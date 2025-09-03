@@ -15,17 +15,17 @@
 Сначала нужно создать [топик](../../concepts/datamodel/topic.md) в {{ ydb-short-name }}, из которого трансфер будет читать данные. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-topic.md):
 
 ```yql
-CREATE TOPIC SourceTopic;
+CREATE TOPIC `transfer_recipe/source_topic`;
 ```
 
-Этот топик `SourceTopic` позволяет передавать любые неструктурированные данные.
+Этот топик `transfer_recipe/source_topic` позволяет передавать любые неструктурированные данные.
 
 ## Шаг 2. Создание таблицы {#step2}
 
-После создания топика следует добавить [таблицу](../../concepts/datamodel/table.md), в которую будут поставляться данные из топика `SourceTopic`. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create_table/index.md):
+После создания топика следует добавить [таблицу](../../concepts/datamodel/table.md), в которую будут поставляться данные из топика `source_topic`. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create_table/index.md):
 
 ```yql
-CREATE TABLE TargetTable (
+CREATE TABLE `transfer_recipe/target_table` (
   partition Uint32 NOT NULL,
   offset Uint64 NOT NULL,
   data String,
@@ -33,7 +33,7 @@ CREATE TABLE TargetTable (
 );
 ```
 
-Эта таблица `TargetTable` имеет три столбца:
+Эта таблица `transfer_recipe/target_table` имеет три столбца:
 
 * `partition` — идентификатор [партиции](../../concepts/glossary.md#partition) топика, из которой получено сообщение;
 * `offset` — [порядковый номер](../../concepts/glossary.md#offset), идентифицирующий сообщение внутри партиции;
@@ -54,8 +54,8 @@ $transformation_lambda = ($msg) -> {
     ];
 };
 
-CREATE TRANSFER Transfer
-  FROM SourceTopic TO TargetTable
+CREATE TRANSFER `transfer_recipe/example_transfer`
+  FROM `transfer_recipe/source_topic` TO `transfer_recipe/target_table`
   USING $transformation_lambda;
 ```
 
@@ -71,18 +71,18 @@ CREATE TRANSFER Transfer
 {% include [x](../../_includes/ydb-cli-profile.md) %}
 
 ```bash
-echo "Message 1" |  ydb --profile quickstart topic write SourceTopic
-echo "Message 2" |  ydb --profile quickstart topic write SourceTopic
-echo "Message 3" |  ydb --profile quickstart topic write SourceTopic
+echo "Message 1" |  ydb --profile quickstart topic write source_topic
+echo "Message 2" |  ydb --profile quickstart topic write source_topic
+echo "Message 3" |  ydb --profile quickstart topic write source_topic
 ```
 
 ## Шаг 5. Проверка содержимого таблицы {#step5}
 
-После записи сообщении в топик `SourceTopic` спустя некоторое время появятся записи в таблице `TargetTable`. Проверить их наличие можно с помощью [SQL-запроса](../../yql/reference/syntax/select/index.md):
+После записи сообщении в топик `source_topic` спустя некоторое время появятся записи в таблице `transfer_recipe/target_table`. Проверить их наличие можно с помощью [SQL-запроса](../../yql/reference/syntax/select/index.md):
 
 ```yql
 SELECT *
-FROM TargetTable;
+FROM `transfer_recipe/target_table`;
 ```
 
 Результат выполнения запроса:
@@ -102,4 +102,7 @@ partition offset  data
 
 Эти примеры призваны проиллюстрировать синтаксис при работе с трансфером. Более реалистичный пример см. в [статье](transfer-nginx.md) описывающей поставку access лога NGINX.
 
-Более подробную информацию о трансфере см. [здесь](../../concepts/transfer.md).
+См. также:
+
+* [{#T}](../../concepts/transfer.md)
+* [{#T}](transfer-nginx.md)

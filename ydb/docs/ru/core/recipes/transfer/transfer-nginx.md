@@ -1,8 +1,14 @@
 # Трансфер — поставка access логов NGINX в таблицу
 
-Эта статья поможет настроить поставку access логов NGINX в [таблицу](../../concepts/datamodel/table.md) для дальнейшего анализа. В этой статье будет рассматриваться формат access логов NGINX, который используется по умолчанию и имеет формат `$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"`. Более подробно о формате логов NGINX и его настройке можно прочитать в [документации](https://docs.nginx.com/nginx/admin-guide/monitoring/logging/#set-up-the-access-log) NGINX.
+Эта статья поможет настроить поставку access логов NGINX в [таблицу](../../concepts/datamodel/table.md) для дальнейшего анализа. В этой статье будет рассматриваться формат access логов NGINX, который используется по умолчанию. Более подробно о формате логов NGINX и его настройке можно прочитать в [документации](https://docs.nginx.com/nginx/admin-guide/monitoring/logging/#set-up-the-access-log) NGINX.
 
-Пример содержимого файла с логами:
+Формат логов access лога по умолчанию имеет вид:
+
+```txt
+$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"
+```
+
+Пример:
 
 ```txt
 ::1 - - [01/Sep/2025:15:02:47 +0500] "GET /favicon.ico HTTP/1.1" 404 181 "-" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 YaBrowser/25.6.0.0 Safari/537.36"
@@ -24,14 +30,14 @@
 
 * Установленный http-сервер NGINX с ведением access логов.
 
-* Настроенная поставка access логов NGINX из файла в топик `access_log_topic`, например, с помощью [kafka connect](../../reference/kafka-api/connect/index.md).
+* Настроенная поставка access логов NGINX из файла в топик `access_log_topic`, например, с помощью [kafka connect](../../reference/kafka-api/connect/index.md) с [конфигурацией](../../reference/kafka-api/connect/connect-examples.md#file-to-topic) поставки данных из файла в топик.
 
 ## Шаг 1. Создание таблицы {#step1}
 
 Добавьте [таблицу](../../concepts/datamodel/table.md), в которую будут поставляться данные из топика `access_log_topic`. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create_table/index.md):
 
 ```yql
-CREATE TABLE access_log (
+CREATE TABLE `transfer_recipe/access_log` (
   partition Uint32 NOT NULL,
   offset Uint64 NOT NULL,
   line Uint64 NOT NULL,
@@ -49,7 +55,7 @@ CREATE TABLE access_log (
 );
 ```
 
-Эта таблица `access_log` имеет три служебных столбца:
+Эта таблица `transfer_recipe/access_log` имеет три служебных столбца:
 
 * `partition` — идентификатор [партиции](../../concepts/glossary.md#partition) топика, из которой получено сообщение;
 * `offset` — [порядковый номер](../../concepts/glossary.md#offset), идентифицирующий сообщение внутри партиции;
@@ -60,7 +66,7 @@ CREATE TABLE access_log (
 Если требуется хранить данные access логов ограниченное кол-во времени, то можно настроить [автоматическое удаление](../../concepts/ttl.md) старых строк таблицы. Это можно сделать с помощью [SQL-запроса](../../yql/reference/recipes/ttl.md):
 
 ```yql
-ALTER TABLE `access_log` SET (TTL = Interval("PT24H") ON time_local);
+ALTER TABLE `transfer_recipe/access_log` SET (TTL = Interval("PT24H") ON time_local);
 ```
 
 ## Шаг 2. Создание трансфера {#step2}
@@ -69,22 +75,30 @@ ALTER TABLE `access_log` SET (TTL = Interval("PT24H") ON time_local);
 
 ```yql
 $transformation_lambda = ($msg) -> {
+    -- Функция преобразования строки лога в строку таблицы
     $line_lambda = ($line) -> {
-        $dateParser = DateTime::Parse("%d/%b/%Y:%H:%M:%S");
-
+        -- Сначала разбиваем строку по символу " чтобы выделиьт строки, которые могут содержать пробел.
+        -- Сами строки символ " содержать не могут - он будет зменен последовательностью символов \x.
         $parts = String::SplitToList($line.1, '"');
+        -- Каждую полученную часть, которая не соответствует экранированной строке, разбиваем по пробелу.
         $info_parts = String::SplitToList($parts[0], " ");
         $request_parts = String::SplitToList($parts[1], " ");
         $response_parts = String::SplitToList($parts[2], " ");
-        $date = Substring($info_parts[3], 1);
+        -- Преобразуем дату в формат Timestamp
+        $dateParser = DateTime::Parse("%d/%b/%Y:%H:%M:%S");
+        $date = $dateParser(Substring($info_parts[3], 1));
 
+        -- Возвращаем структуру, каждое именованное поле которой соответствует столбцу таблицы.
+        -- Важно: типы значений именованных полей должны соответствовать типам столбцов таблицы, например, если столбец имеет тип Uint32,
+        -- то значение именованного поля должно быть Uint32. В некоторых случаях потребуется явное преобразование с помощью CAST.
+        -- Значение NOT NULL колонок должно быть преобразовано из Optional типа с помощью функции Unwrap.
         return <|
             partition: $msg._partition,
             offset: $msg._offset,
             line: $line.0,
             remote_addr: $info_parts[0],
             remote_user: $info_parts[2],
-            time_local: DateTime::MakeTimestamp($dateParser($date)),
+            time_local: DateTime::MakeTimestamp($date),
             request_method: $request_parts[0],
             request_path: $request_parts[1],
             request_protocol: $request_parts[2],
@@ -96,15 +110,17 @@ $transformation_lambda = ($msg) -> {
     };
 
 
-    $lines = ListFilter(String::SplitToList($msg._data, "\n"), ($line) -> {
+    $split = String::SplitToList($msg._data, "\n"); -- Если одно сообщение содержит несколько строк из лога, то разделяем сообщение на отельные строки
+    $lines = ListFilter($split, ($line) -> { -- Фильтруем пустые строки, которые, например, могут появится после последнего символа \n 
         return Length($line) > 0;
     });
 
+    -- Преобразуем каждую строку access лога в строку таблицы
     return ListMap(ListEnumerate($lines), $line_lambda);
 };
 
-CREATE TRANSFER access_log_transfer
-  FROM access_log_topic TO access_log
+CREATE TRANSFER `transfer_recipe/access_log_transfer`
+  FROM `access_log_topic` TO `transfer_recipe/access_log`
   USING $transformation_lambda;
 ```
 
@@ -116,11 +132,11 @@ CREATE TRANSFER access_log_transfer
 
 ## Шаг 3. Проверка содержимого таблицы {#step3}
 
-После записи сообщении в топик `access_log_topic` спустя некоторое время появятся записи в таблице `access_log`. Проверить их наличие можно с помощью [SQL-запроса](../../yql/reference/syntax/select/index.md):
+После записи сообщении в топик `access_log_topic` спустя некоторое время появятся записи в таблице `transfer_recipe/access_log`. Проверить их наличие можно с помощью [SQL-запроса](../../yql/reference/syntax/select/index.md):
 
 ```yql
 SELECT *
-FROM access_log;
+FROM `transfer_recipe/access_log`;
 ```
 
 Результат выполнения запроса:
@@ -138,4 +154,7 @@ FROM access_log;
 
 Данная статья приводит пример поставки access логов NGINX в таблицу {{ ydb-short-name }}. Логи любого другого текстовового формата могут обрабатываться аналогично: для этого надо создать таблицу, в которой будут храниться необходимые данные из этого лога, и правильно написать [lambda-функции](../../yql/reference/syntax/expressions.md#lambda), преобразовывающую строки лога в строки таблицы.
 
-Более подробную информацию о трансфере см. [здесь](../../concepts/transfer.md).
+См. также:
+
+* [{#T}](../../concepts/transfer.md)
+* [{#T}](transfer-quickstart.md)

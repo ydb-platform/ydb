@@ -57,7 +57,7 @@ CREATE TABLE access_log (
 
 Столбцы `partition`, `offset` и `line` однозначно идентифицируют строку файла access лога.
 
-Если требуется хранить данные access логов ограниченное кол-во времени, то можно настроить [автоматическое удаление](../../concepts/ttl.md) старых строк таблицы. Это можно сделать с помощью [SQL-запроса](../yql/reference/recipes/ttl.md):
+Если требуется хранить данные access логов ограниченное кол-во времени, то можно настроить [автоматическое удаление](../../concepts/ttl.md) старых строк таблицы. Это можно сделать с помощью [SQL-запроса](../../yql/reference/recipes/ttl.md):
 
 ```yql
 ALTER TABLE `access_log` SET (TTL = Interval("PT24H") ON time_local);

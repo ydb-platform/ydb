@@ -46,27 +46,26 @@ namespace NKikimr {
 
             if (status.KeepData) {
                 if (ScrubCtx->EnableDeepScrubbing) {
-                    CheckIntegrity(id, true);
-                } else {
-                    merger.Begin(id);
-                    iter.PutToMerger(&merger);
-                    const NMatrix::TVectorType needed = merger.GetPartsToRestore();
-                    UpdateUnreadableParts(id, needed, merger.GetCorruptedPart());
-                    if (!needed.Empty()) {
-                        Checkpoints |= TEvScrubNotify::HUGE_BLOB_SCRUBBED;
-                    }
-                    merger.Clear();
+                    EnqueueCheckIntegrity(id, true);
                 }
+                merger.Begin(id);
+                iter.PutToMerger(&merger);
+                const NMatrix::TVectorType needed = merger.GetPartsToRestore();
+                UpdateUnreadableParts(id, needed, merger.GetCorruptedPart());
+                if (!needed.Empty()) {
+                    Checkpoints |= TEvScrubNotify::HUGE_BLOB_SCRUBBED;
+                }
+                merger.Clear();
             } else {
                 DropGarbageBlob(id);
             }
 
+            LogoBlobIDFromLogoBlobID(id, State->MutableBlobId());
+
             iter.Prev();
         } while (TActorCoroImpl::Now() < startTime + TDuration::Seconds(5));
 
-        if (iter.Valid()) {
-            LogoBlobIDFromLogoBlobID(iter.GetCurKey().LogoBlobID(), State->MutableBlobId());
-        } else {
+        if (!iter.Valid()) {
             State->ClearBlobId();
         }
     }

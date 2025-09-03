@@ -16,6 +16,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
     class TAllocation: public NOlap::NGroupedMemoryManager::IAllocation, public TObjectCounter<TAllocation> {
     public:
         std::shared_ptr<NOlap::NGroupedMemoryManager::TAllocationGuard> Guard;
+    private:
         using TBase = NOlap::NGroupedMemoryManager::IAllocation;
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
             AFL_VERIFY(false)("error", errorMessage);

@@ -413,7 +413,7 @@ class TransitionHistory:
             self.transitions.append(summary)
 
 
-class Bridgekeeper:
+class BridgeSkipper:
     def __init__(self, path_to_cli: str, initial_piles: Dict[str, List[str]], use_https: bool = False, auto_failover: bool = True):
         self.path_to_cli = path_to_cli
         self.initial_piles = initial_piles
@@ -576,7 +576,7 @@ class Bridgekeeper:
             return None
 
         self._stop_event.clear()
-        self._run_thread = threading.Thread(target=self.run, name="Bridgekeeper.run", daemon=True)
+        self._run_thread = threading.Thread(target=self.run, name="BridgeSkipper.run", daemon=True)
         self._run_thread.start()
 
         return self._run_thread

@@ -78,7 +78,7 @@ private:
     IComputationWideFlowNode* const LeftFlow_;
     IComputationWideFlowNode* const RightFlow_;
 
-        const TVector<TType*>   ResultItemTypes_;
+    const TVector<TType*>   ResultItemTypes_;
     const TVector<TType*>   LeftItemTypes_;
     const TVector<ui32>     LeftKeyColumns_;
     const TVector<TType*>   RightItemTypes_;

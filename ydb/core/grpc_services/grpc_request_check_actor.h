@@ -674,37 +674,17 @@ void TGrpcRequestCheckActor<TEvent>::InitializeAttributes(const TSchemeBoardEven
     InitializeAttributesFromSchema(schemeData, rootAttributes);
 }
 
-template<typename T>
-inline constexpr bool IsStreamWrite = (
-    std::is_same_v<T, TEvStreamPQWriteRequest>
-    || std::is_same_v<T, TEvStreamTopicWriteRequest>
-    || std::is_same_v<T, TRefreshTokenStreamWriteSpecificRequest>
-);
-
 template <typename TEvent>
 const TVector<TString>& TGrpcRequestCheckActor<TEvent>::GetPermissions() {
-    if constexpr (IsStreamWrite<TEvent>) {
-        // extended permissions for stream write request family
-        static const TVector<TString> permissions = {
-            "ydb.databases.list",
-            "ydb.databases.create",
-            "ydb.databases.connect",
-            "ydb.tables.select",
-            "ydb.schemas.getMetadata",
-            "ydb.streams.write"
-        };
-        return permissions;
-    } else {
-        // default permissions
-        static const TVector<TString> permissions = {
-            "ydb.databases.list",
-            "ydb.databases.create",
-            "ydb.databases.connect",
-            "ydb.tables.select",
-            "ydb.schemas.getMetadata"
-        };
-        return permissions;
-    }
+    static const TVector<TString> permissions = {
+        "ydb.databases.list",
+        "ydb.databases.create",
+        "ydb.databases.connect",
+        "ydb.tables.select",
+        "ydb.schemas.getMetadata",
+        "ydb.streams.write"
+    };
+    return permissions;
 }
 
 template <typename TEvent>

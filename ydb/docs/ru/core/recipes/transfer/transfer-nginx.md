@@ -2,7 +2,7 @@
 
 Эта статья поможет настроить поставку access логов NGINX в [таблицу](../../concepts/datamodel/table.md) для дальнейшего анализа. В этой статье будет рассматриваться формат access логов NGINX, который используется по умолчанию. Более подробно о формате логов NGINX и его настройке можно прочитать в [документации](https://docs.nginx.com/nginx/admin-guide/monitoring/logging/#set-up-the-access-log) NGINX.
 
-Формат логов access лога по умолчанию имеет вид:
+Формат access лога NGINX по умолчанию имеет вид:
 
 ```txt
 $remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"

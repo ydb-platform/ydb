@@ -6,12 +6,14 @@
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 TAllocationGuard::~TAllocationGuard() {
-    if (TlsActivationContext && !Released) {
+    if (!Released) {
         if (Stage) {
             Stage->Free(Memory, true);
         }
-        NActors::TActivationContext::AsActorContext().Send(
-            ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishTask>(ProcessId, ScopeId, AllocationId));
+        if (TlsActivationContext) {
+            NActors::TActivationContext::AsActorContext().Send(
+                ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishTask>(ProcessId, ScopeId, AllocationId));
+        }
     }
 }
 

@@ -2692,6 +2692,8 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
     TString PeerName;  // required for making audit log records
+    TString SanitizedToken;  // required for making audit log records
+
     TVector<TItem> Items;
 
     TPathId ExportPathId = InvalidPathId;
@@ -2853,6 +2855,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
     TString PeerName;  // required for making audit log records
+    TString SanitizedToken;  // required for making audit log records
 
     EState State = EState::Invalid;
     TString Issue;

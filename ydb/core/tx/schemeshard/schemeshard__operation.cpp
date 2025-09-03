@@ -304,9 +304,13 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
             Response = MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId), "Failed to parse user token");
             return true;
         }
+        const auto& record = Request->Get()->Record;
         if (userToken) {
             UserSID = userToken->GetUserSID();
             SanitizedToken = userToken->GetSanitizedToken();
+        } else {
+            UserSID = record.GetUserSID();
+            SanitizedToken = record.GetSanitizedToken();
         }
 
         TMemoryChanges memChanges;

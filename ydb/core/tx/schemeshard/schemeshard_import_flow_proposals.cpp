@@ -1,5 +1,6 @@
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_path_describer.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -17,7 +18,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, *importInfo);
     auto& record = propose->Record;
 
     if (importInfo->UserSID) {
@@ -143,9 +144,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, *importInfo);
+    auto& record = propose->Record;
 
-    auto& modifyScheme = *propose->Record.AddTransaction();
+    auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpRestore);
     modifyScheme.SetInternal(true);
 

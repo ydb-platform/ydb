@@ -1167,6 +1167,7 @@ struct Schema : NIceDb::Schema {
         struct StartTime : Column<14, NScheme::NTypeIds::Uint64> {};
         struct EndTime : Column<15, NScheme::NTypeIds::Uint64> {};
         struct PeerName : Column<16, NScheme::NTypeIds::Utf8> {};
+        struct SanitizedToken : Column<20, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1185,7 +1186,8 @@ struct Schema : NIceDb::Schema {
             UserSID,
             StartTime,
             EndTime,
-            PeerName
+            PeerName,
+            SanitizedToken
         >;
     };
 
@@ -1495,6 +1497,7 @@ struct Schema : NIceDb::Schema {
         struct StartTime : Column<11, NScheme::NTypeIds::Uint64> {};
         struct EndTime : Column<12, NScheme::NTypeIds::Uint64> {};
         struct PeerName : Column<13, NScheme::NTypeIds::Utf8> {};
+        struct SanitizedToken : Column<14, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1510,7 +1513,8 @@ struct Schema : NIceDb::Schema {
             UserSID,
             StartTime,
             EndTime,
-            PeerName
+            PeerName,
+            SanitizedToken
         >;
     };
 

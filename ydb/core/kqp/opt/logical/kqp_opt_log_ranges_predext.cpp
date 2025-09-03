@@ -207,16 +207,16 @@ TExprBase KqpTopSortSelectIndex(TExprBase node, TExprContext& ctx, const TKqpOpt
 }
 
 struct TIndexComparisonKey {
-    bool SortingMatch = false;
-    bool IdLambda = false;
+    bool SortingMatchAndIsLambda = false;
     bool PointPredicateCoversKey = false;
     size_t PointPrefixLen = 0;
+    bool SortingMatch = false;
     bool UsedPrefixLenCoversKey = false;
     size_t UsedPrefixLen = 0;
     bool ReadCoversIndex = false;
 
     auto GetTuple() const {
-        return std::tie(SortingMatch, IdLambda, PointPredicateCoversKey, PointPrefixLen, UsedPrefixLenCoversKey, UsedPrefixLen, ReadCoversIndex);
+        return std::tie(SortingMatchAndIsLambda, PointPredicateCoversKey, PointPrefixLen, SortingMatch, UsedPrefixLenCoversKey, UsedPrefixLen, ReadCoversIndex);
     }
 
     bool operator<(const TIndexComparisonKey& other) const {
@@ -229,14 +229,16 @@ struct TIndexComparisonKey {
 
     TString ToString() const {
         TStringBuilder sb;
+        auto tuple = GetTuple();
+
         sb << "("
-            << SortingMatch << ","
-            << IdLambda << ","
-            << PointPredicateCoversKey << ","
-            << PointPrefixLen << ","
-            << UsedPrefixLenCoversKey << ","
-            << UsedPrefixLen << ","
-            << ReadCoversIndex << ")";
+            << std::get<0>(tuple) << ","
+            << std::get<1>(tuple) << ","
+            << std::get<2>(tuple) << ","
+            << std::get<3>(tuple) << ","
+            << std::get<4>(tuple) << ","
+            << std::get<5>(tuple) << ","
+            << std::get<6>(tuple) << ")";
 
         return TString(sb);
     }
@@ -318,6 +320,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     YQL_ENSURE(prepareSuccess);
 
     THashMap<TString, TString> indexSelectionDebugInfo;
+    ui32 indexSelectionCandidates = 0;
     if (!indexName.IsValid() && !readSettings.ForcePrimary) {
         auto calcNeedsJoin = [&] (const TKikimrTableMetadataPtr& keyTable) -> bool {
             bool needsJoin = false;
@@ -335,16 +338,9 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
             selectorDescription = ExtractSortingKeys(keySelector.Cast());
         }
 
-        TStringBuilder detectedSortingsb;
-        bool isfirst = true;
-        for(auto s: selectorDescription) {
-            if (!isfirst)
-                detectedSortingsb << ",";
-            isfirst = false;
-            detectedSortingsb << s;
+        if (!selectorDescription.empty()) {
+            indexSelectionDebugInfo.emplace("sorting", TString(JoinSeq(',', selectorDescription)));
         }
-
-        indexSelectionDebugInfo.emplace("sorting", TString(detectedSortingsb));
 
         auto calcKey = [&](
             NYql::IPredicateRangeExtractor::TBuildResult buildResult,
@@ -361,11 +357,14 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                 prefixLen = 0;
             }
 
+            bool isIdLambda = IsIdLambda(TCoLambda(buildResult.PrunedLambda).Body());
+            bool sortingMatch = keySelector.IsValid() && IsSortKeyPrimary(keySelector.Cast(), tableDesc, {}, prefixLen);
+
             return TIndexComparisonKey{
-                .SortingMatch=keySelector.IsValid() && IsSortKeyPrimary(keySelector.Cast(), tableDesc, {}, prefixLen),
-                .IdLambda=IsIdLambda(TCoLambda(buildResult.PrunedLambda).Body()),
+                .SortingMatchAndIsLambda=sortingMatch && isIdLambda,
                 .PointPredicateCoversKey=buildResult.PointPrefixLen >= descriptionKeyColumns,
                 .PointPrefixLen=buildResult.PointPrefixLen >= descriptionKeyColumns ? 0 : buildResult.PointPrefixLen,
+                .SortingMatch=sortingMatch,
                 .UsedPrefixLenCoversKey=buildResult.UsedPrefixLen >= descriptionKeyColumns,
                 .UsedPrefixLen=buildResult.UsedPrefixLen >= descriptionKeyColumns ? 0 : buildResult.UsedPrefixLen,
                 .ReadCoversIndex=!needsJoin
@@ -400,6 +399,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
 
                     auto key = calcKey(buildResult, tableDesc.Metadata->KeyColumnNames.size() , needsJoin, tableDesc);
                     indexSelectionDebugInfo.emplace("index:" + index.Name, key.ToString());
+                    indexSelectionCandidates++;
                     if (key > maxKey) {
                         maxKey = key;
                         chosenIndex = index.Name;
@@ -411,6 +411,10 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         if (chosenIndex) {
             indexName = ctx.NewAtom(read.Pos(), *chosenIndex);
         }
+    }
+
+    if (indexSelectionCandidates == 0) {
+        indexSelectionDebugInfo.clear();
     }
 
     auto& tableDesc = indexName ? kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(indexName.Cast()).first->Name) : mainTableDesc;

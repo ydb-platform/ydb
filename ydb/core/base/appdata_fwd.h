@@ -273,6 +273,7 @@ struct TAppData {
     bool UsePartitionStatsCollectorForTests = false;
     bool DisableCdcAutoSwitchingToReadyStateForTests = false;
     bool BridgeModeEnabled = false;
+    bool SuppressBridgeModeBootstrapperLogic = false; // for tests
 
     TVector<TString> AdministrationAllowedSIDs; // use IsAdministrator method to check whether a user or a group is allowed to perform administrative tasks
     TVector<TString> RegisterDynamicNodeAllowedSIDs;

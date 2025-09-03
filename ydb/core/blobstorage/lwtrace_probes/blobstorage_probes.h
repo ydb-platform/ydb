@@ -69,9 +69,9 @@ struct TEventTypeField {
       TYPES(NKikimr::TEventTypeField, ui64, double, ui64, ui32, ui32, TString, bool), \
       NAMES("type", "size", "durationMs", "tabletId", "groupId", "channel", "handleClass", "isOk")) \
     PROBE(DSProxyVDiskRequestDuration, GROUPS("VDisk", "DSProxy"), \
-      TYPES(NKikimr::TEventTypeField, ui64, ui64, ui32, ui32, ui32, double, double, double, double, TString, TString), \
+      TYPES(NKikimr::TEventTypeField, ui64, ui64, ui32, ui32, ui32, double, double, double, double, double, double, TString, TString), \
       NAMES("type", "size", "tabletId", "groupId", "channel", "vdiskOrderNum", "startTime", "totalDurationMs", \
-          "vdiskDurationMs", "transferDurationMs", "handleClass", "status")) \
+          "vdiskDurationMs", "transferDurationMs", "spentInBsQueue", "spentInSkeletonFrontQueue", "handleClass", "status")) \
     PROBE(VDiskSkeletonFrontVMovedPatchRecieved, GROUPS("VDisk", "DSProxy"), \
       TYPES(ui32, ui32, ui32, ui64, ui64), \
       NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \

@@ -94,7 +94,7 @@ class Workload(unittest.TestCase):
         time.sleep(self.duration)
 
         print("Killing processes")
-        for i in range(1, self.num_workers + 1):
+        for i in range(1, len(processes)):
             os.kill(processes[i].pid, signal.SIGKILL)
 
         topic_description = self.driver.topic_client.describe_topic(self.test_topic_path, include_stats=True)

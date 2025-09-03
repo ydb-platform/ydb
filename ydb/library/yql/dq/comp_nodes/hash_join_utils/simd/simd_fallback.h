@@ -161,7 +161,7 @@ struct TBase8: TBase<TSimd8<T>> {
         ui64 diff = lhs.Value ^ rhs.Value;
         ui64 result = 0;
 
-        #define ComparisonResultByte(i) ((diff >> (i * 8)) & 0xFF) ? 0 : 0x80ULL << (i * 8);
+        #define ComparisonResultByte(i) ((diff >> (i * 8)) & 0xFF) ? 0 : 0xFFULL << (i * 8);
         result |= ComparisonResultByte(0);
         result |= ComparisonResultByte(1);
         result |= ComparisonResultByte(2);

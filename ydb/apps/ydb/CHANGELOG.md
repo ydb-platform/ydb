@@ -1,4 +1,5 @@
 * Added query compilation time statistics to the `ydb workload * run` command.
+* **_(Requires server v25.4+)_** Added `--replace-sys-acl` option to `tools restore` command, which specifies whether to to replace ACL for system objects or not.
 
 ## 2.25.0 ##
 

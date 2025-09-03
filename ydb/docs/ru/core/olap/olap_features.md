@@ -1,101 +1,110 @@
-# Основные функции аналитической обработки в {{ydb-short-name}}
+# Ключевые возможности для аналитики: быстрый справочник
 
-## Хранение данных в колоночных таблицах
+Эта страница служит отправной точкой для более детального изучения возможностей {{ydb-short-name}} в части аналитических сценариев. Здесь собраны ссылки на основные разделы документации, сгруппированные по типовым задачам.
 
-- [Выбор ключей для колоночных таблиц](../dev/primary-key/column-oriented).
-- [Партиционирование](../concepts/datamodel/table.md#olap-tables-partitioning) данных.
+---
 
-## SQL и аналитические функции
+## 1. Проектирование хранилища данных
 
-- [Язык запросов](../yql/reference/index.md).
-- [Типовые сценарии работы с датами](../yql/reference/udf/list/datetime.md#tipovye-scenarii).
-- [Оконные функции](../yql/reference/builtins/window.md).
+Этот раздел посвящен базовым сущностям и концепциям, которые необходимо понимать перед созданием таблиц и организацией хранения данных.
 
+### 1.1. Структура данных
 
-## Оптимизация запросов
+- Типы данных: [Справочник по поддерживаемым типам данных.](../yql/reference/types/index.md)
+- Колоночные таблицы: [Основной тип таблиц для аналитики.](../concepts/datamodel/table.md#column-oriented-tables)
 
-- [!!!ссылка на описание оптимизатора](../yql/reference/index.md).
+### 1.2. Масштабирование и производительность
 
-Распределённые JOIN-ы. Планирование обменов данными между узлами, стратегии перераспределения.
-Где читать: Концепции → Распределённые операторы; Руководство → Соединения в MPP.
+- Выбор первичного ключа: [Рекомендации по проектированию PK для OLAP-таблиц.](../dev/primary-key/column-oriented.md)
+- Партиционирование таблиц: [Как данные делятся на части для масштабирования.](../concepts/datamodel/table.md#olap-tables-partitioning)
 
+### 1.3. Управление жизненным циклом данных
 
-## Управление нагрузкой
+- TTL (Time-to-Live): [Автоматическое удаление устаревших данных.](../concepts/ttl.md)
 
-- [Ресурсные пулы](../dev/resource-consumption-management.md)
+## 2. Загрузка и выгрузка данных (Ingestion & Egress)
 
-## Загрузка и интеграция данных
+В этом разделе собраны ссылки на инструменты и API для перемещения данных в {{ydb-short-name}} и из нее, как в потоковом, так и в пакетном режиме.
 
-- Потоковый ввод данных с использованием [топиков](../concepts/topic.md) с поддержкой [Kafka протокола](../reference/kafka-api/index.md) и [транзакций между топиками и таблицами](../concepts/transactions.md#topic-table-transactions).
-- Автоматический перенос данных между топиками и таблицами с использованием [!!!TRANSFER](.).
-- [!!!!Потоковый перенос CDC-данных](SCD1) между строковыми и колоночными таблицами.
+### 2.1. Потоковая загрузка
 
-Поставка данных с использованием готовых коннекторов:
+- Kafka API: [Работа с топиками](../concepts/datamodel/topic.md)
+- Fluent Bit: [Загрузка логов напрямую из Fluent Bit.](../integrations/ingestion/fluent-bit.md)
+- Transfer: [Автоматизированный перенос данных между топиками и таблицами.](../concepts/transfer.md)
 
-- [Apache Spark](../integrations/ingestion/spark);
-- [FluentBit](../integrations/ingestion/fluent-bit);
-- [и других](../integrations/ingestion/index.md).
+### 2.2. Пакетная загрузка
 
-### Федеративные запросы
+- BulkUpsert API: [Для быстрой вставки больших объемов данных.](../recipes/ydb-sdk/bulk-upsert.md)
+- Apache Spark: [Чтение и запись данных с помощью Spark-коннектора.](../integrations/ingestion/spark.md)
 
-С помощью федеративных запросов можно выполнять прямые запросы к внешним источникам данных:
+### 2.3. Взаимодействие с внешними системами
 
-- [PostgreSQL](../concepts/federated_query/postgresql.md);
-- [ClickHouse](../concepts/federated_query/clickhouse.md);
-- [S3](../concepts/federated_query/s3/external_table.md);
+- Федеративные запросы: [Работа с данными напрямую в S3](../concepts/federated_query/index.md)
 
-## Инструменты инженера данных
+## 3. Обработка и трансформация данных (ETL/ELT)
 
-Для работы инженеров данных {{ydb-short-name}} предоставляет ряд готовых коннекторов:
+Этот раздел посвящен написанию кода для трансформации данных и построению конвейеров их обработки.
 
-- [!!!!DBT](.)
-- [Apache Airflow](../integrations/orchestration/airflow.md).
+### 3.1. Язык запросов YQL
 
-Работа с данными в формате SCD (slow changing dimensions) описана в разделе:
+- Общий справочник по YQL: [Синтаксис, функции и операторы.](../yql/reference/index.md)
+- Оконные функции: [Для сложных аналитических расчетов.](../yql/reference/builtins/window.md)
+- Работа с датами и временем: [Список функций и типовые сценарии.](../yql/reference/udf/list/datetime.md#tipovye-scenarii)
 
-- [!!!SCD2](.). # !!!../dataeng/scd2.md
+### 3.2. Инструменты для построения пайплайнов
 
-## Инструменты аналитика
+- dbt (Data Build Tool): [Управление ELT-пайплайнами на SQL.](../integrations/migration/dbt.md)
+- Apache Airflow: [Оркестрация пайплайнов любой сложности.](../integrations/orchestration/airflow.md)
 
-Анализ данных с помощью YDB можно производить с помощью готовых интеграций с:
+### 3.3. Специализированные сценарии
 
-- [!!!Apache SuperSet](.); # ../integrations/gui/!!
-- [Grafana](../integrations/visualization/grafana.md).
+- Slowly Changing Dimensions (SCD): [!!Пример реализации SCD Type 2.](.)
+
+## 4. Разработка приложений и интеграция
+
+Этот раздел содержит ссылки на инструменты для разработчиков, которые создают приложения или сервисы, использующие {{ydb-short-name}} как бэкенд.
+
+### 4.1. Основные инструменты
+
+- SDK: [Обзор нативных SDK (Go, Python, Java, C++, etc.).](../reference/ydb-sdk/index.md)
+- JDBC драйвер: [Подключение из Java-экосистемы.](../reference/languages-and-apis/jdbc-driver/index.md)
+- YDB CLI: [Инструмент командной строки для администрирования и выполнения запросов.](../reference/ydb-cli/index.md)
+
+## 5. Анализ данных и визуализация
+
+Этот раздел посвящен интеграции с инструментами, которые используют конечные пользователи: аналитики и data scientists.
+
+### 5.1. BI-системы
+
+- [Apache SuperSet](../integrations/visualization/superset.md)
+- [Grafana](../integrations/visualization/grafana.md)
+- [Yandex DataLens](../integrations/visualization/datalens.md)
+
+### 5.2. Инструменты Data Science
+
 - [Jupyter Notebooks](../integrations/gui/jupyter.md)
-- и [другие](../integrations/index.md).
 
-С YDB можно взаимодействовать с помощью MCP:
+## 6. Эксплуатация и производительность
 
-- [MCP Server](../reference/languages-and-apis/mcp/index.md).
+Этот раздел содержит ссылки на документацию по управлению кластером, мониторингу, безопасности и оптимизации производительности.
 
-## ML/ETL/ELT
+### 6.1. Управление производительностью
 
-Драйвер для [Apache Spark](../integrations/ingestion/spark) с параллельным чтением данных, позволяющим получать высокую скорость чтения данных из {{ydb-short-name}}.
+- Управление нагрузкой (Resource Pools): [Изоляция ресурсов для разных команд.](../dev/resource-consumption-management.md)
+- Стоимостной оптимизатор: [Как YDB строит планы запросов.](../concepts/optimizer.md)
+- Анализ планов запросов (EXPLAIN): [!!Как понять, почему запрос работает медленно.](.)
 
-SDK/JDBC/CLI. Драйверы и инструменты для разработки и автоматизации.
+### 6.2. Мониторинг и диагностика
 
-- поддерживается более 8 языков программирования в [{{ydb-short-name}} native SDK](../reference/ydb-sdk/index.md).
-- [JDBC](../reference/languages-and-apis/jdbc-driver/index.md)
-- [и другие](../reference/languages-and-apis/index.md)
+- Встроенный UI: [Веб-интерфейс для диагностики кластера.](../reference/embedded-ui/index.md)
+- Метрики для мониторинга: [Полный справочник по метрикам.](../reference/observability/metrics/index.md)
+- Готовые дешборды для Grafana: [Шаблоны для быстрой настройки мониторинга.](../reference/observability/metrics/grafana-dashboards.md)
 
+### 6.3. Безопасность и отказоустойчивость
 
-## Мониторинг и профилирование. Метрики кластера, планы, профили операторов, трассировка
+- Аутентификация: [Настройка входа пользователей, включая LDAP.](../security/authentication.md)
+- Резервное копирование: [Выполняется через внешние инструменты, например, выгрузку в S3.](../concepts/federated_query/s3/external_table.md)
 
-[Для диагностики](../troubleshooting/performance/index.md) доступен набор инструментов:
+### 6.4. Ограничения системы
 
-- [Встроенная диагностика {{ydb-short-name}}](../reference/embedded-ui/index.md), обнаруживающая и предоставляющая необходимую информацию для диагностирования работы кластера.
-- [Метрики](../reference/observability/metrics/index.md)
-- Готовые [дешборды Grafana](../reference/observability/metrics/grafana-dashboards.md).
-
-## Резервное копирование и восстановление. Политики snapshot/backup, тест восстановления
-
-В данный момент бэкап встроенными средствами не поддерживается. Вместо этого можно выполнять копирование и восстановление данных с помощью [федеративных запросов к S3](../concepts/federated_query/s3/external_table.md).
-
-## Безопасность и доступ. Роли и права, интеграция с IAM, аудит
-
-Доступны различные варианты авторизации:
-
-- [Логин-пароль](../security/authentication.md#static-credentials)
-- [LDAP](../security/authentication.md#static-credentials#ldap).
-- [и другие методы](../security/authentication.md).
-
+- Текущие ограничения: [Важный раздел для понимания архитектурных компромиссов.](limitations.md)

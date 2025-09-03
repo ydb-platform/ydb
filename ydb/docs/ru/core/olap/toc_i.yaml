@@ -1,5 +1,7 @@
 items:
   - name: Обзор
+    href: index.md
+  - name: Детально
     include:
       mode: link
       path: dwh/toc_p.yaml

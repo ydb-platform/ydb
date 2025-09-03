@@ -154,7 +154,7 @@ void TCommandRestore::Config(TConfig& config) {
     config.Opts->AddLongOption("restore-acl", "Whether to restore ACL and owner or not.")
         .DefaultValue(defaults.RestoreACL_).StoreResult(&RestoreACL);
 
-    config.Opts->AddLongOption("replace-sys-acl", "Whether to restore ACL for system objects or not.")
+    config.Opts->AddLongOption("replace-sys-acl", "Whether to replace ACL for system objects or not.")
         .DefaultValue(defaults.ReplaceSysACL_).StoreResult(&ReplaceSysACL);
 
     config.Opts->AddLongOption("skip-document-tables", "Skip Document API tables.")

@@ -1,3 +1,4 @@
+import traceback
 import allure
 import logging
 import os
@@ -1228,6 +1229,7 @@ class WorkloadTestBase(LoadSuiteBase):
                             node_host = node_plan["node"]["node"].host
                             logging.error(
                                 f"Error executing on {node_host}: {e}")
+                            logging.error(traceback.format_exc())
                             # Добавляем информацию об ошибке
                             node_results.append(
                                 {

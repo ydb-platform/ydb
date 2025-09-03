@@ -1,24 +1,18 @@
-IF (NOT WITH_VALGRIND)
 PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
-ENV(YDB_ERASURE=mirror_3_dc)
-ENV(YDB_USE_IN_MEMORY_PDISKS=true)
-ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/kv/workload_kv")
+ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/mixedpy/workload_mixed")
 
 TEST_SRCS(
     test_workload.py
 )
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
-ENDIF()
-
 SIZE(MEDIUM)
+REQUIREMENTS(ram:32)
 
 DEPENDS(
-    ydb/tests/stress/kv
     ydb/apps/ydb
+    ydb/tests/stress/mixedpy
 )
 
 PEERDIR(
@@ -28,5 +22,3 @@ PEERDIR(
 
 
 END()
-
-ENDIF()

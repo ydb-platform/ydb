@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 import argparse
 import logging
-from ydb.tests.stress.log.workload.workload_log import YdbLogWorkload
+
+from ydb.tests.stress.mixedpy.workload import YdbMixedWorkload
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description="Workload log wrapper", formatter_class=argparse.RawDescriptionHelpFormatter
+        description="Workload mixed wrapper", formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument('--endpoint', default='grpc://localhost:2135', help="YDB endpoint")
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
     parser.add_argument('--duration', default=120, type=lambda x: int(x), help='A duration of workload in seconds')
-    parser.add_argument('--log_prefix', default='log', help='Log path')
+    parser.add_argument('--mixed_prefix', default='mixed', help='Mixed path')
     parser.add_argument('--store_type', default='row', choices=['row', 'column'], help='Table type either row or column')
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
 
@@ -25,6 +26,6 @@ if __name__ == '__main__':
             level=logging.INFO
         )
 
-    workload = YdbLogWorkload(args.endpoint, args.database, args.duration, args.store_type, args.log_prefix)
+    workload = YdbMixedWorkload(args.endpoint, args.database, args.duration, args.store_type, args.mixed_prefix)
     workload.start()
     workload.join()

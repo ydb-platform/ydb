@@ -70,7 +70,7 @@ class Workload(unittest.TestCase):
 
         print("Creating test topic")
         testOptions = [("1", "1"), ("0", "1"), ("0", "0")]
-        checkerConsumer = f"targetCheckerConsumer"
+        checkerConsumer = "targetCheckerConsumer"
         self.create_topic(self.test_topic_path, [workloadConsumerName, checkerConsumer] + [f"{checkerConsumer}-{i}" for i in range(len(testOptions))])
 
         print("Running workload topic run")
@@ -85,7 +85,9 @@ class Workload(unittest.TestCase):
             targetTopicName = f"{self.target_topic_path}-{i}"
             self.create_topic(targetTopicName, [checkerConsumer, f"{checkerConsumer}-{i}"])
             for j in range(self.num_workers):
-                processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap, f"streams-store-{i * self.num_workers + j}", self.test_topic_path, targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence]))
+                processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap,
+                                                   f"streams-store-{i * self.num_workers + j}", self.test_topic_path,
+                                                   targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence]))
         processes[0].wait()
         assert processes[0].returncode == 0
 
@@ -113,11 +115,14 @@ class Workload(unittest.TestCase):
                 totalMessCountTest += testCount
                 totalMessCountTarget += targetCount
 
-            print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest}, totalMessCountTarget = {totalMessCountTarget}")
+            print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest}," + \
+                    "totalMessCountTarget = {totalMessCountTarget}")
             if i >= 1:
-                assert totalMessCountTest <= totalMessCountTarget, f"Source message count is greater than the target {self.target_topic_path}-{i} topic's message count: {totalMessCountTest} and {totalMessCountTarget} respectively."
+                assert totalMessCountTest <= totalMessCountTarget, "Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
+                       f"{totalMessCountTest} and {totalMessCountTarget} respectively."
             else:
-                assert totalMessCountTest == totalMessCountTarget, f"Source and target {self.target_topic_path}-{i} topics total messages count are not equal: {totalMessCountTest} and {totalMessCountTarget} respectively."
+                assert totalMessCountTest == totalMessCountTarget, f"Source and target {self.target_topic_path}-{i} topics total messages count are not equal:" + \
+                       "{totalMessCountTest} and {totalMessCountTarget} respectively."
             print(f"Total num of messages: {totalMessCountTest}")
         return
 

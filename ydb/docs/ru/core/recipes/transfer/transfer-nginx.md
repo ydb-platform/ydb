@@ -30,11 +30,11 @@ $remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$
 
 * Установленный http-сервер NGINX с ведением access логов или access логи NGINX доступные с другого сервера.
 
-* Настроенная поставка access логов NGINX из файла в топик `access_log_topic`, например, с помощью [kafka connect](../../reference/kafka-api/connect/index.md) с [конфигурацией](../../reference/kafka-api/connect/connect-examples.md#file-to-topic) поставки данных из файла в топик.
+* Настроенная поставка access логов NGINX из файла в топик `transfer_recipe/access_log_topic`, например, с помощью [kafka connect](../../reference/kafka-api/connect/index.md) с [конфигурацией](../../reference/kafka-api/connect/connect-examples.md#file-to-topic) поставки данных из файла в топик.
 
 ## Шаг 1. Создание таблицы {#step1}
 
-Добавьте [таблицу](../../concepts/datamodel/table.md), в которую будут поставляться данные из топика `access_log_topic`. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create_table/index.md):
+Добавьте [таблицу](../../concepts/datamodel/table.md), в которую будут поставляться данные из топика `transfer_recipe/access_log_topic`. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create_table/index.md):
 
 ```yql
 CREATE TABLE `transfer_recipe/access_log` (
@@ -50,7 +50,7 @@ CREATE TABLE `transfer_recipe/access_log` (
   status Uint32,
   body_bytes_sent Uint64,
   http_referer String,
-  http_user_agent String,
+  http_user_agent Utf8,
   PRIMARY KEY (partition, offset, line)
 );
 ```
@@ -105,7 +105,7 @@ $transformation_lambda = ($msg) -> {
             status: CAST($response_parts[1] AS Uint32),
             body_bytes_sent: CAST($response_parts[2] AS Uint64),
             http_referer: $parts[3],
-            http_user_agent: $parts[5]
+            http_user_agent: CAST($parts[5] AS Utf8) -- явно преобразовываем в Utf8 т.к. колонка http_user_agent имеет типа Utf8, а не String
         |>;
     };
 
@@ -120,7 +120,7 @@ $transformation_lambda = ($msg) -> {
 };
 
 CREATE TRANSFER `transfer_recipe/access_log_transfer`
-  FROM `access_log_topic` TO `transfer_recipe/access_log`
+  FROM `transfer_recipe/access_log_topic` TO `transfer_recipe/access_log`
   USING $transformation_lambda;
 ```
 
@@ -132,7 +132,7 @@ CREATE TRANSFER `transfer_recipe/access_log_transfer`
 
 ## Шаг 3. Проверка содержимого таблицы {#step3}
 
-После записи сообщении в топик `access_log_topic` спустя некоторое время появятся записи в таблице `transfer_recipe/access_log`. Проверить их наличие можно с помощью [SQL-запроса](../../yql/reference/syntax/select/index.md):
+После записи сообщении в топик `transfer_recipe/access_log_topic` спустя некоторое время появятся записи в таблице `transfer_recipe/access_log`. Проверить их наличие можно с помощью [SQL-запроса](../../yql/reference/syntax/select/index.md):
 
 ```yql
 SELECT *

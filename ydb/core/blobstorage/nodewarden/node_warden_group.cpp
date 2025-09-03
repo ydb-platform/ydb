@@ -190,6 +190,10 @@ namespace NKikimr::NStorage {
             // for group/proxy and ask BSC for group info
             group.Info.Reset();
             group.NodeLayoutInfo.Reset();
+            if (group.GroupResolver) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
+                group.GroupResolver = {};
+            }
             RequestGroupConfig(groupId, group);
             if (group.ProxyId) {
                 Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(nullptr, nullptr));

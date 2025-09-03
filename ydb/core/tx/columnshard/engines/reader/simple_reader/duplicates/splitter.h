@@ -14,26 +14,32 @@ public:
     private:
         YDB_READONLY_DEF(bool, IsLast);
         NArrow::NMerger::TSortableBatchPosition Key;
+        YDB_READONLY_DEF(ui64, PortionId);
 
-        TBorder(const bool isLast, const NArrow::TSimpleRow key)
+        TBorder(const bool isLast, const NArrow::TSimpleRow key, const ui64 portionId)
             : IsLast(isLast)
             , Key(NArrow::NMerger::TSortableBatchPosition(key.ToBatch(), 0, false))
+            , PortionId(portionId)
         {
         }
 
     public:
-        static TBorder First(NArrow::TSimpleRow&& key) {
-            return TBorder(false, std::move(key));
+        static TBorder First(NArrow::TSimpleRow&& key, const ui64 portionId) {
+            return TBorder(false, std::move(key), portionId);
         }
-        static TBorder Last(NArrow::TSimpleRow&& key) {
-            return TBorder(true, std::move(key));
+        static TBorder Last(NArrow::TSimpleRow&& key, const ui64 portionId) {
+            return TBorder(true, std::move(key), portionId);
+        }
+        TBorder(const TPortionBorderView& border, const TPortionInfo::TConstPtr& source)
+            : TBorder(border.IsLast(), border.GetIndexKey(*source), source->GetPortionId())
+        {
         }
 
-        std::partial_ordering operator<=>(const TBorder& other) const {
-            return std::tie(Key, IsLast) <=> std::tie(other.Key, other.IsLast);
+        bool operator<(const TBorder& other) const {
+            return std::tie(Key, IsLast, PortionId) < std::tie(other.Key, other.IsLast, PortionId);
         };
-        bool operator==(const TBorder& other) const {
-            return (*this <=> other) == std::partial_ordering::equivalent;
+        bool IsEquivalent(const TBorder& other) const {
+            return Key == other.Key && IsLast == other.IsLast;
         };
 
         const NArrow::NMerger::TSortableBatchPosition& GetKey() const {
@@ -43,31 +49,35 @@ public:
         TString DebugString() const {
             return TStringBuilder() << (IsLast ? "Last:" : "First:") << Key.GetSorting()->DebugJson(0);
         }
+
+        TPortionBorderView MakeView() const {
+            return IsLast ? TPortionBorderView::Last(PortionId) : TPortionBorderView::First(PortionId);
+        }
     };
 
 private:
     std::vector<TBorder> Borders;
-    std::shared_ptr<arrow::Schema> SortingSchema;
+    // std::shared_ptr<arrow::Schema> SortingSchema;
 
 public:
-    TColumnDataSplitter(const THashMap<ui64, NArrow::TFirstLastSpecialKeys>& sources, const NArrow::TFirstLastSpecialKeys& bounds) {
+    TColumnDataSplitter(const THashMap<ui64, TPortionInfo::TConstPtr>& sources) {
         AFL_VERIFY(sources.size());
-        SortingSchema = sources.begin()->second.GetSchema();
+        // SortingSchema = sources.begin()->second.GetSchema();
+        // TBorder sortableBegin(begin, *TValidator::CheckNotNull(sources.FindPtr(begin.GetPortionId())));
+        // TBorder sortableEnd(end, *TValidator::CheckNotNull(sources.FindPtr(end.GetPortionId())));
 
-        for (const auto& [id, specials] : sources) {
-            AFL_VERIFY(specials.GetSchema()->Equals(SortingSchema))("lhs", specials.GetSchema()->ToString())("rhs", SortingSchema->ToString());
-            if (specials.GetFirst() > bounds.GetFirst()) {
-                Borders.emplace_back(TBorder::First(specials.GetFirst()));
-            }
-            if (specials.GetLast() < bounds.GetLast()) {
-                Borders.emplace_back(TBorder::Last(specials.GetLast()));
-            }
+        for (const auto& [id, source] : sources) {
+            // AFL_VERIFY(localBegin <= sortableEnd)("portion_start", source->GetMeta().IndexKeyStart().DebugString())(
+            //     "interval_end", sortableEnd.DebugString());
+            // AFL_VERIFY(localEnd >= sortableEnd)("portion_end", source->GetMeta().IndexKeyEnd().DebugString())(
+            //     "interval_start", sortableBegin.DebugString());
+            Borders.emplace_back(TBorder::First(source->GetMeta().IndexKeyStart(), id));
+            Borders.emplace_back(TBorder::Last(source->GetMeta().IndexKeyEnd(), id));
         }
-        Borders.emplace_back(TBorder::First(bounds.GetFirst()));
-        Borders.emplace_back(TBorder::Last(bounds.GetLast()));
+        // Borders.emplace_back(std::move(sortableBegin));
+        // Borders.emplace_back(std::move(sortableEnd));
 
         std::sort(Borders.begin(), Borders.end());
-        Borders.erase(std::unique(Borders.begin(), Borders.end()), Borders.end());
 
         AFL_VERIFY(NumIntervals());
     }
@@ -82,43 +92,64 @@ public:
         return Borders[intervalIdx + 1];
     }
 
-    std::vector<TRowRange> SplitPortion(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
-        AFL_VERIFY(!Borders.empty());
+    template <class Callback>
+    void ForEachInterval(Callback&& callback) const {
+        THashSet<ui64> currentPortions;
+        const TBorder* lastBorder = &Borders.front();
 
-        std::vector<ui64> borderOffsets;
-        ui64 offset = 0;
-
-        auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, SortingSchema->field_names(), {}, false);
-
-        for (const auto& border : Borders) {
-            if (offset == data->GetRecordsCount()) {
-                borderOffsets.emplace_back(offset);
-                continue;
+        for (ui64 i = 1; i < Borders.size(); ++i) {
+            const auto& currentBorder = Borders[i];
+            if (!currentBorder.IsEquivalent(*lastBorder)) {
+                if (!callback(TIntervalBordersView(lastBorder->MakeView(), currentBorder.MakeView()), currentPortions)) {
+                    break;
+                }
             }
-            const auto findBound = NArrow::NMerger::TSortableBatchPosition::FindBound(
-                position, offset, data->GetRecordsCount() - 1, border.GetKey(), border.GetIsLast());
-            offset = findBound ? findBound->GetPosition() : data->GetRecordsCount();
-            borderOffsets.emplace_back(offset);
+            if (currentBorder.GetIsLast()) {
+                AFL_VERIFY(currentPortions.erase(currentBorder.GetPortionId()));
+            } else {
+                AFL_VERIFY(currentPortions.insert(currentBorder.GetPortionId()).second);
+            }
+            lastBorder = &currentBorder;
         }
-
-        std::vector<TRowRange> segments;
-        for (ui64 i = 1; i < borderOffsets.size(); ++i) {
-            segments.emplace_back(TRowRange(borderOffsets[i - 1], borderOffsets[i]));
-        }
-
-        AFL_VERIFY(segments.size() == NumIntervals())("splitted", segments.size())("expected", NumIntervals())("splitter", DebugString());
-        return segments;
     }
 
-    TString DebugString() const {
-        TStringBuilder sb;
-        sb << "[";
-        for (const auto& border : Borders) {
-            sb << border.DebugString() << ";";
-        }
-        sb << "]";
-        return sb;
-    }
+    // std::vector<TRowRange> SplitPortion(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
+    //     AFL_VERIFY(!Borders.empty());
+
+    //     std::vector<ui64> borderOffsets;
+    //     ui64 offset = 0;
+
+    //     auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, SortingSchema->field_names(), {}, false);
+
+    //     for (const auto& border : Borders) {
+    //         if (offset == data->GetRecordsCount()) {
+    //             borderOffsets.emplace_back(offset);
+    //             continue;
+    //         }
+    //         const auto findBound = NArrow::NMerger::TSortableBatchPosition::FindBound(
+    //             position, offset, data->GetRecordsCount() - 1, border.GetKey(), border.GetIsLast());
+    //         offset = findBound ? findBound->GetPosition() : data->GetRecordsCount();
+    //         borderOffsets.emplace_back(offset);
+    //     }
+
+    //     std::vector<TRowRange> segments;
+    //     for (ui64 i = 1; i < borderOffsets.size(); ++i) {
+    //         segments.emplace_back(TRowRange(borderOffsets[i - 1], borderOffsets[i]));
+    //     }
+
+    //     AFL_VERIFY(segments.size() == NumIntervals())("splitted", segments.size())("expected", NumIntervals())("splitter", DebugString());
+    //     return segments;
+    // }
+
+    // TString DebugString() const {
+    //     TStringBuilder sb;
+    //     sb << "[";
+    //     for (const auto& border : Borders) {
+    //         sb << border.DebugString() << ";";
+    //     }
+    //     sb << "]";
+    //     return sb;
+    // }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

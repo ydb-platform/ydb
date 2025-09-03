@@ -27,12 +27,31 @@ class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
     friend class TMergeableInterval;
 
 private:
-    class TPortionsSlice;
-
     class TFilterSizeProvider {
     public:
         size_t operator()(const NArrow::TColumnFilter& filter) {
             return filter.GetDataSize();
+        }
+    };
+
+    class TIntervalFilterCallback {
+    private:
+        ui32 IntervalIdx;
+        std::shared_ptr<TFilterAccumulator> Constructor;
+
+    public:
+        TIntervalFilterCallback(const ui32 intervalIdx, const std::shared_ptr<TFilterAccumulator>& constructor)
+            : IntervalIdx(intervalIdx)
+            , Constructor(constructor)
+        {
+        }
+
+        void OnFilterReady(const NArrow::TColumnFilter& filter) {
+            Constructor->AddFilter(IntervalIdx, filter);
+        }
+
+        void OnError(const TString& error) {
+            Constructor->Abort(error);
         }
     };
 
@@ -51,7 +70,7 @@ private:
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
 
     TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter, TNoopDelete, TFilterSizeProvider> FiltersCache;
-    THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
+    THashMap<TIntervalBordersView, THashMap<ui64, std::vector<TIntervalFilterCallback>>> IntervalsInFlight;
     ui64 ExpectedIntersectionCount = 0;
 
 private:
@@ -73,20 +92,12 @@ private:
         return portions;
     }
 
-    void BuildFilterForSlice(const TPortionsSlice& slice, const std::shared_ptr<TInternalFilterConstructor>& constructor,
-        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard,
-        const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& dataByPortion);
-
-    std::vector<TPortionsSlice> FindIntervalBorders(const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& dataByPortion,
-        const std::shared_ptr<TInternalFilterConstructor>& context) const;
-
 private:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRequestFilter, Handle);
             hFunc(NPrivate::TEvFilterRequestResourcesAllocated, Handle);
             hFunc(NPrivate::TEvFilterConstructionResult, Handle);
-            hFunc(NPrivate::TEvDuplicateSourceCacheResult, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
@@ -96,16 +107,15 @@ private:
     void Handle(const TEvRequestFilter::TPtr&);
     void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
     void Handle(const NPrivate::TEvFilterConstructionResult::TPtr&);
-    void Handle(const NPrivate::TEvDuplicateSourceCacheResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
         AbortAndPassAway("aborted by actor system");
     }
 
     void AbortAndPassAway(const TString& reason) {
-        for (auto& [_, constructors] : BuildingFilters) {
-            for (auto& constructor : constructors) {
-                if (!constructor->IsDone()) {
-                    constructor->Abort(reason);
+        for (auto& [_, callbacksByPortion] : IntervalsInFlight) {
+            for (auto& [_, callbacks] : callbacksByPortion) {
+                for (auto& callback : callbacks) {
+                    callback.OnError(reason);
                 }
             }
         }

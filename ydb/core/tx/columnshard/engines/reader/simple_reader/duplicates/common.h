@@ -63,36 +63,117 @@ public:
     }
 };
 
+class TPortionBorderView {
+private:
+    enum class EBorder {
+        FIRST,
+        LAST,
+    };
+
+private:
+    YDB_READONLY_DEF(ui64, PortionId);
+    EBorder Border;
+
+private:
+    TPortionBorderView(const ui64 portionId, const EBorder border)
+        : PortionId(portionId)
+        , Border(border)
+    {
+    }
+
+public:
+    static TPortionBorderView First(const ui64 portionId) {
+        return TPortionBorderView(portionId, EBorder::FIRST);
+    }
+    static TPortionBorderView Last(const ui64 portionId) {
+        return TPortionBorderView(portionId, EBorder::LAST);
+    }
+
+    NArrow::TSimpleRow GetIndexKey(const TPortionInfo& portion) const {
+        AFL_VERIFY(PortionId == portion.GetPortionId());
+        switch (Border) {
+            case EBorder::FIRST:
+                return portion.GetMeta().IndexKeyStart();
+            case EBorder::LAST:
+                return portion.GetMeta().IndexKeyEnd();
+        }
+    }
+
+    NArrow::TSimpleRow GetIndexKeyVerified(const THashMap<ui64, TPortionInfo::TConstPtr>& portions) const {
+        auto* findPortion = portions.FindPtr(PortionId);
+        AFL_VERIFY(findPortion)("id", PortionId)("portions", portions.size());
+        AFL_VERIFY(*findPortion);
+        return GetIndexKey(**findPortion);
+    }
+
+    operator size_t() const {
+        return CombineHashes(PortionId, (ui64)Border);
+    }
+
+    bool IsLast() const {
+        switch (Border) {
+            case EBorder::FIRST:
+                return false;
+            case EBorder::LAST:
+                return true;
+        }
+    }
+};
+
+class TIntervalBordersView {
+private:
+    TPortionBorderView Begin;
+    TPortionBorderView End;
+
+public:
+    TIntervalBordersView(const TPortionBorderView& begin, const TPortionBorderView& end)
+        : Begin(begin)
+        , End(end)
+    {
+    }
+
+    const TPortionBorderView& GetBegin() const {
+        return Begin;
+    }
+    const TPortionBorderView& GetEnd() const {
+        return End;
+    }
+
+    operator size_t() const {
+        return CombineHashes((size_t)Begin, (size_t)End);
+    }
+};
+
 class TDuplicateMapInfo {
 private:
     TSnapshot MaxVersion;
-    TRowRange Rows;
+    TIntervalBordersView Interval;
     YDB_READONLY_DEF(ui64, SourceId);
 
 public:
-    TDuplicateMapInfo(const TSnapshot& maxVersion, const TRowRange& rows, const ui64 sourceId)
+    TDuplicateMapInfo(const TSnapshot& maxVersion, const TIntervalBordersView& interval, const ui64 sourceId)
         : MaxVersion(maxVersion)
-        , Rows(rows)
+        , Interval(interval)
         , SourceId(sourceId)
     {
     }
 
     operator size_t() const {
         size_t h = (size_t)MaxVersion;
-        h = CombineHashes(h, (size_t)Rows);
+        h = CombineHashes(h, (size_t)Interval);
         h = CombineHashes(h, SourceId);
         return h;
     }
     bool operator==(const TDuplicateMapInfo& other) const {
-        return std::tie(MaxVersion, Rows, SourceId) == std::tie(other.MaxVersion, other.Rows, other.SourceId);
+        return std::tie(MaxVersion, Interval, SourceId) == std::tie(other.MaxVersion, other.Interval, other.SourceId);
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "MaxVersion=" << MaxVersion.DebugString() << ";Rows=" << Rows.DebugString() << ";SourceId=" << SourceId;
+        return TStringBuilder() << "MaxVersion=" << MaxVersion.DebugString() << ";SourceId=" << SourceId;
     }
 
-    const TRowRange& GetRows() const {
-        return Rows;
+    const TIntervalBordersView& GetInterval() const {
+        return Interval;
     }
 };
 

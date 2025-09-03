@@ -101,7 +101,9 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ_AUTH;
     }
 
-    static const TVector<TString>& GetPermissions();
+    static const TVector<TString>& GetPermissions() {
+        return NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::DEFAULT>::Get();
+    }
 
     void InitializeAttributesFromSchema(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
         CheckedDatabaseName_ = CanonizePath(schemeData.GetPath());
@@ -624,24 +626,6 @@ void TGrpcRequestCheckActor<TEvent>::InitializeAttributes(const TSchemeBoardEven
         Attributes_.emplace_back(std::make_pair(attr.GetKey(), attr.GetValue()));
     }
     InitializeAttributesFromSchema(schemeData, rootAttributes);
-}
-
-template<typename T>
-inline constexpr bool IsStreamWrite = (
-    std::is_same_v<T, TEvStreamPQWriteRequest>
-    || std::is_same_v<T, TEvStreamTopicWriteRequest>
-    || std::is_same_v<T, TRefreshTokenStreamWriteSpecificRequest>
-);
-
-template <typename TEvent>
-const TVector<TString>& TGrpcRequestCheckActor<TEvent>::GetPermissions() {
-    if constexpr (IsStreamWrite<TEvent>) {
-        // extended permissions for stream write request family
-        return NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::STREAM>::Get();
-    } else {
-        // default permissions
-        return NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::DEFAULT>::Get();
-    }
 }
 
 template <typename TEvent>

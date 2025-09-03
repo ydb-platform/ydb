@@ -53,16 +53,20 @@ void TManager::TryAllocateWaiting() {
     if (Processes.size()) {
         auto it = Processes.find(ProcessIds.GetMinInternalIdVerified());
         AFL_VERIFY(it != Processes.end());
-        AFL_VERIFY(it->second.IsPriorityProcess());
-        it->second.TryAllocateWaiting(0);
+        TProcessMemory& process = it->second;
+        AFL_VERIFY(process.IsPriorityProcess());
+        process.TryAllocateWaiting(0);
     }
     for (auto it = ProcessesOrdered.begin(); it != ProcessesOrdered.end();) {
-        if (it->second->TryAllocateWaiting(1)) {
-            TProcessMemory* process = it->second;
+        // Check root availability
+        if (!DefaultStage->IsAllocatable(1, 0)) {
+            break;
+        }
+        TProcessMemory* process = it->second;
+        if (process->TryAllocateWaiting(1)) {
             it = ProcessesOrdered.erase(it);
-            auto info = ProcessesOrdered.emplace(process->BuildUsageAddress(), process);
-            AFL_VERIFY(info.second);
-            auto itNew = info.first;
+            auto [itNew, emplaced] = ProcessesOrdered.emplace(process->BuildUsageAddress(), process);
+            AFL_VERIFY(emplaced);
             if (it == ProcessesOrdered.end() || itNew->first < it->first) {
                 it = itNew;
             }

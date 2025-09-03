@@ -40,6 +40,9 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
     TDeque<TPathId> Sequences;
     TDeque<TPathId> AlterSequences;
 
+    TDeque<TPathId> Secrets;
+    TDeque<TPathId> AlterSecrets;
+
     TDeque<TPathId> SysViews;
 
     // Can we have multiple long incremental restore operations?
@@ -133,6 +136,14 @@ public:
 
     void PersistSequence(const TPathId& pathId) {
         Sequences.push_back(pathId);
+    }
+
+    void PersistAlterSecret(const TPathId& pathId) {
+        AlterSecrets.emplace_back(pathId);
+    }
+
+    void PersistSecret(const TPathId& pathId) {
+        Secrets.emplace_back(pathId);
     }
 
     void PersistSysView(const TPathId& pathId) {

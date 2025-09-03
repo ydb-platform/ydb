@@ -144,6 +144,14 @@ void TMemoryChanges::GrabNewLongIncrementalBackupOp(TSchemeShard* ss, ui64 id) {
     IncrementalBackups.emplace(id, nullptr);
 }
 
+void TMemoryChanges::GrabNewSecret(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->Secrets, Secrets);
+}
+
+void TMemoryChanges::GrabSecret(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TSecretInfo>(pathId, ss->Secrets, Secrets);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -323,6 +331,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->IncrementalBackups.erase(id);
         }
         IncrementalBackups.pop();
+    }
+
+    while (Secrets) {
+        const auto& [id, elem] = Secrets.top();
+        if (elem) {
+            ss->Secrets[id] = elem;
+        } else {
+            ss->Secrets.erase(id);
+        }
+        Secrets.pop();
     }
 }
 

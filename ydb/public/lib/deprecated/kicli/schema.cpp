@@ -140,6 +140,9 @@ void TSchemaObject::Drop() {
     case EPathType::ResourcePool:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool);
         break;
+    case EPathType::Secret:
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret);
+        break;
     case EPathType::BackupCollection:
         // FIXME(+active)
         // drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection);
@@ -244,6 +247,8 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
         return TSchemaObject::EPathType::BackupCollection;
     case NKikimrSchemeOp::EPathTypeSysView:
         return TSchemaObject::EPathType::SysView;
+    case NKikimrSchemeOp::EPathTypeSecret:
+        return TSchemaObject::EPathType::Secret;
     case NKikimrSchemeOp::EPathTypeTableIndex:
     case NKikimrSchemeOp::EPathTypeExtSubDomain:
     case NKikimrSchemeOp::EPathTypeCdcStream:

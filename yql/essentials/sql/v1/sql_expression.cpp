@@ -1233,7 +1233,9 @@ TNodePtr TSqlExpression::LambdaRule(const TRule_lambda& rule) {
     TVector<TString> argNames;
     for (const auto& arg : args) {
         argNames.push_back(arg.Name);
-        PopNamedNode(arg.Name);
+        if (!PopNamedNode(arg.Name)) {
+            return {};
+        }
     }
     if (!ret) {
         return {};
@@ -1659,7 +1661,9 @@ bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_lambda_body& n
     }
 
     for (const auto& name : localNames) {
-        PopNamedNode(name);
+        if (!PopNamedNode(name)) {
+            return false;
+        }
     }
 
     if (!nodeExpr) {
@@ -1903,7 +1907,12 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                     }
 
                     if (!Ctx_.PragmaRegexUseRe2) {
-                        Ctx_.Warning(pos, TIssuesIds::CORE_LEGACY_REGEX_ENGINE) << "Legacy regex engine works incorrectly with unicode. Use PRAGMA RegexUseRe2='true';";
+                        if (!Ctx_.Warning(pos, TIssuesIds::CORE_LEGACY_REGEX_ENGINE, [](auto& out) {
+                            out << "Legacy regex engine works incorrectly with unicode. "
+                                << "Use PRAGMA RegexUseRe2='true';";
+                        })) {
+                            return nullptr;
+                        }
                     }
 
                     const auto& matcher = Ctx_.PragmaRegexUseRe2 ?
@@ -1957,7 +1966,11 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                 if (altCase == TRule_cond_expr::TAlt3::TBlock1::kAlt4 &&
                     !cond.GetAlt_cond_expr3().GetBlock1().GetAlt4().HasBlock1())
                 {
-                    Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_MISSING_IS_BEFORE_NOT_NULL) << "Missing IS keyword before NOT NULL";
+                    if (!Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_MISSING_IS_BEFORE_NOT_NULL, [](auto& out) {
+                        out << "Missing IS keyword before NOT NULL";
+                    })) {
+                        return {};
+                    }
                 }
 
                 auto isNull = BuildIsNullOp(pos, res);
@@ -1978,8 +1991,11 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                 const bool oneArgNull  = left->IsNull() || right->IsNull();
 
                 if (res->IsNull() || bothArgNull || (symmetric && oneArgNull)) {
-                    Ctx_.Warning(pos, TIssuesIds::YQL_OPERATION_WILL_RETURN_NULL)
-                    << "BETWEEN operation will return NULL here";
+                    if (!Ctx_.Warning(pos, TIssuesIds::YQL_OPERATION_WILL_RETURN_NULL, [](auto& out) {
+                        out << "BETWEEN operation will return NULL here";
+                    })) {
+                        return {};
+                    }
                 }
 
                 auto buildSubexpr = [&](const TNodePtr& left, const TNodePtr& right) {

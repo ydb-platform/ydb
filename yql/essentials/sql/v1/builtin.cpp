@@ -487,14 +487,20 @@ public:
 
             // TODO: TablePath() and TableRecordIndex() have more strict limitations
             if (src->GetJoin()) {
-                ctx.Warning(Pos_,
-                    TIssuesIds::YQL_EMPTY_TABLENAME_RESULT) << "TableName() may produce empty result when used in ambiguous context (with JOIN)";
+                if (!ctx.Warning(Pos_, TIssuesIds::YQL_EMPTY_TABLENAME_RESULT, [](auto& out) {
+                    out << "TableName() may produce empty result when used in ambiguous context (with JOIN)";
+                })) {
+                    return false;
+                }
             }
 
             if (src->HasAggregations()) {
-                ctx.Warning(Pos_,
-                    TIssuesIds::YQL_EMPTY_TABLENAME_RESULT) << "TableName() will produce empty result when used with aggregation.\n"
-                                                               "Please consult documentation for possible workaround";
+                if (!ctx.Warning(Pos_, TIssuesIds::YQL_EMPTY_TABLENAME_RESULT, [](auto& out) {
+                    out << "TableName() will produce empty result when used with aggregation.\n"
+                           "Please consult documentation for possible workaround";
+                })) {
+                    return false;
+                }
             }
 
             Args_.push_back(Y("TablePath", Y("DependsOn", "row")));
@@ -1615,10 +1621,13 @@ private:
             // TODO: 'IN ((select ...))' is parsed exactly like 'IN (select ...)' instead of a single element tuple
             if (singleElement->GetSource() || singleElement->IsSelect()) {
                 TStringBuf parenKind = singleElement->GetSource() ? "" : "external ";
-                ctx.Warning(pos,
-                            TIssuesIds::YQL_CONST_SUBREQUEST_IN_LIST) << "Using subrequest in scalar context after IN, "
-                                                                      << "perhaps you should remove "
-                                                                      << parenKind << "parenthesis here";
+                if (!ctx.Warning(pos, TIssuesIds::YQL_CONST_SUBREQUEST_IN_LIST, [&](auto& out) {
+                    out << "Using subrequest in scalar context after IN, "
+                        << "perhaps you should remove "
+                        << parenKind << "parenthesis here";
+                })) {
+                    return false;
+                }
             }
         }
 
@@ -3448,7 +3457,12 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     }
 
     if (ns == "datetime2") {
-        ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_DATETIME2) << "DateTime2:: is a temporary alias for DateTime:: which will be removed in the future, use DateTime:: instead";
+        if (!ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_DATETIME2, [](auto& out) {
+            out << "DateTime2:: is a temporary alias for DateTime:: which will be "
+                << "removed in the future, use DateTime:: instead";
+        })) {
+            return nullptr;
+        }
     }
 
     if (ns == "datetime") {
@@ -3475,9 +3489,12 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     if (ns == "yql" || ns == "@yql") {
         if (warnOnYqlNameSpace && GetEnv("YQL_DETERMINISTIC_MODE").empty()) {
-            ctx.Warning(pos, TIssuesIds::YQL_S_EXPRESSIONS_CALL)
-                << "It is not recommended to directly access s-expressions functions via YQL::" << Endl
-                << "This mechanism is mostly intended for temporary workarounds or internal testing purposes";
+            if (!ctx.Warning(pos, TIssuesIds::YQL_S_EXPRESSIONS_CALL, [](auto& out) {
+                out << "It is not recommended to directly access s-expressions functions via YQL::" << Endl
+                    << "This mechanism is mostly intended for temporary workarounds or internal testing purposes";
+            })) {
+                return nullptr;
+            }
         }
 
         if (ns == "yql") {
@@ -3890,7 +3907,11 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     TNodePtr customUserType = nullptr;
     if (ns == "json") {
-        ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_JSON_UDF) << "Json UDF is deprecated. Please use JSON API instead";
+        if (!ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_JSON_UDF, [](auto& out) {
+            out << "Json UDF is deprecated. Please use JSON API instead";
+        })) {
+            return nullptr;
+        }
 
         ns = "yson";
         nameSpace = "Yson";

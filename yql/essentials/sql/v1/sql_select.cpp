@@ -38,7 +38,11 @@ bool CollectJoinLinkSettings(TPosition pos, TJoinLinkSettings& linkSettings, TCo
             linkSettings.Compact = true;
             continue;
         } else {
-            ctx.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT) << "Unsupported join hint: " << hint.Name;
+            if (!ctx.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT, [&](auto& out) {
+                out << "Unsupported join hint: " << hint.Name;
+            })) {
+                return false;
+            }
         }
 
         if (TJoinLinkSettings::EStrategy::Default == linkSettings.Strategy) {
@@ -159,7 +163,11 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
     }
     joinOp = NormalizeJoinOp(joinOp);
     if (linkSettings.Strategy != TJoinLinkSettings::EStrategy::Default && joinOp == "Cross") {
-        Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_UNUSED_HINT) << "Non-default join strategy will not be used for CROSS JOIN";
+        if (!Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_UNUSED_HINT, [](auto& out) {
+            out << "Non-default join strategy will not be used for CROSS JOIN";
+        })) {
+            return false;
+        }
         linkSettings.Strategy = TJoinLinkSettings::EStrategy::Default;
     }
 
@@ -999,7 +1007,11 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
             uniqueSets.insert_unique(NSorted::TSimpleSet<TString>(hint.Values.cbegin(), hint.Values.cend()));
             distinctSets.insert_unique(NSorted::TSimpleSet<TString>(hint.Values.cbegin(), hint.Values.cend()));
         } else {
-            Ctx_.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT) << "Hint " << hint.Name << " will not be used";
+            if (!Ctx_.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT, [&](auto& out) {
+                out << "Hint " << hint.Name << " will not be used";
+            })) {
+                return nullptr;
+            }
         }
     }
 
@@ -1395,11 +1407,14 @@ TSourcePtr TSqlSelect::BuildStmt(const TRule& node, TPosition& pos) {
     if (assumeOrderBy) {
         YQL_ENSURE(!orderBy.empty());
 
-        Ctx_.Warning(orderBy[0]->OrderExpr->GetPos(), TIssuesIds::WARNING)
-            << "ASSUME ORDER BY is used, "
-            << "but UNION, INTERSECT and EXCEPT "
-            << "operators have no ordering guarantees, "
-            << "therefore consider using ORDER BY";
+        if (!Ctx_.Warning(orderBy[0]->OrderExpr->GetPos(), TIssuesIds::WARNING, [](auto& out) {
+            out << "ASSUME ORDER BY is used, "
+                << "but UNION, INTERSECT and EXCEPT "
+                << "operators have no ordering guarantees, "
+                << "therefore consider using ORDER BY";
+        })) {
+            return nullptr;
+        }
     }
 
     if (orderBy) {

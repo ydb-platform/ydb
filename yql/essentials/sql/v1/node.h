@@ -820,7 +820,7 @@ namespace NSQLTranslationV1 {
 
     TWinSpecs CloneContainer(const TWinSpecs& specs);
 
-    void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
+    bool WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
         const TVector<TNodePtr>& groupByExprTerms);
     bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& nodes);
 

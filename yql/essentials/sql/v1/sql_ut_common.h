@@ -4328,6 +4328,39 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
             "<main>:1:10: Warning: You should probably use alias in GROUP BY instead of using it here. Please consult documentation for more details, code: 4532\n");
     }
 
+    Y_UNIT_TEST(WarnForAggregationBySelectAliasAsError) {
+        NSQLTranslation::TTranslationSettings settings;
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+            PRAGMA Warning("error", "*");
+            SELECT c + 1 AS c
+            FROM plato.Input
+            GROUP BY c;
+        )sql", settings);
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res),
+            "<main>:5:22: Error: GROUP BY will aggregate by column `c` instead of aggregating by SELECT expression with same alias, code: 4532\n"
+            "<main>:3:22: Error: You should probably use alias in GROUP BY instead of using it here. Please consult documentation for more details, code: 4532\n");
+    }
+
+    Y_UNIT_TEST(WarnForAggregationBySelectAliasAsErrorStrict) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.Flags.emplace("StrictWarningAsError");
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+            PRAGMA Warning("error", "*");
+            SELECT c + 1 AS c
+            FROM plato.Input
+            GROUP BY c;
+        )sql", settings);
+
+        UNIT_ASSERT_C(!res.IsOk(), res.Issues.ToString());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res),
+            "<main>:5:22: Error: GROUP BY will aggregate by column `c` instead of aggregating by SELECT expression with same alias, code: 4532\n"
+            "<main>:3:22: Error: You should probably use alias in GROUP BY instead of using it here. Please consult documentation for more details, code: 4532\n");
+    }
+
     Y_UNIT_TEST(NoWarnForAggregationBySelectAliasWhenAggrFunctionsAreUsedInAlias) {
         NYql::TAstParseResult res = SqlToYql("select\n"
                                              "    cast(avg(val) as int) as value,\n"
@@ -5871,6 +5904,23 @@ select FormatType($f());
                                              "       1;");
         UNIT_ASSERT(res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:23: Warning: Hint foo will not be used, code: 4534\n");
+    }
+
+    Y_UNIT_TEST(WarnForUnusedSqlHintAsError) {
+        NSQLTranslation::TTranslationSettings settings;
+
+        TString query = R"sql(
+            pragma warning("error", "*");
+
+            select * from plato.Input1 as a
+            join /*+ merge() */ plato.Input2 as b using(key);
+            select --+            foo(bar)
+                1;
+        )sql";
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(!res.IsOk(), res.Issues.ToString());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:6:35: Error: Hint foo will not be used, code: 4534\n");
     }
 
     Y_UNIT_TEST(WarnForDeprecatedSchema) {

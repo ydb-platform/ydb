@@ -12820,7 +12820,7 @@
         {
             "checksum": "5362cc94a32ae614cc3808035e96d473",
             "size": 388,
-            "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql_negative.test_flatten_by-struct_with_wrong_correlation-default.txt_/err_file.out"
+            "uri": "https://{canondata_backend}/1923547/3399f6791e98c475dea65ef58ba430d5f6730d95/resource.tar.gz#test_sql_negative.test_flatten_by-struct_with_wrong_correlation-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[flatten_by-table_funcs_spec_flatten_by-default.txt]": [
@@ -12932,7 +12932,7 @@
         {
             "checksum": "0842060cf09e8e67fc1e59c57fc509e4",
             "size": 406,
-            "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql_negative.test_pragma-messages-default.txt_/err_file.out"
+            "uri": "https://{canondata_backend}/1923547/3399f6791e98c475dea65ef58ba430d5f6730d95/resource.tar.gz#test_sql_negative.test_pragma-messages-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[pragma-messages_warning_action-default.txt]": [

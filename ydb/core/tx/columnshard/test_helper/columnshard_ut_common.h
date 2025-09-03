@@ -20,6 +20,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
+#include <util/string/hex.h>
+#include <cstring>
+
 namespace NKikimr::NOlap {
 struct TIndexInfo;
 }
@@ -530,6 +533,28 @@ public:
                 if constexpr (std::is_same<TData, std::string>::value) {
                     if constexpr (arrow::has_string_view<T>::value && arrow::is_parameter_free_type<T>::value) {
                         Y_ABORT_UNLESS(typedBuilder.Append(data.data(), data.size()).ok());
+                        return true;
+                    }
+
+                    if constexpr (std::is_same<T, arrow::FixedSizeBinaryType>::value) {
+                        // For UUID convert hex string to binary data using GUID format (mixed endian)
+                        Y_ABORT_UNLESS(data.size() == 32);
+
+                        auto hexStr = data;
+                        ui32 time_low = std::stoul(hexStr.substr(0, 8), nullptr, 16);
+                        ui16 time_mid = std::stoul(hexStr.substr(8, 4), nullptr, 16);
+                        ui16 time_hi = std::stoul(hexStr.substr(12, 4), nullptr, 16);
+
+                        // Convert to GUID format (little endian for first 3 fields)
+                        char guidBytes[16];
+                        *reinterpret_cast<ui32*>(&guidBytes[0]) = time_low;
+                        *reinterpret_cast<ui16*>(&guidBytes[4]) = time_mid;
+                        *reinterpret_cast<ui16*>(&guidBytes[6]) = time_hi;
+
+                        // Last 8 bytes remain in big endian
+                        auto lastBytes = HexDecode(hexStr.substr(16, 16));
+                        memcpy(&guidBytes[8], lastBytes.data(), 8);
+                        Y_ABORT_UNLESS(typedBuilder.Append(guidBytes).ok());
                         return true;
                     }
                 }

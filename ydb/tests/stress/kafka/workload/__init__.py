@@ -69,8 +69,9 @@ class Workload(unittest.TestCase):
         workloadConsumerName = self.workload_consumer_name
 
         print("Creating test topic")
+        testOptions = [("1", "1"), ("0", "1"), ("0", "0")]
         checkerConsumer = f"targetCheckerConsumer"
-        self.create_topic(self.test_topic_path, [workloadConsumerName, checkerConsumer])
+        self.create_topic(self.test_topic_path, [workloadConsumerName, checkerConsumer] + [f"{checkerConsumer}-{i}" for i in range(len(testOptions))])
 
         print("Running workload topic run")
         processes = [
@@ -78,13 +79,13 @@ class Workload(unittest.TestCase):
         ]
         print("NumWorkers: ", self.num_workers)
         print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
-        testOptions = [("1", "1"), ("0", "1"), ("0", "0")]
+
         for i, parameters in enumerate(testOptions):
             use_transactions, use_idempotence = parameters
             targetTopicName = f"{self.target_topic_path}-{i}"
-            self.create_topic(targetTopicName, [checkerConsumer])
+            self.create_topic(targetTopicName, [checkerConsumer, f"{checkerConsumer}-{i}"])
             for j in range(self.num_workers):
-                processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap, f"streams-store-{i}", self.test_topic_path, targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence]))
+                processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap, f"streams-store-{i * self.num_workers + j}", self.test_topic_path, targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence]))
         processes[0].wait()
         assert processes[0].returncode == 0
 
@@ -101,7 +102,7 @@ class Workload(unittest.TestCase):
         messages_info_test = self.read_messages(self.test_topic_path, checkerConsumer)
 
         for i in range(len(testOptions)):
-            messages_info_target = self.read_messages(f"{self.target_topic_path}-{i}", checkerConsumer)
+            messages_info_target = self.read_messages(f"{self.target_topic_path}-{i}", f"{checkerConsumer}-{i}")
             totalMessCountTest = 0
             totalMessCountTarget = 0
             for partitionNum in messages_info_test.keys():

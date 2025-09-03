@@ -3149,6 +3149,11 @@
                 "ColumnId": 19,
                 "ColumnName": "ExportMetadata",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 20,
+                "ColumnName": "SanitizedToken",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -3173,7 +3178,8 @@
                     16,
                     17,
                     18,
-                    19
+                    19,
+                    20
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6157,6 +6163,11 @@
                 "ColumnId": 13,
                 "ColumnName": "PeerName",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "SanitizedToken",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -6175,7 +6186,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,

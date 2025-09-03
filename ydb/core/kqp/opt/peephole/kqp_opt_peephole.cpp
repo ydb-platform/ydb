@@ -364,12 +364,12 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             // TODO(#23895): workaround for https://github.com/ydb-platform/ydb/issues/20440
             //      do not mix scalar and block HashShuffle connections,
             //      if we find any scalar connection then don't propagate blocks through other connections.
-            bool hasScalarHashShuffle = false;
+            ui32 scalarHashShuffleCount = 0;
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto connection = stage.Inputs().Item(i).Maybe<TDqCnHashShuffle>();
                 if (connection && connection.Cast().HashFunc().IsValid()) {
                     auto hashFuncType = FromString<NDq::EHashShuffleFuncType>(connection.Cast().HashFunc().Cast().StringValue());
-                    hasScalarHashShuffle |= (hashFuncType == NDq::EHashShuffleFuncType::HashV1) || (hashFuncType == NDq::EHashShuffleFuncType::HashV2);
+                    scalarHashShuffleCount += (hashFuncType == NDq::EHashShuffleFuncType::HashV1) || (hashFuncType == NDq::EHashShuffleFuncType::HashV2);
                 }
             }
 
@@ -379,7 +379,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
                 newArgs.emplace_back(newArg);
 
-                if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); !hasScalarHashShuffle && connection &&
+                if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); scalarHashShuffleCount <= 1 && connection &&
                     CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, TDqStageSettings::Parse(stage), ctx, typesCtx))
                 {
                     TExprNode::TPtr newArgNode = ctx.Builder(oldArg.Pos())

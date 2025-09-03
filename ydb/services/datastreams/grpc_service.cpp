@@ -25,7 +25,7 @@ void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
     }
     if (!attributes.empty()) {
         //full list of permissions for compatibility. remove old permissions later.
-        checker->SetEntries({{NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::STREAM>::Get(), attributes}});
+        checker->SetEntries({{NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::DEFAULT>::Get(), attributes}});
     }
 }
 

@@ -74,6 +74,26 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         }
     }
 
+    switch (indexDesc.GetType()) {
+        case NKikimrSchemeOp::EIndexTypeInvalid:
+            return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Invalid index type")};
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            // no feature flag, everything is fine
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            if (!context.SS->EnableInitialUniqueIndex) {
+                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding a unique index to an existing table is disabled")};
+            }
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            if (!context.SS->EnableVectorIndex) {
+                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
+            }
+            break;
+        // no default section because proto2 enum can only have a valid value
+    }
+
     auto tableInfo = context.SS->Tables.at(table.Base()->PathId);
     auto domainInfo = table.DomainInfo();
 
@@ -93,7 +113,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     TVector<ISubOperation::TPtr> result;
-    const NKikimrSchemeOp::EIndexType indexType = indexDesc.HasType() ? indexDesc.GetType() : NKikimrSchemeOp::EIndexTypeGlobal;
 
     {
         auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
@@ -101,7 +120,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         outTx.MutableCreateTableIndex()->CopyFrom(indexDesc);
         outTx.MutableCreateTableIndex()->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
         outTx.SetInternal(tx.GetInternal());
-        outTx.MutableCreateTableIndex()->SetType(indexType);
 
         result.push_back(CreateNewTableIndex(NextPartId(opId, result), outTx));
     }
@@ -118,7 +136,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
-        if (indexType != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+        if (indexDesc.GetType() != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
             implTableDesc.MutablePartitionConfig()->SetShadowData(true);
         }
 

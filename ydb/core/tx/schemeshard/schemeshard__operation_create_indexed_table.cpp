@@ -127,6 +127,27 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TTableColumns baseTableColumns = ExtractInfo(baseTableDescription);
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
+        
+        switch (indexDescription.GetType()) {
+            case NKikimrSchemeOp::EIndexTypeInvalid:
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Invalid index type")};
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                // no feature flag, everything is fine
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                if (!context.SS->EnableInitialUniqueIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique constraint feature is disabled")};
+                }
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                if (!context.SS->EnableVectorIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
+                }
+                break;
+            // no default section because proto2 enum can only have a valid value
+        }
+
         bool uniformIndexTable = false;
         if (indexDescription.IndexImplTableDescriptionsSize()) {
             if (indexDescription.GetIndexImplTableDescriptions(0).HasUniformPartitionsCount()) {
@@ -134,8 +155,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             }
         }
 
-        TPath indexPath = baseTablePath.Child(indexName);
         {
+            TPath indexPath = baseTablePath.Child(indexName);
             TString msg = "invalid table index name: ";
             if (!indexPath.IsValidLeafName(context.UserToken.Get(), msg)) {
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
@@ -241,29 +262,6 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     }
 
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
-        const auto indexType = indexDescription.HasType()
-            ? indexDescription.GetType()
-            : NKikimrSchemeOp::EIndexTypeGlobal;
-
-        switch (indexType) {
-            case NKikimrSchemeOp::EIndexTypeInvalid:
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Invalid index type")};
-            case NKikimrSchemeOp::EIndexTypeGlobal:
-            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-                // no feature flag, everything is fine
-                break;
-            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-                if (!context.SS->EnableInitialUniqueIndex) {
-                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique constraint feature is disabled")};
-                }
-                break;
-            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-                if (!context.SS->EnableVectorIndex) {
-                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
-                }
-                break;
-        }
-
         {
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName(),
@@ -271,10 +269,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             scheme.SetFailOnExist(tx.GetFailOnExist());
             scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
             scheme.SetInternal(tx.GetInternal());
-
             scheme.MutableCreateTableIndex()->CopyFrom(indexDescription);
-            scheme.MutableCreateTableIndex()->SetType(indexType);
-
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
         }
 

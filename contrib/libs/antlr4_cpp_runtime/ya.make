@@ -10,6 +10,10 @@ VERSION(4.13.2)
 
 ORIGINAL_SOURCE(https://github.com/antlr/antlr4/archive/4.13.2.tar.gz)
 
+PEERDIR(
+    contrib/restricted/abseil-cpp
+)
+
 ADDINCL(
     GLOBAL contrib/libs/antlr4_cpp_runtime/src
 )
@@ -20,6 +24,8 @@ NO_UTIL()
 
 CFLAGS(
     GLOBAL -DANTLR4CPP_STATIC
+    GLOBAL -DANTLR4_USE_THREAD_LOCAL_CACHE
+    GLOBAL -DANTLR4CPP_USING_ABSEIL
 )
 
 SRCS(

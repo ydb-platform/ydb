@@ -28,7 +28,7 @@
 #include "antlr4-common.h"
 
 #if ANTLR4CPP_USING_ABSEIL
-#error #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_map.h"
 #else
 #include <unordered_map>
 #endif

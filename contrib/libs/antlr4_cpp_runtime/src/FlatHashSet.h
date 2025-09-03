@@ -28,7 +28,7 @@
 #include "antlr4-common.h"
 
 #if ANTLR4CPP_USING_ABSEIL
-#error #include "absl/container/flat_hash_set.h"
+#include "absl/container/flat_hash_set.h"
 #else
 #include <unordered_set>
 #endif

@@ -544,7 +544,6 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         static const TTypedScheme ChangefeedScheme;
         static const TTypedScheme TopicScheme;
         static const TString RequestStringTable;
-        static const TString RequestStringTopic;
         static const TTypedScheme IndexedTableScheme;
     };
 
@@ -571,20 +570,6 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 State: ECdcStreamStateReady
             }
         )", TableName)
-    };
-
-    const TTypedScheme TTestData::TopicScheme = TTypedScheme {
-        EPathTypePersQueueGroup,
-        R"(
-            Name: "Topic"
-            TotalGroupCount: 2
-            PartitionPerTablet: 1
-            PQTabletConfig {
-                PartitionConfig {
-                    LifetimeSeconds: 10
-                }
-            }
-        )"
     };
 
     const TTypedScheme TTestData::IndexedTableScheme = TTypedScheme {

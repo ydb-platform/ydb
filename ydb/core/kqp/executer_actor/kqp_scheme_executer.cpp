@@ -185,6 +185,9 @@ public:
         auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         auto& record = ev->Record;
 
+        auto actorSystem = TActivationContext::ActorSystem();
+        auto selfId = SelfId();
+
         record.SetDatabaseName(Database);
         if (UserToken) {
             record.SetUserToken(UserToken->GetSerializedToken());
@@ -197,23 +200,38 @@ public:
         const auto& alterTableModifyScheme = schemeOp.GetAlterTable();
         AFL_ENSURE(alterTableModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
 
+        auto dirPath = SplitPath(alterTableModifyScheme.GetMoveTable().GetDstPath());
+        dirPath.pop_back();
+        const auto databasePath = SplitPath(Database);
+
+        if (std::equal(dirPath.begin(), dirPath.end(), databasePath.begin(), databasePath.end())) {
+            auto ev = MakeHolder<TEvPrivate::TEvMakeCTASDirResult>();
+            ev->Result.SetSuccess();
+            actorSystem->Send(selfId, ev.Release());
+            Become(&TKqpSchemeExecuter::ExecuteState);
+            return;
+        }
+
         std::pair<TString, TString> pathPair;
         TString error;
-        AFL_ENSURE(NSchemeHelpers::SplitTablePath(alterTableModifyScheme.GetMoveTable().GetDstPath(), Database, pathPair, error, false))("Error", error);
+        AFL_ENSURE(NSchemeHelpers::SplitTablePath(
+            CombinePath(dirPath.begin(), dirPath.end()),
+            Database,
+            pathPair,
+            error,
+            true))("Error", error);
 
         auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetWorkingDir(pathPair.first);
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
 
         auto* makeDir = modifyScheme->MutableMkDir();
-        makeDir->SetName(alterTableModifyScheme.GetMoveTable().GetDstPath());
+        makeDir->SetName(pathPair.second);
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
         IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
         RegisterWithSameMailbox(requestHandler);
 
-        auto actorSystem = TActivationContext::ActorSystem();
-        auto selfId = SelfId();
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
             auto ev = MakeHolder<TEvPrivate::TEvMakeCTASDirResult>();
             ev->Result = future.GetValue();

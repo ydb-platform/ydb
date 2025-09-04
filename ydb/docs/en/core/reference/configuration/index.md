@@ -28,6 +28,7 @@ The following top-level configuration sections are available, listed in alphabet
 || [{#T}](security_config.md) | No | Security configuration settings ||
 || [{#T}](table_service_config.md) | No | Query processing configuration||
 || [{#T}](tls.md) | No | TLS configuration for secure connections ||
+|| [{#T}](kafka.md) | No | [Kafka Proxy](../../reference/kafka-api/index.md) configuration ||
 |#
 
 ## Practical Guidelines

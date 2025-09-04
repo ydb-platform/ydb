@@ -33,3 +33,5 @@ items:
   href: tls.md
 - name: table_service_config
   href: table_service_config.md
+- name: kafka_proxy_config
+  href: kafka.md

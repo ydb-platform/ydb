@@ -7,6 +7,8 @@ from .constants import (
     PNPM_PRE_LOCKFILE_FILENAME,
     LOCAL_PNPM_INSTALL_HASH_FILENAME,
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
+    CA_STORE_DIRNAME,
+    VIRTUAL_STORE_DIRNAME,
 )
 from .lockfile import PnpmLockfile
 from .utils import build_lockfile_path, build_build_backup_lockfile_path, build_pre_lockfile_path, build_ws_config_path
@@ -135,9 +137,6 @@ def hashed_by_files(files_to_hash, paths_to_exist, hash_storage_filename):
 
 
 class PnpmPackageManager(BasePackageManager):
-    _STORE_NM_PATH = os.path.join(".pnpm", "store")
-    _VSTORE_NM_PATH = os.path.join(".pnpm", "virtual-store")
-    _STORE_VER = "v3"
 
     @classmethod
     def load_lockfile(cls, path):
@@ -221,8 +220,8 @@ class PnpmPackageManager(BasePackageManager):
         self._copy_pnpm_patches()
 
         # Pure `tier 0` logic - isolated stores in the `build_root` (works in `distbuild` and `CI autocheck`)
-        store_dir = self._nm_path(self._STORE_NM_PATH)
-        virtual_store_dir = self._nm_path(self._VSTORE_NM_PATH)
+        store_dir = os.path.join(self.build_root, CA_STORE_DIRNAME)
+        virtual_store_dir = self._nm_path(VIRTUAL_STORE_DIRNAME)
 
         # Local mode optimizations (run from the `ya tool nots`)
         if local_cli:
@@ -230,8 +229,8 @@ class PnpmPackageManager(BasePackageManager):
             store_dir = self.get_local_pnpm_store()
 
             nm_store_path = build_nm_store_path(self.module_path)
-            # Use single virtual-store location in ~/.nots/nm_store/$MODDIR/node_modules/.pnpm/virtual-store
-            virtual_store_dir = os.path.join(build_nm_path(nm_store_path), self._VSTORE_NM_PATH)
+            # Use single virtual-store location in ~/.nots/nm_store/$MODDIR/node_modules/.pnpm
+            virtual_store_dir = os.path.join(build_nm_path(nm_store_path), VIRTUAL_STORE_DIRNAME)
 
             self._create_local_node_modules(nm_store_path, store_dir, virtual_store_dir)
 

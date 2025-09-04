@@ -406,7 +406,7 @@ void TGetQueryTrackerInfoCommand::DoExecute(ICommandContextPtr context)
             .Item("supported_features").Value(result.SupportedFeatures)
             .Item("access_control_objects").Value(result.AccessControlObjects)
             .Item("clusters").Value(result.Clusters)
-            .Item("engines_info").Value(result.EnginesInfo)
+            .Item("engines_info").Value(result.EnginesInfo.value_or(TYsonString(TString("{}"))))
         .EndMap());
 }
 

@@ -573,6 +573,14 @@
             "uri": "https://{canondata_backend}/1777230/52bc68d899becf7bbae2237144774d811cdd833d/resource.tar.gz#test.test_Pure-PureStructListWithFields-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Pure-World-default.txt-Debug]": [
+        {
+            "checksum": "ac7e155438800823a3a5de9f2b6da528",
+            "size": 19,
+            "uri": "https://{canondata_backend}/1880306/e8720a861115a5a62f2d0b244adef451fe7c90a3/resource.tar.gz#test.test_Pure-World-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Pure-World-default.txt-Results]": [],
     "test.test[Stream-Squeeze-default.txt-Debug]": [
         {
             "checksum": "1f2328e4026578c65e646eb7a8fe8d9b",

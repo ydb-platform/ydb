@@ -2157,7 +2157,11 @@ bool TSqlQuery::DeclareStatement(const TRule_declare_stmt& stmt) {
     }
 
     if (Ctx_.IsAlreadyDeclared(varName)) {
-        Ctx_.Warning(varPos, TIssuesIds::YQL_DUPLICATE_DECLARE) << "Duplicate declaration of '" << varName << "' will be ignored";
+        if (!Ctx_.Warning(varPos, TIssuesIds::YQL_DUPLICATE_DECLARE, [&](auto& out) {
+            out << "Duplicate declaration of '" << varName << "' will be ignored";
+        })) {
+            return false;
+        }
     } else {
         PushNamedAtom(varPos, varName);
         Ctx_.DeclareVariable(varName, varPos, typeNode);
@@ -3111,7 +3115,11 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
             query.Error() << "Expected string literal as a single argument for: " << pragma;
             return {};
         }
-        ctx.Warning(ctx.Pos(), TIssuesIds::YQL_PRAGMA_WARNING_MSG) << *values[0].GetLiteral();
+        if (!ctx.Warning(ctx.Pos(), TIssuesIds::YQL_PRAGMA_WARNING_MSG, [&](auto& out) {
+            out << *values[0].GetLiteral();
+        })) {
+            return {};
+        }
         return TNodePtr{};
     }),
     TableElemExt("ErrorMsg", [](CB_SIG) -> TMaybe<TNodePtr> {
@@ -3141,8 +3149,11 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     }),
     TableElemExt("DisableUnordered", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
-        ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
-            << "Use of deprecated DisableUnordered pragma. It will be dropped soon";
+        if (!ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA, [](auto& out) {
+            out << "Use of deprecated DisableUnordered pragma. It will be dropped soon";
+        })) {
+            return {};
+        }
         return TNodePtr{};
     }),
     TableElemExt("RotateJoinTree", [](CB_SIG) -> TMaybe<TNodePtr> {
@@ -3253,9 +3264,12 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     }),
     TableElemExt("DisableFlexibleTypes", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
-        ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
-            << "Deprecated pragma DisableFlexibleTypes - it will be removed soon. "
-               "Consider submitting bug report if FlexibleTypes doesn't work for you";
+        if (!ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA, [](auto& out) {
+            out << "Deprecated pragma DisableFlexibleTypes - it will be removed soon. "
+                << "Consider submitting bug report if FlexibleTypes doesn't work for you";
+        })) {
+            return {};
+        }
         ctx.FlexibleTypes = false;
         return TNodePtr{};
     }),
@@ -3287,9 +3301,12 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     }),
     TableElemExt("DisableCompactNamedExprs", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
-        ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
-            << "Deprecated pragma DisableCompactNamedExprs - it will be removed soon. "
-               "Consider submitting bug report if CompactNamedExprs doesn't work for you";
+        if (!ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA, [](auto& out) {
+            out << "Deprecated pragma DisableCompactNamedExprs - it will be removed soon. "
+                << "Consider submitting bug report if CompactNamedExprs doesn't work for you";
+        })) {
+            return {};
+        }
         ctx.CompactNamedExprs = false;
         return TNodePtr{};
     }),
@@ -3344,6 +3361,8 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TABLE_ELEM("AllowUnnamedColumns", WarnUnnamedColumns, false),
     TABLE_ELEM("WarnUnnamedColumns", WarnUnnamedColumns, true),
     TABLE_ELEM("DiscoveryMode", DiscoveryMode, true),
+    PAIRED_TABLE_ELEM("ExceptIntersectBefore202503", ExceptIntersectBefore202503),
+
     // TODO DqEngine/blockengine
     PAIRED_TABLE_ELEM("AnsiOptionalAs", AnsiOptionalAs),
     PAIRED_TABLE_ELEM("WarnOnAnsiAliasShadowing", WarnOnAnsiAliasShadowing),
@@ -3419,6 +3438,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
     };
     const bool hasLexicalScope = withConfigure || lexicalScopePragmas.contains(normalizedPragma);
     const bool withFileAlias = normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "library" || normalizedPragma == "udf";
+    const bool allowTopLevelPragmas = TopLevel_ || AllowTopLevelPragmas_;
     for (auto pragmaValue : pragmaValues) {
         if (pragmaValue->HasAlt_pragma_value3()) {
             // Quoted string.
@@ -3469,7 +3489,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
     }
 
     if (prefix.empty()) {
-        if (!TopLevel_ && !hasLexicalScope) {
+        if (!allowTopLevelPragmas && !hasLexicalScope) {
             Error() << "This pragma '" << pragma << "' is not allowed to be used in actions or subqueries";
             Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
             return{};
@@ -3530,14 +3550,17 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
         }
     } else {
         if (lowerPrefix == "yson") {
-            if (!TopLevel_) {
+            if (!allowTopLevelPragmas) {
                 Error() << "This pragma '" << pragma << "' is not allowed to be used in actions";
                 Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             }
             if (normalizedPragma == "fast") {
-                Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
-                    << "Use of deprecated yson.Fast pragma. It will be dropped soon";
+                if (!Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA, [](auto& out) {
+                    out << "Use of deprecated yson.Fast pragma. It will be dropped soon";
+                })) {
+                    return {};
+                }
                 return TNodePtr{};
             } else if (normalizedPragma == "autoconvert") {
                 Ctx_.PragmaYsonAutoConvert = true;
@@ -3899,7 +3922,9 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
     }
 
     auto result = BuildQuery(Ctx_.Pos(), blocks, true, Ctx_.Scoped, Ctx_.SeqMode);
-    WarnUnusedNodes();
+    if (!WarnUnusedNodes()) {
+        return nullptr;
+    }
     return result;
 }
 

@@ -1,0 +1,6 @@
+SELECT
+    666 AS a
+UNION DISTINCT
+SELECT
+    666 AS a
+;

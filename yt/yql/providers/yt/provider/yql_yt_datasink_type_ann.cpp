@@ -565,7 +565,7 @@ private:
             if (!IsSameAnnotation(*description.RowType, *itemType)) {
                 if (content) {
                     auto expectedType = ctx.MakeType<TListExprType>(description.RowType);
-                    auto status = TryConvertTo(content, *expectedType, ctx);
+                    auto status = TryConvertTo(content, *expectedType, ctx, *State_->Types);
                     if (status.Level != TStatus::Error) {
                         return status;
                     }
@@ -638,7 +638,7 @@ private:
                 if (!IsSameAnnotation(*nextDescription.RowType, *itemType)) {
                     if (content) {
                         auto expectedType = ctx.MakeType<TListExprType>(nextDescription.RowType);
-                        auto status = TryConvertTo(content, *expectedType, ctx);
+                        auto status = TryConvertTo(content, *expectedType, ctx, *State_->Types);
                         if (status.Level != TStatus::Error) {
                             return status;
                         }

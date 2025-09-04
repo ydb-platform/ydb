@@ -1788,6 +1788,7 @@ message TReqLinkNode
     optional bool force = 4 [default = false];
     optional bool ignore_existing = 5 [default = false];
     optional bool lock_existing = 6 [default = false];
+    optional NYT.NYTree.NProto.TAttributeDictionary attributes = 7;
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;

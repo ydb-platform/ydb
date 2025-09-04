@@ -409,10 +409,6 @@ TNodeId TRpcRawClient::Link(
     const TYPath& linkPath,
     const TLinkOptions& options)
 {
-    if (options.Attributes_) {
-        THROW_ERROR_EXCEPTION("Link option 'Attributes' is not supported yet via RPC client");
-    }
-
     auto newTargetPath = AddPathPrefix(targetPath, Config_->Prefix);
     auto newLinkPath = AddPathPrefix(linkPath, Config_->Prefix);
     auto future = Client_->LinkNode(newTargetPath, newLinkPath, SerializeOptionsForLink(mutationId, transactionId, options));

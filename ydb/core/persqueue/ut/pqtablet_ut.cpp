@@ -2605,6 +2605,22 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_
     UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie);
 }
 
+Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet, TPQTabletFixture) {
+    // NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+    EnsurePipeExist();
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  {.Partition=1, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+                                   
+}
+
 Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Should_Be_Processed_After_Previous_Complete_Erasure, TPQTabletFixture) {
     NKafka::TProducerInstanceId producerInstanceId = {1, 0};
     const ui64 txId = 67890;

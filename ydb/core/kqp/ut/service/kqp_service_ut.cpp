@@ -597,13 +597,15 @@ struct TDictCase {
         ui32 nodeShuttingDownCount = 0;
         auto grab = [&nodeShuttingDownCount](TAutoPtr<IEventHandle>& ev) -> auto {
             if (ev->GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksResponse::EventType) {
-                ++nodeShuttingDownCount;
-                // auto msg = ev->Get<TEvKqpNode::TEvStartKqpTasksResponse>()->Record;
-                // if (msg.getNotAccepted == TEvKqpNode::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN)
-                // ++nodeShuttingDownCount;
+                auto msg = ev->Get<TEvKqpNode::TEvStartKqpTasksResponse>()->Record;
+                if (msg.NotStartedTasksSize() > 0
+                        && msg.GetNotStartedTasks()[0].GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN) {
+                    ++nodeShuttingDownCount;
+                }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         };
+
         runtime.SetObserverFunc(grab);
         auto query = R"(SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "22222";)";
         auto resultFuture = kikimr.RunInThreadPool([&]{
@@ -614,9 +616,9 @@ struct TDictCase {
             return nodeShuttingDownCount > 0;
         });
         runtime.DispatchEvents(opts);
-        // auto result = runtime.WaitFuture(resultFuture);
-        // UNIT_ASSERT_VALUES_EQUAL_C(nodeShuttingDownCount, 1, "updated views more than once: " << nodeShuttingDownCount);
 
+        auto result = runtime.WaitFuture(resultFuture);
+        UNIT_ASSERT_VALUES_EQUAL_C(nodeShuttingDownCount, 1, "Expected to be 1 since one node is shutting down");
     }
 }
 

@@ -2955,8 +2955,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             CompareYson(output, R"([[[1u];[1u]];[[10u];[10u]];[[100u];[100u]]])");
         }
     }
-
-
 }
 
 } // namespace NKqp

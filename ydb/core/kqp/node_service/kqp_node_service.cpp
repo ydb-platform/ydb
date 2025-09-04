@@ -126,7 +126,7 @@ private:
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
             default: {
-                Y_ABORT("Unexpected event 0x%x for TKqpResourceManagerService", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x for TKqpNodeService", ev->GetTypeRewrite());
             }
         }
     }
@@ -135,8 +135,8 @@ private:
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleShuttingDown);
             default: {
+                LOG_D("Unexpected event" << ev->GetTypeName() << " for TKqpNodeService");
                 Send(ev->Sender, new TEvKqpNode::TEvNodeShutdowned());
-                Y_ABORT("Unexpected event 0x%x for TKqpNodeService", ev->GetTypeRewrite());
             }
         }
     }

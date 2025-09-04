@@ -784,9 +784,10 @@ protected:
                     break;
                 }
                 case NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN: {
-                    // TODO: anely-d here is supposed that all the task with the same reason
                     for (auto& task : record.GetNotStartedTasks()) {
-                        Planner->SendStartKqpTasksRequest(task.GetrequestId(), SelfId());
+                        if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN) {
+                            Planner->SendStartKqpTasksRequest(task.GetrequestId(), SelfId());
+                        }
                     }
                     break;
                 }

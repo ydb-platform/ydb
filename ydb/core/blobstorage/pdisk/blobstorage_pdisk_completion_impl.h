@@ -209,11 +209,8 @@ public:
 class TChunkWritePiece;
 
 class TCompletionChunkWritePiece : public TCompletionAction {
-    TPDisk *PDisk;
-    ui32 PieceShift;
-    ui32 PieceSize;
+    TChunkWritePiece* Piece;
     TCompletionChunkWrite* CumulativeCompletion;
-    TBuffer::TPtr Buffer;
     NWilson::TSpan Span;
 public:
     TCompletionChunkWritePiece(NKikimr::NPDisk::TChunkWritePiece* piece, TCompletionChunkWrite* cumulativeCompletion);

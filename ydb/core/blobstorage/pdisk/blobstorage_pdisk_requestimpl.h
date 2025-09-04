@@ -524,7 +524,7 @@ public:
 
     TAtomic Pieces = 0;
     TAtomic Aborted = 0;
-    std::atomic<ui8> ReadyForBlockDevice = 0;
+    std::atomic<ui32> ReadyForBlockDevice = 0;
 
     TCompletionChunkWrite* Completion = nullptr;
 

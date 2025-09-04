@@ -18,9 +18,7 @@ namespace NPDisk {
 
 TCompletionChunkWritePiece::TCompletionChunkWritePiece(TChunkWritePiece* piece, TCompletionChunkWrite* cumulativeCompletion)
     : TCompletionAction()
-    , PDisk(piece->PDisk)
-    , PieceShift(piece->PieceShift)
-    , PieceSize(piece->PieceSize)
+    , Piece(piece)
     , CumulativeCompletion(cumulativeCompletion)
     , Span(piece->Span.CreateChild(TWilson::PDiskDetailed, "PDisk.ChunkWritePiece.CompletionPart"))
 {
@@ -28,7 +26,7 @@ TCompletionChunkWritePiece::TCompletionChunkWritePiece(TChunkWritePiece* piece, 
 
 TCompletionChunkWritePiece::~TCompletionChunkWritePiece() {
     if (CumulativeCompletion) {
-        CumulativeCompletion->RemovePart(PDisk->PCtx->ActorSystem);
+        CumulativeCompletion->RemovePart(Piece->PDisk->PCtx->ActorSystem);
     }
 }
 
@@ -42,7 +40,8 @@ void TCompletionChunkWritePiece::Exec(TActorSystem *actorSystem) {
     }
 
     double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
-    LWTRACK(PDiskChunkWritePieceComplete, Orbit, PDisk->PCtx->PDiskId, PieceSize, PieceShift, deviceTimeMs);
+    //TODO: Fork and join this orbit from ChunkWrite orbit.
+    LWTRACK(PDiskChunkWritePieceComplete, Orbit, Piece->PDisk->PCtx->PDiskId, Piece->PieceSize, Piece->PieceShift, deviceTimeMs);
 
     CumulativeCompletion->CompletePart(actorSystem);
     CumulativeCompletion = nullptr;

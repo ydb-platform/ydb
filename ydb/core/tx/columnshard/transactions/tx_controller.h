@@ -349,7 +349,7 @@ public:
         void SendReply(TColumnShard& owner, const TActorContext& ctx) {
             // It means that we had already processed this event
             if (Status == EStatus::ReplySent) {
-                return;
+                return DoSendReply(owner, ctx);
             }
             AFL_VERIFY(!!ProposeStartInfo);
             if (ProposeStartInfo->IsFail()) {

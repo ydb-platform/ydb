@@ -116,11 +116,10 @@ jobs:
           THIRD_LINE=$(head -n 3 ydb/apps/ydb/CHANGELOG.md | tail -n 1)
 
           if [[ -z "$FIRST_LINE" ]] && [[ "$SECOND_LINE" =~ ^##.*##$ ]] && [[ -z "$THIRD_LINE" ]]; then
-            echo "Error: CHANGELOG already has version format at the beginning"
+            echo "Error: CHANGELOG has nothing new since last release"
             exit 1
           fi
-          
-            
+
       - name: Update version file
         run: |
           echo "${{ steps.update-version.outputs.new-version }}" > ydb/apps/ydb/version.txt
@@ -218,7 +217,7 @@ jobs:
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
       run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -o ./
-    
+
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}
       run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}

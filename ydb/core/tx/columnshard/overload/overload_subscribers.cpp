@@ -51,70 +51,107 @@ void TOverloadSubscribers::AddOverloadSubscriber(const TColumnShardInfo& columnS
     AFL_VERIFY(pipeServerInfo.PipeServerId == overloadSubscriberInfo.PipeServerId);
 
     auto& columnShardSubscriber = ColumnShardsOverloadSubscribers[columnShardInfo.ColumnShardId];
-    auto subscriberInfoIt = columnShardSubscriber.find(pipeServerInfo.PipeServerId);
-    if (subscriberInfoIt == columnShardSubscriber.end()) {
-        subscriberInfoIt = columnShardSubscriber.emplace(pipeServerInfo.PipeServerId, TInfo{
+    auto subscriptionInfoIt = columnShardSubscriber.find(pipeServerInfo.PipeServerId);
+    if (subscriptionInfoIt == columnShardSubscriber.end()) {
+        subscriptionInfoIt = columnShardSubscriber.emplace(pipeServerInfo.PipeServerId, TSubscriptionInfo{
             .InterconnectSessionId = pipeServerInfo.InterconnectSessionId,
             .ColumnShardTabletId = columnShardInfo.TabletId,
         }).first;
     } else {
-        auto& info = subscriberInfoIt->second;
-        AFL_VERIFY(info.InterconnectSessionId == pipeServerInfo.InterconnectSessionId);
-        AFL_VERIFY(info.ColumnShardTabletId == columnShardInfo.TabletId);
+        auto& subscriptionInfo = subscriptionInfoIt->second;
+        AFL_VERIFY(subscriptionInfo.InterconnectSessionId == pipeServerInfo.InterconnectSessionId);
+        AFL_VERIFY(subscriptionInfo.ColumnShardTabletId == columnShardInfo.TabletId);
     }
-    auto& info = subscriberInfoIt->second;
-    info.OverloadSubscribers[overloadSubscriberInfo.OverloadSubscriberId] = overloadSubscriberInfo.SeqNo;
+    auto& subscriptionInfo = subscriptionInfoIt->second;
+    subscriptionInfo.OverloadSubscribers[overloadSubscriberInfo.OverloadSubscriberId] = overloadSubscriberInfo.SeqNo;
 }
 
 void TOverloadSubscribers::RemoveOverloadSubscriber(const TColumnShardInfo& columnShardInfo, const TOverloadSubscriberInfo& overloadSubscriberInfo) {
-    Y_UNUSED(columnShardInfo, overloadSubscriberInfo);
+    auto infoByPipeServerIdIt = ColumnShardsOverloadSubscribers.find(columnShardInfo.ColumnShardId);
+    if (infoByPipeServerIdIt == ColumnShardsOverloadSubscribers.end()) {
+        return;
+    }
+    auto& infoByPipeServerId = infoByPipeServerIdIt->second;
+    auto subscriptionInfoIt = infoByPipeServerId.find(overloadSubscriberInfo.PipeServerId);
+    if (subscriptionInfoIt == infoByPipeServerId.end()) {
+        return;
+    }
+    auto& subscriptionInfo = subscriptionInfoIt->second;
+    subscriptionInfo.OverloadSubscribers.erase(overloadSubscriberInfo.OverloadSubscriberId);
+
+    if (subscriptionInfo.OverloadSubscribers.empty()) {
+        infoByPipeServerId.erase(subscriptionInfoIt);
+    }
+    if (infoByPipeServerId.empty()) {
+        ColumnShardsOverloadSubscribers.erase(infoByPipeServerIdIt);
+    }
 }
 
 void TOverloadSubscribers::RemovePipeServer(const TColumnShardInfo& columnShardInfo, const TPipeServerInfo& pipeServerInfo) {
-    Y_UNUSED(columnShardInfo, pipeServerInfo);
+    auto infoByPipeServerIdIt = ColumnShardsOverloadSubscribers.find(columnShardInfo.ColumnShardId);
+    if (infoByPipeServerIdIt == ColumnShardsOverloadSubscribers.end()) {
+        return;
+    }
+    auto& infoByPipeServerId = infoByPipeServerIdIt->second;
+    infoByPipeServerId.erase(pipeServerInfo.PipeServerId);
+    if (infoByPipeServerId.empty()) {
+        ColumnShardsOverloadSubscribers.erase(infoByPipeServerIdIt);
+    }
 }
 
 void TOverloadSubscribers::NotifyAllOverloadSubscribers() {
+    for (auto& [source, infoByPipeServerId] : ColumnShardsOverloadSubscribers) {
+        for (auto& [_, subscriptionInfo] : infoByPipeServerId) {
+            for (auto& [target, seqNo] : subscriptionInfo.OverloadSubscribers) {
+                SendViaSession(
+                    subscriptionInfo.InterconnectSessionId,
+                    target,
+                    source,
+                    new TEvColumnShard::TEvOverloadReady(subscriptionInfo.ColumnShardTabletId, seqNo));
+            }
+        }
+    }
+    ColumnShardsOverloadSubscribers.clear();
 }
 
-void TOverloadSubscribers::DiscardOverloadSubscribers(TPipeServerInfo1& pipeServer) {
-    for (auto it = pipeServer.OverloadSubscribers.begin(); it != pipeServer.OverloadSubscribers.end(); ++it) {
-        TOverloadSubscriber& entry = it->second;
-        EnumerateRejectReasons(entry.Reasons, [&](ERejectReason reason) {
-            OverloadSubscribersByReason[RejectReasonIndex(reason)]--;
-        });
-    }
-    pipeServer.OverloadSubscribers.clear();
-    PipeServersWithOverloadSubscribers.Remove(&pipeServer);
-}
+// void TOverloadSubscribers::DiscardOverloadSubscribers(TPipeServerInfo1& pipeServer) {
+//     for (auto it = pipeServer.OverloadSubscribers.begin(); it != pipeServer.OverloadSubscribers.end(); ++it) {
+//         TOverloadSubscriber& entry = it->second;
+//         EnumerateRejectReasons(entry.Reasons, [&](ERejectReason reason) {
+//             OverloadSubscribersByReason[RejectReasonIndex(reason)]--;
+//         });
+//     }
+//     pipeServer.OverloadSubscribers.clear();
+//     PipeServersWithOverloadSubscribers.Remove(&pipeServer);
+// }
 
-bool TOverloadSubscribers::AddOverloadSubscriber(const TActorId& pipeServerId, const TActorId& actorId, ui64 seqNo, ERejectReasons reasons) {
-    auto it = PipeServers.find(pipeServerId);
-    if (it == PipeServers.end()) {
-        return false;
-    }
+// bool TOverloadSubscribers::AddOverloadSubscriber(const TActorId& pipeServerId, const TActorId& actorId, ui64 seqNo, ERejectReasons reasons) {
+//     auto it = PipeServers.find(pipeServerId);
+//     if (it == PipeServers.end()) {
+//         return false;
+//     }
 
-    bool wasEmpty = it->second.OverloadSubscribers.empty();
-    auto& entry = it->second.OverloadSubscribers[actorId];
-    if (entry.SeqNo <= seqNo) {
-        entry.SeqNo = seqNo;
-        // Increment counter for every new reason
-        EnumerateRejectReasons(reasons - entry.Reasons, [&](ERejectReason reason) {
-            OverloadSubscribersByReason[RejectReasonIndex(reason)]++;
-        });
-        entry.Reasons |= reasons;
-    }
+// bool wasEmpty = it->second.OverloadSubscribers.empty();
+// auto& entry = it->second.OverloadSubscribers[actorId];
+// if (entry.SeqNo <= seqNo) {
+//     entry.SeqNo = seqNo;
+//     // Increment counter for every new reason
+//     EnumerateRejectReasons(reasons - entry.Reasons, [&](ERejectReason reason) {
+//         OverloadSubscribersByReason[RejectReasonIndex(reason)]++;
+//     });
+//     entry.Reasons |= reasons;
+// }
 
-    if (wasEmpty) {
-        PipeServersWithOverloadSubscribers.PushBack(&it->second);
-    }
+// if (wasEmpty) {
+//     PipeServersWithOverloadSubscribers.PushBack(&it->second);
+// }
 
-    return true;
-}
+// return true;
+// }
 
-bool TOverloadSubscribers::HasPipeServer(const TActorId& pipeServerId) {
-    return PipeServers.contains(pipeServerId);
-}
+// bool TOverloadSubscribers::HasPipeServer(const TActorId& pipeServerId) {
+//     return PipeServers.contains(pipeServerId);
+// }
 
 // void TOverloadSubscribers::NotifyOverloadSubscribers(ERejectReason reason, const TActorId& sourceActorId, ui64 sourceTabletId) {
 //     if (OverloadSubscribersByReason[RejectReasonIndex(reason)] == 0) {
@@ -192,16 +229,16 @@ bool TOverloadSubscribers::HasPipeServer(const TActorId& pipeServerId) {
 //     }
 // }
 
-void TOverloadSubscribers::ScheduleNotification(const TActorId& actorId) {
-    if (InFlightNotification) {
-        return;
-    }
-    InFlightNotification = true;
-    TActivationContext::Schedule(TDuration::MilliSeconds(200), new IEventHandle(actorId, actorId, new NActors::TEvents::TEvWakeup(2)));
-}
+// void TOverloadSubscribers::ScheduleNotification(const TActorId& actorId) {
+//     if (InFlightNotification) {
+//         return;
+//     }
+//     InFlightNotification = true;
+//     TActivationContext::Schedule(TDuration::MilliSeconds(200), new IEventHandle(actorId, actorId, new NActors::TEvents::TEvWakeup(2)));
+// }
 
-void TOverloadSubscribers::ProcessNotification() {
-    InFlightNotification = false;
-}
+// void TOverloadSubscribers::ProcessNotification() {
+//     InFlightNotification = false;
+// }
 
 } // namespace NKikimr::NColumnShard::NOverload

@@ -57,7 +57,7 @@ void TColumnShard::UpdateOverloadsStatus() {
     }
 }
 
-void TColumnShard::Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext&) {
+void TColumnShard::Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& /*ev*/, const TActorContext&) {
     // OverloadSubscribers.RemoveOverloadSubscriber(ev->Get()->Record.GetSeqNo(), ev->Recipient, ev->Sender);
 }
 

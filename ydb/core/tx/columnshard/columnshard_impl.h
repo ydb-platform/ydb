@@ -542,6 +542,7 @@ private:
     NDataShard::TSysLocks SysLocks;
     TSpaceWatcher* SpaceWatcher;
     TActorId SpaceWatcherId;
+    THashMap<TActorId, TActorId> PipeServersInterconnectSessions;
     // NOverload::TOverloadSubscribers OverloadSubscribers;
 
     void TryRegisterMediatorTimeCast();

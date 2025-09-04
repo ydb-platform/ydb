@@ -584,7 +584,12 @@ public:
 
                 if (func.StartsWith("regexp")) {
                     if (!ctx.PragmaRegexUseRe2) {
-                        ctx.Warning(Pos_, TIssuesIds::CORE_LEGACY_REGEX_ENGINE) << "Legacy regex engine works incorrectly with unicode. Use PRAGMA RegexUseRe2='true';";
+                        if (!ctx.Warning(Pos_, TIssuesIds::CORE_LEGACY_REGEX_ENGINE, [&](auto& out) {
+                            out << "Legacy regex engine works incorrectly with unicode. "
+                                << "Use PRAGMA RegexUseRe2='true';";
+                        })) {
+                            return nullptr;
+                        }
                     }
 
                     auto pattern = Args_[1].Id;
@@ -742,8 +747,12 @@ public:
                     postHandler = arg.Expr;
                 }
                 else {
-                    ctx.Warning(Pos_, DEFAULT_ERROR) << "Unsupported named argument: "
-                        << label << " in " << Func_;
+                    if (!ctx.Warning(Pos_, DEFAULT_ERROR, [&](auto& out) {
+                        out << "Unsupported named argument: "
+                            << label << " in " << Func_;
+                    })) {
+                        return nullptr;
+                    }
                 }
             }
             if (rootAttributes == nullptr) {

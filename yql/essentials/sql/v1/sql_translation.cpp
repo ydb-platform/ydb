@@ -1216,7 +1216,12 @@ bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWild
                     isBinding = true;
                     break;
                 case NSQLTranslation::EBindingsMode::DROP_WITH_WARNING:
-                    Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_DEPRECATED_BINDINGS) << "Please remove 'bindings.' from your query, the support for this syntax will be dropped soon";
+                    if (!Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_DEPRECATED_BINDINGS, [](auto& out) {
+                        out << "Please remove 'bindings.' from your query, "
+                            << "the support for this syntax will be dropped soon";
+                    })) {
+                        return false;
+                    }
                     Ctx_.IncrementMonCounter("sql_errors", "DeprecatedBinding");
                     [[fallthrough]];
                 case NSQLTranslation::EBindingsMode::DROP:
@@ -3537,8 +3542,12 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
 
                 auto pos = Ctx_.Pos();
                 if (!altCurrent && !warn) {
-                    Ctx_.Warning(pos, TIssuesIds::YQL_DEPRECATED_POSITIONAL_SCHEMA)
-                        << "Deprecated syntax for positional schema: please use 'column type' instead of 'type AS column'";
+                    if (!Ctx_.Warning(pos, TIssuesIds::YQL_DEPRECATED_POSITIONAL_SCHEMA, [](auto& out) {
+                        out << "Deprecated syntax for positional schema: "
+                            << "please use 'column type' instead of 'type AS column'";
+                    })) {
+                        return false;
+                    }
                     warn = true;
                 }
 
@@ -4472,7 +4481,11 @@ bool TSqlTranslation::IsValidFrameSettings(TContext& ctx, const TFrameSpecificat
 
         if (*beginValue > *endValue) {
             YQL_ENSURE(begin.Bound);
-            ctx.Warning(begin.Bound->GetPos(), TIssuesIds::YQL_EMPTY_WINDOW_FRAME) << "Used frame specification implies empty window frame";
+            if (!ctx.Warning(begin.Bound->GetPos(), TIssuesIds::YQL_EMPTY_WINDOW_FRAME, [](auto& out) {
+                out << "Used frame specification implies empty window frame";
+            })) {
+                return false;
+            }
         }
     }
 
@@ -4779,7 +4792,9 @@ TNodePtr TSqlTranslation::DoStatement(const TRule_do_stmt& stmt, bool makeLambda
 
         const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, body);
         auto ret = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
-        WarnUnusedNodes();
+        if (!WarnUnusedNodes()) {
+            return nullptr;
+        }
         Ctx_.ScopeLevel--;
         Ctx_.Scoped = saveScoped;
 
@@ -4894,7 +4909,9 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
     }
 
     auto ret = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
-    WarnUnusedNodes();
+    if (!WarnUnusedNodes()) {
+        return false;
+    }
     Ctx_.Scoped = saveScoped;
     Ctx_.ScopeLevel--;
     Ctx_.Settings.Mode = saveMode;
@@ -4975,7 +4992,10 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
         --Ctx_.ParallelModeCount;
     }
 
-    PopNamedNode(itemArgName);
+    if (!PopNamedNode(itemArgName)) {
+        return {};
+    }
+
     if (!bodyNode) {
         return{};
     }
@@ -5250,27 +5270,6 @@ bool TSqlTranslation::ParseViewQuery(
 
 namespace {
 
-static std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token, bool antlr4) {
-    if (1 == token.GetLine() && 0 == token.GetColumn()) {
-        return 0;
-    }
-
-    TPosition pos = {0, 1};
-    TTextWalker walker(pos, antlr4);
-
-    std::string::size_type position = 0;
-    for (char c : query) {
-        walker.Advance(c);
-        ++position;
-
-        if (pos.Row == token.GetLine() && pos.Column == token.GetColumn()) {
-            return position;
-        }
-    }
-
-    return std::string::npos;
-}
-
 static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
     static const TString statementSeparator = ";\n";
 
@@ -5323,6 +5322,27 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
     }
 }
 
+} // anonymous namespace
+
+std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token, bool antlr4) {
+    if (1 == token.GetLine() && 0 == token.GetColumn()) {
+        return 0;
+    }
+
+    TPosition pos = {0, 1};
+    TTextWalker walker(pos, antlr4);
+
+    std::string::size_type position = 0;
+    for (char c : query) {
+        walker.Advance(c);
+        ++position;
+
+        if (pos.Row == token.GetLine() && pos.Column == token.GetColumn()) {
+            return position;
+        }
+    }
+
+    return std::string::npos;
 }
 
 bool TSqlTranslation::ParseTransferLambda(
@@ -5640,13 +5660,19 @@ bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_
     Ctx_.AllScopes.push_back(Ctx_.Scoped);
     Ctx_.Scoped->Local = TScopedState::TLocal{};
     Ctx_.ScopeLevel++;
-    TSqlQuery query(Ctx_, Ctx_.Settings.Mode, false);
+    TSqlQuery query(Ctx_, Ctx_.Settings.Mode, /* topLevel */ false, /* allowTopLevelPragmas */ true);
     TBlocks innerBlocks;
+
+    TNodePtr clearWorldNode = new TAstListNodeImpl(Ctx_.Pos());
+    clearWorldNode->Add("World");
+    innerBlocks.push_back(clearWorldNode);
 
     const auto& inlineAction = node.GetRule_inline_action3();
     const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, inlineAction.GetRule_define_action_or_subquery_body2());
     auto queryNode = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
-    WarnUnusedNodes();
+    if (!WarnUnusedNodes()) {
+        return false;
+    }
     Ctx_.ScopeLevel--;
     Ctx_.Scoped = saveScoped;
 
@@ -5655,8 +5681,7 @@ bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_
     }
 
     TNodePtr blockNode = new TAstListNodeImpl(Ctx_.Pos());
-    blockNode->Add("block");
-    blockNode->Add(blockNode->Q(queryNode));
+    blockNode->Add("block", blockNode->Q(queryNode));
     settings.Features[TStreamingQuerySettings::QUERY_AST_FEATURE] = TDeferredAtom(blockNode, Ctx_);
 
     // Extract whole query text between BEGIN and END tokens

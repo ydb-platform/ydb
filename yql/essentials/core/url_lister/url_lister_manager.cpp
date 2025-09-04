@@ -128,7 +128,7 @@ private:
 
             auto [preprocessedUrl, alias] = GetPreparedUrlAndAlias(currentEntry.Url);
 
-            Y_ENSURE(urlLister->Accept(preprocessedUrl), "URL: '" << currentEntry.Url << "' is not supported by the lister");
+            YQL_ENSURE(urlLister->Accept(preprocessedUrl), "URL: '" << currentEntry.Url << "' is not supported by the lister");
 
             TVector<TUrlListEntry> subEntries;
             try {

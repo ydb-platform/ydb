@@ -74,7 +74,7 @@ TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list
     return items;
 }
 
-void CompareResults(const TType* type, const NUdf::TUnboxedValue& expected,
+void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected,
         const NUdf::TUnboxedValue& got
 ) {
     const auto itemType = AS_TYPE(TListType, type)->GetItemType();

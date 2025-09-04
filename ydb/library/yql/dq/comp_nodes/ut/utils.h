@@ -23,7 +23,7 @@ TRuntimeNode FromWideFlow(TProgramBuilder& pgmBuilder, TRuntimeNode wideFlow);
 
 TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list); 
 
-void CompareResults(const TType* type, const NUdf::TUnboxedValue& expected, const NUdf::TUnboxedValue& got);
+void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected, const NUdf::TUnboxedValue& got);
 
 template<typename Type>
 const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,

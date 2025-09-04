@@ -68,7 +68,7 @@ void RunTestDqScalarHashJoin(
     );
     
     UNIT_ASSERT(got.HasValue());
-    CompareResults(expectedType, expected, got);
+    CompareListsIgnoringOrder(expectedType, expected, got);
 }
 
 } // namespace

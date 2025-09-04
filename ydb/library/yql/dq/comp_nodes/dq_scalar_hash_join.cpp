@@ -17,7 +17,7 @@ public:
     TScalarHashJoinState(TMemoryUsageInfo* memInfo,
         IComputationWideFlowNode* leftFlow, IComputationWideFlowNode* rightFlow,
         const std::vector<ui32>& leftKeyColumns, const std::vector<ui32>& rightKeyColumns,
-        const std::vector<TType*>& leftColumnTypes, const std::vector<TType*>& rightColumnTypes, TComputationContext& ctx,
+        const std::vector<TType*>& leftColumnTypes, const std::vector<TType*>& rightColumnTypes, [[maybe_unused]] TComputationContext& ctx,
         NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
     :   TBase(memInfo)
     ,   LeftFlow_(leftFlow)
@@ -29,7 +29,6 @@ public:
     ,   Logger_(logger)
     ,   LogComponent_(logComponent)
     {
-        Y_UNUSED(ctx);
         UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Debug, "TScalarHashJoinState created");
     }
 

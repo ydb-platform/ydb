@@ -30,14 +30,14 @@ namespace NKafka {
     }
 
     // for non-transactional INIT_PRODUCER_ID request - just return random producer.id and 0 as epoch
-    // for transactional INIT_PRODUCER_ID request algorythm is below: 
+    // for transactional INIT_PRODUCER_ID request algorythm is below:
     // 1. Init tables in Bootstrap()
     // 2. Create KQP session in Handle(TEvManagerPrepared)
     // 3. Send Begin transaction in Handle(TEvCreateSessionResponse)
     // 4. Send Select in Handle(TEvQueryResponse) when LastSentToKqpRequest == BEGIN_TRANSACTION
     // 5. switch (SelectResult) in Handle(TEvQueryResponse) when LastSentToKqpRequest == SELECT
     //       case (RowDoesNotExist): Send Insert
-    //       case (RowExistsAndEpochWillOverflow): 
+    //       case (RowExistsAndEpochWillOverflow):
     //          we need to obtain new producer_id for this transactional_id
     //          producer_id field is serial and thus we can just delete-insert row to obtain new producer_id
     //          a. First send Delete
@@ -50,7 +50,7 @@ namespace NKafka {
         , TransactionalId(transactionalId)
         , TransactionTimeoutMs(transactionTimeoutMs) {
     }
-        
+
     void TKafkaInitProducerIdActor::Bootstrap(const NActors::TActorContext& ctx) {
         if (IsTransactionalProducerInitialization()) {
             if (!TxnTimeoutIsValid()) {
@@ -59,7 +59,7 @@ namespace NKafka {
                 Die(ctx);
                 return;
             }
-            Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
+            Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
             KAFKA_LOG_D("Bootstrapping actor for transactional producer. Sending init table request to KQP.");
             Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
             Become(&TKafkaInitProducerIdActor::StateWork);
@@ -144,7 +144,7 @@ namespace NKafka {
         Kqp->ResetTxId();
         StartTxProducerInitCycle(ctx);
     }
-    
+
     void TKafkaInitProducerIdActor::Die(const TActorContext& ctx) {
         KAFKA_LOG_D("Pass away.");
         if (Kqp) {
@@ -195,12 +195,12 @@ namespace NKafka {
 
         if (!producerState) {
             SendInsertRequest(ctx);
-        } 
+        }
         // if epoch will overflow we need to delete-insert row in this transaction
         // so that new producer id (serial) is assigned to this transactional id
         else if (producerState->ProducerEpoch == std::numeric_limits<i16>::max() - 1) {
             SendDeleteByTransactionalIdRequest(ctx);
-        } 
+        }
         // else we increment epoch and persist in the database
         else {
             SendUpdateRequest(ctx, producerState->ProducerEpoch + 1);
@@ -211,32 +211,32 @@ namespace NKafka {
         auto producerState = ParseProducerState(ev).value();
 
         SendSaveTxnProducerStateRequest(producerState);
-        
+
         PersistedProducerState = std::move(producerState);
     }
 
     // requests to producer_state table
     void TKafkaInitProducerIdActor::SendSelectRequest(const TActorContext& ctx) {
         Kqp->SendYqlRequest(GetYqlWithTableName(NInitProducerIdSql::SELECT_BY_TRANSACTIONAL_ID), BuildSelectOrDeleteByTransactionalIdParams(), ++KqpReqCookie, ctx, false);
-        
+
         LastSentToKqpRequest = EInitProducerIdKqpRequests::SELECT;
     }
 
     void TKafkaInitProducerIdActor::SendInsertRequest(const TActorContext& ctx) {
         Kqp->SendYqlRequest(GetYqlWithTableName(NInitProducerIdSql::INSERT_NEW_TRANSACTIONAL_ID), BuildInsertNewProducerStateParams(), ++KqpReqCookie, ctx, true);
-        
+
         LastSentToKqpRequest = EInitProducerIdKqpRequests::INSERT;
     }
 
     void TKafkaInitProducerIdActor::SendUpdateRequest(const TActorContext& ctx, ui16 newProducerEpoch) {
         Kqp->SendYqlRequest(GetYqlWithTableName(NInitProducerIdSql::UPDATE_PRODUCER_EPOCH), BuildUpdateProducerStateParams(newProducerEpoch), ++KqpReqCookie, ctx, true);
-        
+
         LastSentToKqpRequest = EInitProducerIdKqpRequests::UPDATE;
     }
 
     void TKafkaInitProducerIdActor::SendDeleteByTransactionalIdRequest(const TActorContext& ctx) {
         Kqp->SendYqlRequest(GetYqlWithTableName(NInitProducerIdSql::DELETE_BY_TRANSACTIONAL_ID), BuildSelectOrDeleteByTransactionalIdParams(), ++KqpReqCookie, ctx, false);
-        
+
         LastSentToKqpRequest = EInitProducerIdKqpRequests::DELETE_REQ;
     }
 
@@ -283,7 +283,7 @@ namespace NKafka {
         response->ErrorCode = EKafkaErrors::NONE_ERROR;
         response->ProducerId = producerState.ProducerId;
         response->ProducerEpoch = producerState.ProducerEpoch;
-        
+
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, EKafkaErrors::NONE_ERROR));
         Die(ctx);
     }
@@ -294,7 +294,7 @@ namespace NKafka {
         Send(NKafka::MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvSaveTxnProducerRequest(
             producerState.TransactionalId,
             {
-                producerState.ProducerId, 
+                producerState.ProducerId,
                 producerState.ProducerEpoch
             },
             static_cast<ui64>(*TransactionTimeoutMs)
@@ -323,7 +323,7 @@ namespace NKafka {
             return EKafkaErrors::NONE_ERROR;
         } else if (status == Ydb::StatusIds::ABORTED) {
             return EKafkaErrors::BROKER_NOT_AVAILABLE;
-        } 
+        }
         return EKafkaErrors::INVALID_REQUEST;
     }
 
@@ -340,14 +340,14 @@ namespace NKafka {
         // for this transactional id there is no rows
         if (parser.RowsCount() == 0) {
             return {};
-        } 
+        }
         // there are multiple rows for this transactional id. This is unexpected and should not happen
         else if (parser.RowsCount() > 1) {
             throw yexception() << "Request returned more than one row: " << resp.GetYdbResults().size();
         } else {
             parser.TryNextRow();
 
-            TProducerState result; 
+            TProducerState result;
 
             result.TransactionalId = parser.ColumnParser("transactional_id").GetUtf8();
             result.ProducerId = parser.ColumnParser("producer_id").GetInt64();
@@ -361,7 +361,7 @@ namespace NKafka {
     TString TKafkaInitProducerIdActor::GetYqlWithTableName(const TString& templateStr) {
         return std::regex_replace(
             templateStr.c_str(),
-            std::regex("<table_name>"), 
+            std::regex("<table_name>"),
             NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->GetStorageTablePath().c_str()
         );
     }

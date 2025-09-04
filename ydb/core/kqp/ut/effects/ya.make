@@ -15,6 +15,7 @@ SRCS(
     kqp_immediate_effects_ut.cpp
     kqp_inplace_update_ut.cpp
     kqp_overload_ut.cpp
+    kqp_reattach_ut.cpp
     kqp_write_ut.cpp
 )
 

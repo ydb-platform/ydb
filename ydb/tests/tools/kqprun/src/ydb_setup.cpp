@@ -12,6 +12,7 @@
 #include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
 
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/tls_backend.h>
 
 using namespace NKikimrRun;
 
@@ -524,7 +525,7 @@ public:
             ythrow yexception() << "Trace opt was disabled";
         }
 
-        NYql::NLog::YqlLogger().ResetBackend(CreateLogBackend(Settings_));
+        NYql::NLog::YqlLogger().ResetBackend(MakeHolder<NYql::NLog::TTlsLogBackend>(CreateLogBackend(Settings_)));
     }
 
     static void StopTraceOpt() {

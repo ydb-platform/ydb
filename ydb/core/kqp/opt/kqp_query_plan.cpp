@@ -617,6 +617,7 @@ private:
         TString RangesDesc;
 
         bool IncludePointPrefixLen = false;
+        THashMap<TString, TString> IndexSelectionInfo;
     };
 
     template<typename TColumnsIterator>
@@ -691,6 +692,22 @@ private:
             op.Properties["ReadRangesPointPrefixLen"] = ToString(params.ExplainPrompt.PointPrefixLen);
         }
 
+        if (!params.ExplainPrompt.IndexSelectionInfo.empty()) {
+            TStringBuilder fullInfo;
+            bool isFirst = true;
+            for(const auto& [name, info] : params.IndexSelectionInfo) {
+                if (isFirst) {
+                    isFirst = false;
+                } else {
+                    fullInfo << ", ";
+                }
+
+                fullInfo << name << ": " << info;
+            }
+
+            op.Properties["IndexSelectionInfo"] = TString(fullInfo);
+        }
+
         // Add remaining columns from columnsIter (avoiding duplicates)
         for (const auto& col : columnsIter) {
             TString colName = TString(col.Value());
@@ -721,7 +738,8 @@ private:
             .TablePath = tablePath,
             .ExplainPrompt = explainPrompt,
             .RangesDesc = rangesDesc,
-            .IncludePointPrefixLen = true
+            .IncludePointPrefixLen = true,
+            .IndexSelectionInfo = TKqpReadTableSettings::Parse(sourceSettings.Settings()).IndexSelectionInfo
         };
 
         ProcessReadRangesCommon(params, readInfo, op, planNode, sourceSettings.Columns());
@@ -1817,7 +1835,8 @@ private:
             .TablePath = tablePath,
             .ExplainPrompt = explainPrompt,
             .RangesDesc = rangesDesc,
-            .IncludePointPrefixLen = false
+            .IncludePointPrefixLen = false,
+            .IndexSelectionInfo = TKqpReadTableSettings::Parse(read.Settings()).IndexSelectionInfo,
         };
 
         ProcessReadRangesCommon(params, readInfo, op, planNode, read.Columns());

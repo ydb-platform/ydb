@@ -74,7 +74,7 @@ class WorkloadManagerWorkload:
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
 
-    def wait_for_connection(self, timeout_seconds=30):
+    def wait_for_connection(self, timeout_seconds=120):
         def predicate():
             try:
                 with ydb.QuerySessionPool(self.driver) as session_pool:

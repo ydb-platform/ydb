@@ -6,6 +6,7 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -192,11 +193,28 @@ private:
             "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
             << ", begin new cycle (lookup in state storage)");
 
+        if (AppData()->BridgeModeEnabled && !AppData()->SuppressBridgeModeBootstrapperLogic) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false));
+        } else {
+            BeginLookup();
+        }
+
+        Become(&TThis::StateLookup);
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
+        if (ev->Get()->BridgeInfo && !ev->Get()->BridgeInfo->SelfNodePile->IsPrimary) {
+            Schedule(GetSleepDuration(), new TEvents::TEvWakeup(RoundCounter));
+        } else {
+            BeginLookup();
+        }
+    }
+
+    void BeginLookup() {
         // We shouldn't start a new cycle with a connected leader pipe
         Y_ABORT_UNLESS(!KnownLeaderPipe);
 
         Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvLookup(TabletInfo->TabletID, 0), IEventHandle::FlagTrackDelivery);
-        Become(&TThis::StateLookup);
     }
 
     void HandleUnknown(TEvBootstrapper::TEvWatch::TPtr& ev) {
@@ -852,6 +870,7 @@ public:
             hFunc(TEvents::TEvWakeup, HandleLookup);
             cFunc(TEvents::TSystem::PoisonPill, HandlePoison); // => die
             cFunc(TEvBootstrapper::EvStandBy, Standby);
+            hFunc(TEvNodeWardenStorageConfig, Handle);
         }
     }
 

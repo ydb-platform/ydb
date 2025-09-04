@@ -1299,7 +1299,7 @@ namespace Tests {
             }
 
             NKikimr::NKqp::IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory = Settings->FederatedQuerySetupFactory;
-            if (Settings->InitializeFederatedQuerySetupFactory) {
+            if (Settings->InitializeFederatedQuerySetupFactory && GetRuntime()->GetAppData(nodeIdx).FeatureFlags.GetEnableScriptExecutionOperations()) {
                 const auto& queryServiceConfig = Settings->AppConfig->GetQueryServiceConfig();
 
                 NYql::NConnector::IClient::TPtr connectorClient;

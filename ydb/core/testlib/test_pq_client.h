@@ -986,11 +986,11 @@ public:
         CallPersQueueGRPC(createRequest.GetRequest()->Record);
 
         AddTopic(createRequest.Topic);
-        while (doWait && GetTopicVersionFromPath(createRequest.Topic) != prevVersion + 1) {
+        while (doWait && GetTopicVersionFromPath(createRequest.Topic) < prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
-        while (doWait && GetTopicVersionFromMetadata(createRequest.Topic, prevVersion) != prevVersion + 1) {
+        while (doWait && GetTopicVersionFromMetadata(createRequest.Topic, prevVersion) < prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }

@@ -2790,6 +2790,8 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
     TString PeerName;  // required for making audit log records
+    TString SanitizedToken;  // required for making audit log records
+
     TVector<TItem> Items;
 
     TPathId ExportPathId = InvalidPathId;
@@ -2982,6 +2984,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
     TString PeerName;  // required for making audit log records
+    TString SanitizedToken;  // required for making audit log records
     TMaybe<NBackup::TEncryptionIV> ExportIV;
     TMaybe<NBackup::TSchemaMapping> SchemaMapping;
     TActorId SchemaMappingGetter;
@@ -4051,6 +4054,13 @@ struct TSecretInfo : TSimpleRefCount<TSecretInfo> {
     ui64 AlterVersion = 0;
     TSecretInfo::TPtr AlterData = nullptr;
     NKikimrSchemeOp::TSecretDescription Description;
+};
+
+struct TStreamingQueryInfo : TSimpleRefCount<TStreamingQueryInfo> {
+    using TPtr = TIntrusivePtr<TStreamingQueryInfo>;
+
+    ui64 AlterVersion = 0;
+    NKikimrSchemeOp::TStreamingQueryProperties Properties;
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

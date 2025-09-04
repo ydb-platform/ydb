@@ -206,6 +206,34 @@ namespace NKikimr {
                     return false;
             }
 
+            switch (familySettings.cache_mode()) {
+                case Ydb::Table::ColumnFamily::CACHE_MODE_UNSPECIFIED:
+                    break;
+                case Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR:
+                    if (!AppData()->FeatureFlags.GetEnableTableCacheModes()) {
+                        *code = Ydb::StatusIds::BAD_REQUEST;
+                        *error = "Setting cache_mode is not allowed";
+                        return false;
+                    }
+                    family->SetColumnCacheMode(NKikimrSchemeOp::ColumnCacheModeRegular);
+                    break;
+                case Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY:
+                    if (!AppData()->FeatureFlags.GetEnableTableCacheModes()) {
+                        *code = Ydb::StatusIds::BAD_REQUEST;
+                        *error = "Setting cache_mode is not allowed";
+                        return false;
+                    }
+                    family->SetColumnCacheMode(NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory);
+                    break;
+                default:
+                    *code = Ydb::StatusIds::BAD_REQUEST;
+                    *error = TStringBuilder()
+                        << "Unsupported cache mode value "
+                        << (ui32)familySettings.cache_mode()
+                        << " in column family '" << familySettings.name() << "'";
+                    return false;
+            }
+
             return true;
         }
 

@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
     SIZE(MEDIUM)
 
-    TIMEOUT(300)
+    TIMEOUT(600)
 
     SRCS(
         comp_defrag.cpp

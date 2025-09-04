@@ -240,7 +240,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
 
     if (detainReplication) {
         ui64 vdisksWithStuckRepl = env.AggregateVDiskCounters(env.StoragePoolName, nodeCount, nodeCount,
-                groupId, pdiskLayout, "repl", "ReplMadeNoProgress", false);
+                groupId, pdiskLayout, "repl", "ReplMadeNoProgress", {}, false);
         UNIT_ASSERT_VALUES_UNEQUAL(vdisksWithStuckRepl, 0);
         env.Runtime->FilterFunction = {};
         for (auto& [nodeId, ev] : detainedMsgs) {
@@ -249,7 +249,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
         checkBlob();
         env.Sim(TDuration::Minutes(360));
         vdisksWithStuckRepl = env.AggregateVDiskCounters(env.StoragePoolName, nodeCount, nodeCount,
-                groupId, pdiskLayout, "repl", "ReplMadeNoProgress", false);
+                groupId, pdiskLayout, "repl", "ReplMadeNoProgress", {}, false);
         UNIT_ASSERT_VALUES_EQUAL(vdisksWithStuckRepl, 0);
     }
 

@@ -168,7 +168,7 @@ private:
 
     void AddVersion(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, std::optional<NOlap::TTiering> ttl) {
         auto [it, inserted] = Ttl[pathId].emplace(snapshot, ttl);
-        AFL_VERIFY(!inserted || it->second == ttl)("snapshot", snapshot);
+        AFL_VERIFY(inserted || it->second == ttl)("snapshot", snapshot);
     }
 
 public:

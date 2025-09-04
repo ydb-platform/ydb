@@ -240,61 +240,58 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare-release.outputs.branch-name }}
-      - name: Get YDB CLI version from prepare-release job
-        id: getver
-        run: echo "cli_version=${{ needs.prepare-release.outputs.new-version }}" >> $GITHUB_OUTPUT
-      - name: Print YDB CLI version ${{ steps.getver.outputs.cli_version }}
-        run: echo ${{ steps.getver.outputs.cli_version }}
+      - name: Print YDB CLI version ${{ needs.prepare-release.outputs.new-version }}
+        run: echo ${{ needs.prepare-release.outputs.new-version }}
 
       - name: Prepare directory for linux-amd binary
         if: ${{ inputs.build-linux-amd }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/linux/amd64
+        run: mkdir -p ${{ needs.prepare-release.outputs.new-version }}/linux/amd64
       - name: Prepare directory for linux-arm binary
         if: ${{ inputs.build-linux-arm }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/linux/arm64
+        run: mkdir -p ${{ needs.prepare-release.outputs.new-version }}/linux/arm64
       - name: Prepare directory for darwin-amd binary
         if: ${{ inputs.build-darwin-amd }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/amd64
+        run: mkdir -p ${{ needs.prepare-release.outputs.new-version }}/darwin/amd64
       - name: Prepare directory for darwin-arm binary
         if: ${{ inputs.build-darwin-arm }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/arm64
+        run: mkdir -p ${{ needs.prepare-release.outputs.new-version }}/darwin/arm64
       - name: Prepare directory for windows-amd binary
         if: ${{ inputs.build-windows-amd }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
+        run: mkdir -p ${{ needs.prepare-release.outputs.new-version }}/windows/amd64/unsigned
 
       - name: Copy linux-amd binary
         if: ${{ inputs.build-linux-amd }}
         uses: actions/download-artifact@v4
         with:
           name: linux-amd-binary
-          path: ${{ steps.getver.outputs.cli_version }}/linux/amd64/
+          path: ${{ needs.prepare-release.outputs.new-version }}/linux/amd64/
       - name: Copy linux-arm binary
         if: ${{ inputs.build-linux-arm }}
         uses: actions/download-artifact@v4
         with:
           name: linux-arm-binary
-          path: ${{ steps.getver.outputs.cli_version }}/linux/arm64/
+          path: ${{ needs.prepare-release.outputs.new-version }}/linux/arm64/
       - name: Copy darwin amd64 binary
         if: ${{ inputs.build-darwin-amd }}
         uses: actions/download-artifact@v4
         with:
           name: darwin-amd-binary
-          path: ${{ steps.getver.outputs.cli_version }}/darwin/amd64/
+          path: ${{ needs.prepare-release.outputs.new-version }}/darwin/amd64/
       - name: Copy darwin arm64 binary
         if: ${{ inputs.build-darwin-arm }}
         uses: actions/download-artifact@v4
         with:
           name: darwin-arm-binary
-          path: ${{ steps.getver.outputs.cli_version }}/darwin/arm64/
+          path: ${{ needs.prepare-release.outputs.new-version }}/darwin/arm64/
       - name: Copy windows-amd binary (unsigned)
         if: ${{ inputs.build-windows-amd }}
         uses: actions/download-artifact@v4
         with:
           name: windows-amd-binary
-          path: ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned/
+          path: ${{ needs.prepare-release.outputs.new-version }}/windows/amd64/unsigned/
 
       - name: Print resulting file hierarchy
-        run: find ${{ steps.getver.outputs.cli_version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
+        run: find ${{ needs.prepare-release.outputs.new-version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
 
       - name: Download s3
         run: wget https://github.com/s3tools/s3cmd/releases/download/v2.4.0/s3cmd-2.4.0.tar.gz
@@ -312,7 +309,7 @@ jobs:
           S3_BUCKET: "yandexcloud-ydb"
           S3_DNS_HOST_BUCKET: "%(bucket)s.storage.yandexcloud.net"
           S3_REGION: ru-central1
-        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host="$S3_HOST" --host-bucket="$S3_DNS_HOST_BUCKET" --region="$S3_REGION" sync --recursive ${{ steps.getver.outputs.cli_version }} "s3://$S3_BUCKET/release/"
+        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host="$S3_HOST" --host-bucket="$S3_DNS_HOST_BUCKET" --region="$S3_REGION" sync --recursive ${{ needs.prepare-release.outputs.new-version }} "s3://$S3_BUCKET/release/"
 
   finalize-release:
     name: Merge to main and finalize release

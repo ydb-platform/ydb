@@ -120,9 +120,9 @@ class TPermissions : public TPublicDescriber<Ydb::Scheme::ModifyPermissionsReque
 public:
     TPermissions(const TString& dir) : TFileDescriber(dir, "/permissions.pb") {
         google::protobuf::TextFormat::ParseFromString(
-                                R"(actions {
-                                    change_owner: "root@builtin"
-                                })", &Public);
+            R"(actions {
+                change_owner: "root@builtin"
+            })", &Public);
     }
 };
 
@@ -240,26 +240,28 @@ private:
 class TExportRequest : public TXxportRequest {
 public:
     TExportRequest(ui16 port, const TVector<TString>& items)
-                  : TXxportRequest("ExportToS3", items, port) {}
+        : TXxportRequest("ExportToS3", items, port) 
+    {}
     
     TExportRequest(const TVector<TString>& items)
-                  : TXxportRequest("ExportToS3", items) {}
+        : TXxportRequest("ExportToS3", items)
+    {}
 };
 
 class TImportRequest : public TXxportRequest {
 public:
     TImportRequest(ui16 port, const TVector<TString>& items)
-                  : TXxportRequest("ImportFromS3", items, port) {}
+        : TXxportRequest("ImportFromS3", items, port)
+    {}
     
     TImportRequest(const TVector<TString>& items)
-                  : TXxportRequest("ImportFromS3", items) {}
+        : TXxportRequest("ImportFromS3", items)
+    {}
 };
 
-class TTopic : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription,
-                                             Ydb::Topic::CreateTopicRequest> {
+class TTopic : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription, Ydb::Topic::CreateTopicRequest> {
 private:
-    class TConsumer : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer,
-                                            Ydb::Topic::Consumer> {
+    class TConsumer : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer, Ydb::Topic::Consumer> {
     public:
         TConsumer(ui64 number, bool important = false) {
             google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerScheme, number), &Scheme);
@@ -287,7 +289,7 @@ private:
 
 public:
     TTopic(ui64 number, ui64 countConsumers = 0) 
-       : TSchemeObjectDescriber(Sprintf("/Topic_%d", number), "/create_topic.pb") {
+        : TSchemeObjectDescriber(Sprintf("/Topic_%d", number), "/create_topic.pb") {
         google::protobuf::TextFormat::ParseFromString(Sprintf(TopicScheme, number), &Scheme);
         google::protobuf::TextFormat::ParseFromString(TopicPublic, &Public);
 

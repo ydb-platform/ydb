@@ -60,7 +60,7 @@ private:
     std::shared_ptr<TWorkersPoolCounters> Counters;
     TAverageCalcer<TDuration> DeliveringDuration;
     std::deque<TDuration> DeliveryDurations;
-    ui64 MaxBatchSize = 5;
+    ui64 MaxBatchSize = 30;
 
 public:
     static constexpr double Eps = 1e-6;

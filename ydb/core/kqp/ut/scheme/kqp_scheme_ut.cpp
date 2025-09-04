@@ -2130,11 +2130,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         uuidInsertAndCheck(session, tableName, inputs);
     }
 
-    Y_UNIT_TEST(CreateTableWithFamiliesRegular) {
+    Y_UNIT_TEST_TWIN(CreateTableWithFamiliesRegular, UseQueryService) {
         TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
         TString tableName = "/Root/TableWithFamiliesRegular";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2150,7 +2162,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ),
                 FAMILY Family2 ()
             );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        auto result = executeGeneric(query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
@@ -2256,10 +2268,22 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables", resultAlter.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(CreateFamilyWithCacheModeFeatureDisabled) {
+    Y_UNIT_TEST_TWIN(CreateFamilyWithCacheModeFeatureDisabled, UseQueryService) {
         TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
         TString tableName = "/Root/TableWithWithCacheMode";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2273,15 +2297,27 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                      CACHE_MODE = "in_memory"
                 ),
             );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        auto result = executeGeneric(query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Setting cache_mode is not allowed", result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(AlterCacheModeInColumnFamilyFeatureDisabled) {
+    Y_UNIT_TEST_TWIN(AlterCacheModeInColumnFamilyFeatureDisabled, UseQueryService) {
         TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
         TString tableName = "/Root/TableWithWithCacheMode";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2294,21 +2330,33 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                      DATA = "test"
                 ),
             );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        auto result = executeGeneric(query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto queryAlter = TStringBuilder() << R"(
             --!syntax_v1
             ALTER TABLE `)" << tableName << R"(` ALTER FAMILY Family1 SET CACHE_MODE "in_memory";)";
-        auto resultAlter = session.ExecuteSchemeQuery(queryAlter).GetValueSync();
+        auto resultAlter = executeGeneric(queryAlter);
         UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::GENERIC_ERROR, resultAlter.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Setting cache_mode is not allowed", resultAlter.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(AddColumnFamilyWithCacheModeFeatureDisabled) {
+    Y_UNIT_TEST_TWIN(AddColumnFamilyWithCacheModeFeatureDisabled, UseQueryService) {
         TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
         TString tableName = "/Root/TableWithWithCacheMode";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2321,7 +2369,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                      DATA = "test"
                 ),
             );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        auto result = executeGeneric(query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto queryAlter = TStringBuilder() << R"(
@@ -2331,16 +2379,28 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                      DATA = "test",
                      CACHE_MODE = "in_memory"
                 );)";
-        auto resultAlter = session.ExecuteSchemeQuery(queryAlter).GetValueSync();
+        auto resultAlter = executeGeneric(queryAlter);
         UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::GENERIC_ERROR, resultAlter.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Setting cache_mode is not allowed", resultAlter.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(CreateTableWithDefaultFamily) {
+    Y_UNIT_TEST_TWIN(CreateTableWithDefaultFamily, UseQueryService) {
         TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
         TString tableName = "/Root/TableWithDefaultFamily";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2360,7 +2420,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                      CACHE_MODE = "regular"
                 )
             );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        auto result = executeGeneric(query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         {
@@ -2396,7 +2456,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER COLUMN Value1 SET FAMILY Family2,
                 ALTER FAMILY Family1 SET COMPRESSION "LZ4",
                 ALTER FAMILY Family1 SET CACHE_MODE "in_memory";)";
-        auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
+        auto resultAlter1 = executeGeneric(queryAlter1);
         UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
 
         {

@@ -1034,10 +1034,7 @@ NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, cons
 NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels);
 TMaybe<NKikimrConfig::TAppConfig> GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
-    IConfigUpdateTracer& ConfigUpdateTracer);
-NKikimrConfig::TAppConfig GetActualDynConfig(
-    const NKikimrConfig::TAppConfig& yamlConfig,
-    const NKikimrConfig::TAppConfig& regularConfig,
+    const TMaybe<NKikimrConfig::TAppConfig>& regularConfig,
     IConfigUpdateTracer& ConfigUpdateTracer);
 
 NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& settings, const TString& addrs, const IEnv& env, const std::optional<TString>& authToken = std::nullopt);
@@ -1433,6 +1430,21 @@ public:
         ApplyConfigForNode(appConfig);
     }
 
+    bool ApplyActualDynConfigFromYaml(const NKikimrConfig::TAppConfig& yamlConfig, const TMaybe<NKikimrConfig::TAppConfig>& regularConfigOpt) {
+        InitDebug.YamlConfig.CopyFrom(yamlConfig);
+        auto appConfig = GetActualDynConfig(yamlConfig, regularConfigOpt, ConfigUpdateTracer);
+        if (!appConfig) {
+            return false;
+        }
+        TString message = "Success apply config";
+        if (!regularConfigOpt) { // regularConfigOpt is empty when starting a node with the --force-start-with-local-config option
+            message += " (force start with local config)";
+        }
+        Logger.Out() << message << Endl;
+        ApplyConfigForNode(*appConfig);
+        return true;
+    }
+
     void StartWithLocalConfig() {
         Logger.Out() << "Try force start with local config" << Endl;
         NKikimrConfig::TAppConfig yamlConfig;
@@ -1442,13 +1454,7 @@ public:
             Labels,
             yamlConfig,
             std::nullopt);
-        InitDebug.YamlConfig.CopyFrom(yamlConfig);
-        auto appConfig = GetActualDynConfig(yamlConfig, ConfigUpdateTracer);
-        if (!appConfig) {
-            return;
-        }
-        Logger.Out() << "Success force start with local config" << Endl;
-        return ApplyConfigForNode(*appConfig);
+        ApplyActualDynConfigFromYaml(yamlConfig, Nothing());
     }
 
     void InitDynamicNode() {
@@ -1493,12 +1499,7 @@ public:
         NKikimrConfig::TAppConfig yamlConfig = GetYamlConfigFromResult(*result, Labels);
         NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig);
 
-        InitDebug.OldConfig.CopyFrom(result->GetConfig());
-        InitDebug.YamlConfig.CopyFrom(yamlConfig);
-
-        NKikimrConfig::TAppConfig appConfig = GetActualDynConfig(yamlConfig, result->GetConfig(), ConfigUpdateTracer);
-
-        ApplyConfigForNode(appConfig);
+        ApplyActualDynConfigFromYaml(yamlConfig, result->GetConfig());
     }
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) override {

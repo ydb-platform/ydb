@@ -332,6 +332,13 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropSecret);
     DROP_BY_PATH_ID_HELPERS(DropSecret);
 
+    // streaming query
+    GENERIC_HELPERS(CreateStreamingQuery);
+    GENERIC_HELPERS(AlterStreamingQuery);
+    GENERIC_HELPERS(DropStreamingQuery);
+    DROP_BY_PATH_ID_HELPERS(DropStreamingQuery);
+    void TestCreateStreamingQueryOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults);
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS

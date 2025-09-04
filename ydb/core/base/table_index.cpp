@@ -213,8 +213,8 @@ bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType) {
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            return true;
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            return true;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
             return false;

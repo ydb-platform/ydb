@@ -620,7 +620,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     if (op.HasTTLSettings()) {
         for (const auto& indexDescription : op.GetTableIndexes()) {
             if (!DoesIndexSupportTTL(indexDescription.GetType())) {
-                errStr = TStringBuilder() << "Table with " << indexDescription.GetType() << " doesn't support TTL";
+                errStr = TStringBuilder() << "Table with " << indexDescription.GetType() << " index doesn't support TTL";
                 return nullptr;
             }
         }

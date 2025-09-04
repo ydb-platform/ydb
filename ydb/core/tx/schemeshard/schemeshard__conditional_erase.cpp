@@ -240,7 +240,8 @@ private:
             }
 
             auto index = GetIndex(childPath);
-            if (!DoesIndexSupportTTL(index->Type)) {
+            if (index->Type == NKikimrSchemeOp::EIndexTypeGlobalAsync
+                || !DoesIndexSupportTTL(index->Type)) {
                 continue;
             }
 

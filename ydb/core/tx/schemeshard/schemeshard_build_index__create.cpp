@@ -160,7 +160,7 @@ public:
 
             if (tableInfo->IsTTLEnabled() && !DoesIndexSupportTTL(buildInfo->IndexType)) {
                 return Reply(Ydb::StatusIds::PRECONDITION_FAILED,
-                    TStringBuilder() << "index " << buildInfo->IndexType << " doesn't support TTL");
+                    TStringBuilder() << buildInfo->IndexType << " index doesn't support TTL");
             }
 
             NKikimrSchemeOp::TIndexBuildConfig tmpConfig;

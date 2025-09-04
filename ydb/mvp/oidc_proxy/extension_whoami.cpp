@@ -83,7 +83,7 @@ void TExtensionWhoamiWorker::PatchResponse(NJson::TJsonValue& json, NJson::TJson
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvExtensionRequest::TPtr ev) {
     Context = std::move(ev->Get()->Context);
     if (Context->Params->StatusOverride.StartsWith("3") || Context->Params->StatusOverride == "404") {
-        ContinueAndPassAway();
+        return ContinueAndPassAway();
     }
     ApplyIfReady();
 }

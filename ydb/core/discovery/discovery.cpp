@@ -242,7 +242,7 @@ namespace NDiscovery {
     }
 
     TEvDiscovery::TEvDiscoveryData* TCachedMessageData::ToEvent(bool returnSerializedMessage) const {
-        auto* event = new TEvDiscovery::TEvDiscoveryData();
+        auto event = std::make_unique<TEvDiscovery::TEvDiscoveryData>();
         if (returnSerializedMessage && !CachedMessage.empty() && !CachedMessageSsl.empty()) {
             event->CachedMessage = CachedMessage;
             event->CachedMessageSsl = CachedMessageSsl;
@@ -256,7 +256,7 @@ namespace NDiscovery {
         } else {
             event->Status = Status;
         }
-        return event;
+        return event.release();
     }
 }
 

@@ -1080,6 +1080,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             if (DirectStream) {
                 DirectStream->Finish();
                 DirectStream = nullptr;
+                DirectContext = MakeHolder<grpc::ClientContext>();
             }
             DirectStream = Stub->StreamDirectRead(DirectContext.Get());
             UNIT_ASSERT(DirectStream);

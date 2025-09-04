@@ -328,13 +328,14 @@ jobs:
 
       - name: Merge release branch to main
         run: |
-          # Fetch latest changes from main
+          # Fetch latest changes from main and release branch
           git fetch origin main
+          git fetch origin "${{ needs.prepare-release.outputs.branch-name }}"
           git checkout main
           git reset --hard origin/main
 
           # Merge release branch
-          git merge "${{ needs.prepare-release.outputs.branch-name }}" --no-ff -m "Merge CLI release ${{ needs.prepare-release.outputs.new-version }}"
+          git merge "origin/${{ needs.prepare-release.outputs.branch-name }}" --no-ff -m "Merge CLI release ${{ needs.prepare-release.outputs.new-version }}"
           git push origin main
 
       - name: Delete release branch
@@ -343,7 +344,7 @@ jobs:
 
   cleanup-on-failure:
     name: Cleanup release branch on failure
-    needs: [prepare-release]  # TODO: add back gather-and-push-to-s3 for production
+    needs: [prepare-release, finalize-release]  # TODO: add back gather-and-push-to-s3 for production
     runs-on: ubuntu-latest
     if: failure() && needs.prepare-release.result == 'success'
     steps:

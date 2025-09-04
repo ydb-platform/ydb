@@ -8,10 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version-change:
-        description: |
-          Version part to increment:
-          • PATCH (X.Y.Z → X.Y.Z+1) - for bug fixes, small improvements
-          • MINOR (X.Y.Z → X.Y+1.0) - for new features, significant updates
+        description: "PATCH for bug fixes, MINOR for new features"
         required: true
         type: choice
         options:

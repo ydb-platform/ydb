@@ -1063,6 +1063,8 @@ public:
         if (QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE
                 && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_SCAN
+                && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_AST_SCAN
+                && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
                 && QueryState->TxCtx->HasOlapTable) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             TStringBuilder()

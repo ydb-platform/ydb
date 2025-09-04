@@ -977,6 +977,7 @@ void TColumnShard::Die(const TActorContext& ctx) {
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
     if (SpaceWatcherId == TActorId{}) {
         delete SpaceWatcher;
+        SpaceWatcher = nullptr;
     } else {
         Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
     }

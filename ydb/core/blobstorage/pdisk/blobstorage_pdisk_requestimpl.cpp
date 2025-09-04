@@ -106,11 +106,9 @@ TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &wr
 {
     ChunkWrite->RegisterPiece();
     GateId = ChunkWrite->GateId;
-    ChunkWrite->Orbit.Fork(Orbit);
 }
 
 TChunkWritePiece::~TChunkWritePiece() {
-    ChunkWrite->Orbit.Join(Orbit);
 }
 
 void TChunkWritePiece::Process(void*) {
@@ -120,9 +118,10 @@ void TChunkWritePiece::Process(void*) {
 
 void TChunkWritePiece::MarkReady(const TString& logPrefix) {
     auto evChunkWrite = ChunkWrite.Get();
-    evChunkWrite->ReadyForBlockDevice++;
-    if (evChunkWrite->ReadyForBlockDevice == evChunkWrite->Pieces) {
+    ui8 old = evChunkWrite->ReadyForBlockDevice.fetch_add(1, std::memory_order_seq_cst);
+    if (old + 1 == evChunkWrite->Pieces) {
         Y_VERIFY_S(evChunkWrite->RemainingSize == 0, logPrefix);
+        evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
     }
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

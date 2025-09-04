@@ -852,7 +852,6 @@ void TPDisk::ChunkWritePiecePlain(TChunkWritePiece *piece) {
         (diskOffset, diskOffset), (count, count));
 
     auto traceId = evChunkWrite->Span.GetTraceId();
-    evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
     BlockDevice->PwriteAsync(buff, newSize, diskOffset, piece->Completion.Release(), evChunkWrite->ReqId, &traceId);
     evChunkWrite->IsReplied = true;
 }
@@ -930,7 +929,6 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter& wri
     }
 
     auto traceId = evChunkWrite->Span.GetTraceId();
-    evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
     writer.Flush(evChunkWrite->ReqId, &traceId, piece->Completion.Release());
     piece->MarkReady(PCtx->PDiskLogPrefix);
 

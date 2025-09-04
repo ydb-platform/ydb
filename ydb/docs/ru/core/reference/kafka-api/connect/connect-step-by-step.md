@@ -45,7 +45,6 @@
     consumer.security.protocol=SASL_SSL
     consumer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<sasl.username>" password="<sasl.password>";
 
-    consumer.partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor
     consumer.check.crcs=false
 
     # Converter properties
@@ -56,7 +55,6 @@
 
     # Worker properties
     plugin.path=/etc/kafka-connect-worker/plugins
-    offset.storage.file.filename=/etc/kafka-connect-worker/worker.offset
     ```
 
 5. Создайте файл настроек FileSink коннектора `/etc/kafka-connect-worker/file-sink.properties` для переноса данных из топика {{ ydb-short-name }} в файл:

@@ -11,6 +11,9 @@ SRCS(
     mpmc_ring_queue_v2_ut_single_thread.cpp
     mpmc_ring_queue_v2_ut_multi_threads.cpp
 
+    mpmc_ring_queue_v3_ut_single_thread.cpp
+    mpmc_ring_queue_v3_ut_multi_threads.cpp
+
     mpmc_bitmap_buffer_ut.cpp
 )
 

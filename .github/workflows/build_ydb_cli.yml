@@ -141,7 +141,7 @@ jobs:
 
       - name: Commit changes
         run: |
-          git commit -m "Release ${{ steps.update-version.outputs.new-version }}"
+          git commit -m "YDB CLI release ${{ steps.update-version.outputs.new-version }}"
 
       - name: Create tag
         run: |

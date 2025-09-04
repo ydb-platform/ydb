@@ -2,6 +2,7 @@
 #include "distconf_statestorage_config_generator.h"
 
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/nodestate.h>
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
@@ -112,7 +113,7 @@ namespace NKikimr::NStorage {
     ui32 TStateStoragePerPileGenerator::CalcNodeState(ui32 nodeId, bool disconnected) const {
         ui32 state = disconnected ? 0 : (SelfHealNodesState.contains(nodeId) ? SelfHealNodesState.at(nodeId) : (NodeStatesSize - 1));
         Y_ABORT_UNLESS(state < NodeStatesSize);
-        Y_ABORT_UNLESS(state != NCms::NSentinel::TNodeStatusComputer::ENodeState::PRETTY_GOOD);
+        Y_ABORT_UNLESS(state != ENodeState::PRETTY_GOOD);
         if (state == 0 && UsedNodes.contains(nodeId)) {
             state++;
         }

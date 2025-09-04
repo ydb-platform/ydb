@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(SimpleDropStreamingQueryWithReboots2) {
+    Y_UNIT_TEST(SimpleDropStreamingQuery2) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {

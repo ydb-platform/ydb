@@ -5660,8 +5660,12 @@ bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_
     Ctx_.AllScopes.push_back(Ctx_.Scoped);
     Ctx_.Scoped->Local = TScopedState::TLocal{};
     Ctx_.ScopeLevel++;
-    TSqlQuery query(Ctx_, Ctx_.Settings.Mode, false);
+    TSqlQuery query(Ctx_, Ctx_.Settings.Mode, /* topLevel */ false, /* allowTopLevelPragmas */ true);
     TBlocks innerBlocks;
+
+    TNodePtr clearWorldNode = new TAstListNodeImpl(Ctx_.Pos());
+    clearWorldNode->Add("World");
+    innerBlocks.push_back(clearWorldNode);
 
     const auto& inlineAction = node.GetRule_inline_action3();
     const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, inlineAction.GetRule_define_action_or_subquery_body2());
@@ -5677,8 +5681,7 @@ bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_
     }
 
     TNodePtr blockNode = new TAstListNodeImpl(Ctx_.Pos());
-    blockNode->Add("block");
-    blockNode->Add(blockNode->Q(queryNode));
+    blockNode->Add("block", blockNode->Q(queryNode));
     settings.Features[TStreamingQuerySettings::QUERY_AST_FEATURE] = TDeferredAtom(blockNode, Ctx_);
 
     // Extract whole query text between BEGIN and END tokens

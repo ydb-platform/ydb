@@ -9381,8 +9381,10 @@ Y_UNIT_TEST_SUITE(StreamingQuery) {
     Y_UNIT_TEST(CreateStreamingQueryBasic) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
 USE plato;
+CREATE TABLE test (Key Int32 NOT NULL, PRIMARY KEY (Key));
 -- Some comment
 CREATE STREAMING QUERY MyQuery AS DO BEGIN
+PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
 USE plato;
 $source = SELECT * FROM Input;
 INSERT INTO Output1 SELECT * FROM $source;
@@ -9398,15 +9400,20 @@ USE hahn;
             }
 
             if (word == "__query_text") {
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nPRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;")))#");
             }
         };
 
-        TWordCountHive elementStat = { {TString("createObject"), 0}, {TString("__query_text"), 0} };
+        TWordCountHive elementStat = {
+            {TString("createObject"), 0},
+            {TString("__query_text"), 0},
+            {TString("(let world (World))"), 0},
+        };
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["createObject"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["__query_text"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["(let world (World))"]);
     }
 
     Y_UNIT_TEST(CreateStreamingQueryCrlfCheck) {
@@ -9599,8 +9606,10 @@ USE hahn;
     Y_UNIT_TEST(AlterStreamingQuerySetQuery) {
         NYql::TAstParseResult res = SqlToYql(TStringBuilder() << R"sql(
 USE plato;
+CREATE TABLE test (Key Int32 NOT NULL, PRIMARY KEY (Key));
 -- Some comment
 ALTER STREAMING QUERY MyQuery AS DO )sql" << "\r" << R"sql(BEGIN
+PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
 USE plato;
 $source = SELECT * FROM Input;
 INSERT INTO Output1 SELECT * FROM $source;
@@ -9617,15 +9626,20 @@ USE hahn;
             }
 
             if (word == "__query_text") {
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nPRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n")))#");
             }
         };
 
-        TWordCountHive elementStat = { {TString("alterObject"), 0}, {TString("__query_text"), 0} };
+        TWordCountHive elementStat = {
+            {TString("alterObject"), 0},
+            {TString("__query_text"), 0},
+            {TString("(let world (World))"), 0},
+        };
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["alterObject"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["__query_text"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["(let world (World))"]);
     }
 
     Y_UNIT_TEST(AlterStreamingQuerySetOptions) {

@@ -3438,6 +3438,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
     };
     const bool hasLexicalScope = withConfigure || lexicalScopePragmas.contains(normalizedPragma);
     const bool withFileAlias = normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "library" || normalizedPragma == "udf";
+    const bool allowTopLevelPragmas = TopLevel_ || AllowTopLevelPragmas_;
     for (auto pragmaValue : pragmaValues) {
         if (pragmaValue->HasAlt_pragma_value3()) {
             // Quoted string.
@@ -3488,7 +3489,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
     }
 
     if (prefix.empty()) {
-        if (!TopLevel_ && !hasLexicalScope) {
+        if (!allowTopLevelPragmas && !hasLexicalScope) {
             Error() << "This pragma '" << pragma << "' is not allowed to be used in actions or subqueries";
             Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
             return{};
@@ -3549,7 +3550,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
         }
     } else {
         if (lowerPrefix == "yson") {
-            if (!TopLevel_) {
+            if (!allowTopLevelPragmas) {
                 Error() << "This pragma '" << pragma << "' is not allowed to be used in actions";
                 Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};

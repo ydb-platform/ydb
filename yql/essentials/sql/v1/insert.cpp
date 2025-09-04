@@ -199,7 +199,7 @@ public:
             }
 
             if (numColumns != sourceColumns->List.size()) {
-                ctx.Error(Pos_) << "SELECT have " << numColumns << " columns, " << OperationHumanName_ << " expects: " << ColumnsHint_.size();
+                ctx.Error(Pos_) << "SELECT have " << numColumns << " columns, " << OperationHumanName_ << " expects: " << sourceColumns->List.size();
                 return false;
             }
 

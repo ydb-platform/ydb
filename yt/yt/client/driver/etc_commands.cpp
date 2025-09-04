@@ -31,10 +31,10 @@ using namespace NApi;
 
 void TGetCurrentUserCommand::DoExecute(ICommandContextPtr context)
 {
-    auto userInfo = WaitFor(context->GetClient()->GetCurrentUser())
+    auto result = WaitFor(context->GetClient()->GetCurrentUser())
         .ValueOrThrow();
 
-    context->ProduceOutputValue(ConvertToYsonString(userInfo));
+    context->ProduceOutputValue(ConvertToYsonString(result));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -164,6 +164,26 @@ void TCheckPermissionCommand::DoExecute(ICommandContextPtr context)
                         fluent
                             .Item().BeginMap()
                                 .Do([&] (auto fluent) { produceResult(fluent, result); })
+                            .EndMap();
+                    });
+            })
+            .DoIf(response.RlAcl.has_value(), [&] (auto fluent) {
+                fluent
+                    .Item("rl_acl")
+                    .DoListFor(*response.RlAcl, [&] (auto fluent, const auto& rlAce) {
+                        fluent
+                            .Item().BeginMap()
+                                .Item(TSerializableAccessControlEntry::ExpressionKey).Value(rlAce.Expression)
+                                // NB(coteeq): The DoIf will try to hide the whole inapplicable_expression_mode
+                                // mechanism from too curious users.
+                                // EInapplicableExpressionMode::Ignore is not a good choice in the common case
+                                // from security perspective, but it may be necessary to be able to have
+                                // tables with completely different schemas in one directory.
+                                .DoIf(rlAce.InapplicableExpressionMode != EInapplicableExpressionMode::Deny, [&] (auto fluent) {
+                                    fluent
+                                        .Item(TSerializableAccessControlEntry::InapplicableExpressionModeKey)
+                                        .Value(rlAce.InapplicableExpressionMode);
+                                })
                             .EndMap();
                     });
             })

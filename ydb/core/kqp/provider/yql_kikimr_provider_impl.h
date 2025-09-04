@@ -284,8 +284,6 @@ TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TIntrusivePtr<IKikimrQueryExecutor> queryExecutor);
 
-TAutoPtr<IGraphTransformer> CreateKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor);
-
 NNodes::TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPositionHandle pos,
     TExprContext& ctx, bool withSystemColumns, bool ignoreWriteOnlyColumns);
 

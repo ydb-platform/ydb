@@ -1,5 +1,6 @@
 #include "query_builder.h"
 
+#include <library/cpp/iterator/zip.h>
 #include <yt/yt/core/misc/error.h>
 
 #include <util/string/join.h>
@@ -116,13 +117,19 @@ void TQueryBuilder::SetLimit(i64 limit)
     Limit_ = limit;
 }
 
-void TQueryBuilder::AddArrayJoinExpression(const std::vector<std::string>& expressions,  const std::vector<std::string>& aliases, ETableJoinType type) {
+void TQueryBuilder::AddArrayJoinExpression(
+    const std::vector<std::string>& expressions,
+    const std::vector<std::string>& aliases,
+    ETableJoinType type,
+    std::string predicate)
+{
     TJoinEntry entry;
     entry.Type = type;
     entry.ArrayJoinFields.reserve(expressions.size());
-    for (size_t ind = 0; ind < expressions.size(); ++ind) {
-        entry.ArrayJoinFields.push_back({expressions[ind], aliases[ind]});
+    for (const auto& [expression, alias] : Zip(expressions, aliases)) {
+        entry.ArrayJoinFields.emplace_back(expression, alias);
     }
+    entry.Predicate = predicate;
     JoinEntries_.push_back(std::move(entry));
 }
 
@@ -130,7 +137,8 @@ void TQueryBuilder::AddJoinExpression(
     std::string table,
     std::string alias,
     std::string onExpression,
-    ETableJoinType type)
+    ETableJoinType type,
+    std::string predicate)
 {
     JoinEntries_.push_back(TJoinEntry{
         std::move(table),
@@ -138,16 +146,21 @@ void TQueryBuilder::AddJoinExpression(
         std::move(onExpression),
         type,
         std::vector<TEntryWithAlias>(),
+        std::move(predicate),
     });
 }
 
-std::string TQueryBuilder::WrapTableName(const std::string& table) {
-    if (SyntaxVersion_ == 1) {
-        return "[" + table + "]";
-    } else if (SyntaxVersion_ == 2) {
-        return "`" + table + "`";
-    } else {
-        THROW_ERROR_EXCEPTION("Only syntax versions 1 and 2 are supported");
+std::string TQueryBuilder::WrapTableName(const std::string& table)
+{
+    switch (SyntaxVersion_) {
+        case 1:
+            return "[" + table + "]";
+
+        case 2:
+            return "`" + table + "`";
+
+        default:
+            THROW_ERROR_EXCEPTION("Only syntax versions 1 and 2 are supported");
     }
 }
 
@@ -181,11 +194,19 @@ std::string TQueryBuilder::Build()
     for (const auto& join : JoinEntries_) {
         if (join.Type == ETableJoinType::Inner || join.Type == ETableJoinType::Left) {
             TStringBuf joinType = join.Type == ETableJoinType::Inner ? "JOIN" : "LEFT JOIN";
-            wrapper->AppendFormat("%v %v AS %v ON %v", joinType, WrapTableName(join.Table), WrapTableName(join.Alias), join.OnExpression);
+            if (join.Predicate != "") {
+                wrapper->AppendFormat("%v %v AS %v ON %v AND %v", joinType, WrapTableName(join.Table), WrapTableName(join.Alias), join.OnExpression, join.Predicate);
+            } else {
+                wrapper->AppendFormat("%v %v AS %v ON %v", joinType, WrapTableName(join.Table), WrapTableName(join.Alias), join.OnExpression);
+            }
         } else {
             TStringBuf joinType = join.Type == ETableJoinType::ArrayInner ? "ARRAY JOIN" : "LEFT ARRAY JOIN";
             wrapper->AppendFormat(" %v ", joinType);
             JoinToString(&wrapper, join.ArrayJoinFields.begin(), join.ArrayJoinFields.end(), &FormatEntryWithAlias);
+            if (join.Predicate != "") {
+                wrapper->AppendString("AND");
+                wrapper->AppendString(join.Predicate);
+            }
         }
     }
 
@@ -260,7 +281,6 @@ void TQueryBuilder::FormatOrderByEntry(TStringBuilderBase* builder, const TQuery
         builder->AppendString(directionString);
     }
 }
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NQueryClient

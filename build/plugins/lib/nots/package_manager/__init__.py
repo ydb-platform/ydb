@@ -12,10 +12,9 @@ from .base import (
 )
 from .base.package_json import PackageJsonWorkspaceError
 from .pnpm import PnpmPackageManager
-from .npm import NpmPackageManager
 
 
-type PackageManagerType = Literal["pnpm", "npm"]
+type PackageManagerType = Literal["pnpm"]
 
 manager = PnpmPackageManager
 
@@ -23,8 +22,8 @@ manager = PnpmPackageManager
 def get_package_manager_type(key: PackageManagerType) -> type[BasePackageManager]:
     if key == "pnpm":
         return PnpmPackageManager
-    if key == "npm":
-        return NpmPackageManager
+    # if key == "npm":
+    #     return NpmPackageManager
     raise ValueError(f"Invalid package manager key: {key}")
 
 
@@ -32,7 +31,6 @@ __all__ = [
     "BaseLockfile",
     "BasePackageManager",
     "PnpmPackageManager",
-    "NpmPackageManager",
     "PackageJson",
     "PackageJsonWorkspaceError",
     "PackageManagerCommandError",

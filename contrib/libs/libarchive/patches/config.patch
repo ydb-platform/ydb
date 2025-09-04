@@ -1,0 +1,20 @@
+--- a/config-linux.h
++++ b/config-linux.h
+@@ -382,1 +382,1 @@
+-#define HAVE_ARC4RANDOM_BUF 1
++/* #undef HAVE_ARC4RANDOM_BUF */
+@@ -616,1 +616,1 @@ typedef uint64_t uintmax_t;
+-#define HAVE_FSTATVFS 1
++/* #undef HAVE_FSTATVFS */
+@@ -809,1 +809,1 @@
+-#define HAVE_POSIX_SPAWNP 1
++#define HAVE_POSIX_SPAWNP 0
+@@ -987,1 +987,1 @@ typedef uint64_t uintmax_t;
+-#define HAVE_STATVFS 1
++/* #undef HAVE_STATVFS */
+@@ -1389,3 +1389,5 @@ typedef uint64_t uintmax_t;
+ 
+ /* Define to `unsigned int' if <sys/types.h> does not define. */
+ /* #undef uintptr_t */
++
++#define HAVE_STRUCT_STATFS

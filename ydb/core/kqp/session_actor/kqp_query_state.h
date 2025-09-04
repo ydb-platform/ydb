@@ -62,6 +62,7 @@ public:
         , ProxyRequestId(ev->Cookie)
         , ParametersSize(ev->Get()->GetParametersSize())
         , QueryPhysicalGraph(ev->Get()->GetQueryPhysicalGraph())
+        , Generation(ev->Get()->GetGeneration())
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , StartTime(TInstant::Now())
@@ -69,6 +70,7 @@ public:
         , UserToken(ev->Get()->GetUserToken())
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
+        , ResultSetFormatSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
     {
         RequestEv.reset(ev->Release().Release());
         bool enableImplicitQueryParameterTypes = tableServiceConfig.GetEnableImplicitQueryParameterTypes() ||
@@ -128,6 +130,7 @@ public:
     NKikimrKqp::EQueryType QueryType;
     bool SaveQueryPhysicalGraph = false;
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
+    const i64 Generation = 0;
 
     TActorId RequestActorId;
 
@@ -182,6 +185,8 @@ public:
 
     TMaybe<TString> CommandTagName;
     THashSet<ui32> ParticipantNodes;
+
+    TResultSetFormatSettings ResultSetFormatSettings;
 
     bool IsLocalExecution(ui32 nodeId) const {
         if (RequestEv->GetRequestCtx() == nullptr) {
@@ -279,6 +284,10 @@ public:
 
     bool IsCreateTableAs() const {
         return IsSplitted();
+    }
+
+    const TResultSetFormatSettings& GetResultSetFormatSettings() const {
+        return ResultSetFormatSettings;
     }
 
     // todo: gvit

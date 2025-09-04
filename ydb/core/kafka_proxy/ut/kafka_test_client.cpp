@@ -34,16 +34,13 @@ TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions(bool silent)
 // YDB ignores AllowAutoTopicCreation, i.e. it never creates a new topic implicitly.
 // But in Apache Kafka the default behavior is to create a new topic, if there is no one at the moment of the request.
 // With this flag, allowAutoTopicCreation, you can stop this behavior in Apache Kafka.
-TMessagePtr<TMetadataResponseData> TKafkaTestClient::Metadata(const TVector<TString>& topics, std::optional<bool> allowAutoTopicCreation) {
+TMessagePtr<TMetadataResponseData> TKafkaTestClient::Metadata(const TVector<TString>& topics, bool allowAutoTopicCreation) {
     Cerr << ">>>>> MetadataRequest\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::METADATA, 12);
 
     TMetadataRequestData request;
-    if (allowAutoTopicCreation.has_value()) {
-        // If allowAutoTopicCreation does not have a value, use the default value (= true).
-        request.AllowAutoTopicCreation = allowAutoTopicCreation.value() ? 1 : 0;
-    }
+    request.AllowAutoTopicCreation = allowAutoTopicCreation;
     request.Topics.reserve(topics.size());
     for (auto topicName : topics) {
         NKafka::TMetadataRequestData::TMetadataRequestTopic topic;
@@ -424,7 +421,7 @@ TMessagePtr<TOffsetFetchResponseData> TKafkaTestClient::OffsetFetch(TString grou
     return WriteAndRead<TOffsetFetchResponseData>(header, request);
 }
 
-TMessagePtr<TOffsetFetchResponseData> TKafkaTestClient::OffsetFetch(TOffsetFetchRequestData request) {
+TMessagePtr<TOffsetFetchResponseData> TKafkaTestClient::OffsetFetch(TOffsetFetchRequestData& request) {
     Cerr << ">>>>> TOffsetFetchRequestData\n";
     TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_FETCH, 8);
     return WriteAndRead<TOffsetFetchResponseData>(header, request);
@@ -711,7 +708,11 @@ void TKafkaTestClient::UnknownApiKey() {
 }
 
 void TKafkaTestClient::AuthenticateToKafka() {
-{
+    AuthenticateToKafka("ouruser@/Root", "ourUserPassword");
+}
+
+void TKafkaTestClient::AuthenticateToKafka(const TString& userName, const TString& userPassword) {
+    {
         auto msg = ApiVersions();
 
         UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
@@ -727,11 +728,11 @@ void TKafkaTestClient::AuthenticateToKafka() {
     }
 
     {
-        auto msg = SaslAuthenticate("ouruser@/Root", "ourUserPassword");
+        auto msg = SaslAuthenticate(userName, userPassword);
         UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     }
-}
 
+}
 
 TRequestHeaderData TKafkaTestClient::Header(NKafka::EApiKey apiKey, TKafkaVersion version) {
     TRequestHeaderData header;

@@ -81,6 +81,7 @@ namespace NSchemeShardUT_Private {
         OPTION(TVector<TIntrusivePtr<NFake::TProxyDS>>, DSProxies, {});
         OPTION(std::optional<bool>, EnableSystemNamesProtection, std::nullopt);
         OPTION(std::optional<bool>, EnableRealSystemViewPaths, std::nullopt);
+        OPTION(ui32, NStoragePools, 2);
 
         #undef OPTION
     };
@@ -161,7 +162,7 @@ namespace NSchemeShardUT_Private {
 
     private:
         static std::function<IActor*(const TActorId&, TTabletStorageInfo*)> GetTabletCreationFunc(ui32 type);
-        void AddDomain(TTestActorRuntime& runtime, TAppPrepare& app, ui32 domainUid, ui64 hive, ui64 schemeRoot);
+        void AddDomain(TTestActorRuntime& runtime, TAppPrepare& app, ui32 domainUid, ui64 hive, ui64 schemeRoot, ui32 storagePoolCount);
 
         void BootSchemeShard(TTestActorRuntime& runtime, ui64 schemeRoot);
         void BootTxAllocator(TTestActorRuntime& runtime, ui64 tabletId);

@@ -11,13 +11,13 @@ COMMIT;
 $manufacturer_name_fix = ($manufacturer) -> {
     $lowered_manufacturer = CAST(Unicode::ToLower(CAST(String::Strip($manufacturer) AS Utf8)) AS String);
     $in = AsList(
-        "oysters", -- bullshit in naming
-        "qumo", -- bullshit in naming
-        "texet", -- bullshit in naming
-        "alcatel", -- bullshit in naming
-        "dexp", -- bullshit in naming
-        "haier", -- bullshit in naming
-        "dexp", -- bullshit in naming
+        "oysters", -- bad naming
+        "qumo", -- bad naming
+        "texet", -- bad naming
+        "alcatel", -- bad naming
+        "dexp", -- bad naming
+        "haier", -- bad naming
+        "dexp", -- bad naming
         "asus", -- ASUSTek Computer Inc & ASUS both usable
         "yota", -- Yota Devices & Yota Devices Limited ...
         "ark" -- "ark" & "ark electronic technology" & "ark_electronic_technology"

@@ -110,5 +110,5 @@
   - gdk-pixbuf/gdk-pixbuf.h
 
 - includes:
-    - sys/queue.h:   contrib/libs/libc_compat/include/windows/sys/queue.h
+    - sys/queue.h:   contrib/libs/libc_compat/queue/sys/queue.h
     - sys/uio.h:     contrib/libs/libc_compat/include/windows/sys/uio.h

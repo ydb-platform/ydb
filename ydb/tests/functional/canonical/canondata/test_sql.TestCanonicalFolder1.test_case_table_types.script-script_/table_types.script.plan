@@ -149,7 +149,7 @@
                                 "Operators": [
                                     {
                                         "Inputs": [],
-                                        "Iterator": "[{Key: \"Key\",Value01: \"true\",Value02: 1,Value03: -1,Value04: 2,Value05: -2,Value06: 3,Value07: \"4.5\",Value08: Minus,Value09: \"3.14\",Value10: DyNumber,Value21: \"\\u041F\\u0440\\u0438\\u0432\\u0435\\u0442\",Value22: \"{\\\"name\\\": \\\"George\\\", \\\"age\\\": 23}\",Value23: JsonDocument,Value24: \"{a=1; b=2}\",Value31: Apply,Value32: Apply,Value33: Apply,Value34: Apply}]",
+                                        "Iterator": "[{Key: \"Key\",Value01: \"true\",Value02: 1,Value03: -1,Value04: 2,Value05: -2,Value06: 3,Value07: \"4.5\",Value08: Minus,Value09: \"3.14\",Value10: \"1.23\",Value21: \"\\u041F\\u0440\\u0438\\u0432\\u0435\\u0442\",Value22: \"{\\\"name\\\": \\\"George\\\", \\\"age\\\": 23}\",Value23: \"{\\\"name\\\": \\\"Anna\\\", \\\"age\\\": 27}\",Value24: \"{a=1; b=2}\",Value31: Apply,Value32: Apply,Value33: Apply,Value34: Apply}]",
                                         "Name": "Iterator"
                                     }
                                 ],

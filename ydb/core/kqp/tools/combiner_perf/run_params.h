@@ -40,6 +40,8 @@ struct TRunParams {
     bool MeasureReferenceMemory = false;
     bool AlwaysSubprocess = false;
     bool EnableVerification = true;
+    size_t JoinOverlap = 0;
+    size_t JoinRightRows = 0;
 };
 
 }

@@ -13,11 +13,12 @@ public:
     class TBorder {
     private:
         YDB_READONLY_DEF(bool, IsLast);
-        NArrow::TSimpleRow Key;
+        NArrow::NMerger::TSortableBatchPosition Key;
 
         TBorder(const bool isLast, const NArrow::TSimpleRow key)
             : IsLast(isLast)
-            , Key(key) {
+            , Key(NArrow::NMerger::TSortableBatchPosition(key.ToBatch(), 0, false))
+        {
         }
 
     public:
@@ -35,21 +36,26 @@ public:
             return (*this <=> other) == std::partial_ordering::equivalent;
         };
 
-        const NArrow::TSimpleRow& GetKey() const {
+        const NArrow::NMerger::TSortableBatchPosition& GetKey() const {
             return Key;
         }
 
         TString DebugString() const {
-            return TStringBuilder() << (IsLast ? "Last:" : "First:") << Key.DebugString();
+            return TStringBuilder() << (IsLast ? "Last:" : "First:") << Key.GetSorting()->DebugJson(0);
         }
     };
 
 private:
     std::vector<TBorder> Borders;
+    std::shared_ptr<arrow::Schema> SortingSchema;
 
 public:
     TColumnDataSplitter(const THashMap<ui64, NArrow::TFirstLastSpecialKeys>& sources, const NArrow::TFirstLastSpecialKeys& bounds) {
+        AFL_VERIFY(sources.size());
+        SortingSchema = sources.begin()->second.GetSchema();
+
         for (const auto& [id, specials] : sources) {
+            AFL_VERIFY(specials.GetSchema()->Equals(SortingSchema))("lhs", specials.GetSchema()->ToString())("rhs", SortingSchema->ToString());
             if (specials.GetFirst() > bounds.GetFirst()) {
                 Borders.emplace_back(TBorder::First(specials.GetFirst()));
             }
@@ -82,17 +88,15 @@ public:
         std::vector<ui64> borderOffsets;
         ui64 offset = 0;
 
-        auto sortingFields = Borders.front().GetKey().ToBatch()->schema()->field_names();
-        auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, sortingFields, {}, false);
+        auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, SortingSchema->field_names(), {}, false);
 
         for (const auto& border : Borders) {
-            const auto borderPosition = NArrow::NMerger::TSortableBatchPosition(border.GetKey().ToBatch(), 0, sortingFields, {}, false);
             if (offset == data->GetRecordsCount()) {
                 borderOffsets.emplace_back(offset);
                 continue;
             }
             const auto findBound = NArrow::NMerger::TSortableBatchPosition::FindBound(
-                position, offset, data->GetRecordsCount() - 1, borderPosition, border.GetIsLast());
+                position, offset, data->GetRecordsCount() - 1, border.GetKey(), border.GetIsLast());
             offset = findBound ? findBound->GetPosition() : data->GetRecordsCount();
             borderOffsets.emplace_back(offset);
         }

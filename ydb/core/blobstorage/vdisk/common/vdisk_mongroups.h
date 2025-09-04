@@ -477,24 +477,19 @@ public:                                                                         
         ///////////////////////////////////////////////////////////////////////////////////
         class TLsmAllLevelsStat {
         public:
+            static constexpr ui32 MaxCounterLevels = 20;
+
             TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
             // per-level information
-            TLsmLevelGroup Level0;
-            TLsmLevelGroup Level1to8;
-            TLsmLevelGroup Level9to16;
-            TLsmLevelGroup Level17;
-            TLsmLevelGroup Level18;
-            TLsmLevelGroup Level19;
+            std::unique_ptr<TLsmLevelGroup> Levels[MaxCounterLevels];
 
             TLsmAllLevelsStat(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
                 : Group(counters->GetSubgroup("subsystem", "levels"))
-                , Level0(Group, "level", "0")
-                , Level1to8(Group, "level", "1..8")
-                , Level9to16(Group, "level", "9..16")
-                , Level17(Group, "level", "17")
-                , Level18(Group, "level", "18")
-                , Level19(Group, "level", "19")
-            {}
+            {
+                for (ui32 level = 0; level < MaxCounterLevels; ++level) {
+                    Levels[level].reset(new TLsmLevelGroup(Group, "level", Sprintf("%u", level)));
+                }
+            }
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

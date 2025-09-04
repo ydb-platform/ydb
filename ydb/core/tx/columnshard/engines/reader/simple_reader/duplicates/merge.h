@@ -20,7 +20,8 @@ private:
     TActorId Owner;
     std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     std::optional<NArrow::NMerger::TCursor> MaxVersion;
-    NArrow::TSimpleRow Finish;
+    std::optional<NArrow::NMerger::TCursor> MinUncommittedVersion;;
+    NArrow::NMerger::TSortableBatchPosition Finish;
     bool IncludeFinish;
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> AllocationGuards;
 
@@ -33,17 +34,19 @@ private:
     }
 
 public:
-    TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& sortingSchema, const std::optional<NArrow::NMerger::TCursor>& maxVersion,
-        const NArrow::TSimpleRow& finish, const bool includeFinish, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters,
-        const TActorId& owner)
+    TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& sortingSchema, const std::optional<NArrow::NMerger::TCursor>& maxVersion, const std::optional<NArrow::NMerger::TCursor>& minUncommittedVersion,
+        const NArrow::NMerger::TSortableBatchPosition& finishKey, const bool includeFinish,
+        const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, const TActorId& owner)
         : PKSchema(sortingSchema)
         , VersionColumnNames(IIndexInfo::GetSnapshotColumnNames())
         , Owner(owner)
         , Counters(counters)
         , MaxVersion(maxVersion)
-        , Finish(finish)
-        , IncludeFinish(includeFinish) {
-        AFL_VERIFY(finish.GetSchema()->Equals(sortingSchema));
+        , MinUncommittedVersion(minUncommittedVersion)
+        , Finish(finishKey)
+        , IncludeFinish(includeFinish)
+    {
+        AFL_VERIFY(finishKey.IsSameSortingSchema(*sortingSchema));
     }
 
     void AddSource(const std::shared_ptr<NArrow::TGeneralContainer>& batch,

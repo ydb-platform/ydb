@@ -74,6 +74,7 @@ namespace NSQLComplete {
 
     struct TColumnName: TIdentifier {
         struct TConstraints {
+            TString TableAlias;
             TVector<TAliased<TTableId>> Tables;
             THashMap<TString, THashSet<TString>> WithoutByTableAlias;
         };
@@ -153,7 +154,5 @@ namespace NSQLComplete {
 
         virtual NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const = 0;
     };
-
-    TString NormalizeName(TStringBuf name);
 
 } // namespace NSQLComplete

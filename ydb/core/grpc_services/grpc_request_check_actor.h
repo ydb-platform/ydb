@@ -20,6 +20,7 @@
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/cloud_permissions/cloud_permissions.h>
 
 #include <util/string/split.h>
 
@@ -122,7 +123,9 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ_AUTH;
     }
 
-    static const TVector<TString>& GetPermissions();
+    static const TVector<TString>& GetPermissions() {
+        return NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::DEFAULT>::Get();
+    }
 
     void InitializeAttributesFromSchema(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
         CheckedDatabaseName_ = CanonizePath(schemeData.GetPath());
@@ -275,6 +278,15 @@ public:
                 }
             );
 
+        // Category: Topic
+        static NRpcService::TRlConfig ruRlTopicConfig(
+            "serverless_rt_coordination_node_path",
+            "serverless_rt_topic_resource_ru",
+                {
+                    // no actions
+                }
+            );
+
         auto rlMode = Request_->Get()->GetRlMode();
         switch (rlMode) {
             case TRateLimiterMode::Rps:
@@ -288,6 +300,9 @@ public:
                 break;
             case TRateLimiterMode::RuManual:
                 RlConfig = &ruRlManualConfig;
+                break;
+            case TRateLimiterMode::RuTopic:
+                RlConfig = &ruRlTopicConfig;
                 break;
             case TRateLimiterMode::Off:
                 break;
@@ -469,23 +484,30 @@ private:
     void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName) const {
         const TString userSID = TBase::GetUserSID();
         // DmlAudit, specially enabled through Scheme Shard
-        bool auditEnabled = requestBaseCtx->IsDmlAuditable() && IsAuditEnabledFor(userSID);
+        bool auditEnabledCompleted = requestBaseCtx->IsDmlAuditable() && IsAuditEnabledFor(userSID);
+        bool auditEnabledReceived = false;
 
-        if (!auditEnabled) {
-            TAuditMode auditMode = requestBaseCtx->GetAuditMode();
-            if (auditMode.IsModifying && !requestBaseCtx->IsInternalCall()) {
-                TIntrusiveConstPtr<NACLib::TUserToken> token = TBase::GetParsedToken();
-                auditEnabled = AppData()->AuditConfig.EnableLogging(auditMode.LogClass, token ? token->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS);
-            }
+        TAuditMode auditMode = requestBaseCtx->GetAuditMode();
+        if (auditMode.IsModifying && !requestBaseCtx->IsInternalCall()) {
+            TIntrusiveConstPtr<NACLib::TUserToken> token = TBase::GetParsedToken();
+            const NACLibProto::ESubjectType subjectType = token ? token->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
+            auditEnabledCompleted |= AppData()->AuditConfig.EnableLogging(auditMode.LogClass, NKikimrConfig::TAuditConfig::TLogClassConfig::Completed, subjectType);
+            auditEnabledReceived |= AppData()->AuditConfig.EnableLogging(auditMode.LogClass, NKikimrConfig::TAuditConfig::TLogClassConfig::Received, subjectType);
         }
 
         const TString sanitizedToken = TBase::GetSanitizedToken();
-        if (auditEnabled) {
+        if (auditEnabledReceived || auditEnabledCompleted) {
             AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
-            requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
-                AuditContextEnd(requestBaseCtx);
-                AuditLog(status, parts);
-            });
+            if (auditEnabledReceived) {
+                AuditLog(std::nullopt, requestBaseCtx->GetAuditLogParts());
+            }
+
+            if (auditEnabledCompleted) {
+                requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
+                    AuditContextEnd(requestBaseCtx);
+                    AuditLog(status, parts);
+                });
+            }
         }
     }
 
@@ -552,6 +574,12 @@ private:
     }
 
     void HandleAndDie(TEvRequestAuthAndCheck::TPtr& ev) {
+        // Request audit happen after successful authentication
+        // and authorization check against the database
+        // TODO: refactor: http monitoring authentication/authorization scheme must pass the same
+        // way as for grpc API
+        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_);
+
         GrpcRequestBaseCtx_->FinishSpan();
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
         PassAway();
@@ -663,39 +691,6 @@ void TGrpcRequestCheckActor<TEvent>::InitializeAttributes(const TSchemeBoardEven
         Attributes_.emplace_back(std::make_pair(attr.GetKey(), attr.GetValue()));
     }
     InitializeAttributesFromSchema(schemeData, rootAttributes);
-}
-
-template<typename T>
-inline constexpr bool IsStreamWrite = (
-    std::is_same_v<T, TEvStreamPQWriteRequest>
-    || std::is_same_v<T, TEvStreamTopicWriteRequest>
-    || std::is_same_v<T, TRefreshTokenStreamWriteSpecificRequest>
-);
-
-template <typename TEvent>
-const TVector<TString>& TGrpcRequestCheckActor<TEvent>::GetPermissions() {
-    if constexpr (IsStreamWrite<TEvent>) {
-        // extended permissions for stream write request family
-        static const TVector<TString> permissions = {
-            "ydb.databases.list",
-            "ydb.databases.create",
-            "ydb.databases.connect",
-            "ydb.tables.select",
-            "ydb.schemas.getMetadata",
-            "ydb.streams.write"
-        };
-        return permissions;
-    } else {
-        // default permissions
-        static const TVector<TString> permissions = {
-            "ydb.databases.list",
-            "ydb.databases.create",
-            "ydb.databases.connect",
-            "ydb.tables.select",
-            "ydb.schemas.getMetadata"
-        };
-        return permissions;
-    }
 }
 
 template <typename TEvent>

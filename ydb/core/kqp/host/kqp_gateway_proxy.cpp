@@ -292,6 +292,10 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         }
     }
 
+    if (const auto count = metadata->TableSettings.ExternalDataChannelsCount) {
+        proto.mutable_storage_settings()->set_external_data_channels_count(*count);
+    }
+
     proto.set_temporary(metadata->Temporary);
 
     return true;
@@ -637,6 +641,33 @@ public:
         TLoadTableMetadataSettings settings) override
     {
         return Gateway->LoadTableMetadata(cluster, table, settings);
+    }
+
+    TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
+        try {
+            auto [dirname, tableName] = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath);
+            if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+                dirname = JoinPath({GetDatabase(), dirname});
+            }
+
+            NKikimrSchemeOp::TSetColumnConstraintsInitiate setColumnConstraintsInitiate;
+            for (auto& setting : settings) {
+                auto* add = setColumnConstraintsInitiate.AddConstraintSettings();
+                add->Swap(&setting);
+            }
+
+            setColumnConstraintsInitiate.SetTableName(tableName);
+
+            NKikimrSchemeOp::TModifyScheme modifyScheme;
+            *modifyScheme.MutableSetColumnConstraintsInitiate() = std::move(setColumnConstraintsInitiate);
+            modifyScheme.SetWorkingDir(std::move(dirname));
+            modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate);
+
+            return Gateway->ModifyScheme(std::move(modifyScheme));
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
     }
 
     TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme) {
@@ -1401,15 +1432,20 @@ public:
             }
 
             NKikimrSchemeOp::TModifyScheme tx;
-            tx.SetWorkingDir(GetDatabase() ? GetDatabase() : NSchemeHelpers::GetDomainDatabase(AppData(ActorSystem)));
             if (settings.Cascade) {
                 return MakeFuture(ResultFromError<TGenericResult>("Unimplemented"));
             } else {
                 tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropBackupCollection);
             }
 
+            TString database = GetDatabase() ? GetDatabase() : NSchemeHelpers::GetDomainDatabase(AppData(ActorSystem));
+            tx.SetWorkingDir(JoinPath({database, ".backups", "collections"}));
+
             auto& op = *tx.MutableDrop();
-            op.SetName(pathPair.second);
+            op.SetName(settings.Name);
+            
+            auto& dropBackupOp = *tx.MutableDropBackupCollection();
+            dropBackupOp.SetName(settings.Name);
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();

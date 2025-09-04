@@ -4,11 +4,13 @@
 #include "sql_query.h"
 #include "sql_values.h"
 #include "sql_select.h"
+#include "object_processing.h"
 #include "source.h"
 #include "antlr_token.h"
 
 #include <yql/essentials/sql/settings/partitioning.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
+#include <yql/essentials/utils/yql_paths.h>
 
 #include <util/generic/scope.h>
 #include <util/string/join.h>
@@ -1691,6 +1693,11 @@ bool TSqlTranslation::FillFamilySettingsEntry(const TRule_family_settings_entry&
             Ctx_.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
+    } else if (to_lower(id.Name) == "cache_mode") {
+        if (!StoreString(value, family.CacheMode, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
     } else {
         Ctx_.Error() << "Unknown table setting: " << id.Name;
         return false;
@@ -2387,6 +2394,15 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
         }
         if (!StoreId(*value, settings.StoreExternalBlobs, *this)) {
             Ctx_.Error() << to_upper(id.Name) << " value should be an identifier";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "external_data_channels_count") {
+        if (reset) {
+            Ctx_.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!StoreInt(*value, settings.ExternalDataChannelsCount, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
     } else {
@@ -3457,6 +3473,7 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
     //      an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
     //    | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
     //    | SCHEMA EQUALS? LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
+    //    | WATERMARK AS LPAREN expr RPAREN
     switch (rule.Alt_case()) {
     case TRule_table_hint::kAltTableHint1: {
         const auto& alt = rule.GetAlt_table_hint1();
@@ -3569,6 +3586,18 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         }
     }
 
+    case TRule_table_hint::kAltTableHint4: {
+        const auto& alt = rule.GetAlt_table_hint4();
+        const auto pos = Ctx_.TokenPosition(alt.GetToken1());
+        TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
+        auto expr = TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr4());
+        if (!expr) {
+            return false;
+        }
+        hints["watermark"] = { BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), std::move(expr)) };
+        break;
+    }
+
     case TRule_table_hint::ALT_NOT_SET:
         Y_ABORT("You should change implementation according to grammar changes");
     }
@@ -3635,11 +3664,6 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
     switch (node.Alt_case()) {
     case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore1: {
         if (node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) {
-            if (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW) {
-                Error() << "Cluster should not be used in limited view";
-                return false;
-            }
-
             if (!ClusterExpr(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
                 return false;
             }
@@ -3658,14 +3682,20 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
         break;
     }
     case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore2: {
+        if (node.GetAlt_simple_table_ref_core2().HasBlock1()) {
+            if (!ClusterExpr(node.GetAlt_simple_table_ref_core2().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
+                return false;
+            }
+        }
+
         if (cluster.Empty()) {
             Error() << "No cluster name given and no default cluster is selected";
             return false;
         }
 
-        auto at = node.GetAlt_simple_table_ref_core2().HasBlock1();
+        auto at = node.GetAlt_simple_table_ref_core2().HasBlock2();
         TString bindName;
-        if (!NamedNodeImpl(node.GetAlt_simple_table_ref_core2().GetRule_bind_parameter2(), bindName, *this)) {
+        if (!NamedNodeImpl(node.GetAlt_simple_table_ref_core2().GetRule_bind_parameter3(), bindName, *this)) {
             return false;
         }
         auto named = GetNamedNode(bindName);
@@ -4490,7 +4520,7 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
             break;
         }
         case TRule_window_frame_bound::ALT_NOT_SET:
-            Y_ABORT("FrameClause: frame bound not corresond to grammar changes");
+            Y_ABORT("FrameClause: frame bound not correspond to grammar changes");
     }
     return true;
 }
@@ -5511,6 +5541,186 @@ bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDef
         case TRule_alter_resource_pool_classifier_action::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }
+}
+
+TMaybe<TString> TSqlTranslation::ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context) {
+    // object_ref: (cluster_expr .)? id_or_at
+
+    if (node.HasBlock1()) {
+        if (!ClusterExpr(node.GetBlock1().GetRule_cluster_expr1(), false, context.ServiceId, context.Cluster)) {
+            return Nothing();
+        }
+    }
+
+    const auto& [hasAt, objectId] = Id(node.GetRule_id_or_at2(), *this);
+    if (hasAt) {
+        Error() << "'@' is not allowed prefix for object name";
+        return Nothing();
+    }
+
+    return BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId);
+}
+
+bool TSqlTranslation::ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings) {
+    // streaming_query_setting: an_id_or_type = (id_or_type | STRING_VALUE | bool_value)
+
+    const auto& id = to_lower(Id(node.GetRule_an_id_or_type1(), *this));
+    if (id.StartsWith(TStreamingQuerySettings::RESERVED_FEATURE_PREFIX)) {
+        Error() << "Streaming query parameter name should not start with prefix '" << TStreamingQuerySettings::RESERVED_FEATURE_PREFIX << "': " << to_upper(id);
+        return false;
+    }
+
+    const auto [it, inserted] = settings.Features.emplace(id, TDeferredAtom{});
+    if (!inserted) {
+        Error() << "Found duplicated parameter: " << to_upper(id);
+        return false;
+    }
+
+    const auto& valueNode = node.GetRule_streaming_query_setting_value3();
+    switch (valueNode.GetAltCase()) {
+        case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue1: {
+            it->second = TDeferredAtom(Ctx_.Pos(), Id(valueNode.GetAlt_streaming_query_setting_value1().GetRule_id_or_type1(), *this));
+            break;
+        }
+        case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue2: {
+            const auto& strToken = Ctx_.Token(valueNode.GetAlt_streaming_query_setting_value2().GetToken1());
+            const auto& strValue = StringContent(Ctx_, Ctx_.Pos(), strToken);
+            if (!strValue) {
+                Error() << "Cannot parse string correctly: " << strToken;
+                return false;
+            }
+
+            it->second = TDeferredAtom(Ctx_.Pos(), strValue->Content);
+            break;
+        }
+        case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue3: {
+            it->second = TDeferredAtom(BuildLiteralBool(
+                Ctx_.Pos(),
+                FromString<bool>(Ctx_.Token(valueNode.GetAlt_streaming_query_setting_value3().GetRule_bool_value1().GetToken1()))
+            ), Ctx_);
+            break;
+        }
+        case TRule_streaming_query_setting_value::ALT_NOT_SET: {
+            Y_ABORT("You should change implementation according to grammar changes");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::ParseStreamingQuerySettings(const TRule_streaming_query_settings& node, TStreamingQuerySettings& settings) {
+    // streaming_query_settings: (
+    //     streaming_query_setting
+    //     (, streaming_query_setting)* ,?
+    // )
+
+    if (!ParseStreamingQuerySetting(node.GetRule_streaming_query_setting2(), settings)) {
+        return false;
+    }
+
+    for (const auto& setting : node.GetBlock3()) {
+        if (!ParseStreamingQuerySetting(setting.GetRule_streaming_query_setting2(), settings)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_definition& node, TStreamingQuerySettings& settings) {
+    // streaming_query_definition: AS DO (BEGIN define_action_or_subquery_body END DO);
+
+    Ctx_.Token(node.GetToken1());
+
+    // Save query ast to perform type check and validation of allowed expressions
+
+    const auto saveScoped = Ctx_.Scoped;
+    Ctx_.Scoped = Ctx_.CreateScopedState();  // Reset scoped context to interrupt inheritance of global settings and named nodes
+    Ctx_.AllScopes.push_back(Ctx_.Scoped);
+    Ctx_.Scoped->Local = TScopedState::TLocal{};
+    Ctx_.ScopeLevel++;
+    TSqlQuery query(Ctx_, Ctx_.Settings.Mode, false);
+    TBlocks innerBlocks;
+
+    const auto& inlineAction = node.GetRule_inline_action3();
+    const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, inlineAction.GetRule_define_action_or_subquery_body2());
+    auto queryNode = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
+    WarnUnusedNodes();
+    Ctx_.ScopeLevel--;
+    Ctx_.Scoped = saveScoped;
+
+    if (!queryNode) {
+        return false;
+    }
+
+    TNodePtr blockNode = new TAstListNodeImpl(Ctx_.Pos());
+    blockNode->Add("block");
+    blockNode->Add(blockNode->Q(queryNode));
+    settings.Features[TStreamingQuerySettings::QUERY_AST_FEATURE] = TDeferredAtom(blockNode, Ctx_);
+
+    // Extract whole query text between BEGIN and END tokens
+
+    const auto& queryBegin = inlineAction.GetToken1();
+    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(Ctx_.Settings.Antlr4Parser, queryBegin.GetId(), BEGIN));
+
+    const auto& queryEnd = inlineAction.GetToken3();
+    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(Ctx_.Settings.Antlr4Parser, queryEnd.GetId(), END));
+
+    auto beginPos = GetQueryPosition(Ctx_.Query, queryBegin, Ctx_.Settings.Antlr4Parser);
+    const auto endPos = GetQueryPosition(Ctx_.Query, queryEnd, Ctx_.Settings.Antlr4Parser);
+    if (beginPos == std::string::npos || endPos == std::string::npos) {
+        Error() << "Failed to parse streaming query definition";
+        return false;
+    }
+
+    beginPos += queryBegin.value().size();
+    settings.Features[TStreamingQuerySettings::QUERY_TEXT_FEATURE] = TDeferredAtom(Ctx_.Pos(), Ctx_.Query.substr(beginPos, endPos - beginPos));
+
+    return true;
+}
+
+bool TSqlTranslation::ParseAlterStreamingQueryAction(const TRule_alter_streaming_query_action& node, TStreamingQuerySettings& settings) {
+    // alter_streaming_query_action:
+    //     (SET streaming_query_settings)
+    //   | (SET streaming_query_settings)? streaming_query_definition
+
+    switch (node.GetAltCase()) {
+        case TRule_alter_streaming_query_action::kAltAlterStreamingQueryAction1: {
+            const auto& alterSettingsNode = node.GetAlt_alter_streaming_query_action1().GetRule_alter_streaming_query_set_settings1();
+            Ctx_.Token(alterSettingsNode.GetToken1());
+
+            if (!ParseStreamingQuerySettings(alterSettingsNode.GetRule_streaming_query_settings2(), settings)) {
+                return false;
+            }
+
+            break;
+        }
+        case TRule_alter_streaming_query_action::kAltAlterStreamingQueryAction2: {
+            const auto& action = node.GetAlt_alter_streaming_query_action2();
+
+            if (action.HasBlock1()) {
+                const auto& alterSettingsNode = action.GetBlock1().GetRule_alter_streaming_query_set_settings1();
+                Ctx_.Token(alterSettingsNode.GetToken1());
+
+                if (!ParseStreamingQuerySettings(alterSettingsNode.GetRule_streaming_query_settings2(), settings)) {
+                    return false;
+                }
+            }
+
+            if (!ParseStreamingQueryDefinition(action.GetRule_streaming_query_definition2(), settings)) {
+                return false;
+            }
+
+            break;
+        }
+        case TRule_alter_streaming_query_action::ALT_NOT_SET: {
+            Y_ABORT("You should change implementation according to grammar changes");
+            return false;
+        }
+    }
+
+    return true;
 }
 
 } // namespace NSQLTranslationV1

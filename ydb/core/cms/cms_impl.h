@@ -23,6 +23,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/queue.h>
 #include <util/generic/stack.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 namespace NKikimr::NCms {
 
@@ -264,6 +265,7 @@ private:
             FFunc(TEvCms::EvGetClusterInfoRequest, EnqueueRequest);
             HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
+            HFunc(NKikimr::TEvNodeWardenStorageConfig, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
@@ -382,6 +384,7 @@ private:
     void RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool done, const TActorContext &ctx);
     void GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const TActorContext &ctx);
     void RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
+    void ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
     void GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool all, const TActorContext &ctx);
     bool RemoveNotification(const TString &id, const TString &user, bool remove, TErrorInfo &error);
 
@@ -434,6 +437,7 @@ private:
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
+    void Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
 

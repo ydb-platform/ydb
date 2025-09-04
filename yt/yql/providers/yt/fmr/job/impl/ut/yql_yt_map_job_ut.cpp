@@ -1,5 +1,4 @@
-#include "yql_yt_job_ut.h"
-
+#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <util/string/split.h>
 
@@ -8,7 +7,8 @@
 
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/process/yql_yt_job_fmr.h>
-#include <yt/yql/providers/yt/fmr/table_data_service/helpers/yql_yt_table_data_service_helpers.h>
+#include <yt/yql/providers/yt/fmr/test_tools/table_data_service/yql_yt_table_data_service_helpers.h>
+#include <yt/yql/providers/yt/fmr/test_tools/yson/yql_yt_yson_helpers.h>
 
 using namespace NKikimr::NMiniKQL;
 
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(MapTests) {
             .RichPaths = {NYT::TRichYPath().Path("test_path").Cluster("test_cluster")},
             .FilePaths = {inputYsonContentFile.Name()}
         };
-        TFmrTableOutputRef fmrOutputRef{.TableId = "table_id", .PartId = "part_id"};
+        TFmrTableOutputRef fmrOutputRef("table_id", "part_id");
         TTaskTableRef taskTableRef(fileTask);
         TMapTaskParams mapTaskParams{
             .Input = TTaskTableInputRef{.Inputs ={taskTableRef}},
@@ -111,8 +111,8 @@ Y_UNIT_TEST_SUITE(MapTests) {
 
         // Checking correctness
         auto tableDataServiceClient = MakeTableDataServiceClient(port);
-        TString key = "table_id_part_id:0";
-        auto gottenBinaryTableContent = tableDataServiceClient->Get(key).GetValueSync();
+        TString group = "table_id_part_id", chunkId = "0";
+        auto gottenBinaryTableContent = tableDataServiceClient->Get(group, chunkId).GetValueSync();
         UNIT_ASSERT(gottenBinaryTableContent);
 
         // Reformating data

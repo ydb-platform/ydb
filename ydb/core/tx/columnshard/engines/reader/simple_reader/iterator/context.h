@@ -47,11 +47,13 @@ public:
             if (!aggrProc) {
                 SourcesAggregationScript = nullptr;
             } else {
-                NCommon::TFetchingScriptBuilder builder(*this);
-                builder.AddStep(std::make_shared<TInitializeSourceStep>());
-                builder.AddStep(std::make_shared<TStepAggregationSources>(aggrProc));
-                builder.AddStep(std::make_shared<TCleanAggregationSources>(aggrProc));
-                SourcesAggregationScript = std::move(builder).Build();
+                // TODO: fix me, temporary disabled
+                SourcesAggregationScript = nullptr;
+                // NCommon::TFetchingScriptBuilder builder(*this);
+                // builder.AddStep(std::make_shared<TInitializeSourceStep>());
+                // builder.AddStep(std::make_shared<TStepAggregationSources>(aggrProc));
+                // builder.AddStep(std::make_shared<TCleanAggregationSources>(aggrProc));
+                // SourcesAggregationScript = std::move(builder).Build();
             }
         }
         return *SourcesAggregationScript;
@@ -82,6 +84,9 @@ public:
     }
 
     ~TSpecialReadContext() {
+        if (NActors::TActorSystem::IsStopped()) {
+            return;
+        }
         AFL_VERIFY(!DuplicatesManager);
     }
 };

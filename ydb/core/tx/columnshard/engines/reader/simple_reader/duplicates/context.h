@@ -1,16 +1,22 @@
 #pragma once
 
 #include "events.h"
-#include "splitter.h"
 
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TInternalFilterConstructor: TMoveOnly {
+public:
+    enum class EFetchingStage {
+        INTERSECTIONS = 0,
+        ACCESSORS = 1,
+        COLUMN_DATA = 2,
+    };
+
 private:
     const TEvRequestFilter::TPtr OriginalRequest;
-    const TColumnDataSplitter Intervals;
     const std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ProcessGuard;
     const std::shared_ptr<NGroupedMemoryManager::TScopeGuard> ScopeGuard;
     const std::shared_ptr<NGroupedMemoryManager::TGroupGuard> GroupGuard;
@@ -33,6 +39,15 @@ private:
     }
 
 public:
+    static std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> GetStageFeatures() {
+        static const std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> StageFeatures = {
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("INTERSECTIONS", 10000000),   // 10 MiB
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("ACCESSORS", 100000000),   // 100 MiB
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 10000000000),   // 10 GiB
+        };
+        return StageFeatures;
+    }
+
     void AddFilter(const TDuplicateMapInfo& info, const NArrow::TColumnFilter& filterExt) {
         AFL_VERIFY(!IsDone());
         AFL_VERIFY(filterExt.GetRecordsCountVerified() == info.GetRows().NumRows())("filter", filterExt.GetRecordsCountVerified())(
@@ -73,14 +88,10 @@ public:
         return OriginalRequest;
     }
 
-    const TColumnDataSplitter& GetIntervals() const {
-        return Intervals;
-    }
-
-    TInternalFilterConstructor(const TEvRequestFilter::TPtr& request, TColumnDataSplitter&& splitter);
+    TInternalFilterConstructor(const TEvRequestFilter::TPtr& request);
 
     ~TInternalFilterConstructor() {
-        AFL_VERIFY(IsDone())("state", DebugString());
+        AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()) || TActorSystem::IsStopped())("state", DebugString());
     }
 
     TString DebugString() const {
@@ -100,10 +111,10 @@ public:
         return ProcessGuard->GetProcessId();
     }
     ui64 GetMemoryScopeId() const {
-        return ScopeGuard->GetProcessId();
+        return ScopeGuard->GetScopeId();
     }
     ui64 GetMemoryGroupId() const {
-        return GroupGuard->GetProcessId();
+        return GroupGuard->GetGroupId();
     }
 };
 

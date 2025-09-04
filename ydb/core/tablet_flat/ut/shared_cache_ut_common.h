@@ -1,7 +1,7 @@
 #pragma once
 
-#include "shared_cache_tiers.h"
-#include <ydb/core/util/cache_cache_iface.h>
+#include <shared_cache_s3fifo.h>
+#include <shared_page.h>
 
 namespace NKikimr::NSharedCache::NTest {
 
@@ -12,9 +12,27 @@ namespace NKikimr::NSharedCache::NTest {
         TPage(ui32 id, size_t size) 
             : Id(id), Size(size)
         {}
+        
+        ui32 GetFrequency() const noexcept {
+            return Frequency.load(std::memory_order_relaxed);
+        }
 
-        ui32 CacheId : 4 = 0;
-        ECacheTier CacheTier : 2 = ECacheTier::Regular;
+        void IncrementFrequency() noexcept {
+            ui32 value = Frequency.load(std::memory_order_relaxed);
+            if (value < 3) { // S3FIFO frequency is capped to 3
+                Frequency.compare_exchange_weak(value, value + 1,
+                    std::memory_order_acq_rel, std::memory_order_relaxed);
+            }
+        }
+    
+        void SetFrequency(ui32 frequency) noexcept {
+            Frequency.store(frequency, std::memory_order_release);
+        }
+
+        ECacheMode CacheMode : 2 = ECacheMode::Regular;
+
+        ES3FIFOPageLocation Location : 4 = ES3FIFOPageLocation::None;
+        std::atomic<ui32> Frequency;
     };
 
     struct TPageTraits {
@@ -30,99 +48,41 @@ namespace NKikimr::NSharedCache::NTest {
             return page->Size;
         }
 
-        static ui32 GetCacheId(const TPage* page) {
-            return page->CacheId;
+        static TPageKey GetKey(const TPage* page) {
+            return {page->Id};
         }
 
-        static void SetCacheId(TPage* page, ui32 id) {
-            Y_ENSURE(id < (1 << 4));
-            page->CacheId = id;
+        static size_t GetHash(const TPageKey& key) {
+            return key.Id;
         }
 
-        static ECacheTier GetTier(TPage* page) {
-            return page->CacheTier;
+        static TString ToString(const TPageKey& key) {
+            return std::to_string(key.Id);
         }
 
-        static void SetTier(TPage* page, ECacheTier tier) {
-            page->CacheTier = tier;
-        }
-    };
-
-    class TSimpleCache : public ICacheCache<TPage> {
-    public:
-        TIntrusiveList<TPage> EvictNext() override {
-            TIntrusiveList<TPage> result;
-            
-            if (!List.empty()) {
-                TPage* page = List.front();
-                List.pop_front();
-                Map.erase(page->Id);
-                result.PushBack(page);
-            };
-
-            return result;
+        static TString GetKeyToString(const TPage* page) {
+            return ToString(GetKey(page));
         }
 
-        TIntrusiveList<TPage> Touch(TPage* page) override {
-            if (Map.contains(page->Id)) {
-                List.erase(Map[page->Id]);
-            }
-            List.push_back(page);
-            Map[page->Id] = prev(List.end());
-
-            TIntrusiveList<TPage> evictedList;
-
-            while (GetSize() > Limit) {
-                TPage* page = List.front();
-                List.pop_front();
-                Map.erase(page->Id);
-                evictedList.PushBack(page);
-            }
-
-            return evictedList;
+        static ES3FIFOPageLocation GetLocation(const TPage* page) {
+            return page->Location;
         }
 
-        void Erase(TPage* page) override {
-            if (Map.contains(page->Id)) {
-                List.erase(Map[page->Id]);
-                Map.erase(page->Id);
-            }
+        static void SetLocation(TPage* page, ES3FIFOPageLocation location) {
+            page->Location = location;
         }
 
-        void UpdateLimit(ui64 limit) override {
-            Limit = limit;
-        }
-
-        ui64 GetSize() const override {
-            ui64 size = 0;
-            for (auto page : List) {
-                size += page->Size;
-            }
-            return size;
-        }
-
-        TString Dump() const override {
-            TStringBuilder result;
-            size_t count = 0;
-            for (auto it = List.begin(); it != List.end(); it++) {
-                TPage* page = *it;
-                if (count != 0) result << ", ";
-                result << "{" << page->Id << " " << page->Size << "b}";
-                count++;
-                Y_ENSURE(*Map.FindPtr(page->Id) == it);
-            }
-            Y_ENSURE(Map.size() == count);
-            return result;
-        }
-
-        ui64 GetLimit() const {
-            return Limit;
+        static ui32 GetFrequency(const TPage* page) {
+            return page->GetFrequency();
         }
     
-    private:
-        ui64 Limit = 0;
-        TList<TPage*> List;
-        THashMap<ui32, TList<TPage*>::iterator> Map;
+        static void SetFrequency(TPage* page, ui32 frequency) {
+            page->SetFrequency(frequency);
+        }
+
+        static ui32 GetTier(TPage* page) {
+            return static_cast<ui32>(page->CacheMode);
+        }
     };
 
 } // namespace NKikimr::NSharedCache::NTest

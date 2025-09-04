@@ -125,7 +125,9 @@
 
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
+#include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/core/security/ticket_parser_settings.h>
+#include <ydb/core/security/token_manager/token_manager_settings.h>
 
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -171,12 +173,14 @@
 
 #include <ydb/core/ymq/actor/serviceid.h>
 
+#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/logs/log.h>
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
 
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
@@ -754,7 +758,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     }
                 }
                 Y_ABORT_UNLESS(i != bridge.PilesSize());
-                const auto selfBridgePileId = TBridgePileId::FromValue(i);
+                const auto selfBridgePileId = TBridgePileId::FromPileIndex(i);
 
                 const TActorId actorId = MakeDistconfBridgeConnectionCheckerActorId();
                 setup->LocalServices.emplace_back(actorId, TActorSetupCmd(
@@ -1628,8 +1632,26 @@ TSecurityServicesInitializer::TSecurityServicesInitializer(const TKikimrRunConfi
 {
 }
 
-void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
-                                                      const NKikimr::TAppData* appData) {
+void TSecurityServicesInitializer::InitializeTokenManager(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    const auto& authConfig = appData->AuthConfig;
+    if (!IsServiceInitialized(setup, MakeTokenManagerID()) && authConfig.GetTokenManager().GetEnable()) {
+        IActor* tokenManager = nullptr;
+        TTokenManagerSettings settings {
+            .Config = Config.GetAuthConfig().GetTokenManager(),
+            .HttpProxyId = {}
+        };
+        if (Factories && Factories->CreateTokenManager) {
+            tokenManager = Factories->CreateTokenManager(settings);
+        } else {
+            tokenManager = CreateTokenManager(settings);
+        }
+        if (tokenManager) {
+            setup->LocalServices.push_back(std::make_pair<TActorId, TActorSetupCmd>(MakeTokenManagerID(), TActorSetupCmd(tokenManager, TMailboxType::HTSwap, appData->UserPoolId)));
+        }
+    }
+}
+
+void TSecurityServicesInitializer::InitializeLdapAuthProvider(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     const auto& authConfig = appData->AuthConfig;
     if (!IsServiceInitialized(setup, MakeLdapAuthProviderID()) && authConfig.HasLdapAuthentication()) {
         IActor* ldapAuthProvider = CreateLdapAuthProvider(authConfig.GetLdapAuthentication());
@@ -1637,6 +1659,9 @@ void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup
             setup->LocalServices.push_back(std::make_pair<TActorId, TActorSetupCmd>(MakeLdapAuthProviderID(), TActorSetupCmd(ldapAuthProvider, TMailboxType::HTSwap, appData->UserPoolId)));
         }
     }
+}
+
+void TSecurityServicesInitializer::InitializeTicketParser(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     if (!IsServiceInitialized(setup, MakeTicketParserID())) {
         IActor* ticketParser = nullptr;
         auto grpcConfig = Config.GetGRpcConfig();
@@ -1658,6 +1683,13 @@ void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup
                 TActorSetupCmd(ticketParser, TMailboxType::HTSwap, appData->UserPoolId)));
         }
     }
+}
+
+void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
+                                                      const NKikimr::TAppData* appData) {
+    InitializeTokenManager(setup, appData);
+    InitializeLdapAuthProvider(setup, appData);
+    InitializeTicketParser(setup, appData);
 }
 
 // TGRpcServicesInitializer
@@ -2155,10 +2187,12 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
 TKqpServiceInitializer::TKqpServiceInitializer(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories,
-        IGlobalObjectStorage& globalObjects)
+        IGlobalObjectStorage& globalObjects,
+        NFq::IYqSharedResources::TPtr yqSharedResources)
     : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))
     , GlobalObjects(globalObjects)
+    , YqSharedResources(yqSharedResources)
 {}
 
 void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
@@ -2212,6 +2246,20 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
+
+        const auto& checkpointConfig = Config.GetQueryServiceConfig().GetCheckpointsConfig();
+        if (checkpointConfig.GetEnabled()) {
+            auto service = NFq::NewCheckpointStorageService(
+                checkpointConfig,
+                "cs",
+                NKikimr::CreateYdbCredentialsProviderFactory,
+                NFq::TYqSharedResources::Cast(YqSharedResources),
+                appData->Counters);
+
+            setup->LocalServices.push_back(std::make_pair(
+                NYql::NDq::MakeCheckpointStorageID(),
+                TActorSetupCmd(service.release(), TMailboxType::HTSwap, appData->UserPoolId)));
+        }
     }
 }
 
@@ -2256,6 +2304,29 @@ void TCompGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSys
         auto service = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::CreateService(serviceConfig, countersGroup);
 
         setup->LocalServices.push_back(std::make_pair(NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::MakeServiceId(NodeId),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
+    }
+}
+
+TDeduplicationGroupedMemoryLimiterInitializer::TDeduplicationGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TDeduplicationGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    NOlap::NGroupedMemoryManager::TConfig serviceConfig;
+    if (Config.GetDeduplicationGroupedMemoryLimiterConfig().GetCountBuckets() == 0) {
+        Config.MutableDeduplicationGroupedMemoryLimiterConfig()->SetCountBuckets(1);
+    }
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetDeduplicationGroupedMemoryLimiterConfig()));
+
+    if (serviceConfig.IsEnabled()) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_DEDU_GROUPED_MEMORY_LIMITER");
+
+        auto service = NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::CreateService(serviceConfig, countersGroup);
+
+        setup->LocalServices.push_back(std::make_pair(NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }

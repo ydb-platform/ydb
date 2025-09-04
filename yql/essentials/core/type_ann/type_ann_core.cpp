@@ -1521,7 +1521,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus FlattenByColumns(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus FlattenByColumns(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -1626,32 +1626,23 @@ namespace NTypeAnnImpl {
             const bool fieldOptional = fieldType->GetKind() == ETypeAnnotationKind::Optional;
             if (fieldOptional) {
                 fieldType = fieldType->Cast<TOptionalExprType>()->GetItemType();
-            } else {
-                allFieldOptional = false;
             }
 
-            if (mode == "optional" && !fieldOptional) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
-                    "Expected optional type in field of struct: '" << fieldName <<
-                    "', but got: " << *field->GetItemType()));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (mode == "list" && RemoveOptionalType(field->GetItemType())->GetKind() != ETypeAnnotationKind::List) {
+            if (mode == "list" && fieldType->GetKind() != ETypeAnnotationKind::List) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
                     "Expected (optional) list type in field of struct: '" << fieldName <<
                     "', but got: " << *field->GetItemType()));
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (mode == "dict" && RemoveOptionalType(field->GetItemType())->GetKind() != ETypeAnnotationKind::Dict) {
+            if (mode == "dict" && fieldType->GetKind() != ETypeAnnotationKind::Dict) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
                     "Expected (optional) dict type in field of struct: '" << fieldName <<
                     "', but got: " << *field->GetItemType()));
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (mode == "auto" && fieldOptional && RemoveOptionalType(field->GetItemType())->GetKind() == ETypeAnnotationKind::List) {
+            if (mode == "auto" && fieldOptional && fieldType->GetKind() == ETypeAnnotationKind::List) {
                 auto issue = TIssue(ctx.Expr.GetPosition(structObj->Pos()), "Ambiguous FLATTEN BY statement, please choose FLATTEN LIST BY or FLATTEN OPTIONAL BY");
                 SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_FLATTEN_BY_OPT, issue);
                 if (!ctx.Expr.AddWarning(issue)) {
@@ -1659,7 +1650,7 @@ namespace NTypeAnnImpl {
                 }
             }
 
-            if (mode == "auto" && fieldOptional && RemoveOptionalType(field->GetItemType())->GetKind() == ETypeAnnotationKind::Dict) {
+            if (mode == "auto" && fieldOptional && fieldType->GetKind() == ETypeAnnotationKind::Dict) {
                 auto issue = TIssue(ctx.Expr.GetPosition(structObj->Pos()), "Ambiguous FLATTEN BY statement, please choose FLATTEN DICT BY or FLATTEN OPTIONAL BY");
                 SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_FLATTEN_BY_OPT, issue);
                 if (!ctx.Expr.AddWarning(issue)) {
@@ -1668,27 +1659,25 @@ namespace NTypeAnnImpl {
             }
 
             const TTypeAnnotationNode* flattenItemType = nullptr;
-            if (fieldOptional) {
-                flattenItemType = fieldType;
-                if (mode == "list") {
-                    auto listType = fieldType->Cast<TListExprType>();
-                    flattenItemType = listType->GetItemType();
-                    allFieldOptional = false;
-                } else if (mode == "dict") {
-                    auto dictType = fieldType->Cast<TDictExprType>();
-                    const auto keyType = dictType->GetKeyType();
-                    const auto payloadType = dictType->GetPayloadType();
-                    flattenItemType = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType({ keyType, payloadType }));
-                    allFieldOptional = false;
-                }
-            } else if (fieldType->GetKind() == ETypeAnnotationKind::List) {
+            if (mode == "list" || (mode == "auto" && !fieldOptional && fieldType->GetKind() == ETypeAnnotationKind::List)) {
                 auto listType = fieldType->Cast<TListExprType>();
                 flattenItemType = listType->GetItemType();
-            } else if (fieldType->GetKind() == ETypeAnnotationKind::Dict) {
+                allFieldOptional = false;
+            } else if (mode == "dict" || (mode == "auto" && !fieldOptional && fieldType->GetKind() == ETypeAnnotationKind::Dict)) {
                 auto dictType = fieldType->Cast<TDictExprType>();
                 const auto keyType = dictType->GetKeyType();
                 const auto payloadType = dictType->GetPayloadType();
                 flattenItemType = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType({keyType, payloadType}));
+                allFieldOptional = false;
+            } else if (mode == "optional" || (mode == "auto" && fieldOptional)) {
+                if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 03), ctx.Types.BackportMode) && !fieldOptional) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
+                        "Expected optional type in field of struct: '" << fieldName <<
+                        "', but got: " << *field->GetItemType()));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                flattenItemType = fieldType;
             } else {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
                     "Expected list, dict or optional types in field of struct: '" << fieldName <<
@@ -8473,9 +8462,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus SqlCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 2, 6, ctx.Expr)) {
+    IGraphTransformer::TStatus SqlCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->ChildrenSize() > 6) {
+            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 6);
+            if (status != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
         }
 
         if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
@@ -8601,15 +8597,24 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             .Seal()
             .Build();
 
+        const bool needNamedApply = namedArgs || input->ChildrenSize() > 6;
         TExprNodeList applyArgs = { udf };
-        if (namedArgs) {
+        if (needNamedApply) {
             applyArgs.push_back(ctx.Expr.NewList(input->Pos(), std::move(positionalArgs)));
-            applyArgs.push_back(namedArgs);
+            if (namedArgs) {
+                applyArgs.push_back(namedArgs);
+            } else {
+                applyArgs.push_back(ctx.Expr.NewCallable(input->Pos(), "AsStruct", {}));
+            }
+
+            for (ui32 i = 6; i < input->ChildrenSize(); ++i) {
+                applyArgs.push_back(input->ChildPtr(i));
+            }
         } else {
             applyArgs.insert(applyArgs.end(), positionalArgs.begin(), positionalArgs.end());
         }
 
-        output = ctx.Expr.NewCallable(input->Pos(), namedArgs ? "NamedApply" : "Apply", std::move(applyArgs));
+        output = ctx.Expr.NewCallable(input->Pos(), needNamedApply ? "NamedApply" : "Apply", std::move(applyArgs));
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -10815,6 +10820,36 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus WithSideEffectsModeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto mode = input->Tail().Content();
+        if (mode == "None") {
+            input->SetSideEffects(ESideEffects::None);
+        } else if (mode == "SemilatticeRT") {
+            input->SetSideEffects(ESideEffects::SemilatticeRT);
+        } else if (mode == "General") {
+            input->SetSideEffects(ESideEffects::General);
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), TStringBuilder() << "Unknown side effects mode: " << mode));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     TMaybe<EDataSlot> ExtractDataType(const TExprNode& node, TExprContext& ctx) {
         if (node.IsAtom()) {
             auto dataType = node.Content();
@@ -12614,7 +12649,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["RemoveMembers"] = &RemoveMembersWrapper<false>;
         Functions["ForceRemoveMembers"] = &RemoveMembersWrapper<true>;
         Functions["DivePrefixMembers"] = &DivePrefixMembersWrapper;
-        Functions["FlattenByColumns"] = &FlattenByColumns;
+        ExtFunctions["FlattenByColumns"] = &FlattenByColumns;
         Functions["ExtractMembers"] = &ExtractMembersWrapper;
         Functions["FlattenStructs"] = &FlattenStructsWrapper;
         Functions["<"] = &CompareWrapper<false>;
@@ -12942,7 +12977,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Apply"] = &ApplyWrapper;
         ExtFunctions["NamedApply"] = &NamedApplyWrapper;
         Functions["PositionalArgs"] = &PositionalArgsWrapper;
-        Functions["SqlCall"] = &SqlCallWrapper;
+        ExtFunctions["SqlCall"] = &SqlCallWrapper;
         Functions["Callable"] = &CallableWrapper;
         Functions["CallableType"] = &TypeWrapper<ETypeAnnotationKind::Callable>;
         Functions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>;
@@ -13067,6 +13102,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["InnerDependsOn"] = &InnerDependsOnWrapper;
         Functions["Seq"] = &SeqWrapper;
         Functions["Parameter"] = &ParameterWrapper;
+        Functions["WithSideEffectsMode"] = WithSideEffectsModeWrapper;
         ExtFunctions["WeakField"] = &WeakFieldWrapper;
         ExtFunctions["TryWeakMemberFromDict"] = &TryWeakMemberFromDictWrapper;
         Functions["ByteString"] = &ByteStringWrapper;

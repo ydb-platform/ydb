@@ -122,7 +122,8 @@ class Platform(object):
 
         self.is_xtensa_hifi4 = self.arch == 'xtensa_hifi4'
         self.is_xtensa_hifi5 = self.arch == 'xtensa_hifi5'
-        self.is_xtensa = self.is_xtensa_hifi4 or self.is_xtensa_hifi5
+        self.is_xtensa_esp32s3 = self.arch == 'xtensa_esp32s3'
+        self.is_xtensa = self.is_xtensa_hifi4 or self.is_xtensa_hifi5 or self.is_xtensa_esp32s3
 
         self.armv6_float_abi = 'hard'
 
@@ -244,6 +245,7 @@ class Platform(object):
             (self.is_riscv32, 'ARCH_RISCV32'),
             (self.is_xtensa_hifi4, 'ARCH_XTENSA_HIFI4'),
             (self.is_xtensa_hifi5, 'ARCH_XTENSA_HIFI5'),
+            (self.is_xtensa_esp32s3, 'ARCH_XTENSA_ESP32S3'),
             (self.is_xtensa, 'ARCH_XTENSA'),
             (self.is_nds32, 'ARCH_NDS32'),
             (self.is_tc32, 'ARCH_TC32'),
@@ -1433,8 +1435,6 @@ class GnuCompiler(Compiler):
         self.tc = tc
 
         self.c_foptions = [
-            # Enable C++ exceptions (and allow them to be throw through pure C code)
-            '-fexceptions',
             # Enable standard-conforming behavior and generate duplicate symbol error in case of duplicated global constants.
             # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85678#c0
             '-fno-common',
@@ -1443,6 +1443,18 @@ class GnuCompiler(Compiler):
             '-ffunction-sections',
             '-fdata-sections'
         ]
+
+        if is_positive('NO_CXX_EXCEPTIONS'):
+            self.c_foptions.append('-fno-exceptions')
+        else:
+            # Enable C++ exceptions (and allow them to be throw through pure C code)
+            self.c_foptions.append('-fexceptions')
+
+        if is_positive('NO_CXX_RTTI'):
+            self.c_foptions.append('-fno-rtti')
+        else:
+            # RTTI is enabled by default
+            pass
 
         if self.tc.is_clang and self.target.is_linux:
             # Use .init_array instead of .ctors (default for old clang versions)
@@ -1930,6 +1942,10 @@ class MSVCCompiler(MSVC, Compiler):
         super(MSVCCompiler, self).print_compiler()
 
         target = self.build.target
+
+        # Not supported/tested for MSVC
+        assert not is_positive('NO_CXX_EXCEPTIONS')
+        assert not is_positive('NO_CXX_RTTI')
 
         warns_enabled = [
             4018,  # 'expression' : signed/unsigned mismatch

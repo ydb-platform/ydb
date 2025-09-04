@@ -21,6 +21,9 @@ NYql::NNodes::TKqlKeyRange BuildKeyRangeExpr(const NYql::NCommon::TKeyRange& key
 NYql::NNodes::TExprBase KqpPushExtractedPredicateToReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, NYql::TTypeAnnotationContext& typesCtx, const NYql::TParentsMap& parentsMap);
 
+NYql::NNodes::TExprBase KqpTopSortSelectIndex(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
 NYql::NNodes::TExprBase KqpJoinToIndexLookup(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, bool useCBO, const NYql::TOptimizerHints& hints);
 

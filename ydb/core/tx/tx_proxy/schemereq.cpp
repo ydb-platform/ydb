@@ -168,6 +168,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
         case NKikimrSchemeOp::ESchemeOpDropSysView:
+        case NKikimrSchemeOp::ESchemeOpDropSecret:
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
@@ -232,8 +233,14 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision:
             return *modifyScheme.MutableUpgradeSubDomain()->MutableName();
 
+        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
+            return *modifyScheme.MutableSetColumnConstraintsInitiate()->MutableTableName();
+
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
             Y_ABORT("no implementation for ESchemeOpCreateColumnBuild");
+
+        case NKikimrSchemeOp::ESchemeOpDropColumnBuild:
+            Y_ABORT("no implementation for ESchemeOpDropColumnBuild");
 
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
             Y_ABORT("no implementation for ESchemeOpCreateIndexBuild");
@@ -387,6 +394,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
             return *modifyScheme.MutableDropContinuousBackup()->MutableTableName();
 
+        case NKikimrSchemeOp::ESchemeOpCreateSecret:
+            return *modifyScheme.MutableCreateSecret()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpAlterSecret:
+            return *modifyScheme.MutableAlterSecret()->MutableName();
+
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
             return *modifyScheme.MutableCreateResourcePool()->MutableName();
 
@@ -413,6 +426,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection:
             return *modifyScheme.MutableBackupIncrementalBackupCollection()->MutableName();
 
+        case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalBackupOp:
+            return *modifyScheme.MutableBackupIncrementalBackupCollection()->MutableName();
+
         case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
             return *modifyScheme.MutableRestoreBackupCollection()->MutableName();
 
@@ -424,6 +440,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpChangePathState:
             return *modifyScheme.MutableChangePathState()->MutablePath();
+
+        case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
+            return *modifyScheme.MutableIncrementalRestoreFinalize()->MutableTargetTablePaths(0);
         }
         Y_UNREACHABLE();
     }
@@ -454,6 +473,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
         case NKikimrSchemeOp::ESchemeOpCreateSysView:
+        case NKikimrSchemeOp::ESchemeOpCreateSecret:
             return true;
         default:
             return false;
@@ -744,7 +764,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
         case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpAlterSecret:
+        case NKikimrSchemeOp::ESchemeOpCreateSecret:
         {
+            // TODO(yurikiselev): Change grants according to discussed [issue:23460]
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
@@ -806,6 +829,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
         case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpDropSecret:
         {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -935,6 +959,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             ResolveForACL.push_back(toResolve);
             break;
         }
+        case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalBackupOp: {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
+            auto collectionPath = SplitPath(pbModifyScheme.GetBackupIncrementalBackupCollection().GetName());
+            std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
         case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection: {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = workingDir;
@@ -1025,8 +1058,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSysView:
         case NKikimrSchemeOp::ESchemeOpDropSysView:
             return false;
-        case NKikimrSchemeOp::ESchemeOpChangePathState:
-        {
+        case NKikimrSchemeOp::ESchemeOpChangePathState: {
+        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
@@ -1037,6 +1070,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropTableIndex:
         case NKikimrSchemeOp::ESchemeOp_DEPRECATED_35:
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
+        case NKikimrSchemeOp::ESchemeOpDropColumnBuild:
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable:
         case NKikimrSchemeOp::ESchemeOpCreateLock:
@@ -1061,6 +1095,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
         case NKikimrSchemeOp::ESchemeOpAlterView:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
+        case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
             return false;
         }
         return true;
@@ -1157,12 +1192,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 TxProxyMon->ResolveKeySetWrongRequest->Inc();
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
                 break;
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
                 TxProxyMon->ResolveKeySetFail->Inc();
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, ctx);
                 break;
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
                 TxProxyMon->ResolveKeySetFail->Inc();
@@ -1692,14 +1727,29 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
     const auto& resultSet = ev->Get()->Request->ResultSet;
 
     const TVector<TString>* workingDir = nullptr;
+    bool lookupError = false;
     for (auto it = resultSet.rbegin(); it != resultSet.rend(); ++it) {
         if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             workingDir = &it->Path;
             break;
+        } else if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError) {
+            lookupError = true;
         }
     }
 
     auto parts = GetFullPath(GetModifyScheme());
+    if (!workingDir && lookupError) {
+        const auto errText = TStringBuilder()
+            << "Cannot resolve working dir, lookup error"
+            << " path# " << JoinPath(parts);
+        LOG_INFO_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << ", " << errText
+        );
+        TxProxyMon->ResolveKeySetFail->Inc();
+        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR, errText);
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, nullptr, &issue, ctx);
+        return Die(ctx);
+    }
 
     if (!workingDir || workingDir->size() >= parts.size()) {
         const TString errText = TStringBuilder()

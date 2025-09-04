@@ -1,9 +1,10 @@
 #include <ydb/core/kqp/tools/combiner_perf/subprocess.h>
 #include <ydb/core/kqp/tools/combiner_perf/printout.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple_last.h>
+#include <ydb/core/kqp/tools/combiner_perf/simple_grace_join.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple.h>
-#include <ydb/core/kqp/tools/combiner_perf/tpch_last.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple_block.h>
+#include <ydb/core/kqp/tools/combiner_perf/dq_combine_vs.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
@@ -53,6 +54,7 @@ public:
         Cout << "Long strings: " << (runParams.LongStringKeys ? "yes" : "no") << Endl;
         Cout << "Combiner mem limit: " << runParams.WideCombinerMemLimit << Endl;
         Cout << "Hash map type: " << HashMapTypeName(runParams.ReferenceHashType) << Endl;
+        Cout << "Join overlap: " << runParams.JoinOverlap << Endl;
         Cout << Endl;
 
         Cout << "Graph runtime is: " << result.ResultTime << " vs. reference C++ implementation: " << result.ReferenceTime << Endl;
@@ -95,6 +97,8 @@ public:
         }
         out["longStringKeys"] = runParams.LongStringKeys;
         out["numKeys"] = runParams.NumKeys;
+        out["joinOverlap"] = runParams.JoinOverlap;
+        out["joinRightRows"] = runParams.JoinRightRows;
         out["combinerMemLimit"] = runParams.WideCombinerMemLimit;
         out["hashType"] = HashMapTypeName(runParams.ReferenceHashType);
 
@@ -168,6 +172,8 @@ enum class ETestType {
     SimpleCombiner,
     SimpleLastCombiner,
     BlockCombiner,
+    DqHashCombinerVs,
+    SimpleGraceJoin,
 };
 
 void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spilling)
@@ -200,6 +206,17 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
                 NKikimr::NMiniKQL::RunTestCombineLastSimple<false, false>(params, printout);
             }
         }
+    } else if (testType == ETestType::DqHashCombinerVs) {
+        if (llvm || spilling) {
+            ythrow yexception() << "LLVM/spilling are not supported for DqHashCombiner perf test";
+        }
+        NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<false>(params, printout);
+    } else if (testType == ETestType::SimpleGraceJoin) {
+        if (params.NumRuns != 1) {
+            Cerr << "Join tests only support run-count == 1. Force-setting run-count to 1" << Endl;
+            params.NumRuns = 1;
+        }
+        NKikimr::NMiniKQL::RunTestGraceJoinSimple(params, printout);
     }
 }
 
@@ -222,6 +239,7 @@ int main(int argc, const char* argv[])
     ETestType testType = ETestType::All;
     bool spilling = false;
     bool llvm = false;
+    double joinOverlap = .0;
 
     NLastGetopt::TOpts options;
     options.SetTitle("A sandbox to run combiners (and other compute nodes) while measuring performance/RAM usage");
@@ -279,7 +297,7 @@ int main(int argc, const char* argv[])
 
     options
         .AddLongOption('t', "test")
-        .Choices({"combiner", "last-combiner", "block-combiner"})
+        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "grace-join"})
         .RequiredArgument("TEST_TYPE")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
@@ -289,6 +307,10 @@ int main(int argc, const char* argv[])
                 testType = ETestType::SimpleLastCombiner;
             } else if (val == "block-combiner") {
                 testType = ETestType::BlockCombiner;
+            } else if (val == "dq-hash-combiner") {
+                testType = ETestType::DqHashCombinerVs;
+            } else if (val == "grace-join") {
+                testType = ETestType::SimpleGraceJoin;
             } else {
                 ythrow yexception() << "Unknown test type: " << val;
             }
@@ -297,7 +319,7 @@ int main(int argc, const char* argv[])
 
     options.AddLongOption("no-verify").NoArgument().Handler0([&](){
         runParams.EnableVerification = false;
-    });
+    }).Help("Don't check that the graph and the reference results are actually equal");
 
     options
         .AddLongOption('m', "mode")
@@ -320,6 +342,16 @@ int main(int argc, const char* argv[])
     options.AddLongOption("spilling").NoArgument().SetFlag(&spilling)
         .Help("Enable spilling for the single test mode, if applicable, or enable spilling tests in the full test suite");
 
+    options.AddLongOption("join-overlap")
+        .RequiredArgument()
+        .DefaultValue(100.0)
+        .StoreResult(&joinOverlap)
+        .Help("Percentage of overlapping keys in left and right tables for join tests (relative to the number of distinct keys)");
+
+    options.AddLongOption("join-right-rows")
+        .RequiredArgument()
+        .StoreResult(&runParams.JoinRightRows)
+        .Help("Size for the right table in the join; defaults to num-keys");
 
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 
@@ -328,6 +360,12 @@ int main(int argc, const char* argv[])
     Y_ENSURE(runParams.NumRuns >= 1);
     Y_ENSURE(runParams.NumAttempts >= 1);
     Y_ENSURE(runParams.BlockSize >= 1);
+    Y_ENSURE(joinOverlap >= 0.0 && joinOverlap <= 100.0);
+
+    joinOverlap /= 100.0;
+    runParams.JoinOverlap = std::min(static_cast<size_t>(runParams.NumKeys * joinOverlap), runParams.NumKeys);
+
+    Y_ENSURE(runParams.JoinRightRows > 0);
 
     runParams.WideCombinerMemLimit <<= 20;
 

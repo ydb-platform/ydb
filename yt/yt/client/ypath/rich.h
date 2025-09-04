@@ -27,19 +27,23 @@ namespace NYT::NYPath {
 class TRichYPath
 {
 public:
-    TRichYPath();
-    TRichYPath(const TRichYPath& other);
-    TRichYPath(TRichYPath&& other);
-    TRichYPath(const char* path);
-    TRichYPath(const TYPath& path);
-    TRichYPath(const TYPath& path, const NYTree::IAttributeDictionary& attributes);
-    TRichYPath& operator = (const TRichYPath& other);
+    TRichYPath() noexcept = default;
 
-    static TRichYPath Parse(const TString& str);
+    TRichYPath(const TRichYPath& other) noexcept;
+    TRichYPath& operator=(const TRichYPath& other) noexcept;
+
+    TRichYPath(TRichYPath&& other) noexcept = default;
+    TRichYPath& operator=(TRichYPath&& other) noexcept = default;
+
+    TRichYPath(const char* path);
+    TRichYPath(TYPath path);
+    TRichYPath(TYPath path, const NYTree::IAttributeDictionary& attributes);
+
+    static TRichYPath Parse(TStringBuf str);
     TRichYPath Normalize() const;
 
     const TYPath& GetPath() const;
-    void SetPath(const TYPath& path);
+    void SetPath(TYPath path);
 
     const NYTree::IAttributeDictionary& Attributes() const;
     NYTree::IAttributeDictionary& Attributes();

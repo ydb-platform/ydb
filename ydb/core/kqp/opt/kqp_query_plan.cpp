@@ -617,6 +617,7 @@ private:
         TString RangesDesc;
 
         bool IncludePointPrefixLen = false;
+        THashMap<TString, TString> IndexSelectionInfo;
     };
 
     template<typename TColumnsIterator>
@@ -691,6 +692,22 @@ private:
             op.Properties["ReadRangesPointPrefixLen"] = ToString(params.ExplainPrompt.PointPrefixLen);
         }
 
+        if (!params.ExplainPrompt.IndexSelectionInfo.empty()) {
+            TStringBuilder fullInfo;
+            bool isFirst = true;
+            for(const auto& [name, info] : params.IndexSelectionInfo) {
+                if (isFirst) {
+                    isFirst = false;
+                } else {
+                    fullInfo << ", ";
+                }
+
+                fullInfo << name << ": " << info;
+            }
+
+            op.Properties["IndexSelectionInfo"] = TString(fullInfo);
+        }
+
         // Add remaining columns from columnsIter (avoiding duplicates)
         for (const auto& col : columnsIter) {
             TString colName = TString(col.Value());
@@ -721,7 +738,8 @@ private:
             .TablePath = tablePath,
             .ExplainPrompt = explainPrompt,
             .RangesDesc = rangesDesc,
-            .IncludePointPrefixLen = true
+            .IncludePointPrefixLen = true,
+            .IndexSelectionInfo = TKqpReadTableSettings::Parse(sourceSettings.Settings()).IndexSelectionInfo
         };
 
         ProcessReadRangesCommon(params, readInfo, op, planNode, sourceSettings.Columns());
@@ -1014,6 +1032,8 @@ private:
     TVector<std::variant<ui32, TArgContext>> Visit(TExprNode::TPtr node, TQueryPlanNode& planNode) {
         TMaybe<std::variant<ui32, TArgContext>> operatorId;
 
+        auto maybeCallable = TMaybeNode<TCallable>(node);
+
         if (auto maybeRead = TMaybeNode<TKqlReadTableBase>(node)) {
             auto read = maybeRead.Cast();
             TString table = TString(read.Table().Path()); TKqlKeyRange range = read.Range();
@@ -1066,6 +1086,11 @@ private:
             operatorId = Visit(maybeCombiner.Cast(), planNode);
         } else if (auto maybeBlockCombine = TMaybeNode<TCoBlockCombineHashed>(node)) {
             operatorId = Visit(maybeBlockCombine.Cast(), planNode);
+        } else if (maybeCallable && (maybeCallable.Cast().CallableName() == "BlockMergeFinalizeHashed" || maybeCallable.Cast().CallableName() == "BlockMergeManyFinalizeHashed")) {
+            TOperator op;
+            op.Properties["Name"] = "Aggregate";
+            op.Properties["Phase"] = "Final";
+            operatorId = AddOperator(planNode, "Aggregate", std::move(op));
         } else if (auto maybeCombiner = TMaybeNode<TCoWideCombiner>(node)) {
             operatorId = Visit(maybeCombiner.Cast(), planNode);
         } else if (auto maybeSort = TMaybeNode<TCoSort>(node)) {
@@ -1124,6 +1149,25 @@ private:
             } else if (TMaybeNode<TKqpReadOlapTableRangesBase>(node)) {
                 auto olapTable = TExprBase(node).Cast<TKqpReadOlapTableRangesBase>();
 
+                ui32 currentOperatorId = 0;
+
+                auto aggr = [](const TExprNode::TPtr& n) -> bool {
+                    if (auto maybeAggregation = TMaybeNode<TKqpOlapAgg>(n)) { return true; } return false;
+                };
+
+                if (auto maybeKqpOlapAggregation = FindNode(olapTable.Process().Body().Ptr(), aggr)) {
+                    auto kqpOlapAggregation = TExprBase(maybeKqpOlapAggregation).Cast<TKqpOlapAgg>();
+
+                    TOperator op;
+                    op.Properties["Name"] = "Aggregate";
+                    op.Properties["Phase"] = "Intermediate";
+                    op.Properties["Pushdown"] = "True";
+
+                    AddOptimizerEstimates(op, kqpOlapAggregation);
+                    currentOperatorId = AddOperator(planNode, "Aggregate", std::move(op));
+                    operatorId = currentOperatorId;
+                }
+
                 auto pred = [](const TExprNode::TPtr& n) -> bool {
                     if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false;
                 };
@@ -1137,11 +1181,22 @@ private:
                     op.Properties["Pushdown"] = "True";
 
                     AddOptimizerEstimates(op, kqpOlapFilter);
+                    auto filterOperatorId = AddOperator(planNode, "Filter", std::move(op));
 
-                    operatorId = AddOperator(planNode, "Filter", std::move(op));
-                    inputIds.push_back(Visit(olapTable, planNode));
+                    if (operatorId) {
+                        planNode.Operators[currentOperatorId].Inputs.push_back(filterOperatorId);
+                    } else {
+                        operatorId = filterOperatorId;
+                    }
+                    currentOperatorId = filterOperatorId;
+                }
+
+                auto tableOperatorId = Visit(olapTable, planNode);
+
+                if (operatorId) {
+                    planNode.Operators[currentOperatorId].Inputs.push_back(tableOperatorId);
                 } else {
-                    operatorId = Visit(olapTable, planNode);
+                    operatorId = tableOperatorId;
                 }
             } else if (TMaybeNode<TCoToFlow>(node)) {
                 // do nothing
@@ -1768,7 +1823,7 @@ private:
         return AddOperator(planNode, readName, std::move(op));
     }
 
-    std::variant<ui32, TArgContext> Visit(const TKqlReadTableRangesBase& read, TQueryPlanNode& planNode) {
+    ui32 Visit(const TKqlReadTableRangesBase& read, TQueryPlanNode& planNode) {
         const auto tablePath = TString(read.Table().Path());
         const auto explainPrompt = TKqpReadTableExplainPrompt::Parse(read);
         const auto rangesDesc = NPlanUtils::PrettyExprStr(read.Ranges());
@@ -1780,7 +1835,8 @@ private:
             .TablePath = tablePath,
             .ExplainPrompt = explainPrompt,
             .RangesDesc = rangesDesc,
-            .IncludePointPrefixLen = false
+            .IncludePointPrefixLen = false,
+            .IndexSelectionInfo = TKqpReadTableSettings::Parse(read.Settings()).IndexSelectionInfo,
         };
 
         ProcessReadRangesCommon(params, readInfo, op, planNode, read.Columns());

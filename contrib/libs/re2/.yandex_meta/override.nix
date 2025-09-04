@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "2025-07-22";
+  version = "2025-08-12";
 
   src = fetchFromGitHub {
     owner = "google";
     repo = "re2";
     rev = "${version}";
-    hash = "sha256-e1PvcpZFl1lGOjwaK2ocBsQEQCYtCusdWM3b1KpHHnQ=";
+    hash = "sha256-3cWbw8Wlnl1OMPIcbNlc3HnCsuL4VT7psuHWtldsWoQ=";
   };
 
   buildInputs = [

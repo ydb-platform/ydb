@@ -1,3 +1,4 @@
+#include <library/cpp/retry/retry.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/events.h>
@@ -199,8 +200,19 @@ public:
             sb << i << ";";
         }
         Cerr << sb << Endl;
-        Sleep(TDuration::Seconds(15));
-        AFL_VERIFY(NKikimr::NColumnShard::TMonitoringObjectsCounter<TProcessScope>::GetCounter().Val() == 5)("count", NKikimr::NColumnShard::TMonitoringObjectsCounter<TProcessScope>::GetCounter().Val());
+
+        int expected = 5;
+        ui32 retries = 60;
+        auto sleep = TDuration::Seconds(1);
+        auto getCount = []() {
+            return NKikimr::NColumnShard::TMonitoringObjectsCounter<TProcessScope>::GetCounter().Val();
+        };
+        auto checkCount = [&]() {
+            return getCount() == expected;
+        };
+
+        bool result = DoWithRetryOnRetCode(checkCount, TRetryOptions{retries, sleep});
+        AFL_VERIFY(result)("count", getCount());
 
         actorSystem.Stop();
         actorSystem.Cleanup();

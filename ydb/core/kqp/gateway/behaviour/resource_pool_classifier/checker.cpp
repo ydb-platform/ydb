@@ -258,7 +258,7 @@ private:
     void GetDatabaseInfo() const {
         const auto& externalContext = Context.GetExternalData();
         const auto userToken = externalContext.GetUserToken() ? MakeIntrusive<NACLib::TUserToken>(*externalContext.GetUserToken()) : nullptr;
-        Register(CreateDatabaseFetcherActor(SelfId(), externalContext.GetDatabase(), userToken, NACLib::EAccessRights::GenericFull));
+        Register(CreateDatabaseFetcherActor(SelfId(), externalContext.GetDatabase(), userToken, NACLib::EAccessRights::GenericUse));
     }
 
     void ValidateRanks() {

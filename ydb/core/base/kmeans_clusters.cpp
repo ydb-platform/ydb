@@ -37,7 +37,7 @@ Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const ui8* lhs, const ui8* rh
 template <typename TCoord>
 struct TMetric {
     using TCoord_ = TCoord;
-    using TSum = std::conditional_t<std::is_floating_point_v<TCoord>, TCoord, i64>;
+    using TSum = std::conditional_t<std::is_floating_point_v<TCoord>, double, i64>;
 };
 
 template <typename TCoord>
@@ -266,13 +266,10 @@ public:
         return false;
     }
 
-    std::optional<ui32> FindCluster(TArrayRef<const TCell> row, ui32 embeddingPos) override {
-        Y_ENSURE(embeddingPos < row.size());
-        const auto embedding = row.at(embeddingPos).AsRef();
+    std::optional<ui32> FindCluster(TArrayRef<const char> embedding) override {
         if (!IsExpectedSize(embedding)) {
             return {};
         }
-
         auto min = TMetric::Init();
         std::optional<ui32> closest = {};
         for (size_t i = 0; const auto& cluster : Clusters) {
@@ -284,6 +281,11 @@ public:
             ++i;
         }
         return closest;
+    }
+
+    std::optional<ui32> FindCluster(TArrayRef<const TCell> row, ui32 embeddingPos) override {
+        Y_ENSURE(embeddingPos < row.size());
+        return FindCluster(row.at(embeddingPos).AsRef());
     }
 
     void AggregateToCluster(ui32 pos, const TArrayRef<const char>& embedding, ui64 weight) override {
@@ -298,6 +300,13 @@ public:
 
     bool IsExpectedSize(const TArrayRef<const char>& data) override {
         return data.size() == 1 + sizeof(TCoord) * Dimensions;
+    }
+
+    TString GetEmptyRow() const override {
+        TString str;
+        str.resize(1 + sizeof(TCoord) * Dimensions);
+        str[sizeof(TCoord) * Dimensions] = TypeByte;
+        return str;
     }
 
 private:

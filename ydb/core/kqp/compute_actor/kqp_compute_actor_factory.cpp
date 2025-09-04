@@ -130,11 +130,10 @@ public:
         resourcesRequest.ExecutionUnits = 1;
         resourcesRequest.Memory = memoryLimits.MkqlLightProgramMemoryLimit;
 
-        NScheduler::TSchedulableActorHelper::TOptions schedulableOptions;
-        if (args.Query) {
-            schedulableOptions.SchedulableTask = MakeHolder<NScheduler::TSchedulableTask>(args.Query);
-        }
-        schedulableOptions.IsSchedulable = args.Query && !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID;
+        NScheduler::TSchedulableActorOptions schedulableOptions {
+            .Query = args.Query,
+            .IsSchedulable = args.Query && !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID,
+        };
 
         TIntrusivePtr<NRm::TTaskState> task = MakeIntrusive<NRm::TTaskState>(args.Task->GetId(), args.TxInfo->CreatedAt);
 

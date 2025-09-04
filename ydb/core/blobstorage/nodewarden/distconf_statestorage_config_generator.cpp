@@ -1,6 +1,8 @@
 #include "distconf.h"
 #include "distconf_statestorage_config_generator.h"
 
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/nodestate.h>
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
@@ -10,12 +12,14 @@ namespace NKikimr::NStorage {
 
     TStateStoragePerPileGenerator::TStateStoragePerPileGenerator(THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>& nodes
         , const std::unordered_map<ui32, ui32>& selfHealNodesState
-        , const std::optional<TBridgePileId>& pileId
+        , TBridgePileId pileId
         , std::unordered_set<ui32>& usedNodes
+        , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig
     )
         : PileId(pileId)
         , SelfHealNodesState(selfHealNodesState)
         , UsedNodes(usedNodes)
+        , OldConfig(oldConfig)
     {
         FillNodeGroups(nodes);
         CalculateRingsParameters();
@@ -45,7 +49,7 @@ namespace NKikimr::NStorage {
         }
         Y_ABORT_UNLESS(NodeGroups.size() > 0 && NodeGroups[0].Nodes.size() > 0);
         for (auto& ng : NodeGroups) {
-            ng.Disconnected = ng.State[0] + ng.State[1] < ng.Nodes.size() / 2;
+            ng.Disconnected = ng.State[0] + ng.State[1] <= ng.Nodes.size() / 2;
         }
     }
 
@@ -87,9 +91,7 @@ namespace NKikimr::NStorage {
 
     void TStateStoragePerPileGenerator::AddRingGroup(NKikimrConfig::TDomainsConfig::TStateStorage *ss) {
         auto *rg = ss->AddRingGroups();
-        if (PileId) {
-            PileId->CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
-        }
+        PileId.CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
         rg->SetNToSelect(NToSelect);
         for (auto &nodes : Rings) {
             std::ranges::sort(nodes, [&](const auto& x, const auto& y) {
@@ -111,7 +113,7 @@ namespace NKikimr::NStorage {
     ui32 TStateStoragePerPileGenerator::CalcNodeState(ui32 nodeId, bool disconnected) const {
         ui32 state = disconnected ? 0 : (SelfHealNodesState.contains(nodeId) ? SelfHealNodesState.at(nodeId) : (NodeStatesSize - 1));
         Y_ABORT_UNLESS(state < NodeStatesSize);
-        Y_ABORT_UNLESS(state != NCms::NSentinel::TNodeStatusComputer::ENodeState::PRETTY_GOOD);
+        Y_ABORT_UNLESS(state != ENodeState::PRETTY_GOOD);
         if (state == 0 && UsedNodes.contains(nodeId)) {
             state++;
         }
@@ -152,7 +154,57 @@ namespace NKikimr::NStorage {
         return true;
     }
 
+    bool TStateStoragePerPileGenerator::PickOldNodesStrategy(TNodeGroup& group) {
+        if (!group.Disconnected || (OldConfig.RingGroupsSize() == 0 && !OldConfig.HasRing())) {
+            return false;
+        }
+        std::unordered_set<ui32> nodesInGroup;
+        for (auto& n : group.Nodes) {
+            nodesInGroup.insert(std::get<0>(n));
+        }
+        ui32 ringGroupIdx = 0;
+        for (ui32 i : xrange(OldConfig.RingGroupsSize())) {
+            if (PileId == TBridgePileId::FromProto(&OldConfig.GetRingGroups(i), &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId)) {
+                ringGroupIdx = i;
+                break;
+            }
+        }
+        std::vector<std::vector<ui32>> result;
+        TIntrusivePtr<TStateStorageInfo> info = BuildStateStorageInfo(OldConfig);
+        if (info->RingGroups.size() <= ringGroupIdx) {
+            return false;
+        }
+        if (info->RingGroups[ringGroupIdx].NToSelect != NToSelect) {
+            return false;
+        }
+        ui32 ringsSize = info->RingGroups[ringGroupIdx].Rings.size();
+        for (ui32 ringIdx : xrange(ringsSize)) {
+            if (nodesInGroup.contains(info->RingGroups[ringGroupIdx].Rings[ringIdx].Replicas.front().NodeId())) {
+                result.push_back({});
+                for (auto& r : info->RingGroups[ringGroupIdx].Rings[ringIdx].Replicas) {
+                    if (!nodesInGroup.contains(r.NodeId())) {
+                        return false;
+                    }
+                    result.back().emplace_back(r.NodeId());
+                }
+                if (result.back().size() != ReplicasInRingCount) {
+                    return false;
+                }
+            }
+        }
+        if (result.size() != RingsInGroupCount) {
+            return false;
+        }
+        for (auto& ring : result) {
+            Rings.emplace_back(ring);
+        }
+        return true;
+    }
+
     void TStateStoragePerPileGenerator::PickNodes(TNodeGroup& group) {
+        if (PickOldNodesStrategy(group)) {
+            return;
+        }
         std::unordered_map<TString, std::array<ui32, NodeStatesSize>> rackStates;
         for (auto& n : group.Nodes) {
             auto rack = std::get<1>(n).GetRackId();

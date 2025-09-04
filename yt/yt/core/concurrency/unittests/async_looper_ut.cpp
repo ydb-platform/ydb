@@ -5,9 +5,9 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
-#include <library/cpp/yt/threading/event_count.h>
+#include <yt/yt/core/actions/cancelable_context.h>
 
-#include <thread>
+#include <library/cpp/yt/threading/event_count.h>
 
 namespace NYT::NConcurrency {
 namespace {
@@ -630,7 +630,53 @@ TEST(TAsyncLooperTest, NullFuture)
     queue->Shutdown();
 }
 
+TEST(TAsyncLooperTest, CancelInvoker)
+{
+    auto queue = New<TActionQueue>();
+    auto cancelableContext = New<TCancelableContext>();
+    auto invoker = cancelableContext->CreateInvoker(queue->GetInvoker());
+
+    auto syncFinishPromise = NewPromise<void>();
+    auto syncFinishStarted = syncFinishPromise.ToFuture();
+
+    auto canceledPromise = NewPromise<void>();
+    auto canceled = canceledPromise.ToFuture();
+
+    auto firstCanceledPromise = NewPromise<void>();
+    auto firstCanceled = firstCanceledPromise.ToFuture();
+
+    auto looper = New<TAsyncLooper>(
+        invoker,
+        /*asyncStart*/ BIND([=] {
+            EXPECT_FALSE(syncFinishStarted.IsSet());
+            YT_ASSERT_INVOKER_AFFINITY(invoker);
+            return VoidFuture;
+        }),
+        /*syncFinish*/ BIND([=] {
+            YT_ASSERT_INVOKER_AFFINITY(invoker);
+            syncFinishPromise.Set();
+            try {
+                Y_UNUSED(WaitFor(canceled));
+                GTEST_FAIL() << "Should be canceled";
+            } catch (TFiberCanceledException) {
+                firstCanceledPromise.Set();
+                throw;
+            }
+        }));
+
+    looper->Start();
+
+    ASSERT_TRUE(WaitFor(syncFinishStarted).IsOK());
+
+    cancelableContext->Cancel(TError("Cancel"));
+    canceledPromise.Set();  // triggers unwinding of the awaiting fiber
+
+    ASSERT_TRUE(WaitFor(firstCanceled).IsOK());
+
+    queue->Shutdown();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT:::NConcurrency
+} // namespace NYT::NConcurrency

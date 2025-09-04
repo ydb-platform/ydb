@@ -24,22 +24,67 @@ class TColumnFetchingContext;
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
+    friend class TMergeableInterval;
+
 private:
+    class TPortionsSlice;
+
+    class TFilterSizeProvider {
+    public:
+        size_t operator()(const NArrow::TColumnFilter& filter) {
+            return filter.GetDataSize();
+        }
+    };
+
+private:
+    inline static const ui64 FILTER_CACHE_SIZE = 10000000;  // 10 MiB
+
     inline static TAtomicCounter NextRequestId = 0;
 
+    const std::shared_ptr<ISnapshotSchema> LastSchema;
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
-    std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
+    const std::shared_ptr<arrow::Schema> PKSchema;
+    const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     const TPortionIntervalTree Intervals;
     const THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
-    TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter> FiltersCache;
-    THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
+
+    TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter, TNoopDelete, TFilterSizeProvider> FiltersCache;
+    THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
+    ui64 ExpectedIntersectionCount = 0;
+
+private:
+    static TPortionIntervalTree MakeIntervalTree(const std::deque<NSimple::TSourceConstructor>& portions) {
+        TPortionIntervalTree intervals;
+        for (const auto& portion : portions) {
+            intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
+                                   portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
+        }
+        return intervals;
+    }
+
+    static THashMap<ui64, std::shared_ptr<TPortionInfo>> MakePortionsIndex(const TPortionIntervalTree& intervals) {
+        THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
+        intervals.EachRange(
+            [&portions](const TPortionIntervalTree::TOwnedRange& /*range*/, const std::shared_ptr<TPortionInfo>& portion) mutable {
+                AFL_VERIFY(portions.emplace(portion->GetPortionId(), portion).second);
+            });
+        return portions;
+    }
+
+    void BuildFilterForSlice(const TPortionsSlice& slice, const std::shared_ptr<TInternalFilterConstructor>& constructor,
+        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard,
+        const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& dataByPortion);
+
+    std::vector<TPortionsSlice> FindIntervalBorders(const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& dataByPortion,
+        const std::shared_ptr<TInternalFilterConstructor>& context) const;
 
 private:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRequestFilter, Handle);
+            hFunc(NPrivate::TEvFilterRequestResourcesAllocated, Handle);
             hFunc(NPrivate::TEvFilterConstructionResult, Handle);
             hFunc(NPrivate::TEvDuplicateSourceCacheResult, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
@@ -49,6 +94,7 @@ private:
     }
 
     void Handle(const TEvRequestFilter::TPtr&);
+    void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
     void Handle(const NPrivate::TEvFilterConstructionResult::TPtr&);
     void Handle(const NPrivate::TEvDuplicateSourceCacheResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {

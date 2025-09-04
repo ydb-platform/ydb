@@ -24,10 +24,6 @@ unsupported_types = [
     "Decimal(15,0)",
     "Decimal(22,9)",
     "Decimal(35,10)",
-    "Date32",
-    "Datetime64",
-    "Timestamp64",
-    "Interval64",
 ]
 
 
@@ -58,6 +54,10 @@ primitive_type = {
     "Json": ydb.PrimitiveType.Json,
     "JsonDocument": ydb.PrimitiveType.JsonDocument,
     "Yson": ydb.PrimitiveType.Yson,
+    "Date32": ydb.PrimitiveType.Date32,
+    "Datetime64": ydb.PrimitiveType.Datetime64,
+    "Timestamp64": ydb.PrimitiveType.Timestamp64,
+    "Interval64": ydb.PrimitiveType.Interval64,
 }
 
 

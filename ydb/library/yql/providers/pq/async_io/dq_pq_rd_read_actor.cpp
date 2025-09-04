@@ -835,6 +835,9 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
 
     for (auto partition : ev->Get()->Record.GetPartition()) {
         auto partitionId = partition.GetPartitionId();
+        if (!partition.HasNextMessageOffset()) {
+            continue;
+        }
         auto offset = partition.GetNextMessageOffset();
         auto [itNextOffset, inserted] = NextOffsetFromRD.emplace(partitionId, offset);
         if (!inserted) {
@@ -969,6 +972,12 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr&
     Counters.CoordinatorResult++;
     if (ev->Cookie != CoordinatorRequestCookie) {
         SRC_LOG_W("Ignore TEvCoordinatorResult. wrong cookie");
+        return;
+    }
+    if (!ev->Get()->Record.GetIssues().empty()) {
+        NYql::TIssues issues;
+        IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+        Stop(NYql::NDqProto::StatusIds::BAD_REQUEST, issues);
         return;
     }
     LastReceivedPartitionDistribution.clear();

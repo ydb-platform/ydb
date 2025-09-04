@@ -28,6 +28,7 @@ PEERDIR(
     yql/essentials/udfs/common/re2
     yql/essentials/udfs/common/string
     yql/essentials/udfs/common/yson2
+    yql/essentials/udfs/common/json2
 )
 
 YQL_LAST_ABI_VERSION()

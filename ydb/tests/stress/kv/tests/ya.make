@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_ERASURE=mirror_3_dc)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
+ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/kv/workload_kv")
 
 TEST_SRCS(
     test_workload.py
@@ -16,6 +17,7 @@ ENDIF()
 SIZE(MEDIUM)
 
 DEPENDS(
+    ydb/tests/stress/kv
     ydb/apps/ydb
 )
 

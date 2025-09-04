@@ -79,6 +79,8 @@
 #include <ydb/core/tablet/tablet_monitoring_proxy.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
+#include <ydb/core/transfer/transfer_writer.h>
+
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -754,7 +756,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasLegacy) {
             // start legacy service
-            auto grpcService = new NGRpcProxy::TGRpcService();
+            auto grpcService = new NGRpcProxy::TGRpcService(grpcRequestProxies[0]);
             auto future = grpcService->Prepare(ActorSystem.Get(), NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NMsgBusProxy::CreateMsgBusProxyId(), Counters);
             auto startCb = [grpcService](NThreading::TFuture<void> result) {
                 if (result.HasException()) {
@@ -963,7 +965,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         opts.SetWorkersPerCompletionQueue(grpcConfig.GetWorkersPerCompletionQueue());
         opts.SetGRpcMemoryQuotaBytes(grpcConfig.GetGRpcMemoryQuotaBytes());
         opts.SetEnableGRpcMemoryQuota(grpcConfig.GetEnableGRpcMemoryQuota());
-        opts.SetMaxMessageSize(grpcConfig.HasMaxMessageSize() ? grpcConfig.GetMaxMessageSize() : NYdbGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
+        opts.SetMaxMessageSize(grpcConfig.HasMaxMessageSize() ? grpcConfig.GetMaxMessageSize() : NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
         opts.SetMaxGlobalRequestInFlight(grpcConfig.GetMaxInFlight());
         opts.SetLogger(NYdbGrpc::CreateActorSystemLogger(*ActorSystem.Get(), NKikimrServices::GRPC_SERVER));
         switch(grpcConfig.GetDefaultCompressionAlgorithm()) {
@@ -1161,9 +1163,9 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
     AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
 
-    AppData->TransferWriterFactory = ModuleFactories
+    AppData->TransferWriterFactory = ModuleFactories && ModuleFactories->TransferWriterFactory
         ? ModuleFactories->TransferWriterFactory
-        : nullptr;
+        : std::make_shared<NKikimr::NReplication::NTransfer::TTransferWriterFactory>();
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
@@ -1297,6 +1299,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     if (runConfig.AppConfig.HasBridgeConfig()) {
         AppData->BridgeConfig = runConfig.AppConfig.GetBridgeConfig();
         AppData->BridgeModeEnabled = true;
+    }
+
+    if (runConfig.AppConfig.HasStatisticsConfig()) {
+        AppData->StatisticsConfig = runConfig.AppConfig.GetStatisticsConfig();
     }
 
     // setup resource profiles
@@ -1723,7 +1729,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
 
     if (serviceMask.EnableKqp) {
-        sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));
+        sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this, YqSharedResources));
     }
 
     if (serviceMask.EnableMetadataProvider) {
@@ -1741,6 +1747,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableGroupedMemoryLimiter) {
         sil->AddServiceInitializer(new TScanGroupedMemoryLimiterInitializer(runConfig));
         sil->AddServiceInitializer(new TCompGroupedMemoryLimiterInitializer(runConfig));
+        sil->AddServiceInitializer(new TDeduplicationGroupedMemoryLimiterInitializer(runConfig));
     }
 
     if (serviceMask.EnableCompPriorities) {

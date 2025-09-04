@@ -8,7 +8,7 @@ on:
       branches:
         description: 'Comma-separated list of branches to process'
         required: false
-        default: 'main,stable-25-1,stable-25-1-3'
+        default: 'main,stable-25-1,stable-25-1-4,stable-25-2,stable-25-2-1'
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -29,7 +29,7 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "branches=$(echo '${{ github.event.inputs.branches }}' | jq -R -s -c 'split(",")')" >> $GITHUB_OUTPUT
           else
-            echo "branches=$(echo '["main","stable-25-1","stable-25-1-3"]' | jq -c .)" >> $GITHUB_OUTPUT
+            echo "branches=$(echo '["main","stable-25-1","stable-25-1-4","stable-25-2","stable-25-2-1"]' | jq -c .)" >> $GITHUB_OUTPUT
           fi
 
   update-muted-tests:
@@ -76,10 +76,10 @@ jobs:
           
           git config user.name YDBot
           git config user.email ydbot@ydb.tech
-      
+
           # Fetch the latest changes from remote
           git fetch origin ${PR_BRANCH} || true
-      
+
           # Checkout BRANCH_FOR_PR, create if it doesn't exist based on BASE_BRANCH
           if git show-ref --quiet refs/remotes/origin/${PR_BRANCH}; then
             echo "Branch ${PR_BRANCH} exists."
@@ -88,15 +88,10 @@ jobs:
             echo "Branch ${PR_BRANCH} does not exist. Creating based on ${{ env.BASE_BRANCH }}"
             git checkout -b ${PR_BRANCH}
           fi
-      
-          # Attempt to rebase PR branch onto BASE_BRANCH
-          if ! git rebase origin/${{ env.BASE_BRANCH }} -X theirs; then
-            echo "Rebase failed, resetting branch to match ${{ env.BASE_BRANCH }}..."
-            # Abort the rebase process
-            git rebase --abort
-            echo "Reset branch ${PR_BRANCH} to origin/${{ env.BASE_BRANCH }}"
-            git reset --hard origin/${{ env.BASE_BRANCH }}
-          fi
+
+          echo "Resetting ${PR_BRANCH} to match ${{ env.BASE_BRANCH }}..."
+          git reset --hard origin/${{ env.BASE_BRANCH }}
+          echo "✓ Branch ${PR_BRANCH} now exactly matches ${{ env.BASE_BRANCH }}"
                   
       - name: Run create_new_muted_ya.py
         run: |

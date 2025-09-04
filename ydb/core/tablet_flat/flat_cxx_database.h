@@ -390,6 +390,37 @@ struct TConvertValue<TColumnType, TIdWrapper<T, Tag>, TRawTypeValue> {
     operator TIdWrapper<T, Tag>() const { return TIdWrapper<T, Tag>::FromValue(static_cast<T>(Value)); }
 };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TBridgePileId conversion
+
+template<typename TColumnType>
+struct TConvertValue<TColumnType, TRawTypeValue, TBridgePileId> {
+    static_assert(TColumnType::ColumnType == NScheme::NTypeIds::Uint32);
+
+    ui32 Storage;
+    TTypeValue Value;
+
+    TConvertValue(TBridgePileId value)
+        : Storage(value.GetLocalDb())
+        , Value(value ? TTypeValue(Storage) : TTypeValue())
+    {}
+
+    operator const TRawTypeValue&() const { return Value; }
+};
+
+template<typename TColumnType>
+struct TConvertValue<TColumnType, TBridgePileId, TRawTypeValue> {
+    TTypeValue Value;
+
+    TConvertValue(const TRawTypeValue& value)
+        : Value(value)
+    {}
+
+    operator TBridgePileId() const {
+        return Value.HaveValue() ? TBridgePileId::FromLocalDb(static_cast<ui32>(Value)) : TBridgePileId();
+    }
+};
+
 template <typename TColumnType, typename SourceType>
 struct TConvertValue<TColumnType, TRawTypeValue, SourceType> {
     TTypeValue Value;

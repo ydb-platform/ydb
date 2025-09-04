@@ -1,8 +1,11 @@
 #include "stream.h"
 #include "client.h"
-#include "service_detail.h"
 
 #include <yt/yt/core/compression/codec.h>
+
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
+#include <yt/yt/core/rpc/service.h>
 
 namespace NYT::NRpc {
 
@@ -26,10 +29,12 @@ size_t GetStreamingAttachmentSize(TRef attachment)
 ////////////////////////////////////////////////////////////////////////////////
 
 TAttachmentsInputStream::TAttachmentsInputStream(
+    TRequestId requestId,
     TClosure readCallback,
     IInvokerPtr compressionInvoker,
     std::optional<TDuration> timeout)
-    : ReadCallback_(std::move(readCallback))
+    : RequestId_(requestId)
+    , ReadCallback_(std::move(readCallback))
     , CompressionInvoker_(std::move(compressionInvoker))
     , Timeout_(timeout)
     , Window_(MaxWindowSize)
@@ -41,7 +46,7 @@ TFuture<TSharedRef> TAttachmentsInputStream::Read()
 
     // Failure here indicates an attempt to read past EOSs.
     if (Closed_) {
-        return MakeFuture<TSharedRef>(TError("Stream is already closed"));
+        return MakeFuture<TSharedRef>(TError("Stream is already closed") << GetErrorAttributes());
     }
 
     if (!Error_.IsOK()) {
@@ -163,7 +168,7 @@ void TAttachmentsInputStream::AbortUnlessClosed(const TError& error, bool fireAb
         return;
     }
 
-    static const auto FinishedError = TError("Request finished");
+    auto FinishedError = TError("Request finished") << GetErrorAttributes();
     DoAbort(
         guard,
         error.IsOK() ? FinishedError : error,
@@ -194,7 +199,8 @@ void TAttachmentsInputStream::DoAbort(TGuard<NThreading::TSpinLock>& guard, cons
 void TAttachmentsInputStream::OnTimeout()
 {
     Abort(TError(NYT::EErrorCode::Timeout, "Attachments stream read timed out")
-        << TErrorAttribute("timeout", *Timeout_));
+        << TErrorAttribute("timeout", *Timeout_)
+        << GetErrorAttributes());
 }
 
 TStreamingFeedback TAttachmentsInputStream::GetFeedback() const
@@ -204,15 +210,24 @@ TStreamingFeedback TAttachmentsInputStream::GetFeedback() const
     };
 }
 
+std::vector<TErrorAttribute> TAttachmentsInputStream::GetErrorAttributes() const
+{
+    return {
+        TErrorAttribute{"request_id", RequestId_},
+    };
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TAttachmentsOutputStream::TAttachmentsOutputStream(
+    TRequestId requestId,
     NCompression::ECodec codec,
     IInvokerPtr compressisonInvoker,
     TClosure pullCallback,
     ssize_t windowSize,
     std::optional<TDuration> timeout)
-    : Codec_(codec)
+    : RequestId_(requestId)
+    , Codec_(codec)
     , CompressionInvoker_(std::move(compressisonInvoker))
     , PullCallback_(std::move(pullCallback))
     , WindowSize_(windowSize)
@@ -261,7 +276,7 @@ void TAttachmentsOutputStream::OnWindowPacketsReady(TMutableRange<TWindowPacket>
 {
     if (ClosePromise_) {
         guard.Release();
-        TError error("Stream is already closed");
+        auto error = TError("Stream is already closed") << GetErrorAttributes();
         for (auto& packet : packets) {
             TDelayedExecutor::CancelAndClear(packet.TimeoutCookie);
             packet.Promise.Set(error);
@@ -354,9 +369,12 @@ void TAttachmentsOutputStream::AbortUnlessClosed(const TError& error, bool fireA
         return;
     }
 
+    auto requestAlreadyCompletedError = TError("Request is already completed")
+        << GetErrorAttributes();
+
     DoAbort(
         guard,
-        error.IsOK() ? TError("Request is already completed") : error,
+        error.IsOK() ? requestAlreadyCompletedError : error,
         fireAborted);
 }
 
@@ -417,7 +435,8 @@ void TAttachmentsOutputStream::HandleFeedback(const TStreamingFeedback& feedback
     if (feedback.ReadPosition > WritePosition_) {
         THROW_ERROR_EXCEPTION("Stream read position exceeds write position: %v > %v",
             feedback.ReadPosition,
-            WritePosition_);
+            WritePosition_)
+            << GetErrorAttributes();
     }
 
     ReadPosition_ = feedback.ReadPosition;
@@ -500,6 +519,13 @@ bool TAttachmentsOutputStream::CanPullMore(bool first) const
     }
 
     return false;
+}
+
+std::vector<TErrorAttribute> TAttachmentsOutputStream::GetErrorAttributes() const
+{
+    return {
+        TErrorAttribute{"request_id", RequestId_},
+    };
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -870,4 +896,3 @@ void HandleOutputStreamingRequest(
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NRpc
-

@@ -34,45 +34,45 @@ TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::Do
         switch(context.GetDefaultStrategy()) {
             case EOptimizerStrategy::Default:
                 levels.emplace_back(std::make_shared<TOneLayerPortions>(
-                    5, 1.0,  8 * (1ull << 20),
+                    5, 1.0, 8 * (1ull << 20),
                     nullptr, portionsInfo, counters->GetLevelCounters(5),
                     1ull << 40,
                     selectors, defaultSelectorName
                 ));
 
                 levels.emplace_back(std::make_shared<TOneLayerPortions>(
-                    4, 0.0, 4 * (1ull << 20),
+                    4, 0.0, 6 * (1ull << 20),
                     levels.back(), portionsInfo, counters->GetLevelCounters(4),
                     16 * (1ull << 30),
                     selectors, defaultSelectorName
                 ));
 
                 levels.emplace_back(std::make_shared<TOneLayerPortions>(
-                    3, 0.0, 2 * (1ull << 20),
+                    3, 0.0, 4 * (1ull << 20),
                     levels.back(), portionsInfo, counters->GetLevelCounters(3),
                     1ull << 30,
                     selectors, defaultSelectorName
                 ));
 
                 levels.emplace_back(std::make_shared<TOneLayerPortions>(
-                    2, 0.0, 1 * (1 << 20),
+                    2, 0.0, 2 * (1 << 20),
                     levels.back(), portionsInfo, counters->GetLevelCounters(2),
                     128 * (1ull << 20),
                     selectors, defaultSelectorName
                 ));
 
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-                    1, levels.back(), counters->GetLevelCounters(1), 
-                    std::make_shared<TLimitsOverloadChecker>(1ull << 20, 16 * (1ull << 30)), 
+                    1, levels.back(), counters->GetLevelCounters(1),
+                    std::make_shared<TLimitsOverloadChecker>(1ull << 20, 2048 * (1ull << 30)),
                     TDuration::Max(), 2 * (1ull << 20), 1,
-                    selectors, defaultSelectorName
+                    selectors, defaultSelectorName, ui64(1) << 63
                 ));
 
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-                    0, levels.back(), counters->GetLevelCounters(0), 
-                    std::make_shared<TLimitsOverloadChecker>(1ull << 20, 8 * (1ull << 30)), 
+                    0, levels.back(), counters->GetLevelCounters(0),
+                    std::make_shared<TLimitsOverloadChecker>(1ull << 20, 8 * (1ull << 30)),
                     TDuration::Max(), 1ull << 20, 1,
-                    selectors, defaultSelectorName
+                    selectors, defaultSelectorName, ui64(1) << 63
                 ));
                break;
 
@@ -86,7 +86,7 @@ TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::Do
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     0, levels.back(), counters->GetLevelCounters(0),
                     std::make_shared<TLimitsOverloadChecker>(1'000'000, 8 * (1ull << 30)),
-                    TDuration::Max(), 4 << 20, 1, 
+                    TDuration::Max(), 4 << 20, 1,
                     selectors, defaultSelectorName
                 ));
                 break;
@@ -94,7 +94,7 @@ TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::Do
             case EOptimizerStrategy::LogsInStore:
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     2, nullptr, counters->GetLevelCounters(2),
-                    std::make_shared<TNoOverloadChecker>(), 
+                    std::make_shared<TNoOverloadChecker>(),
                     TDuration::Max(), 8 * (1ull << 20), 1,
                     selectors, defaultSelectorName
                 ));

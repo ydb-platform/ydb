@@ -242,14 +242,14 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
             case NKikimrDataEvents::FORMAT_UNSPECIFIED:
             case NKikimrDataEvents::FORMAT_CELLVEC: {
                 if (!msg.Rows.empty()) {
-                    bytes = ScanData->AddData(msg.Rows, {}, TaskRunner->GetHolderFactory(), 0, msg.Finished);
+                    bytes = ScanData->AddData(msg.Rows, {}, TaskRunner->GetHolderFactory(), 0, 0, 0, msg.Finished);
                     rowsCount = msg.Rows.size();
                 }
                 break;
             }
             case NKikimrDataEvents::FORMAT_ARROW: {
                 if(msg.ArrowBatch != nullptr) {
-                    bytes = ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.ArrowBatch, BlockTrackingMode), {}, TaskRunner->GetHolderFactory(), 0, msg.Finished);
+                    bytes = ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.ArrowBatch, BlockTrackingMode), {}, TaskRunner->GetHolderFactory(), 0, 0, 0, msg.Finished);
                     rowsCount = msg.ArrowBatch->num_rows();
                 }
                 break;

@@ -685,11 +685,11 @@ public:
     {
         TString sensorPrefix = "\"sensor\":\"yt.fair_share_invoker_pool";
         TString bucketPrefix = "\"bucket\":\"invoker_";
-        TString threadName = "\"thread\":\"TestInvokerPool\"";
+        std::string threadName = "\"thread\":\"TestInvokerPool\"";
 
-        auto checker = [&] (const TString& pattern) {
+        auto checker = [&] (const std::string& pattern) {
             EXPECT_TRUE(json.Contains(pattern))
-                << TError("Pattern %v is missing", pattern).GetMessage();
+                << Format("Pattern %Qv is missing", pattern);
         };
 
         checker(sensorPrefix + ".size\"");
@@ -746,7 +746,7 @@ public:
                 invokerNameToEnqueued :
                 invokerNameToDequeued;
 
-            if (auto threadName = labels->FindChildValue<TString>("thread")) {
+            if (auto threadName = labels->FindChildValue<std::string>("thread")) {
                 EXPECT_EQ(threadName, "TestInvokerPool");
 
                 if (auto bucketName = labels->FindChildValue<TString>("bucket")) {

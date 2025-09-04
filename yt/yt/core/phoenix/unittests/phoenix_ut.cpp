@@ -408,7 +408,7 @@ void S::RegisterMetadata(auto&& registrar)
 
 PHOENIX_DEFINE_TYPE(S);
 
-} // namespace NVersions
+} // namespace NInVersions
 
 TEST(TPhoenixTest, InVersion1)
 {

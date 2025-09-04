@@ -23,20 +23,24 @@ namespace NYql::NDocs {
 
         void Parse(IInputStream& markdown, TMarkdownCallback&& onSection) {
             for (TString line; markdown.ReadLine(line) != 0;) {
+                size_t depth = HeaderDepth(line);
                 if (IsSkipping_) {
-                    if (IsSectionHeader(line)) {
+                    if (HeaderDepth_ == depth) {
                         ResetSection(std::move(line));
                         IsSkipping_ = false;
                     } else {
                         // Skip
                     }
                 } else {
-                    if (IsSectionHeader(line)) {
+                    if (HeaderDepth_ == depth) {
                         onSection(std::move(Section_));
                         ResetSection(std::move(line));
-                    } else {
+                    } else if (depth == 0 || HeaderDepth_ < depth) {
                         line.append('\n');
                         Section_.Body.append(std::move(line));
+                    } else {
+                        onSection(std::move(Section_));
+                        IsSkipping_ = true;
                     }
                 }
             }
@@ -64,11 +68,15 @@ namespace NYql::NDocs {
             }
         }
 
-        bool IsSectionHeader(TStringBuf line) const {
-            return HeaderDepth(line) == HeaderDepth_;
-        }
-
         size_t HeaderDepth(TStringBuf line) const {
+            while (line.StartsWith(' ') || line.StartsWith('\t')) {
+                line.Skip(1);
+            }
+
+            if (!line.StartsWith('#')) {
+                return 0;
+            }
+
             size_t begin = line.find('#');
             size_t end = line.find_first_not_of('#', begin);
             return end != TStringBuf::npos ? (end - begin) : 0;

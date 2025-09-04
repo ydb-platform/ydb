@@ -2,7 +2,7 @@
 
 #include "schemeshard_info_types.h"
 
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/persqueue/utils.h>
 
 namespace NKikimr {
@@ -271,16 +271,16 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     }
 
     NKikimrSchemeOp::TTableDescription implTableDesc;
-    implTableDesc.SetName(TString::Join(NTableVectorKmeansTreeIndex::PostingTable, suffix));
+    implTableDesc.SetName(TString::Join(NKMeans::PostingTable, suffix));
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
     {
         auto parentColumn = implTableDesc.AddColumns();
-        parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
-        parentColumn->SetType(NTableIndex::ClusterIdTypeName);
+        parentColumn->SetName(NKMeans::ParentColumn);
+        parentColumn->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
         parentColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         parentColumn->SetNotNull(true);
     }
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);
+    implTableDesc.AddKeyColumnNames(NKMeans::ParentColumn);
     FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
@@ -296,19 +296,19 @@ auto CalcVectorKmeansTreePrefixImplTableDescImpl(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc
 ) {
     NKikimrSchemeOp::TTableDescription implTableDesc;
-    implTableDesc.SetName(NTableVectorKmeansTreeIndex::PrefixTable);
+    implTableDesc.SetName(NKMeans::PrefixTable);
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
     auto keys = implTableColumns.Keys;
     std::erase_if(keys, [&](const auto& key) { return !indexKeyColumns.contains(key); });
     FillIndexImplTableColumns(GetColumns(baseTable), keys, indexKeyColumns, implTableDesc);
     {
         auto idColumn = implTableDesc.AddColumns();
-        idColumn->SetName(NTableVectorKmeansTreeIndex::IdColumn);
-        idColumn->SetType(NTableIndex::ClusterIdTypeName);
+        idColumn->SetName(NKMeans::IdColumn);
+        idColumn->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
         idColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         idColumn->SetNotNull(true);
     }
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::IdColumn);
+    implTableDesc.AddKeyColumnNames(NKMeans::IdColumn);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
 
@@ -347,34 +347,34 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 {
     NKikimrSchemeOp::TTableDescription implTableDesc;
 
-    implTableDesc.SetName(NTableVectorKmeansTreeIndex::LevelTable);
+    implTableDesc.SetName(NKMeans::LevelTable);
 
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
 
     {
         auto parentColumn = implTableDesc.AddColumns();
-        parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
-        parentColumn->SetType(NTableIndex::ClusterIdTypeName);
+        parentColumn->SetName(NKMeans::ParentColumn);
+        parentColumn->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
         parentColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         parentColumn->SetNotNull(true);
     }
     {
         auto idColumn = implTableDesc.AddColumns();
-        idColumn->SetName(NTableVectorKmeansTreeIndex::IdColumn);
-        idColumn->SetType(NTableIndex::ClusterIdTypeName);
+        idColumn->SetName(NKMeans::IdColumn);
+        idColumn->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
         idColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         idColumn->SetNotNull(true);
     }
     {
         auto centroidColumn = implTableDesc.AddColumns();
-        centroidColumn->SetName(NTableVectorKmeansTreeIndex::CentroidColumn);
+        centroidColumn->SetName(NKMeans::CentroidColumn);
         centroidColumn->SetType("String");
         centroidColumn->SetTypeId(NScheme::NTypeIds::String);
         centroidColumn->SetNotNull(true);
     }
 
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::IdColumn);
+    implTableDesc.AddKeyColumnNames(NKMeans::ParentColumn);
+    implTableDesc.AddKeyColumnNames(NKMeans::IdColumn);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
 

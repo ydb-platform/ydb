@@ -281,6 +281,9 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
     if (tableSettings.PartitionByHashFunction && parsingMode == ETableSettingsParsingMode::Create) {
         settings = L(settings, Q(Y(Q("partitionByHashFunction"), tableSettings.PartitionByHashFunction)));
     }
+    if (tableSettings.ExternalDataChannelsCount) {
+        settings = L(settings, Q(Y(Q("externalDataChannelsCount"), tableSettings.ExternalDataChannelsCount)));
+    }
 
     return settings;
 }
@@ -862,6 +865,20 @@ public:
                 ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
                 return false;
             }
+
+            if ("watermark" == hintName) {
+                TNodePtr option = Y(BuildQuotedAtom(Pos_, hintName));
+                auto anyColumnSrc = BuildAnyColumnSource(Pos_);
+                for (auto& x : hint.second) {
+                    if (!x->Init(ctx, anyColumnSrc.Get())) {
+                        return false;
+                    }
+                    option = L(option, x);
+                }
+                Nodes_.push_back(Q(option));
+                continue;
+            }
+
             TNodePtr option = Y(BuildQuotedAtom(Pos_, hintName));
             for (auto& x : hint.second) {
                 if (!x->Init(ctx, src)) {
@@ -1126,6 +1143,9 @@ public:
                 }
                 if (family.CompressionLevel) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
+                }
+                if (family.CacheMode) {
+                    familyDesc = L(familyDesc, Q(Y(Q("cache_mode"), family.CacheMode)));
                 }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
@@ -1531,6 +1551,9 @@ public:
                 if (family.CompressionLevel) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
                 }
+                if (family.CacheMode) {
+                    familyDesc = L(familyDesc, Q(Y(Q("cache_mode"), family.CacheMode)));
+                }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
             actions = L(actions, Q(Y(Q("addColumnFamilies"), Q(columnFamilies))));
@@ -1549,6 +1572,9 @@ public:
                 }
                 if (family.CompressionLevel) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
+                }
+                if (family.CacheMode) {
+                    familyDesc = L(familyDesc, Q(Y(Q("cache_mode"), family.CacheMode)));
                 }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
@@ -2449,21 +2475,22 @@ private:
 
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
     std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TUpsertObject(pos, objectId, typeId, false, false, std::move(features), std::set<TString>(), context);
+    return new TUpsertObject(pos, objectId, typeId, context, std::move(features));
 }
+
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
     bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TCreateObject(pos, objectId, typeId, existingOk, replaceIfExists, std::move(features), std::set<TString>(), context);
+    return new TCreateObject(pos, objectId, typeId, context, std::move(features), existingOk, replaceIfExists);
 }
+
 TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-    std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)
-{
-    return new TAlterObject(pos, secretId, typeId, false, false, std::move(features), std::move(featuresToReset), context);
+    bool missingOk, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context) {
+    return new TAlterObject(pos, secretId, typeId, context, std::move(features), std::move(featuresToReset), missingOk);
 }
+
 TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-    bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context)
-{
-    return new TDropObject(pos, secretId, typeId, missingOk, false, std::move(options), std::set<TString>(), context);
+    bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context) {
+    return new TDropObject(pos, secretId, typeId, context, std::move(options), missingOk);
 }
 
 TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped) {

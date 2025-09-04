@@ -1,6 +1,7 @@
 #include "coordinator.h"
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/core/fq/libs/actors/nodes_manager_events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/ydb/schema.h>
 #include <ydb/core/fq/libs/ydb/util.h>
@@ -11,6 +12,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/protos/actors.pb.h>
+
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NFq {
 
@@ -50,23 +54,26 @@ struct TEvPrivate {
 
 class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
-    const ui64 PrintStatePeriodSec = 300;
-    const ui64 PrintStateToLogSplitSize = 64000;
+    static constexpr ui64 PrintStatePeriodSec = 300;
+    static constexpr ui64 PrintStateToLogSplitSize = 64000;
+    static constexpr TDuration NodesManagerRetryPeriod = TDuration::Seconds(1);
 
     struct TTopicKey {
         TString Endpoint;
         TString Database;
+        TString ReadGroup;
         TString TopicName;
 
         size_t Hash() const noexcept {
             ui64 hash = std::hash<TString>()(Endpoint);
             hash = CombineHashes<ui64>(hash, std::hash<TString>()(Database));
+            hash = CombineHashes<ui64>(hash, std::hash<TString>()(ReadGroup));
             hash = CombineHashes<ui64>(hash, std::hash<TString>()(TopicName));
             return hash;
         }
         bool operator==(const TTopicKey& other) const {
             return Endpoint == other.Endpoint && Database == other.Database
-                && TopicName == other.TopicName;
+                && ReadGroup == other.ReadGroup && TopicName == other.TopicName;
         }
     };
 
@@ -171,6 +178,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     NConfig::TRowDispatcherCoordinatorConfig Config;
     TYqSharedResources::TPtr YqSharedResources;
     TActorId LocalRowDispatcherId;
+    NActors::TActorId NodesManagerId;
     const TString LogPrefix;
     const TString Tenant;
     TMap<NActors::TActorId, RowDispatcherInfo> RowDispatchers;
@@ -179,6 +187,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     std::unordered_map<TActorId, TCoordinatorRequest> PendingReadActors;
     TCoordinatorMetrics Metrics;
     THashSet<TActorId> InterconnectSessions;
+    ui64 NodesCount = 0;
 
 public:
     TActorCoordinator(
@@ -186,7 +195,8 @@ public:
         const NConfig::TRowDispatcherCoordinatorConfig& config,
         const TYqSharedResources::TPtr& yqSharedResources,
         const TString& tenant,
-        const ::NMonitoring::TDynamicCounterPtr& counters);
+        const ::NMonitoring::TDynamicCounterPtr& counters,
+        NActors::TActorId nodesManagerId);
 
     void Bootstrap();
 
@@ -199,6 +209,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev);
     void Handle(TEvPrivate::TEvPrintState::TPtr&);
+    void Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr&);
 
     STRICT_STFUNC(
         StateFunc, {
@@ -209,6 +220,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorRequest, Handle);
         hFunc(TEvPrivate::TEvPrintState, Handle);
+        hFunc(NFq::TEvNodesManager::TEvGetNodesResponse, Handle);
     })
 
 private:
@@ -216,11 +228,13 @@ private:
     void AddRowDispatcher(NActors::TActorId actorId, bool isLocal);
     void PrintInternalState();
     TTopicInfo& GetOrCreateTopicInfo(const TTopicKey& topic);
-    std::optional<TActorId> GetAndUpdateLocation(const TPartitionKey& key);  // std::nullopt if TopicPartitionsLimitPerNode reached
+    std::optional<TActorId> GetAndUpdateLocation(const TPartitionKey& key, const TSet<ui32>& filteredNodeIds);  // std::nullopt if TopicPartitionsLimitPerNode reached
     bool ComputeCoordinatorRequest(TActorId readActorId, const TCoordinatorRequest& request);
     void UpdatePendingReadActors();
     void UpdateInterconnectSessions(const NActors::TActorId& interconnectSession);
     TString GetInternalState();
+    bool IsReady() const;
+    void SendError(TActorId readActorId, const TCoordinatorRequest& request, const TString& message);
 };
 
 TActorCoordinator::TActorCoordinator(
@@ -228,21 +242,25 @@ TActorCoordinator::TActorCoordinator(
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    NActors::TActorId nodesManagerId)
     : Config(config)
     , YqSharedResources(yqSharedResources)
     , LocalRowDispatcherId(localRowDispatcherId)
+    , NodesManagerId(nodesManagerId)
     , LogPrefix("Coordinator: ")
     , Tenant(tenant)
     , Metrics(counters)
 {
-    Metrics.PartitionsLimitPerNode->Set(Config.GetTopicPartitionsLimitPerNode());
     AddRowDispatcher(localRowDispatcherId, true);
 }
 
 void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
     Send(LocalRowDispatcherId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
+
+    Send(NodesManagerId, new NFq::TEvNodesManager::TEvGetNodesRequest(), IEventHandle::FlagTrackDelivery);
+
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId());
     auto nodeGroup = Metrics.Counters->GetSubgroup("node", ToString(SelfId().NodeId()));
@@ -347,6 +365,12 @@ void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected:
 void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, ev: " << ev->Get()->ToString());
 
+    if (ev->Sender == NodesManagerId) {
+        LOG_ROW_DISPATCHER_INFO("TEvUndelivered, from nodes manager, reason: " << ev->Get()->Reason);
+        NActors::TActivationContext::Schedule(NodesManagerRetryPeriod, new IEventHandle(NodesManagerId, SelfId(), new NFq::TEvNodesManager::TEvGetNodesRequest(), IEventHandle::FlagTrackDelivery));
+        return;
+    }
+
     for (auto& [actorId, info] : RowDispatchers) {
         if (ev->Sender != actorId) {
             continue;
@@ -372,10 +396,15 @@ TActorCoordinator::TTopicInfo& TActorCoordinator::GetOrCreateTopicInfo(const TTo
     return TopicsInfo.insert({topic, TTopicInfo(Metrics, topic.TopicName)}).first->second;
 }
 
-std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& key) {
+std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& key, const TSet<ui32>& filteredNodeIds) {
     Y_ENSURE(!PartitionLocations.contains(key));
 
     auto& topicInfo = GetOrCreateTopicInfo(key.Topic);
+
+    if (!IsReady()) {
+        topicInfo.AddPendingPartition(key);
+        return std::nullopt;
+    }
 
     TActorId bestLocation;
     ui64 bestNumberPartitions = std::numeric_limits<ui64>::max();
@@ -383,7 +412,9 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
         if (!info.Connected) {
             continue;
         }
-
+        if (!filteredNodeIds.empty() && !filteredNodeIds.contains(location.NodeId())) {
+            continue;
+        }
         ui64 numberPartitions = 0;
         if (const auto it = topicInfo.NodesInfo.find(location.NodeId()); it != topicInfo.NodesInfo.end()) {
             numberPartitions = it->second.NumberPartitions;
@@ -394,10 +425,7 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
             bestNumberPartitions = numberPartitions;
         }
     }
-    Y_ENSURE(bestLocation, "Local row dispatcher should always be connected");
-
-    if (Config.GetTopicPartitionsLimitPerNode() > 0 && bestNumberPartitions >= Config.GetTopicPartitionsLimitPerNode()) {
-        topicInfo.AddPendingPartition(key);
+    if (!bestLocation) {
         return std::nullopt;
     }
 
@@ -425,8 +453,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
     if (ComputeCoordinatorRequest(ev->Sender, request)) {
         PendingReadActors.erase(ev->Sender);
     } else {
-        LOG_ROW_DISPATCHER_INFO("All nodes are overloaded, add request into pending queue");
-        // All nodes are overloaded, add request into pending queue
+        LOG_ROW_DISPATCHER_INFO("Not all nodes connected, nodes count: " << NodesCount << ", known rd count: " << RowDispatchers.size() << ", add request into pending queue");
         // We save only last request from each read actor
         PendingReadActors[ev->Sender] = request;
     }
@@ -434,20 +461,24 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
 
 bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TCoordinatorRequest& request) {
     const auto& source = request.Record.GetSource();
-
+    TSet<ui32> filteredNodeIds{source.GetNodeIds().begin(), source.GetNodeIds().end()};
     Y_ENSURE(!RowDispatchers.empty());
 
     bool hasPendingPartitions = false;
     TMap<NActors::TActorId, TSet<ui64>> tmpResult;
     for (auto& partitionId : request.Record.GetPartitionIds()) {
-        TTopicKey topicKey{source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath()};
+        TTopicKey topicKey{source.GetEndpoint(), source.GetDatabase(), source.GetReadGroup(), source.GetTopicPath()};
         TPartitionKey key {topicKey, partitionId};
         auto locationIt = PartitionLocations.find(key);
         NActors::TActorId rowDispatcherId;
         if (locationIt != PartitionLocations.end()) {
             rowDispatcherId = locationIt->second;
+            if (!filteredNodeIds.empty() && !filteredNodeIds.contains(rowDispatcherId.NodeId())) {
+                SendError(readActorId, request, TStringBuilder() << "Can't read the same topic with different mappings");
+                return true;
+            }
         } else {
-            if (const auto maybeLocation = GetAndUpdateLocation(key)) {
+            if (const auto maybeLocation = GetAndUpdateLocation(key, filteredNodeIds)) {
                 rowDispatcherId = *maybeLocation;
             } else {
                 hasPendingPartitions = true;
@@ -476,6 +507,9 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
 }
 
 void TActorCoordinator::UpdatePendingReadActors() {
+    if (!IsReady()) {
+        return;
+    }
     for (auto readActorIt = PendingReadActors.begin(); readActorIt != PendingReadActors.end();) {
         if (ComputeCoordinatorRequest(readActorIt->first, readActorIt->second)) {
             readActorIt = PendingReadActors.erase(readActorIt);
@@ -490,6 +524,29 @@ void TActorCoordinator::Handle(TEvPrivate::TEvPrintState::TPtr&) {
     PrintInternalState();
 }
 
+void TActorCoordinator::Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr& ev) {
+    NodesCount = ev->Get()->NodeIds.size();
+    LOG_ROW_DISPATCHER_DEBUG("TEvGetNodesResponse, nodes count " << NodesCount);
+    if (!NodesCount) {
+        NActors::TActivationContext::Schedule(NodesManagerRetryPeriod, new IEventHandle(NodesManagerId, SelfId(), new NFq::TEvNodesManager::TEvGetNodesRequest(), IEventHandle::FlagTrackDelivery));
+    }
+    UpdatePendingReadActors();
+}
+
+bool TActorCoordinator::IsReady() const {
+    if (!NodesCount) {
+        return false;
+    }
+    return RowDispatchers.size() >= NodesCount - 1; 
+}
+
+void TActorCoordinator::SendError(TActorId readActorId, const TCoordinatorRequest& request, const TString& message) {
+    LOG_ROW_DISPATCHER_WARN("Send TEvCoordinatorResult to " << readActorId << ", issues: " << message);
+    auto response = std::make_unique<TEvRowDispatcher::TEvCoordinatorResult>();
+    NYql::IssuesToMessage(NYql::TIssues{NYql::TIssue{message}}, response->Record.MutableIssues());
+    Send(readActorId, response.release(), IEventHandle::FlagTrackDelivery, request.Cookie);
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -499,9 +556,10 @@ std::unique_ptr<NActors::IActor> NewCoordinator(
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    NActors::TActorId nodesManagerId)
 {
-    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, yqSharedResources, tenant, counters));
+    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, yqSharedResources, tenant, counters, nodesManagerId));
 }
 
 } // namespace NFq

@@ -49,6 +49,7 @@ TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& 
 TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNode& arg, TExprNode::TPtr&& members, const TParentsMap& parentsMap, TExprContext& ctx);
 
 bool IsDepended(const TExprNode& from, const TExprNode& to);
+bool AreAllDependedOnAny(const TExprNode::TChildrenType& from, const TNodeSet& to);
 bool MarkDepended(const TExprNode& from, const TExprNode& to, TNodeMap<bool>& deps);
 bool IsEmpty(const TExprNode& node, const TTypeAnnotationContext& typeCtx);
 bool IsEmptyContainer(const TExprNode& node);
@@ -181,7 +182,7 @@ template<bool Ordered = false>
 TPartOfConstraintBase::TSetType GetPathsToKeys(const TExprNode& body, const TExprNode& arg);
 
 // generates column names with pattern "prefixN" that do not clash with source columns
-// prefix should start with "_yql"
+// prefix should start with "_yql" or "<alias>._yql"
 TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count);
 
 bool CheckSupportedTypes(
@@ -221,5 +222,7 @@ TExprNode::TPtr ReplaceUnessentials(TExprNode::TPtr predicate, TExprNode::TPtr r
 
 bool IsDependsOnUsage(const TExprNode& node, const TParentsMap& parentsMap);
 bool IsNormalizedDependsOn(const TExprNode& node);
+
+bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types);
 
 }

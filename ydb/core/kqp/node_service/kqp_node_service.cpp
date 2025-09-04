@@ -159,16 +159,28 @@ private:
 
         NScheduler::NHdrf::NDynamic::TQueryPtr query;
         if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
+            const auto schedulerServiceId = MakeKqpSchedulerServiceId(SelfId().NodeId());
+
+            // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
+            //       Replace with more precise database events in the future.
+            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
+            addDatabaseEvent->Id = databaseId;
+            this->Send(schedulerServiceId, addDatabaseEvent.Release());
+
+            // TODO: replace with more precise pool events.
+            auto addPoolEvent = MakeHolder<NScheduler::TEvAddPool>(databaseId, poolId);
+            this->Send(schedulerServiceId, addPoolEvent.Release());
+
             auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
-            addQueryEvent->DatabaseId = msg.GetDatabase();
+            addQueryEvent->DatabaseId = databaseId;
             addQueryEvent->PoolId = poolId;
             addQueryEvent->QueryId = txId;
-            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release(), 0, txId);
+            Send(schedulerServiceId, addQueryEvent.Release(), 0, txId);
             query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(txId))->Get()->Query;
         }
 
         auto now = TAppData::TimeProvider->Now();
-        NKqpNode::TTasksRequest request(txId, ev->Sender, now);
+        NKqpNode::TTasksRequest request(txId, query, ev->Sender, now);
         auto& msgRtSettings = msg.GetRuntimeSettings();
         if (msgRtSettings.GetTimeoutMs() > 0) {
             // compute actor should not arm timer since in case of timeout it will receive TEvAbortExecution from Executer
@@ -393,6 +405,10 @@ private:
 
         if (event.GetConfig().GetTableServiceConfig().HasIteratorReadQuotaSettings()) {
             SetIteratorReadsQuotaSettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadQuotaSettings());
+        }
+
+        if (event.GetConfig().GetTableServiceConfig().HasWriteActorSettings()) {
+            SetWriteActorSettings(event.GetConfig().GetTableServiceConfig().GetWriteActorSettings());
         }
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);

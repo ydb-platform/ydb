@@ -265,13 +265,10 @@ private:
         }
 
         for (auto& message : records) {
-            TMessage input;
-            input.Data = std::move(message.GetData());
-            input.MessageGroupId = std::move(message.GetMessageGroupId());
-            input.Partition = partitionId;
-            input.ProducerId = std::move(message.GetProducerId());
-            input.Offset = message.GetOffset();
-            input.SeqNo = message.GetSeqNo();
+            TMessage input {
+                .PartitionId = partitionId,
+                .Message = message
+            };
 
             auto setError = [&](const auto& msg) {
                 ProcessingErrorStatus = TEvWorker::TEvGone::EStatus::SCHEME_ERROR;
@@ -446,6 +443,10 @@ private:
     }
 
     void PassAway() override {
+        if (TableState) {
+            TableState->PassAway();
+        }
+
         TActor::PassAway();
     }
 

@@ -48,8 +48,8 @@ public:
 
 void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("task", "build_duplicate_filters")("info", DebugString());
-    NArrow::NMerger::TMergePartialStream merger(PKSchema, nullptr, false, VersionColumnNames, MaxVersion);
-    merger.PutControlPoint(Finish.BuildSortablePosition(), false);
+    NArrow::NMerger::TMergePartialStream merger(PKSchema, nullptr, false, VersionColumnNames, MaxVersion, MinUncommittedVersion);
+    merger.PutControlPoint(Finish, false);
     TFiltersBuilder filtersBuilder;
     for (const auto& [interval, data] : SourcesById) {
         merger.AddSource(data, nullptr, NArrow::NMerger::TIterationOrder::Forward(interval.GetRows().GetBegin()), interval.GetSourceId());

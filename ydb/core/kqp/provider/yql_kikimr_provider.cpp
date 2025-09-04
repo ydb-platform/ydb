@@ -2,6 +2,7 @@
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
@@ -225,20 +226,20 @@ TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, con
 bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStringBuf& path) {
     auto mainTableImpl = GetMainTableIfTableIsImplTableOfIndex(cluster, path);
     if (mainTableImpl) {
-
-        for(const auto& index: mainTableImpl->Metadata->Indexes) {
-            if (index.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                continue;
-            }
-
-            for(const auto& implTable: index.GetImplTables()) {
-                TString implTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << implTable;
-                if (path == implTablePath)
+        for (const auto& index: mainTableImpl->Metadata->Indexes) {
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                if (index.KeyColumns.size() > 1) {
+                    // prefixed index update is not supported yet
                     return true;
+                }
+                const auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::LevelTable;
+                const auto postingTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::PostingTable;
+                if (path == levelTablePath || path == postingTablePath) {
+                    return true;
+                }
             }
         }
     }
-
     return false;
 }
 
@@ -839,11 +840,12 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             protoValue.set_uint64_value(FromString<ui64>(value));
             break;
         case EDataSlot::String:
-        case EDataSlot::DyNumber:
             protoValue.set_bytes_value(value.data(), value.size());
             break;
         case EDataSlot::Utf8:
         case EDataSlot::Json:
+        case EDataSlot::DyNumber:
+        case EDataSlot::JsonDocument:
             protoValue.set_text_value(ToString(value));
             break;
         case EDataSlot::Double:
@@ -905,17 +907,16 @@ void TableDescriptionToTableInfoImpl(const TKikimrTableDescription& desc, TYdbOp
                 continue;
             }
 
-            const auto& implTable = *desc.Metadata->ImplTables[idxNo];
-            YQL_ENSURE(!implTable.Next);
+            for (auto implTable = desc.Metadata->ImplTables[idxNo]; implTable; implTable = implTable->Next) {
+                auto info = NKqpProto::TKqpTableInfo();
+                info.SetTableName(implTable->Name);
+                info.MutableTableId()->SetOwnerId(implTable->PathId.OwnerId());
+                info.MutableTableId()->SetTableId(implTable->PathId.TableId());
+                info.SetSchemaVersion(implTable->SchemaVersion);
 
-            auto info = NKqpProto::TKqpTableInfo();
-            info.SetTableName(implTable.Name);
-            info.MutableTableId()->SetOwnerId(implTable.PathId.OwnerId());
-            info.MutableTableId()->SetTableId(implTable.PathId.TableId());
-            info.SetSchemaVersion(implTable.SchemaVersion);
-
-            back_inserter = std::move(info);
-            ++back_inserter;
+                back_inserter = std::move(info);
+                ++back_inserter;
+            }
         }
     }
 }

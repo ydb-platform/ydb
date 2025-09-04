@@ -53,7 +53,6 @@
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
-#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/compute/common/pinger.h>
 #include <ydb/core/fq/libs/compute/common/utils.h>
@@ -69,6 +68,7 @@
 #include <ydb/core/fq/libs/read_rule/read_rule_deleter.h>
 #include <ydb/core/fq/libs/tasks_packer/tasks_packer.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -81,6 +81,9 @@
 
 #include <util/string/split.h>
 #include <util/system/hostname.h>
+
+#include <library/cpp/protobuf/util/pb_io.h>
+#include <library/cpp/scheme/scheme.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
 #define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
@@ -199,6 +202,8 @@ public:
                     return;
                 }
 
+                Parsed = true;
+
                 if (ExecuteMode == FederatedQuery::ExecuteMode::PARSE) {
                     SendStatusAndDie(TProgram::TStatus::Ok);
                     return;
@@ -212,13 +217,13 @@ public:
                     return;
                 }
 
+                Compiled = true;
+
                 if (ExecuteMode == FederatedQuery::ExecuteMode::COMPILE) {
                     SendStatusAndDie(TProgram::TStatus::Ok);
                     return;
                 }
             }
-
-            Compiled = true;
 
             // next phases can be async: optimize, validate, run
             TProgram::TFutureStatus futureStatus;
@@ -256,6 +261,10 @@ public:
             Program->Print(&exprOut, &planOut);
             plan = Plan2Json(planOut.Str());
             expr = exprOut.Str();
+        } else if (Parsed) {
+            if (const auto& ast = Program->GetQueryAst()) {
+                expr = *ast;
+            }
         }
         Issues.AddIssues(Program->Issues());
         Send(RunActorId, new TEvPrivate::TEvProgramFinished(Issues, plan, expr, status, message));
@@ -312,6 +321,7 @@ private:
     const NSQLTranslation::TTranslationSettings SqlSettings;
     const FederatedQuery::ExecuteMode ExecuteMode;
     const TString QueryId;
+    bool Parsed = false;
     bool Compiled = false;
 };
 
@@ -1609,11 +1619,18 @@ private:
         }
 
         if (enableCheckpointCoordinator) {
+            NKikimrConfig::TCheckpointsConfig config;
+            const auto& oldConfig = Params.Config.GetCheckpointCoordinator();
+            config.SetEnabled(oldConfig.GetEnabled());
+            config.SetCheckpointingPeriodMillis(oldConfig.GetCheckpointingPeriodMillis());
+            config.SetMaxInflight(oldConfig.GetMaxInflight());
+            config.SetCheckpointingSnapshotRotationPeriod(oldConfig.GetCheckpointingSnapshotRotationPeriod());
+
             CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
                 ::NFq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
                 NYql::NDq::MakeCheckpointStorageID(),
                 SelfId(),
-                Params.Config.GetCheckpointCoordinator(),
+                config,
                 QueryCounters.Counters,
                 dqGraphParams,
                 Params.StateLoadMode,
@@ -1699,6 +1716,15 @@ private:
         apply("WatermarksIdlePartitions", "true");
         apply("EnableChannelStats", "true");
         apply("ExportStats", "true");
+
+        Yql::DqsProto::TWorkerFilter workerFilter;
+        for (auto nodeId : Params.NodeIds) {
+            workerFilter.AddNodeId(nodeId);
+        }
+
+        TStringStream stream;
+        SerializeToTextFormat(workerFilter, stream);
+        apply("WorkerFilter", stream.Str());
 
         switch (Params.QueryType) {
         case FederatedQuery::QueryContent::STREAMING: {
@@ -2029,7 +2055,7 @@ private:
                 case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
                     break;
             }
-            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, std::move(disposition), Params.TaskSensorLabels));
+            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, std::move(disposition), Params.TaskSensorLabels, Params.NodeIds));
         }
 
         {
@@ -2338,7 +2364,7 @@ private:
 
     const ui64 MaxTasksPerStage;
     const ui64 MaxTasksPerOperation;
-    const TCompressor Compressor;
+    const NKikimr::NKqp::TCompressor Compressor;
 
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     TMap<TString, TString> Statistics;

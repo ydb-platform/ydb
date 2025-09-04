@@ -14,7 +14,8 @@ public:
         std::shared_ptr<TUploadTypes>& types,
         std::shared_ptr<arrow::RecordBatch>& data,
         ui64 cookie)
-        : Sender(sender)
+        : TUploadRowsBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>())
+        , Sender(sender)
         , Table(table)
         , ColumnTypes(types)
         , Data(data)
@@ -23,17 +24,12 @@ public:
     }
 
 private:
-    TString GetDatabase()override {
+    TString GetDatabase() override {
         return TString();
     }
 
     const TString& GetTable() override {
         return Table;
-    }
-
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
-        static const TVector<std::pair<TSerializedCellVec, TString>> empty;
-        return empty;
     }
 
     bool CheckAccess(TString&) override {

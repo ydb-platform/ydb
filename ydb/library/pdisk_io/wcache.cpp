@@ -7,6 +7,7 @@
 #include <util/string/builder.h>
 #include <util/string/strip.h>
 #include <util/system/file.h>
+#include <util/system/fs.h>
 
 #ifdef _linux_
 #include <libgen.h>
@@ -670,6 +671,10 @@ static std::optional<TDriveData> GetSysfsDriveData(const TString &path, TStringS
 
 std::optional<TDriveData> GetDriveData(const TString &path, TStringStream *outDetails) {
     try {
+        if (!NFs::Exists(path)) {
+            *outDetails << "file not found";
+            return std::nullopt;
+        }
         TFile f(path, OpenExisting | RdOnly);
         TDriveData data;
         if (off64_t off = lseek64(f.GetHandle(), 0, SEEK_END); off != (off64_t)-1) {

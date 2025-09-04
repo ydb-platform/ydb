@@ -7,6 +7,7 @@ namespace NMVP::NOIDC {
 
 void TExtensionWhoamiWorker::Bootstrap() {
     auto connection = CreateGRpcServiceConnection<TProfileService>(Settings.WhoamiExtendedInfoEndpoint);
+    RequestContext = CreateContext();
 
     nebius::iam::v1::GetProfileRequest request;
     NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
@@ -24,7 +25,7 @@ void TExtensionWhoamiWorker::Bootstrap() {
     SetHeader(meta, "authorization", AuthHeader);
     meta.Timeout = Timeout;
 
-    connection->DoRequest(request, std::move(responseCb), &nebius::iam::v1::ProfileService::Stub::AsyncGet, meta);
+    connection->DoRequest(request, std::move(responseCb), &nebius::iam::v1::ProfileService::Stub::AsyncGet, meta, RequestContext.get());
     Become(&TExtensionWhoamiWorker::StateWork);
 }
 
@@ -164,6 +165,13 @@ void TExtensionWhoamiWorker::ApplyExtension() {
 void TExtensionWhoamiWorker::ContinueAndPassAway() {
     Context->Continue();
     PassAway();
+}
+
+void TExtensionWhoamiWorker::PassAway() {
+    if (RequestContext) {
+        RequestContext->Cancel();
+    }
+    NActors::TActorBootstrapped<TExtensionWhoamiWorker>::PassAway();
 }
 
 TExtensionWhoami::TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader, const TDuration timeout)

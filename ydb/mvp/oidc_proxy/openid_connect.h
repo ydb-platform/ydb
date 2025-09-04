@@ -97,6 +97,11 @@ std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcService
     return client.CreateGRpcServiceConnection<TSessionService>(config);
 }
 
+inline NYdbGrpc::IQueueClientContextPtr CreateContext() {
+    static NYdbGrpc::TGRpcClientLow client;
+    return client.CreateContext();
+}
+
 struct TEvPrivate {
     enum EEv {
         EvCheckSessionResponse = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),

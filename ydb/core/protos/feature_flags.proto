@@ -230,4 +230,5 @@ message TFeatureFlags {
     optional bool EnableTableCacheModes = 204 [default = false];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = false];
     optional bool EnableStreamingQueries = 206 [default = false];
+    optional bool EnablePartitionCounters = 207 [default = false];
 }

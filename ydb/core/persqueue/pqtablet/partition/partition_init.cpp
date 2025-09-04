@@ -1039,10 +1039,14 @@ void TPartition::Initialize(const TActorContext& ctx) {
         } else {
             SetupTopicCounters(ctx);
         }
-        if (Config.GetEnablePartitionCounters()) {
+        if (PartitionCountersAreEnabled()) {
             SetupPerPartitionCounters();
         }
     }
+}
+
+bool TPartition::PartitionCountersAreEnabled() const {
+    return AppData()->FeatureFlags.GetEnablePartitionCounters() && Config.GetEnablePartitionCounters();
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {

@@ -122,10 +122,8 @@ namespace NKafka::NTests {
             TAutoPtr<IEventHandle> handle;
             auto* ev = runtime->GrabEdgeEvent<TEvDiscovery::TEvDiscoveryData>(handle);
             UNIT_ASSERT(ev);
-            auto* serializedMessage = std::get_if<NDiscovery::TSerializedMessage>(&ev->CachedMessageData);
-            Y_ABORT_UNLESS(serializedMessage);
-            auto discoveryData = UnpackDiscoveryData(serializedMessage->CachedMessage);
-            auto discoverySslData = UnpackDiscoveryData(serializedMessage->CachedMessageSsl);
+            auto discoveryData = UnpackDiscoveryData(ev->CachedMessage);
+            auto discoverySslData = UnpackDiscoveryData(ev->CachedMessageSsl);
 
             auto checkEnpoints = [&] (ui32 port, ui32 sslPort) {
                 if (port) {

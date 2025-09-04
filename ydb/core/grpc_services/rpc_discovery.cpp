@@ -128,11 +128,7 @@ public:
         if (!NameserviceResponse || !LookupResponse)
             return;
 
-        auto lookupStatus = std::visit([](auto&& arg) {
-            return arg.Status;
-        }, LookupResponse->CachedMessageData);
-
-        Y_ABORT_UNLESS(lookupStatus == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+        Y_ABORT_UNLESS(LookupResponse->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
 
         const TSet<TString> services(
             Request->GetProtoRequest()->Getservice().begin(), Request->GetProtoRequest()->Getservice().end());
@@ -141,21 +137,17 @@ public:
 
         TString endpointId = Request->GetEndpointId();
 
-        if (auto* serializedMessage = std::get_if<NDiscovery::TSerializedMessage>(&LookupResponse->CachedMessageData); serializedMessage) {
-            Y_ABORT_UNLESS(!serializedMessage->CachedMessage.empty() && !serializedMessage->CachedMessageSsl.empty());
-
-            cachedMessage = serializedMessage->CachedMessage;
-            cachedMessageSsl = serializedMessage->CachedMessageSsl;
-        } else if (auto* deserializedMessage = std::get_if<NDiscovery::TDeserializedMessage>(&LookupResponse->CachedMessageData); deserializedMessage) {
+        if (!LookupResponse->CachedMessage.empty() && !LookupResponse->CachedMessageSsl.empty()) {
+            cachedMessage = LookupResponse->CachedMessage;
+            cachedMessageSsl = LookupResponse->CachedMessageSsl;
+        } else {
             NDiscovery::TCachedMessageData cachedMessageData(
-                deserializedMessage->InfoEntries,
-                NameserviceResponse, deserializedMessage->BridgeInfo,
+                LookupResponse->InfoEntries,
+                NameserviceResponse, LookupResponse->BridgeInfo,
                 endpointId, services);
 
             cachedMessage = std::move(cachedMessageData.CachedMessage);
             cachedMessageSsl = std::move(cachedMessageData.CachedMessageSsl);
-        } else {
-            Y_ABORT_UNLESS(false, "Invalid cached message data in ListEndpointsRPC");
         }
 
         if (Request->SslServer()) {

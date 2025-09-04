@@ -80,17 +80,10 @@ void TKafkaMetadataActor::ProcessDiscoveryData(TEvDiscovery::TEvDiscoveryData::T
     Ydb::Discovery::ListEndpointsResult leResult;
     TString const* cachedMessage;
 
-    auto* serializedMessage = std::get_if<NDiscovery::TSerializedMessage>(&ev->Get()->CachedMessageData);
-    if (!serializedMessage) {
-        KAFKA_LOG_ERROR("Port discovery failed, unable to parse discovery response for request " << CorrelationId);
-        HaveError = true;
-        return;
-    }
-
     if (expectSsl) {
-        cachedMessage = &serializedMessage->CachedMessageSsl;
+        cachedMessage = &ev->Get()->CachedMessageSsl;
     } else {
-        cachedMessage = &serializedMessage->CachedMessage;
+        cachedMessage = &ev->Get()->CachedMessage;
     }
     auto ok = leResponse.ParseFromString(*cachedMessage);
     if (ok) {

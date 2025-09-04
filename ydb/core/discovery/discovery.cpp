@@ -246,10 +246,16 @@ namespace NDiscovery {
     }
 
     TEvDiscovery::TEvDiscoveryData* TCachedMessageData::ToEvent(bool returnSerializedMessage) const {
+        auto* event = new TEvDiscovery::TEvDiscoveryData();
         if (returnSerializedMessage && !CachedMessage.empty() && !CachedMessageSsl.empty()) {
-            return new TEvDiscovery::TEvDiscoveryData(TSerializedMessage{CachedMessage, CachedMessageSsl, Status});
+            event->CachedMessage = CachedMessage;
+            event->CachedMessageSsl = CachedMessageSsl;
+        } else {
+            event->InfoEntries = InfoEntries;
+            event->BridgeInfo = BridgeInfo;
         }
-        return new TEvDiscovery::TEvDiscoveryData(TDeserializedMessage{InfoEntries, BridgeInfo, Status});
+        event->Status = Status;
+        return event;
     }
 }
 
@@ -679,13 +685,9 @@ public:
             }
         }
 
-        auto lookupStatus = std::visit([](auto&& arg) {
-            return arg.Status;
-        }, LookupResponse->CachedMessageData);
-
-        if (lookupStatus != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+        if (LookupResponse->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
             DLOG_D("Lookup error"
-                << ": status# " << ui64(lookupStatus));
+                << ": status# " << ui64(LookupResponse->Status));
             return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::RESOLVE_ERROR,
                 "Database nodes resolve failed with no certain result"));
         }

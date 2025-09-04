@@ -35,10 +35,8 @@ void TNodesManager::DiscoverNodes(const TString& tenant, const TActorId& cache, 
 }
 
 TNodesManager::TProcessResult TNodesManager::ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
-    auto* deserializedMessage = std::get_if<NDiscovery::TDeserializedMessage>(&ev->Get()->CachedMessageData);
-    Y_ABORT_UNLESS(deserializedMessage);
-    Y_ABORT_UNLESS(!deserializedMessage->InfoEntries.empty());
-    Y_ABORT_UNLESS(deserializedMessage->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+    Y_ABORT_UNLESS(!ev->Get()->InfoEntries.empty());
+    Y_ABORT_UNLESS(ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
 
     TProcessResult result;
 
@@ -50,7 +48,7 @@ TNodesManager::TProcessResult TNodesManager::ProcessResponse(TEvDiscovery::TEvDi
     THashSet<ui32> newNodes;
     auto& curNodes = TenantNodes[it->second];
 
-    for (const auto& [actorId, _] : deserializedMessage->InfoEntries) {
+    for (const auto& [actorId, _] : ev->Get()->InfoEntries) {
         const ui32 nodeId = actorId.NodeId();
         newNodes.insert(nodeId);
         auto it = curNodes.find(nodeId);

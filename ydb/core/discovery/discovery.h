@@ -10,22 +10,6 @@
 
 namespace NKikimr {
 
-namespace NDiscovery {
-
-struct TSerializedMessage {
-    TString CachedMessage;
-    TString CachedMessageSsl;
-    TEvStateStorage::TEvBoardInfo::EStatus Status;
-};
-
-struct TDeserializedMessage {
-    TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
-    TBridgeInfo::TPtr BridgeInfo;
-    TEvStateStorage::TEvBoardInfo::EStatus Status;
-};
-
-}
-
 struct TEvDiscovery {
 
     enum EEv {
@@ -53,17 +37,12 @@ struct TEvDiscovery {
     };
 
     struct TEvDiscoveryData : public TEventLocal<TEvDiscoveryData, EvDiscoveryData> {
-        std::variant<NDiscovery::TSerializedMessage, NDiscovery::TDeserializedMessage> CachedMessageData;
+        TString CachedMessage;
+        TString CachedMessageSsl;
 
-        TEvDiscoveryData(
-                NDiscovery::TSerializedMessage&& cachedMessageData)
-            : CachedMessageData(std::move(cachedMessageData))
-        {}
-
-        TEvDiscoveryData(
-                NDiscovery::TDeserializedMessage&& cachedMessageData)
-            : CachedMessageData(std::move(cachedMessageData))
-        {}
+        TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
+        TBridgeInfo::TPtr BridgeInfo;
+        TEvStateStorage::TEvBoardInfo::EStatus Status;
     };
 };
 

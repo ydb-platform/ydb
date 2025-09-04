@@ -23,11 +23,8 @@ void ValidateDiscovererResponse(TTestActorRuntime& runtime, TActorId edge) {
     auto discoveryDataEvent = runtime.GrabEdgeEvent<TEvDiscovery::TEvDiscoveryData>(edge)->Release();
     UNIT_ASSERT(discoveryDataEvent);
 
-    auto* serializedMessage = std::get_if<NDiscovery::TSerializedMessage>(&discoveryDataEvent->CachedMessageData);
-    Y_ABORT_UNLESS(serializedMessage);
-
-    auto discoveryData = UnpackDiscoveryData(serializedMessage->CachedMessage);
-    auto discoverySslData = UnpackDiscoveryData(serializedMessage->CachedMessageSsl);
+    auto discoveryData = UnpackDiscoveryData(discoveryDataEvent->CachedMessage);
+    auto discoverySslData = UnpackDiscoveryData(discoveryDataEvent->CachedMessageSsl);
 
     UNIT_ASSERT_EQUAL(discoveryData.endpoints_size(), 1);
     UNIT_ASSERT_EQUAL(discoverySslData.endpoints_size(), 0);

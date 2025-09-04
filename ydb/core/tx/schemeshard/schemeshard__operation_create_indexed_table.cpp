@@ -129,8 +129,6 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         const auto& indexName = indexDescription.GetName();
 
         switch (GetIndexType(indexDescription)) {
-            case NKikimrSchemeOp::EIndexTypeInvalid:
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Invalid index type")};
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 // no feature flag, everything is fine

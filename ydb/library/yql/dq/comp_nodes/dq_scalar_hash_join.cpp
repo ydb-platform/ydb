@@ -1,4 +1,3 @@
-
 #include "dq_scalar_hash_join.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
@@ -11,35 +10,30 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
-class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHashJoinWrapper> {
-private:
-    using TBaseComputation = TStatefulWideFlowComputationNode<TScalarHashJoinWrapper>;
-
+class TScalarHashJoinState : public TComputationValue<TScalarHashJoinState> {
+    using TBase = TComputationValue<TScalarHashJoinState>;
 public:
-    TScalarHashJoinWrapper(
-        TComputationMutables&       mutables,
-        IComputationWideFlowNode*   leftFlow,
-        IComputationWideFlowNode*   rightFlow,
-        const TVector<TType*>&&     resultItemTypes,
-        const TVector<TType*>&&     leftItemTypes,
-        const TVector<ui32>&&       leftKeyColumns,
-        const TVector<TType*>&&     rightItemTypes,
-        const TVector<ui32>&&       rightKeyColumns
-    )
-        : TBaseComputation(mutables, nullptr, EValueRepresentation::Boxed)
-        , LeftFlow_(leftFlow)
-        , RightFlow_(rightFlow)
-        , ResultItemTypes_(std::move(resultItemTypes))
-        , LeftItemTypes_(std::move(leftItemTypes))
-        , LeftKeyColumns_(std::move(leftKeyColumns))
-        , RightItemTypes_(std::move(rightItemTypes))
-        , RightKeyColumns_(std::move(rightKeyColumns))
 
-    {}
+    TScalarHashJoinState(TMemoryUsageInfo* memInfo,
+        IComputationWideFlowNode* leftFlow, IComputationWideFlowNode* rightFlow,
+        const std::vector<ui32>& leftKeyColumns, const std::vector<ui32>& rightKeyColumns,
+        const std::vector<TType*>& leftColumnTypes, const std::vector<TType*>& rightColumnTypes, TComputationContext& ctx,
+        NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
+    :   TBase(memInfo)
+    ,   LeftFlow_(leftFlow)
+    ,   RightFlow_(rightFlow)
+    ,   LeftKeyColumns_(leftKeyColumns)
+    ,   RightKeyColumns_(rightKeyColumns)
+    ,   LeftColumnTypes_(leftColumnTypes)
+    ,   RightColumnTypes_(rightColumnTypes)
+    ,   Logger_(logger)
+    ,   LogComponent_(logComponent)
+    {
+        Y_UNUSED(ctx);
+        UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Debug, "TScalarHashJoinState created");
+    }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
-        Y_UNUSED(state);
-
+    EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         if (!LeftFinished_) {
             auto result = LeftFlow_->FetchValues(ctx, output);
             if (result == EFetchResult::One) {
@@ -70,6 +64,66 @@ public:
     }
 
 private:
+    IComputationWideFlowNode* const LeftFlow_;
+    IComputationWideFlowNode* const RightFlow_;
+
+    bool LeftFinished_ = false;
+    bool RightFinished_ = false;
+
+    const std::vector<ui32> LeftKeyColumns_;
+    const std::vector<ui32> RightKeyColumns_;
+    const std::vector<TType*> LeftColumnTypes_;
+    const std::vector<TType*> RightColumnTypes_;
+
+    const NUdf::TLoggerPtr Logger_;
+    const NUdf::TLogComponentId LogComponent_;
+};
+
+class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHashJoinWrapper> {
+private:
+    using TBaseComputation = TStatefulWideFlowComputationNode<TScalarHashJoinWrapper>;
+
+public:
+    TScalarHashJoinWrapper(
+        TComputationMutables&       mutables,
+        IComputationWideFlowNode*   leftFlow,
+        IComputationWideFlowNode*   rightFlow,
+        const TVector<TType*>&&     resultItemTypes,
+        const TVector<TType*>&&     leftColumnTypes,
+        const TVector<ui32>&&       leftKeyColumns,
+        const TVector<TType*>&&     rightColumnTypes,
+        const TVector<ui32>&&       rightKeyColumns
+    )
+        : TBaseComputation(mutables, nullptr, EValueRepresentation::Boxed)
+        , LeftFlow_(leftFlow)
+        , RightFlow_(rightFlow)
+        , ResultItemTypes_(std::move(resultItemTypes))
+        , LeftColumnTypes_(std::move(leftColumnTypes))
+        , LeftKeyColumns_(std::move(leftKeyColumns))
+        , RightColumnTypes_(std::move(rightColumnTypes))
+        , RightKeyColumns_(std::move(rightKeyColumns))
+
+    {}
+
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
+        if (state.IsInvalid()) {
+            MakeState(ctx, state);
+        }
+        return static_cast<TScalarHashJoinState*>(state.AsBoxed().Get())->FetchValues(ctx, output);
+    }
+
+private:
+    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+            NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
+            NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("ScalarHashJoin");
+            UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
+
+            state = ctx.HolderFactory.Create<TScalarHashJoinState>(
+                LeftFlow_, RightFlow_, LeftKeyColumns_, RightKeyColumns_,
+                LeftColumnTypes_, RightColumnTypes_,
+                ctx, logger, logComponent);
+    }
+
     void RegisterDependencies() const final {
         FlowDependsOnBoth(LeftFlow_, RightFlow_);
     }
@@ -79,13 +133,10 @@ private:
     IComputationWideFlowNode* const RightFlow_;
 
     const TVector<TType*>   ResultItemTypes_;
-    const TVector<TType*>   LeftItemTypes_;
+    const TVector<TType*>   LeftColumnTypes_;
     const TVector<ui32>     LeftKeyColumns_;
-    const TVector<TType*>   RightItemTypes_;
+    const TVector<TType*>   RightColumnTypes_;
     const TVector<ui32>     RightKeyColumns_;
-    
-    mutable bool LeftFinished_ = false;
-    mutable bool RightFinished_ = false;
 };
 
 } // namespace
@@ -151,7 +202,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
         ctx.Mutables,
         leftFlow,
         rightFlow,
-        std::move(leftFlowItems), // Используем тип левого потока как результат
+        std::move(leftFlowItems),
         std::move(leftFlowItems),
         std::move(leftKeyColumns),
         std::move(rightFlowItems),

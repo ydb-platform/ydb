@@ -429,6 +429,20 @@
             "uri": "file://test.test_datetime-date_tz_expand_gmt-default.txt-Results_/extracted"
         }
     ],
+    "test.test[except-except_2025_02--Debug]": [
+        {
+            "checksum": "4be5b2f4d90d943f26abd15bcca8ae6b",
+            "size": 672,
+            "uri": "https://{canondata_backend}/1899731/56a3a9031b56fa4015832265c511adaf881768c5/resource.tar.gz#test.test_except-except_2025_02--Debug_/opt.yql"
+        }
+    ],
+    "test.test[except-except_2025_02--Results]": [
+        {
+            "checksum": "62cd1151c69eb668ee2defe88b79d83f",
+            "size": 638,
+            "uri": "https://{canondata_backend}/1899731/56a3a9031b56fa4015832265c511adaf881768c5/resource.tar.gz#test.test_except-except_2025_02--Results_/results.txt"
+        }
+    ],
     "test.test[expr-cast_utf8-default.txt-Debug]": [
         {
             "checksum": "ae79454812605fa62fea5f6ca73684de",

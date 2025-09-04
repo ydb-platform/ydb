@@ -1477,7 +1477,9 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
 
         const NSQLv1Generated::TToken& token = nextBlock.GetRule_union_op1().GetToken1();
         TString nextOp = ToLowerUTF8(Token(token));
-        if (nextOp != "union" && !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3))) {
+        if (nextOp != "union" &&
+            !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3)) &&
+            !Ctx_.ExceptIntersectBefore202503) {
             Ctx_.Error(Ctx_.TokenPosition(token))
                 << "EXCEPT/INTERSECT is not available before version 2025.03";
             return nullptr;
@@ -1486,7 +1488,9 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
         if (nextBlock.GetRule_union_op1().HasBlock2()) {
             const NSQLv1Generated::TToken& token = nextBlock.GetRule_union_op1().GetBlock2().GetToken1();
             const TString qualifier = ToLowerUTF8(Token(token));
-            if (qualifier == "distinct" && !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3))) {
+            if (qualifier == "distinct" &&
+                !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3)) &&
+                !Ctx_.ExceptIntersectBefore202503) {
                 Ctx_.Error(Ctx_.TokenPosition(token))
                     << "UNION DISTINCT is not available before version 2025.03";
                 return nullptr;
@@ -1569,7 +1573,8 @@ TSourcePtr TSqlSelect::BuildIntersection(
         const auto& nextBlock = tail[i];
 
         const NSQLv1Generated::TToken& token = nextBlock.GetRule_intersect_op1().GetToken1();
-        if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3))) {
+        if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3)) &&
+            !Ctx_.ExceptIntersectBefore202503) {
             Ctx_.Error(Ctx_.TokenPosition(token))
                 << "EXCEPT/INTERSECT is not available before version 2025.03";
             return nullptr;

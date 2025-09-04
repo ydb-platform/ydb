@@ -321,6 +321,7 @@ namespace NSQLTranslationV1 {
         bool RotateJoinTree = true;
         bool WarnUnnamedColumns = false;
         bool DiscoveryMode = false;
+        bool ExceptIntersectBefore202503 = true; // TODO(YQL-20367)
         bool EnableSystemColumns = true;
         bool DqEngineEnable = false;
         bool DqEngineForce = false;

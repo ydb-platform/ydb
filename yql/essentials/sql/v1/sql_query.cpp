@@ -3361,6 +3361,8 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TABLE_ELEM("AllowUnnamedColumns", WarnUnnamedColumns, false),
     TABLE_ELEM("WarnUnnamedColumns", WarnUnnamedColumns, true),
     TABLE_ELEM("DiscoveryMode", DiscoveryMode, true),
+    PAIRED_TABLE_ELEM("ExceptIntersectBefore202503", ExceptIntersectBefore202503),
+
     // TODO DqEngine/blockengine
     PAIRED_TABLE_ELEM("AnsiOptionalAs", AnsiOptionalAs),
     PAIRED_TABLE_ELEM("WarnOnAnsiAliasShadowing", WarnOnAnsiAliasShadowing),

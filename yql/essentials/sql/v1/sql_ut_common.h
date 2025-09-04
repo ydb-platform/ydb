@@ -2013,6 +2013,22 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
     }
 
+    Y_UNIT_TEST(DefaultYQL20367) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202502;
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT 1 EXCEPT SELECT 1;", settings);
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(DisabledYQL20367) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202502;
+        settings.Flags.emplace("DisableExceptIntersectBefore202503");
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT 1 EXCEPT SELECT 1;", settings);
+        UNIT_ASSERT_C(!res.IsOk(), res.Issues.ToString());
+    }
 
     Y_UNIT_TEST(DeclareDecimalParameter) {
         NYql::TAstParseResult res = SqlToYql("declare $value as Decimal(22,9); select $value as cnt;");

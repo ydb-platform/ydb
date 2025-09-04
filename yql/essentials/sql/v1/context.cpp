@@ -41,6 +41,7 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
 
 typedef bool TContext::*TPragmaField;
 
+// TODO(vitya-smirnov): register thsese names automatically using TABLE_ELEM macro.
 THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"AnsiOptionalAs", &TContext::AnsiOptionalAs},
     {"WarnOnAnsiAliasShadowing", &TContext::WarnOnAnsiAliasShadowing},
@@ -75,6 +76,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"FailOnGroupByExprOverride", &TContext::FailOnGroupByExprOverride},
     {"OptimizeSimpleILIKE", &TContext::OptimizeSimpleIlike},
     {"DebugPositions", &TContext::DebugPositions},
+    {"ExceptIntersectBefore202503", &TContext::ExceptIntersectBefore202503},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;

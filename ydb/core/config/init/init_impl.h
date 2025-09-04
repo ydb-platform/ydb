@@ -1489,6 +1489,7 @@ public:
         if (!result) {
             return StartWithLocalConfig();
         }
+
         NKikimrConfig::TAppConfig yamlConfig = GetYamlConfigFromResult(*result, Labels);
         NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig);
 

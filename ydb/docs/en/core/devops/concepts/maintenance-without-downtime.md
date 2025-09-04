@@ -83,10 +83,6 @@ To check if the actions of a maintenance task can be performed, the CMS sequenti
 
 The action can be performed if the checks are successful, and temporary locks are acquired on the checked nodes, hosts, or disks. The CMS then considers the next group of actions. Temporary locks help to understand whether the actions requested in different groups conflict with each other. Once the check is complete, the temporary locks are released.
 
-## Bridge Mode {#bridge-mode}
-
-If the cluster uses a bridge mode configuration, limits are set and availability checks are performed independently for each pile.
-
 ## Examples {#examples}
 
 The [ydbops](../../reference/ydbops/index.md) utility tool uses CMS for cluster maintenance without downtime. You can also use the CMS directly through the [gRPC API](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/grpc/draft/ydb_maintenance_v1.proto).

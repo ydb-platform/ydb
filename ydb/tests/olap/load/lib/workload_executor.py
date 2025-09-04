@@ -947,7 +947,8 @@ class WorkloadTestBase(LoadSuiteBase):
         )
 
         self._stop_nemesis()
-        YdbCluster.wait_ydb_alive(30)
+        logging.info("=== YdbCluster.wait_ydb_alive(30) ===")
+        logging.info(YdbCluster.wait_ydb_alive(30))
 
         # ФАЗА 3: РЕЗУЛЬТАТЫ
         final_result = self._finalize_workload_results(

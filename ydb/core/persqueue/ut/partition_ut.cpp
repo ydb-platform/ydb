@@ -2657,6 +2657,7 @@ Y_UNIT_TEST_F(DataTxCalcPredicateOk, TPartitionTxTestHelper)
     auto tx2 = MakeAndSendWriteTx({{"src1", {1, 10}}});
     WaitWriteInfoRequest(tx2, true);
     SendTxCommit(tx1);
+    EmulateKVTablet();
     Cerr << "Wait second predicate result " << Endl;
     WaitTxPredicateReply(tx2);
     SendTxCommit(tx2);
@@ -3010,7 +3011,7 @@ Y_UNIT_TEST_F(DifferentWriteTxBatchingOptions, TPartitionTxTestHelper) {
     EmulateKVTablet();
     WaitBatchCompletion(1);
     WaitCommitDone(tx);
-    EmulateKVTablet();
+    //EmulateKVTablet();
     WaitImmediateTxComplete(immTx, true);
     }
 }
@@ -3127,6 +3128,8 @@ Y_UNIT_TEST_F(ConflictingCommitsInSeveralBatches, TPartitionTxTestHelper) {
     WaitBatchCompletion(1); // tx1
     ExpectNoTxPredicateReply();
     SendTxCommit(tx1);
+    WaitKvRequest();
+    SendKvResponse();
 
     WaitTxPredicateReply(tx2);
     SendTxCommit(tx2);
@@ -3176,6 +3179,8 @@ Y_UNIT_TEST_F(ConflictingCommitFails, TPartitionTxTestHelper) {
     WaitBatchCompletion(1 + 1);
 
     SendTxCommit(tx1);
+    WaitKvRequest();
+    SendKvResponse();
     WaitTxPredicateFailure(tx2);
     SendTxRollback(tx2);
 

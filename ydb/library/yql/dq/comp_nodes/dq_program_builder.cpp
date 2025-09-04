@@ -150,7 +150,7 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftStream);
     callableBuilder.Add(rightStream);
-    callableBuilder.Add(NewDataLiteral((ui32)joinKind));
+    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(joinKind)));
     callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
     callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
 
@@ -181,7 +181,7 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftFlow);
     callableBuilder.Add(rightFlow);
-    callableBuilder.Add(NewDataLiteral((ui32)joinKind));
+    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(joinKind)));
     callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
     callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
 

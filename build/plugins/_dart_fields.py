@@ -390,15 +390,10 @@ class CustomDependencies:
         return {cls.KEY: " ".join(custom_deps)}
 
     @classmethod
-    def depends_with_wrapper_script(cls, unit, flat_args, spec_args):
+    def depends_with_linter(cls, unit, flat_args, spec_args):
         deps = spec_args.get('DEPENDS', [])
         for dep in deps:
             unit.ondepends(dep)
-        # FIXME: Workaround to get wrapper scripts exported to opensource.
-        # Note that we don't include it in CUSTOM-DEPENDENCIES. Actual build is undesired.
-        # Need to figure out a better way to make scripts dependecies.
-        script = spec_args['WRAPPER_SCRIPT'][0]
-        unit.ondepends(os.path.dirname(script))
         return {cls.KEY: " ".join(deps)}
 
     @classmethod
@@ -599,7 +594,8 @@ class LintWrapperScript:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        return {cls.KEY: spec_args['WRAPPER_SCRIPT'][0]}
+        if spec_args.get('WRAPPER_SCRIPT'):
+            return {cls.KEY: spec_args['WRAPPER_SCRIPT'][0]}
 
 
 class LintConfigs:

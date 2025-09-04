@@ -107,7 +107,7 @@ LINTER_FIELDS_BASE = (
     df.TestEnv.value,
     df.UseArcadiaPython.value,
     df.LintFileProcessingTime.from_macro_args,
-    df.CustomDependencies.depends_with_wrapper_script,
+    df.CustomDependencies.depends_with_linter,
 )
 
 tidy_config_map = None

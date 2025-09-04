@@ -5270,27 +5270,6 @@ bool TSqlTranslation::ParseViewQuery(
 
 namespace {
 
-static std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token, bool antlr4) {
-    if (1 == token.GetLine() && 0 == token.GetColumn()) {
-        return 0;
-    }
-
-    TPosition pos = {0, 1};
-    TTextWalker walker(pos, antlr4);
-
-    std::string::size_type position = 0;
-    for (char c : query) {
-        walker.Advance(c);
-        ++position;
-
-        if (pos.Row == token.GetLine() && pos.Column == token.GetColumn()) {
-            return position;
-        }
-    }
-
-    return std::string::npos;
-}
-
 static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
     static const TString statementSeparator = ";\n";
 
@@ -5343,6 +5322,27 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
     }
 }
 
+} // anonymous namespace
+
+std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token, bool antlr4) {
+    if (1 == token.GetLine() && 0 == token.GetColumn()) {
+        return 0;
+    }
+
+    TPosition pos = {0, 1};
+    TTextWalker walker(pos, antlr4);
+
+    std::string::size_type position = 0;
+    for (char c : query) {
+        walker.Advance(c);
+        ++position;
+
+        if (pos.Row == token.GetLine() && pos.Column == token.GetColumn()) {
+            return position;
+        }
+    }
+
+    return std::string::npos;
 }
 
 bool TSqlTranslation::ParseTransferLambda(

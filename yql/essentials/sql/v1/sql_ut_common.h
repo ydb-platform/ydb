@@ -9393,18 +9393,16 @@ USE hahn;
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["__query_text"]);
     }
 
-    Y_UNIT_TEST(CreateStreamingQueryWithSettings) {
-        NYql::TAstParseResult res = SqlToYql(R"sql(
+    Y_UNIT_TEST(CreateStreamingQueryCrlfCheck) {
+        NYql::TAstParseResult res = SqlToYql(TStringBuilder() << R"sql(
 USE plato;
 -- Some comment
-CREATE STREAMING QUERY MyQuery WITH (
-    RUN = TRUE,
-    RESOURCE_POOL = my_pool
-) AS DO BEGIN
+CREATE STREAMING QUERY MyQuery AS DO )sql" << "\r" << R"sql(BEGIN
 USE plato;
 $source = SELECT * FROM Input;
 INSERT INTO Output1 SELECT * FROM $source;
-INSERT INTO Output2 SELECT * FROM $source;END DO;
+INSERT INTO Output2 SELECT * FROM $source;
+END DO;
 USE hahn;
 -- Other comment
         )sql");
@@ -9416,7 +9414,42 @@ USE hahn;
             }
 
             if (word == "__query_text") {
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;") '('"resource_pool" '"my_pool") '('"run" (Bool '"true")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n")))#");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("createObject"), 0}, {TString("__query_text"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["createObject"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["__query_text"]);
+    }
+
+    Y_UNIT_TEST(CreateStreamingQueryWithSettings) {
+        NYql::TAstParseResult res = SqlToYql(TStringBuilder() << R"sql(
+USE plato;
+-- Some comment
+CREATE STREAMING QUERY MyQuery WITH (
+    RUN = TRUE,
+    RESOURCE_POOL = my_pool
+) AS DO )sql" << "\r" << R"sql(BEGIN
+USE plato;
+$source = SELECT * FROM Input;
+INSERT INTO Output1 SELECT * FROM $source;
+INSERT INTO Output2 SELECT * FROM $source;
+END DO;
+USE hahn;
+-- Other comment
+        )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToOneLineString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "createObject") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_ast" (block '()#");
+            }
+
+            if (word == "__query_text") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n") '('"resource_pool" '"my_pool") '('"run" (Bool '"true")))#");
             }
         };
 
@@ -9548,14 +9581,15 @@ USE hahn;
     }
 
     Y_UNIT_TEST(AlterStreamingQuerySetQuery) {
-        NYql::TAstParseResult res = SqlToYql(R"sql(
+        NYql::TAstParseResult res = SqlToYql(TStringBuilder() << R"sql(
 USE plato;
 -- Some comment
-ALTER STREAMING QUERY MyQuery AS DO BEGIN
+ALTER STREAMING QUERY MyQuery AS DO )sql" << "\r" << R"sql(BEGIN
 USE plato;
 $source = SELECT * FROM Input;
 INSERT INTO Output1 SELECT * FROM $source;
-INSERT INTO Output2 SELECT * FROM $source;END DO;
+INSERT INTO Output2 SELECT * FROM $source;
+END DO;
 USE hahn;
 -- Other comment
         )sql");
@@ -9567,7 +9601,7 @@ USE hahn;
             }
 
             if (word == "__query_text") {
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n")))#");
             }
         };
 
@@ -9754,5 +9788,73 @@ USE hahn;
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TestGetQueryPosition) {
+    Y_UNIT_TEST(TestTokenFinding) {
+        const TString query = TStringBuilder() << R"(
+)" << "\r" << R"(BEGIN)" << "\r\n" << R"(
+   )" << "\n\r" << R"(END
+$b = ()" << "\r\r" << R"($x) -> {
+
+)" << "\n" << R"(
+-- comment A
+return /*Комментарий*/ $x;
+-- Comment B
+};
+)";
+
+        NSQLTranslationV1::TLexers lexers;
+#if ANTLR_VER == 3
+        bool antlr4 = false;
+        lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+#else
+        bool antlr4 = true;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+#endif
+
+        ui64 lexerPosition = 0;
+        const auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
+            NSQLv1Generated::TToken tokenProto;
+            tokenProto.SetLine(token.Line);
+            tokenProto.SetColumn(token.LinePos);
+            UNIT_ASSERT_VALUES_EQUAL_C(lexerPosition, NSQLTranslationV1::GetQueryPosition(query, tokenProto, antlr4), token.Line << ":" << token.LinePos << ":'" << token.Content << "'");
+
+            lexerPosition += token.Content.size();
+        };
+
+        const auto lexer = NSQLTranslationV1::MakeLexer(lexers, false, antlr4);
+
+        NYql::TIssues issues;
+        const bool result = lexer->Tokenize(query, {}, onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS);
+        UNIT_ASSERT_C(result, issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(TestTokenMissing) {
+        const TString query = "BEGIN /*Комментарий*/ \nEND";
+        NSQLv1Generated::TToken tokenProto;
+
+#if ANTLR_VER == 3
+        bool antlr4 = false;
+#else
+        bool antlr4 = true;
+#endif
+
+        tokenProto.SetLine(3);
+        tokenProto.SetColumn(0);
+        UNIT_ASSERT_VALUES_EQUAL(std::string::npos, NSQLTranslationV1::GetQueryPosition(query, tokenProto, antlr4));
+
+        tokenProto.SetLine(2);
+        tokenProto.SetColumn(4);
+        UNIT_ASSERT_VALUES_EQUAL(std::string::npos, NSQLTranslationV1::GetQueryPosition(query, tokenProto, antlr4));
+
+        tokenProto.SetLine(1);
+        tokenProto.SetColumn(34);
+        UNIT_ASSERT_VALUES_EQUAL(std::string::npos, NSQLTranslationV1::GetQueryPosition(query, tokenProto, antlr4));
+
+        tokenProto.SetLine(1);
+        tokenProto.SetColumn(0);
+        UNIT_ASSERT_VALUES_EQUAL(0, NSQLTranslationV1::GetQueryPosition(query, tokenProto, antlr4));
     }
 }

@@ -301,8 +301,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
             *index.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
             break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext:
+            *index.mutable_global_fulltext_index() = Ydb::Table::GlobalFulltextIndex();
+            break;
         default:
-            Y_ABORT("Unreachable");
+            Y_ENSURE(false, InvalidIndexType(info.IndexType));
         }
     } else if (info.IsBuildColumns()) {
         for(const auto& column : info.BuildColumns) {

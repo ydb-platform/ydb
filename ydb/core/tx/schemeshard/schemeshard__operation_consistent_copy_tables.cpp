@@ -50,11 +50,23 @@ static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NS
         *operation->MutableDataColumnNames()->Add() = dataColumn;
     }
 
-    if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        *operation->MutableVectorIndexKmeansTreeDescription() =
-            std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
-    } else if (!std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription)) {
-        return {};
+    switch (indexInfo->Type) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            // no specialized index description
+            Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            *operation->MutableVectorIndexKmeansTreeDescription() =
+                std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            *operation->MutableFulltextIndexDescription() =
+                std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
+            break;
+        default:
+            return {}; // reject
     }
 
     return scheme;

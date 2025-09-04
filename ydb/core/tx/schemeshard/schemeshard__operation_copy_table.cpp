@@ -852,12 +852,24 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             for (const auto& dataColumn: indexInfo->IndexDataColumns) {
                 *operation->MutableDataColumnNames()->Add() = dataColumn;
             }
-            if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-                *operation->MutableVectorIndexKmeansTreeDescription() =
-                    std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
-            } else if (!std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription)) {
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
-                                     TStringBuilder{} << "Copy table doesn't support table with index type " << indexInfo->Type)};
+
+            switch (indexInfo->Type) {
+                case NKikimrSchemeOp::EIndexTypeGlobal:
+                case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                    // no specialized index description
+                    Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+                    break;
+                case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                    *operation->MutableVectorIndexKmeansTreeDescription() =
+                        std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+                    *operation->MutableFulltextIndexDescription() =
+                        std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
+                    break;
+                default:
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, InvalidIndexType(indexInfo->Type))};
             }
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));

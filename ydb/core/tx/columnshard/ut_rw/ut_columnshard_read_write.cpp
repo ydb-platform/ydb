@@ -554,7 +554,6 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
     csControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
-    csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Minutes(5));
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -2428,8 +2427,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csDefaultControllerGuard->SetOverrideMaxReadStaleness(TDuration::Minutes(5));
 
         TActorId sender = runtime.AllocateEdgeActor();
+
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
         TDispatchOptions options;

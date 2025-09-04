@@ -1,6 +1,10 @@
 items:
 - name: Глоссарий
   href: glossary.md
+- name: Платформа
+  include:
+    path: platform/toc_p.yaml
+    mode: link
 - name: Архитектура
   href: architecture.md
 - name: Соединение с БД
@@ -12,6 +16,8 @@ items:
     mode: link
 - name: Топология кластера
   href: topology.md
+- name: Основные технологии
+  href: cluster_structure.md
 - name: Транзакции
   href: transactions.md
 - name: Вторичные индексы

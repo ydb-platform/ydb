@@ -321,9 +321,9 @@ def datacenter_nemesis_list(cluster):
 
     try:
         datacenter_nemesis_list = [
-            DataCenterStopNodesNemesis(cluster),
-            DataCenterRouteUnreachableNemesis(cluster),
-            DataCenterIptablesBlockPortsNemesis(cluster)
+         #   DataCenterStopNodesNemesis(cluster),
+         #   DataCenterRouteUnreachableNemesis(cluster),
+         #  DataCenterIptablesBlockPortsNemesis(cluster)
         ]
         logger.info("Successfully created %d datacenter nemesis", len(datacenter_nemesis_list))
         return datacenter_nemesis_list

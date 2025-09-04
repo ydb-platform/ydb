@@ -6,14 +6,15 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_scalar_hash_join.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_program_builder.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
 
-NUdf::TUnboxedValue DoTestDqBlockHashJoin(
+NUdf::TUnboxedValue DoTestDqScalarHashJoin(
     TDqSetup<false>& setup,
     TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns,
     TType* rightType, NUdf::TUnboxedValue&& rightListValue, const TVector<ui32>& rightKeyColumns,
@@ -23,11 +24,27 @@ NUdf::TUnboxedValue DoTestDqBlockHashJoin(
 
     TRuntimeNode leftList = pb.Arg(leftType);
     TRuntimeNode rightList = pb.Arg(rightType);
-    const auto leftStream = ToWideStream(pb, leftList);
-    const auto rightStream = ToWideStream(pb, rightList);
-    const auto joinNode = pb.DqBlockHashJoin(leftStream, rightStream, joinKind, leftKeyColumns, rightKeyColumns, leftStream.GetStaticType());
+    const auto leftFlow = ToWideFlow(pb, leftList);
+    const auto rightFlow = ToWideFlow(pb, rightList);
     
-    const auto resultNode = FromWideStream(pb, joinNode);
+    TVector<TType*> resultTypes;
+    
+    auto leftComponents = GetWideComponents(leftFlow.GetStaticType());
+    for (auto* type : leftComponents) {
+        resultTypes.push_back(type);
+    }
+    
+    auto rightComponents = GetWideComponents(rightFlow.GetStaticType());
+    for (auto* type : rightComponents) {
+        resultTypes.push_back(type);
+    }
+    
+    auto resultMultiType = pb.NewMultiType(resultTypes);
+    auto resultFlowType = pb.NewFlowType(resultMultiType);
+    
+    const auto joinNode = pb.DqScalarHashJoin(leftFlow, rightFlow, joinKind, leftKeyColumns, rightKeyColumns, resultFlowType);
+    
+    const auto resultNode = FromWideFlow(pb, joinNode);
 
     const auto graph = setup.BuildGraph(resultNode, {leftList.GetNode(), rightList.GetNode()});
     auto& ctx = graph->GetContext();
@@ -37,13 +54,13 @@ NUdf::TUnboxedValue DoTestDqBlockHashJoin(
     return graph->GetValue();
 }
 
-void RunTestDqBlockHashJoin(
+void RunTestDqScalarHashJoin(
     TDqSetup<false>& setup, EJoinKind joinKind,
     TType* expectedType, const NUdf::TUnboxedValue& expected,
     TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns,
     TType* rightType, NUdf::TUnboxedValue&& rightListValue, const TVector<ui32>& rightKeyColumns
 ) {
-    const auto got = DoTestDqBlockHashJoin(
+    const auto got = DoTestDqScalarHashJoin(
         setup,
         leftType, std::move(leftListValue), leftKeyColumns,
         rightType, std::move(rightListValue), rightKeyColumns,
@@ -56,7 +73,7 @@ void RunTestDqBlockHashJoin(
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TDqBlockHashJoinBasicTest) {
+Y_UNIT_TEST_SUITE(TDqScalarHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestBasicPassthrough) {
         TDqSetup<false> setup(GetDqNodeFactory());
@@ -74,7 +91,7 @@ Y_UNIT_TEST_SUITE(TDqBlockHashJoinBasicTest) {
         auto [rightType, rightList] = ConvertVectorsToTuples(setup, rightKeys, rightValues);
         auto [expectedType, expected] = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
 
-        RunTestDqBlockHashJoin(
+        RunTestDqScalarHashJoin(
             setup, EJoinKind::Inner,
             expectedType, expected,
             leftType, std::move(leftList), {0},
@@ -82,7 +99,7 @@ Y_UNIT_TEST_SUITE(TDqBlockHashJoinBasicTest) {
         );
     }
 
-    Y_UNIT_TEST(TestEmptyStreams) {
+    Y_UNIT_TEST(TestEmptyFlows) {
         TDqSetup<false> setup(GetDqNodeFactory());
         
         TVector<ui64> emptyKeys;
@@ -92,7 +109,7 @@ Y_UNIT_TEST_SUITE(TDqBlockHashJoinBasicTest) {
         auto [rightType, rightList] = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
         auto [expectedType, expected] = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
 
-        RunTestDqBlockHashJoin(
+        RunTestDqScalarHashJoin(
             setup, EJoinKind::Inner,
             expectedType, expected,
             leftType, std::move(leftList), {0},
@@ -100,7 +117,54 @@ Y_UNIT_TEST_SUITE(TDqBlockHashJoinBasicTest) {
         );
     }
 
-} // Y_UNIT_TEST_SUITE
+    Y_UNIT_TEST(TestEmptyLeft) {
+        TDqSetup<false> setup(GetDqNodeFactory());
+        
+        TVector<ui64> emptyKeys;
+        TVector<TString> emptyValues;
+        
+        TVector<ui64> rightKeys = {1, 2, 3};
+        TVector<TString> rightValues = {"x", "y", "z"};
+
+        TVector<ui64> expectedKeys = {1, 2, 3};
+        TVector<TString> expectedValues = {"x", "y", "z"};
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+
+        RunTestDqScalarHashJoin(
+            setup, EJoinKind::Inner,
+            expectedType, expected,
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
+        );
+    }
+
+    Y_UNIT_TEST(TestEmptyRight) {
+        TDqSetup<false> setup(GetDqNodeFactory());
+        
+        TVector<ui64> leftKeys = {1, 2, 3};
+        TVector<TString> leftValues = {"a", "b", "c"};
+        
+        TVector<ui64> emptyKeys;
+        TVector<TString> emptyValues;
+
+        TVector<ui64> expectedKeys = {1, 2, 3};
+        TVector<TString> expectedValues = {"a", "b", "c"};
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+
+        RunTestDqScalarHashJoin(
+            setup, EJoinKind::Inner,
+            expectedType, expected,
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
+        );
+    }
+}
 
 } // namespace NMiniKQL
-} // namespace NKikimr 
+} // namespace NKikimr

@@ -147,6 +147,9 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     const auto joinType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(joinType->IsFlow(), "Expected WideFlow as a resulting flow");
+    const auto joinComponents = GetWideComponents(joinType);
+    MKQL_ENSURE(joinComponents.size() > 0, "Expected at least one column");
+    const TVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsFlow(), "Expected WideFlow as a left flow");
@@ -202,7 +205,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
         ctx.Mutables,
         leftFlow,
         rightFlow,
-        std::move(leftFlowItems),
+        std::move(joinItems),
         std::move(leftFlowItems),
         std::move(leftKeyColumns),
         std::move(rightFlowItems),

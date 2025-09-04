@@ -59,7 +59,7 @@ namespace NKafka {
                 Die(ctx);
                 return;
             }
-            Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
+            Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
             KAFKA_LOG_D("Bootstrapping actor for transactional producer. Sending init table request to KQP.");
             Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
             Become(&TKafkaInitProducerIdActor::StateWork);

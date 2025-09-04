@@ -2130,10 +2130,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         uuidInsertAndCheck(session, tableName, inputs);
     }
 
-    Y_UNIT_TEST(CreateTableWithFamiliesRegular) {
+    Y_UNIT_TEST_TWIN(CreateTableWithFamiliesRegular, UseQueryService) {
         TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
         TString tableName = "/Root/TableWithFamiliesRegular";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2144,11 +2157,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 PRIMARY KEY (Key),
                 FAMILY Family1 (
                      DATA = "test",
-                     COMPRESSION = "off"
+                     COMPRESSION = "off",
+                     CACHE_MODE = "regular"
                 ),
                 FAMILY Family2 ()
             );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        auto result = executeGeneric(query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
@@ -2159,6 +2173,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             if (family.GetName() == "Family1") {
                 UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
                 UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::None);
+                UNIT_ASSERT_VALUES_EQUAL(family.GetCacheMode().value(), EColumnFamilyCacheMode::Regular);
             } else {
                 UNIT_ASSERT(family.GetName() == "default" || family.GetName() == "Family2");
             }
@@ -2253,10 +2268,139 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables", resultAlter.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(CreateTableWithDefaultFamily) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(CreateFamilyWithCacheModeFeatureDisabled, UseQueryService) {
+        TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
+        TString tableName = "/Root/TableWithWithCacheMode";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value1 String FAMILY Family1,
+                Value2 Uint32,
+                PRIMARY KEY (Key),
+                FAMILY Family1 (
+                     DATA = "test",
+                     CACHE_MODE = "in_memory"
+                ),
+            );)";
+        auto result = executeGeneric(query);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Setting cache_mode is not allowed", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(AlterCacheModeInColumnFamilyFeatureDisabled, UseQueryService) {
+        TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
+        TString tableName = "/Root/TableWithWithCacheMode";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value1 String FAMILY Family1,
+                Value2 Uint32,
+                PRIMARY KEY (Key),
+                FAMILY Family1 (
+                     DATA = "test"
+                ),
+            );)";
+        auto result = executeGeneric(query);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto queryAlter = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLE `)" << tableName << R"(` ALTER FAMILY Family1 SET CACHE_MODE "in_memory";)";
+        auto resultAlter = executeGeneric(queryAlter);
+        UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::GENERIC_ERROR, resultAlter.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Setting cache_mode is not allowed", resultAlter.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(AddColumnFamilyWithCacheModeFeatureDisabled, UseQueryService) {
+        TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
+        TString tableName = "/Root/TableWithWithCacheMode";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value1 String FAMILY Family1,
+                Value2 Uint32,
+                PRIMARY KEY (Key),
+                FAMILY Family1 (
+                     DATA = "test"
+                ),
+            );)";
+        auto result = executeGeneric(query);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto queryAlter = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLE `)" << tableName << R"(`
+                ADD FAMILY Family2 (
+                     DATA = "test",
+                     CACHE_MODE = "in_memory"
+                );)";
+        auto resultAlter = executeGeneric(queryAlter);
+        UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::GENERIC_ERROR, resultAlter.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Setting cache_mode is not allowed", resultAlter.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(CreateTableWithDefaultFamily, UseQueryService) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
         TString tableName = "/Root/TableWithDefaultFamily";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2267,14 +2411,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 PRIMARY KEY (Key),
                 FAMILY default (
                      DATA = "test",
-                     COMPRESSION = "lz4"
+                     COMPRESSION = "lz4",
+                     CACHE_MODE = "in_memory"
                 ),
                 FAMILY Family1 (
                      DATA = "test",
-                     COMPRESSION = "off"
+                     COMPRESSION = "off",
+                     CACHE_MODE = "regular"
                 )
             );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        auto result = executeGeneric(query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         {
@@ -2286,10 +2432,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 if (family.GetName() == "Family1") {
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::None);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCacheMode().value(), EColumnFamilyCacheMode::Regular);
                 } else {
                     UNIT_ASSERT(family.GetName() == "default");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::LZ4);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCacheMode().value(), EColumnFamilyCacheMode::InMemory);
                 }
             }
         }
@@ -2299,14 +2447,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ALTER TABLE `)" << tableName << R"(`
                 ADD FAMILY  Family2 (
                      DATA = "test",
-                     COMPRESSION = "off"
+                     COMPRESSION = "off",
+                     CACHE_MODE = "regular"
                 ),
                 ADD COLUMN Value3 Uint32 FAMILY Family1,
                 ADD COLUMN Value4 Uint32 FAMILY Family2,
                 DROP COLUMN Value2,
                 ALTER COLUMN Value1 SET FAMILY Family2,
-                ALTER FAMILY Family1 SET COMPRESSION "LZ4";)";
-        auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
+                ALTER FAMILY Family1 SET COMPRESSION "LZ4",
+                ALTER FAMILY Family1 SET CACHE_MODE "in_memory";)";
+        auto resultAlter1 = executeGeneric(queryAlter1);
         UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
 
         {
@@ -2318,13 +2468,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 if (family.GetName() == "Family1") {
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::LZ4);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCacheMode().value(), EColumnFamilyCacheMode::InMemory);
                 } else if (family.GetName() == "Family2") {
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::None);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCacheMode().value(), EColumnFamilyCacheMode::Regular);
                 } else {
                     UNIT_ASSERT(family.GetName() == "default");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::LZ4);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCacheMode().value(), EColumnFamilyCacheMode::InMemory);
                 }
             }
             const auto& columns = describeResult.GetTableDescription().GetColumns();
@@ -13054,7 +13207,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
     }
 
-    Y_UNIT_TEST(CrateWithWrongCodec) {
+    Y_UNIT_TEST(CreateWithWrongCodec) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
@@ -14205,6 +14358,97 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
 
         testHelper.RebootTablets("/Root/ColumnTableTest");
+    }
+
+    Y_UNIT_TEST(CreateTableWithCacheModeError) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableTableCacheModes(true);
+        TTestHelper testHelper(settings);
+
+        TString tableName = "/Root/ColumnTableTest";
+        auto session = testHelper.GetSession();
+        auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+            Key Uint64 NOT NULL,
+            Value1 String,
+            Value2 Uint32,
+            PRIMARY KEY (Key),
+            FAMILY family1 (
+                CACHE_MODE = "in_memory"
+            ))
+            WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            result.GetIssues().ToString(),
+            "Field `CACHE_MODE` is not supported for OLAP tables in column family 'family1'",
+            result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableWithCacheModeError) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableTableCacheModes(true);
+        TTestHelper testHelper(settings);
+
+        TString tableName = "/Root/ColumnTableTest";
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default"),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto alterFamilyCacheMode = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ALTER FAMILY default SET CACHE_MODE "in_memory";)";
+        auto session = testHelper.GetSession();
+        auto result = session.ExecuteSchemeQuery(alterFamilyCacheMode).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            result.GetIssues().ToString(),
+            "Field `CACHE_MODE` is not supported for OLAP tables in column family 'default'",
+            result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(AddColumnFamilyWithCacheModeError) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableTableCacheModes(true);
+        TTestHelper testHelper(settings);
+
+        TString tableName = "/Root/ColumnTableTest";
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+            TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        auto session = testHelper.GetSession();
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                        ADD FAMILY family1 (CACHE_MODE = "in_memory");)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            result.GetIssues().ToString(),
+            "Field `CACHE_MODE` is not supported for OLAP tables in column family 'family1'",
+            result.GetIssues().ToString());
+        }
     }
 }
 

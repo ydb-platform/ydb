@@ -975,9 +975,10 @@ void TColumnShard::Die(const TActorContext& ctx) {
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
-    Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
     if (SpaceWatcherId == TActorId{}) {
         delete SpaceWatcher;
+    } else {
+        Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
     }
     IActor::Die(ctx);
 }

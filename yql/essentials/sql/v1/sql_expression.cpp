@@ -429,8 +429,8 @@ TMaybe<TExprOrIdent> TSqlExpression::LiteralExpr(const TRule_literal_value& node
             return BuildLiteralTypedSmartStringOrId(Ctx_, value);
         }
         case TRule_literal_value::kAltLiteralValue4: {
-            Error() << Token(node.GetAlt_literal_value4().GetToken1())
-                    << " literal is not supported yet";
+            const auto& token = node.GetAlt_literal_value4().GetToken1();
+            Ctx_.Error(GetPos(token)) << Token(token) << " literal is not supported yet";
             break;
         }
         case TRule_literal_value::kAltLiteralValue5: {
@@ -439,18 +439,18 @@ TMaybe<TExprOrIdent> TSqlExpression::LiteralExpr(const TRule_literal_value& node
             break;
         }
         case TRule_literal_value::kAltLiteralValue6: {
-            Error() << Token(node.GetAlt_literal_value6().GetToken1())
-                    << " literal is not supported yet";
+            const auto& token = node.GetAlt_literal_value6().GetToken1();
+            Ctx_.Error(GetPos(token)) << Token(token) << " literal is not supported yet";
             break;
         }
         case TRule_literal_value::kAltLiteralValue7: {
-            Error() << Token(node.GetAlt_literal_value7().GetToken1())
-                    << " literal is not supported yet";
+            const auto& token = node.GetAlt_literal_value7().GetToken1();
+            Ctx_.Error(GetPos(token)) << Token(token) << " literal is not supported yet";
             break;
         }
         case TRule_literal_value::kAltLiteralValue8: {
-            Error() << Token(node.GetAlt_literal_value8().GetToken1())
-                    << " literal is not supported yet";
+            const auto& token = node.GetAlt_literal_value8().GetToken1();
+            Ctx_.Error(GetPos(token)) << Token(token) << " literal is not supported yet";
             break;
         }
         case TRule_literal_value::kAltLiteralValue9: {

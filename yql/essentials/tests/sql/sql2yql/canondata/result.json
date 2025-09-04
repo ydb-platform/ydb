@@ -12847,9 +12847,9 @@
     ],
     "test_sql_negative.test[expr-current_time-default.txt]": [
         {
-            "checksum": "e18bc91c98913889f1a6dabf1843205d",
-            "size": 82,
-            "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql_negative.test_expr-current_time-default.txt_/err_file.out"
+            "checksum": "b67009c8619bae7d2a02269dccd0f097",
+            "size": 95,
+            "uri": "https://{canondata_backend}/1936842/9cab98540c13bc1190bbd112c424c65825c8a3ef/resource.tar.gz#test_sql_negative.test_expr-current_time-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[flatten_by-struct_with_wrong_correlation-default.txt]": [

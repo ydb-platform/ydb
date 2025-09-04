@@ -267,12 +267,10 @@ public:
 };
 
 class TTopic 
-    : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription
-    , Ydb::Topic::CreateTopicRequest> {
+    : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription, Ydb::Topic::CreateTopicRequest> {
 private:
     class TConsumer 
-        : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer
-        , Ydb::Topic::Consumer> {
+        : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer, Ydb::Topic::Consumer> {
     public:
         TConsumer(ui64 number, bool important = false) {
             google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerScheme, number), &Scheme);

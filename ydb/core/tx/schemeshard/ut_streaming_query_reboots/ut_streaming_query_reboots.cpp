@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
         }
     }
 
-    Y_UNIT_TEST(CreateStreamingQueryWithReboots) {
+    Y_UNIT_TEST(CreateStreamingQuery) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             AsyncMkDir(runtime, ++t.TxId, "/MyRoot", "DirStreamingQuery");
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(SimpleDropStreamingQueryWithReboots) {
+    Y_UNIT_TEST(SimpleDropStreamingQuery) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropStreamingQueryWithReboots) {
+    Y_UNIT_TEST(DropStreamingQuery) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateDroppedStreamingQueryWithReboots) {
+    Y_UNIT_TEST(CreateDroppedStreamingQuery) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateDroppedStreamingQueryAndDropWithReboots) {
+    Y_UNIT_TEST(CreateDroppedStreamingQueryAndDrop) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterStreamingQueryWithReboots) {
+    Y_UNIT_TEST(AlterStreamingQuery) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {

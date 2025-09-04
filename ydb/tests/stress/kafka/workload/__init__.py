@@ -115,7 +115,7 @@ class Workload(unittest.TestCase):
                 totalMessCountTest += testCount
                 totalMessCountTarget += targetCount
 
-            print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest}," + \
+            print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest},"
                     "totalMessCountTarget = {totalMessCountTarget}")
             if i >= 1:
                 assert totalMessCountTest <= totalMessCountTarget, "Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \

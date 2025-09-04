@@ -116,12 +116,14 @@ Y_UNIT_TEST(Partition) {
 }
 
 
-Y_UNIT_TEST(PerPartition) {
+void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TString referenceDir) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     bool activeZone{false};
-    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, false, true);
+    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, firstClassCitizen, true);
     tc.Runtime->SetScheduledLimit(100);
+
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnablePartitionCounters(featureFlagEnabled);
 
     PQTabletPrepare({ .enablePartitionCounters = false }, {}, tc);
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
@@ -139,6 +141,7 @@ Y_UNIT_TEST(PerPartition) {
             "WriteTimeLagMsByCommittedPerPartition",
             "TimeSinceLastReadMsPerPartition",
             "WriteTimeLagMsByLastReadPerPartition",
+            "milliseconds",  // For FirstClassCitizen
         };
         for (const auto& name : names) {
             counters = std::regex_replace(counters, std::regex(name + ": \\d+"), name + ": 0");
@@ -155,7 +158,7 @@ Y_UNIT_TEST(PerPartition) {
     };
 
     TString counters = getCountersHtml();
-    TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_turned_off.html"));
+    TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_turned_off.html");
     UNIT_ASSERT(counters + "\n" == referenceCounters || counters == EMPTY_COUNTERS);
 
     {
@@ -175,8 +178,9 @@ Y_UNIT_TEST(PerPartition) {
         std::string counters = getCountersHtml();
         Cerr << "after write: " << counters << "\n";
         Cerr << "after write zeroed: " << zeroUnreliableValues(counters) << "\n";
-        TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_after_write.html"));
-        UNIT_ASSERT_VALUES_EQUAL(zeroUnreliableValues(counters) + "\n", referenceCounters);
+        TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_after_write.html");
+        counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");
+        UNIT_ASSERT_VALUES_EQUAL(counters, featureFlagEnabled ? referenceCounters : EMPTY_COUNTERS);
     }
 
     {
@@ -223,8 +227,9 @@ Y_UNIT_TEST(PerPartition) {
 
         TString counters = getCountersHtml();
         Cerr << "after read: " << counters << "\n";
-        TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_after_read.html"));
-        UNIT_ASSERT_VALUES_EQUAL(zeroUnreliableValues(counters) + "\n", referenceCounters);
+        TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_after_read.html");
+        counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");
+        UNIT_ASSERT_VALUES_EQUAL(counters, featureFlagEnabled ? referenceCounters : EMPTY_COUNTERS);
     }
 
     {
@@ -232,9 +237,20 @@ Y_UNIT_TEST(PerPartition) {
 
         PQTabletPrepare({ .enablePartitionCounters = false }, {}, tc);
         TString counters = getCountersHtml();
-        TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_turned_off.html"));
-        UNIT_ASSERT_VALUES_EQUAL(zeroUnreliableValues(counters) + "\n", referenceCounters);
+        TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_turned_off.html");
+        counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");
+        UNIT_ASSERT_VALUES_EQUAL(counters, featureFlagEnabled ? referenceCounters : EMPTY_COUNTERS);
     }
+}
+
+Y_UNIT_TEST(PartitionLevelCounters_Federation) {
+    PartitionLevelCounters(false, false, "federation");
+    PartitionLevelCounters(true, false, "federation");
+}
+
+Y_UNIT_TEST(PartitionLevelCounters_FirstClassCitizen) {
+    PartitionLevelCounters(false, true, "first_class_citizen");
+    PartitionLevelCounters(true, true, "first_class_citizen");
 }
 
 Y_UNIT_TEST(PartitionWriteQuota) {

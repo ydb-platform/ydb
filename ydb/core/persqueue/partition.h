@@ -500,6 +500,7 @@ private:
     ::NMonitoring::TDynamicCounterPtr GetPerPartitionCounterSubgroup() const;
     void SetupPerPartitionCounters();
     void ResetPerPartitionCounters();
+    bool PartitionCountersAreEnabled() const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

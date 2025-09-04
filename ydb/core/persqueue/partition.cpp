@@ -3083,7 +3083,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         OffloadActor = {};
     }
 
-    if (Config.GetEnablePartitionCounters()) {
+    if (PartitionCountersAreEnabled()) {
         SetupPerPartitionCounters();
     } else {
         ResetPerPartitionCounters();
@@ -4188,6 +4188,9 @@ void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
 }
 
 void TPartition::SetupPerPartitionCounters() {
+    if (!PartitionCountersAreEnabled()) {
+        return;
+    }
     if (WriteTimeLagMsByLastWritePerPartition) {
         // Don't recreate the counters if they already exist.
         return;

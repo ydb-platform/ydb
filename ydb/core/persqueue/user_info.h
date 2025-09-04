@@ -473,6 +473,7 @@ public:
     ::NMonitoring::TDynamicCounterPtr GetPartitionCounterSubgroup(const TActorContext& ctx) const;
     void SetupPerPartitionCounters(const TActorContext& ctx);
     void ResetPerPartitionCounters();
+    bool PartitionCountersAreEnabled() const;
 
 private:
 

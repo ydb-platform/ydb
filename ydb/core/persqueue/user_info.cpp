@@ -158,7 +158,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
 }
 
 ::NMonitoring::TDynamicCounterPtr TUsersInfoStorage::GetPartitionCounterSubgroup(const TActorContext& ctx) const {
-    if (!Config.GetEnablePartitionCounters()) {
+    if (!PartitionCountersAreEnabled()) {
         return nullptr;
     }
     auto counters = AppData(ctx)->Counters;
@@ -201,6 +201,10 @@ void TUsersInfoStorage::ResetPerPartitionCounters() {
     for (auto& userInfo : GetAll()) {
         userInfo.second.ResetPerPartitionCounters();
     }
+}
+
+bool TUsersInfoStorage::PartitionCountersAreEnabled() const {
+    return AppData()->FeatureFlags.GetEnablePartitionCounters() && Config.GetEnablePartitionCounters();
 }
 
 const TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) const {

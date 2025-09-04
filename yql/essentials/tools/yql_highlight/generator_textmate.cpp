@@ -231,7 +231,7 @@ namespace NSQLHighlight {
         }
     }
 
-    void GenerateTextMateJson(IOutputStream& out, const THighlighting& highlighting) {
+    void GenerateTextMateJson(IOutputStream& out, const THighlighting& highlighting, bool /* ansi */) {
         Print(out, ToJson(ToTextMateLanguage(highlighting)));
     }
 
@@ -258,7 +258,7 @@ namespace NSQLHighlight {
         }
 
     public:
-        void Write(IOutputStream& out, const THighlighting& highlighting) final {
+        void Write(IOutputStream& out, const THighlighting& highlighting, bool /* ansi */) final {
             const auto [bundle, info, syntax] = Paths(highlighting);
 
             out << "File " << bundle << "/" << info << ":" << '\n';
@@ -267,7 +267,7 @@ namespace NSQLHighlight {
             WriteSyntax(out, ToTextMateLanguage(highlighting));
         }
 
-        void Write(const TFsPath& path, const THighlighting& highlighting) final {
+        void Write(const TFsPath& path, const THighlighting& highlighting, bool /* ansi */) final {
             const auto [bundle, info, syntax] = Paths(highlighting);
 
             if (TString name = path.GetName(); !name.StartsWith(bundle)) {

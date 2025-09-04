@@ -1,5 +1,6 @@
 __all__ = [
     "BaseQueryTxMode",
+    "QueryExplainResultFormat",
     "QueryOnlineReadOnly",
     "QuerySerializableReadWrite",
     "QuerySnapshotReadOnly",
@@ -15,6 +16,7 @@ import logging
 
 from .base import (
     QueryClientSettings,
+    QueryExplainResultFormat,
     QueryStatsMode,
 )
 

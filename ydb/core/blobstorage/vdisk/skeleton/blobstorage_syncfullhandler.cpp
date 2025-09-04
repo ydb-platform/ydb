@@ -19,6 +19,7 @@ namespace NKikimr {
         TIntrusivePtr<THullCtx> HullCtx;
         TVDiskID SelfVDiskId;
         const TActorId ParentId;
+        const TActorId SyncLogActorId;
         std::shared_ptr<THull> Hull;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         std::shared_ptr<NMonGroup::TFullSyncGroup> FullSyncGroup;
@@ -158,6 +159,7 @@ namespace NKikimr {
                     Db->Config,
                     HullCtx,
                     SelfId(),
+                    SyncLogActorId,
                     Hull->GetIndexSnapshot(),
                     newSyncState,
                     SelfVDiskId,
@@ -279,6 +281,7 @@ namespace NKikimr {
                           const TIntrusivePtr<THullCtx> &hullCtx,
                           const TVDiskID &selfVDiskId,
                           const TActorId &parentId,
+                          const TActorId& syncLogActorId,
                           const std::shared_ptr<THull> &hull,
                           const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
                           const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
@@ -288,6 +291,7 @@ namespace NKikimr {
             , HullCtx(hullCtx)
             , SelfVDiskId(selfVDiskId)
             , ParentId(parentId)
+            , SyncLogActorId(syncLogActorId)
             , Hull(hull)
             , IFaceMonGroup(ifaceMonGroup)
             , FullSyncGroup(fullSyncGroup)
@@ -305,11 +309,12 @@ namespace NKikimr {
                                       const TIntrusivePtr<THullCtx> &hullCtx,
                                       const TVDiskID &selfVDiskId,
                                       const TActorId &parentId,
+                                      const TActorId& syncLogActorId,
                                       const std::shared_ptr<THull> &hull,
                                       const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
                                       const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
                                       ui64 dbBirthLsn) {
-        return new TVSyncFullHandler(db, hullCtx, selfVDiskId, parentId, hull,
+        return new TVSyncFullHandler(db, hullCtx, selfVDiskId, parentId, syncLogActorId, hull,
                     ifaceMonGroup, fullSyncGroup, dbBirthLsn);
     }
 

@@ -88,12 +88,130 @@ jobs:
         uname -a
         echo "YDB CLI version: $(cat ydb/apps/ydb/version.txt) (read from ydb/apps/ydb/version.txt)"
 
-    # Turns out it is crucial to prepare VS environment and build in one step due to env variable visibility
-    - name: Prepare Visual Studio environment and build windows binary with ya make
+    - name: Install LLVM/Clang 18 for Windows
+      if: ${{ matrix.os == 'windows-amd' }}
+      uses: KyleMayes/install-llvm-action@v2
+      with:
+        version: "18.1.8"
+        cached: false
+
+    - name: Show LLVM/Clang version for Windows
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -o ./
-    
+      run: clang-cl --version
+
+    - name: Setup Windows tools
+      if: ${{ matrix.os == 'windows-amd' }}
+      shell: cmd
+      run: |
+        set "ML64_PATH="
+
+        REM Use vswhere.exe to find Visual Studio installation dynamically
+        set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+        if not exist "%VSWHERE%" (
+          echo vswhere.exe not found, falling back to LLVM assembler
+          goto :symlinks
+        )
+
+        REM Find latest VS installation with MSVC component
+        for /f "delims=" %%i in ('"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath') do set "VSINSTALLDIR=%%i"
+        if not defined VSINSTALLDIR (
+          echo Visual Studio with MSVC not found, falling back to LLVM assembler
+          goto :symlinks
+        )
+
+        REM Find ml64.exe in the MSVC tools directory
+        for /d %%v in ("%VSINSTALLDIR%\VC\Tools\MSVC\*") do (
+          if exist "%%v\bin\Hostx64\x64\ml64.exe" (
+            set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe"
+            echo Found Microsoft ml64.exe: %%v\bin\Hostx64\x64\ml64.exe
+            goto :symlinks
+          )
+        )
+
+        :symlinks
+        REM Create required symlinks for LLVM/ya make integration
+        echo Creating lib.exe symlink...
+        mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe" >nul 2>nul
+        if %ERRORLEVEL% equ 0 (
+          echo   lib.exe -^> llvm-lib.exe: SUCCESS
+        ) else (
+          echo   lib.exe symlink failed ^(may already exist^): CONTINUING
+        )
+
+        echo Creating ml.exe symlink...
+        if defined ML64_PATH (
+          mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%" >nul 2>nul
+          if %ERRORLEVEL% equ 0 (
+            echo   ml.exe -^> Microsoft ml64.exe: SUCCESS
+          ) else (
+            echo   ml.exe symlink failed ^(may already exist^): CONTINUING
+          )
+          echo Using Microsoft ml64.exe for assembly
+        ) else (
+          mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" >nul 2>nul
+          if %ERRORLEVEL% equ 0 (
+            echo   ml.exe -^> llvm-ml.exe: SUCCESS
+          ) else (
+            echo   ml.exe symlink failed ^(may already exist^): CONTINUING
+          )
+          echo Using LLVM llvm-ml.exe for assembly (may fail on OpenSSL)
+        )
+
+    - name: Patch fix_msvc_output.py
+      if: ${{ matrix.os == 'windows-amd' }}
+      shell: powershell
+      run: |
+        Write-Host "Creating patch script..."
+
+        # Create readable Python patch script
+        $patchScript = @'
+        import re
+        import sys
+
+        print("Patching build/scripts/fix_msvc_output.py...")
+
+        # Read the original file
+        with open('build/scripts/fix_msvc_output.py', 'r') as f:
+            content = f.read()
+
+        # Define the patch code (replacement for "args = sys.argv[1:]")
+        patch_code = '''args = [a for a in sys.argv[1:] if a != "None"]
+
+            # Fix Git Bash link conflict: /usr/bin/link.exe -> lld-link.exe
+            if len(args) >= 2 and args[0] == "link" and "/usr/bin/link.exe" in args[1]:
+                args[1] = "C:/Program Files/LLVM/bin/lld-link.exe"
+
+            # Fix missing ml.exe path when None is passed
+            if len(args) >= 1 and args[0] == "ml" and len(sys.argv) > 2 and sys.argv[2] == "None":
+                args.insert(1, "C:/Program Files/LLVM/bin/ml.exe")'''
+
+        # Apply the patch using regex substitution
+        patched_content = re.sub(r'args = sys\.argv\[1:\]', patch_code, content)
+
+        # Write the patched file back
+        with open('build/scripts/fix_msvc_output.py', 'w') as f:
+            f.write(patched_content)
+
+        print("fix_msvc_output.py patched successfully!")
+        '@
+
+        # Write and execute the patch script
+        $patchScript | Out-File -FilePath "patch_fix_msvc.py" -Encoding utf8
+        python patch_fix_msvc.py
+        Remove-Item "patch_fix_msvc.py"
+
+    - name: Build YDB CLI
+      if: ${{ matrix.os == 'windows-amd' }}
+      shell: cmd
+      run: |
+        REM Find and setup VS environment in single command chain
+        set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+        for /f "delims=" %%i in ('"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath') do (
+          echo Using Visual Studio: %%i
+          "%%i\Common7\Tools\VsDevCmd.bat" -arch=amd64 && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
+        )
+
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}
       run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}
@@ -188,4 +306,3 @@ jobs:
           S3_DNS_HOST_BUCKET: "%(bucket)s.storage.yandexcloud.net"
           S3_REGION: ru-central1
         run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host="$S3_HOST" --host-bucket="$S3_DNS_HOST_BUCKET" --region="$S3_REGION" sync --recursive ${{ steps.getver.outputs.cli_version }} "s3://$S3_BUCKET/release/"
-      

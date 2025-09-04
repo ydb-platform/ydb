@@ -486,7 +486,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
 
 void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx)
 {
-    PQ_LOG_T("TPartition::Handle TEvHandleWriteResponse.");
+    PQ_LOG_D("Received TPartition::Handle TEvHandleWriteResponse.");
     OnHandleWriteResponse(ctx);
 }
 
@@ -657,7 +657,7 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::TEvWrite");
+    PQ_LOG_D("Received TPartition::TEvWrite");
 
     if (!CanEnqueue()) {
         ReplyError(ctx, ev->Get()->Cookie, InactivePartitionErrorCode,
@@ -1020,13 +1020,17 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
 }
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
+    PQ_LOG_D("PreProcessRequest(TWriteMsg& p) CanWrite()=" << CanWrite() << " DiskIsFull=" << DiskIsFull);
+
     if (!CanWrite()) {
+        WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
                            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
 
     if (DiskIsFull) {
+        WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false,
                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
                            "Disk is full");

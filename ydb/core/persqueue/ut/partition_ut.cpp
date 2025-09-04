@@ -1266,6 +1266,8 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace_DeadlineWork(bool ignoreQuo
 {
     Ctx->Runtime->GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
     Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
+    Ctx->Runtime->SetLogPriority( NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
+
     CreatePartition({
                     .Partition=TPartitionId{1},
                     .Begin=0, .End=0,
@@ -1293,10 +1295,9 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace_DeadlineWork(bool ignoreQuo
         return cookie == e.Cookie;
     };
 
-    TString data = "data for write";
-
     // First message will be processed because used storage 0 and limit 0. That is, the limit is not exceeded.
-    SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data, ignoreQuotaDeadline);
+    TString data0 = "data for write 0";
+    SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data0, ignoreQuotaDeadline);
     messageNo++;
 
     WaitKeyValueRequest(kvCookie); // the partition saves the TEvPQ::TEvWrite event
@@ -1308,7 +1309,8 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace_DeadlineWork(bool ignoreQuo
     }
 
     // Second message will not be processed because the limit is exceeded.
-    SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data, ignoreQuotaDeadline);
+    TString data1 = "data for write 1";
+    SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data1, ignoreQuotaDeadline);
     messageNo++;
 
     {
@@ -2560,7 +2562,7 @@ Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
 Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
 {
     // TODO(abcdef): temporarily deleted
-    return;
+    //return;
 
     TestWriteSubDomainOutOfSpace_DeadlineWork(false);
 }

@@ -3,6 +3,7 @@
 
 #include "defs.h"
 #include "channel_profiles.h"
+#include "config_metrics.h"
 #include "domain.h"
 #include "feature_flags.h"
 #include "nameservice.h"
@@ -72,6 +73,7 @@ struct TAppData::TImpl {
     NKikimrProto::TDataIntegrityTrailsConfig DataIntegrityTrailsConfig;
     NKikimrConfig::TDataErasureConfig DataErasureConfig;
     NKikimrConfig::THealthCheckConfig HealthCheckConfig;
+    TMetricsConfig MetricsConfig;
 };
 
 TAppData::TAppData(
@@ -130,6 +132,7 @@ TAppData::TAppData(
     , DataIntegrityTrailsConfig(Impl->DataIntegrityTrailsConfig)
     , DataErasureConfig(Impl->DataErasureConfig)
     , HealthCheckConfig(Impl->HealthCheckConfig)
+    , MetricsConfig(Impl->MetricsConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

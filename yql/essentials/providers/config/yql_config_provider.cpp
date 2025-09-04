@@ -1307,19 +1307,17 @@ namespace {
             TStringBuf url = args[1];
             TStringBuf tokenName = args.size() == 3 ? args[2] : TStringBuf();
 
-            TStringBuf token;
-            if (tokenName) {
-                if (auto cred = Types_.Credentials->FindCredential(tokenName)) {
-                    token = cred->Content;
-                } else {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << tokenName << "' for folder."));
-                    return false;
-                }
-            } else if (auto cred = Types_.Credentials->FindCredential("default_sandbox")) {
-                token = cred->Content;
-            }
-
             if (Types_.UseUrlListerForFolder) {
+                TStringBuf token;
+                if (tokenName) {
+                    if (auto cred = Types_.Credentials->FindCredential(tokenName)) {
+                        token = cred->Content;
+                    } else {
+                        ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << tokenName << "' for folder."));
+                        return false;
+                    }
+                }
+
                 if (!Types_.UrlListerManager) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "UrlListerManager is not initialized, unable to add folder by url"));
                     return false;
@@ -1340,6 +1338,18 @@ namespace {
                     }
                 }
             } else {
+
+                TStringBuf token;
+                if (tokenName) {
+                    if (auto cred = Types_.Credentials->FindCredential(tokenName)) {
+                        token = cred->Content;
+                    } else {
+                        ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << tokenName << "' for folder."));
+                        return false;
+                    }
+                } else if (auto cred = Types_.Credentials->FindCredential("default_sandbox")) {
+                    token = cred->Content;
+                }
 
                 std::vector<std::pair<TString, TString>> queue;
                 queue.emplace_back(prefix, url);

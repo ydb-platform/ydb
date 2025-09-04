@@ -1172,8 +1172,8 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             break;
 
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
-            error = "Invalid index type";
-            return false;
+            // FIXME: python sdk can create a table with a secondary index without a type
+            break;
         }
 
         std::vector<NKikimrSchemeOp::TTableDescription> indexImplTableDescriptions;

@@ -164,7 +164,7 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
             if (skip) continue;
 
             if (blobs[i].IsLastPart()) {
-                const bool messageSkippingBehaviourEnabledInConfig = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() || AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp();
+                const bool messageSkippingBehaviourEnabledInConfig = PreciseReadFromTimestampBehaviourEnabled(*AppData());
                 bool messageSkippingBehaviour = messageSkippingBehaviourEnabledInConfig
                     && readTimestampMs > blobs[i].WriteTimestamp.MilliSeconds();
                 ++count;

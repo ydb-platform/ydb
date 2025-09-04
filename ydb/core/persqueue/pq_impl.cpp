@@ -171,7 +171,7 @@ private:
 
         Y_ABORT_UNLESS(readResult.ResultSize() > 0 || isDirectRead);
 
-        ui64 readFromTimestampMs = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
+        ui64 readFromTimestampMs = PreciseReadFromTimestampBehaviourEnabled(*AppData(ctx))
                                    ? (responseRecord.HasPartitionResponse()
                                         ? responseRecord.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs()
                                         : readResult.GetReadFromTimestampMs())

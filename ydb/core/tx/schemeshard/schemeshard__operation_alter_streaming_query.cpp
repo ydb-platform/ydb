@@ -137,9 +137,11 @@ class TAlterStreamingQuery : public TSubOperation {
             .Properties = Transaction.GetCreateStreamingQuery().GetProperties(),
         });
 
-        auto& properties = *streamingQueryInfo->Properties.MutableProperties();
-        for (const auto& [property, value] : oldStreamingQueryInfo->Properties.GetProperties()) {
-            properties.emplace(property, value);
+        if (!Transaction.GetReplaceIfExists()) {
+            auto& properties = *streamingQueryInfo->Properties.MutableProperties();
+            for (const auto& [property, value] : oldStreamingQueryInfo->Properties.GetProperties()) {
+                properties.emplace(property, value);
+            }
         }
 
         return streamingQueryInfo;

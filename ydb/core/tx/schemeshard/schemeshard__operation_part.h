@@ -744,7 +744,7 @@ ISubOperation::TPtr CreateDropSecret(TOperationId id, TTxState::ETxState state);
 
 // Streaming Query
 // Create
-ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, TTxState::ETxState state);
 // Alter
 ISubOperation::TPtr CreateAlterStreamingQuery(TOperationId id, const TTxTransaction& tx);

@@ -1181,6 +1181,12 @@ ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
 }
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
+    Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= p.Msg.Data.size(),
+                         "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", p.Msg.Data.size=%" PRISZT,
+                         TabletID, Partition.OriginalPartitionId, Partition.InternalPartitionId,
+                         WriteInflightSize, p.Msg.Data.size());
+    WriteInflightSize -= p.Msg.Data.size();
+
     if (!CanWrite()) {
         ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
                            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -1197,12 +1203,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     ui64& curOffset = parameters.CurOffset;
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
-
-    Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= p.Msg.Data.size(),
-                         "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", p.Msg.Data.size=%" PRISZT,
-                         TabletID, Partition.OriginalPartitionId, Partition.InternalPartitionId,
-                         WriteInflightSize, p.Msg.Data.size());
-    WriteInflightSize -= p.Msg.Data.size();
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written

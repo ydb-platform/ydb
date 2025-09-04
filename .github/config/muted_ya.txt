@@ -33,12 +33,7 @@ ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
-<<<<<<< HEAD
-=======
 ydb/core/kqp/ut/query KqpStats.CreateTableAsStats+IsOlap
-ydb/core/kqp/ut/scan KqpScan.StreamExecuteScanQueryClientTimeoutBruteForce
-ydb/core/kqp/ut/scheme KqpAcl.AlterDatabasePrivilegesRequiredToChangeSchemeLimits-AsClusterAdmin
->>>>>>> 683684eaf16 (CTAS: more tests (#22408))
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow

@@ -241,10 +241,6 @@ namespace NDiscovery {
         BridgeInfo = bridgeInfo;
     }
 
-    bool TCachedMessageData::IsValid() const {
-        return Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok && !InfoEntries.empty();
-    }
-
     TEvDiscovery::TEvDiscoveryData* TCachedMessageData::ToEvent(bool returnSerializedMessage) const {
         auto* event = new TEvDiscovery::TEvDiscoveryData();
         if (returnSerializedMessage && !CachedMessage.empty() && !CachedMessageSsl.empty()) {
@@ -254,7 +250,12 @@ namespace NDiscovery {
             event->InfoEntries = InfoEntries;
             event->BridgeInfo = BridgeInfo;
         }
-        event->Status = Status;
+
+        if (InfoEntries.empty()) {
+            event->Status = TEvStateStorage::TEvBoardInfo::EStatus::Unknown;
+        } else {
+            event->Status = Status;
+        }
         return event;
     }
 }
@@ -319,7 +320,8 @@ namespace NDiscoveryPrivate {
                 auto cookie = ++LastCookie;
                 BoardLookupStartTime[cookie] = TMonotonic::Now();
                 CLOG_D("Lookup"
-                    << ": path# " << database);
+                    << ": path# " << database
+                    << ", cookie# " << cookie);
                 Register(CreateBoardLookupActor(database, SelfId(), mode, {}, cookie));
             }
 

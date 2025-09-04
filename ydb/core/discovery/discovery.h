@@ -89,8 +89,6 @@ public:
                         const TString& endpointId = {},
                         const TSet<TString>& services = {});
 
-    bool IsValid() const;
-
     TEvDiscovery::TEvDiscoveryData* ToEvent(bool returnSerializedMessage) const;
 };
 

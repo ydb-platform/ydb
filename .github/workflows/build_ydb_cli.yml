@@ -157,6 +157,18 @@ jobs:
           git push origin "${{ steps.create-branch.outputs.branch-name }}"
           git push origin "CLI_${{ steps.update-version.outputs.new-version }}"
 
+  # Temporary job for testing cleanup logic - will fail intentionally
+  test-failure:
+    name: Simulate build failure for testing cleanup
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate failure
+        run: |
+          echo "Simulating build failure for cleanup testing..."
+          echo "This step will fail intentionally to test cleanup-on-failure job"
+          exit 1
+
   # TODO: uncomment for production - commented for fork testing
   # build-matrix:
   #     name: Build platform matrix
@@ -319,7 +331,7 @@ jobs:
   #
   finalize-release:
     name: Merge to main and finalize release
-    needs: [prepare-release]  # TODO: add back gather-and-push-to-s3 for production
+    needs: [prepare-release, test-failure]  # Depends on build success
     runs-on: ubuntu-latest
     if: success()
     steps:
@@ -352,7 +364,7 @@ jobs:
 
   cleanup-on-failure:
     name: Cleanup release branch on failure
-    needs: [prepare-release, finalize-release]  # TODO: add back gather-and-push-to-s3 for production
+    needs: [prepare-release, test-failure]  # Testing cleanup on failure
     runs-on: ubuntu-latest
     if: failure() && needs.prepare-release.result == 'success'
     steps:

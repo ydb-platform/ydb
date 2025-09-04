@@ -93,9 +93,9 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
-    , SysLocks(this)
-    , SpaceWatcher(std::unique_ptr<TSpaceWatcher>(new TSpaceWatcher(this), std::default_delete<TSpaceWatcher>())) {
+    , SysLocks(this) {
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
+    SpaceWatcher = new TSpaceWatcher(this);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -976,6 +976,9 @@ void TColumnShard::Die(const TActorContext& ctx) {
     UnregisterMediatorTimeCast();
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
     Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
+    if (SpaceWatcherId == TActorId{}) {
+        delete SpaceWatcher;
+    }
     IActor::Die(ctx);
 }
 

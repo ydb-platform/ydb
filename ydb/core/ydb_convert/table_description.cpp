@@ -1173,6 +1173,7 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
 
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
             // FIXME: python sdk can create a table with a secondary index without a type
+            // so it's not possible to return an invalid index type error here for now
             break;
         }
 

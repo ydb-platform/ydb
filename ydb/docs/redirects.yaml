@@ -131,12 +131,14 @@ common:
     to: /devops/configuration-management/configuration-v1/cms.md
   - from: /maintenance/manual/dynamic-config.md
     to: /devops/configuration-management/configuration-v1/dynamic-config.md
-  - from: /maintenance/manual/cluster_expansion.md
-    to: /devops/configuration-management/configuration-v1/cluster_expansion.md
   - from: /maintenance/manual/config-overview.md
     to: /devops/configuration-management/configuration-v1/config-overview.md
   - from: /maintenance/manual/change_actorsystem_configs.md
     to: /devops/configuration-management/configuration-v1/change_actorsystem_configs.md
+  - from: /maintenance/manual/replacing_nodes.md
+    to: /devops/configuration-management/configuration-v1/replacing-nodes.md
+  - from: /maintenance/manual/cluster_expansion.md
+    to: /devops/configuration-management/configuration-v1/cluster-expansion.md
 
 
   # Redirects for Observability
@@ -168,10 +170,6 @@ common:
     to: /devops/concepts/system-requirements.md
   - from: /cluster/system-requirements.md
     to: /devops/concepts/system-requirements.md
-
-  # Redirects for maintenance folder
-  - from: /maintenance/(.*)$
-    to: /devops/deployment-options/manual/$1
 
   # Dev-related redirects
   - from: /db/index.md
@@ -477,12 +475,12 @@ ru:
     to: /dev/terraform.md
   - from: /postgresql/docker-connect.md
     to: /postgresql/connect.md
-  - from: /maintenance/manual/replacing_nodes.md
-    to: /devops/configuration-management/configuration-v1/replacing_nodes.md
   - from: /maintenance/manual/dynamic-config-selectors.md
     to: /devops/configuration-management/configuration-v1/dynamic-config-selectors.md
   - from: /maintenance/manual/dynamic-config-volatile-config.md
     to: /devops/configuration-management/configuration-v1/dynamic-config-volatile-config.md
+  - from: /maintenance/manual/replacing_nodes.md
+    to: /devops/configuration-management/configuration-v1/replacing-nodes.md
 
 
 en:
@@ -490,8 +488,6 @@ en:
     to: /devops/system-requirements.md
   - from: /devops/observability/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment.md
-  - from: /maintenance/manual/cluster_expansion.md
-    to: /devops/deployment-options/manual/cluster-expansion.md
   - from: /maintenance/manual/index.md
     to: /devops/deployment-options/manual/index.md
   - from: /reference/ydbops/scenarios.md

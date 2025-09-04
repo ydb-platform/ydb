@@ -3,6 +3,7 @@
 
 #include "defs.h"
 #include "channel_profiles.h"
+#include "config_metrics.h"
 #include "domain.h"
 #include "feature_flags.h"
 #include "nameservice.h"
@@ -66,6 +67,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TMetadataCacheConfig MetadataCacheConfig;
     NKikimrReplication::TReplicationDefaults ReplicationConfig;
     NKikimrProto::TDataIntegrityTrailsConfig DataIntegrityTrailsConfig;
+    TMetricsConfig MetricsConfig;
 };
 
 TAppData::TAppData(
@@ -120,6 +122,7 @@ TAppData::TAppData(
     , MetadataCacheConfig(Impl->MetadataCacheConfig)
     , ReplicationConfig(Impl->ReplicationConfig)
     , DataIntegrityTrailsConfig(Impl->DataIntegrityTrailsConfig)
+    , MetricsConfig(Impl->MetricsConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
 {}
 

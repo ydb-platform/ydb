@@ -444,6 +444,18 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<GroupId, HiveId, BlobDepotId>;
     };
 
+    struct BridgeSyncState : Table<132> {
+        struct TargetGroupId : Column<1, NScheme::NTypeIds::Uint32> {}; // PK
+        struct Stage : Column<2, NScheme::NTypeIds::Uint32> { using Type = NKikimrBridge::TGroupState::EStage; };
+        struct LastError : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct LastErrorTimestamp : Column<4, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
+        struct FirstErrorTimestamp : Column<5, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
+        struct ErrorCount : Column<6, NScheme::NTypeIds::Uint32> {};
+
+        using TKey = TableKey<TargetGroupId>;
+        using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp, ErrorCount>;
+    };
+
     using TTables = SchemaTables<
         Node,
         PDisk,
@@ -467,7 +479,8 @@ struct Schema : NIceDb::Schema {
         MigrationEntry,
         ScrubState,
         DriveSerial,
-        BlobDepotDeleteQueue
+        BlobDepotDeleteQueue,
+        BridgeSyncState
     >;
 
     using TSettings = SchemaSettings<

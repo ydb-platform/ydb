@@ -184,7 +184,7 @@ namespace NKikimr::NStorage {
                     } else if (r.ConfigToPropose) {
                         StartProposition(&r.ConfigToPropose.value(), /*acceptLocalQuorum=*/ true,
                             /*requireScepter=*/ false, /*mindPrev=*/ true,
-                            r.PropositionBase ? &r.PropositionBase.value() : nullptr);
+                            r.PropositionBase ? &r.PropositionBase.value() : nullptr, r.AutomaticBootstrap);
                     } else {
                         Finish(TResult::OK, std::nullopt);
                     }
@@ -234,7 +234,8 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum,
-            bool requireScepter, bool mindPrev, const NKikimrBlobStorage::TStorageConfig *propositionBase) {
+            bool requireScepter, bool mindPrev, const NKikimrBlobStorage::TStorageConfig *propositionBase,
+            bool fromBootstrap) {
         if (!Self->HasConnectedNodeQuorum(*config, acceptLocalQuorum)) {
             throw TExError() << "No quorum to start propose/commit configuration";
         } else if (requireScepter && !Self->Scepter) {
@@ -283,6 +284,10 @@ namespace NKikimr::NStorage {
 
         if (!propositionBase) {
             propositionBase = Self->StorageConfig.get();
+        }
+
+        if (propositionBase && !propositionBase->GetGeneration() && !fromBootstrap) {
+            throw TExError() << "First distconf config-changing command has to be BootstrapCluster";
         }
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
@@ -435,7 +440,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::HandleInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev) {
-        if (Binding && !Binding->SessionId) { // binding is in progess, wait for it to complete
+        if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
             InvokeOnRootPending.push_back(std::move(ev));
         } else if (Binding) {
             // we have binding, so we have to forward this message to 'hop' node and return answer

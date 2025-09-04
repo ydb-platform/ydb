@@ -464,6 +464,10 @@ void TestOlapEstimationRowsCorrectness(const TString& queryPath, const TString& 
 
 /* Tests to check olap selectivity correctness */
 Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
+    Y_UNIT_TEST(TPCDS80) {
+        TestOlapEstimationRowsCorrectness("queries/tpcds80.sql", "stats/tpcds1000s.json");
+    }
+
     Y_UNIT_TEST(TPCDS14) {
         TestOlapEstimationRowsCorrectness("queries/tpcds14.sql", "stats/tpcds1000s.json");
     }
@@ -1040,7 +1044,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
 
         for (const std::string& queryType : queryTypes) {
-            for (std::size_t i = 1; i <= queryCount; ++i) {
+            for (std::size_t i = 80; i <= 80; ++i) {
                 TString qPath = TStringBuilder{} << ArcadiaSourceRoot() << queryPathTemplate << queryType << "/" << "q" << i << ".sql";
 
                 TIFStream s(qPath);

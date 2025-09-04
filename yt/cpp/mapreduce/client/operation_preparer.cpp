@@ -464,7 +464,7 @@ bool TJobPreparer::ShouldRedirectStdoutToStderr() const
 
 bool TJobPreparer::ShouldAppendDebugOptions() const
 {
-    return OperationPreparer_.GetContext().Config->AppendDebugOptions;
+    return !IsCommandJob_ && OperationPreparer_.GetContext().Config->AppendDebugOptions;
 }
 
 TString TJobPreparer::GetFileStorage() const

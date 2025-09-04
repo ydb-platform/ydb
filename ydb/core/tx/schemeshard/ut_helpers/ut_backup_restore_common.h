@@ -92,6 +92,7 @@ public:
 
         return Public.DebugString() == proto.DebugString();
     } 
+
 protected:
     TPublicProto Public;
 };
@@ -99,8 +100,9 @@ protected:
 class TFileDescriber {
 public:
     TFileDescriber(const TString& dir, const TString& name) 
-                  : Dir(dir)
-                  , Path(dir + name) {}
+        : Dir(dir)
+        , Path(dir + name)
+    {}
 
     const TString& GetDir() const {
         return Dir;
@@ -115,10 +117,12 @@ protected:
     const TString Path;
 };
 
-class TPermissions : public TPublicDescriber<Ydb::Scheme::ModifyPermissionsRequest>
-                   , public TFileDescriber {
+class TPermissions 
+    : public TPublicDescriber<Ydb::Scheme::ModifyPermissionsRequest>
+    , public TFileDescriber {
 public:
-    TPermissions(const TString& dir) : TFileDescriber(dir, "/permissions.pb") {
+    TPermissions(const TString& dir)
+        : TFileDescriber(dir, "/permissions.pb") {
         google::protobuf::TextFormat::ParseFromString(
             R"(actions {
                 change_owner: "root@builtin"
@@ -127,8 +131,9 @@ public:
 };
 
 template <typename TSchemeProto, typename TPublicProto>
-class TObjectDescriber : public TSchemeDescriber<TSchemeProto>
-                       , public TPublicDescriber<TPublicProto> {
+class TObjectDescriber 
+    : public TSchemeDescriber<TSchemeProto>
+    , public TPublicDescriber<TPublicProto> {
 public:
     template <typename TFormat>
     TFormat Get() const {return {};}
@@ -145,12 +150,13 @@ public:
 };
 
 template <typename TSchemeProto, typename TPublicProto>
-class TSchemeObjectDescriber : public TObjectDescriber<TSchemeProto, TPublicProto> 
-                             , public TFileDescriber {
+class TSchemeObjectDescriber 
+    : public TObjectDescriber<TSchemeProto, TPublicProto> 
+    , public TFileDescriber {
 public:
     TSchemeObjectDescriber(const TString& dir, const TString& name) 
-                  : TFileDescriber(dir, name)
-                  , Permissions(dir) {
+        : TFileDescriber(dir, name)
+        , Permissions(dir) {
         ExportRequestItem = GetItemsFromTemp(ExportRequestItemTemp);
         ImportRequestItem = GetItemsFromTemp(ImportRequestItemTemp);
     }
@@ -177,7 +183,6 @@ protected:
     TString ImportRequestItem;
 
 private:
-
     TString GetItemsFromTemp(const char* temp) {
         return Sprintf(temp, Dir.c_str(), Dir.c_str());
     }
@@ -237,7 +242,8 @@ private:
     )";
 };
 
-class TExportRequest : public TXxportRequest {
+class TExportRequest 
+    : public TXxportRequest {
 public:
     TExportRequest(ui16 port, const TVector<TString>& items)
         : TXxportRequest("ExportToS3", items, port) 
@@ -248,7 +254,8 @@ public:
     {}
 };
 
-class TImportRequest : public TXxportRequest {
+class TImportRequest
+    : public TXxportRequest {
 public:
     TImportRequest(ui16 port, const TVector<TString>& items)
         : TXxportRequest("ImportFromS3", items, port)
@@ -259,9 +266,13 @@ public:
     {}
 };
 
-class TTopic : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription, Ydb::Topic::CreateTopicRequest> {
+class TTopic 
+    : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription
+    , Ydb::Topic::CreateTopicRequest> {
 private:
-    class TConsumer : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer, Ydb::Topic::Consumer> {
+    class TConsumer 
+        : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer
+        , Ydb::Topic::Consumer> {
     public:
         TConsumer(ui64 number, bool important = false) {
             google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerScheme, number), &Scheme);

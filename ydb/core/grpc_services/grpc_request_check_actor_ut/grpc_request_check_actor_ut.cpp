@@ -198,7 +198,7 @@ Y_UNIT_TEST(CanSetAllPermissions) {
     UNIT_ASSERT_EQUAL(requestAuthAndCheckResultEv->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT(requestAuthAndCheckResultEv->UserToken);
     UNIT_ASSERT_EQUAL_C(requestAuthAndCheckResultEv->UserToken->GetUserSID(), "user1@as", requestAuthAndCheckResultEv->UserToken->GetUserSID());
-    UNIT_ASSERT_EQUAL_C(requestAuthAndCheckResultEv->UserToken->GetGroupSIDs().size(), 21, requestAuthAndCheckResultEv->UserToken->GetGroupSIDs().size());
+    UNIT_ASSERT_EQUAL_C(requestAuthAndCheckResultEv->UserToken->GetGroupSIDs().size(), 23, requestAuthAndCheckResultEv->UserToken->GetGroupSIDs().size());
     THashSet<TString> groups;
     for (const auto& p : requestAuthAndCheckResultEv->UserToken->GetGroupSIDs()) {
         groups.insert(p);
@@ -236,7 +236,7 @@ Y_UNIT_TEST(CanSetPermissionsWithoutGizmoResourse) {
     UNIT_ASSERT_EQUAL(refreshTokenGenericRequestEv->GetAuthState().State, NYdbGrpc::TAuthState::AS_OK);
     UNIT_ASSERT(refreshTokenGenericRequestEv->GetInternalToken());
     UNIT_ASSERT_EQUAL_C(refreshTokenGenericRequestEv->GetInternalToken()->GetUserSID(), "user1@as", refreshTokenGenericRequestEv->GetInternalToken()->GetUserSID());
-    UNIT_ASSERT_EQUAL_C(refreshTokenGenericRequestEv->GetInternalToken()->GetGroupSIDs().size(), 17, refreshTokenGenericRequestEv->GetInternalToken()->GetGroupSIDs().size());
+    UNIT_ASSERT_EQUAL_C(refreshTokenGenericRequestEv->GetInternalToken()->GetGroupSIDs().size(), 19, refreshTokenGenericRequestEv->GetInternalToken()->GetGroupSIDs().size());
     THashSet<TString> groups;
     for (const auto& p : refreshTokenGenericRequestEv->GetInternalToken()->GetGroupSIDs()) {
         groups.insert(p);
@@ -274,7 +274,7 @@ Y_UNIT_TEST(CanSetPermissionsForRootDb) {
     UNIT_ASSERT_EQUAL(refreshTokenGenericRequestEv->GetAuthState().State, NYdbGrpc::TAuthState::AS_OK);
     UNIT_ASSERT(refreshTokenGenericRequestEv->GetInternalToken());
     UNIT_ASSERT_EQUAL_C(refreshTokenGenericRequestEv->GetInternalToken()->GetUserSID(), "user1@as", refreshTokenGenericRequestEv->GetInternalToken()->GetUserSID());
-    UNIT_ASSERT_EQUAL_C(refreshTokenGenericRequestEv->GetInternalToken()->GetGroupSIDs().size(), 11, refreshTokenGenericRequestEv->GetInternalToken()->GetGroupSIDs().size());
+    UNIT_ASSERT_EQUAL_C(refreshTokenGenericRequestEv->GetInternalToken()->GetGroupSIDs().size(), 12, refreshTokenGenericRequestEv->GetInternalToken()->GetGroupSIDs().size());
     THashSet<TString> groups;
     for (const auto& p : refreshTokenGenericRequestEv->GetInternalToken()->GetGroupSIDs()) {
         groups.insert(p);

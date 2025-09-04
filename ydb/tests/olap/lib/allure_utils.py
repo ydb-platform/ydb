@@ -81,9 +81,11 @@ def _set_results_plot(test_info: dict[str, str], suite: str, test: str, refferen
     test_info['results_plot'] = f"<a target='_blank' href='https://datalens.yandex-team.ru/iqnd4b1miaz27-testy-ydb?{params}'>link</a>"
 
 
-def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: float):
+def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: float, nodes: list[YdbCluster.Node] = None):
     hosts = []
-    for node in YdbCluster.get_cluster_nodes():
+    if nodes is None:
+        nodes = YdbCluster.get_cluster_nodes()
+    for node in nodes:
         if node.role == YdbCluster.Node.Role.STORAGE:
             hosts.append(node.host)
     hosts_cmd = ' '.join([f'-H {h}' for h in hosts])
@@ -104,7 +106,7 @@ def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: fl
     test_info['kernel_log'] = f'<details><code>{dmesg_cmd}</code></details>'
 
 
-def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None, use_node_subcols: bool = False) -> str:
+def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None, use_node_subcols: bool = False, nodes: list[YdbCluster.Node] = None) -> str:
     """
     Создает HTML таблицу с информацией об итерациях workload
 
@@ -119,7 +121,7 @@ def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, nod
     """
     # Если запрошен формат с подколонками для нод, используем новую реализацию
     if use_node_subcols:
-        return __create_iterations_table_with_node_subcols(result, node_errors, workload_params)
+        return __create_iterations_table_with_node_subcols(result, node_errors, workload_params, nodes=nodes)
 
     # Оригинальная реализация таблицы
     def __get_node_issue_info(node_error: NodeErrors) -> tuple[str, str, bool]:
@@ -222,7 +224,7 @@ def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, nod
 
     # Получаем ноды для колонок (автоматически)
     try:
-        all_cluster_nodes = YdbCluster.get_cluster_nodes(db_only=True)
+        all_cluster_nodes = YdbCluster.get_cluster_nodes(db_only=True) if nodes is None else nodes
         # Добавляем отладочную информацию о всех нодах
         logging.info(f"All nodes before filtering: {[(node.slot, node.role) for node in all_cluster_nodes]}")
         # Для отладки - показываем все ноды кластера вместо фильтрации только storage
@@ -366,7 +368,7 @@ def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, nod
     return table_html
 
 
-def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
+def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None, nodes: list[YdbCluster.Node] = None) -> str:
     """
     Создает HTML таблицу с информацией об итерациях workload с подколонками для каждой ноды
 
@@ -443,7 +445,7 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
 
     # Получаем ноды для колонок (автоматически)
     try:
-        all_cluster_nodes = YdbCluster.get_cluster_nodes(db_only=True)
+        all_cluster_nodes = YdbCluster.get_cluster_nodes(db_only=True) if nodes is None else nodes
         # Добавляем отладочную информацию о всех нодах
         logging.info(f"All nodes before filtering: {[(node.slot, node.role) for node in all_cluster_nodes]}")
 
@@ -753,6 +755,7 @@ def allure_test_description(
     workload_result=None,
     workload_params: dict = None,
     use_node_subcols: bool = False,
+    nodes: list[YdbCluster.Node] = None,
 ):
     if addition_table_strings is None:
         addition_table_strings = {}
@@ -777,7 +780,7 @@ def allure_test_description(
     _set_coredumps(test_info, start_time, end_time)
     _set_node_errors(test_info, node_errors)
     _set_results_plot(test_info, suite, test, refference_set)
-    _set_logs_command(test_info, start_time, end_time)
+    _set_logs_command(test_info, start_time, end_time, nodes=nodes)
 
     service_url = YdbCluster._get_service_url()
     db = test_info['database']
@@ -800,7 +803,7 @@ def allure_test_description(
         </tbody></table>
     '''
 
-    iterations_table = __create_iterations_table(workload_result, node_errors, workload_params, use_node_subcols)
+    iterations_table = __create_iterations_table(workload_result, node_errors, workload_params, use_node_subcols, nodes=nodes)
     logging.info(f"iterations_table created, length: {len(iterations_table) if iterations_table else 0}")
     if iterations_table:
         html += f'''

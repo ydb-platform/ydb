@@ -2339,6 +2339,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 workload_result=result,
                 workload_params=workload_params,
                 use_node_subcols=use_node_subcols,
+                nodes = self.nodes_on_start
             )
 
             # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---

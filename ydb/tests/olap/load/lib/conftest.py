@@ -137,10 +137,10 @@ class LoadSuiteBase:
     def __attach_logs(cls, start_time, attach_name, query_text, ignore_roles=False):
         if ignore_roles:
             # Получаем уникальные хосты кластера без фильтрации по роли
-            hosts = sorted(set(node.host for node in YdbCluster.get_cluster_nodes()))
+            hosts = sorted(set(node.host for node in cls.nodes_on_start))
         else:
             # Оригинальная логика - только STORAGE ноды
-            hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
+            hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, cls.nodes_on_start)]
 
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()

@@ -155,6 +155,10 @@ namespace NKikimr {
         // DEEP SCRUBBING
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+        std::vector<std::tuple<TLogoBlobID, bool>> CheckIntegrityPending;
+
+        void EnqueueCheckIntegrity(const TLogoBlobID& blobId, bool isHuge);
+        void CheckIntegrity();
         void CheckIntegrity(const TLogoBlobID& blobId, bool isHuge);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

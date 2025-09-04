@@ -200,7 +200,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             break;
         }
         default:
-            Y_ENSURE(false, InvalidIndexType(indexDesc.GetType()));
+            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDesc.GetType()));
+            break;
     }
 
     return result;

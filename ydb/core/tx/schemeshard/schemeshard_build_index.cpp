@@ -112,7 +112,8 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
                     std::get<NKikimrSchemeOp::TFulltextIndexDescription>(info.SpecializedIndexDescription);
                 break;
             default:
-                Y_ENSURE(false, InvalidIndexType(info.IndexType));
+                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(info.IndexType));
+                break;
         }
 
         persistedBuildIndex.Update(

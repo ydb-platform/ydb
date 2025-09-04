@@ -337,7 +337,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 break;
             }
             default:
-                Y_ENSURE(false, InvalidIndexType(indexDescription.GetType()));
+                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDescription.GetType()));
+                break;
         }
     }
 

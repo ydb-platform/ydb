@@ -66,8 +66,7 @@ static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NS
                 std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
             break;
         default:
-            Y_DEBUG_ABORT_S(InvalidIndexType(indexInfo->Type));
-            return {};
+            return {}; // reject
     }
 
     return scheme;

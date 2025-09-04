@@ -1681,16 +1681,14 @@ R"(column0:   -- is_valid: all not null
         }
     }
 
-    /**
-     * Arrow format is supported for list types.
-     */
-    Y_UNIT_TEST(ArrowFormat_Types_List) {
+    // List<T>
+    Y_UNIT_TEST(ArrowFormat_Types_List_1) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
 
         {
             auto batches = ExecuteAndCombineBatches(client, R"(
-                SELECT [1, 2, 3];
+                SELECT CAST([1, 2, 3] AS List<Int32>);
             )", /* assertSize */ false);
 
             UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
@@ -1707,6 +1705,100 @@ R"(column0:   [
       1,
       2,
       3
+    ]
+  ]
+)";
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+    }
+
+    // List<Optional<T>>
+    Y_UNIT_TEST(ArrowFormat_Types_List_2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto batches = ExecuteAndCombineBatches(client, R"(
+                SELECT CAST([1, NULL, 3, null] AS List<Optional<Int32>>);
+            )", /* assertSize */ false);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
+            const auto& batch = batches.front();
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be list");
+
+            const TString expected =
+R"(column0:   [
+    [
+      1,
+      null,
+      3,
+      null
+    ]
+  ]
+)";
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+    }
+
+    // List<Optional<T>> of columns
+    Y_UNIT_TEST(ArrowFormat_Types_List_3) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto batches = ExecuteAndCombineBatches(client, R"(
+                SELECT [App, Host] FROM Logs;
+            )", /* assertSize */ false);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
+            const auto& batch = batches.front();
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 9);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be list");
+
+            const TString expected =
+R"(column0:   [
+    [
+      "kikimr-db",
+      "kikimr-db-10"
+    ],
+    [
+      "kikimr-db",
+      "kikimr-db-21"
+    ],
+    [
+      "kikimr-db",
+      "kikimr-db-21"
+    ],
+    [
+      "kikimr-db",
+      "kikimr-db-53"
+    ],
+    [
+      "nginx",
+      "nginx-10"
+    ],
+    [
+      "nginx",
+      "nginx-23"
+    ],
+    [
+      "nginx",
+      "nginx-23"
+    ],
+    [
+      "ydb",
+      "ydb-1000"
+    ],
+    [
+      "apache",
+      "front-42"
     ]
   ]
 )";

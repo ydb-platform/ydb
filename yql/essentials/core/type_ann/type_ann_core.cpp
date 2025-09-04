@@ -8526,14 +8526,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         }
 
-        TExprNode::TPtr customUserType;
+        TExprNode::TPtr externalTypes;
         if (input->ChildrenSize() > 2) {
             if (auto status = EnsureTypeRewrite(input->ChildRef(2), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
-            customUserType = input->ChildPtr(2);
+            externalTypes = input->ChildPtr(2);
         } else {
-            customUserType = ctx.Expr.NewCallable(input->Pos(), "TupleType", {});
+            externalTypes = ctx.Expr.NewCallable(input->Pos(), "TupleType", {});
         }
 
         TExprNode::TPtr typeConfig;
@@ -8598,7 +8598,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         }
                         return parent;
                     })
-                    .Add(2, customUserType)
+                    .Add(2, externalTypes)
                 .Seal()
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     if (typeConfig) {

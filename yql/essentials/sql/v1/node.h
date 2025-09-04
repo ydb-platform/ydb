@@ -1541,7 +1541,7 @@ namespace NSQLTranslationV1 {
 
     // Implemented in builtin.cpp
     TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
-        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig,
+        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr externalTypes, const TDeferredAtom& typeConfig, TNodePtr runConfig,
         TNodePtr options, const TVector<TNodePtr>& depends);
     TNodePtr BuildScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args,
         TNodePtr options);

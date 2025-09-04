@@ -2251,7 +2251,7 @@ TNodePtr THoppingWindow::ProcessIntervalParam(const TNodePtr& node) const {
     return new TYqlData(node->GetPos(), "Interval", {node});
 }
 
-TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr customUserType) {
+TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr externalTypes) {
     TVector<TNodePtr> argsTypeItems;
     for (auto& arg : args) {
         argsTypeItems.push_back(new TCallNodeImpl(pos, "TypeOf", TVector<TNodePtr>(1, arg)));
@@ -2260,8 +2260,8 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNode
     TVector<TNodePtr> userTypeItems;
     userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", argsTypeItems));
     userTypeItems.push_back(new TCallNodeImpl(pos, "StructType", {}));
-    if (customUserType) {
-        userTypeItems.push_back(customUserType);
+    if (externalTypes) {
+        userTypeItems.push_back(externalTypes);
     } else {
         userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
@@ -2269,13 +2269,13 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNode
     return new TCallNodeImpl(pos, "TupleType", userTypeItems);
 }
 
-TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType) {
+TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr externalTypes) {
     TVector<TNodePtr> userTypeItems;
     userTypeItems.reserve(3);
     userTypeItems.push_back(positionalArgs->Y("TypeOf", positionalArgs));
     userTypeItems.push_back(positionalArgs->Y("TypeOf", namedArgs));
-    if (customUserType) {
-        userTypeItems.push_back(customUserType);
+    if (externalTypes) {
+        userTypeItems.push_back(externalTypes);
     } else {
         userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
@@ -2284,7 +2284,7 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr na
 }
 
 TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector<TNodePtr>& args,
-        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, TNodePtr typeConfig) {
+        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr externalTypes, TNodePtr typeConfig) {
     if (!ctx.Settings.EnableGenericUdfs) {
         return {};
     }
@@ -2292,9 +2292,9 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
     udfArgs.push_back(new TAstListNodeImpl(pos));
     udfArgs[0]->Add(new TAstAtomNodeImpl(pos, "Void", 0));
     if (namedArgs) {
-        udfArgs.push_back(BuildUdfUserTypeArg(pos, positionalArgs, namedArgs, customUserType));
+        udfArgs.push_back(BuildUdfUserTypeArg(pos, positionalArgs, namedArgs, externalTypes));
     } else {
-        udfArgs.push_back(BuildUdfUserTypeArg(pos, args, customUserType));
+        udfArgs.push_back(BuildUdfUserTypeArg(pos, args, externalTypes));
     }
 
     if (typeConfig) {
@@ -2305,7 +2305,7 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
 }
 
 TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
-    TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig,
+    TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr externalTypes, const TDeferredAtom& typeConfig, TNodePtr runConfig,
     TNodePtr options, const TVector<TNodePtr>& depends)
 {
     const TString fullName = module + "." + name;
@@ -2336,8 +2336,8 @@ TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const
     }
 
     // optional arguments
-    if (customUserType) {
-        sqlCallArgs.push_back(customUserType);
+    if (externalTypes) {
+        sqlCallArgs.push_back(externalTypes);
     } else if (!typeConfig.Empty() || runConfig || options || !depends.empty()) {
         sqlCallArgs.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
@@ -2410,12 +2410,12 @@ public:
                 src->AllColumns();
             }
         } else {
-            TNodePtr customUserType = nullptr;
+            TNodePtr externalTypes = nullptr;
             if (Module_ == "Tensorflow" && Name_ == "RunBatch") {
                 if (Args_.size() > 2) {
                     auto passThroughAtom = Q("PassThrough");
                     auto passThroughType = Y("StructMemberType", Y("ListItemType", Y("TypeOf", Args_[1])), passThroughAtom);
-                    customUserType = Y("AddMemberType", Args_[2], passThroughAtom, passThroughType);
+                    externalTypes = Y("AddMemberType", Args_[2], passThroughAtom, passThroughType);
                     Args_.erase(Args_.begin() + 2);
                 }
             }
@@ -2427,13 +2427,13 @@ public:
             if (ForReduce_) {
                 TVector<TNodePtr> udfArgs;
                 udfArgs.push_back(BuildQuotedAtom(Pos_, TString(Module_) + "." + Name_));
-                udfArgs.push_back(customUserType ? customUserType : new TCallNodeImpl(Pos_, "TupleType", {}));
+                udfArgs.push_back(externalTypes ? externalTypes : new TCallNodeImpl(Pos_, "TupleType", {}));
                 if (typeConfig) {
                     udfArgs.push_back(typeConfig);
                 }
                 Node_ = new TCallNodeImpl(Pos_, "SqlReduceUdf", udfArgs);
             } else {
-                auto udfArgs = BuildUdfArgs(ctx, Pos_, Args_, nullptr, nullptr, customUserType, typeConfig);
+                auto udfArgs = BuildUdfArgs(ctx, Pos_, Args_, nullptr, nullptr, externalTypes, typeConfig);
                 Node_ = BuildUdf(ctx, Pos_, Module_, Name_, udfArgs);
             }
         }
@@ -3905,7 +3905,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     TVector<TNodePtr> usedArgs = args;
 
-    TNodePtr customUserType = nullptr;
+    TNodePtr externalTypes = nullptr;
     if (ns == "json") {
         if (!ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_JSON_UDF, [](auto& out) {
             out << "Json UDF is deprecated. Please use JSON API instead";
@@ -3932,7 +3932,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     if (ns.StartsWith("yson")) {
         if (lowerName == "convertto" && usedArgs.size() > 1) {
-            customUserType = usedArgs[1];
+            externalTypes = usedArgs[1];
             usedArgs.erase(usedArgs.begin() + 1);
         }
 
@@ -3984,7 +3984,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     }
 
     TNodePtr typeConfig = MakeTypeConfig(pos, ns, usedArgs);
-    return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, customUserType,
+    return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, externalTypes,
         TDeferredAtom(typeConfig, ctx), nullptr, nullptr, {});
 }
 

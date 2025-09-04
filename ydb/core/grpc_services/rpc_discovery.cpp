@@ -44,11 +44,9 @@ public:
 
     void Bootstrap() {
         // request endpoints
-        const TSet<TString> services(
-            Request->GetProtoRequest()->Getservice().begin(), Request->GetProtoRequest()->Getservice().end());
-        
         Discoverer = Register(CreateDiscoverer(&MakeEndpointsBoardPath,
-            Request->GetProtoRequest()->database(), Request->GetEndpointId().empty() && services.empty(), SelfId(), CacheId));
+            Request->GetProtoRequest()->database(), Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),
+            SelfId(), CacheId));
 
         // request self node info
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));

@@ -8,7 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       version-change:
-        description: Version part to increment
+        description: |
+          Version part to increment:
+          • PATCH (X.Y.Z → X.Y.Z+1) - for bug fixes, small improvements
+          • MINOR (X.Y.Z → X.Y+1.0) - for new features, significant updates
         required: true
         type: choice
         options:
@@ -97,6 +100,11 @@ jobs:
       - name: Create release branch
         id: create-branch
         run: |
+          # Ensure we're on main before creating release branch
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+          
           BRANCH_NAME="release/cli-${{ steps.update-version.outputs.new-version }}"
           git checkout -b "$BRANCH_NAME"
           echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT

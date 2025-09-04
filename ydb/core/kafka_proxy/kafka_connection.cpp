@@ -410,7 +410,7 @@ protected:
         if (Request->Header.ClientId.has_value() && Request->Header.ClientId != "") {
             Context->KafkaClient = Request->Header.ClientId.value();
         }
-        
+
         if (IsTransactionalApiKey(Request->Header.RequestApiKey) && !TransactionsEnabled()) {
             KAFKA_LOG_ERROR("Transactional API keys are not enabled. To enable them set \"EnableKafkaTransactions\" feature flag to true in cluster configuration.");
             PassAway();
@@ -562,6 +562,7 @@ protected:
         Context->CloudId = event->CloudId;
         Context->FolderId = event->FolderId;
         Context->IsServerless = event->IsServerless;
+        Context->ResourceDatabasePath = event->ResourceDatabasePath;
 
         KAFKA_LOG_D("Authentificated successful. SID=" << Context->UserToken->GetUserSID());
         Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
@@ -638,10 +639,10 @@ protected:
         KAFKA_LOG_T("Building reply for method " << method << " and correlationId " << header->CorrelationId << " with error code: " << errorCode);
         TKafkaVersion headerVersion = ResponseHeaderVersion(header->RequestApiKey, header->RequestApiVersion);
         TKafkaVersion version = header->RequestApiVersion;
-        
+
         TResponseHeaderData responseHeader;
         responseHeader.CorrelationId = header->CorrelationId;
-        
+
         TKafkaInt32 size = responseHeader.Size(headerVersion) + reply->Size(version);
         TKafkaWritable writable(BufferedWriter);
         SendResponseMetrics(method, requestStartTime, size, errorCode, ctx);

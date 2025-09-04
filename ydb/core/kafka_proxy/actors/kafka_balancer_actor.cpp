@@ -6,7 +6,7 @@ using namespace NKikimr;
 using namespace NKikimr::NGRpcProxy::V1;
 
 void TKafkaBalancerActor::Bootstrap(const NActors::TActorContext& ctx) {
-    Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
+    Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
 
     if (RequestType == JOIN_GROUP && MemberId.empty()) {
         MemberId = SelfId().ToString();

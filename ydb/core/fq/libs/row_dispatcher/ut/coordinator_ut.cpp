@@ -7,6 +7,8 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
+#include <ydb/core/mind/tenant_node_enumeration.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <google/protobuf/util/message_differencer.h>
@@ -26,31 +28,25 @@ public:
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
-        auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-        auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-   
+
         LocalRowDispatcherId = Runtime.AllocateEdgeActor(0);
         RowDispatcher1Id = Runtime.AllocateEdgeActor(1);
         RowDispatcher2Id = Runtime.AllocateEdgeActor(2);
         ReadActor1 = Runtime.AllocateEdgeActor(0);
         ReadActor2 = Runtime.AllocateEdgeActor(0);
-        NodesManager = Runtime.AllocateEdgeActor(0);
+        Nameservice = Runtime.AllocateEdgeActor(0);
 
-        NConfig::TRowDispatcherCoordinatorConfig config;
+        NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig config;
         config.SetCoordinationNodePath("RowDispatcher");
-        config.SetTopicPartitionsLimitPerNode(1);
         auto& database = *config.MutableDatabase();
         database.SetEndpoint("YDB_ENDPOINT");
         database.SetDatabase("YDB_DATABASE");
         database.SetToken("");
-
         Coordinator = Runtime.Register(NewCoordinator(
             LocalRowDispatcherId,
             config,
-            yqSharedResources,
             "Tenant",
-            MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            NodesManager
+            MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 
         Runtime.EnableScheduleForActor(Coordinator);
@@ -110,14 +106,12 @@ public:
     }
 
     void ProcessNodesManagerRequest(ui64 nodesCount) {
-        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvNodesManager::TEvGetNodesRequest>(NodesManager, TDuration::Seconds(5));
-        UNIT_ASSERT(eventHolder.Get() != nullptr);
-
-        auto event = new NFq::TEvNodesManager::TEvGetNodesResponse();
-        for (ui64 i = 0; i < nodesCount; ++i) {
-            event->NodeIds.push_back(i);
+        TVector<ui32> nodes;
+        nodes.reserve(nodesCount);
+        for (ui32 i = 0; i < nodesCount; ++i) {
+            nodes.push_back(i);
         }
-        Runtime.Send(new NActors::IEventHandle(Coordinator, NodesManager, event));
+        Runtime.Send(new NActors::IEventHandle(Coordinator, Nameservice, new TEvTenantNodeEnumerator::TEvLookupResult("TenantName", std::move(nodes))));
     }
 
     TActorSystemStub actorSystemStub;
@@ -128,7 +122,7 @@ public:
     NActors::TActorId RowDispatcher2Id;
     NActors::TActorId ReadActor1;
     NActors::TActorId ReadActor2;
-    NActors::TActorId NodesManager;
+    NActors::TActorId Nameservice;
 };
 
 Y_UNIT_TEST_SUITE(CoordinatorTests) {

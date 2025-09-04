@@ -252,6 +252,9 @@ public:
         TString useTls = properties.Value("use_tls", "false");
         useTls.to_lower();
         cluster.SetUseSsl(useTls == "true"sv);
+        TString sharedReading = properties.Value("shared_reading", "false");
+        sharedReading.to_lower();
+        cluster.SetSharedReading(sharedReading == "true"sv);
 
         State_->Configuration->AddCluster(cluster, State_->DatabaseIds, State_->Types->Credentials, State_->DbResolver, properties);
         Gateway_->AddCluster(cluster);

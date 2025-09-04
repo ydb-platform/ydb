@@ -12,10 +12,10 @@ std::unique_ptr<NActors::IActor> NewCheckpointStorageService(
     const NKikimrConfig::TCheckpointsConfig& config,
     const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources,
+    NYdb::TDriver driver,
     const ::NMonitoring::TDynamicCounterPtr& counters)
 {
-    return NewStorageProxy(config, idsPrefix, credentialsProviderFactory, yqSharedResources, counters);
+    return NewStorageProxy(config, idsPrefix, credentialsProviderFactory, std::move(driver), counters);
 }
 
 } // namespace NFq

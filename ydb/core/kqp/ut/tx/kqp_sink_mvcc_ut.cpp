@@ -428,7 +428,6 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
                                             NQuery::TTxControl::Tx(*tx1).CommitTx())
                                         .GetValueSync();
                 UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, insertResult1.GetStatus(), insertResult1.GetIssues().ToString());
-                Cerr << "QQQ: insert into session 2\n"; 
                 auto insertResult2 = session2
                                         .ExecuteQuery(R"(
                             INSERT INTO `/Root/KV` (Key) VALUES (100)

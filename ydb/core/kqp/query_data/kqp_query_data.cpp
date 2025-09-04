@@ -116,7 +116,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TResultSetFo
             auto columnName = ColumnHints && ColumnHints->size() ? ColumnHints->at(idx) : TString(mkqlSrcRowStructType->GetMemberName(memberIndex));
             auto* columnType = mkqlSrcRowStructType->GetMemberType(memberIndex);
 
-            if (columnType->GetKind() == TType::EKind::Data) {
+            if (columnType->GetKind() != TType::EKind::Optional) {
                 arrowNotNullColumns.insert(columnName);
             }
 

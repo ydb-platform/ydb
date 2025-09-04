@@ -85,7 +85,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
             auto columnName = TString(columnHints && columnHints->size() ? order.at(idx).LogicalName : mkqlSrcRowStructType->GetMemberName(memberIndex));
             auto* columnType = mkqlSrcRowStructType->GetMemberType(memberIndex);
 
-            if (columnType->GetKind() == NMiniKQL::TType::EKind::Data) {
+            if (columnType->GetKind() != NMiniKQL::TType::EKind::Optional) {
                 arrowNotNullColumns.insert(columnName);
             }
 

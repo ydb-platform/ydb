@@ -208,7 +208,7 @@ class PileWorldView:
         return self.__str__()
 
 
-def get_latest_generation_pile(pile_world_views: Dict[str, PileWorldView]) -> Tuple[int, str]:
+def get_latest_generation_pile(pile_world_views: Dict[str, PileWorldView]) -> Tuple[Optional[int], Optional[str]]:
     latest_generation = None
     pile_with_latest_generation = None
     for pile_name, view in pile_world_views.items():

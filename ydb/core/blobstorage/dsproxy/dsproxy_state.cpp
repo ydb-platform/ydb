@@ -190,7 +190,7 @@ namespace NKikimr {
                 << " UnconfiguredStateReason# " << UnconfiguredStateReasonStr(UnconfiguredStateReason);
 
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-                << " Unconfigured Wakeup TIMEOUT Marker# DSP05 " << details)
+                << " Unconfigured Wakeup TIMEOUT Marker# DSP05 " << details);
                 
         ErrorDescription = "Configuration timeout occured (DSPE1). " + details;
         EstablishingSessionsPutMuteChecker.Unmute();

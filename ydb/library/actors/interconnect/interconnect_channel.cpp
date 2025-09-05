@@ -72,6 +72,7 @@ namespace NActors {
             switch (State) {
                 case EState::INITIAL:
                     event.InitChecksum();
+                    SendViaRdma.reset();
                     if (event.Buffer) {
                         State = EState::BODY;
                         Iter = event.Buffer->GetBeginIter();
@@ -105,7 +106,6 @@ namespace NActors {
                             sendViaRdma &= section.IsRdma;
                             totalSize += section.Size;
                         }
-                        SendViaRdma.reset();
                         if (sendViaRdma) {
                             Y_ABORT_UNLESS(totalSize, "got empty sz, sections: %d type: %d ", SerializationInfo->Sections.size(),  event.Event->Type());
                             NActorsInterconnect::TRdmaCreds rdmaCreds;

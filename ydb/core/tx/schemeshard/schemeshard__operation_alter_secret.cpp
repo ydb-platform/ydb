@@ -122,29 +122,16 @@ public:
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         NSchemeShard::TPath secretPath = parentPath.Child(secretName);
         {
-            NSchemeShard::TPath::TChecker checks = parentPath.Check();
+            NSchemeShard::TPath::TChecker checks = secretPath.Check();
             checks
+                .NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsDirectory();
-
-            if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
-                return result;
-            }
-        }
-
-        {
-            NSchemeShard::TPath::TChecker checks = secretPath.Check();
-            checks
-                .IsResolved()
-                .NotDeleted()
-                .NotUnderDeleting()
-                .IsSecret();
+                .IsSecret()
+                .NotUnderOperation()
+                .IsCommonSensePath();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

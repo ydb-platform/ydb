@@ -516,6 +516,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             return TableScheme;
         }
 
+        static const TTypedScheme& IndexedTable() {
+            return IndexedTableScheme;
+        } 
+
         static const TTypedScheme& Changefeed() {
             return ChangefeedScheme;
         }
@@ -543,6 +547,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         static const TTypedScheme TopicScheme;
         static const TString RequestStringTable;
         static const TString RequestStringTopic;
+        static const TTypedScheme IndexedTableScheme;
     };
 
     const char* TTestData::TableName = "Table";
@@ -582,6 +587,20 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 }
             }
         )"
+    };
+
+    const TTypedScheme TTestData::IndexedTableScheme = TTypedScheme {
+        EPathTypeTableIndex, // TODO: Replace with IndexedTable
+        Sprintf(R"(
+            TableDescription {
+                %s
+            }
+            IndexDescription {
+                Name: "ByValue"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobalUnique
+            }  
+        )", TableScheme.Scheme.c_str())
     };
 
     const TString TTestData::RequestStringTable = R"(
@@ -624,6 +643,24 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         ForgetS3({
             TTestData::Table(),
             TTestData::Changefeed()
+        }, TTestData::Request());
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleShardTableWithUniqueIndex) {
+        RunS3({
+            TTestData::IndexedTable()
+        }, TTestData::Request());
+    }
+
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleShardTableWithUniqueIndex) {
+        ForgetS3({
+            TTestData::IndexedTable()
+        }, TTestData::Request());
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleShardTableWithUniqueIndex) {
+        CancelS3({
+            TTestData::IndexedTable()
         }, TTestData::Request());
     }
 

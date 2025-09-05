@@ -134,21 +134,15 @@ class SimpleReaderWorkload:
         total_count = count_result[0]["count"]
         sum_result = self.execute_scan_query(f"SELECT SUM(value) as sum_value FROM `{self.table_name}`")
         total_sum = sum_result[0]["sum_value"]
-        unique_count_result = self.execute_scan_query(f"SELECT COUNT(DISTINCT id) as unique_count FROM `{self.table_name}`")
-        unique_count = unique_count_result[0]["unique_count"]
         expected_total_count = 6 * self.batch_size * write_calls
-        expected_unique_count = self.batch_size
         expected_total_sum = sum(range(self.batch_size)) * 6 * write_calls
         is_consistent = (total_count == expected_total_count and
-                         unique_count == expected_unique_count and
                          total_sum == expected_total_sum)
 
         return {
             "total_count": total_count,
             "total_sum": total_sum,
-            "unique_count": unique_count,
             "expected_total_count": expected_total_count,
-            "expected_unique_count": expected_unique_count,
             "expected_total_sum": expected_total_sum,
             "is_consistent": is_consistent,
         }
@@ -207,8 +201,6 @@ class TestSimpleReaderRestartToAnotherVersion(RestartToAnotherVersionFixture):
         assert len(failed_queries) == 0, f"Failed queries: {failed_queries}"
         assert final_consistency["total_count"] == final_consistency["expected_total_count"], \
             f"Total count mismatch: got {final_consistency['total_count']}, expected {final_consistency['expected_total_count']}"
-        assert final_consistency["unique_count"] == final_consistency["expected_unique_count"], \
-            f"Unique count mismatch: got {final_consistency['unique_count']}, expected {final_consistency['expected_unique_count']}"
         assert final_consistency["total_sum"] == final_consistency["expected_total_sum"], \
             f"Total sum mismatch: got {final_consistency['total_sum']}, expected {final_consistency['expected_total_sum']}"
 

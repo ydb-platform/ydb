@@ -285,6 +285,15 @@ message TGroupInfo {
     optional uint32 ProxyGroupId = 19;
     optional uint32 BridgePileId = 20;
     optional uint32 GroupSizeInUnits = 21;
+
+    optional string BridgeSyncStage = 22; // current stage of bridge sync (only for bridged groups)
+    optional double BridgeDataSyncProgress = 23; // [0, 1] for WRITE_KEEP_BARRIER_DONOTKEEP_DATA
+    optional bool BridgeDataSyncErrors = 24; // have we seen data errors during this stage?
+    optional string BridgeSyncLastError = 25; // last reported error during this stage
+    optional uint64 BridgeSyncLastErrorTimestamp = 26; // when was it reported?
+    optional uint64 BridgeSyncFirstErrorTimestamp = 27; // first error timestamp
+    optional uint32 BridgeSyncErrorCount = 28; // number of errors reported during this stage
+    optional bool BridgeSyncRunning = 29; // is the syncer running right now?
 }
 
 message TGroupEntry {

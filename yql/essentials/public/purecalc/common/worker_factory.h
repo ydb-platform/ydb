@@ -129,16 +129,19 @@ namespace NYql {
             void ReturnWorker(IWorker* worker) override;
 
         private:
+            TIntrusivePtr<TTypeAnnotationContext> PrepareTypeContext(
+                IModuleResolver::TPtr factoryModuleResolver
+            );
+
             TExprNode::TPtr Compile(TStringBuf query,
                 ETranslationMode mode,
-                IModuleResolver::TPtr moduleResolver,
                 ui16 syntaxVersion,
-                NYql::TLangVersion langver,
                 const THashMap<TString, TString>& modules,
                 const TInputSpecBase& inputSpec,
                 const TOutputSpecBase& outputSpec,
                 bool useAntlr4,
-                EProcessorMode processorMode);
+                EProcessorMode processorMode,
+                TTypeAnnotationContext* typeContext);
         };
 
         class TPullStreamWorkerFactory final: public TWorkerFactory<IPullStreamWorkerFactory> {

@@ -2,7 +2,7 @@
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
@@ -232,8 +232,8 @@ bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStrin
                     // prefixed index update is not supported yet
                     return true;
                 }
-                const auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::LevelTable;
-                const auto postingTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::PostingTable;
+                const auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::LevelTable;
+                const auto postingTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::PostingTable;
                 if (path == levelTablePath || path == postingTablePath) {
                     return true;
                 }

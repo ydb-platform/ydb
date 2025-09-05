@@ -80,7 +80,12 @@ private:
         }
         virtual void DoComplete(const NActors::TActorContext& ctx) override {
             if (NeedContinueFlag) {
-                Self->EnqueueProgressTx(ctx, TxId);
+                if (TxId && Self->ProgressTxInFlight && TxId != Self->ProgressTxInFlight) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("issue #23402", "TxId != ProgressTxInFlight")("TxId", TxId)("ProgressTxInFlight", Self->ProgressTxInFlight);
+                }
+                else {
+                    Self->EnqueueProgressTx(ctx, TxId);
+                }
             }
         }
 

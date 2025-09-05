@@ -6,6 +6,8 @@ FORK_TEST_FILES()
 TEST_SRCS(
     base.py
     basic_reading.py
+    data_paging.py
+    listing_paging.py
     settings_validation.py
 )
 

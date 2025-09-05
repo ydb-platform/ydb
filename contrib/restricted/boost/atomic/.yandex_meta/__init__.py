@@ -18,17 +18,6 @@ def post_install(self):
             ),
         )
 
-        # wait_on_address is a windows-specific source
-        atomic.SRCS.remove("src/wait_on_address.cpp")
-        atomic.after(
-            "PEERDIR",
-            Switch(
-                OS_WINDOWS=Linkable(
-                    SRCS=["src/wait_on_address.cpp"],
-                ),
-            ),
-        )
-
         atomic.SRCS.remove("src/find_address_sse41.cpp")
         atomic.after(
             "SRCS",

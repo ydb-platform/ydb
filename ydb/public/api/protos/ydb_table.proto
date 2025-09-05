@@ -301,6 +301,12 @@ message ColumnFamilyPolicy {
         COMPRESSED = 2;
     }
 
+    enum CacheMode {
+        CACHE_MODE_UNSPECIFIED = 0;
+        CACHE_MODE_REGULAR = 1;
+        CACHE_MODE_IN_MEMORY = 2;
+    }
+
     // Name of the column family, the name "default" must be used for the
     // primary column family that contains as least primary key columns
     string name = 1;
@@ -315,6 +321,9 @@ message ColumnFamilyPolicy {
 
     // Optionally specify whether data should be compressed
     Compression compression = 5;
+
+    // When IN_MEMORY tries to keep the colums of the family in memory (default is REGULAR)
+    CacheMode cache_mode = 6;
 }
 
 message CompactionPolicy {
@@ -553,6 +562,12 @@ message ColumnFamily {
         COMPRESSION_ZSTD = 3;
     }
 
+    enum CacheMode {
+        CACHE_MODE_UNSPECIFIED = 0;
+        CACHE_MODE_REGULAR = 1;
+        CACHE_MODE_IN_MEMORY = 2;
+    }
+
     // Name of the column family
     string name = 1;
 
@@ -570,6 +585,8 @@ message ColumnFamily {
     // For ZSTD compression level must be in range [-131072:22]
     // For other compression types compression level must be empty
     optional int32 compression_level = 5;
+
+    CacheMode cache_mode = 6;
 }
 
 message PartitioningSettings {

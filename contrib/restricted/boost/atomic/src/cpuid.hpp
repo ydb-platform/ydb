@@ -21,7 +21,7 @@
 #if defined(_MSC_VER)
 #include <intrin.h> // __cpuid
 #endif
-#include <boost/cstdint.hpp>
+#include <cstdint>
 #include <boost/atomic/detail/config.hpp>
 
 #include <boost/atomic/detail/header.hpp>
@@ -31,14 +31,14 @@ namespace atomics {
 namespace detail {
 
 //! The function invokes x86 cpuid instruction
-inline void cpuid(uint32_t& eax, uint32_t& ebx, uint32_t& ecx, uint32_t& edx)
+inline void cpuid(std::uint32_t& eax, std::uint32_t& ebx, std::uint32_t& ecx, std::uint32_t& edx)
 {
 #if defined(__GNUC__)
 #if (defined(__i386__) || defined(__VXWORKS__)) && (defined(__PIC__) || defined(__PIE__)) && !(defined(__clang__) || (defined(BOOST_GCC) && BOOST_GCC >= 50100))
     // Unless the compiler can do it automatically, we have to backup ebx in 32-bit PIC/PIE code because it is reserved by the ABI.
     // For VxWorks ebx is reserved on 64-bit as well.
 #if defined(__x86_64__)
-    uint64_t rbx = ebx;
+    std::uint64_t rbx = ebx;
     __asm__ __volatile__
     (
         "xchgq %%rbx, %0\n\t"
@@ -46,7 +46,7 @@ inline void cpuid(uint32_t& eax, uint32_t& ebx, uint32_t& ecx, uint32_t& edx)
         "xchgq %%rbx, %0\n\t"
             : "+DS" (rbx), "+a" (eax), "+c" (ecx), "+d" (edx)
     );
-    ebx = static_cast< uint32_t >(rbx);
+    ebx = static_cast< std::uint32_t >(rbx);
 #else // defined(__x86_64__)
     __asm__ __volatile__
     (

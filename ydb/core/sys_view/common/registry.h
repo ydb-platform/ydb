@@ -334,27 +334,35 @@ struct Schema : NIceDb::Schema {
     };
 
     struct Groups : Table<6> {
-        struct GroupId             : Column<1, NScheme::NTypeIds::Uint32> {};
-        struct Generation          : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct ErasureSpecies      : Column<3, NScheme::NTypeIds::Utf8> {};
-        struct BoxId               : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct StoragePoolId       : Column<5, NScheme::NTypeIds::Uint64> {};
-        struct EncryptionMode      : Column<6, NScheme::NTypeIds::Uint32> {};
-        struct LifeCyclePhase      : Column<7, NScheme::NTypeIds::Uint32> {};
-        struct AllocatedSize       : Column<8, NScheme::NTypeIds::Uint64> {};
-        struct AvailableSize       : Column<9, NScheme::NTypeIds::Uint64> {};
-        //struct Usage             : Column<10, NScheme::NTypeIds::Double> {};
-        //struct StopFactor        : Column<11, NScheme::NTypeIds::Double> {};
-        struct SeenOperational     : Column<12, NScheme::NTypeIds::Bool> {};
-        struct PutTabletLogLatency : Column<13, NScheme::NTypeIds::Interval> {};
-        struct PutUserDataLatency  : Column<14, NScheme::NTypeIds::Interval> {};
-        struct GetFastLatency      : Column<15, NScheme::NTypeIds::Interval> {};
-        struct LayoutCorrect       : Column<16, NScheme::NTypeIds::Bool> {};
-        struct OperatingStatus     : Column<17, NScheme::NTypeIds::Utf8> {};
-        struct ExpectedStatus      : Column<18, NScheme::NTypeIds::Utf8> {};
-        struct ProxyGroupId        : Column<19, NScheme::NTypeIds::Uint32> {};
-        struct BridgePileId        : Column<20, NScheme::NTypeIds::Uint32> {};
-        struct GroupSizeInUnits    : Column<21, NScheme::NTypeIds::Uint32> {};
+        struct GroupId                       : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct Generation                    : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct ErasureSpecies                : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct BoxId                         : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct StoragePoolId                 : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct EncryptionMode                : Column<6, NScheme::NTypeIds::Uint32> {};
+        struct LifeCyclePhase                : Column<7, NScheme::NTypeIds::Uint32> {};
+        struct AllocatedSize                 : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct AvailableSize                 : Column<9, NScheme::NTypeIds::Uint64> {};
+        //struct Usage                       : Column<10, NScheme::NTypeIds::Double> {};
+        //struct StopFactor                  : Column<11, NScheme::NTypeIds::Double> {};
+        struct SeenOperational               : Column<12, NScheme::NTypeIds::Bool> {};
+        struct PutTabletLogLatency           : Column<13, NScheme::NTypeIds::Interval> {};
+        struct PutUserDataLatency            : Column<14, NScheme::NTypeIds::Interval> {};
+        struct GetFastLatency                : Column<15, NScheme::NTypeIds::Interval> {};
+        struct LayoutCorrect                 : Column<16, NScheme::NTypeIds::Bool> {};
+        struct OperatingStatus               : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct ExpectedStatus                : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct ProxyGroupId                  : Column<19, NScheme::NTypeIds::Uint32> {};
+        struct BridgePileId                  : Column<20, NScheme::NTypeIds::Uint32> {};
+        struct GroupSizeInUnits              : Column<21, NScheme::NTypeIds::Uint32> {};
+        struct BridgeSyncStage               : Column<22, NScheme::NTypeIds::Utf8> {};
+        struct BridgeDataSyncProgress        : Column<23, NScheme::NTypeIds::Double> {};
+        struct BridgeDataSyncErrors          : Column<24, NScheme::NTypeIds::Bool> {};
+        struct BridgeSyncLastError           : Column<25, NScheme::NTypeIds::Utf8> {};
+        struct BridgeSyncLastErrorTimestamp  : Column<26, NScheme::NTypeIds::Uint64> {};
+        struct BridgeSyncFirstErrorTimestamp : Column<27, NScheme::NTypeIds::Uint64> {};
+        struct BridgeSyncErrorCount          : Column<28, NScheme::NTypeIds::Uint32> {};
+        struct BridgeSyncRunning             : Column<29, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -376,7 +384,15 @@ struct Schema : NIceDb::Schema {
             ExpectedStatus,
             ProxyGroupId,
             BridgePileId,
-            GroupSizeInUnits>;
+            GroupSizeInUnits,
+            BridgeSyncStage,
+            BridgeDataSyncProgress,
+            BridgeDataSyncErrors,
+            BridgeSyncLastError,
+            BridgeSyncLastErrorTimestamp,
+            BridgeSyncFirstErrorTimestamp,
+            BridgeSyncErrorCount,
+            BridgeSyncRunning>;
     };
 
     struct StoragePools : Table<7> {

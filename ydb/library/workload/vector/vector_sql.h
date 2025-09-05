@@ -10,6 +10,10 @@ namespace NYdbWorkload {
 std::tuple<std::string, bool> GetMetricInfo(NYdb::NTable::TVectorIndexSettings::EMetric metric);
 
 
+// Utility function to create "primary key as string" expression
+std::string MakeKeyExpression(const TVectorWorkloadParams& params, const std::string& tableAlias);
+
+
 // Utility function to create select query
 std::string MakeSelect(const TVectorWorkloadParams& params, const TString& indexName);
 

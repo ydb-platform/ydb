@@ -149,6 +149,9 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
             return parseConclusion;
         }
     }
+    if (proto.HasMaxBatchSize()) {
+        MaxBatchSize = proto.GetMaxBatchSize();
+    }
 
     return TConclusionStatus::Success();
 }
@@ -256,6 +259,7 @@ TCPULimitsConfig::TCPULimitsConfig(const double cpuGroupThreadsLimit, const doub
 TConclusionStatus TCPULimitsConfig::DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScan& config) {
     if (config.HasCpuGroupThreadsLimit()) {
         CPUGroupThreadsLimit = config.GetCpuGroupThreadsLimit();
+        CPUGroupName = config.GetCpuGroupName();
     }
     return TConclusionStatus::Success();
 }

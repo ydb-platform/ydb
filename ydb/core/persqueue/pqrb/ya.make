@@ -1,8 +1,10 @@
 LIBRARY()
 
 SRCS(
+    mirror_describer.cpp
     partition_scale_request.cpp
     partition_scale_manager.cpp
+    partition_scale_manager_graph_cmp.cpp
     read_balancer__balancing_app.cpp
     read_balancer__balancing.cpp
     read_balancer_app.cpp

@@ -1358,7 +1358,7 @@ namespace NTypeAnnImpl {
 
         auto resType = MakeTypeHandleResourceType(ctx.Expr);
         auto listType = ctx.Expr.MakeType<TListExprType>(resType);
-        auto status = TryConvertTo(input->ChildRef(0), *listType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto status = TryConvertTo(input->ChildRef(0), *listType, ctx.Expr, ctx.Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -1391,7 +1391,7 @@ namespace NTypeAnnImpl {
 
         auto itemType = MakeItemDescriptorType(ctx.Expr);
         auto listType = ctx.Expr.MakeType<TListExprType>(itemType);
-        auto status = TryConvertTo(input->ChildRef(0), *listType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto status = TryConvertTo(input->ChildRef(0), *listType, ctx.Expr, ctx.Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -1602,7 +1602,7 @@ namespace NTypeAnnImpl {
 
         if (input->ChildrenSize() > 1) {
             auto optStrType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
-            auto status = TryConvertTo(input->ChildRef(1), *optStrType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            auto status = TryConvertTo(input->ChildRef(1), *optStrType, ctx.Expr, ctx.Types);
             if (status == IGraphTransformer::TStatus::Error) {
                 return status;
             }
@@ -1610,7 +1610,7 @@ namespace NTypeAnnImpl {
 
         if (input->ChildrenSize() > 2) {
             auto optListStrType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TListExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String)));
-            auto status = TryConvertTo(input->ChildRef(2), *optListStrType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            auto status = TryConvertTo(input->ChildRef(2), *optListStrType, ctx.Expr, ctx.Types);
             if (status == IGraphTransformer::TStatus::Error) {
                 return status;
             }
@@ -1681,14 +1681,14 @@ namespace NTypeAnnImpl {
         }
 
         auto listType = ctx.Expr.MakeType<TListExprType>(MakeArgumentDescriptorType(ctx.Expr));
-        auto status = TryConvertTo(input->ChildRef(1), *listType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto status = TryConvertTo(input->ChildRef(1), *listType, ctx.Expr, ctx.Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
 
         if (input->ChildrenSize() > 2) {
             auto optUi32Type = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint32));
-            status = TryConvertTo(input->ChildRef(2), *optUi32Type, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            status = TryConvertTo(input->ChildRef(2), *optUi32Type, ctx.Expr, ctx.Types);
             if (status != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
@@ -1696,7 +1696,7 @@ namespace NTypeAnnImpl {
 
         if (input->ChildrenSize() > 3) {
             auto optStrType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
-            status = TryConvertTo(input->ChildRef(3), *optStrType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            status = TryConvertTo(input->ChildRef(3), *optStrType, ctx.Expr, ctx.Types);
             if (status != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
@@ -1774,7 +1774,7 @@ namespace NTypeAnnImpl {
         }
 
         auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::String);
-        auto status = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto status = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, ctx.Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -1808,7 +1808,7 @@ namespace NTypeAnnImpl {
         }
 
         auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::String);
-        auto status = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto status = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, ctx.Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -1844,7 +1844,7 @@ namespace NTypeAnnImpl {
             }
         } else {
             auto ui32Type = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint32);
-            auto status = TryConvertTo(input->ChildRef(0), *ui32Type, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            auto status = TryConvertTo(input->ChildRef(0), *ui32Type, ctx.Expr, ctx.Types);
             if (status.Level != IGraphTransformer::TStatus::Ok) {
                 return status;
             }

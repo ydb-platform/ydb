@@ -460,7 +460,7 @@ void TestWriteOverload(const TestTableDescription& table) {
 
     const ui64 overloadSize = NKikimrConfig::TColumnShardConfig().GetWritingInFlightRequestBytesLimit();
     ui32 toCatch = overloadSize / testBlob.size() + 1;
-    UNIT_ASSERT_VALUES_EQUAL(toCatch, 21);
+    UNIT_ASSERT_VALUES_EQUAL(toCatch, 340);
     TDeque<TAutoPtr<IEventHandle>> capturedWrites;
 
     auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
@@ -1619,7 +1619,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
         AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        AFL_VERIFY(writer.Abort(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        AFL_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
         PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId + 1), false);
 

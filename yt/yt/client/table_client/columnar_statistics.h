@@ -54,6 +54,8 @@ struct TLargeColumnarStatistics
 //! TColumnarStatistics stores per-column statistics of data stored in a chunk/table.
 struct TColumnarStatistics
 {
+    static constexpr size_t MaxStringValueLength = 100;
+
     //! Per-column total data weight for chunks whose meta contains columnar statistics.
     std::vector<i64> ColumnDataWeights;
     //! Total weight of all write and delete timestamps.

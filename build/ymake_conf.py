@@ -122,7 +122,8 @@ class Platform(object):
 
         self.is_xtensa_hifi4 = self.arch == 'xtensa_hifi4'
         self.is_xtensa_hifi5 = self.arch == 'xtensa_hifi5'
-        self.is_xtensa = self.is_xtensa_hifi4 or self.is_xtensa_hifi5
+        self.is_xtensa_esp32s3 = self.arch == 'xtensa_esp32s3'
+        self.is_xtensa = self.is_xtensa_hifi4 or self.is_xtensa_hifi5 or self.is_xtensa_esp32s3
 
         self.armv6_float_abi = 'hard'
 
@@ -244,6 +245,7 @@ class Platform(object):
             (self.is_riscv32, 'ARCH_RISCV32'),
             (self.is_xtensa_hifi4, 'ARCH_XTENSA_HIFI4'),
             (self.is_xtensa_hifi5, 'ARCH_XTENSA_HIFI5'),
+            (self.is_xtensa_esp32s3, 'ARCH_XTENSA_ESP32S3'),
             (self.is_xtensa, 'ARCH_XTENSA'),
             (self.is_nds32, 'ARCH_NDS32'),
             (self.is_tc32, 'ARCH_TC32'),

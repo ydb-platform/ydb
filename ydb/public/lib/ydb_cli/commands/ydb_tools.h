@@ -59,6 +59,7 @@ private:
     bool RestoreData = true;
     bool RestoreIndexes = true;
     bool RestoreACL = true;
+    bool ReplaceSysACL = true;
     bool SkipDocumentTables = false;
     bool SavePartialResult = false;
     bool Replace = false;

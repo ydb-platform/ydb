@@ -11,7 +11,7 @@ def boringssl_cryptobackend(self):
 
 ngtcp2 = CMakeNinjaNixProject(
     license="MIT",
-    owners=["g:devtools-contrib", "g:yandex-io"],
+    owners=["g:yandex-io"],
     nixattr="ngtcp2",
     arcdir="contrib/libs/ngtcp2",
     disable_includes=[

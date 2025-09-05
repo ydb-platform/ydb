@@ -220,7 +220,11 @@ public:
                 }
             }
             if (mismatchFound) {
-                ctx.Warning(Pos_, TIssuesIds::YQL_SOURCE_SELECT_COLUMN_MISMATCH) << str.Str();
+                if (!ctx.Warning(Pos_, TIssuesIds::YQL_SOURCE_SELECT_COLUMN_MISMATCH, [&](auto& out) {
+                    out << str.Str();
+                })) {
+                    return false;
+                }
             }
         }
         return true;

@@ -177,6 +177,17 @@ BELONGS ya.make
     Files with this license:
         LICENSE [208:208]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 308695cb6f8bec662735a4cdaa183a3e
+BELONGS ya.make
+    License text:
+        \# Copyright 2023 The gRPC Authors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        _parallel_compile_patch.py [1:1]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 3f8e6ecc96f8543539ce4b548cdc9afb
 BELONGS ya.make
     License text:
@@ -210,7 +221,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        _parallel_compile_patch.py [1:1]
         grpc/_cython/_cygrpc/_hooks.pxd.pxi [1:1]
         grpc/_cython/_cygrpc/_hooks.pyx.pxi [1:1]
         grpc/_cython/_cygrpc/arguments.pxd.pxi [1:1]
@@ -249,6 +259,17 @@ BELONGS ya.make
         grpc/aio/_server.py [1:1]
         grpc/aio/_typing.py [1:1]
 
+KEEP     COPYRIGHT_SERVICE_LABEL c12d7f573afc12fe7a2af0e4d66c7697
+BELONGS ya.make
+    License text:
+        \# Copyright 2023 gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        grpc/_cython/_cygrpc/observability.pyx.pxi [1:1]
+
 KEEP     COPYRIGHT_SERVICE_LABEL cd2dccf3745a79cfb4fea6a49cb170ae
 BELONGS ya.make
     License text:
@@ -281,6 +302,17 @@ BELONGS ya.make
         grpc/_cython/_cygrpc/tag.pyx.pxi [1:1]
         grpc/_interceptor.py [1:1]
         grpc/beta/_metadata.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d6b90be8cc590f71cdd4ab1921cde88d
+BELONGS ya.make
+    License text:
+        \# Copyright 2023 The gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        grpc/_observability.py [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f8fb9a8ebe3e4b096090bd006ebb72cc
 BELONGS ya.make

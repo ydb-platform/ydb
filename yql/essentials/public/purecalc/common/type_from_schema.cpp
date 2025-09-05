@@ -10,7 +10,7 @@ namespace {
 
 #define REPORT(...) ctx.AddError(TIssue(TString(TStringBuilder() << __VA_ARGS__)))
 
-    bool CheckStruct(const TStructExprType* got, const TStructExprType* expected, TExprContext& ctx) {
+    bool CheckStruct(const TStructExprType* got, const TStructExprType* expected, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
         auto status = true;
 
         if (expected) {
@@ -21,7 +21,7 @@ namespace {
                     const auto* expectedItem = expected->GetItems()[*expectedIndex]->GetItemType();
 
                     auto arg = ctx.NewArgument(TPositionHandle(), "arg");
-                    auto fieldConversionStatus = TryConvertTo(arg, *gotItem, *expectedItem, ctx, {}, true);
+                    auto fieldConversionStatus = TryConvertTo(arg, *gotItem, *expectedItem, ctx, typeCtx);
                     if (fieldConversionStatus.Level == IGraphTransformer::TStatus::Error) {
                         status = false;
                     }
@@ -45,7 +45,8 @@ namespace {
         return status;
     }
 
-    bool CheckVariantContent(const TStructExprType* got, const TStructExprType* expected, TExprContext& ctx) {
+    bool CheckVariantContent(const TStructExprType* got, const TStructExprType* expected, TExprContext& ctx,
+        const TTypeAnnotationContext& typeCtx) {
         auto status = true;
 
         if (expected) {
@@ -86,7 +87,7 @@ namespace {
             const auto* gotStruct = gotItem->Cast<TStructExprType>();
             const auto* expectedStruct = expectedItem ? expectedItem->Cast<TStructExprType>() : nullptr;
 
-            if (!CheckStruct(gotStruct, expectedStruct, ctx)) {
+            if (!CheckStruct(gotStruct, expectedStruct, ctx, typeCtx)) {
                 status = false;
             }
         }
@@ -94,7 +95,8 @@ namespace {
         return status;
     }
 
-    bool CheckVariantContent(const TTupleExprType* got, const TTupleExprType* expected, TExprContext& ctx) {
+    bool CheckVariantContent(const TTupleExprType* got, const TTupleExprType* expected, TExprContext& ctx,
+        const TTypeAnnotationContext& typeCtx) {
         if (expected && expected->GetSize() != got->GetSize()) {
             REPORT("Expected to have " << expected->GetSize() << " alternatives, but got " << got->GetSize());
             return false;
@@ -123,7 +125,7 @@ namespace {
             const auto* gotStruct = gotItem->Cast<TStructExprType>();
             const auto* expectedStruct = expectedItem ? expectedItem->Cast<TStructExprType>() : nullptr;
 
-            if (!CheckStruct(gotStruct, expectedStruct, ctx)) {
+            if (!CheckStruct(gotStruct, expectedStruct, ctx, typeCtx)) {
                 status = false;
             }
         }
@@ -131,7 +133,8 @@ namespace {
         return status;
     }
 
-    bool CheckVariant(const TVariantExprType* got, const TVariantExprType* expected, TExprContext& ctx) {
+    bool CheckVariant(const TVariantExprType* got, const TVariantExprType* expected, TExprContext& ctx,
+        const TTypeAnnotationContext& typeCtx) {
         if (expected && expected->GetUnderlyingType()->GetKind() != got->GetUnderlyingType()->GetKind()) {
             REPORT("Expected Variant over " << expected->GetUnderlyingType()->GetKind() <<
                    ", but got Variant over " << got->GetUnderlyingType()->GetKind());
@@ -143,13 +146,13 @@ namespace {
             {
                 const auto* gotStruct = got->GetUnderlyingType()->Cast<TStructExprType>();
                 const auto* expectedStruct = expected ? expected->GetUnderlyingType()->Cast<TStructExprType>() : nullptr;
-                return CheckVariantContent(gotStruct, expectedStruct, ctx);
+                return CheckVariantContent(gotStruct, expectedStruct, ctx, typeCtx);
             }
             case ETypeAnnotationKind::Tuple:
             {
                 const auto* gotTuple = got->GetUnderlyingType()->Cast<TTupleExprType>();
                 const auto* expectedTuple = expected ? expected->GetUnderlyingType()->Cast<TTupleExprType>() : nullptr;
-                return CheckVariantContent(gotTuple, expectedTuple, ctx);
+                return CheckVariantContent(gotTuple, expectedTuple, ctx, typeCtx);
             }
             default:
                 Y_UNREACHABLE();
@@ -158,7 +161,7 @@ namespace {
         return false;
     }
 
-    bool CheckSchema(const TTypeAnnotationNode* got, const TTypeAnnotationNode* expected, TExprContext& ctx, bool allowVariant) {
+    bool CheckSchema(const TTypeAnnotationNode* got, const TTypeAnnotationNode* expected, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, bool allowVariant) {
         if (expected && expected->GetKind() != got->GetKind()) {
             REPORT("Expected " << expected->GetKind() << ", but got " << got->GetKind());
             return false;
@@ -176,7 +179,7 @@ namespace {
                     return false;
                 }
 
-                return CheckStruct(gotStruct, expectedStruct, ctx);
+                return CheckStruct(gotStruct, expectedStruct, ctx, typeCtx);
             }
             case ETypeAnnotationKind::Variant:
                 if (allowVariant) {
@@ -189,7 +192,7 @@ namespace {
                         return false;
                     }
 
-                    return CheckVariant(gotVariant, expectedVariant, ctx);
+                    return CheckVariant(gotVariant, expectedVariant, ctx, typeCtx);
                 }
                 [[fallthrough]];
             default:
@@ -240,18 +243,18 @@ namespace NYql::NPureCalc {
         return result;
     }
 
-    bool ValidateInputSchema(const TTypeAnnotationNode* type, TExprContext& ctx) {
+    bool ValidateInputSchema(const TTypeAnnotationNode* type, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
         TIssueScopeGuard issueScope(ctx.IssueManager, []() { return new TIssue(TPosition(), "Input schema"); });
-        return CheckSchema(type, nullptr, ctx, false);
+        return CheckSchema(type, nullptr, ctx, typeCtx, false);
     }
 
-    bool ValidateOutputSchema(const TTypeAnnotationNode* type, TExprContext& ctx) {
+    bool ValidateOutputSchema(const TTypeAnnotationNode* type, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
         TIssueScopeGuard issueScope(ctx.IssueManager, []() { return new TIssue(TPosition(), "Output schema"); });
-        return CheckSchema(type, nullptr, ctx, true);
+        return CheckSchema(type, nullptr, ctx, typeCtx, true);
     }
 
-    bool ValidateOutputType(const TTypeAnnotationNode* type, const TTypeAnnotationNode* expected, TExprContext& ctx) {
+    bool ValidateOutputType(const TTypeAnnotationNode* type, const TTypeAnnotationNode* expected, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
         TIssueScopeGuard issueScope(ctx.IssueManager, []() { return new TIssue(TPosition(), "Program return type"); });
-        return CheckSchema(type, expected, ctx, true);
+        return CheckSchema(type, expected, ctx, typeCtx, true);
     }
 }

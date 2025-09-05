@@ -18,7 +18,7 @@ public:
         GroupDeletionRequestMaxBatchSize_(settings.GroupDeletionRequestMaxBatchSize),
         MaxInflightGroupDeletionRequests_(settings.MaxInflightGroupDeletionRequests)
     {
-        ThreadPool_ = CreateThreadPool(settings.WorkersNum);
+        ThreadPool_ = CreateThreadPool(settings.WorkersNum, settings.MaxQueueSize, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
         ProcessGroupDeletionRequests();
     }
 

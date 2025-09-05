@@ -7,7 +7,7 @@
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/range_ops.h>
@@ -26,11 +26,11 @@ namespace NSchemeShard {
 ui64 gVectorIndexSeed = 0;
 
 // return count, parts, step
-static std::tuple<NTableIndex::TClusterId, NTableIndex::TClusterId, NTableIndex::TClusterId> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
+static std::tuple<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
     const auto& kmeans = buildInfo.KMeans;
     Y_ENSURE(kmeans.K != 0);
     const auto count = kmeans.ChildCount();
-    NTableIndex::TClusterId step = 1;
+    NTableIndex::NKMeans::TClusterId step = 1;
     auto parts = count;
     auto shards = tableInfo.GetShard2PartitionIdx().size();
     if (!buildInfo.KMeans.NeedsAnotherLevel() || count <= 1 || shards <= 1) {
@@ -63,8 +63,8 @@ protected:
     TActorId Uploader;
     ui32 RetryCount = 0;
     ui32 UploadBytes = 0;
-    const NTableIndex::TClusterId Parent = 0;
-    NTableIndex::TClusterId Child = 0;
+    const NTableIndex::NKMeans::TClusterId Parent = 0;
+    NTableIndex::NKMeans::TClusterId Child = 0;
     const TString EmptyVector;
     const ui32 EmptyLevels;
 
@@ -77,8 +77,8 @@ public:
                    const TActorId& responseActorId,
                    TIndexBuildId buildId,
                    TIndexBuildInfo::TSample::TRows sample,
-                   NTableIndex::TClusterId parent,
-                   NTableIndex::TClusterId child,
+                   NTableIndex::NKMeans::TClusterId parent,
+                   NTableIndex::NKMeans::TClusterId child,
                    const TString& emptyVector,
                    ui32 emptyLevels)
         : TargetTable(std::move(targetTable))
@@ -125,9 +125,9 @@ public:
         for (auto& [_, row] : Sample) {
             auto child = Child++;
             if (IsPostingLevel) {
-                child = SetPostingParentFlag(child);
+                child = NTableIndex::NKMeans::SetPostingParentFlag(child);
             } else {
-                EnsureNoPostingParentFlag(child);
+                NTableIndex::NKMeans::EnsureNoPostingParentFlag(child);
             }
             pk[1] = TCell::Make(child);
 
@@ -144,7 +144,7 @@ public:
             Y_ENSURE(!UploadRows->size());
             for (ui32 level = 1; level <= EmptyLevels; level++) {
                 pk[0] = TCell::Make((ui64)(level-1));
-                pk[1] = TCell::Make(level == EmptyLevels ? SetPostingParentFlag((ui64)level) : (ui64)level);
+                pk[1] = TCell::Make(level == EmptyLevels ? NTableIndex::NKMeans::SetPostingParentFlag((ui64)level) : (ui64)level);
                 UploadBytes += NDataShard::CountRowCellBytes(pk, emptyCells);
                 UploadRows->emplace_back(TSerializedCellVec{pk}, emptyRow);
             }
@@ -152,11 +152,11 @@ public:
 
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
-        type.set_type_id(NTableIndex::ClusterIdType);
-        (*Types)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
-        (*Types)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
+        type.set_type_id(NTableIndex::NKMeans::ClusterIdType);
+        (*Types)[0] = {NTableIndex::NKMeans::ParentColumn, type};
+        (*Types)[1] = {NTableIndex::NKMeans::IdColumn, type};
         type.set_type_id(Ydb::Type::STRING);
-        (*Types)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
+        (*Types)[2] = {NTableIndex::NKMeans::CentroidColumn, type};
 
         Become(&TThis::StateWork);
 
@@ -348,7 +348,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         indexDataColumns.insert(indexKeys.KeyColumns.back());
     }
 
-    using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+    using namespace NTableIndex::NKMeans;
     modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
@@ -745,7 +745,7 @@ private:
         }
 
         ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
-        path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
+        path.Rise().Dive(NTableIndex::NKMeans::LevelTable);
         ev->Record.SetLevelName(path.PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
@@ -783,9 +783,9 @@ private:
         ev->Record.SetChild(buildInfo.KMeans.ChildBegin + (2 * buildInfo.KMeans.TableSize) * shardIndex);
 
         ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
-        path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
+        path.Rise().Dive(NTableIndex::NKMeans::LevelTable);
         ev->Record.SetLevelName(path.PathString());
-        path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable);
+        path.Rise().Dive(NTableIndex::NKMeans::PrefixTable);
         ev->Record.SetPrefixName(path.PathString());
 
         ev->Record.SetPrefixColumns(buildInfo.IndexColumns.size() - 1);
@@ -886,7 +886,7 @@ private:
 
     void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
         buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
-        auto path = GetBuildPath(Self, buildInfo, NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
+        auto path = GetBuildPath(Self, buildInfo, NTableIndex::NKMeans::LevelTable);
         Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
         auto actor = new TUploadSampleK(path.PathString(), !buildInfo.KMeans.NeedsAnotherLevel(),
             buildInfo.ScanSettings, Self->SelfId(), BuildId,
@@ -1713,7 +1713,7 @@ public:
         return TSerializedTableRange(TSerializedCellVec::Serialize(cells), "", true, false);
     }
 
-    static TSerializedTableRange ParentRange(NTableIndex::TClusterId parent) {
+    static TSerializedTableRange ParentRange(NTableIndex::NKMeans::TClusterId parent) {
         if (parent == 0) {
             return {};  // empty
         }

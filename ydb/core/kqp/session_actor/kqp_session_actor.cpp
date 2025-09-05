@@ -1050,13 +1050,26 @@ public:
         if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->HasOltpTable && QueryState->TxCtx->HasTableWrite
                 && !QueryState->TxCtx->EnableHtapTx.value_or(false) && !QueryState->IsSplitted()) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "Write transactions that use both row-based and column-based tables are disabled at current time.");
+                            "Write transactions that use both row-oriented and column-oriented tables are disabled at current time.");
             return false;
         }
         if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
             && QueryState->TxCtx->HasOltpTable) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "SnapshotRW can only be used with olap tables.");
+            return false;
+        }
+
+        if (QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE
+                && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO
+                && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_SCAN
+                && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_AST_SCAN
+                && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
+                && QueryState->TxCtx->HasOlapTable) {
+            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            TStringBuilder()
+                                << "Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. "
+                                << "Use Serializable or Snapshot Read-Only mode instead.");
             return false;
         }
 
@@ -1845,6 +1858,16 @@ public:
                 stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
                 ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
                 stats.SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
+
+                if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
+                    if (const auto compileResult = QueryState->CompileResult) {
+                        if (const auto preparedQuery = compileResult->PreparedQuery) {
+                            if (const auto& queryAst = preparedQuery->GetPhysicalQuery().GetQueryAst()) {
+                                ev->Get()->Record.SetQueryAst(queryAst);
+                            }
+                        }
+                    }
+                }
             }
 
             LOG_D("Forwarded TEvExecuterProgress to " << QueryState->RequestActorId);

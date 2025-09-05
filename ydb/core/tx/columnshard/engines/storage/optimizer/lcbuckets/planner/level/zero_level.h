@@ -10,6 +10,7 @@ private:
     const TDuration DurationToDrop;
     const ui64 ExpectedBlobsSize;
     const ui64 PortionsCountAvailable;
+    const ui64 HighPriorityContribution;
 
     std::set<TOrderedPortion> Portions;
 
@@ -68,7 +69,7 @@ private:
         return false;
     }
 
-    virtual ui64 DoGetWeight() const override;
+    virtual ui64 DoGetWeight(bool highPriority) const override;
     virtual TInstant DoGetWeightExpirationInstant() const override;
 
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
@@ -79,7 +80,8 @@ private:
 public:
     TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters,
         const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop, const ui64 expectedBlobsSize,
-        const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors, const TString& defaultSelectorName);
+        const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors, const TString& defaultSelectorName,
+        const ui64 highPriorityContribution = 0);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

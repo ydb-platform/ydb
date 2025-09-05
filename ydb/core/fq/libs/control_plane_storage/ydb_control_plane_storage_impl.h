@@ -43,7 +43,7 @@
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/core/kqp/proxy_service/kqp_script_execution_retries.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
 
 namespace NFq {
 

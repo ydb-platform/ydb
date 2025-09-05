@@ -284,6 +284,20 @@ column_families {
   keep_in_memory: ENABLED
 }
 )");
+
+        // cache mode
+        Test<NKikimrSchemeOp::TTableDescription, Ydb::Table::DescribeTableResult>(&FillColumnFamilies, R"(
+PartitionConfig {
+  ColumnFamilies {
+    ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+  }
+})", R"(
+column_families {
+  name: "default"
+  compression: COMPRESSION_NONE
+  cache_mode: CACHE_MODE_IN_MEMORY
+}
+)");
     }
 
 } // ConvertTableDescription

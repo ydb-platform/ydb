@@ -467,6 +467,11 @@ int BuildAST(int argc, char* argv[]) {
                 Cerr << "No error reported, but no yql compiled result!" << Endl << Endl;
             }
 
+            if (parseRes.IsOk() && hasError && flags.contains("StrictWarningAsError")) {
+                hasError = true;
+                Cerr << "Errors reported, but yql compiled result!" << Endl << Endl;
+            }
+
             if (res.Has("test-format") && syntaxVersion == 1 && !hasError && parseRes.Root) {
                 hasError = !TestFormat(translators, query, settings, queryFile, parseRes, outFileNameFormat, res.Has("test-double-format"));
             }

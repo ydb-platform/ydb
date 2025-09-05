@@ -91,8 +91,7 @@ public:
     TInternalFilterConstructor(const TEvRequestFilter::TPtr& request);
 
     ~TInternalFilterConstructor() {
-        AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()))(
-                                                                             "state", DebugString());
+        AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()) || TActorSystem::IsStopped())("state", DebugString());
     }
 
     TString DebugString() const {

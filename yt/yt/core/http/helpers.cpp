@@ -16,8 +16,6 @@
 
 #include <yt/yt/core/ytree/fluent.h>
 
-#include <yt/yt/library/formats/format.h>
-
 #include <util/stream/buffer.h>
 
 #include <util/generic/buffer.h>
@@ -32,7 +30,6 @@ namespace NYT::NHttp {
 constinit const auto Logger = HttpLogger;
 
 using namespace NJson;
-using namespace NFormats;
 using namespace NYson;
 using namespace NYTree;
 using namespace NConcurrency;
@@ -40,56 +37,63 @@ using namespace NHeaders;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<NYson::IFlushableYsonConsumer> TJsonFactory::CreateConsumer(IZeroCopyOutput* output)
+void FillYTErrorResponse(
+    const THeadersPtr& headers,
+    const TError& error)
 {
-    return CreateJsonConsumer(output);
-}
-
-NYson::TYsonProducer TJsonFactory::CreateProducer(IInputStream* input)
-{
-    return BIND([=] (IYsonConsumer* consumer) {
-        ParseJson(input, consumer);
-    });
+    headers->Add(XYTResponseCodeHeaderName, ToString(static_cast<int>(error.GetCode())));
+    headers->Add(XYTResponseMessageHeaderName, EscapeHeaderValue(error.GetMessage()));
 }
 
 void FillYTError(
     const THeadersPtr& headers,
-    const TError& error,
-    IFormatFactoryPtr errorFormatFactory)
+    const TError& error)
 {
     TString errorString;
     TStringOutput errorStringOutput(errorString);
 
-    auto consumer = errorFormatFactory->CreateConsumer(&errorStringOutput);
+    auto consumer = CreateJsonConsumer(&errorStringOutput);
 
     Serialize(error, consumer.get());
     consumer->Flush();
 
     headers->Add(XYTErrorHeaderName, errorString);
-    headers->Add(XYTResponseCodeHeaderName, ToString(static_cast<int>(error.GetCode())));
-    headers->Add(XYTResponseMessageHeaderName, EscapeHeaderValue(error.GetMessage()));
+    headers->Add(XYTErrorContentTypeHeaderName, "application/json");
+
+    FillYTErrorResponse(headers, error);
 }
 
 void FillYTErrorHeaders(
     const IResponseWriterPtr& rsp,
-    const TError& error,
-    IFormatFactoryPtr errorFormatFactory)
+    const TError& error)
 {
-    FillYTError(rsp->GetHeaders(), error, errorFormatFactory);
+    FillYTError(rsp->GetHeaders(), error);
 }
 
 void FillYTErrorTrailers(
     const IResponseWriterPtr& rsp,
-    const TError& error,
-    IFormatFactoryPtr errorFormatFactory)
+    const TError& error)
 {
-    FillYTError(rsp->GetTrailers(), error, errorFormatFactory);
+    FillYTError(rsp->GetTrailers(), error);
+}
+
+void FillYTErrorResponseHeaders(
+    const IResponseWriterPtr& rsp,
+    const TError& error)
+{
+    FillYTErrorResponse(rsp->GetHeaders(), error);
+}
+
+void FillYTErrorResponseTrailers(
+    const IResponseWriterPtr& rsp,
+    const TError& error)
+{
+    FillYTErrorResponse(rsp->GetTrailers(), error);
 }
 
 TError ParseYTError(
     const IResponsePtr& rsp,
-    bool fromTrailers,
-    IFormatFactoryPtr errorFormatFactory)
+    bool fromTrailers)
 {
     std::string source;
     const std::string* errorHeader;
@@ -117,10 +121,8 @@ TError ParseYTError(
     std::unique_ptr<IBuildingYsonConsumer<TError>> buildingConsumer;
     CreateBuildingYsonConsumer(&buildingConsumer, EYsonType::Node);
 
-    auto producer = errorFormatFactory->CreateProducer(&errorStringInput);
-
     try {
-        producer.Run(buildingConsumer.get());
+        ParseJson(&errorStringInput, buildingConsumer.get());
     } catch (const std::exception& ex) {
         return TError("Failed to parse error from response")
             << TErrorAttribute("source", source)

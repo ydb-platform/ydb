@@ -15,39 +15,39 @@ struct TStateStorageInfo : public TThrRefBase {
         struct TSelection {
             ui32 Sz;
             TArrayHolder<TActorId> SelectedReplicas;
-    
+
             TSelection()
                 : Sz(0)
             {}
-    
+
             const TActorId* begin() const { return SelectedReplicas.Get(); }
             const TActorId* end() const { return SelectedReplicas.Get() + Sz; }
         };
-    
+
         struct TRing {
             bool IsDisabled;
             bool UseRingSpecificNodeSelection;
             TVector<TActorId> Replicas;
-    
+
             TActorId SelectReplica(ui32 hash) const;
             ui32 ContentHash() const;
         };
-    
+
         ui32 NToSelect;
         TVector<TRing> Rings;
-    
+
         ui32 StateStorageVersion;
         TVector<ui32> CompatibleVersions;
-    
+
         void SelectReplicas(ui64 tabletId, TSelection *selection) const;
         TList<TActorId> SelectAllReplicas() const;
         ui32 ContentHash() const;
-    
+
         TStateStorageInfo()
             : NToSelect(0)
             , Hash(Max<ui64>())
         {}
-    
+
     private:
         mutable ui64 Hash;
     };
@@ -184,12 +184,12 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActor
     TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
     Y_ABORT_UNLESS(config.GetSSId() == 1);
     info->StateStorageVersion = config.GetStateStorageVersion();
-    
+
     info->CompatibleVersions.reserve(config.CompatibleVersionsSize());
     for (ui32 version : config.GetCompatibleVersions()) {
         info->CompatibleVersions.push_back(version);
     }
-    
+
     const size_t offset = FindIndex(namePrefix, char());
     Y_ABORT_UNLESS(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
 
@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(TStateStorageConfigCompareWithOld) {
         if (newSS->RingGroups.size() == 1) {
             Y_ABORT_UNLESS(oldSS->SelectAllReplicas() == newSS->SelectAllReplicas());
             Y_ABORT_UNLESS(oldSS->ContentHash() == newSS->ContentHash());
-        
+
             NStateStorageOld::TStateStorageInfo::TSelection oldSelection;
             NKikimr::TStateStorageInfo::TSelection newSelection;
             ui64 oldRetHash = 0;
@@ -261,14 +261,14 @@ Y_UNIT_TEST_SUITE(TStateStorageConfigCompareWithOld) {
         TIntrusivePtr<NKikimr::TStateStorageInfo> stateStorageInfo;
         TIntrusivePtr<NKikimr::TStateStorageInfo> boardInfo;
         TIntrusivePtr<NKikimr::TStateStorageInfo> schemeBoardInfo;
-        
+
         NStateStorageOld::BuildStateStorageInfos(oldConfig, oldstateStorageInfo, oldboardInfo, oldschemeBoardInfo);
         NKikimr::BuildStateStorageInfos(newConfig, stateStorageInfo, boardInfo, schemeBoardInfo);
         Compare(oldstateStorageInfo, stateStorageInfo, rgIndex);
         Compare(oldboardInfo, boardInfo, rgIndex);
         Compare(oldschemeBoardInfo, schemeBoardInfo, rgIndex);
     }
-    
+
     void FillRing1(NKikimrConfig::TDomainsConfig::TStateStorage::TRing* ring) {
         ring->SetNToSelect(5);
         for (ui32 nodeId : xrange(5, 13)) {
@@ -451,6 +451,16 @@ Y_UNIT_TEST_SUITE(TStateStorageConfig) {
         UNIT_ASSERT(UniformityRun(113, 3, 5, true) < 0.10);
         UNIT_ASSERT(UniformityRun(113, 9, 1, true) < 0.10);
         UNIT_ASSERT(UniformityRun(113, 9, 8, true) < 0.10);
+    }
+
+    Y_UNIT_TEST(SameConfigurationTest) {
+        TStateStorageInfo info1;
+        FillStateStorageInfo(&info1, 5, 5, 1, false);
+        TStateStorageInfo info2;
+        FillStateStorageInfo(&info2, 5, 5, 1, false);
+        UNIT_ASSERT(info1.RingGroups[0].SameConfiguration(info2.RingGroups[0]));
+        info1.RingGroups[0].State = ERingGroupState::DISCONNECTED;
+        UNIT_ASSERT(info1.RingGroups[0].SameConfiguration(info2.RingGroups[0]));
     }
 }
 

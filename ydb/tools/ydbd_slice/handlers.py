@@ -167,15 +167,27 @@ class Slice:
             )
         )
 
-    def __create_databases(self):
-        create_db_template = f"{self.slice_kikimr_path} admin database /{{}}/{{}} create {{}}:{{}}"
+    def __create_databases(self, serverless=False):
+        create_db_template = f"{self.slice_kikimr_path} admin database /{{}}/{{}} create {{}}"
         for domain in self.cluster_details.domains:
             for tenant in domain.tenants:
+                opts = []
                 for storage in tenant.storage_units:
-                    self.nodes.execute_async(
-                        create_db_template.format(domain.domain_name, tenant.name, storage.kind, storage.count),
-                        nodes=self.nodes.nodes_list[:1]
-                    )
+                    opts.append(':'.join([storage.kind, str(storage.count)]))
+                if tenant.shared_database_path:
+                    if serverless:
+                        opts.append("--serverless")
+                        opts.append(tenant.shared_database_path)
+                    else:
+                        continue
+                elif serverless:
+                    continue
+                elif tenant.shared:
+                    opts.append("--shared")
+                self.nodes.execute_async(
+                    create_db_template.format(domain.domain_name, tenant.name, ' '.join(opts)),
+                    nodes=self.nodes.nodes_list[:1]
+                )
 
     def __init_blobstorage_kikimr(self):
         self.nodes.execute_async(
@@ -234,6 +246,9 @@ class Slice:
 
         self._deploy_slot_configs()
         self._start_dynamic()
+
+        if 'kikimr' in self.components:
+            self.__create_databases(serverless=True)  # create serverless databases if any
 
     def _get_available_slots(self):
         if 'dynamic_slots' not in self.components:

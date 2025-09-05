@@ -64,6 +64,7 @@ namespace NSequenceProxy {
             TEvNextValResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
                 : Status(status)
                 , Issues(issues)
+                , Value(0)
             { }
 
             TEvNextValResult(const TPathId& pathId, i64 value)
@@ -105,11 +106,27 @@ namespace NSequenceProxy {
             TEvGetSequenceResult(const TPathId& pathId)
                 : Status(Ydb::StatusIds::SUCCESS)
                 , PathId(pathId)
+                , MinValue(0)
+                , MaxValue(0)
+                , StartValue(0)
+                , NextValue(0)
+                , NextUsed(false)
+                , Cache(0)
+                , Increment(0)
+                , Cycle(false)
             { }
 
             TEvGetSequenceResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
                 : Status(status)
                 , Issues(issues)
+                , MinValue(0)
+                , MaxValue(0)
+                , StartValue(0)
+                , NextValue(0)
+                , NextUsed(false)
+                , Cache(0)
+                , Increment(0)
+                , Cycle(false)
             { }
 
             explicit TEvGetSequenceResult(const TEvGetSequenceResult& ev)

@@ -2,9 +2,10 @@ import asyncio
 
 
 class AsyncResponseIterator(object):
-    def __init__(self, it, wrapper):
+    def __init__(self, it, wrapper, error_converter=None):
         self.it = it.__aiter__()
         self.wrapper = wrapper
+        self.error_converter = error_converter
 
     def cancel(self):
         self.it.cancel()
@@ -17,7 +18,13 @@ class AsyncResponseIterator(object):
         return self
 
     async def _next(self):
-        res = self.wrapper(await self.it.__anext__())
+        try:
+            res = self.wrapper(await self.it.__anext__())
+        except BaseException as e:
+            if self.error_converter:
+                raise self.error_converter(e) from e
+            raise e
+
         if res is not None:
             return res
         return await self._next()

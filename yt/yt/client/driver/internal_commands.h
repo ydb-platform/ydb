@@ -192,4 +192,20 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TGetOrderedTabletSafeTrimRowCount
+    : public TTypedCommand<NApi::TGetOrderedTabletSafeTrimRowCountOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetOrderedTabletSafeTrimRowCount);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    std::vector<NApi::TSerializableGetOrderedTabletSafeTrimRowCountRequestPtr> Requests_;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

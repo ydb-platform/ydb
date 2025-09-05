@@ -212,7 +212,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
         else if (attr.first == "database_id") DatabaseId = attr.second;
         else if (attr.first == "service_account_id") ServiceAccountId = attr.second;
         else if (attr.first == "serverless_rt_coordination_node_path") Coordinator = attr.second;
-        else if (attr.first == "serverless_rt_base_resource_ru") ResourcePath = attr.second;
+        else if (attr.first == "serverless_rt_topic_resource_ru") ResourcePath = attr.second;
         else if (attr.first == "kafka_api") KafkaApiFlag = attr.second;
     }
 

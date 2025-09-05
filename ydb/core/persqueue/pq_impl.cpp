@@ -171,7 +171,7 @@ private:
 
         Y_ABORT_UNLESS(readResult.ResultSize() > 0 || isDirectRead);
 
-        ui64 readFromTimestampMs = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
+        ui64 readFromTimestampMs = PreciseReadFromTimestampBehaviourEnabled(*AppData(ctx))
                                    ? (responseRecord.HasPartitionResponse()
                                         ? responseRecord.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs()
                                         : readResult.GetReadFromTimestampMs())
@@ -3151,6 +3151,9 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
     , NextResponseCookie(0)
     , ResourceMetrics(nullptr)
 {
+    // Override to persqueue activity type
+    SetActivityType(ActorActivityType());
+
     InitPipeClientCache();
 
     typedef TProtobufTabletCounters<
@@ -5419,6 +5422,18 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const T
     }
 }
 
+void TPersQueue::Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx) {
+    const TEvPQ::TBroadcastPartitionError& event = *ev->Get();
+    for (auto& [partitionId, partitionInfo] : Partitions) {
+        if (partitionId.IsSupportivePartition()) {
+            continue;
+        }
+        THolder error = MakeHolder<TEvPQ::TBroadcastPartitionError>();
+        error->Record.CopyFrom(event.Record);
+        ctx.Send(partitionInfo.Actor, std::move(error));
+    }
+}
+
 void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorContext& ctx)
 {
     auto p = Partitions.find(partitionId);
@@ -5547,7 +5562,6 @@ void TPersQueue::ProcessPendingEvents()
 
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
-    SetActivityType(NKikimrServices::TActivity::PERSQUEUE_ACTOR);
     TRACE_EVENT(NKikimrServices::PERSQUEUE);
     switch(ev->GetTypeRewrite())
     {
@@ -5588,6 +5602,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
+        HFuncTraced(TEvPQ::TBroadcastPartitionError, Handle);
         hFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);

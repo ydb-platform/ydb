@@ -270,7 +270,7 @@ public:
         if (Portions.size() <= 1) {
             return true;
         }
-        return MemoryUsage < (((ui64)512) << 20) && CurrentLevelPortionsInfo.GetCount() + TargetLevelPortionsInfo.GetCount() < 1000 &&
+        return MemoryUsage < (((ui64)512) << 20) && CurrentLevelPortionsInfo.GetCount() + TargetLevelPortionsInfo.GetCount() < 10000 &&
                Portions.size() < 10000;
     }
 
@@ -323,7 +323,7 @@ class IPortionsLevel {
 private:
     virtual std::vector<TPortionInfo::TPtr> DoModifyPortions(
         const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) = 0;
-    virtual ui64 DoGetWeight() const = 0;
+    virtual ui64 DoGetWeight(bool highPriority) const = 0;
     virtual TInstant DoGetWeightExpirationInstant() const = 0;
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const = 0;
     virtual TCompactionTaskData DoGetOptimizationTask() const = 0;
@@ -485,8 +485,8 @@ public:
         return DoModifyPortions(addSelective, removeSelective);
     }
 
-    ui64 GetWeight() const {
-        return DoGetWeight();
+    ui64 GetWeight(bool highPriority = false) const {
+        return DoGetWeight(highPriority);
     }
 
     TInstant GetWeightExpirationInstant() const {

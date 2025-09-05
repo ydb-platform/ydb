@@ -1,0 +1,5 @@
+/* custom error: Condition violated */
+pragma warning("disable","4510");
+
+$vt = Variant<Int32,String>;
+select Variant(Yql::WithSideEffectsMode(Ensure(1,false),AsAtom('General')),"0",$vt).1

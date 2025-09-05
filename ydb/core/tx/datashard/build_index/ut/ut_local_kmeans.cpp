@@ -15,7 +15,7 @@
 namespace NKikimr {
 using namespace Tests;
 using Ydb::Table::VectorIndexSettings;
-using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+using namespace NTableIndex::NKMeans;
 
 static std::atomic<ui64> sId = 1;
 static const TString kMainTable = "/Root/table-main";
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
     }
 
     static std::tuple<TString, TString> DoLocalKMeans(
-        Tests::TServer::TPtr server, TActorId sender, NTableIndex::TClusterId parentFrom, NTableIndex::TClusterId parentTo, ui64 seed, ui64 k,
+        Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parentFrom, NTableIndex::NKMeans::TClusterId parentTo, ui64 seed, ui64 k,
         NKikimrTxDataShard::EKMeansState upload, VectorIndexSettings::VectorType type,
         VectorIndexSettings::Metric metric, ui32 maxBatchRows = 50000)
     {
@@ -176,8 +176,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
-            {IdColumn, NTableIndex::ClusterIdTypeName, true, true},
+            {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
+            {IdColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
             {CentroidColumn, "String", false, true},
         });
         CreateShardedTable(server, sender, "/Root", "table-level", options);
@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
+            {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"data", "String", false, false},
         });
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
+            {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"embedding", "String", false, false},
             {"data", "String", false, false},
@@ -342,7 +342,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
             request.SetChild(Max<ui64>() - 100);
-        }, "Condition violated: `(parent & PostingParentFlag) == 0'", true, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        }, "Condition violated: `!HasPostingParentFlag(parent)'", true, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
     }
 
     Y_UNIT_TEST (MainToPosting) {

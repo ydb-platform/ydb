@@ -32,6 +32,7 @@ class TAttachmentsInputStream
 {
 public:
     TAttachmentsInputStream(
+        TRequestId requestId,
         TClosure readCallback,
         IInvokerPtr compressionInvoker,
         std::optional<TDuration> timeout = {});
@@ -46,6 +47,7 @@ public:
     DEFINE_SIGNAL(void(), Aborted);
 
 private:
+    const TRequestId RequestId_;
     const TClosure ReadCallback_;
     const IInvokerPtr CompressionInvoker_;
     const std::optional<TDuration> Timeout_;
@@ -81,6 +83,7 @@ private:
         const TError& error,
         bool fireAborted = true);
     void OnTimeout();
+    std::vector<TErrorAttribute> GetErrorAttributes() const;
 };
 
 DEFINE_REFCOUNTED_TYPE(TAttachmentsInputStream)
@@ -92,6 +95,7 @@ class TAttachmentsOutputStream
 {
 public:
     TAttachmentsOutputStream(
+        TRequestId requestId,
         NCompression::ECodec codec,
         IInvokerPtr compressionInvoker,
         TClosure pullCallback,
@@ -109,6 +113,7 @@ public:
     DEFINE_SIGNAL(void(), Aborted);
 
 private:
+    const TRequestId RequestId_;
     const NCompression::ECodec Codec_;
     const IInvokerPtr CompressionInvoker_;
     const TClosure PullCallback_;
@@ -153,6 +158,7 @@ private:
         const TError& error,
         bool fireAborted = true);
     void OnTimeout();
+    std::vector<TErrorAttribute> GetErrorAttributes() const;
 };
 
 DEFINE_REFCOUNTED_TYPE(TAttachmentsOutputStream)
@@ -307,4 +313,3 @@ void HandleOutputStreamingRequest(
 #define STREAM_INL_H_
 #include "stream-inl.h"
 #undef STREAM_INL_H_
-

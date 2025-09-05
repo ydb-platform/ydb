@@ -988,19 +988,19 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Basics) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 232);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
 
-    // read from in-memory table, should be no more cache misses
+    // read from in-memory table, should be no more cache misses and all read should be from private cache (no more CacheHit*)
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
         env.SendSync(new NFake::TEvExecute{ new TTxReadRows(TableId, key, retried) }, true);
     }
     LogCounters(counters);
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 116);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(20'000_KB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 232);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
@@ -1105,19 +1105,19 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 232);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
 
-    // read from previously-in-memory table, should not be preloaded
+    // read from in-memory table, should be preloaded
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
         env.SendSync(new NFake::TEvExecute{ new TTxReadRows(TableId, key, retried) }, true);
     }
     LogCounters(counters);
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 116);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(20'000_KB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 232);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));

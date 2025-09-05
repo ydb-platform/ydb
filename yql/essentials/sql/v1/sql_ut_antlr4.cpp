@@ -1,4 +1,5 @@
 #include "sql_ut_antlr4.h"
+#include "sql_translation.h"
 #include "format/sql_format.h"
 #include "lexer/lexer.h"
 

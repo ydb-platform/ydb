@@ -286,4 +286,5 @@ enum ETxTypes {
     TXTYPE_UPDATE_SHRED = 30 [(TxTypeOpts) = {Name: "TTxUpdateShred"}];
     TXTYPE_CHECK_UNSYNCED = 31 [(TxTypeOpts) = {Name: "TTxCheckUnsynced"}];
     TXTYPE_UPDATE_BRIDGE_GROUP_INFO = 32 [(TxTypeOpts) = {Name: "TTxUpdateBridgeGroupInfo"}];
+    TXTYPE_UPDATE_BRIDGE_SYNC_STATE = 33 [(TxTypeOpts) = {Name: "TTxUpdateBridgeSyncState"}];
 }

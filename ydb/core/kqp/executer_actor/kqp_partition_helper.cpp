@@ -343,21 +343,6 @@ TVector<TSerializedPointOrRange> FillReadRangesInternal(const TVector<NScheme::T
     return BuildFullRange(keyColumnTypes);
 }
 
-TVector<TPartitionWithRange> GetKeyRangesIntersectionPartitions(const TVector<TTableRange>& ranges,
-    const TVector<NScheme::TTypeInfo>& keyColumnTypes, const TVector<TKeyDesc::TPartitionInfo>& partitions)
-{
-    if (ranges.empty()) {
-        return {};
-    }
-
-    TTableRange intersection = ranges.front();
-    for (size_t i = 1; i < ranges.size(); ++i) {
-        intersection = Intersect(keyColumnTypes, intersection, ranges[i]);
-    }
-
-    return GetKeyRangePartitions(intersection, partitions, keyColumnTypes);
-}
-
 } // anonymous namespace
 
 TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
@@ -465,16 +450,13 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadRange& 
     isFullScan = IsFullRange(keyColumnTypes, range);
 
     TTableRange tableRange = range.ToTableRange();
-    TVector<TPartitionWithRange> readPartitions;
 
     if (prunerConfig.BatchOperationRange) {
         isFullScan = false;
-        readPartitions = GetKeyRangesIntersectionPartitions({tableRange, prunerConfig.BatchOperationRange->ToTableRange()},
-            keyColumnTypes,stageInfo.Meta.ShardKey->GetPartitions());
-    } else {
-        readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
-        keyColumnTypes);
+        tableRange = Intersect(keyColumnTypes, tableRange, prunerConfig.BatchOperationRange->ToTableRange());
     }
+
+    auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(), keyColumnTypes);
 
     THashMap<ui64, TShardInfo> shardInfoMap;
     for (TPartitionWithRange& partitionWithRange : readPartitions) {
@@ -511,16 +493,13 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadRanges&
         TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
             ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
             : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
-        TVector<TPartitionWithRange> readPartitions;
 
         if (prunerConfig.BatchOperationRange) {
             isFullScan = false;
-            readPartitions = GetKeyRangesIntersectionPartitions({tableRange, prunerConfig.BatchOperationRange->ToTableRange()},
-                keyColumnTypes, stageInfo.Meta.ShardKey->GetPartitions());
-        } else {
-            readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
-            keyColumnTypes);
+            tableRange = Intersect(keyColumnTypes, tableRange, prunerConfig.BatchOperationRange->ToTableRange());
         }
+
+        auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(), keyColumnTypes);
 
         for (TPartitionWithRange& partitionWithRange : readPartitions) {
             auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
@@ -570,7 +549,7 @@ TVector<TSerializedPointOrRange> ExtractRanges(const NKqpProto::TKqpReadRangesSo
 }
 
 std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, const TPartitionPruner::TConfig& prunerConfig)
 {
     auto guard = typeEnv.BindAllocator();
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
@@ -582,8 +561,13 @@ std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadR
     if (!ranges.empty()) {
         auto& range = source.GetReverse() ? ranges.back() : ranges[0];
         TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
-            ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
+            ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true,
+                std::get<TSerializedCellVec>(range).GetCells(), true, true)
             : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
+
+        if (prunerConfig.BatchOperationRange) {
+            tableRange = Intersect(keyColumnTypes, tableRange, prunerConfig.BatchOperationRange->ToTableRange());
+        }
 
         auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
             keyColumnTypes);
@@ -598,6 +582,16 @@ std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadR
     for (auto& range: ranges) {
         if (!result.KeyReadRanges) {
             result.KeyReadRanges.ConstructInPlace();
+        }
+
+        if (prunerConfig.BatchOperationRange) {
+            TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
+                ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true,
+                    std::get<TSerializedCellVec>(range).GetCells(), true, true)
+                : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
+
+            range = TSerializedTableRange(Intersect(keyColumnTypes,
+                tableRange, prunerConfig.BatchOperationRange->ToTableRange()));
         }
 
         result.KeyReadRanges->Add(std::move(range));
@@ -623,16 +617,13 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpReadRangesSource
         TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
             ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
             : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
-        TVector<TPartitionWithRange> readPartitions;
 
         if (prunerConfig.BatchOperationRange) {
             isFullScan = false;
-            readPartitions = GetKeyRangesIntersectionPartitions({tableRange, prunerConfig.BatchOperationRange->ToTableRange()},
-                keyColumnTypes, stageInfo.Meta.ShardKey->GetPartitions());
-        } else {
-            readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
-            keyColumnTypes);
+            tableRange = Intersect(keyColumnTypes, tableRange, prunerConfig.BatchOperationRange->ToTableRange());
         }
+
+        auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(), keyColumnTypes);
 
         for (TPartitionWithRange& partitionWithRange : readPartitions) {
             auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
@@ -901,6 +892,10 @@ THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpReadRang
 
 THashMap<ui64, TShardInfo> TPartitionPruner::PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo) {
     return PruneEffectPartitions(operation, stageInfo, *HolderFactory, *TypeEnv, Config);
+}
+
+std::pair<ui64, TShardInfo> TPartitionPruner::MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo) {
+    return ::NKikimr::NKqp::MakeVirtualTablePartition(source, stageInfo, *HolderFactory, *TypeEnv, Config);
 }
 
 } // namespace NKikimr::NKqp

@@ -681,6 +681,20 @@
             "uri": "https://{canondata_backend}/1946324/e7201814e6e6593b8222695568ac22e9db8f99bc/resource.tar.gz#test.test_expr-longint_builtins-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[expr-nth_no_tagged_no_cache-default.txt-Debug]": [
+        {
+            "checksum": "3a01e0ed4889c9e3359e70a4fbab6918",
+            "size": 1150,
+            "uri": "https://{canondata_backend}/1814674/efe8c7ac8f2ea327318cb7a3ddfef73523f9ca53/resource.tar.gz#test.test_expr-nth_no_tagged_no_cache-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-nth_no_tagged_no_cache-default.txt-Results]": [
+        {
+            "checksum": "2255f4b90375f9348060f9605926c2c3",
+            "size": 4329,
+            "uri": "https://{canondata_backend}/1814674/efe8c7ac8f2ea327318cb7a3ddfef73523f9ca53/resource.tar.gz#test.test_expr-nth_no_tagged_no_cache-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[expr-partial_columns_in_mem_aggr-default.txt-Debug]": [
         {
             "checksum": "f6b313886299912210c39d23bbc3c44b",

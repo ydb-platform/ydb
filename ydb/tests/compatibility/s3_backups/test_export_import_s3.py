@@ -6,7 +6,6 @@ import yatest
 import os
 import json
 import sys
-import math
 
 from enum import Enum
 
@@ -64,9 +63,6 @@ class TestExportImportS3(MixedClusterFixture):
 
         return s3_endpoint, s3_access_key, s3_secret_key, s3_bucket
 
-    def _is_current_version(self):
-        return len(self.versions) == 1 and math.isnan(self.versions[0][0])
-
     def _execute_command_and_get_result(self, command):
         with tempfile.NamedTemporaryFile(mode='w+', delete=True) as temp_file:
             yatest.common.execute(command, wait=True, stdout=temp_file, stderr=sys.stderr)
@@ -108,8 +104,7 @@ class TestExportImportS3(MixedClusterFixture):
                         f"CONSUMER consumerB_{num}"
                         f");"
                     )
-                    if self._is_current_version():
-                        self.settings = self.settings.with_source_and_destination(topic_name, topic_name)
+                    self.settings = self.settings.with_source_and_destination(topic_name, topic_name)
 
     def _create_items(self):
         self._create_tables()
@@ -214,7 +209,7 @@ class TestExportImportS3(MixedClusterFixture):
         self._import_check_table()
 
     def test_topics(self):
-        if self._is_current_version():
+        if min(self.versions) >= (25, 3):
             self._create_topics()
             self._export_check_topic()
             self._import_check_topic()

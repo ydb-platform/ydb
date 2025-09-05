@@ -114,6 +114,8 @@ public:
         const TChecker& IsBackupCollection(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsSupportedInExports(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsSysView(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsSecret(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsStreamingQuery(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:

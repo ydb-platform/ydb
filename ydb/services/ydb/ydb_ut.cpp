@@ -1308,7 +1308,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_REQUEST);
             NYdb::NIssue::TIssues issues;
             NYdb::NIssue::IssuesFromMessage(deferred.issues(), issues);
-            UNIT_ASSERT(issues.ToString().contains("invalid or unset index type"));
+            UNIT_ASSERT(issues.ToString().contains("Invalid or unset index type"));
         }
     }
 

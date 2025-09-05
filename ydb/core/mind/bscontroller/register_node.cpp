@@ -293,7 +293,7 @@ public:
             }
         }
 
-        Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead);
+        Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead, /*comprehensive=*/ true);
         Self->SerializeSyncers(nodeId, &Response->Record, groupIDsToRead);
 
         Self->ReadGroups(groupIDsToRead, false, Response.get(), nodeId);

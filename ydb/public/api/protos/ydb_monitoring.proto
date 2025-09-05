@@ -107,12 +107,18 @@ message LoadAverageStatus {
     uint32 cores = 3;
 }
 
+message ClockSkewStatus {
+    StatusFlag.Status overall = 1;
+    float clock_skew = 2; // ms
+}
+
 message ComputeNodeStatus {
     string id = 1;
     StatusFlag.Status overall = 2;
     repeated ComputeTabletStatus tablets = 3;
     repeated ThreadPoolStatus pools = 4;
     LoadAverageStatus load = 5;
+    ClockSkewStatus clock_skew = 6;
 }
 
 message ComputeStatus {
@@ -121,6 +127,7 @@ message ComputeStatus {
     repeated ComputeTabletStatus tablets = 3;
     float paths_quota_usage = 4;
     float shards_quota_usage = 5;
+    ClockSkewStatus clock_skew = 6;
 }
 
 message LocationNode {

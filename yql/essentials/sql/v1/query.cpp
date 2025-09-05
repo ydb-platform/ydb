@@ -584,7 +584,12 @@ public:
 
                 if (func.StartsWith("regexp")) {
                     if (!ctx.PragmaRegexUseRe2) {
-                        ctx.Warning(Pos_, TIssuesIds::CORE_LEGACY_REGEX_ENGINE) << "Legacy regex engine works incorrectly with unicode. Use PRAGMA RegexUseRe2='true';";
+                        if (!ctx.Warning(Pos_, TIssuesIds::CORE_LEGACY_REGEX_ENGINE, [&](auto& out) {
+                            out << "Legacy regex engine works incorrectly with unicode. "
+                                << "Use PRAGMA RegexUseRe2='true';";
+                        })) {
+                            return nullptr;
+                        }
                     }
 
                     auto pattern = Args_[1].Id;
@@ -742,8 +747,12 @@ public:
                     postHandler = arg.Expr;
                 }
                 else {
-                    ctx.Warning(Pos_, DEFAULT_ERROR) << "Unsupported named argument: "
-                        << label << " in " << Func_;
+                    if (!ctx.Warning(Pos_, DEFAULT_ERROR, [&](auto& out) {
+                        out << "Unsupported named argument: "
+                            << label << " in " << Func_;
+                    })) {
+                        return nullptr;
+                    }
                 }
             }
             if (rootAttributes == nullptr) {
@@ -2475,21 +2484,22 @@ private:
 
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
     std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TUpsertObject(pos, objectId, typeId, false, false, std::move(features), std::set<TString>(), context);
+    return new TUpsertObject(pos, objectId, typeId, context, std::move(features));
 }
+
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
     bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TCreateObject(pos, objectId, typeId, existingOk, replaceIfExists, std::move(features), std::set<TString>(), context);
+    return new TCreateObject(pos, objectId, typeId, context, std::move(features), existingOk, replaceIfExists);
 }
+
 TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-    std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)
-{
-    return new TAlterObject(pos, secretId, typeId, false, false, std::move(features), std::move(featuresToReset), context);
+    bool missingOk, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context) {
+    return new TAlterObject(pos, secretId, typeId, context, std::move(features), std::move(featuresToReset), missingOk);
 }
+
 TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-    bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context)
-{
-    return new TDropObject(pos, secretId, typeId, missingOk, false, std::move(options), std::set<TString>(), context);
+    bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context) {
+    return new TDropObject(pos, secretId, typeId, context, std::move(options), missingOk);
 }
 
 TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped) {

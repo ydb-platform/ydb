@@ -99,25 +99,6 @@ void TKafkaMetadataActor::ProcessDiscoveryData(TEvDiscovery::TEvDiscoveryData::T
     }
 }
 
-void TKafkaMetadataActor::RequestICNodeCache() {
-    Y_ABORT_UNLESS(!FallbackToIcDiscovery);
-    FallbackToIcDiscovery = true;
-    PendingResponses++;
-    Send(NKikimr::NIcNodeCache::CreateICNodesInfoCacheServiceId(), new NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoRequest());
-}
-
-void TKafkaMetadataActor::HandleNodesResponse(
-        NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev,
-        const NActors::TActorContext& ctx
-) {
-    Y_ABORT_UNLESS(FallbackToIcDiscovery);
-    for (const auto& [nodeId, index] : *ev->Get()->NodeIdsMapping) {
-        Nodes[nodeId] = {(*ev->Get()->Nodes)[index].Host, (ui32)Context->Config.GetListeningPort()};
-    }
-    --PendingResponses;
-    RespondIfRequired(ctx);
-}
-
 void TKafkaMetadataActor::ProcessTopicsFromRequest() {
     TVector<TString> topicsToRequest;
     for (size_t i = 0; i < Message->Topics.size(); ++i) {
@@ -142,6 +123,7 @@ void TKafkaMetadataActor::HandleListTopics(NKikimr::TEvPQ::TEvListAllTopicsRespo
 }
 
 void TKafkaMetadataActor::AddProxyNodeToBrokers() {
+    Nodes.insert({ProxyNodeId, {Context->Config.GetProxy().GetHostname(), static_cast<ui32>(Context->Config.GetProxy().GetPort())}});
     AddBroker(ProxyNodeId, Context->Config.GetProxy().GetHostname(), Context->Config.GetProxy().GetPort());
 }
 
@@ -274,7 +256,9 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
                 << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
             AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
         } else if (status == Ydb::StatusIds::SCHEME_ERROR && TopicСreationAttempts.find(*topic.Name) == TopicСreationAttempts.end()) {
+            KAFKA_LOG_D("Sending create topic'" << topic.Name << "' request");
             TopicСreationAttempts.insert(*topic.Name);
+            PendingResponses++;
             SendCreateTopicsRequest(*topic.Name, index, ctx);
         }
     }
@@ -290,6 +274,7 @@ void TKafkaMetadataActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const TA
     const TString& topicName = topicNameToIndex.TopicName;
     const ui32& topicIndex = topicNameToIndex.TopicIndex;
     InflyCreateTopics--;
+    PendingResponses--;
     EKafkaErrors errorCode = ev->Get()->ErrorCode;
     if (errorCode == EKafkaErrors::NONE_ERROR) {
         TActorId child = SendTopicRequest(topicName);
@@ -322,7 +307,7 @@ void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32
 }
 
 void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port) {
-    auto ins = AddedNodes.insert(nodeId);
+    auto ins = AddedBrokerNodes.insert(nodeId);
     if (ins.second) {
         auto hostname = host;
         if (hostname.StartsWith(UnderlayPrefix)) {
@@ -357,19 +342,17 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     while (!PendingTopicResponses.empty()) {
         auto& [index, ev] = *PendingTopicResponses.begin();
         auto& topic = Response->Topics[index];
-        auto topicNodes = CheckTopicNodes(ev.Get());
-        if (topicNodes.empty()) {
-            if (!FallbackToIcDiscovery) {
-                // Node info wasn't found via discovery, fallback to interconnect
-                RequestICNodeCache();
-                return;
+        if (!WithProxy) {
+            auto topicNodes = CheckTopicNodes(ev.Get());
+            if (topicNodes.empty()) {
+                    // Already tried YDB discovery. Throw error
+                    KAFKA_LOG_ERROR("Could not discovery kafka port for topic '" << topic.Name);
+                    AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
             } else {
-                // Already tried both YDB discovery and interconnect, still couldn't find the node for partition. Throw error
-                KAFKA_LOG_ERROR("Could not discovery kafka port for topic '" << topic.Name);
-                AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
+                AddTopicResponse(topic, ev.Get(), topicNodes);
             }
         } else {
-            AddTopicResponse(topic, ev.Get(), topicNodes);
+            AddTopicResponse(topic, ev.Get(), {});
         }
         PendingTopicResponses.erase(PendingTopicResponses.begin());
     }

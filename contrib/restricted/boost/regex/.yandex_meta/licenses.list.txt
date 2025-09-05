@@ -67,10 +67,5 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (c) 2011
- * John Maddock
-
-
-====================COPYRIGHT====================
  * Copyright (c) 2020
  * John Maddock

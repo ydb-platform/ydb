@@ -272,6 +272,8 @@ public:
     THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
     THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
     THashMap<TPathId, TSysViewInfo::TPtr> SysViews;
+    THashMap<TPathId, TSecretInfo::TPtr> Secrets;
+    THashMap<TPathId, TStreamingQueryInfo::TPtr> StreamingQueries;
 
     TTempDirsState TempDirsState;
 
@@ -355,6 +357,8 @@ public:
     bool EnableTempTables = false;
     bool EnableResourcePoolsOnServerless = false;
     bool EnableVectorIndex = false;
+    bool EnableInitialUniqueIndex = false;
+    bool EnableAddUniqueIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableShred = false;
     bool EnableExternalSourceSchemaInference = false;
@@ -894,7 +898,19 @@ public:
     void PersistSysView(NIceDb::TNiceDb &db, TPathId pathId);
     void PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId);
 
+    // StreamingQuery
+    void PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
+
     void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
+
+    // Secret
+    void PersistSecret(NIceDb::TNiceDb& db, TPathId pathId, const TSecretInfo& secretInfo);
+    void PersistSecret(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistSecretRemove(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistSecretAlter(NIceDb::TNiceDb& db, TPathId pathId, const TSecretInfo& secretInfo);
+    void PersistSecretAlter(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistSecretAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 
     TTabletId GetGlobalHive() const;
 

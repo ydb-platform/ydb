@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 
 _AWAIT_THREADS_TIMEOUT_SECONDS = 5
 
@@ -34,7 +35,7 @@ _GRPC_ENABLE_FORK_SUPPORT = (
 
 _fork_handler_failed = False
 
-cdef void __prefork() nogil:
+cdef void __prefork() noexcept nogil:
     with gil:
         global _fork_handler_failed
         _fork_handler_failed = False
@@ -48,14 +49,14 @@ cdef void __prefork() nogil:
             _fork_handler_failed = True
 
 
-cdef void __postfork_parent() nogil:
+cdef void __postfork_parent() noexcept nogil:
     with gil:
         with _fork_state.fork_in_progress_condition:
             _fork_state.fork_in_progress = False
             _fork_state.fork_in_progress_condition.notify_all()
 
 
-cdef void __postfork_child() nogil:
+cdef void __postfork_child() noexcept nogil:
     with gil:
         try:
             if _fork_handler_failed:
@@ -90,7 +91,9 @@ def fork_handlers_and_grpc_init():
     if _GRPC_ENABLE_FORK_SUPPORT:
         with _fork_state.fork_handler_registered_lock:
             if not _fork_state.fork_handler_registered:
-                pthread_atfork(&__prefork, &__postfork_parent, &__postfork_child)
+                os.register_at_fork(before=__prefork,
+                                    after_in_parent=__postfork_parent,
+                                    after_in_child=__postfork_child)
                 _fork_state.fork_handler_registered = True
 
 

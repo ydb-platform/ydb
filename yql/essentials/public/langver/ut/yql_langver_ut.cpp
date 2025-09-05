@@ -90,6 +90,34 @@ Y_UNIT_TEST_SUITE(TLangVerTests) {
         UNIT_ASSERT(!IsBackwardCompatibleFeatureAvailable(MinLangVersion, GetMaxLangVersion(),
             EBackportCompatibleFeaturesMode::None));
     }
+
+    Y_UNIT_TEST(EnumerateAllValid) {
+        const auto max = GetMaxLangVersion();
+        const auto maxReleased = GetMaxReleasedLangVersion();
+        bool hasMin = false;
+        bool hasMax = false;
+        bool hasMaxReleased = false;
+        EnumerateLangVersions([&](TLangVersion ver) {
+            UNIT_ASSERT(IsValidLangVersion(ver));
+            UNIT_ASSERT(ver >= MinLangVersion);
+            UNIT_ASSERT(ver <= max);
+            if (ver == MinLangVersion) {
+                hasMin = true;
+            }
+
+            if (ver == max) {
+                hasMax = true;
+            }
+
+            if (ver == maxReleased) {
+                hasMaxReleased = true;
+            }
+        });
+
+        UNIT_ASSERT(hasMin);
+        UNIT_ASSERT(hasMax);
+        UNIT_ASSERT(hasMaxReleased);
+    }
 }
 
 }

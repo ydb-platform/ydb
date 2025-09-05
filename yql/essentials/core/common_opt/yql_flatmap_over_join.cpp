@@ -1446,12 +1446,18 @@ TExprBase NormalizeEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoi
 
     for (auto pred : andComponents) {
         TExprNodeList sides(2);
-        // TODO: handle case IsEquality() && !IsMemberEquality()
         if (!IsEquality(pred, sides.front(), sides.back()) || HasDependsOn(pred, rowPtr) || !IsStrict(pred)) {
             rest.push_back(pred);
             continue;
         }
 
+        // TODO: remove after YQL-20354 is fixed
+        if (AnyOf(sides, [](const TExprNode::TPtr& side) { return side->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg; }) &&
+            !IsSameAnnotation(*sides[0]->GetTypeAnn(), *sides[1]->GetTypeAnn()))
+        {
+            rest.push_back(pred);
+            continue;
+        }
 
         TVector<ui32> indexes;
         TSet<ui32> inputs;

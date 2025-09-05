@@ -924,6 +924,15 @@ TString BuildCreateExternalTableQuery(const Ydb::Table::DescribeExternalTableRes
     );
 }
 
+Ydb::Table::DescribeSystemViewResult DescribeSystemView(TDriver driver, const TString& path) {
+    NTable::TTableClient client(driver);
+    Ydb::Table::DescribeSystemViewResult description;
+    auto status = NDump::DescribeSystemView(client, path, description);
+    VerifyStatus(status, "describe system view");
+    description.clear_self();
+    return description;
+}
+
 }
 
 void BackupExternalTable(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
@@ -934,6 +943,16 @@ void BackupExternalTable(TDriver driver, const TString& dbPath, const TFsPath& f
     const auto creationQuery = BuildCreateExternalTableQuery(description);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalTable());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
+void BackupSystemView(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+    Y_ENSURE(!dbPath.empty());
+    LOG_I("Backup system view " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto description = DescribeSystemView(driver, dbPath);
+
+    WriteProtoToFile(description, fsBackupFolder, NDump::NFiles::SystemView());
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
@@ -1015,7 +1034,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                         auto status = CopyTableAsyncStart(driver, dbIt.GetFullPath(), tmpTablePath);
                         copiedTablesStatuses.emplace(dbIt.GetFullPath(), std::move(status));
                     }
-                } else if (dbIt.IsDir()) {
+                } else if (dbIt.IsDir() && !dbIt.IsSystemDir()) {
                     CreateClusterDirectory(driver, JoinDatabasePath(backupPrefix, dbIt.GetRelPath()));
                 }
             }
@@ -1031,6 +1050,8 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 BackupExternalDataSource(driver, dbIt.GetFullPath(), childFolderPath);
             } else if (dbIt.IsExternalTable()) {
                 BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
+            } else if (dbIt.IsSystemView()) {
+                BackupSystemView(driver, dbIt.GetFullPath(), childFolderPath);
             } else if (!dbIt.IsTable() && !dbIt.IsDir()) {
                 LOG_W("Skipping " << dbIt.GetFullPath().Quote() << ": dumping objects of type " << dbIt.GetCurrentNode()->Type << " is not supported");
                 childFolderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
@@ -1097,7 +1118,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             } else if (dbIt.IsDir()) {
                 MaybeCreateEmptyFile(childFolderPath);
                 BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
-                if (!avoidCopy) {
+                if (!avoidCopy && !dbIt.IsSystemDir()) {
                     RemoveClusterDirectory(driver, tmpTablePath);
                 }
             }

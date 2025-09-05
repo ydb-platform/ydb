@@ -407,6 +407,10 @@ private:
             SetIteratorReadsQuotaSettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadQuotaSettings());
         }
 
+        if (event.GetConfig().GetTableServiceConfig().HasWriteActorSettings()) {
+            SetWriteActorSettings(event.GetConfig().GetTableServiceConfig().GetWriteActorSettings());
+        }
+
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }

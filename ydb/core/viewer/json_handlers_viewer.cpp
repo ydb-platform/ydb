@@ -38,6 +38,7 @@
 #include "viewer_simple_counter.h"
 #include "viewer_multipart_counter.h"
 #include "viewer_groups.h"
+#include "viewer_sse_counter.h"
 
 namespace NKikimr::NViewer {
 
@@ -251,7 +252,7 @@ void InitViewerWhoAmIJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerQueryJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/query", new THttpHandler<TJsonQuery>(TJsonQuery::GetSwagger()), 9);
+    handlers.AddHandler("/viewer/query", new THttpHandler<TJsonQuery>(TJsonQuery::GetSwagger()), 10);
 }
 
 void InitViewerNetInfoJsonHandler(TJsonHandlers& handlers) {
@@ -311,6 +312,10 @@ void InitViewerMultipartCounterHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/multipart_counter", new THttpHandler<TViewerMultipartCounter>());
 }
 
+void InitViewerTextStreamCounterHandler(TJsonHandlers& handlers) {
+    handlers.AddHandler("/viewer/sse_counter", new THttpHandler<TViewerEventStreamCounter>());
+}
+
 void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerCapabilitiesJsonHandler(jsonHandlers);
     InitViewerNodelistJsonHandler(jsonHandlers);
@@ -356,6 +361,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerPlan2SvgJsonHandler(jsonHandlers);
     InitViewerSimpleCounterHandler(jsonHandlers);
     InitViewerMultipartCounterHandler(jsonHandlers);
+    InitViewerTextStreamCounterHandler(jsonHandlers);
     InitViewerGroupsJsonHandler(jsonHandlers);
 }
 

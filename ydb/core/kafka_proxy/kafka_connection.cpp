@@ -804,7 +804,12 @@ protected:
 
                     case MESSAGE_PROCESS:
                         Request->StartTime = TInstant::Now();
-                        KAFKA_LOG_D("received message. ApiKey=" << Request->ApiKey << ", Version=" << Request->ApiVersion << ", CorrelationId=" << Request->CorrelationId);
+                        if constexpr (DEBUG_ENABLED) {
+                            KAFKA_LOG_D("received message. ApiKey=" << Request->ApiKey << ", Version=" << Request->ApiVersion << ", CorrelationId=" << Request->CorrelationId
+                                << ", Data=" << Hex(Request->Buffer->Begin(), Request->Buffer->End()));
+                        } else {
+                            KAFKA_LOG_D("received message. ApiKey=" << Request->ApiKey << ", Version=" << Request->ApiVersion << ", CorrelationId=" << Request->CorrelationId);
+                        }
 
                         TKafkaReadable readable(*Request->Buffer);
 

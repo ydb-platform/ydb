@@ -168,6 +168,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
         case NKikimrSchemeOp::ESchemeOpDropSysView:
+        case NKikimrSchemeOp::ESchemeOpDropSecret:
+        case NKikimrSchemeOp::ESchemeOpDropStreamingQuery:
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
@@ -231,6 +233,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpUpgradeSubDomain:
         case NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision:
             return *modifyScheme.MutableUpgradeSubDomain()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
+            return *modifyScheme.MutableSetColumnConstraintsInitiate()->MutableTableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
             Y_ABORT("no implementation for ESchemeOpCreateColumnBuild");
@@ -390,6 +395,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
             return *modifyScheme.MutableDropContinuousBackup()->MutableTableName();
 
+        case NKikimrSchemeOp::ESchemeOpCreateSecret:
+            return *modifyScheme.MutableCreateSecret()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpAlterSecret:
+            return *modifyScheme.MutableAlterSecret()->MutableName();
+
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
             return *modifyScheme.MutableCreateResourcePool()->MutableName();
 
@@ -433,6 +444,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
             return *modifyScheme.MutableIncrementalRestoreFinalize()->MutableTargetTablePaths(0);
+
+        case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery:
+            return *modifyScheme.MutableCreateStreamingQuery()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpAlterStreamingQuery:
+            return *modifyScheme.MutableCreateStreamingQuery()->MutableName();
         }
         Y_UNREACHABLE();
     }
@@ -463,6 +480,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
         case NKikimrSchemeOp::ESchemeOpCreateSysView:
+        case NKikimrSchemeOp::ESchemeOpCreateSecret:
+        case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery:
             return true;
         default:
             return false;
@@ -753,7 +772,11 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
         case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpAlterSecret:
+        case NKikimrSchemeOp::ESchemeOpCreateSecret:
+        case NKikimrSchemeOp::ESchemeOpAlterStreamingQuery:
         {
+            // TODO(yurikiselev): Change grants according to discussed [issue:23460]
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
@@ -815,6 +838,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
         case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpDropSecret:
+        case NKikimrSchemeOp::ESchemeOpDropStreamingQuery:
         {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -877,6 +902,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateView:
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery:
         {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = workingDir;
@@ -1043,8 +1069,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSysView:
         case NKikimrSchemeOp::ESchemeOpDropSysView:
             return false;
-        case NKikimrSchemeOp::ESchemeOpChangePathState:
-        {
+        case NKikimrSchemeOp::ESchemeOpChangePathState: {
+        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;

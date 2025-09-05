@@ -52,6 +52,7 @@ enum class ESchemeEntryType : i32 {
     ResourcePool = 21,
     SysView = 22,
     Transfer = 23,
+    StreamingQuery = 24,
 };
 
 struct TVirtualTimestamp {

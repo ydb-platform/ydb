@@ -565,6 +565,10 @@ TFuture<NCypressClient::TNodeId> TClientBase::LinkNode(
     req->set_ignore_existing(options.IgnoreExisting);
     req->set_lock_existing(options.LockExisting);
 
+    if (options.Attributes) {
+        ToProto(req->mutable_attributes(), *options.Attributes);
+    }
+
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);

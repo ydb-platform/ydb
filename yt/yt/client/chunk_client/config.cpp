@@ -179,6 +179,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("block_set_subrequest_threshold", &TThis::BlockSetSubrequestThreshold)
         .Default();
+    registrar.Parameter("partial_peer_probing_timeouts", &TThis::PartialPeerProbingTimeouts)
+        .Default();
 
     registrar.Postprocessor([] (TThis* config) {
         // Seems unreasonable to make backoff greater than half of total session timeout.
@@ -194,6 +196,50 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         // These are supposed to be not greater than PassCount and RetryCount.
         config->LookupRequestPassCount = std::min(config->LookupRequestPassCount, config->PassCount);
         config->LookupRequestRetryCount = std::min(config->LookupRequestRetryCount, config->RetryCount);
+
+        if (config->PartialPeerProbingTimeouts.size() > 5) {
+            THROW_ERROR_EXCEPTION(
+                "List of \"partial_peer_probing_timeouts\" contains %v elements, maximum allowed amount is 5",
+                config->PartialPeerProbingTimeouts.size());
+        }
+
+        if (!config->PartialPeerProbingTimeouts.empty()) {
+            SortBy(config->PartialPeerProbingTimeouts, [] (const auto& peerCountAndTimeout) {
+                return peerCountAndTimeout.second;
+            });
+
+            int pairIndex = 1;
+            while (pairIndex < std::ssize(config->PartialPeerProbingTimeouts)) {
+                if (config->PartialPeerProbingTimeouts[pairIndex - 1].second ==
+                    config->PartialPeerProbingTimeouts[pairIndex].second)
+                {
+                    THROW_ERROR_EXCEPTION("List of \"partial_peer_probing_timeouts\" cannot contain equal timeouts");
+                }
+
+                if (config->PartialPeerProbingTimeouts[pairIndex - 1].first ==
+                    config->PartialPeerProbingTimeouts[pairIndex].first)
+                {
+                    THROW_ERROR_EXCEPTION(
+                        "In list of \"partial_peer_probing_timeouts\" timeout for %v peers encountered multiple times",
+                        config->PartialPeerProbingTimeouts[pairIndex].first);
+                }
+
+                if (config->PartialPeerProbingTimeouts[pairIndex - 1].first <
+                    config->PartialPeerProbingTimeouts[pairIndex].first)
+                {
+                    THROW_ERROR_EXCEPTION(
+                        "In list of \"partial_peer_probing_timeouts\" timeout for %v peers must be larger than for %v peers",
+                        config->PartialPeerProbingTimeouts[pairIndex - 1].first,
+                        config->PartialPeerProbingTimeouts[pairIndex].first);
+                }
+
+                ++pairIndex;
+            }
+
+            if (config->PartialPeerProbingTimeouts.back().first <= 0) {
+                THROW_ERROR_EXCEPTION("List of \"partial_peer_probing_timeouts\" can only contain peer counts larger than zero");
+            }
+        }
     });
 }
 

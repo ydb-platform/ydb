@@ -639,7 +639,7 @@ namespace NKikimr {
         TBridgeInfo::TPtr BridgeInfo;
 
         std::deque<std::unique_ptr<IEventHandle>> PendingQ;
-        std::map<ui32, std::deque<std::unique_ptr<IEventHandle>>> PendingByGeneration;
+        std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForNextGeneration;
 
     public:
         TBridgedBlobStorageProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info)
@@ -650,6 +650,32 @@ namespace NKikimr {
         void Bootstrap() {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ true));
             Become(&TThis::StateWaitBridgeInfo);
+            HandleWakeup();
+        }
+
+        void HandleWakeup() {
+            TMonotonic dropBefore = TActivationContext::Monotonic() - TDuration::Seconds(2);
+            while (!PendingForNextGeneration.empty()) {
+                if (auto& [timestamp, ev] = PendingForNextGeneration.front(); timestamp < dropBefore) {
+                    switch (ev->GetTypeRewrite()) {
+#define MAKE_ERROR(TYPE) \
+                        case TYPE::EventType: \
+                            Send(ev->Sender, static_cast<TYPE*>(ev->GetBase())->MakeErrorResponse(NKikimrProto::ERROR, \
+                                "bridge request timed out", GroupId), 0, ev->Cookie); \
+                            break;
+
+                        DSPROXY_ENUM_EVENTS(MAKE_ERROR)
+#undef MAKE_ERROR
+                        default:
+                            Y_ABORT();
+                    }
+                    PendingForNextGeneration.pop_front();
+                } else {
+                    break;
+                }
+            }
+            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(),
+                {}, nullptr, 0));
         }
 
         void PassAway() override {
@@ -815,7 +841,7 @@ namespace NKikimr {
                     const ui32 myGeneration = bridgeGroupState.GetPile(pile.BridgePileId.GetPileIndex()).GetGroupGeneration();
 
                     if (myGeneration < msg->RacingGeneration) {
-                        PendingByGeneration[Info->GroupGeneration + 1].push_back(std::move(handle));
+                        PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), std::move(handle));
                     } else if (msg->RacingGeneration < myGeneration) {
                         // our generation is higher than the recipient's; we have to route this message through node warden
                         // to ensure proxy's configuration gets in place
@@ -879,17 +905,13 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
-            Info = std::move(ev->Get()->Info);
-            while (!PendingByGeneration.empty()) {
-                auto it = PendingByGeneration.begin();
-                auto& [requiredGeneration, events] = *it;
-                if (Info->GroupGeneration < requiredGeneration) {
-                    break;
-                }
-                for (auto& ev : events) {
+            auto prevInfo = std::exchange(Info, std::move(ev->Get()->Info));
+            Y_ABORT_UNLESS(prevInfo);
+            Y_ABORT_UNLESS(Info);
+            if (prevInfo->GroupGeneration < Info->GroupGeneration) {
+                for (auto& [timestamp, ev] : std::exchange(PendingForNextGeneration, {})) {
                     TActivationContext::Send(ev.release());
                 }
-                PendingByGeneration.erase(it);
             }
         }
 
@@ -923,6 +945,7 @@ namespace NKikimr {
             hFunc(TEvBlobStorage::TEvConfigureProxy, Handle)
             hFunc(TEvNodeWardenStorageConfig, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup)
         )
 
 #undef HANDLE_RESULT

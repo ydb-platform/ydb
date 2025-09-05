@@ -1,0 +1,20 @@
+service: committeepython
+title: Python Committee
+arcanum:
+  review:
+    auto_assign: true
+    groups:
+      - name: python-committee
+        roles: [ "committeepython:consultant" ]
+    rules:
+      - subpaths: "ruff.toml"
+        reviewers:
+          - name: python-committee
+            assign: 1
+            ship: 0
+            min_approvers_count: 1
+  auto_merge:
+    enabled: true
+    requirements:
+      - system: arcanum
+        type: comment_issues_closed

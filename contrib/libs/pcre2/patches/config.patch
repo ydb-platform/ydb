@@ -1,5 +1,0 @@
---- a/src/pcre2_config-linux.h	(index)
-+++ b/src/pcre2_config-linux.h	(working tree)
-@@ -81,1 +81,1 @@ sure both macros are undefined; an emulation function will then be used. */
--#define HAVE_MEMFD_CREATE 1
-+/* #undef HAVE_MEMFD_CREATE */

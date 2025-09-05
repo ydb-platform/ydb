@@ -119,6 +119,7 @@ private:
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         if (navigate->ErrorCount != 0) {
             Finish();
+            return;
         }
 
         for (const auto& entry : navigate->ResultSet) {
@@ -229,6 +230,7 @@ private:
     void HandleRemoveDir(TEvPrivate::TEvRemoveDirResult::TPtr& result) {
         if (!result->Get()->Result.Success()) {
             Finish();
+            return;
         }
 
         RemoveNextDir();

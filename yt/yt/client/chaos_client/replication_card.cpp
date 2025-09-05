@@ -604,6 +604,23 @@ TTimestamp GetReplicationProgressTimestampForKeyOrThrow(
     return *timestamp;
 }
 
+NTransactionClient::TTimestamp GetReplicationCardProgressMinTimestamp(
+    const TReplicationCard& replicationCard,
+    NTableClient::TLegacyKey lower,
+    NTableClient::TLegacyKey upper)
+{
+    auto replicationTimestamp = MaxTimestamp;
+    for (const auto& [_, replica] : replicationCard.Replicas) {
+        auto minTimestamp = GetReplicationProgressMinTimestamp(
+            replica.ReplicationProgress,
+            lower,
+            upper);
+        replicationTimestamp = std::min(replicationTimestamp, minTimestamp);
+    }
+
+    return replicationTimestamp;
+}
+
 TTimestamp GetReplicationProgressMinTimestamp(
     const TReplicationProgress& progress,
     TLegacyKey lower,

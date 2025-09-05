@@ -110,7 +110,7 @@ namespace NSQLHighlight {
         return json;
     }
 
-    void GenerateHighlightJS(IOutputStream& out, const THighlighting& highlighting) {
+    void GenerateHighlightJS(IOutputStream& out, const THighlighting& highlighting, bool /* ansi */) {
         Print(out, ToHighlightJSON(highlighting));
     }
 

@@ -12,8 +12,9 @@ TPartitionScaleRequest::TPartitionScaleRequest(
     const TString& databasePath,
     ui64 pathId,
     ui64 pathVersion,
-    const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit>& splits,
-    const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge>& merges,
+    std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit> splits,
+    std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge> merges,
+    std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionBoundary> setBoundaries,
     const NActors::TActorId& parentActorId
 )
     : Topic(topicName)
@@ -21,8 +22,9 @@ TPartitionScaleRequest::TPartitionScaleRequest(
     , DatabasePath(databasePath)
     , PathId(pathId)
     , PathVersion(pathVersion)
-    , Splits(splits)
-    , Merges(merges)
+    , Splits(std::move(splits))
+    , Merges(std::move(merges))
+    , SetBoundaries(std::move(setBoundaries))
     , ParentActorId(parentActorId) {
 
     }
@@ -55,11 +57,24 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
     NKikimrSchemeOp::TPersQueueGroupDescription groupDescription;
     groupDescription.SetName(Topic);
     TStringBuilder logMessage;
-    logMessage << "TPartitionScaleRequest::FillProposeRequest trying to scale partitions of '" << workingDir << "/" << Topic << "'. Spilts: ";
-    for(const auto& split: Splits) {
-        auto* newSplit = groupDescription.AddSplit();
-        logMessage << "partition: " << split.GetPartition() << " boundary: '" << split.GetSplitBoundary() << "' ";
-        *newSplit = split;
+    logMessage << "TPartitionScaleRequest::FillProposeRequest trying to scale partitions of '" << workingDir << "/" << Topic << "'.";
+    if (!Splits.empty()) {
+        logMessage << " Spilts:";
+        for(const auto& split: Splits) {
+            auto* newSplit = groupDescription.AddSplit();
+            logMessage << " partition: " << split.GetPartition() << " boundary: " << split.GetSplitBoundary().Quote();
+            *newSplit = split;
+        }
+        logMessage << ".";
+    }
+    if (!SetBoundaries.empty()) {
+        logMessage << " Sets:";
+        for(const auto& set: SetBoundaries) {
+            auto* newSet = groupDescription.AddRootPartitionBoundaries();
+            logMessage << " partition: " << set.GetPartition() << " boundary: " << set.GetKeyRange().GetFromBound().Quote() << '-' << set.GetKeyRange().GetToBound().Quote();
+            *newSet = set;
+        }
+        logMessage << ".";
     }
     PQ_LOG_D( logMessage);
 

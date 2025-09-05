@@ -170,7 +170,10 @@ public:
             return false;
         }
 
-        TInstant GetWatermark() {
+        TMaybe<TInstant> GetWatermark() {
+            if (!WatermarkMode) {
+                return Nothing();
+            }
             return Watermark.WatermarkIn;
         }
 
@@ -223,7 +226,9 @@ public:
                             return status;
                         }
                         PendingYield = true;
-                        CloseOldBuckets(GetWatermark().MicroSeconds(), newHopsStat);
+                        if (auto watermark = GetWatermark()) {
+                            CloseOldBuckets(watermark->MicroSeconds(), newHopsStat);
+                        }
                         if (!Ready.empty()) {
                             result = std::move(Ready.front());
                             Ready.pop_front();
@@ -246,7 +251,8 @@ public:
                 const auto ts = time.Get<ui64>();
                 const auto hopIndex = ts / HopTime;
 
-                auto& keyState = GetOrCreateKeyState(key, WatermarkMode ? GetWatermark().MicroSeconds() / HopTime : hopIndex);
+                const auto watermark = GetWatermark();
+                auto& keyState = GetOrCreateKeyState(key, watermark ? watermark->MicroSeconds() / HopTime : hopIndex);
                 if (hopIndex < keyState.HopIndex) {
                     ++LateEventsThrown;
                     continue;
@@ -376,7 +382,7 @@ public:
             const auto watermarkIndex = watermarkTs / HopTime;
             EraseNodesIf(StatesMap, [&](auto& iter) {
                 auto& [key, val] = iter;
-                ui64 closeBeforeIndex = watermarkIndex + 1 - IntervalHopCount;
+                ui64 closeBeforeIndex = Max<i64>(watermarkIndex + 1 - IntervalHopCount, 0);
                 const auto keyStateBecameEmpty = CloseOldBucketsForKey(key, val, closeBeforeIndex, newHops);
                 if (keyStateBecameEmpty) {
                     key.UnRef();

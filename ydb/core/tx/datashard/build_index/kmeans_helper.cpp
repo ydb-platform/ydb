@@ -89,8 +89,8 @@ std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table,
     auto result = std::make_shared<NTxProxy::TUploadTypes>();
 
     Ydb::Type type;
-    type.set_type_id(NTableIndex::ClusterIdType);
-    result->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type);
+    type.set_type_id(NTableIndex::NKMeans::ClusterIdType);
+    result->emplace_back(NTableIndex::NKMeans::ParentColumn, type);
 
     auto addType = [&](const auto& column) {
         auto it = types.find(column);

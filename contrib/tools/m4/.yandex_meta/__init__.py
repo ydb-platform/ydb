@@ -129,7 +129,7 @@ def post_install(self):
 
 m4 = NixProject(
     arcdir="contrib/tools/m4",
-    owners=["g:cpp-contrib"],
+    owners=["g:contrib"],
     nixattr="m4",
     ignore_commands=[
         "bash",

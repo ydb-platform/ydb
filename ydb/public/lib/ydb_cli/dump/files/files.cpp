@@ -21,6 +21,7 @@ enum EFilesType {
     CREATE_ASYNC_REPLICATION,
     CREATE_EXTERNAL_DATA_SOURCE,
     CREATE_EXTERNAL_TABLE,
+    SYSTEM_VIEW,
 };
 
 static constexpr TFileInfo FILES_INFO[] = {
@@ -42,6 +43,7 @@ static constexpr TFileInfo FILES_INFO[] = {
     {"create_async_replication.sql", "async replication"},
     {"create_external_data_source.sql", "external data source"},
     {"create_external_table.sql", "external table"},
+    {"system_view.pb", "system view"},
 };
 
 const TFileInfo& TableScheme() {
@@ -114,6 +116,10 @@ const TFileInfo& CreateExternalDataSource() {
 
 const TFileInfo& CreateExternalTable() {
     return FILES_INFO[CREATE_EXTERNAL_TABLE];
+}
+
+const TFileInfo& SystemView() {
+    return FILES_INFO[SYSTEM_VIEW];
 }
 
 } // NYdb::NDump::NFiles

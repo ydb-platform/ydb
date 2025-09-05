@@ -91,7 +91,6 @@ from ._cffi import (  # type: ignore
     lib,
 )
 
-
 backend_features = set()  # type: ignore
 
 COMPRESSION_RECOMMENDED_INPUT_SIZE = lib.ZSTD_CStreamInSize()
@@ -100,7 +99,6 @@ DECOMPRESSION_RECOMMENDED_INPUT_SIZE = lib.ZSTD_DStreamInSize()
 DECOMPRESSION_RECOMMENDED_OUTPUT_SIZE = lib.ZSTD_DStreamOutSize()
 
 new_nonzero = ffi.new_allocator(should_clear_after_alloc=False)
-
 
 MAX_COMPRESSION_LEVEL = lib.ZSTD_maxCLevel()
 MAGIC_NUMBER = lib.ZSTD_MAGICNUMBER
@@ -401,28 +399,28 @@ class ZstdCompressionParameters(object):
         return ZstdCompressionParameters(**kwargs)
 
     def __init__(
-        self,
-        format=0,
-        compression_level=0,
-        window_log=0,
-        hash_log=0,
-        chain_log=0,
-        search_log=0,
-        min_match=0,
-        target_length=0,
-        strategy=-1,
-        write_content_size=1,
-        write_checksum=0,
-        write_dict_id=0,
-        job_size=0,
-        overlap_log=-1,
-        force_max_window=0,
-        enable_ldm=0,
-        ldm_hash_log=0,
-        ldm_min_match=0,
-        ldm_bucket_size_log=0,
-        ldm_hash_rate_log=-1,
-        threads=0,
+            self,
+            format=0,
+            compression_level=0,
+            window_log=0,
+            hash_log=0,
+            chain_log=0,
+            search_log=0,
+            min_match=0,
+            target_length=0,
+            strategy=-1,
+            write_content_size=1,
+            write_checksum=0,
+            write_dict_id=0,
+            job_size=0,
+            overlap_log=-1,
+            force_max_window=0,
+            enable_ldm=0,
+            ldm_hash_log=0,
+            ldm_min_match=0,
+            ldm_bucket_size_log=0,
+            ldm_hash_rate_log=-1,
+            threads=0,
     ):
         params = lib.ZSTD_createCCtxParams()
         if params == ffi.NULL:
@@ -728,13 +726,13 @@ class ZstdCompressionWriter(object):
     """
 
     def __init__(
-        self,
-        compressor,
-        writer,
-        source_size,
-        write_size,
-        write_return_read,
-        closefd=True,
+            self,
+            compressor,
+            writer,
+            source_size,
+            write_size,
+            write_return_read,
+            closefd=True,
     ):
         self._compressor = compressor
         self._writer = writer
@@ -1020,7 +1018,7 @@ class ZstdCompressionObj(object):
     """
 
     def __init__(
-        self, compressor, write_size=COMPRESSION_RECOMMENDED_OUTPUT_SIZE
+            self, compressor, write_size=COMPRESSION_RECOMMENDED_OUTPUT_SIZE
     ):
         self._compressor = compressor
         self._out = ffi.new("ZSTD_outBuffer *")
@@ -1096,8 +1094,8 @@ class ZstdCompressionObj(object):
            Compressed data.
         """
         if flush_mode not in (
-            COMPRESSOBJ_FLUSH_FINISH,
-            COMPRESSOBJ_FLUSH_BLOCK,
+                COMPRESSOBJ_FLUSH_FINISH,
+                COMPRESSOBJ_FLUSH_BLOCK,
         ):
             raise ValueError("flush mode not recognized")
 
@@ -1807,14 +1805,14 @@ class ZstdCompressor(object):
     """
 
     def __init__(
-        self,
-        level=3,
-        dict_data=None,
-        compression_params=None,
-        write_checksum=None,
-        write_content_size=None,
-        write_dict_id=None,
-        threads=0,
+            self,
+            level=3,
+            dict_data=None,
+            compression_params=None,
+            write_checksum=None,
+            write_content_size=None,
+            write_dict_id=None,
+            threads=0,
     ):
         if level > lib.ZSTD_maxCLevel():
             raise ValueError(
@@ -2042,12 +2040,12 @@ class ZstdCompressor(object):
         return ZstdCompressionChunker(self, chunk_size=chunk_size)
 
     def copy_stream(
-        self,
-        ifh,
-        ofh,
-        size=-1,
-        read_size=COMPRESSION_RECOMMENDED_INPUT_SIZE,
-        write_size=COMPRESSION_RECOMMENDED_OUTPUT_SIZE,
+            self,
+            ifh,
+            ofh,
+            size=-1,
+            read_size=COMPRESSION_RECOMMENDED_INPUT_SIZE,
+            write_size=COMPRESSION_RECOMMENDED_OUTPUT_SIZE,
     ):
         """
         Copy data between 2 streams while compressing it.
@@ -2164,11 +2162,11 @@ class ZstdCompressor(object):
         return total_read, total_write
 
     def stream_reader(
-        self,
-        source,
-        size=-1,
-        read_size=COMPRESSION_RECOMMENDED_INPUT_SIZE,
-        closefd=True,
+            self,
+            source,
+            size=-1,
+            read_size=COMPRESSION_RECOMMENDED_INPUT_SIZE,
+            closefd=True,
     ):
         """
         Wrap a readable source with a stream that can read compressed data.
@@ -2214,12 +2212,12 @@ class ZstdCompressor(object):
         return ZstdCompressionReader(self, source, read_size, closefd=closefd)
 
     def stream_writer(
-        self,
-        writer,
-        size=-1,
-        write_size=COMPRESSION_RECOMMENDED_OUTPUT_SIZE,
-        write_return_read=True,
-        closefd=True,
+            self,
+            writer,
+            size=-1,
+            write_size=COMPRESSION_RECOMMENDED_OUTPUT_SIZE,
+            write_return_read=True,
+            closefd=True,
     ):
         """
         Create a stream that will write compressed data into another stream.
@@ -2261,11 +2259,11 @@ class ZstdCompressor(object):
         )
 
     def read_to_iter(
-        self,
-        reader,
-        size=-1,
-        read_size=COMPRESSION_RECOMMENDED_INPUT_SIZE,
-        write_size=COMPRESSION_RECOMMENDED_OUTPUT_SIZE,
+            self,
+            reader,
+            size=-1,
+            read_size=COMPRESSION_RECOMMENDED_INPUT_SIZE,
+            write_size=COMPRESSION_RECOMMENDED_OUTPUT_SIZE,
     ):
         """
         Read uncompressed data from a reader and return an iterator
@@ -2376,7 +2374,7 @@ class ZstdCompressor(object):
             else:
                 remaining = len(reader) - buffer_offset
                 slice_size = min(remaining, read_size)
-                read_result = reader[buffer_offset : buffer_offset + slice_size]
+                read_result = reader[buffer_offset: buffer_offset + slice_size]
                 buffer_offset += slice_size
 
             # No new input data. Break out of the read loop.
@@ -2560,7 +2558,7 @@ def frame_header_size(data):
     return zresult
 
 
-def get_frame_parameters(data):
+def get_frame_parameters(data, format=FORMAT_ZSTD1):
     """
     Parse a zstd frame header into frame parameters.
 
@@ -2571,13 +2569,15 @@ def get_frame_parameters(data):
 
     :param data:
        Data from which to read frame parameters.
+    :param format:
+       Set the format of data for the decoder.
     :return:
        :py:class:`FrameParameters`
     """
-    params = ffi.new("ZSTD_frameHeader *")
+    params = ffi.new("ZSTD_FrameHeader *")
 
     data_buffer = ffi.from_buffer(data)
-    zresult = lib.ZSTD_getFrameHeader(params, data_buffer, len(data_buffer))
+    zresult = lib.ZSTD_getFrameHeader_advanced(params, data_buffer, len(data_buffer), format)
     if lib.ZSTD_isError(zresult):
         raise ZstdError(
             "cannot get frame parameters: %s" % _zstd_error(zresult)
@@ -2635,7 +2635,7 @@ class ZstdCompressionDict(object):
 
     Dictionaries have unique integer IDs. You can retrieve this ID via:
 
-    >>> dict_id = zstandard.dictionary_id(dict_data)
+    >>> dict_id = dict_data.dict_id()
 
     You can obtain the raw data in the dict (useful for persisting and constructing
     a ``ZstdCompressionDict`` later) via ``as_bytes()``:
@@ -2679,9 +2679,9 @@ class ZstdCompressionDict(object):
         self.d = d
 
         if dict_type not in (
-            DICT_TYPE_AUTO,
-            DICT_TYPE_RAWCONTENT,
-            DICT_TYPE_FULLDICT,
+                DICT_TYPE_AUTO,
+                DICT_TYPE_RAWCONTENT,
+                DICT_TYPE_FULLDICT,
         ):
             raise ValueError(
                 "invalid dictionary load mode: %d; must use "
@@ -2765,18 +2765,18 @@ class ZstdCompressionDict(object):
 
 
 def train_dictionary(
-    dict_size,
-    samples,
-    k=0,
-    d=0,
-    f=0,
-    split_point=0.0,
-    accel=0,
-    notifications=0,
-    dict_id=0,
-    level=0,
-    steps=0,
-    threads=0,
+        dict_size,
+        samples,
+        k=0,
+        d=0,
+        f=0,
+        split_point=0.0,
+        accel=0,
+        notifications=0,
+        dict_id=0,
+        level=0,
+        steps=0,
+        threads=0,
 ):
     """Train a dictionary from sample data using the COVER algorithm.
 
@@ -2867,10 +2867,10 @@ def train_dictionary(
         if not isinstance(sample, bytes):
             raise ValueError("samples must be bytes")
 
-        l = len(sample)
-        ffi.memmove(samples_buffer + offset, sample, l)
-        offset += l
-        sample_sizes[i] = l
+        sample_len = len(sample)
+        ffi.memmove(samples_buffer + offset, sample, sample_len)
+        offset += sample_len
+        sample_sizes[i] = sample_len
 
     dict_data = new_nonzero("char[]", dict_size)
 
@@ -3002,7 +3002,7 @@ class ZstdDecompressionObj(object):
                 # for retrieval.
                 self._finished = True
                 self._decompressor = None
-                self._unused_input = data[in_buffer.pos : in_buffer.size]
+                self._unused_input = data[in_buffer.pos: in_buffer.size]
                 break
             elif zresult == 0 and self._read_across_frames:
                 # We're at the end of a fully flushed frame and we can read more.
@@ -3019,8 +3019,8 @@ class ZstdDecompressionObj(object):
             # is exhausted, there's nothing more to write. So we've done all we
             # can.
             elif (
-                in_buffer.pos == in_buffer.size
-                and out_buffer.pos < out_buffer.size
+                    in_buffer.pos == in_buffer.size
+                    and out_buffer.pos < out_buffer.size
             ):
                 break
             else:
@@ -3125,12 +3125,12 @@ class ZstdDecompressionReader(object):
     """
 
     def __init__(
-        self,
-        decompressor,
-        source,
-        read_size,
-        read_across_frames,
-        closefd=True,
+            self,
+            decompressor,
+            source,
+            read_size,
+            read_across_frames,
+            closefd=True,
     ):
         self._decompressor = decompressor
         self._source = source
@@ -3280,9 +3280,9 @@ class ZstdDecompressionReader(object):
         # a) output buffer is full (read amount is satisfied)
         # b) we're at end of a frame and not in frame spanning mode
         return out_buffer.pos and (
-            out_buffer.pos == out_buffer.size
-            or zresult == 0
-            and not self._read_across_frames
+                out_buffer.pos == out_buffer.size
+                or zresult == 0
+                and not self._read_across_frames
         )
 
     def read(self, size=-1):
@@ -3502,12 +3502,12 @@ class ZstdDecompressionWriter(object):
     """
 
     def __init__(
-        self,
-        decompressor,
-        writer,
-        write_size,
-        write_return_read,
-        closefd=True,
+            self,
+            decompressor,
+            writer,
+            write_size,
+            write_return_read,
+            closefd=True,
     ):
         decompressor._ensure_dctx()
 
@@ -3731,11 +3731,11 @@ class ZstdDecompressor(object):
         return lib.ZSTD_sizeof_DCtx(self._dctx)
 
     def decompress(
-        self,
-        data,
-        max_output_size=0,
-        read_across_frames=False,
-        allow_extra_data=True,
+            self,
+            data,
+            max_output_size=0,
+            read_across_frames=False,
+            allow_extra_data=True,
     ):
         """
         Decompress data in a single operation.
@@ -3822,13 +3822,12 @@ class ZstdDecompressor(object):
 
         data_buffer = ffi.from_buffer(data)
 
-        output_size = lib.ZSTD_getFrameContentSize(
-            data_buffer, len(data_buffer)
-        )
-
-        if output_size == lib.ZSTD_CONTENTSIZE_ERROR:
+        params = ffi.new("ZSTD_FrameHeader *")
+        zresult = lib.ZSTD_getFrameHeader_advanced(params, data_buffer, len(data_buffer), self._format)
+        if zresult != 0:
             raise ZstdError("error determining content size from frame header")
-        elif output_size == 0:
+        output_size = params.frameContentSize
+        if output_size == 0:
             return b""
         elif output_size == lib.ZSTD_CONTENTSIZE_UNKNOWN:
             if not max_output_size:
@@ -3876,11 +3875,11 @@ class ZstdDecompressor(object):
         return ffi.buffer(result_buffer, out_buffer.pos)[:]
 
     def stream_reader(
-        self,
-        source,
-        read_size=DECOMPRESSION_RECOMMENDED_INPUT_SIZE,
-        read_across_frames=False,
-        closefd=True,
+            self,
+            source,
+            read_size=DECOMPRESSION_RECOMMENDED_INPUT_SIZE,
+            read_across_frames=False,
+            closefd=True,
     ):
         """
         Read-only stream wrapper that performs decompression.
@@ -3913,9 +3912,9 @@ class ZstdDecompressor(object):
         )
 
     def decompressobj(
-        self,
-        write_size=DECOMPRESSION_RECOMMENDED_OUTPUT_SIZE,
-        read_across_frames=False,
+            self,
+            write_size=DECOMPRESSION_RECOMMENDED_OUTPUT_SIZE,
+            read_across_frames=False,
     ):
         """Obtain a standard library compatible incremental decompressor.
 
@@ -3939,11 +3938,11 @@ class ZstdDecompressor(object):
         )
 
     def read_to_iter(
-        self,
-        reader,
-        read_size=DECOMPRESSION_RECOMMENDED_INPUT_SIZE,
-        write_size=DECOMPRESSION_RECOMMENDED_OUTPUT_SIZE,
-        skip_bytes=0,
+            self,
+            reader,
+            read_size=DECOMPRESSION_RECOMMENDED_INPUT_SIZE,
+            write_size=DECOMPRESSION_RECOMMENDED_OUTPUT_SIZE,
+            skip_bytes=0,
     ):
         """Read compressed data to an iterator of uncompressed chunks.
 
@@ -4048,7 +4047,7 @@ class ZstdDecompressor(object):
             else:
                 remaining = size - buffer_offset
                 slice_size = min(remaining, read_size)
-                read_result = reader[buffer_offset : buffer_offset + slice_size]
+                read_result = reader[buffer_offset: buffer_offset + slice_size]
                 buffer_offset += slice_size
 
             # No new input. Break out of read loop.
@@ -4087,11 +4086,11 @@ class ZstdDecompressor(object):
         # If we get here, input is exhausted.
 
     def stream_writer(
-        self,
-        writer,
-        write_size=DECOMPRESSION_RECOMMENDED_OUTPUT_SIZE,
-        write_return_read=True,
-        closefd=True,
+            self,
+            writer,
+            write_size=DECOMPRESSION_RECOMMENDED_OUTPUT_SIZE,
+            write_return_read=True,
+            closefd=True,
     ):
         """
         Push-based stream wrapper that performs decompression.
@@ -4129,11 +4128,11 @@ class ZstdDecompressor(object):
         )
 
     def copy_stream(
-        self,
-        ifh,
-        ofh,
-        read_size=DECOMPRESSION_RECOMMENDED_INPUT_SIZE,
-        write_size=DECOMPRESSION_RECOMMENDED_OUTPUT_SIZE,
+            self,
+            ifh,
+            ofh,
+            read_size=DECOMPRESSION_RECOMMENDED_INPUT_SIZE,
+            write_size=DECOMPRESSION_RECOMMENDED_OUTPUT_SIZE,
     ):
         """
         Copy data between streams, decompressing in the process.
@@ -4289,7 +4288,7 @@ class ZstdDecompressor(object):
 
         # All chunks should be zstd frames and should have content size set.
         chunk_buffer = ffi.from_buffer(chunk)
-        params = ffi.new("ZSTD_frameHeader *")
+        params = ffi.new("ZSTD_FrameHeader *")
         zresult = lib.ZSTD_getFrameHeader(
             params, chunk_buffer, len(chunk_buffer)
         )
@@ -4373,7 +4372,7 @@ class ZstdDecompressor(object):
         return ffi.buffer(last_buffer, len(last_buffer))[:]
 
     def multi_decompress_to_buffer(
-        self, frames, decompressed_sizes=None, threads=0
+            self, frames, decompressed_sizes=None, threads=0
     ):
         """
         Decompress multiple zstd frames to output buffers as a single operation.

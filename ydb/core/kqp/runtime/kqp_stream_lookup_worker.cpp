@@ -85,6 +85,13 @@ struct TReadState {
     ui64 LastSeqNo = 0;
 };
 
+struct TSizedUnboxedValue {
+    NUdf::TUnboxedValue Data;
+    ui32 StorageBytes = 0;
+    ui32 ComputeSize = 0;
+};
+
+
 void UpdateContinuationData(const NKikimrTxDataShard::TEvReadResult& record, TReadState& state) {
     YQL_ENSURE(record.HasContinuationToken(), "Successful TEvReadResult should contain continuation token");
     NKikimrTxDataShard::TReadContinuationToken continuationToken;
@@ -499,12 +506,12 @@ public:
 
     struct TUnprocessedLeftRow {
         TOwnedCellVec JoinKey;
-        NUdf::TUnboxedValue InputLeftRow;
+        ui64 JoinKeyId = 0;
         ui64 RowSeqNo;
 
-        explicit TUnprocessedLeftRow(TOwnedCellVec joinKey, NUdf::TUnboxedValue inputLeftRow, ui64 rowSeqNo)
+        explicit TUnprocessedLeftRow(TOwnedCellVec joinKey, ui64 joinKeyId, ui64 rowSeqNo)
             : JoinKey(std::move(joinKey))
-            , InputLeftRow(std::move(inputLeftRow))
+            , JoinKeyId(joinKeyId)
             , RowSeqNo(rowSeqNo)
         {}
     };
@@ -538,11 +545,14 @@ public:
             }
         }
 
-        ResultRowsBySeqNo[rowSeqNo].AcceptLeftRow(firstRow, lastRow);
+        TSizedUnboxedValue row{.Data=std::move(std::move(inputRow.GetElement(1))), .StorageBytes=0};
+        row.ComputeSize = NYql::NDq::TDqDataSerializer::EstimateSize(row.Data, GetLeftRowType());
+        ui64 joinKeyId = JoinKeySeqNo++;
+        ResultRowsBySeqNo[rowSeqNo].AcceptLeftRow(std::move(row), joinKeyId, rowSeqNo, firstRow, lastRow);
         UnprocessedRows.emplace_back(
             TUnprocessedLeftRow(
                 std::move(TOwnedCellVec(joinKeyCells)),
-                std::move(inputRow.GetElement(1)),
+                joinKeyId,
                 rowSeqNo
             )
         );
@@ -695,6 +705,7 @@ public:
                 return true;
             };
 
+            bool hasRanges = false;
             if (isKeyAllowed(unprocessedRow.JoinKey)) {
                 std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
                 if (unprocessedRow.JoinKey.size() < Settings.KeyColumns.size()) {
@@ -713,6 +724,7 @@ public:
                 }
 
                 for (auto[shardId, range] : partitions) {
+                    hasRanges = true;
                     if (range.Point) {
                         pointsPerShard[shardId].push_back(std::move(range));
                     } else {
@@ -721,9 +733,13 @@ public:
                 }
             }
 
-            PendingLeftRowsByKey.insert(
-                std::make_pair(std::move(unprocessedRow.JoinKey), TLeftRowInfo(
-                    std::move(unprocessedRow.InputLeftRow), unprocessedRow.RowSeqNo, GetLeftRowType())));
+            if (hasRanges) {
+                PendingLeftRowsByKey.insert(
+                    std::make_pair(std::move(unprocessedRow.JoinKey), TLeftRowInfo(unprocessedRow.RowSeqNo, unprocessedRow.JoinKeyId)));
+            } else {
+                ResultRowsBySeqNo[unprocessedRow.RowSeqNo].OnJoinKeyFinished(HolderFactory, unprocessedRow.JoinKeyId);
+            }
+
             UnprocessedRows.pop_front();
         }
 
@@ -791,21 +807,20 @@ public:
             auto leftRowIt = PendingLeftRowsByKey.find(joinKeyCells);
             YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
 
-            TReadResultStats rowStats;
             auto& resultRows = ResultRowsBySeqNo[leftRowIt->second.SeqNo];
-            auto resultRow = leftRowIt->second.TryBuildResultRow(
-                HolderFactory, Settings, ReadColumns, row, rowStats, resultRows.FirstRowInBatch(), false, result.ShardId);
-            if (resultRow.HasValue()) {
-                resultRows.AddRow(std::move(rowStats), std::move(resultRow));
-                YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
-            }
+            auto rightRow = leftRowIt->second.AttachRightRow(HolderFactory, Settings, ReadColumns, row);
+            resultRows.TryBuildResultRow(HolderFactory, std::move(rightRow));
+            YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
         }
 
         if (record.GetFinished()) {
             for (const auto& key : pendingKeysIt->second.PendingKeys) {
                 auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(key));
                 YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
-                leftRowIt->second.PendingReads.erase(record.GetReadId());
+                if (leftRowIt->second.FinishReadId(record.GetReadId())) {
+                    ResultRowsBySeqNo[leftRowIt->second.SeqNo].OnJoinKeyFinished(HolderFactory, leftRowIt->second.JoinKeyId);
+                    PendingLeftRowsByKey.erase(leftRowIt);
+                }
             }
 
             ReadStateByReadId.erase(pendingKeysIt);
@@ -867,12 +882,9 @@ public:
         // we should process left rows that haven't received last row flags.
         for (auto leftRowIt = PendingLeftRowsByKey.begin(); leftRowIt != PendingLeftRowsByKey.end();) {
             if (leftRowIt->second.PendingReads.empty()) {
-                TReadResultStats rowStats;
                 auto& result = ResultRowsBySeqNo[leftRowIt->second.SeqNo];
-                result.FinishLeftRow();
-                auto resultRow = leftRowIt->second.TryBuildResultRow(HolderFactory, Settings, ReadColumns, {}, rowStats, result.FirstRowInBatch(), result.ProcessedAllLeftRows());
+                result.OnJoinKeyFinished(HolderFactory, leftRowIt->second.JoinKeyId);
                 YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
-                result.AddRow(std::move(rowStats), std::move(resultRow));
                 PendingLeftRowsByKey.erase(leftRowIt++);
             } else {
                 ++leftRowIt;
@@ -930,67 +942,36 @@ public:
     }
 private:
     struct TLeftRowInfo {
-        explicit TLeftRowInfo(NUdf::TUnboxedValue row, ui64 seqNo, NMiniKQL::TStructType* leftRowType)
-        : Row(std::move(row))
-        , SeqNo(seqNo)
-        , LeftRowType(leftRowType)
-        , LeftRowSize(NYql::NDq::TDqDataSerializer::EstimateSize(Row, leftRowType))
+        explicit TLeftRowInfo(ui64 seqNo, ui64 joinKeyId)
+        : SeqNo(seqNo)
+        , JoinKeyId(joinKeyId)
         {
         }
 
-        NUdf::TUnboxedValue Row;
         std::unordered_set<ui64> PendingReads;
-        bool RightRowExist = false;
-        bool LastRowReceived = false;
         const ui64 SeqNo;
-        NMiniKQL::TStructType* LeftRowType = nullptr;
-        ui64 LeftRowSize = 0;
+        const ui64 JoinKeyId;
 
-        NUdf::TUnboxedValue RightRow;
-        ui64 RightRowSize = 0;
-        i64 StorageReadBytes = 0;
-
-        NUdf::TUnboxedValue TryBuildResultRow(const NMiniKQL::THolderFactory& HolderFactory, const TLookupSettings& Settings,
-            const std::map<std::string, TSysTables::TTableColumnInfo>& ReadColumns, TConstArrayRef<TCell> rightRow,
-            TReadResultStats& rowStats, bool firstRow, bool lastRow, TMaybe<ui64> shardId = {})
-        {
-            if (lastRow) {
-                LastRowReceived = lastRow;
+        bool FinishReadId(ui64 readId) {
+            auto it = PendingReads.find(readId);
+            if (it != PendingReads.end()) {
+                PendingReads.erase(readId);
             }
 
-            NUdf::TUnboxedValue resultRow;
-
-            if (RightRow.HasValue() || lastRow) {
-                bool hasValue = RightRow.HasValue();
-                NUdf::TUnboxedValue* resultRowItems = nullptr;
-                resultRow = HolderFactory.CreateDirectArrayHolder(3, resultRowItems);
-                resultRowItems[0] = Row;
-                resultRowItems[1] = std::move(RightRow);
-                auto rowCookie = TStreamLookupJoinRowCookie{.RowSeqNo=SeqNo, .LastRow=lastRow, .FirstRow=firstRow};
-                resultRowItems[2] = NUdf::TUnboxedValuePod(rowCookie.Encode());
-                rowStats.ReadRowsCount += (hasValue ? 1 : 0);
-                rowStats.ReadBytesCount += StorageReadBytes;
-                rowStats.ResultRowsCount += 1;
-                rowStats.ResultBytesCount += LeftRowSize + RightRowSize;
-            }
-
-            if (!rightRow.empty()) {
-                RightRowExist = true;
-                AttachRightRow(
-                    HolderFactory, Settings, ReadColumns, rightRow,
-                    shardId);
-            }
-
-            return resultRow;
+            return Completed();
         }
 
-        void AttachRightRow(const NMiniKQL::THolderFactory& HolderFactory, const TLookupSettings& Settings,
+        TSizedUnboxedValue AttachRightRow(const NMiniKQL::THolderFactory& HolderFactory, const TLookupSettings& Settings,
             const std::map<std::string, TSysTables::TTableColumnInfo>& ReadColumns,
             TConstArrayRef<TCell> rightRow,
             TMaybe<ui64> shardId = {})
         {
             NUdf::TUnboxedValue* rightRowItems = nullptr;
-            RightRow = HolderFactory.CreateDirectArrayHolder(Settings.Columns.size(), rightRowItems);
+
+            TSizedUnboxedValue row;
+            row.Data = std::move(HolderFactory.CreateDirectArrayHolder(Settings.Columns.size(), rightRowItems));
+            row.ComputeSize = 0;
+            row.StorageBytes = 0;
 
             for (size_t colIndex = 0; colIndex < Settings.Columns.size(); ++colIndex) {
                 const auto& column = Settings.Columns[colIndex];
@@ -1000,18 +981,20 @@ private:
                 if (IsSystemColumn(column.Name)) {
                     YQL_ENSURE(shardId);
                     NMiniKQL::FillSystemColumn(rightRowItems[colIndex], *shardId, column.Id, column.PType);
-                    RightRowSize += sizeof(NUdf::TUnboxedValue);
+                    row.ComputeSize += sizeof(NUdf::TUnboxedValue);
                 } else {
-                    StorageReadBytes += rightRow[std::distance(ReadColumns.begin(), it)].Size();
+                    row.StorageBytes += rightRow[std::distance(ReadColumns.begin(), it)].Size();
                     rightRowItems[colIndex] = NMiniKQL::GetCellValue(rightRow[std::distance(ReadColumns.begin(), it)],
                         column.PType);
-                    RightRowSize += NMiniKQL::GetUnboxedValueSize(rightRowItems[colIndex], column.PType).AllocatedBytes;
+                    row.ComputeSize += NMiniKQL::GetUnboxedValueSize(rightRowItems[colIndex], column.PType).AllocatedBytes;
                 }
             }
+
+            return row;
         }
 
         bool Completed() {
-            return PendingReads.empty() && RightRowExist && LastRowReceived;
+            return PendingReads.empty();
         }
     };
 
@@ -1022,26 +1005,32 @@ private:
         };
 
         std::deque<TResultRow> Rows;
+        std::unordered_set<ui64> PendingJoinKeys;
         ui32 FirstUnprocessedRow = 0;
         ui64 ProcessedRows = 0;
-        ui64 ProcessingLeftRows = 0;
         bool FirstRow = false;
         bool LastRow = false;
+        ui64 RowSeqNo = 0;
 
-        bool Finished() const {
-            return Rows.empty();
+        TSizedUnboxedValue LeftRow;
+        TSizedUnboxedValue RightRow;
+
+        bool ProcessedAllJoinKeys() const {
+            return LastRow && PendingJoinKeys.empty();
         }
 
-        bool ProcessedAllLeftRows() const {
-            return ProcessingLeftRows == 0;
+        void OnJoinKeyFinished(const NMiniKQL::THolderFactory& HolderFactory, ui64 joinKeyId) {
+            auto it = PendingJoinKeys.find(joinKeyId);
+            if (it != PendingJoinKeys.end()) {
+                PendingJoinKeys.erase(joinKeyId);
+                TryBuildResultRow(HolderFactory);
+            }
         }
 
-        void FinishLeftRow() {
-            --ProcessingLeftRows;
-        }
-
-        void AcceptLeftRow(bool firstRow, bool lastRow) {
-            ++ProcessingLeftRows;
+        void AcceptLeftRow(TSizedUnboxedValue&& leftRow, ui64 joinKeyId, ui64 seqNo, bool firstRow, bool lastRow) {
+            RowSeqNo = seqNo;
+            LeftRow = std::move(leftRow);
+            PendingJoinKeys.emplace(joinKeyId);
             if (firstRow)
                 FirstRow = true;
 
@@ -1050,13 +1039,34 @@ private:
         }
 
         bool Completed() const {
-            return Rows.empty() && FirstRow && LastRow && ProcessingLeftRows == 0;
+            return Rows.empty() && FirstRow && LastRow && PendingJoinKeys.empty();
         }
 
-        void AddRow(TReadResultStats&& stats, NUdf::TUnboxedValue&& data) {
-            if (data.HasValue()) {
-                Rows.emplace_back(std::move(data), std::move(stats));
+        void TryBuildResultRow(const NMiniKQL::THolderFactory& HolderFactory, std::optional<TSizedUnboxedValue> row = {}) {
+            if (RightRow.Data.HasValue() || ProcessedAllJoinKeys()) {
+                TReadResultStats rowStats;
+                NUdf::TUnboxedValue resultRow;
+
+                bool hasValue = RightRow.Data.HasValue();
+
+                NUdf::TUnboxedValue* resultRowItems = nullptr;
+                resultRow = HolderFactory.CreateDirectArrayHolder(3, resultRowItems);
+                resultRowItems[0] = LeftRow.Data;
+                resultRowItems[1] = std::move(RightRow.Data);
+                auto rowCookie = TStreamLookupJoinRowCookie{.RowSeqNo=RowSeqNo, .LastRow=ProcessedAllJoinKeys(), .FirstRow=FirstRowInBatch()};
+                resultRowItems[2] = NUdf::TUnboxedValuePod(rowCookie.Encode());
+
+                rowStats.ReadRowsCount += (hasValue ? 1 : 0);
+                rowStats.ReadBytesCount += RightRow.StorageBytes;
+                rowStats.ResultRowsCount += 1;
+                rowStats.ResultBytesCount += LeftRow.ComputeSize + RightRow.ComputeSize;
+
                 ++ProcessedRows;
+                Rows.emplace_back(std::move(resultRow), std::move(rowStats));
+            }
+
+            if (row.has_value()) {
+                RightRow = std::move(row.value());
             }
         }
 
@@ -1169,6 +1179,7 @@ private:
     absl::flat_hash_map<TOwnedCellVec, TLeftRowInfo, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PendingLeftRowsByKey;
     std::unordered_map<ui64, TResultBatch> ResultRowsBySeqNo;
     ui64 InputRowSeqNo = 0;
+    ui64 JoinKeySeqNo = 0;
     ui64 CurrentResultSeqNo = 0;
     NMiniKQL::TStructType* LeftRowType = nullptr;
     NKikimr::NMiniKQL::TTupleType* InputTupleType = nullptr;

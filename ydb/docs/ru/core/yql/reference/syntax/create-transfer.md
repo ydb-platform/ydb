@@ -1,6 +1,6 @@
 # CREATE TRANSFER
 
-Создает [трансфер данных](../../../concepts/transfer.md) из [топика](../../../concepts/topic.md) в [таблицу](../../../concepts/datamodel/table.md).
+Создает [трансфер данных](../../../concepts/transfer.md) из [топика](../../../concepts/datamodel/topic.md) в [таблицу](../../../concepts/datamodel/table.md).
 
 Синтаксис:
 

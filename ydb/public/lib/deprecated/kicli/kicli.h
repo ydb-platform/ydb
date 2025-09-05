@@ -591,6 +591,8 @@ public:
         BackupCollection,
         Transfer,
         SysView,
+        Secret,
+        StreamingQuery,
     };
 
     TSchemaObject(TSchemaObject&&) = default;

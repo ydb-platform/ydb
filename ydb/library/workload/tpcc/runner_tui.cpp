@@ -18,22 +18,8 @@ TRunnerTui::TRunnerTui(std::shared_ptr<TLog>& log, TLogBackendWithCapture& logBa
     : Log(log)
     , LogBackend(logBacked)
     , DataToDisplay(std::move(data))
-    , Screen(ScreenInteractive::Fullscreen())
 {
-    TuiThread = std::thread([&] {
-        Screen.Loop(BuildComponent());
-
-        // ftxui catches signals and breaks the loop above, but
-        // we have to let know the rest of app
-        GetGlobalInterruptSource().request_stop();
-    });
-}
-
-TRunnerTui::~TRunnerTui() {
-    Screen.Exit();
-    if (TuiThread.joinable()) {
-        TuiThread.join();
-    }
+    StartLoop();
 }
 
 void TRunnerTui::Update(std::shared_ptr<TRunDisplayData> data) {

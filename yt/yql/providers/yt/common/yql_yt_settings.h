@@ -101,6 +101,13 @@ public:
     NCommon::TConfSetting<TString, StaticPerCluster> StaticPool;
     NCommon::TConfSetting<TString, StaticPerCluster> StaticNetworkProject;
     NCommon::TConfSetting<TString, StaticPerCluster> CoreDumpPath;
+    NCommon::TConfSetting<bool, StaticPerCluster> JobBlockInput;
+    NCommon::TConfSetting<bool, StaticPerCluster> JobBlockTableContent;
+    NCommon::TConfSetting<TSet<TString>, StaticPerCluster> JobBlockInputSupportedTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, StaticPerCluster> JobBlockInputSupportedDataTypes;
+    NCommon::TConfSetting<EBlockOutputMode, StaticPerCluster> JobBlockOutput;
+    NCommon::TConfSetting<TSet<TString>, StaticPerCluster> JobBlockOutputSupportedTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, StaticPerCluster> JobBlockOutputSupportedDataTypes;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -321,13 +328,6 @@ public:
     NCommon::TConfSetting<ui16, Static> MinColumnGroupSize;
     NCommon::TConfSetting<ui16, Static> MaxColumnGroups;
     NCommon::TConfSetting<ui64, Static> ExtendedStatsMaxChunkCount;
-    NCommon::TConfSetting<bool, Static> JobBlockInput;
-    NCommon::TConfSetting<bool, Static> JobBlockTableContent;
-    NCommon::TConfSetting<TSet<TString>, Static> JobBlockInputSupportedTypes;
-    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, Static> JobBlockInputSupportedDataTypes;
-    NCommon::TConfSetting<EBlockOutputMode, Static> JobBlockOutput;
-    NCommon::TConfSetting<TSet<TString>, Static> JobBlockOutputSupportedTypes;
-    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, Static> JobBlockOutputSupportedDataTypes;
     NCommon::TConfSetting<bool, Static> _EnableYtDqProcessWriteConstraints;
     NCommon::TConfSetting<bool, Static> CompactForDistinct;
     NCommon::TConfSetting<bool, Static> DropUnusedKeysFromKeyFilter;

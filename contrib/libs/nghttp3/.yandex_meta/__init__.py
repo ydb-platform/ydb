@@ -23,7 +23,7 @@ def post_install(self):
 nghttp3 = CMakeNinjaNixProject(
     license="MIT",
     flags=["-DENABLE_LIB_ONLY=1"],
-    owners=["g:devtools-contrib", "g:yandex-io"],
+    owners=["g:yandex-io"],
     nixattr="nghttp3",
     arcdir="contrib/libs/nghttp3",
     post_install=post_install,

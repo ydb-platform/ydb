@@ -281,6 +281,7 @@ PyObject *Decompressor_decompress(ZstdDecompressor *self, PyObject *args,
     size_t zresult;
     ZSTD_outBuffer outBuffer;
     ZSTD_inBuffer inBuffer;
+    ZSTD_frameHeader frameHeader;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "y*|nOO:decompress", kwlist,
                                      &source, &maxOutputSize, &readAcrossFrames,
@@ -299,15 +300,14 @@ PyObject *Decompressor_decompress(ZstdDecompressor *self, PyObject *args,
         goto finally;
     }
 
-    decompressedSize = ZSTD_getFrameContentSize(source.buf, source.len);
-
-    if (ZSTD_CONTENTSIZE_ERROR == decompressedSize) {
+    if (ZSTD_getFrameHeader_advanced(&frameHeader, source.buf, source.len, self->format) != 0) {
         PyErr_SetString(ZstdError,
                         "error determining content size from frame header");
         goto finally;
     }
+    decompressedSize = frameHeader.frameContentSize;
     /* Special case of empty frame. */
-    else if (0 == decompressedSize) {
+    if (0 == decompressedSize) {
         result = PyBytes_FromStringAndSize("", 0);
         goto finally;
     }

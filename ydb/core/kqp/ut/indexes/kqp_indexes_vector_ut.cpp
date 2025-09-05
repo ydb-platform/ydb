@@ -965,10 +965,17 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         DoPositiveQueriesVectorIndexOrderByCosine(session, StaleRO ? TTxSettings::StaleRO() : TTxSettings::SerializableRW(), true /*covered*/);
 
-        // from leader - should NOT read
-        CheckTableReads(session, postingTableName, false, false);
-        // from followers - should read
-        CheckTableReads(session, postingTableName, true, true);
+        if (StaleRO) {
+            // from leader - should NOT read
+            CheckTableReads(session, postingTableName, false, false);
+            // from followers - should read
+            CheckTableReads(session, postingTableName, true, true);
+        } else {
+            // from leader - should read
+            CheckTableReads(session, postingTableName, false, true);
+            // from followers - should NOT read
+            CheckTableReads(session, postingTableName, true, false);
+        }
 
         if (StaleRO) {
             CheckTableReads(session, levelTableName, false, false);

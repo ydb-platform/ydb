@@ -3465,6 +3465,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     Y_UNIT_TEST(SimpleColumnFamilies) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnableTableCacheModes(true);
         InitSubDomain(server);
 
         auto connection = NYdb::TDriver(
@@ -3633,6 +3634,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 .AlterColumnFamily("Value", "alt")
                 .BeginAddColumnFamily("alt")
                     .SetCompression(EColumnFamilyCompression::None)
+                    .SetCacheMode(EColumnFamilyCacheMode::Regular)
                 .EndAddColumnFamily();
 
             auto result = session.AlterTable("/Root/ydb_ut_tenant/Table-4", alterSettings).ExtractValueSync();
@@ -3657,12 +3659,14 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression().value(), EColumnFamilyCompression::None);
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCacheMode().value(), EColumnFamilyCacheMode::Regular);
         }
 
         {
             auto alterSettings = TAlterTableSettings()
                 .BeginAlterColumnFamily("alt")
                     .SetCompression(EColumnFamilyCompression::LZ4)
+                    .SetCacheMode(EColumnFamilyCacheMode::InMemory)
                 .EndAlterColumnFamily();
 
             auto result = session.AlterTable("/Root/ydb_ut_tenant/Table-4", alterSettings).ExtractValueSync();
@@ -3687,6 +3691,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression().value(), EColumnFamilyCompression::LZ4);
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCacheMode().value(), EColumnFamilyCacheMode::InMemory);
         }
 
         for (int tableIdx = 1; tableIdx <= 4; ++tableIdx) {
@@ -3763,6 +3768,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     Y_UNIT_TEST(ColumnFamiliesDescriptionWithStorageAndIndex) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnableTableCacheModes(true);
         InitSubDomain(server);
 
         auto connection = NYdb::TDriver(
@@ -3783,6 +3789,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 .BeginColumnFamily("alt")
                     .SetData("hdd")
                     .SetCompression(EColumnFamilyCompression::LZ4)
+                    .SetCacheMode(EColumnFamilyCacheMode::InMemory)
                 .EndColumnFamily();
             tableBuilder.SetPrimaryKeyColumn("Key");
             tableBuilder.AddSecondaryIndex("MyIndex", "Value");
@@ -3813,6 +3820,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetData(), "hdd");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression().value(), EColumnFamilyCompression::LZ4);
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCacheMode().value(), EColumnFamilyCacheMode::InMemory);
         }
     }
 
@@ -3820,6 +3828,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnablePublicApiExternalBlobs(true);
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnableTableCacheModes(true);
         InitSubDomain(server, EDefaultTableProfile::Disabled);
 
         auto connection = NYdb::TDriver(
@@ -3850,6 +3859,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 .BeginColumnFamily("alt")
                     .SetData("hdd")
                     .SetCompression(EColumnFamilyCompression::LZ4)
+                    .SetCacheMode(EColumnFamilyCacheMode::InMemory)
                 .EndColumnFamily();
             tableBuilder.SetPrimaryKeyColumn("Key");
 
@@ -3884,6 +3894,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetData(), "hdd");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression().value(), EColumnFamilyCompression::LZ4);
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCacheMode().value(), EColumnFamilyCacheMode::InMemory);
         }
     }
 

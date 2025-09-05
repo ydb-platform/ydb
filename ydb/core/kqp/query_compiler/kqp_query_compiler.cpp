@@ -10,7 +10,7 @@
 #include <ydb/core/kqp/query_data/kqp_request_predictor.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
@@ -649,6 +649,7 @@ public:
                     rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO)));
                 }
                 ctx.AddError(rootIssue);
+                return false;
             }
         }
 
@@ -1726,14 +1727,14 @@ private:
             TString levelTablePath = TStringBuilder()
                 << vectorResolve.Table().Path().Value()
                 << "/" << vectorResolve.Index().Value()
-                << "/" << NTableIndex::NTableVectorKmeansTreeIndex::LevelTable;
+                << "/" << NTableIndex::NKMeans::LevelTable;
             auto levelTableMeta = TablesData->ExistingTable(Cluster, levelTablePath).Metadata;
             YQL_ENSURE(levelTableMeta);
 
             tablesMap.emplace(levelTablePath, THashSet<TStringBuf>{});
-            tablesMap[levelTablePath].emplace(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
-            tablesMap[levelTablePath].emplace(NTableIndex::NTableVectorKmeansTreeIndex::IdColumn);
-            tablesMap[levelTablePath].emplace(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::ParentColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::IdColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::CentroidColumn);
 
             vectorResolveProto.MutableLevelTable()->SetPath(levelTablePath);
             vectorResolveProto.MutableLevelTable()->SetOwnerId(levelTableMeta->PathId.OwnerId());
@@ -1775,7 +1776,7 @@ private:
             vectorResolveProto.SetVectorColumnIndex(columnIndexes.at(vectorColumn));
 
             TSet<TString> copyColumns;
-            copyColumns.insert(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
+            copyColumns.insert(NTableIndex::NKMeans::ParentColumn);
             for (const auto& keyColumn : tableMeta->KeyColumnNames) {
                 copyColumns.insert(keyColumn);
             }
@@ -1789,7 +1790,7 @@ private:
 
             ui32 pos = 0;
             for (const auto& copyCol : copyColumns) {
-                if (copyCol == NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn) {
+                if (copyCol == NTableIndex::NKMeans::ParentColumn) {
                     vectorResolveProto.SetClusterColumnOutPos(pos);
                 } else {
                     YQL_ENSURE(columnIndexes.contains(copyCol));

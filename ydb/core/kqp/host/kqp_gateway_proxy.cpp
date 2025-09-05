@@ -143,6 +143,17 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         if (family.CompressionLevel) {
             familyProto->set_compression_level(family.CompressionLevel.GetRef());
         }
+        if (family.CacheMode) {
+            if (to_lower(family.CacheMode.GetRef()) == "regular") {
+                familyProto->set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR);
+            } else if (to_lower(family.CacheMode.GetRef()) == "in_memory") {
+                familyProto->set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY);
+            } else {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown cache mode '" << family.CacheMode.GetRef() << "' for a column family";
+                return false;
+            }
+        }
     }
 
     if (metadata->TableSettings.CompactionPolicy) {
@@ -388,6 +399,11 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         if (family.Data.Defined()) {
             code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Field `DATA` is not supported for OLAP tables in column family '" << family.Name << "'";
+            return false;
+        }
+        if (family.CacheMode.Defined()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Field `CACHE_MODE` is not supported for OLAP tables in column family '" << family.Name << "'";
             return false;
         }
         auto columnFamilyIt = columnFamiliesByName.find(family.Name);
@@ -641,6 +657,33 @@ public:
         TLoadTableMetadataSettings settings) override
     {
         return Gateway->LoadTableMetadata(cluster, table, settings);
+    }
+
+    TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
+        try {
+            auto [dirname, tableName] = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath);
+            if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+                dirname = JoinPath({GetDatabase(), dirname});
+            }
+
+            NKikimrSchemeOp::TSetColumnConstraintsInitiate setColumnConstraintsInitiate;
+            for (auto& setting : settings) {
+                auto* add = setColumnConstraintsInitiate.AddConstraintSettings();
+                add->Swap(&setting);
+            }
+
+            setColumnConstraintsInitiate.SetTableName(tableName);
+
+            NKikimrSchemeOp::TModifyScheme modifyScheme;
+            *modifyScheme.MutableSetColumnConstraintsInitiate() = std::move(setColumnConstraintsInitiate);
+            modifyScheme.SetWorkingDir(std::move(dirname));
+            modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate);
+
+            return Gateway->ModifyScheme(std::move(modifyScheme));
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
     }
 
     TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme) {

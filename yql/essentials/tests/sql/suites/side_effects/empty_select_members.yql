@@ -1,0 +1,4 @@
+/* custom error: Condition violated */
+pragma warning("disable","4510");
+
+select Yql::SelectMembers(Yql::WithSideEffectsMode(Ensure(<|a:1|>,false),AsAtom('General')),(AsAtom('b'),));

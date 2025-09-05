@@ -51,6 +51,15 @@ TStreamValues GenerateSample(size_t numKeys, size_t numRows, const std::vector<T
     TStreamValues result;
     result.reserve(numRows * (keys.size() + values.size()));
 
+    std::default_random_engine eng;
+    std::vector<ui64> primaryKeys;
+    primaryKeys.reserve(numRows);
+    for (size_t i = 0; i < numRows; ++i) {
+        primaryKeys.emplace_back(i % numKeys);
+    }
+
+    std::shuffle(primaryKeys.begin(), primaryKeys.end(), eng);
+
     auto pushValue = [&](const TFieldDescr& descr, const ui64 key, const bool isKeyColumn) {
         ui64 smolValue = isKeyColumn ? key : (key % 1000);
         result.emplace_back();
@@ -62,13 +71,12 @@ TStreamValues GenerateSample(size_t numKeys, size_t numRows, const std::vector<T
         }
     };
 
-    for (size_t i = 0; i < numRows; ++i) {
-        const size_t currKey = i % numKeys;
+    for (ui64 pk : primaryKeys) {
         for (const auto& descr : keys) {
-            pushValue(descr, currKey, true);
+            pushValue(descr, pk, true);
         }
         for (const auto& descr : values) {
-            pushValue(descr, currKey, false);
+            pushValue(descr, pk, false);
         }
     }
 
@@ -163,7 +171,6 @@ THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM>& setup, THolder<NUdf::TBox
     mergedTypes.insert(mergedTypes.end(), keyTypes.begin(), keyTypes.end());
     mergedTypes.insert(mergedTypes.end(), valueTypes.begin(), valueTypes.end());
 
-    // const auto streamItemType = pb.NewMultiType({pb.NewDataType(NUdf::TDataType<ui64>::Id), pb.NewDataType(NUdf::TDataType<ui64>::Id)});
     const auto streamItemType = pb.NewMultiType(TArrayRef<TType*>(mergedTypes));
     const auto streamType = pb.NewStreamType(streamItemType);
     const auto streamCallable = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", streamType).Build();
@@ -244,7 +251,7 @@ TRunResult RunTestOverGraph(
     const std::vector<TFieldDescr>& keyFields,
     const std::vector<TFieldDescr>& valueFields,
     [[maybe_unused]] const bool needsVerification,
-    [[maybe_unused]] const bool measureReferenceMemory)
+    [[maybe_unused]] const bool measureReference)
 {
     TKqpSetup<LLVM> setup(GetPerfTestFactory());
 
@@ -270,29 +277,49 @@ TRunResult RunTestOverGraph(
     auto graphRunWc = BuildGraph(setup, makeStream(), false, keyTypes, valueTypes, params.WideCombinerMemLimit);
 
     TRunResult result;
+    long maxRssBefore = GetMaxRSS();
 
-    if (measureReferenceMemory) {
-        long maxRssBefore = GetMaxRSS();
+    if (measureReference) {
         result.ReferenceTime = measureGraphTime(graphRunWc, false);
         result.ReferenceMaxRSSDelta = GetMaxRSSDelta(maxRssBefore);
-        return result;
+    } else {
+        result.ResultTime = measureGraphTime(graphRunDq, true);
+        result.MaxRSSDelta = GetMaxRSSDelta(maxRssBefore);
     }
 
-    long maxRssBefore = GetMaxRSS();
-    result.ResultTime = measureGraphTime(graphRunDq, true);
-    result.MaxRSSDelta = GetMaxRSSDelta(maxRssBefore);
-
-    result.ReferenceTime = measureGraphTime(graphRunWc, false);
     return result;
 }
 
 }
 
-template<bool LLVM>
-void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultCollector& printout)
+std::vector<std::string> GetColumnConfigurationNames()
 {
-    std::vector<TFieldDescr> keyFields;
-    for (size_t i = 0; i < 3; ++i) {
+    return std::vector<std::string> {"1k1v", "3k1v", "1k10v", "3k3v", "3k10v"};
+}
+
+void PrepareColumnDescriptions(const TRunParams& params, std::vector<TFieldDescr>& keyFields, std::vector<TFieldDescr>& valueFields)
+{
+    size_t numKeys = 1;
+    size_t numValues = 1;
+    if (params.CombineVsTestColumnSet == "1k1v") {
+        // default
+    } else if (params.CombineVsTestColumnSet == "3k1v") {
+        numKeys = 3;
+    } else if (params.CombineVsTestColumnSet == "3k3v") {
+        numKeys = 3;
+        numValues = 3;
+    } else if (params.CombineVsTestColumnSet == "1k10v") {
+        numValues = 10;
+    } else if (params.CombineVsTestColumnSet == "3k10v") {
+        numKeys = 3;
+        numValues = 10;
+    } else {
+        ythrow yexception() << "Unknown column configuration: " << params.CombineVsTestColumnSet;
+    }
+
+    Cerr << "Key columns: " << numKeys << ", aggregations: " << numValues << Endl;
+
+    for (size_t i = 0; i < numKeys; ++i) {
         TFieldDescr descr;
         switch (params.SamplerType) {
         case ESamplerType::StringKeysUI64Values:
@@ -309,13 +336,21 @@ void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultColl
         keyFields.emplace_back(descr);
     };
 
-    std::vector<TFieldDescr> valueFields;
-    for (size_t i = 0; i < 10; ++i) {
+    for (size_t i = 0; i < numValues; ++i) {
         valueFields.emplace_back(TFieldDescr{
             .IsString = false,
             .IsEmbedded = false,
         });
     };
+}
+
+template<bool LLVM>
+void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultCollector& printout)
+{
+    std::vector<TFieldDescr> keyFields;
+    std::vector<TFieldDescr> valueFields;
+
+    PrepareColumnDescriptions(params, keyFields, valueFields);
 
     std::optional<TRunResult> finalResult;
 
@@ -332,18 +367,24 @@ void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultColl
 
             const bool needsVerification = (i == 1);
 
-            TRunResult runResult = RunForked([&]() {
+            TRunResult runResultDq = RunForked([&]() {
                 return RunTestOverGraph<LLVM>(params, inputData, keyFields, valueFields, needsVerification, false);
             });
 
+            TRunResult runResultWide = RunForked([&]() {
+                return RunTestOverGraph<LLVM>(params, inputData, keyFields, valueFields, needsVerification, true);
+            });
+
             if (finalResult.has_value()) {
-                MergeRunResults(runResult, *finalResult);
+                MergeRunResults(runResultDq, *finalResult);
             } else {
-                finalResult.emplace(runResult);
+                finalResult.emplace(runResultDq);
             }
+            MergeRunResults(runResultWide, *finalResult);
         }
     }
 
+    /*
     if (params.MeasureReferenceMemory) {
         Cerr << "------ Reference memory measurement run" << Endl;
         TRunResult runResult = RunForked([&]() {
@@ -352,6 +393,7 @@ void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultColl
         Y_ENSURE(finalResult.has_value());
         finalResult->ReferenceMaxRSSDelta = runResult.ReferenceMaxRSSDelta;
     }
+    */
 
     printout.SubmitMetrics(params, *finalResult, "DqHashCombine", LLVM);
 }

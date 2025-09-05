@@ -6,25 +6,25 @@ namespace NSQLHighlight {
 
     class TOnlyFunctionGenerator: public IGenerator {
     public:
-        explicit TOnlyFunctionGenerator(std::function<void(IOutputStream&, const THighlighting&)> function)
+        explicit TOnlyFunctionGenerator(TGeneratorFunction function)
             : Function_(std::move(function))
         {
         }
 
-        void Write(IOutputStream& out, const THighlighting& highlighting) override {
-            Function_(out, highlighting);
+        void Write(IOutputStream& out, const THighlighting& highlighting, bool ansi) override {
+            Function_(out, highlighting, ansi);
         }
 
-        void Write(const TFsPath& path, const THighlighting& highlighting) override {
+        void Write(const TFsPath& path, const THighlighting& highlighting, bool ansi) override {
             TFileOutput out(path);
-            Write(out, highlighting);
+            Write(out, highlighting, ansi);
         }
 
     private:
-        std::function<void(IOutputStream&, const THighlighting&)> Function_;
+        TGeneratorFunction Function_;
     };
 
-    IGenerator::TPtr MakeOnlyFileGenerator(std::function<void(IOutputStream&, const THighlighting&)> function) {
+    IGenerator::TPtr MakeOnlyFileGenerator(TGeneratorFunction function) {
         return new TOnlyFunctionGenerator(std::move(function));
     }
 

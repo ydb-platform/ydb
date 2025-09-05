@@ -412,6 +412,10 @@ public:
 
     void skip(size_t length);
 
+    size_t left() const;
+
+    size_t position() const;
+
 private:
     void checkEof(size_t length);
 

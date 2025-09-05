@@ -124,6 +124,19 @@ namespace TEvColumnShard {
         {
             AFL_VERIFY(Snapshot.Valid());
         }
+
+        TString ToString() const {
+            auto columns = TStringBuilder() << "[";
+            for (size_t i = 0; i != ColumnIds.size(); ++i) {
+                columns << ColumnIds[i];
+                if (i != ColumnIds.size() - 1) {
+                    columns << ", ";
+                }
+            }
+            columns << "]";
+            return TStringBuilder() << "TEvInternalScan { PathId: " << PathId << ", Snapshot: " << Snapshot << ", LockId: " << LockId
+                                    << ", Reverse: " << Reverse << ", ItemsLimit: " << ItemsLimit << ", ColumnIds: " << columns << " }";
+        }
     };
 
     struct TEvProposeTransaction

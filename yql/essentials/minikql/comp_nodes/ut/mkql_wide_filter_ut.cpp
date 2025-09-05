@@ -282,6 +282,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideFilterTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
+    Y_UNIT_TEST_LLVM(TestTakeWhileInclusiveSingular) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTakeWhileInclusive(pb.Source(),
+            [&](TRuntimeNode::TList) -> TRuntimeNode {
+                return pb.NewDataLiteral<bool>(false);
+            }),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }
+        ));
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto length = graph->GetValue().GetListLength();
+        UNIT_ASSERT_VALUES_EQUAL(length, 1);
+    }
+
     Y_UNIT_TEST_LLVM(TestSkipWhile) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -346,6 +362,28 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideFilterTest) {
         UNIT_ASSERT(!item.GetElement(2));
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
+    }
+
+    Y_UNIT_TEST_LLVM(TestSkipWhileInclusiveSingular) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+        constexpr ui64 limit = 2;
+
+        const auto limitedSource = pb.ExpandMap(pb.Take(pb.NarrowMap(pb.Source(),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }),
+            pb.NewDataLiteral<ui64>(limit)),
+            [&](TRuntimeNode) -> TRuntimeNode::TList { return {}; });
+
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideSkipWhileInclusive(limitedSource,
+            [&](TRuntimeNode::TList) -> TRuntimeNode {
+                return pb.NewDataLiteral<bool>(false);
+            }),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }
+        ));
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto length = graph->GetValue().GetListLength();
+        UNIT_ASSERT_VALUES_EQUAL(length, limit - 1);
     }
 
     Y_UNIT_TEST_LLVM(TestFilterByBooleanField) {

@@ -198,8 +198,7 @@ class DataService(DataServiceServicer):
     def Read(self, request: ReadRequest, context) -> ReadResponse:
         logger.debug('ReadRequest: %s', request)
 
-        project = request.container.project_id
-        if project in Shard.DEPRECATED_TESTS_PROJECTS:
+        if request.container.HasField("project_id") and request.container.project_id in Shard.DEPRECATED_TESTS_PROJECTS:
             return self.DeprecatedTestsLogic(request, context)
 
         selectors, success = _parse_selectors(str(request.queries[0].value))
@@ -209,13 +208,19 @@ class DataService(DataServiceServicer):
             context.set_details("Coulnd't parse selectors")
             return ReadResponse()
 
-        selectors["project"] = project
+        if request.container.HasField("project_id"):
+            selectors["project"] = request.container.project_id
+        else:
+            del selectors["folderId"]
+            selectors["project"] = request.container.folder_id
+            selectors["cluster"] = request.container.folder_id
 
         if "project" not in selectors or "cluster" not in selectors or "service" not in selectors:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details("Selectors should contain ['project', 'cluster', 'service'] labels")
             return ReadResponse()
 
+        project = selectors["project"]
         cluster = selectors["cluster"]
         service = selectors["service"]
 

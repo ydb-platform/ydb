@@ -168,9 +168,15 @@ message TEvNodeConfigGather {
 }
 
 message TStateStorageConfig {
+    message TNodeState {
+        optional uint32 NodeId = 1;
+        optional uint32 State = 2;
+        optional string Location = 3;
+    }
     optional NKikimrConfig.TDomainsConfig.TStateStorage StateStorageConfig = 1;
     optional NKikimrConfig.TDomainsConfig.TStateStorage StateStorageBoardConfig = 2;
     optional NKikimrConfig.TDomainsConfig.TStateStorage SchemeBoardConfig = 3;
+    repeated TNodeState NodesState = 4;
 }
 
 // Some kind of RPC -- this event can be sent to any NW, it will forward the request to root node.
@@ -216,6 +222,7 @@ message TEvNodeConfigInvokeOnRoot {
     message TGetStateStorageConfig {
         optional bool Recommended = 1;
         optional bool PileupReplicas = 2;
+        optional bool NodesState = 3;
     }
 
     message TSelfHealStateStorage {
@@ -279,6 +286,11 @@ message TEvNodeConfigInvokeOnRoot {
         NKikimrBlobStorage.TGroupInfo BridgeGroupInfo = 3;
     }
 
+    message TNotifyBridgeSuspended {
+        uint64 Generation = 1; // generation matching ClusterState's one
+        uint32 PileId = 2; // pile to convert from SUSPENDED to DISCONNECTED
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -297,6 +309,7 @@ message TEvNodeConfigInvokeOnRoot {
         TSelfHealStateStorage SelfHealStateStorage = 15;
         TSelfHealNodesStateUpdate SelfHealNodesStateUpdate = 19;
         TUpdateBridgeGroupInfo UpdateBridgeGroupInfo = 20;
+        TNotifyBridgeSuspended NotifyBridgeSuspended = 21;
     }
 }
 

@@ -66,7 +66,6 @@ private:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvLocationResponse, HandleLocationResponse);
-            HFunc(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse, HandleNodesResponse);
             hFunc(NKikimr::TEvDiscovery::TEvDiscoveryData, HandleDiscoveryData);
             hFunc(NKikimr::TEvDiscovery::TEvError, HandleDiscoveryError);
             hFunc(NKikimr::TEvPQ::TEvListAllTopicsResponse, HandleListTopics);
@@ -87,13 +86,12 @@ private:
 
     TMetadataResponseData::TPtr Response;
     THashMap<TActorId, TVector<ui64>> TopicIndexes;
-    THashSet<ui64> AddedNodes;
+    THashSet<ui64> AddedBrokerNodes;
     EKafkaErrors ErrorCode = EKafkaErrors::NONE_ERROR;
 
     TActorId DiscoveryCacheActor;
     bool NeedAllNodes = false;
     bool HaveError = false;
-    bool FallbackToIcDiscovery = false;
     TMap<ui64, TSimpleSharedPtr<TEvLocationResponse>> PendingTopicResponses;
     TSet<TString> TopicСreationAttempts;
     TMap<TActorId, TTopicNameToIndex> CreateTopicRequests;

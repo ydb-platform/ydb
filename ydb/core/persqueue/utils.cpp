@@ -1,6 +1,8 @@
 #include "utils.h"
 #include "user_info.h"
 
+#include <ydb/core/base/appdata.h>
+
 #include <deque>
 
 #include <util/generic/algorithm.h>
@@ -413,6 +415,10 @@ size_t TLastCounter::Count(const TInstant& expirationTime) {
 
 const TString& TLastCounter::LastValue() const {
     return Values.back().Value;
+}
+
+bool PreciseReadFromTimestampBehaviourEnabled(const NKikimr::TAppData& appData) {
+    return appData.PQConfig.GetTopicsAreFirstClassCitizen() || appData.FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp();
 }
 
 } // NKikimr::NPQ

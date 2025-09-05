@@ -180,6 +180,7 @@ public:
         EnableReadsMerge = *MergeDatashardReadsControl() == 1;
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
+        TasksGraph.GetMeta().RequestIsolationLevel = Request.IsolationLevel;
         TasksGraph.GetMeta().Database = Database;
         TasksGraph.GetMeta().ChannelTransportVersion = executerConfig.TableServiceConfig.GetChannelTransportVersion();
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
@@ -1559,7 +1560,7 @@ protected:
         bool isParallelPointRead = EnableParallelPointReadConsolidation && !isSequentialInFlight && !source.GetSorted() && IsParallelPointReadPossible(partitions);
 
         if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead || singlePartitionedStage)) {
-            auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
+            auto [startShard, shardInfo] = PartitionPruner.MakeVirtualTablePartition(source, stageInfo);
 
             YQL_ENSURE(Stats);
 

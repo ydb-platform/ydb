@@ -20,6 +20,8 @@ if __name__ == '__main__':
 
     os.environ["YDB_ANONYMOUS_CREDENTIALS"] = "1"
 
-    with Workload(args.endpoint, args.database, bootstrap=args.bootstrap, test_topic_path=args.source_path, target_topic_path=args.target_path,
-                  workload_consumer_name=args.consumer, num_workers=int(args.num_workers), duration=int(args.duration)) as workload:
+    with Workload(args.endpoint, args.database, bootstrap=args.bootstrap,
+                  test_topic_path=args.source_path, target_topic_path=args.target_path,
+                  workload_consumer_name=args.consumer, num_workers=int(args.num_workers),
+                  duration=int(args.duration)) as workload:
         workload.loop()

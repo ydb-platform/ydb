@@ -1,5 +1,7 @@
 #! /usr/bin/python3
 
+import bridge
+
 import datetime as dt
 import logging
 import os
@@ -17,8 +19,6 @@ from textual.widgets import Static, Log, RichLog
 
 from rich.markup import escape
 from rich.text import Text
-
-import bridge
 
 
 logger = logging.getLogger(__name__)

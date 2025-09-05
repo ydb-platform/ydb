@@ -12,6 +12,10 @@
 #   |_/___\__|
 #
 
+import bridge
+import health
+import skipper_tui
+
 import argparse
 import atexit
 import logging
@@ -21,10 +25,6 @@ import shutil
 import sys
 import time
 import threading
-
-import bridge
-import health
-import skipper_tui
 
 
 logger = logging.getLogger(__name__)

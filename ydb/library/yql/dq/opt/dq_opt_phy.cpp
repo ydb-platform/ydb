@@ -1125,33 +1125,26 @@ TExprBase DqPushOptionalToStage(TExprBase node, TExprContext& ctx, IOptimization
     (void) ctx;
     (void) optCtx;
     (void) allowStageMultiUsage;
-    if (!node.Maybe<TCoToOptional>().List().Maybe<TDqCnUnionAll>()) {
+    if (!node.Maybe<TDqStage>()) {
         return node;
     }
 
-    auto consumers = GetConsumers(node, parentsMap);
-    if (!consumers.size() || consumers.size() > 1) {
+    int index = -1;
+    int i = 0;
+    for (auto input : node.Cast<TDqStage>().Inputs()) {
+        if (TExprBase(input).Maybe<TCoToOptional>().List().Maybe<TDqCnUnionAll>()) {
+            index = i;
+            break;
+        }
+        ++i;
+    }
+
+    if (index == -1) {
         return node;
     }
 
-    auto parent = *consumers.begin();
-    if (!TExprBase(parent).Maybe<TExprList>()) {
-        Cerr << "PARENT CONTENT " << parent->Content() << Endl;
-        return node;
-    }
-
-    auto exprList = TExprBase(parent).Cast<TExprList>();
-    consumers = GetConsumers(exprList, parentsMap);
-    if (!consumers.size()) {
-        return node;
-    }
-
-    parent = *consumers.begin();
-    if (!TExprBase(parent).Maybe<TDqStage>()) {
-        return node;
-    }
-
-    auto dqUnion = node.Cast<TCoToOptional>().List().Cast<TDqCnUnionAll>();
+    auto toOptional = node.Cast<TDqStage>().Inputs().Item(index);
+    auto dqUnion = toOptional.Cast<TCoToOptional>().List().Cast<TDqCnUnionAll>();
     auto lambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"stream"})
         .Body<TCoMap>()
@@ -1182,10 +1175,58 @@ TExprBase DqPushOptionalToStage(TExprBase node, TExprContext& ctx, IOptimization
 
     auto result = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
     if (!result) {
+        Cerr << "CANNOT PUSH LAMBDA TO STAGE " << Endl;
         return node;
     }
 
-    return result.Cast();
+    auto lambdaStage = TExprBase(node.Cast<TDqStage>().Program()).Cast<TCoLambda>();
+    if (!lambdaStage.Body().Maybe<TCoFlatMap>()) {
+        return node;
+    }
+
+    (void)parentsMap;
+
+    auto oldFlatMap = lambdaStage.Body().Cast<TCoFlatMap>();
+    auto arg0 = Build<TCoArgument>(ctx, node.Pos())
+        .Name("arg0").Done();
+    auto arg1 = Build<TCoArgument>(ctx, node.Pos())
+        .Name("arg1").Done();
+
+    auto flatMap = Build<TCoFlatMap>(ctx, node.Pos())
+        .Input(arg0)
+        .Lambda()
+            .Args({"larg"})
+            .Body<TExprApplier>()
+                .Apply(oldFlatMap)
+                .With(oldFlatMap.Lambda().Args().Arg(0), arg0)
+                .With(oldFlatMap.Lambda().Args().Arg(1), "larg")
+            .Build()
+        .Build()
+    .Done();
+
+    return flatMap;
+
+    /*
+    TVector<TExprBase> newInputs;
+    newInputs.push_back(node.Cast<TDqStage>().Inputs().Item(0));
+    newInputs.push_back(result.Cast());
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+            .Output()
+                .Stage<TDqStage>()
+                    .Inputs()
+                        .Add(newInputs)
+                    .Build()
+                    .Program<TCoLambda>()
+                        .Args({arg0, arg1})
+                        .Body(flatMap)
+                    .Build()
+                .Build()
+                .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+                .Index().Build("0")
+            .Build()
+     .Done();
+     */
 }
 
 TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
@@ -1465,8 +1506,8 @@ TExprBase DqBuildShuffleStage(
     }
 
     auto shuffle = node.Cast<TCoShuffleByKeys>();
-    if (!IsDqCompletePureExpr(shuffle.KeySelectorLambda(), true) ||
-        !IsDqCompletePureExpr(shuffle.ListHandlerLambda(), true))
+    if (!IsDqCompletePureExpr(shuffle.KeySelectorLambda()) ||
+        !IsDqCompletePureExpr(shuffle.ListHandlerLambda()))
     {
         return node;
     }
@@ -3091,10 +3132,10 @@ TExprBase DqPrecomputeToInput(const TExprBase& node, TExprContext& ctx) {
 
     TExprNode::TListType innerPrecomputes = FindNodes(stage.Program().Ptr(),
         [](const TExprNode::TPtr& node) {
-            return ETypeAnnotationKind::World != node->GetTypeAnn()->GetKind() && !TDqPhyPrecompute::Match(node.Get());
+            return ETypeAnnotationKind::World != node->GetTypeAnn()->GetKind() && !TCoToOptional::Match(node.Get());
         },
         [](const TExprNode::TPtr& node) {
-            return TDqPhyPrecompute::Match(node.Get());
+            return TCoToOptional::Match(node.Get());
         }
     );
 

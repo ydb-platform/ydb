@@ -119,25 +119,18 @@ bool IsDqPureExpr(const TExprBase& node, bool isPrecomputePure, bool isToOptiona
         return !TMaybeNode<TDqPhyPrecompute>(node).IsValid();
     };
 
-    /*
+    (void) isToOptional;
     auto toOptional = [](const TExprNode::TPtr& node) {
         return !TMaybeNode<TCoToOptional>(node).IsValid();
     };
-    */
 
     auto predicate = [](const TExprNode::TPtr& node) {
         return !IsDqPureNode(TExprBase(node));
     };
 
     if (isPrecomputePure) {
-        return !FindNode(node.Ptr(), filter, predicate);     
+        return !FindNode(node.Ptr(), filter, predicate) || !FindNode(node.Ptr(), toOptional, predicate);
     }
-
-    (void) isToOptional;
-    /*
-    if (isToOptional) {
-      return !FindNode(node.Ptr(), toOptional, predicate);
-    }*/
 
     return !FindNode(node.Ptr(), predicate);
 }

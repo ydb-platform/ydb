@@ -89,7 +89,7 @@ public:
         AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems<false>));
         AddHandler(0, &TCoSqlIn::Match, HNDL(BuildSqlIn<false>));
         AddHandler(0, &TCoAsList::Match, HNDL(BuildAggregationResultStage));
-        //AddHandler(0, &TCoToOptional::Match, HNDL(PushOptionalToStage<false>));
+        AddHandler(0, &TCoToOptional::Match, HNDL(PushOptionalToStage<false>));
         //AddHandler(0, &TCoHead::Match, HNDL(BuildScalarPrecompute<false>));
         //AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<false>));
         AddHandler(0, &TCoAsList::Match, HNDL(PropagatePrecomuteScalarRowset<false>));
@@ -129,15 +129,14 @@ public:
         AddHandler(1, &TCoHasItems::Match, HNDL(BuildHasItems<true>));
         AddHandler(1, &TCoSqlIn::Match, HNDL(BuildSqlIn<true>));
         AddHandler(1, &TCoAsList::Match, HNDL(BuildAggregationResultStage));
-        //AddHandler(1, &TCoToOptional::Match, HNDL(PushOptionalToStage<false>));
-        AddHandler(1, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<true>));
+        //AddHandler(1, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<true>));
         AddHandler(1, &TCoAsList::Match, HNDL(PropagatePrecomuteScalarRowset<true>));
-        //AddHandler(1, &TCoHead::Match, HNDL(BuildScalarPrecompute<true>));
         AddHandler(1, &TCoTake::Match, HNDL(PropagatePrecomuteTake<true>));
         AddHandler(1, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<true>));
         AddHandler(1, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<true>));
         AddHandler(1, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<true>));
         AddHandler(1, &TKqpReadOlapTableRanges::Match, HNDL(AddColumnForEmptyColumnsOlapRead));
+        AddHandler(1, &TCoToOptional::Match, HNDL(PushOptionalToStage<true>));
 
 
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));

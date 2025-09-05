@@ -755,7 +755,7 @@ private:
             }
 
             for (const auto& input : stage.Inputs()) {
-                if (input.Maybe<TDqPhyPrecompute>()) {
+                if (input.Maybe<TDqPhyPrecompute>() || input.Maybe<TCoToOptional>()) {
                     continue;
                 } else if (auto maybeConnection = input.Maybe<TDqConnection>()) {
                     const TExprNode* inputStage = maybeConnection.Cast().Output().Stage().Raw();

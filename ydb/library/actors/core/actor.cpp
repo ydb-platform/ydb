@@ -294,6 +294,11 @@ namespace NActors {
         }
     }
 
+    void IActor::SetActivityType(TActorActivityType activityType) {
+        Y_DEBUG_ABORT_UNLESS(!SelfActorId, "Cannot change activity type for registered actors");
+        ActivityType = activityType;
+    }
+
     template bool TExecutorThread::Send<ESendingType::Common>(TAutoPtr<IEventHandle> ev);
     template bool TExecutorThread::Send<ESendingType::Lazy>(TAutoPtr<IEventHandle> ev);
     template bool TExecutorThread::Send<ESendingType::Tail>(TAutoPtr<IEventHandle> ev);

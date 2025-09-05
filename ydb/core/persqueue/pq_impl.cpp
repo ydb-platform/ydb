@@ -3160,6 +3160,9 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
     , NextResponseCookie(0)
     , ResourceMetrics(nullptr)
 {
+    // Override to persqueue activity type
+    SetActivityType(ActorActivityType());
+
     InitPipeClientCache();
 
     typedef TProtobufTabletCounters<
@@ -5527,7 +5530,6 @@ void TPersQueue::ProcessPendingEvents()
 
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
-    SetActivityType(NKikimrServices::TActivity::PERSQUEUE_ACTOR);
     TRACE_EVENT(NKikimrServices::PERSQUEUE);
     switch(ev->GetTypeRewrite())
     {

@@ -5,6 +5,7 @@
 #include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/datashard_backup.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tx/replication/service/lightweight_schema.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -71,58 +72,100 @@ private:
 
         switch (ProtoBody.GetCdcDataChange().GetRowOperationCase()) {
         case NKikimrChangeExchange::TDataChange::kUpsert: {
-            // Check if NewImage is available, otherwise fall back to Upsert
-            if (ProtoBody.GetCdcDataChange().HasNewImage()) {
-                *upsert.MutableTags() = {
-                    ProtoBody.GetCdcDataChange().GetNewImage().GetTags().begin(),
-                    ProtoBody.GetCdcDataChange().GetNewImage().GetTags().end()};
-                auto it = Schema->ValueColumns.find("__ydb_incrBackupImpl_deleted");
-                Y_ABORT_UNLESS(it != Schema->ValueColumns.end(), "Invariant violation");
-                upsert.AddTags(it->second.Tag);
+            TVector<NTable::TTag> tags;
+            TVector<TCell> cells;
+            NKikimrBackup::TColumnStateMap columnStateMap;
 
-                TString serializedCellVec = ProtoBody.GetCdcDataChange().GetNewImage().GetData();
-                Y_ABORT_UNLESS(
-                    TSerializedCellVec::UnsafeAppendCells({TCell::Make<bool>(false)}, serializedCellVec),
-                    "Invalid cell format, can't append cells");
-
-                upsert.SetData(serializedCellVec);
-            } else {
-                *upsert.MutableTags() = {
-                    ProtoBody.GetCdcDataChange().GetUpsert().GetTags().begin(),
-                    ProtoBody.GetCdcDataChange().GetUpsert().GetTags().end()};
-                auto it = Schema->ValueColumns.find("__ydb_incrBackupImpl_deleted");
-                Y_ABORT_UNLESS(it != Schema->ValueColumns.end(), "Invariant violation");
-                upsert.AddTags(it->second.Tag);
-
-                TString serializedCellVec = ProtoBody.GetCdcDataChange().GetUpsert().GetData();
-                Y_ABORT_UNLESS(
-                    TSerializedCellVec::UnsafeAppendCells({TCell::Make<bool>(false)}, serializedCellVec),
-                    "Invalid cell format, can't append cells");
-
-                upsert.SetData(serializedCellVec);
+            const auto& upsertData = ProtoBody.GetCdcDataChange().GetUpsert();
+            TSerializedCellVec originalCells;
+            Y_ABORT_UNLESS(TSerializedCellVec::TryParse(upsertData.GetData(), originalCells));
+            
+            tags.assign(upsertData.GetTags().begin(), upsertData.GetTags().end());
+            cells.assign(originalCells.GetCells().begin(), originalCells.GetCells().end());
+            
+            THashSet<NTable::TTag> presentTags(upsertData.GetTags().begin(), upsertData.GetTags().end());
+            for (const auto& [name, columnInfo] : Schema->ValueColumns) {
+                if (name == "__ydb_incrBackupImpl_deleted" || name == "__ydb_incrBackupImpl_columnStates") {
+                    continue;
+                }
+                
+                auto* columnState = columnStateMap.AddColumnStates();
+                columnState->SetTag(columnInfo.Tag);
+                
+                if (presentTags.contains(columnInfo.Tag)) {
+                    auto it = std::find(upsertData.GetTags().begin(), upsertData.GetTags().end(), columnInfo.Tag);
+                    if (it != upsertData.GetTags().end()) {
+                        size_t idx = std::distance(upsertData.GetTags().begin(), it);
+                        if (idx < originalCells.GetCells().size()) {
+                            columnState->SetIsNull(originalCells.GetCells()[idx].IsNull());
+                        } else {
+                            columnState->SetIsNull(true);
+                        }
+                    } else {
+                        columnState->SetIsNull(true);
+                    }
+                    columnState->SetIsChanged(true);
+                } else {
+                    columnState->SetIsNull(false);
+                    columnState->SetIsChanged(false);
+                }
             }
+
+            auto deletedIt = Schema->ValueColumns.find("__ydb_incrBackupImpl_deleted");
+            Y_ABORT_UNLESS(deletedIt != Schema->ValueColumns.end(), "Invariant violation");
+            tags.push_back(deletedIt->second.Tag);
+            cells.emplace_back(TCell::Make<bool>(false));
+
+            auto columnStatesIt = Schema->ValueColumns.find("__ydb_incrBackupImpl_columnStates");
+            Y_ABORT_UNLESS(columnStatesIt != Schema->ValueColumns.end(), "Invariant violation");
+            tags.push_back(columnStatesIt->second.Tag);
+            
+            TString serializedColumnState;
+            Y_ABORT_UNLESS(columnStateMap.SerializeToString(&serializedColumnState));
+            cells.emplace_back(TCell(serializedColumnState.data(), serializedColumnState.size()));
+
+            *upsert.MutableTags() = {tags.begin(), tags.end()};
+            upsert.SetData(TSerializedCellVec::Serialize(cells));
             break;
         }
         case NKikimrChangeExchange::TDataChange::kErase: {
             size_t size = Schema->ValueColumns.size();
             TVector<NTable::TTag> tags;
             TVector<TCell> cells;
+            NKikimrBackup::TColumnStateMap columnStateMap;
 
             tags.reserve(size);
             cells.reserve(size);
 
-            for (const auto& [name, value] : Schema->ValueColumns) {
-                tags.push_back(value.Tag);
-                if (name != "__ydb_incrBackupImpl_deleted") {
-                    cells.emplace_back();
-                } else {
-                    cells.emplace_back(TCell::Make<bool>(true));
+            for (const auto& [name, columnInfo] : Schema->ValueColumns) {
+                if (name == "__ydb_incrBackupImpl_deleted" || name == "__ydb_incrBackupImpl_columnStates") {
+                    continue;
                 }
+                
+                tags.push_back(columnInfo.Tag);
+                cells.emplace_back();
+                
+                auto* columnState = columnStateMap.AddColumnStates();
+                columnState->SetTag(columnInfo.Tag);
+                columnState->SetIsNull(true);
+                columnState->SetIsChanged(true);
             }
+
+            auto deletedIt = Schema->ValueColumns.find("__ydb_incrBackupImpl_deleted");
+            Y_ABORT_UNLESS(deletedIt != Schema->ValueColumns.end(), "Invariant violation");
+            tags.push_back(deletedIt->second.Tag);
+            cells.emplace_back(TCell::Make<bool>(true));
+
+            auto columnStatesIt = Schema->ValueColumns.find("__ydb_incrBackupImpl_columnStates");
+            Y_ABORT_UNLESS(columnStatesIt != Schema->ValueColumns.end(), "Invariant violation");
+            tags.push_back(columnStatesIt->second.Tag);
+            
+            TString serializedColumnState;
+            Y_ABORT_UNLESS(columnStateMap.SerializeToString(&serializedColumnState));
+            cells.emplace_back(TCell(serializedColumnState.data(), serializedColumnState.size()));
 
             *upsert.MutableTags() = {tags.begin(), tags.end()};
             upsert.SetData(TSerializedCellVec::Serialize(cells));
-
             break;
         }
         case NKikimrChangeExchange::TDataChange::kReset: [[fallthrough]];

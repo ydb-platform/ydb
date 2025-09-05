@@ -1,6 +1,7 @@
 #include "change_record.h"
 #include "table_writer.h"
 
+#include <ydb/core/protos/datashard_backup.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NBackup::NImpl {
@@ -18,6 +19,10 @@ Y_UNIT_TEST_SUITE(TableWriter) {
         schema->ValueColumns.emplace("__ydb_incrBackupImpl_deleted", TLightweightSchema::TColumn{
                     .Tag = 123,
                     .Type = NScheme::TTypeInfo{NScheme::NTypeIds::Bool},
+                });
+        schema->ValueColumns.emplace("__ydb_incrBackupImpl_columnStates", TLightweightSchema::TColumn{
+                    .Tag = 124,
+                    .Type = NScheme::TTypeInfo{NScheme::NTypeIds::String},
                 });
 
         {
@@ -51,17 +56,26 @@ Y_UNIT_TEST_SUITE(TableWriter) {
             NKikimrTxDataShard::TEvApplyReplicationChanges_TChange result;
             record->Serialize(result, EWriterType::Backup);
 
+            NKikimrBackup::TColumnStateMap expectedColumnState;
+            auto* columnState = expectedColumnState.AddColumnStates();
+            columnState->SetTag(1);
+            columnState->SetIsNull(false);
+            TString expectedSerializedColumnState;
+            UNIT_ASSERT(expectedColumnState.SerializeToString(&expectedSerializedColumnState));
+
             TVector<TCell> outCells{
                 TCell::Make<ui64>(4567),
                 TCell::Make<bool>(false),
+                TCell(expectedSerializedColumnState.data(), expectedSerializedColumnState.size()),
             };
 
             TString out = TSerializedCellVec::Serialize(outCells);
 
             UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(keyCells), result.GetKey());
-            UNIT_ASSERT(result.GetUpsert().TagsSize() == 2);
+            UNIT_ASSERT(result.GetUpsert().TagsSize() == 3);
             UNIT_ASSERT(result.GetUpsert().GetTags(0) == 1);
             UNIT_ASSERT(result.GetUpsert().GetTags(1) == 123);
+            UNIT_ASSERT(result.GetUpsert().GetTags(2) == 124);
             UNIT_ASSERT_VALUES_EQUAL(out, result.GetUpsert().GetData());
         }
 
@@ -91,17 +105,26 @@ Y_UNIT_TEST_SUITE(TableWriter) {
             NKikimrTxDataShard::TEvApplyReplicationChanges_TChange result;
             record->Serialize(result, EWriterType::Backup);
 
+            NKikimrBackup::TColumnStateMap expectedColumnState;
+            auto* columnState = expectedColumnState.AddColumnStates();
+            columnState->SetTag(1);
+            columnState->SetIsNull(true);
+            TString expectedSerializedColumnState;
+            UNIT_ASSERT(expectedColumnState.SerializeToString(&expectedSerializedColumnState));
+
             TVector<TCell> outCells{
                 TCell(),
                 TCell::Make<bool>(true),
+                TCell(expectedSerializedColumnState.data(), expectedSerializedColumnState.size()),
             };
 
             TString out = TSerializedCellVec::Serialize(outCells);
 
             UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(keyCells), result.GetKey());
-            UNIT_ASSERT(result.GetUpsert().TagsSize() == 2);
-            UNIT_ASSERT(result.GetUpsert().GetTags(1) == 123);
+            UNIT_ASSERT(result.GetUpsert().TagsSize() == 3);
             UNIT_ASSERT(result.GetUpsert().GetTags(0) == 1);
+            UNIT_ASSERT(result.GetUpsert().GetTags(1) == 123);
+            UNIT_ASSERT(result.GetUpsert().GetTags(2) == 124);
             UNIT_ASSERT_VALUES_EQUAL(out, result.GetUpsert().GetData());
         }
     }

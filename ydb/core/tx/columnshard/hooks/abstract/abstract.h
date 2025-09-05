@@ -17,6 +17,7 @@
 #include <util/generic/singleton.h>
 
 #include <memory>
+#include <shared_mutex>
 
 namespace NKikimr::NColumnShard {
 class TTiersManager;
@@ -404,6 +405,7 @@ class TControllers {
 private:
     ICSController::TPtr CSController = std::make_shared<ICSController>();
     IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
+    mutable std::shared_mutex CSControllerMutex;
 
 public:
     template <class TController>
@@ -431,7 +433,9 @@ public:
 
         ~TGuard() {
             if (Controller) {
-                Singleton<TControllers>()->CSController = std::make_shared<ICSController>();
+                auto* controllers = Singleton<TControllers>();
+                std::unique_lock<std::shared_mutex> lock(controllers->CSControllerMutex);
+                controllers->CSController = std::make_shared<ICSController>();
             }
         }
     };
@@ -439,17 +443,21 @@ public:
     template <class T, class... Types>
     static TGuard<T> RegisterCSControllerGuard(Types... args) {
         auto result = std::make_shared<T>(args...);
-        Singleton<TControllers>()->CSController = result;
+        auto* controllers = Singleton<TControllers>();
+        std::unique_lock<std::shared_mutex> lock(controllers->CSControllerMutex);
+        controllers->CSController = result;
         return result;
     }
 
     static ICSController::TPtr GetColumnShardController() {
-        return Singleton<TControllers>()->CSController;
+        auto* controllers = Singleton<TControllers>();
+        std::shared_lock<std::shared_mutex> lock(controllers->CSControllerMutex);
+        return controllers->CSController;
     }
 
     template <class T>
     static T* GetControllerAs() {
-        auto controller = Singleton<TControllers>()->CSController;
+        auto controller = GetColumnShardController();
         return dynamic_cast<T*>(controller.get());
     }
 

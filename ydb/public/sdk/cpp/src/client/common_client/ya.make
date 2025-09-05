@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/src/client/impl/ydb_internal/common
+    ydb/public/sdk/cpp/src/client/impl/internal/common
     ydb/public/sdk/cpp/src/client/types/credentials
 )
 

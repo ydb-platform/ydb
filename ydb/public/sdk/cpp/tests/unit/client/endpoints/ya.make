@@ -14,7 +14,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/src/client/impl/ydb_endpoints
+    ydb/public/sdk/cpp/src/client/impl/endpoints
 )
 
 END()

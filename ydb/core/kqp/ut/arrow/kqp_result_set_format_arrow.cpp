@@ -1451,7 +1451,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
 
         {
             auto batches = ExecuteAndCombineBatches(client, R"(
-                SELECT Just(Key1), Just(Name) FROM Join2
+                SELECT Key1, Name FROM Join2
                 WHERE Key1 IN [104, 106, 108]
                 ORDER BY Key1;
             )", /* assertSize */ false, 1);
@@ -1467,25 +1467,16 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             ValidateOptionalColumn(batch->column(1), 1, false);
 
             const TString expected =
-R"(column0:   -- is_valid: all not null
-  -- child 0 type: uint32
-    [
-      104,
-      106,
-      108
-    ]
-column1:   -- is_valid:
-      [
-      true,
-      true,
-      false
-    ]
-  -- child 0 type: binary
-    [
-      4E616D6533,
-      4E616D6533,
-      
-    ]
+R"(Key1:   [
+    104,
+    106,
+    108
+  ]
+Name:   [
+    4E616D6533,
+    4E616D6533,
+    null
+  ]
 )";
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
         }
@@ -1498,7 +1489,7 @@ column1:   -- is_valid:
 
         {
             auto batches = ExecuteAndCombineBatches(client, R"(
-                SELECT Just(Just(Key1)), Just(Just(Name)) FROM Join2
+                SELECT Just(Key1), Just(Name) FROM Join2
                 WHERE Key1 IN [104, 106, 108]
                 ORDER BY Key1;
             )", /* assertSize */ false, 1);
@@ -1515,34 +1506,25 @@ column1:   -- is_valid:
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
-  -- child 0 type: struct<opt: uint32 not null>
-    -- is_valid: all not null
-    -- child 0 type: uint32
-      [
-        104,
-        106,
-        108
-      ]
-column1:   -- is_valid:
-      [
-      true,
-      true,
-      false
+  -- child 0 type: uint32
+    [
+      104,
+      106,
+      108
     ]
-  -- child 0 type: struct<opt: binary not null>
-    -- is_valid: all not null
-    -- child 0 type: binary
-      [
-        4E616D6533,
-        4E616D6533,
-        
-      ]
+column1:   -- is_valid: all not null
+  -- child 0 type: binary
+    [
+      4E616D6533,
+      4E616D6533,
+      null
+    ]
 )";
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
         }
     }
 
-    // Optional<Optional<Optional<T>>>
+    // Optional<Optional<Optional<Optional<T>>>>
     Y_UNIT_TEST(ArrowFormat_Types_Optional_3) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
         auto client = kikimr.GetQueryClient();
@@ -1576,12 +1558,7 @@ R"(column0:   -- is_valid: all not null
           106,
           108
         ]
-column1:   -- is_valid:
-      [
-      true,
-      true,
-      false
-    ]
+column1:   -- is_valid: all not null
   -- child 0 type: struct<opt: struct<opt: binary not null> not null>
     -- is_valid: all not null
     -- child 0 type: struct<opt: binary not null>
@@ -1590,7 +1567,7 @@ column1:   -- is_valid:
         [
           4E616D6533,
           4E616D6533,
-          
+          null
         ]
 )";
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);

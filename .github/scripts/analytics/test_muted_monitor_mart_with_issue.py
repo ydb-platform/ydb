@@ -107,18 +107,24 @@ def get_muted_test_data(driver):
     start_time = time.time()
     
     results = []
-    scan_query = ydb.ScanQuery(query, {})
-    it = driver.table_client.scan_query(scan_query)
-    
     column_types = None
-    while True:
-        try:
-            result = next(it)
-            if column_types is None:
-                column_types = [(col.name, col.type) for col in result.result_set.columns]
-            results.extend(result.result_set.rows)
-        except StopIteration:
-            break
+    
+    try:
+        scan_query = ydb.ScanQuery(query, {})
+        it = driver.table_client.scan_query(scan_query)
+        
+        while True:
+            try:
+                result = next(it)
+                if column_types is None:
+                    column_types = [(col.name, col.type) for col in result.result_set.columns]
+                results.extend(result.result_set.rows)
+            except StopIteration:
+                break
+    except Exception as e:
+        print(f"Warning: Could not fetch muted test data: {e}")
+        print("This might be because the tests_monitor table doesn't exist yet.")
+        return [], []
 
     end_time = time.time()
     print(f'Fetched {len(results)} muted test records, duration: {end_time - start_time}s')
@@ -270,14 +276,23 @@ def create_enhanced_table(session, table_path, column_types):
                     if ptype.proto.type_id == base_type.type_id:
                         type_str = ydb.OptionalType(ptype)._repr
                         break
+                else:
+                    type_str = "Utf8?"  # fallback
             else:
                 for ptype in ydb.PrimitiveType:
                     if ptype.proto.type_id == column_type.proto.type_id:
                         type_str = ptype.name
                         break
+                else:
+                    type_str = "Utf8"  # fallback
         else:
             # Handle explicitly defined YDB type
-            type_str = column_type._repr if hasattr(column_type, '_repr') else str(column_type)
+            if hasattr(column_type, '_repr'):
+                type_str = column_type._repr
+            elif hasattr(column_type, 'name'):
+                type_str = column_type.name
+            else:
+                type_str = str(column_type)
         
         columns_sql.append(f"`{column_name}` {type_str.replace('?', '')}")
 
@@ -311,11 +326,15 @@ def bulk_upsert_enhanced_data(table_client, table_path, enhanced_data, column_ty
                     if ptype.proto.type_id == base_type.type_id:
                         column_types_map.add_column(column_name, ydb.OptionalType(ptype))
                         break
+                else:
+                    column_types_map.add_column(column_name, ydb.OptionalType(ydb.PrimitiveType.Utf8))
             else:
                 for ptype in ydb.PrimitiveType:
                     if ptype.proto.type_id == column_type.proto.type_id:
                         column_types_map.add_column(column_name, ptype)
                         break
+                else:
+                    column_types_map.add_column(column_name, ydb.PrimitiveType.Utf8)
         else:
             # Handle explicitly defined YDB type
             column_types_map.add_column(column_name, column_type)
@@ -356,6 +375,10 @@ def main():
                 
                 if not muted_tests:
                     print("No muted test data found")
+                    return 0
+                
+                if not original_column_types:
+                    print("No column types found from muted test data")
                     return 0
                 
                 # Get GitHub issues data

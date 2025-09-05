@@ -14,9 +14,9 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) co
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
     auto writeOperation = owner->OperationsManager->CreateWriteOperation(PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, IsBulk);
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
-        "in_flight", owner->Counters.GetWritesMonitor()->GetWritesInFlight())(
-        "size_in_flight", owner->Counters.GetWritesMonitor()->GetWritesSizeInFlight());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier()); /*(
+         "in_flight", owner->Counters.GetWritesMonitor()->GetWritesInFlight())(
+         "size_in_flight", owner->Counters.GetWritesMonitor()->GetWritesSizeInFlight());*/
 
     AFL_VERIFY(writeOperation);
     writeOperation->SetBehaviour(Behaviour);
@@ -33,7 +33,6 @@ void TWriteTask::Abort(TColumnShard* owner, const TString& reason, const TActorC
     auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
         owner->TabletID(), TxId, status, reason);
     owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
-    owner->UpdateOverloadsStatus();
     ctx.Send(SourceId, result.release(), 0, Cookie);
     if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED && OverloadSubscribeSeqNo) {
         // const auto rejectReasons = NOverload::MakeRejectReasons(EOverloadStatus::ShardWritesInFly);

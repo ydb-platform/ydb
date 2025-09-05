@@ -3,8 +3,8 @@
 #include <util/generic/intrlist.h>
 #include <util/generic/hash.h>
 
-#include <ydb/core/tx/columnshard/overload/reject_reason.h>
-#include <ydb/core/tx/columnshard/overload/common_types.h>
+#include <ydb/core/tx/columnshard/overload_manager/reject_reason.h>
+#include <ydb/core/tx/columnshard/overload_manager/common_types.h>
 #include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NColumnShard::NOverload {
@@ -15,6 +15,7 @@ public:
     void RemoveOverloadSubscriber(const TColumnShardInfo& columnShardInfo, const TOverloadSubscriberInfo& overloadSubscriberInfo);
     void RemovePipeServer(const TColumnShardInfo& columnShardInfo, const TPipeServerInfo& pipeServerInfo);
     void NotifyAllOverloadSubscribers();
+    void NotifyColumnShardSubscribers(const TColumnShardInfo& columnShardInfo);
 
 private:
     struct TSubscriptionInfo {

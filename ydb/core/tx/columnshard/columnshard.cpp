@@ -192,8 +192,9 @@ void TColumnShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TAc
     LOG_S_DEBUG("Server pipe connected at tablet " << TabletID());
 }
 
-void TColumnShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& /*ev*/, const TActorContext&) {
-    // OverloadSubscribers.RemovePipeServer(ev->Get()->ServerId);
+void TColumnShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
+    PipeServersInterconnectSessions.erase(ev->Get()->ServerId);
+    ctx.Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), new NOverload::TEvOverloadPipeServerDisconnected({.ColumnShardId = SelfId(), .TabletId = TabletID()}, {.PipeServerId = ev->Get()->ServerId, .InterconnectSessionId = {}}));
     LOG_S_DEBUG("Server pipe reset at tablet " << TabletID());
 }
 

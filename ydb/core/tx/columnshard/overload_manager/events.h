@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-#include <ydb/core/tx/columnshard/overload/reject_reason.h>
-#include <ydb/core/tx/columnshard/overload/common_types.h>
+#include <ydb/core/tx/columnshard/overload_manager/reject_reason.h>
+#include <ydb/core/tx/columnshard/overload_manager/common_types.h>
 #include <ydb/library/actors/core/event_local.h>
 
 namespace NKikimr::NColumnShard::NOverload {
@@ -41,6 +41,16 @@ public:
         , PipeServerInfo(std::move(pipeServerInfo)) {
     }
 };
+
+class TEvOverloadColumnShardDied: public NActors::TEventLocal<TEvOverloadColumnShardDied, NColumnShard::TEvPrivate::EvOverloadColumnShardDied> {
+    YDB_READONLY_DEF(TColumnShardInfo, ColumnShardInfo);
+
+public:
+    TEvOverloadColumnShardDied(TColumnShardInfo columnShardInfo)
+        : ColumnShardInfo(std::move(columnShardInfo)) {
+    }
+};
+
 
 class TEvOverloadResourcesReleased: public NActors::TEventLocal<TEvOverloadResourcesReleased, NColumnShard::TEvPrivate::EvOverloadResourcesReleased> {
 };

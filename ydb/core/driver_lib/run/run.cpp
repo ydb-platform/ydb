@@ -1855,6 +1855,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TAwsApiInitializer(*this));
     }
 
+    if (serviceMask.EnableOverloadManager) {
+        sil->AddServiceInitializer(new TOverloadManagerInitializer(runConfig));
+    }
+
     return sil;
 }
 

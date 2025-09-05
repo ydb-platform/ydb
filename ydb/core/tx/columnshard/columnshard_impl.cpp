@@ -976,6 +976,7 @@ void TColumnShard::Die(const TActorContext& ctx) {
     UnregisterMediatorTimeCast();
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
     Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
+    Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), new NOverload::TEvOverloadColumnShardDied({.ColumnShardId = SelfId(), .TabletId = TabletID()}));
     IActor::Die(ctx);
 }
 

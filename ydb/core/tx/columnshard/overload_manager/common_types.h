@@ -12,8 +12,8 @@ using TInterconnectSessionId = TActorId;
 using TOverloadSubscriberId = TActorId;
 
 struct TColumnShardInfo {
-    TTabletId TabletId;
     TColumnShardId ColumnShardId;
+    TTabletId TabletId;
 };
 
 struct TPipeServerInfo {

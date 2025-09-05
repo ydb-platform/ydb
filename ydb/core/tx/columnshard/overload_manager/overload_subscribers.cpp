@@ -63,7 +63,9 @@ void TOverloadSubscribers::AddOverloadSubscriber(const TColumnShardInfo& columnS
         AFL_VERIFY(subscriptionInfo.ColumnShardTabletId == columnShardInfo.TabletId);
     }
     auto& subscriptionInfo = subscriptionInfoIt->second;
-    subscriptionInfo.OverloadSubscribers[overloadSubscriberInfo.OverloadSubscriberId] = overloadSubscriberInfo.SeqNo;
+    if (auto& seqNo = subscriptionInfo.OverloadSubscribers[overloadSubscriberInfo.OverloadSubscriberId]; seqNo < overloadSubscriberInfo.SeqNo) {
+        seqNo = overloadSubscriberInfo.SeqNo;
+    }
 }
 
 void TOverloadSubscribers::RemoveOverloadSubscriber(const TColumnShardInfo& columnShardInfo, const TOverloadSubscriberInfo& overloadSubscriberInfo) {
@@ -72,13 +74,14 @@ void TOverloadSubscribers::RemoveOverloadSubscriber(const TColumnShardInfo& colu
         return;
     }
     auto& infoByPipeServerId = infoByPipeServerIdIt->second;
+
     auto subscriptionInfoIt = infoByPipeServerId.find(overloadSubscriberInfo.PipeServerId);
     if (subscriptionInfoIt == infoByPipeServerId.end()) {
         return;
     }
     auto& subscriptionInfo = subscriptionInfoIt->second;
-    subscriptionInfo.OverloadSubscribers.erase(overloadSubscriberInfo.OverloadSubscriberId);
 
+    subscriptionInfo.OverloadSubscribers.erase(overloadSubscriberInfo.OverloadSubscriberId);
     if (subscriptionInfo.OverloadSubscribers.empty()) {
         infoByPipeServerId.erase(subscriptionInfoIt);
     }
@@ -92,6 +95,7 @@ void TOverloadSubscribers::RemovePipeServer(const TColumnShardInfo& columnShardI
     if (infoByPipeServerIdIt == ColumnShardsOverloadSubscribers.end()) {
         return;
     }
+
     auto& infoByPipeServerId = infoByPipeServerIdIt->second;
     infoByPipeServerId.erase(pipeServerInfo.PipeServerId);
     if (infoByPipeServerId.empty()) {
@@ -100,9 +104,9 @@ void TOverloadSubscribers::RemovePipeServer(const TColumnShardInfo& columnShardI
 }
 
 void TOverloadSubscribers::NotifyAllOverloadSubscribers() {
-    for (auto& [source, infoByPipeServerId] : ColumnShardsOverloadSubscribers) {
-        for (auto& [_, subscriptionInfo] : infoByPipeServerId) {
-            for (auto& [target, seqNo] : subscriptionInfo.OverloadSubscribers) {
+    for (const auto& [source, infoByPipeServerId] : ColumnShardsOverloadSubscribers) {
+        for (const auto& [_, subscriptionInfo] : infoByPipeServerId) {
+            for (const auto& [target, seqNo] : subscriptionInfo.OverloadSubscribers) {
                 SendViaSession(
                     subscriptionInfo.InterconnectSessionId,
                     target,
@@ -112,6 +116,27 @@ void TOverloadSubscribers::NotifyAllOverloadSubscribers() {
         }
     }
     ColumnShardsOverloadSubscribers.clear();
+}
+
+void TOverloadSubscribers::NotifyColumnShardSubscribers(const TColumnShardInfo& columnShardInfo) {
+    auto infoByPipeServerIdIt = ColumnShardsOverloadSubscribers.find(columnShardInfo.ColumnShardId);
+    if (infoByPipeServerIdIt == ColumnShardsOverloadSubscribers.end()) {
+        return;
+    }
+
+    const auto& infoByPipeServerId = infoByPipeServerIdIt->second;
+    for (const auto& [_, subscriptionInfo] : infoByPipeServerId) {
+        for (const auto& [target, seqNo] : subscriptionInfo.OverloadSubscribers) {
+            AFL_VERIFY(columnShardInfo.TabletId == subscriptionInfo.ColumnShardTabletId);
+            SendViaSession(
+                subscriptionInfo.InterconnectSessionId,
+                target,
+                columnShardInfo.ColumnShardId,
+                new TEvColumnShard::TEvOverloadReady(subscriptionInfo.ColumnShardTabletId, seqNo));
+        }
+    }
+
+    ColumnShardsOverloadSubscribers.erase(infoByPipeServerIdIt);
 }
 
 // void TOverloadSubscribers::DiscardOverloadSubscribers(TPipeServerInfo1& pipeServer) {

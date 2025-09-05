@@ -1,0 +1,32 @@
+#pragma once
+
+#include <ydb/library/actors/core/actor.h>
+
+#include <atomic>
+
+#include "events.h"
+
+namespace NKikimr::NColumnShard::NOverload {
+
+class TOverloadManagerServiceOperator {
+private:
+    using TSelf = TOverloadManagerServiceOperator;
+
+    static TPositiveControlInteger WritesInFlight;
+    static TPositiveControlInteger WritesSizeInFlight;
+    static std::atomic_bool LimitReached;
+    static inline const double WritesInFlightSoftLimitCoefficient = 0.9;
+    static inline const double WritesInFlightSizeSoftLimitCoefficient = 0.9;
+
+public:
+    static NActors::TActorId MakeServiceId();
+    static NActors::IActor* CreateService();
+
+    static ui64 GetShardWritesInFlyLimit();
+    static ui64 GetShardWritesSizeInFlyLimit();
+
+    static bool RequestResources(ui64 writesCount, ui64 writesSize);
+    static void ReleaseResources(ui64 writesCount, ui64 writesSize);
+};
+
+} // namespace NKikimr::NColumnShard::NOverload

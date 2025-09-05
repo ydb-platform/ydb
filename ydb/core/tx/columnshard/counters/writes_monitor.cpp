@@ -1,18 +1,21 @@
 #include "writes_monitor.h"
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/tx/columnshard/overload_manager/service.h>
 
 namespace NKikimr::NColumnShard {
 
-TAtomicCounter TWritesMonitor::WritesInFlight = 0;
-TAtomicCounter TWritesMonitor::WritesSizeInFlight = 0;
+bool TWritesMonitor::OnStartWrite(const ui64 dataSize) {
+    if (!NOverload::TOverloadManagerServiceOperator::RequestResources(1, dataSize)) {
+        return false;
+    }
 
-void TWritesMonitor::OnStartWrite(const ui64 dataSize) {
     ++WritesInFlightLocal;
     WritesSizeInFlightLocal += dataSize;
-    WritesInFlight.Inc();
-    WritesSizeInFlight.Add(dataSize);
+
     UpdateTabletCounters();
+
+    return true;
 }
 
 void TWritesMonitor::OnFinishWrite(const ui64 dataSize, const ui32 writesCount /*= 1*/, const bool onDestroy /*= false*/) {
@@ -20,16 +23,14 @@ void TWritesMonitor::OnFinishWrite(const ui64 dataSize, const ui32 writesCount /
     AFL_VERIFY(dataSize <= WritesSizeInFlightLocal);
     WritesSizeInFlightLocal -= dataSize;
     WritesInFlightLocal -= writesCount;
-    AFL_VERIFY(0 <= WritesInFlight.Sub(writesCount));
-    AFL_VERIFY(0 <= WritesSizeInFlight.Sub(dataSize));
+    NOverload::TOverloadManagerServiceOperator::ReleaseResources(writesCount, dataSize);
     if (!onDestroy) {
         UpdateTabletCounters();
     }
 }
 
 TString TWritesMonitor::DebugString() const {
-    return TStringBuilder() << "{object=write_monitor;count_local=" << WritesInFlightLocal << ";size_local=" << WritesSizeInFlightLocal << ";"
-                            << "count_node=" << WritesInFlight.Val() << ";size_node=" << WritesSizeInFlight.Val() << "}";
+    return TStringBuilder() << "{object=write_monitor;count_local=" << WritesInFlightLocal << ";size_local=" << WritesSizeInFlightLocal << ";";
 }
 
 }   // namespace NKikimr::NColumnShard

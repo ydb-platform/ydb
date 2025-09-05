@@ -1,7 +1,8 @@
 LIBRARY()
 
 SRCS(
-    manager.cpp
+    actor.cpp
+    service.cpp
     overload_subscribers.cpp
 )
 

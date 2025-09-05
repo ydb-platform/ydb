@@ -108,8 +108,6 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
 
         Execute(new TTxBlobsWritingFailed(this, std::move(writtenData)), ctx);
     }
-
-    UpdateOverloadsStatus();
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx) {
@@ -143,8 +141,6 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         wBuffer.RemoveData(aggr, StoragesManager->GetInsertOperator());
     }
     AFL_VERIFY(wBuffer.IsEmpty());
-
-    UpdateOverloadsStatus();
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorContext& ctx) {
@@ -490,13 +486,22 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "quota_exceeded")("source", "dataevent");
     }
     auto overloadStatus = outOfSpace ? EOverloadStatus::Disk : CheckOverloadedImmediate(*internalPathId);
+    // TODO: refactor this normally with ShardWritesInFly / ShardWritesSizeInFly
+    // Move from WritesMonitor
+    if (overloadStatus == EOverloadStatus::None) {
+        overloadStatus = Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize()) ? EOverloadStatus::None : EOverloadStatus::ShardWritesSizeInFly;
+    }
     if (overloadStatus != EOverloadStatus::None) {
         LWPROBE(EvWriteResult, TabletID(), source.ToString(), record.GetTxId(), cookie, "immediate error", false, "overload data error");
         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", false, operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED), "overload data error " + ToString(overloadStatus));
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
 
-        if (!outOfSpace && record.HasOverloadSubscribe()) {
+        if (overloadStatus == EOverloadStatus::ShardWritesSizeInFly && record.HasOverloadSubscribe()) {
+            auto seqNo = record.GetOverloadSubscribe();
+            result->Record.SetOverloadSubscribed(seqNo);
+            Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), new NOverload::TEvOverloadSubscribe({.ColumnShardId = SelfId(), .TabletId = TabletID()}, {.PipeServerId = ev->Recipient, .InterconnectSessionId = PipeServersInterconnectSessions[ev->Recipient]}, {.PipeServerId = ev->Recipient, .OverloadSubscriberId = ev->Sender, .SeqNo = seqNo}));
+
             // const auto rejectReasons = NOverload::MakeRejectReasons(overloadStatus);
             // OverloadSubscribers.SetOverloadSubscribed(record.GetOverloadSubscribe(), ev->Recipient, ev->Sender, rejectReasons, result->Record);
             // OverloadSubscribers.ScheduleNotification(SelfId());
@@ -523,7 +528,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const bool isBulk = operation.HasIsBulk() && operation.GetIsBulk();
 
     LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", true, operation.GetIsBulk(), "", "");
-    Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
+
     WriteTasksQueue->Enqueue(TWriteTask(
         arrowData, schema, source, granuleShardingVersionId, pathId, cookie, lockId, *mType, behaviour, writeTimeout, record.GetTxId(), isBulk, record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>()));
     WriteTasksQueue->Drain(false, ctx);

@@ -148,6 +148,7 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/overload_manager/service.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/replication/service/service.h>
@@ -3081,6 +3082,16 @@ void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, c
     Y_UNUSED(setup);
     Y_UNUSED(appData);
     GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
+}
+
+TOverloadManagerInitializer::TOverloadManagerInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TOverloadManagerInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    setup->LocalServices.push_back(std::make_pair(
+        NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+        TActorSetupCmd(NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(), TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
 } // namespace NKikimr::NKikimrServicesInitializers

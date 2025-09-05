@@ -83,6 +83,7 @@ struct TEvPrivate {
 
         EvOverloadSubscribe,
         EvOverloadUnsubscribe,
+        EvOverloadColumnShardDied,
         EvOverloadPipeServerDisconnected,
         EvOverloadResourcesReleased,
 

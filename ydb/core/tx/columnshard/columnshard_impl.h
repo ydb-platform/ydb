@@ -24,7 +24,6 @@
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
-#include "overload/overload_subscribers.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
@@ -38,6 +37,8 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
+#include <ydb/core/tx/columnshard/overload_manager/service.h>
+#include <ydb/core/tx/columnshard/overload_manager/events.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -384,9 +385,6 @@ private:
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
     EOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
     EOverloadStatus CheckOverloadedWait(const TInternalPathId tableId) const;
-    void UpdateOverloadsStatus();
-    ui64 GetShardWritesInFlyLimit() const;
-    ui64 GetShardWritesSizeInFlyLimit() const;
 
 protected:
     STFUNC(StateInit) {

@@ -3,10 +3,12 @@
 #include "public.h"
 #include "cache_config.h"
 
-#include <type_traits>
 #include <yt/yt/core/actions/future.h>
 
 #include <yt/yt/core/logging/log.h>
+
+// TODO(cherepashka): remove dependency.
+#include <yt/yt/core/rpc/dispatcher.h>
 
 #include <yt/yt/library/profiling/sensor.h>
 
@@ -20,7 +22,7 @@ namespace NYT {
 
 /*!
  *  \note
- *  Thread affinity: delayed executor's thread
+ *  Thread affinity: user defined invoker
  */
 template <class TKey, class TValue>
 class TAsyncExpiringCache
@@ -39,7 +41,9 @@ public:
     explicit TAsyncExpiringCache(
         TAsyncExpiringCacheConfigPtr config,
         NLogging::TLogger logger = {},
-        NProfiling::TProfiler profiler = {});
+        NProfiling::TProfiler profiler = {},
+        // TODO(cherepashka): remove default value and move upper.
+        const IInvokerPtr& invoker = NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker());
 
     TFuture<TValue> Get(const TKey& key);
     TExtendedGetResult GetExtended(const TKey& key);
@@ -101,6 +105,8 @@ protected:
 
 private:
     const NLogging::TLogger Logger_;
+    const NConcurrency::TPeriodicExecutorPtr ExpirationExecutor_;
+    const NConcurrency::TPeriodicExecutorPtr RefreshExecutor_;
 
     struct TEntry
         : public TRefCounted
@@ -131,7 +137,8 @@ private:
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
     THashMap<TKey, TEntryPtr> Map_;
-    TAsyncExpiringCacheConfigPtr Config_;
+
+    TAtomicIntrusivePtr<TAsyncExpiringCacheConfig> Config_;
 
     NProfiling::TCounter HitCounter_;
     NProfiling::TCounter MissedCounter_;
@@ -152,22 +159,29 @@ private:
         TWeakPtr<TEntry> weakEntry,
         const TKey& key);
 
+    enum EEraseReason
+    {
+        Refresh,
+        Expiration,
+    };
+
     bool TryEraseExpired(
         const TEntryPtr& Entry,
-        const TKey& key);
+        const TKey& key,
+        EEraseReason reason);
 
     void Erase(THashMap<TKey, TEntryPtr>::iterator it);
 
-    void UpdateAll();
+    void DeleteExpiredItems();
+    void RefreshAllItems();
 
-    void ScheduleEntryRefresh(
+    // Schedules entry expiration and refresh.
+    void ScheduleEntryUpdate(
         const TEntryPtr& entry,
         const TKey& key,
-        std::optional<TDuration> refreshTime);
+        const TAsyncExpiringCacheConfigPtr& config);
 
     TPromise<TValue> GetPromise(const TEntryPtr& entry) noexcept;
-
-    const TAsyncExpiringCacheConfigPtr& Config() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

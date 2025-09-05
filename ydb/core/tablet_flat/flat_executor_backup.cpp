@@ -15,6 +15,7 @@ public:
 
     void Bootstrap() {
         LOG_D("Bootstrap");
+        Become(&TThis::StateWork);
     }
 
     void PassAway() override {

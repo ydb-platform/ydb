@@ -3,6 +3,7 @@
 #include <deque>
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
@@ -100,5 +101,6 @@ private:
     std::deque<Data> Values;
 };
 
+Y_PURE_FUNCTION bool PreciseReadFromTimestampBehaviourEnabled(const NKikimr::TAppData& appData);
 
 } // NKikimr::NPQ

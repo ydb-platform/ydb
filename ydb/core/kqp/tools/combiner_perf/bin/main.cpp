@@ -107,6 +107,7 @@ public:
         out["refTime"] = result.ReferenceTime.MilliSeconds();
         out["maxRssDelta"] = result.MaxRSSDelta;
         out["referenceMaxRssDelta"] = result.ReferenceMaxRSSDelta;
+        out["dqTestColumns"] = runParams.CombineVsTestColumnSet;
 
         Cout << NJson::WriteJson(out, false, false, false) << Endl;
         Cout.Flush();
@@ -352,6 +353,15 @@ int main(int argc, const char* argv[])
         .RequiredArgument()
         .StoreResult(&runParams.JoinRightRows)
         .Help("Size for the right table in the join; defaults to num-keys");
+
+    auto colConfigs = NKikimr::NMiniKQL::GetColumnConfigurationNames();
+    options
+        .AddLongOption("dq-test-columns")
+        .Choices(THashSet<TString>(colConfigs.begin(), colConfigs.end()))
+        .DefaultValue(colConfigs.front())
+        .StoreResult(&runParams.CombineVsTestColumnSet)
+        .Help("Select the set of columns for the dq-hash-combiner test from a list of named configurations");
+
 
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 

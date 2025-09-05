@@ -113,6 +113,8 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::SysView;
     case ::Ydb::Scheme::Entry::TRANSFER:
         return ESchemeEntryType::Transfer;
+    case ::Ydb::Scheme::Entry::STREAMING_QUERY:
+        return ESchemeEntryType::StreamingQuery;
     default:
         return ESchemeEntryType::Unknown;
     }

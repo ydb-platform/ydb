@@ -8,6 +8,7 @@ namespace NMiniKQL {
 
 template<bool LLVM>
 void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultCollector& printout);
+std::vector<std::string> GetColumnConfigurationNames();
 
 }
 }

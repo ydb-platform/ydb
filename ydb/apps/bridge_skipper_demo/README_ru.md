@@ -25,7 +25,7 @@ pip3 install textual requests pyyaml
 
 Пример использования:
 ```
-./skipper.py -e <EXAMPLE.COM> --cluster ydb-test-bridge --tui
+./skipper.py -e <EXAMPLE.COM> -s ~/ydb-test-bridge-state.json --cluster ydb-test-bridge --tui
 ```
 
 ![Import](img/skipper_demo.gif)
@@ -35,6 +35,7 @@ pip3 install textual requests pyyaml
 | Параметр | По умолчанию | Описание |
 |---|---|---|
 | `--endpoint` | — | Хост YDB для получения информации о кластере. |
+| `--state` | — | Путь к файлу, где skipper хранит свой стейт. |
 | `--ydb` | из PATH | Путь к исполняемому файлу YDB CLI. |
 | `--disable-auto-failover` | false | Отключить автоматический failover. |
 | `--log-level` | INFO | Уровень логирования: `TRACE`, `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. |

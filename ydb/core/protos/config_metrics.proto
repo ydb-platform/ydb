@@ -1,0 +1,12 @@
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TCommonLatencyHistBounds {
+    repeated double Rot = 1;
+    repeated double Ssd = 2;
+    repeated double Nvme = 3;
+}
+
+message TMetricsConfig {
+    optional TCommonLatencyHistBounds CommonLatencyHistBounds = 1;
+}

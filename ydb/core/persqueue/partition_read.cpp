@@ -379,9 +379,9 @@ bool TReadInfo::UpdateUsage(const TClientBlob& blob,
     lastBlobSize += blob.GetSerializedSize();
 
     if (blob.IsLastPart()) {
-        bool messageSkippingBehaviour =
-            AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
-            (ReadTimestampMs > blob.WriteTimestamp.MilliSeconds());
+        const bool messageSkippingBehaviourEnabledInConfig = PreciseReadFromTimestampBehaviourEnabled(*AppData());
+        const bool messageSkippingBehaviour = messageSkippingBehaviourEnabledInConfig
+            && (ReadTimestampMs > blob.WriteTimestamp.MilliSeconds());
 
         ++cnt;
 
@@ -566,7 +566,8 @@ TReadAnswer TReadInfo::FormAnswer(
         size += blob.GetSerializedSize();
         lastBlobSize += blob.GetSerializedSize();
         if (blob.IsLastPart()) {
-            bool messageSkippingBehaviour = (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
+            const bool messageSkippingBehaviourEnabledInConfig = PreciseReadFromTimestampBehaviourEnabled(*AppData());
+            const bool messageSkippingBehaviour = (messageSkippingBehaviourEnabledInConfig &&
                     ReadTimestampMs > blob.WriteTimestamp.MilliSeconds()) || blob.Data.empty();
             ++cnt;
             if (messageSkippingBehaviour) {

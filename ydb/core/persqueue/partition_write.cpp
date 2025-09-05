@@ -1155,17 +1155,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                          WriteInflightSize, p.Msg.Data.size());
     WriteInflightSize -= p.Msg.Data.size();
 
-    if (!CanWrite()) {
-        ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
-                           TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
-        return false;
-    }
-    if (DiskIsFull) {
-        ScheduleReplyError(p.Cookie, false,
-                           NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
-                           "Disk is full");
-        return false;
-    }
     const auto& ctx = ActorContext();
 
     ui64& curOffset = parameters.CurOffset;

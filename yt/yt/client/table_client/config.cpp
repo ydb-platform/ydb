@@ -175,6 +175,11 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("enable_large_columnar_statistics", &TThis::EnableLargeColumnarStatistics)
         .Default(false);
+
+    registrar.Parameter("enable_segment_meta_in_blocks", &TThis::EnableSegmentMetaInBlocks)
+        .Optional();
+    registrar.Parameter("enable_column_meta_in_chunk_meta", &TThis::EnableColumnMetaInChunkMeta)
+        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

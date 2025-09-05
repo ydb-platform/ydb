@@ -247,6 +247,10 @@ bool TPathElement::IsSecret() const {
     return PathType == EPathType::EPathTypeSecret;
 }
 
+bool TPathElement::IsStreamingQuery() const {
+    return PathType == EPathType::EPathTypeStreamingQuery;
+}
+
 void TPathElement::SetDropped(TStepId step, TTxId txId) {
     PathState = EPathState::EPathStateNotExist;
     StepDropped = step;

@@ -1089,7 +1089,7 @@ void TPathDescriber::DescribeView(const TActorContext&, TPathId pathId, TPathEle
 
 void TPathDescriber::DescribeResourcePool(TPathId pathId, TPathElement::TPtr pathEl) {
     auto it = Self->ResourcePools.FindPtr(pathId);
-    Y_ABORT_UNLESS(it, "ResourcePools is not found");
+    Y_ABORT_UNLESS(it, "ResourcePool is not found");
     TResourcePoolInfo::TPtr resourcePoolInfo = *it;
 
     auto entry = Result->Record.MutablePathDescription()->MutableResourcePoolDescription();
@@ -1134,6 +1134,16 @@ void TPathDescriber::DescribeSecret(const TActorContext&, TPathId pathId, TPathE
     entry->SetName(pathEl->Name);
     entry->SetValue(secretInfo->Description.GetValue()); // TODO(yurikiselev): Hide this value by default [issue:23462]
     entry->SetVersion(secretInfo->Description.GetVersion());
+}
+
+void TPathDescriber::DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr pathEl) {
+    const auto it = Self->StreamingQueries.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "StreamingQuery is not found");
+    const auto streamingQueryInfo = *it;
+
+    auto& entry = *Result->Record.MutablePathDescription()->MutableStreamingQueryDescription();
+    entry.SetName(pathEl->Name);
+    *entry.MutableProperties() = streamingQueryInfo->Properties;
 }
 
 static bool ConsiderAsDropped(const TPath& path) {
@@ -1302,6 +1312,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeSecret:
             DescribeSecret(ctx, base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeStreamingQuery:
+            DescribeStreamingQuery(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

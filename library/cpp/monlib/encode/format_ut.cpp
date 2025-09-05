@@ -122,6 +122,48 @@ Y_UNIT_TEST_SUITE(TFormatTest) {
             ECompression::LZ4);
     }
 
+    Y_UNIT_TEST(FastestAcceptEncodingHeader) {
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader(""),
+            ECompression::UNKNOWN);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("br"),
+            ECompression::UNKNOWN);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("identity"),
+            ECompression::IDENTITY);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("zlib"),
+            ECompression::ZLIB);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("lz4"),
+            ECompression::LZ4);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("zstd"),
+            ECompression::ZSTD);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("zstd, zlib"),
+            ECompression::ZSTD);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader(" ,, , zstd , zlib"),
+            ECompression::ZSTD);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("br, deflate,lz4, zlib"),
+            ECompression::LZ4);
+
+        UNIT_ASSERT_EQUAL(
+            FastestCompressionFromAcceptEncodingHeader("zstd, zlib, lz4"),
+            ECompression::LZ4);
+    }
+
     Y_UNIT_TEST(CompressionToStrFromStr) {
         const std::array<ECompression, 5> algs = {{
             ECompression::UNKNOWN,

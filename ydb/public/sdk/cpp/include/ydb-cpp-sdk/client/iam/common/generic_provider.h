@@ -74,10 +74,11 @@ private:
 
             auto resultPromise = NThreading::NewPromise();
             auto response = std::make_shared<TResponse>();
+            auto context = std::make_shared<grpc::ClientContext>();
 
             std::shared_ptr<TImpl> self = TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl::shared_from_this();
 
-            auto cb = [self, sync, resultPromise, response] (grpc::Status status) mutable {
+            auto cb = [self, sync, resultPromise, response, context] (grpc::Status status) mutable {
                 self->ProcessIamResponse(std::move(status), std::move(*response), sync);
                 resultPromise.SetValue();
             };
@@ -86,18 +87,16 @@ private:
 
             RequestFiller_(req);
 
-            Context_ = std::make_unique<grpc::ClientContext>();
-
             auto deadline = gpr_time_add(
                 gpr_now(GPR_CLOCK_MONOTONIC),
                 gpr_time_from_micros(IamEndpoint_.RequestTimeout.MicroSeconds(), GPR_TIMESPAN));
 
-            Context_->set_deadline(deadline);
+            context->set_deadline(deadline);
             if (AuthTokenProvider_) {
-                Context_->AddMetadata("authorization", "Bearer " + AuthTokenProvider_->GetAuthInfo());
+                context->AddMetadata("authorization", "Bearer " + AuthTokenProvider_->GetAuthInfo());
             }
 
-            (Stub_->async()->*Rpc_)(Context_.get(), &req, response.get(), std::move(cb));
+            (Stub_->async()->*Rpc_)(context.get(), &req, response.get(), std::move(cb));
 
             if (sync) {
                 resultPromise.GetFuture().Wait(2 * IamEndpoint_.RequestTimeout);
@@ -132,7 +131,6 @@ private:
 
     private:
         void ProcessIamResponse(grpc::Status&& status, TResponse&& result, bool sync) {
-            Context_.reset();
             if (!status.ok()) {
                 TDuration sleepDuration;
                 {
@@ -171,7 +169,6 @@ private:
         std::shared_ptr<grpc::Channel> Channel_;
         std::shared_ptr<typename TService::Stub> Stub_;
         TAsyncRpc Rpc_;
-        std::unique_ptr<grpc::ClientContext> Context_;
 
         std::string Ticket_;
         TInstant NextTicketUpdate_;

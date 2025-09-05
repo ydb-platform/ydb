@@ -11,6 +11,7 @@ import "ydb/core/protos/blobstorage_vdisk_config.proto";
 import "ydb/core/protos/bootstrap.proto";
 import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/compaction.proto";
+import "ydb/core/protos/config_metrics.proto";
 import "ydb/core/protos/config_units.proto";
 import "ydb/core/protos/counters_schemeshard.proto";
 import "ydb/core/protos/data_integrity_trails.proto";
@@ -690,6 +691,7 @@ message TCompositeConveyorConfig {
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
         optional string Name = 4;
+        optional uint64 MaxBatchSize = 5;
     }
 
     optional bool Enabled = 1 [default = true];
@@ -1175,7 +1177,7 @@ message TCheckpointsConfig {
     message TLocalStorage {
         optional string TablePrefix = 1;
     }
-    
+
     optional bool Enabled = 1;
     oneof Storage {
         TExternalStorage ExternalStorage = 2;
@@ -2594,6 +2596,7 @@ message TAppConfig {
     optional TGeneralCacheConfig ColumnDataCache = 111;
     optional TGroupedMemoryLimiterConfig DeduplicationGroupedMemoryLimiterConfig = 112;
     optional TStatisticsConfig StatisticsConfig = 113;
+    optional TMetricsConfig MetricsConfig = 114;
 }
 
 message TYdbVersion {

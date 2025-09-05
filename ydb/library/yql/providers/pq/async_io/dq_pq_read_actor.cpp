@@ -782,6 +782,7 @@ private:
                     continue;
                 }
                 activeBatch.Watermark = *maybeNewWatermark;
+                SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " New watermark " << *maybeNewWatermark << " was generated");
             }
         }
 

@@ -1091,10 +1091,14 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
 
     TPartitionKey partitionKey { Cluster, partitionId };
 
+    if (Parent->ReadyBuffer.empty() || Parent->ReadyBuffer.back().PartitionKey != partitionKey) {
+        Parent->ReadyBuffer.emplace(partitionKey, Nothing(), messages.size());
+    }
+
     auto& nextOffset = NextOffsetFromRD[partitionId];
 
     for (const auto& message : messages) {
-        if (Parent->ReadyBuffer.empty() || Parent->ReadyBuffer.back().Watermark.Defined()) {
+        if (Parent->ReadyBuffer.back().Watermark.Defined()) {
             Parent->ReadyBuffer.emplace(partitionKey, Nothing(), messages.size());
         }
         TReadyBatch& activeBatch = Parent->ReadyBuffer.back();

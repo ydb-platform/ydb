@@ -836,7 +836,7 @@ TPyObjectPtr ToPyNull(
     const NUdf::TType* type,
     const NUdf::TUnboxedValuePod& value)
 {
-    if (!value.HasValue()) {
+    if (!value) {
         return TPyObjectPtr(Py_None, TPyObjectPtr::ADD_REF);
     }
     throw yexception() << "Value is not null";

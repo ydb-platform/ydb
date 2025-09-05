@@ -223,6 +223,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
             TPortionIntervalTree::TRange(mainPortion->IndexKeyStart(), true, mainPortion->IndexKeyEnd(), true), collector);
     }
     Counters->OnFilterRequest(intersectingPortions.size());
+    ExpectedIntersectionCount = intersectingPortions.size();
 
     LOCAL_LOG_TRACE("event", "request_filter")
     ("source", constructor->GetRequest()->Get()->GetSourceId())("fetching_sources", intersectingPortions.size());

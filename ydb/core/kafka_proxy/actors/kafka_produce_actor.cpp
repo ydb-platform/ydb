@@ -315,7 +315,8 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         bool res = proto.SerializeToString(&str);
         Y_ABORT_UNLESS(res);
 
-        w->SetSourceId(sourceId);
+        auto w = partitionRequest->AddCmdWrite();
+        w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
 
         bool enableKafkaDeduplication = batch->ProducerId >= 0;
         w->SetEnableKafkaDeduplication(enableKafkaDeduplication);

@@ -323,6 +323,7 @@ void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32
     ContextForTopicCreation->ConnectionId = ctx.SelfID;
     ContextForTopicCreation->UserToken = Context->UserToken;
     ContextForTopicCreation->DatabasePath = Context->DatabasePath;
+    ContextForTopicCreation->ResourceDatabasePath = Context->ResourceDatabasePath;
     TActorId actorId = ctx.Register(new TKafkaCreateTopicsActor(ContextForTopicCreation,
         1,
         TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message)

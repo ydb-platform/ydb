@@ -116,7 +116,7 @@ namespace NKafka {
         } else {
             auto& producerInstance = ProducersByTransactionalId.at(*ev->Request->TransactionalId);
             txnActorId = ctx.Register(new TTransactionActor(*ev->Request->TransactionalId, {ev->Request->ProducerId, ev->Request->ProducerEpoch}, ev->DatabasePath,
-                                      producerInstance.TxnTimeoutMs, ev->ResourceDatabasePath));
+                                      producerInstance.TxnTimeoutMs, ev->ResourceDatabasePath ? ev->ResourceDatabasePath : ev->DatabasePath));
             TxnActorByTransactionalId[*ev->Request->TransactionalId] = txnActorId;
             KAFKA_LOG_D("Registered TTransactionActor with id " << txnActorId << " for transactionalId " << *ev->Request->TransactionalId << " and ApiKey " << ev->Request->ApiKey());
         }

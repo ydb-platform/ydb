@@ -107,7 +107,7 @@ class KeeperApp(App):
     #piles_group { height: 10; align: center middle; content-align: center middle; }
     #history_view { height: 20; }
     #logs_view { height: 1fr; }
-    .pile { width: 25; margin: 0 1; align: center middle; }
+    .pile { width: 25; height: 5; margin: 0 1; align: center middle; content-align: center middle; }
     """
 
     def __init__(
@@ -195,7 +195,8 @@ class KeeperApp(App):
                     widgets_to_mount.append(w)
 
             if widgets_to_mount:
-                self.piles_group.mount(*widgets_to_mount)
+                await self.piles_group.mount(*widgets_to_mount)
+                self.piles_group.refresh(layout=True)
 
             for name in ordered_names:
                 widget = self.pile_widgets[name]

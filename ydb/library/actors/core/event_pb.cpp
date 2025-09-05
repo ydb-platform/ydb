@@ -341,13 +341,16 @@ namespace NActors {
         return true;
     }
 
-    TRope SerializeToRopeImpl(std::function<TRcBuf(ui32 size)> alloc, const TVector<TRope> &payload) {
+    std::optional<TRope> SerializeToRopeImpl(std::function<TRcBuf(ui32 size)> alloc, const TVector<TRope> &payload) {
         TRope result;
         auto sz = CalculateSerilizedHeaderSizeImpl(payload);
         if (!sz) {
             return result;
         }
         TRcBuf headerBuf = alloc(sz);
+        if (!headerBuf) {
+            return {};
+        }
         char* data = headerBuf.GetDataMut();
         auto append = [&](const char *p, size_t len) {
             std::memcpy(data, p, len);

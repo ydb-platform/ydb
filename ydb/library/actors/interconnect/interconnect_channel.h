@@ -2,6 +2,7 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/protos/interconnect.pb.h>
 #include <ydb/library/actors/core/event_load.h>
 #include <ydb/library/actors/util/rope.h>
 #include <util/generic/deque.h>
@@ -20,10 +21,6 @@ namespace NInterconnect {
     namespace NRdma {
         class IMemPool;
     }
-}
-
-namespace NActorsInterconnect {
-    class TRdmaCreds;
 }
 
 namespace NActors {
@@ -152,7 +149,11 @@ namespace NActors {
         size_t SectionIndex = 0;
         std::vector<char> XdcData;
         std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
-        bool SendViaRdma = false; // TODO: replace per event decision with per section
+        struct TRdmaSerializationArtifacts {
+            NActorsInterconnect::TRdmaCreds RdmaCreds;
+            ui32 CheckSum = 0;
+        };
+        std::optional<TRdmaSerializationArtifacts> SendViaRdma;
 
         template<bool External>
         bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);

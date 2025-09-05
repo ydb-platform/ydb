@@ -313,7 +313,7 @@ namespace NInterconnect::NRdma {
     class TDummyMemPool: public TMemPoolBase {
     public:
         TDummyMemPool()
-            : TMemPoolBase(-1, nullptr)
+            : TMemPoolBase(-1, MakeCounters(nullptr))
         {}
 
         TMemRegion* AllocImpl(int size, ui32) noexcept override {

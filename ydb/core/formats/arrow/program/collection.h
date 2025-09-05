@@ -220,7 +220,7 @@ public:
     class TChunkedArguments: public TMoveOnly {
     private:
         std::vector<std::shared_ptr<IChunkedArray>> ArraysOriginal;
-        std::vector<ui32> ColumnIds;
+        ui32 LastColumnId = 0;
         std::vector<std::shared_ptr<arrow::ChunkedArray>> Arrays;
         std::vector<arrow::Datum> Scalars;
 
@@ -268,9 +268,9 @@ public:
                 AFL_VERIFY(ArraysOriginal.back()->GetRecordsCount() == arr->GetRecordsCount())("last", ArraysOriginal.back()->GetRecordsCount())(
                                                                          "new", arr->GetRecordsCount())("last_type",
                                                                          ArraysOriginal.back()->GetType())("current_type", arr->GetType())
-                                                                         ("last_column", ColumnIds.back())("current_column", columnId);
+                                                                         ("last_column", LastColumnId)("current_column", columnId);
             }
-            ColumnIds.emplace_back(columnId);
+            LastColumnId = columnId;
             ArraysOriginal.emplace_back(arr);
             Arrays.emplace_back(arr->GetChunkedArray());
             Addresses.emplace_back(TArrayAddress::Array(Arrays.size() - 1));

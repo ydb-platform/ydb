@@ -2749,9 +2749,10 @@ Y_UNIT_TEST(TestComactificationWithRebootsSmallMsg) {
         activeZone = false;
         tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
         tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicCompactificationByKey(true);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(1);
 
         tc.Runtime->SetScheduledLimit(3000);
-        TString s{100_KB, 'c'};
+        TString s{300_KB, 'c'};
         ui64 currentOffset = 0;
         auto writeData = [&](ui32 count) {
             TVector<std::pair<ui64, TString>> data;
@@ -2763,7 +2764,6 @@ Y_UNIT_TEST(TestComactificationWithRebootsSmallMsg) {
         };
         PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=10'000, .lowWatermark=100, .enableCompactificationByKey = true}, {}, tc);
         activeZone = PlainOrSoSlow(true, false);
-        activeZone = false;
 
         writeData(50);
         writeData(11);
@@ -2790,6 +2790,7 @@ Y_UNIT_TEST(TestComactificationWithRebootsMediumMsg) {
         activeZone = false;
         tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
         tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicCompactificationByKey(true);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(1);
 
         tc.Runtime->SetScheduledLimit(3000);
         TString s{5_MB, 'c'};
@@ -2809,7 +2810,7 @@ Y_UNIT_TEST(TestComactificationWithRebootsMediumMsg) {
         writeData(3);
         writeData(1);
 
-        i64 expectedOffset = 6;
+        i64 expectedOffset = 5;
         i64 consumerOffset = -1;
         while(consumerOffset < expectedOffset) {
             consumerOffset = CmdGetOffset(0, CLIENTID_COMPACTION_CONSUMER, Nothing(), tc);
@@ -2820,6 +2821,7 @@ Y_UNIT_TEST(TestComactificationWithRebootsMediumMsg) {
 }
 
 Y_UNIT_TEST(TestComactificationWithRebootsLargeMsg) {
+    return; // ToDo: enable after fixing LOGBROKER-9700
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();

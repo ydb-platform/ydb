@@ -129,15 +129,13 @@ void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
 TPartitionCompaction::TReadState::TReadState(ui64 firstOffset, TPartition* partitionActor)
     : OffsetToRead(firstOffset)
     , LastOffset(partitionActor->BlobEncoder.DataKeysBody.empty()
-        ?  partitionActor->BlobEncoder.Head.Offset
+        ? partitionActor->BlobEncoder.Head.Offset
         : partitionActor->BlobEncoder.DataKeysBody.front().Key.GetOffset())
     , PartitionActor(partitionActor)
 {
     if(partitionActor->CompactionBlobEncoder.DataKeysBody.empty()) {
         LastOffset = firstOffset;
     }
-    Cerr << "=== Created read state with last offset: " << LastOffset << " and first offset: " << firstOffset <<", partition last offset: "
-         << partitionActor->BlobEncoder.EndOffset  << Endl;
 }
 
 bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev) {
@@ -160,7 +158,6 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
     if (IsEmptyReadResponse(ev)) {
         return true;
     }
-    Cerr << "==== TReadState: ProcessResponse\n";
 
     const auto& readResult = ev->Get()->Response->GetPartitionResponse().GetCmdReadResult();
     for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
@@ -244,7 +241,6 @@ TPartitionCompaction::EStep TPartitionCompaction::TReadState::ContinueIfPossible
     if (OffsetToRead >= LastOffset) {
         return TopicData.size() ? EStep::COMPACTING : EStep::PENDING;
     }
-    Cerr << "==== TReadState: send evRead\n";
     auto evRead = MakeEvRead(nextRequestCookie, OffsetToRead, LastOffset, NextPartNo);
     PartitionActor->Send(PartitionActor->SelfId(), evRead.release());
     PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
@@ -270,16 +266,13 @@ TPartitionCompaction::TCompactState::TCompactState(
     , CommittedOffset(firstUncompactedOffset)
     , DataKeysBody(partitionActor->CompactionBlobEncoder.DataKeysBody)
 {
-    Cerr << "=== Created compact state with maxOffset = " << MaxOffset << Endl;
     if (!PartitionActor->CompactionBlobEncoder.HeadKeys.empty()) {
         FirstHeadOffset = PartitionActor->CompactionBlobEncoder.HeadKeys.front().Key.GetOffset();
         FirstHeadPartNo = PartitionActor->CompactionBlobEncoder.HeadKeys.front().Key.GetPartNo();
-    }
-    else if (!PartitionActor->BlobEncoder.DataKeysBody.empty()) {
+    } else if (!PartitionActor->BlobEncoder.DataKeysBody.empty()) {
         FirstHeadOffset = PartitionActor->BlobEncoder.DataKeysBody.front().Key.GetOffset();
         FirstHeadPartNo = PartitionActor->BlobEncoder.DataKeysBody.front().Key.GetPartNo();
-    }
-    else {
+    } else {
         FirstHeadPartNo = 0;
         FirstHeadOffset = PartitionActor->BlobEncoder.EndOffset;
     }
@@ -596,6 +589,9 @@ void TPartitionCompaction::TCompactState::AddDeleteRange(const TKey& key) {
     if (!Request) {
         Request = MakeHolder<TEvKeyValue::TEvRequest>();
     }
+    PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+        << PartitionActor->Partition << " add CmdDeleteRange for key " << key.ToString());
+
     auto* cmd = Request->Record.AddCmdDeleteRange();
     auto* range = cmd->MutableRange();
 

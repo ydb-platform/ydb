@@ -259,6 +259,7 @@ TCPULimitsConfig::TCPULimitsConfig(const double cpuGroupThreadsLimit, const doub
 TConclusionStatus TCPULimitsConfig::DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScan& config) {
     if (config.HasCpuGroupThreadsLimit()) {
         CPUGroupThreadsLimit = config.GetCpuGroupThreadsLimit();
+        CPUGroupName = config.GetCpuGroupName();
     }
     return TConclusionStatus::Success();
 }

@@ -9,18 +9,6 @@
 
 namespace NKikimr::NKqp {
 
-struct TShardInfo {
-    struct TColumnWriteInfo {
-        ui32 MaxValueSizeBytes = 0;
-    };
-
-    TMaybe<TShardKeyRanges> KeyReadRanges;  // empty -> no reads
-    TMaybe<TShardKeyRanges> KeyWriteRanges; // empty -> no writes
-    THashMap<TString, TColumnWriteInfo> ColumnWrites;
-
-    TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
-};
-
 class TShardInfoWithId: public TShardInfo {
 public:
     ui64 ShardId;

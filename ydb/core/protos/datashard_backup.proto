@@ -25,10 +25,10 @@ message TS3DownloadState {
 }
 
 message TColumnStateMap {
-    message TColumnNullState {
+    message TColumnState {
         optional uint32 Tag = 1;
         optional bool IsNull = 2;
         optional bool IsChanged = 3;
     }
-    repeated TColumnNullState ColumnStates = 1;
+    repeated TColumnState ColumnStates = 1;
 }

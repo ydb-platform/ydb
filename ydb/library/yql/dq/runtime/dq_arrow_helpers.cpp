@@ -521,6 +521,9 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
         case TType::EKind::Optional: {
             auto optionalType = static_cast<const TOptionalType*>(type);
             auto innerOptionalType = optionalType->GetItemType();
+            if (innerOptionalType->IsOptional() || innerOptionalType->IsVariant()) {
+                return false;
+            }
             return IsArrowCompatible(innerOptionalType);
         }
         case TType::EKind::List: {
@@ -532,16 +535,19 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
             auto dictType = static_cast<const TDictType*>(type);
             auto keyType = dictType->GetKeyType();
             auto payloadType = dictType->GetPayloadType();
+            if (keyType->GetKind() == TType::EKind::Optional) {
+                return false;
+            }
             return IsArrowCompatible(keyType) && IsArrowCompatible(payloadType);
         }
         case TType::EKind::Variant: {
             auto variantType = static_cast<const TVariantType*>(type);
-            bool isCompatible = true;
-            for (ui32 i = 0; i < variantType->GetAlternativesCount(); ++i) {
-                auto alternativeType = variantType->GetAlternativeType(i);
-                isCompatible = isCompatible && IsArrowCompatible(alternativeType);
+            if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
+                return false;
             }
-            return isCompatible;
+            TType* innerType = variantType->GetUnderlyingType();
+            Y_VERIFY_S(innerType->IsTuple() || innerType->IsStruct(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
+            return IsArrowCompatible(innerType);
         }
         case TType::EKind::Block:
         case TType::EKind::Type:
@@ -615,7 +621,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
                 auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(curBuilder);
                 Y_DEBUG_ABORT_UNLESS(structBuilder->num_fields() == 1);
 
-                if (!curValue.HasValue()) {
+                if (!curValue) {
                     auto status = curBuilder->AppendNull();
                     Y_VERIFY_S(status.ok(), status.ToString());
                     return;
@@ -628,7 +634,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
                 curBuilder = structBuilder->field_builder(0);
             }
 
-            if (curValue.HasValue()) {
+            if (curValue) {
                 AppendElement(curValue.GetOptionalValue(), curBuilder, curType);
             } else {
                 auto status = curBuilder->AppendNull();
@@ -845,20 +851,23 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
                 NUdf::TUnboxedValue value;
                 int depth = 0;
 
-                while (curType->IsOptional()) {
-                    Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::STRUCT);
+                while (curArray->type_id() == arrow::Type::STRUCT) {
                     auto structArray = static_pointer_cast<arrow::StructArray>(curArray);
                     Y_DEBUG_ABORT_UNLESS(structArray->num_fields() == 1);
 
                     ++depth;
 
-                    if (curArray->IsNull(row)) {
+                    if (structArray->IsNull(row)) {
                         value = NUdf::TUnboxedValuePod();
                         break;
                     }
 
                     curType = static_cast<const TOptionalType*>(curType)->GetItemType();
                     curArray = structArray->field(0);
+                }
+
+                if (curType->IsVariant()) {
+                    --depth;
                 }
 
                 if (curType->IsVariant() || !curArray->IsNull(row)) {

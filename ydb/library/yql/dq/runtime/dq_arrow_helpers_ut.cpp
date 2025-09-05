@@ -11,6 +11,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/builder.h>
+#include <util/string/hex.h>
 #include <util/system/yassert.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
@@ -235,13 +236,87 @@ struct TTestContext {
                 std::string data = TStringBuilder() << "{value:" << value << "}";
                 item = MakeString(NUdf::TStringRef(data.data(), data.size()));
             } else if (typeIndex == 2) {
-                std::string data = TStringBuilder() << "id-QwErY-" << value;
+                std::string sample = "7856341212905634789012345678901";
+                std::string data = TStringBuilder() << HexDecode(sample + static_cast<char>('0' + (value % 10)));
                 item = MakeString(NUdf::TStringRef(data.data(), data.size()));
             } else if (typeIndex == 3) {
                 item = NUdf::TUnboxedValuePod(static_cast<float>(value) / 4);
             }
             auto wrapped = Vb.NewVariant(typeIndex, std::move(item));
             values.push_back(std::move(wrapped));
+        }
+        return values;
+    }
+
+    TType* GetOptionalVariantOverStructType() {
+        return TOptionalType::Create(GetVariantOverStructType(), TypeEnv);
+    }
+
+    TUnboxedValueVector CreateOptionalVariantOverStruct(ui32 quantity) {
+        TUnboxedValueVector values;
+        for (ui64 value = 0; value < quantity; ++value) {
+            auto typeIndex = value % 4;
+            NUdf::TUnboxedValue item;
+
+            if (value % 2 == 0) {
+                values.push_back(NUdf::TUnboxedValuePod());
+                continue;
+            }
+
+            if (typeIndex == 0) {
+                std::string data = TStringBuilder() << "{value=" << value << "}";
+                item = MakeString(NUdf::TStringRef(data.data(), data.size()));
+            } else if (typeIndex == 1) {
+                std::string data = TStringBuilder() << "{value:" << value << "}";
+                item = MakeString(NUdf::TStringRef(data.data(), data.size()));
+            } else if (typeIndex == 2) {
+                std::string sample = "7856341212905634789012345678901";
+                std::string data = TStringBuilder() << HexDecode(sample + static_cast<char>('0' + (value % 10)));
+                item = MakeString(NUdf::TStringRef(data.data(), data.size()));
+            } else if (typeIndex == 3) {
+                item = NUdf::TUnboxedValuePod(static_cast<float>(value) / 4);
+            }
+            auto wrapped = Vb.NewVariant(typeIndex, std::move(item)).MakeOptional();
+            values.push_back(std::move(wrapped));
+        }
+        return values;
+    }
+
+    TType* GetDoubleOptionalVariantOverStructType() {
+        return TOptionalType::Create(GetOptionalVariantOverStructType(), TypeEnv);
+    }
+
+    TUnboxedValueVector CreateDoubleOptionalVariantOverStruct(ui32 quantity) {
+        TUnboxedValueVector values;
+        for (ui64 value = 0; value < quantity; ++value) {
+            auto typeIndex = value % 4;
+            NUdf::TUnboxedValue item;
+
+            if (value % 3 == 0) {
+                if (typeIndex == 0) {
+                    std::string data = TStringBuilder() << "{value=" << value << "}";
+                    item = MakeString(NUdf::TStringRef(data.data(), data.size()));
+                } else if (typeIndex == 1) {
+                    std::string data = TStringBuilder() << "{value:" << value << "}";
+                    item = MakeString(NUdf::TStringRef(data.data(), data.size()));
+                } else if (typeIndex == 2) {
+                    std::string sample = "7856341212905634789012345678901";
+                    std::string data = TStringBuilder() << HexDecode(sample + static_cast<char>('0' + (value % 10)));
+                    item = MakeString(NUdf::TStringRef(data.data(), data.size()));
+                } else if (typeIndex == 3) {
+                    item = NUdf::TUnboxedValuePod(static_cast<float>(value) / 4);
+                }
+
+                item = Vb.NewVariant(typeIndex, std::move(item)).MakeOptional();
+            } else {
+                item = NUdf::TUnboxedValuePod();
+            }
+
+            if (value % 3 != 2) {
+                item = item.MakeOptional();
+            }
+
+            values.push_back(std::move(item));
         }
         return values;
     }
@@ -280,6 +355,83 @@ struct TTestContext {
             }
             auto wrapped = Vb.NewVariant(typeIndex, std::move(item));
             values.emplace_back(std::move(wrapped));
+        }
+        return values;
+    }
+
+    TType* GetOptionalVariantOverTupleWithOptionalsType() {
+        return TOptionalType::Create(GetVariantOverTupleWithOptionalsType(), TypeEnv);
+    }
+
+    TUnboxedValueVector CreateOptionalVariantOverTupleWithOptionals(ui32 quantity) {
+        NKikimr::NMiniKQL::TUnboxedValueVector values;
+        for (ui64 value = 0; value < quantity; ++value) {
+
+            if (value % 2 == 0) {
+                values.push_back(NUdf::TUnboxedValuePod());
+                continue;
+            }
+
+            auto typeIndex = value % 5;
+            NUdf::TUnboxedValue item;
+            if (typeIndex == 0) {
+                item = NUdf::TUnboxedValuePod(value % 3 == 0);
+            } else if (typeIndex == 1) {
+                item = NUdf::TUnboxedValuePod(static_cast<i16>(-value));
+            } else if (typeIndex == 2) {
+                item = NUdf::TUnboxedValuePod(static_cast<ui16>(value));
+            } else if (typeIndex == 3) {
+                item = NUdf::TUnboxedValuePod(static_cast<i32>(-value));
+            } else if (typeIndex == 4) {
+                NUdf::TUnboxedValue innerItem;
+                innerItem = value % 2 == 0
+                            ? NUdf::TUnboxedValuePod(static_cast<i32>(value))
+                            : NUdf::TUnboxedValuePod();
+                item = innerItem.MakeOptional();
+            }
+            auto wrapped = Vb.NewVariant(typeIndex, std::move(item)).MakeOptional();
+            values.emplace_back(std::move(wrapped));
+        }
+        return values;
+    }
+
+    TType* GetDoubleOptionalVariantOverTupleWithOptionalsType() {
+        return TOptionalType::Create(GetOptionalVariantOverTupleWithOptionalsType(), TypeEnv);
+    }
+
+    TUnboxedValueVector CreateDoubleOptionalVariantOverTupleWithOptionals(ui32 quantity) {
+        NKikimr::NMiniKQL::TUnboxedValueVector values;
+        for (ui64 value = 0; value < quantity; ++value) {
+            auto typeIndex = value % 5;
+            NUdf::TUnboxedValue item;
+
+            if (value % 3 == 0) {
+                if (typeIndex == 0) {
+                    item = NUdf::TUnboxedValuePod(value % 3 == 0);
+                } else if (typeIndex == 1) {
+                    item = NUdf::TUnboxedValuePod(static_cast<i16>(-value));
+                } else if (typeIndex == 2) {
+                    item = NUdf::TUnboxedValuePod(static_cast<ui16>(value));
+                } else if (typeIndex == 3) {
+                    item = NUdf::TUnboxedValuePod(static_cast<i32>(-value));
+                } else if (typeIndex == 4) {
+                    NUdf::TUnboxedValue innerItem;
+                    innerItem = value % 2 == 0
+                                ? NUdf::TUnboxedValuePod(static_cast<i32>(value))
+                                : NUdf::TUnboxedValuePod();
+                    item = innerItem.MakeOptional();
+                }
+
+                item = Vb.NewVariant(typeIndex, std::move(item));
+            } else {
+                item = NUdf::TUnboxedValuePod();
+            }
+
+            if (value % 3 != 2) {
+                item = item.MakeOptional();
+            }
+
+            values.emplace_back(std::move(item));
         }
         return values;
     }
@@ -725,14 +877,16 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
 
         UNIT_ASSERT(unionArray->num_fields() == 4);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::STRING);
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::STRING);
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FIXED_SIZE_BINARY);
         UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::FLOAT);
-        auto ysonArray = static_pointer_cast<arrow::StringArray>(unionArray->field(0));
-        auto jsonDocArray = static_pointer_cast<arrow::StringArray>(unionArray->field(1));
-        auto uuidArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(2));
+
+        auto ysonArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(0));
+        auto jsonDocArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(1));
+        auto uuidArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(unionArray->field(2));
         auto floatArray = static_pointer_cast<arrow::FloatArray>(unionArray->field(3));
+
         for (ui64 index = 0; index < values.size(); ++index) {
             auto value = values[index];
             UNIT_ASSERT(value.GetVariantIndex() == static_cast<ui32>(unionArray->child_id(index)));
@@ -759,13 +913,148 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         }
     }
 
+    Y_UNIT_TEST(OptionalVariantOverStruct) {
+        TTestContext context;
+
+        auto variantType = context.GetOptionalVariantOverStructType();
+        UNIT_ASSERT(!NArrow::IsArrowCompatible(variantType));
+
+        auto values = context.CreateOptionalVariantOverStruct(100);
+        auto array = NArrow::MakeArray(values, variantType);
+        UNIT_ASSERT(array->ValidateFull().ok());
+        UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+
+        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(structArray->num_fields() == 1);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+
+        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(structArray->field(0));
+
+        UNIT_ASSERT(unionArray->num_fields() == 4);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FIXED_SIZE_BINARY);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::FLOAT);
+
+        auto ysonArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(0));
+        auto jsonDocArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(1));
+        auto uuidArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(unionArray->field(2));
+        auto floatArray = static_pointer_cast<arrow::FloatArray>(unionArray->field(3));
+
+        for (ui64 index = 0; index < values.size(); ++index) {
+            auto value = values[index];
+            if (!value.HasValue()) {
+                // NULL
+                UNIT_ASSERT(structArray->IsNull(index));
+                continue;
+            }
+
+            UNIT_ASSERT(!structArray->IsNull(index));
+
+            UNIT_ASSERT(value.GetVariantIndex() == static_cast<ui32>(unionArray->child_id(index)));
+            auto fieldIndex = unionArray->value_offset(index);
+            if (value.GetVariantIndex() == 3) {
+                auto valueArrow = floatArray->Value(fieldIndex);
+                auto valueInner = value.GetVariantItem().Get<float>();
+                UNIT_ASSERT(valueArrow == valueInner);
+            } else {
+                arrow::util::string_view viewArrow;
+                if (value.GetVariantIndex() == 0) {
+                    viewArrow = ysonArray->GetView(fieldIndex);
+                } else if (value.GetVariantIndex() == 1) {
+                    viewArrow = jsonDocArray->GetView(fieldIndex);
+                } else if (value.GetVariantIndex() == 2) {
+                    viewArrow = uuidArray->GetView(fieldIndex);
+                }
+                std::string valueArrow(viewArrow.data(), viewArrow.size());
+                auto innerItem = value.GetVariantItem();
+                auto refInner = innerItem.AsStringRef();
+                std::string valueInner(refInner.Data(), refInner.Size());
+                UNIT_ASSERT(valueArrow == valueInner);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DoubleOptionalVariantOverStruct) {
+        TTestContext context;
+
+        auto variantType = context.GetDoubleOptionalVariantOverStructType();
+        UNIT_ASSERT(!NArrow::IsArrowCompatible(variantType));
+
+        auto values = context.CreateDoubleOptionalVariantOverStruct(100);
+        auto array = NArrow::MakeArray(values, variantType);
+        UNIT_ASSERT(array->ValidateFull().ok());
+        UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+
+        auto firstStructArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(firstStructArray->num_fields() == 1);
+        UNIT_ASSERT(firstStructArray->field(0)->type_id() == arrow::Type::STRUCT);
+
+        auto secondStructArray = static_pointer_cast<arrow::StructArray>(firstStructArray->field(0));
+        UNIT_ASSERT(secondStructArray->num_fields() == 1);
+        UNIT_ASSERT(secondStructArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+
+        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(secondStructArray->field(0));
+
+        UNIT_ASSERT(unionArray->num_fields() == 4);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FIXED_SIZE_BINARY);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::FLOAT);
+
+        auto ysonArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(0));
+        auto jsonDocArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(1));
+        auto uuidArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(unionArray->field(2));
+        auto floatArray = static_pointer_cast<arrow::FloatArray>(unionArray->field(3));
+
+        for (ui64 index = 0; index < values.size(); ++index) {
+            auto value = values[index];
+            if (!value.HasValue()) {
+                if (value) {
+                    // Optional(NULL)
+                    UNIT_ASSERT(secondStructArray->IsNull(index));
+                } else {
+                    // NULL
+                    UNIT_ASSERT(firstStructArray->IsNull(index));
+                }
+                continue;
+            }
+
+            UNIT_ASSERT(!firstStructArray->IsNull(index) && !secondStructArray->IsNull(index));
+
+            UNIT_ASSERT(value.GetVariantIndex() == static_cast<ui32>(unionArray->child_id(index)));
+            auto fieldIndex = unionArray->value_offset(index);
+            if (value.GetVariantIndex() == 3) {
+                auto valueArrow = floatArray->Value(fieldIndex);
+                auto valueInner = value.GetVariantItem().Get<float>();
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+            } else {
+                arrow::util::string_view viewArrow;
+                if (value.GetVariantIndex() == 0) {
+                    viewArrow = ysonArray->GetView(fieldIndex);
+                } else if (value.GetVariantIndex() == 1) {
+                    viewArrow = jsonDocArray->GetView(fieldIndex);
+                } else if (value.GetVariantIndex() == 2) {
+                    viewArrow = uuidArray->GetView(fieldIndex);
+                }
+                std::string valueArrow(viewArrow.data(), viewArrow.size());
+                auto innerItem = value.GetVariantItem();
+                auto refInner = innerItem.AsStringRef();
+                std::string valueInner(refInner.Data(), refInner.Size());
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+            }
+        }
+    }
+
     Y_UNIT_TEST(VariantOverTupleWithOptionals) {
         TTestContext context;
 
         auto variantType = context.GetVariantOverTupleWithOptionalsType();
         UNIT_ASSERT(NArrow::IsArrowCompatible(variantType));
 
-        auto values = context.CreateVariantOverStruct(100);
+        auto values = context.CreateVariantOverTupleWithOptionals(100);
         auto array = NArrow::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
@@ -790,26 +1079,175 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
             if (value.GetVariantIndex() == 0) {
                 bool valueArrow = boolArray->Value(fieldIndex);
                 auto valueInner = value.GetVariantItem().Get<bool>();
-                UNIT_ASSERT(valueArrow == valueInner);
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
             } else if (value.GetVariantIndex() == 1) {
                 auto valueArrow = i16Array->Value(fieldIndex);
                 auto valueInner = value.GetVariantItem().Get<i16>();
-                UNIT_ASSERT(valueArrow == valueInner);
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
             } else if (value.GetVariantIndex() == 2) {
                 auto valueArrow = ui16Array->Value(fieldIndex);
                 auto valueInner = value.GetVariantItem().Get<ui16>();
-                UNIT_ASSERT(valueArrow == valueInner);
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
             } else if (value.GetVariantIndex() == 3) {
                 auto valueArrow = i32Array->Value(fieldIndex);
                 auto valueInner = value.GetVariantItem().Get<i32>();
-                UNIT_ASSERT(valueArrow == valueInner);
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
             } else if (value.GetVariantIndex() == 4) {
                 if (!value.GetVariantItem().HasValue()) {
                     UNIT_ASSERT(ui32Array->IsNull(fieldIndex));
                 } else {
                     auto valueArrow = ui32Array->Value(fieldIndex);
                     auto valueInner = value.GetVariantItem().Get<ui32>();
-                    UNIT_ASSERT(valueArrow == valueInner);
+                    UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(OptionalVariantOverTupleWithOptionals) {
+        // DenseUnionArray does not support NULL values, so we wrap it in a StructArray
+
+        TTestContext context;
+
+        auto variantType = context.GetOptionalVariantOverTupleWithOptionalsType();
+        UNIT_ASSERT(!NArrow::IsArrowCompatible(variantType));
+
+        auto values = context.CreateOptionalVariantOverTupleWithOptionals(100);
+        auto array = NArrow::MakeArray(values, variantType);
+        UNIT_ASSERT(array->ValidateFull().ok());
+        UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+
+        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(structArray->num_fields() == 1);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+
+        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(structArray->field(0));
+        UNIT_ASSERT(unionArray->num_fields() == 5);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BOOL);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::INT16);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::UINT16);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(unionArray->field(4)->type_id() == arrow::Type::UINT32);
+        auto boolArray = static_pointer_cast<arrow::BooleanArray>(unionArray->field(0));
+        auto i16Array = static_pointer_cast<arrow::Int16Array>(unionArray->field(1));
+        auto ui16Array = static_pointer_cast<arrow::UInt16Array>(unionArray->field(2));
+        auto i32Array = static_pointer_cast<arrow::Int32Array>(unionArray->field(3));
+        auto ui32Array = static_pointer_cast<arrow::UInt32Array>(unionArray->field(4));
+        for (ui64 index = 0; index < values.size(); ++index) {
+            auto value = values[index];
+            if (!value) {
+                // NULL
+                UNIT_ASSERT(structArray->IsNull(index));
+                continue;
+            }
+
+            UNIT_ASSERT(!structArray->IsNull(index));
+
+            UNIT_ASSERT(value.GetVariantIndex() == static_cast<ui32>(unionArray->child_id(index)));
+            auto fieldIndex = unionArray->value_offset(index);
+            if (value.GetVariantIndex() == 0) {
+                bool valueArrow = boolArray->Value(fieldIndex);
+                auto valueInner = value.GetVariantItem().Get<bool>();
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+            } else if (value.GetVariantIndex() == 1) {
+                auto valueArrow = i16Array->Value(fieldIndex);
+                auto valueInner = value.GetVariantItem().Get<i16>();
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+            } else if (value.GetVariantIndex() == 2) {
+                auto valueArrow = ui16Array->Value(fieldIndex);
+                auto valueInner = value.GetVariantItem().Get<ui16>();
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+            } else if (value.GetVariantIndex() == 3) {
+                auto valueArrow = i32Array->Value(fieldIndex);
+                auto valueInner = value.GetVariantItem().Get<i32>();
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+            } else if (value.GetVariantIndex() == 4) {
+                if (!value.GetVariantItem().HasValue()) {
+                    UNIT_ASSERT(ui32Array->IsNull(fieldIndex));
+                } else {
+                    auto valueArrow = ui32Array->Value(fieldIndex);
+                    auto valueInner = value.GetVariantItem().Get<ui32>();
+                    UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DoubleOptionalVariantOverTupleWithOptionals) {
+        // DenseUnionArray does not support NULL values, so we wrap it in a StructArray
+
+        TTestContext context;
+
+        auto variantType = context.GetDoubleOptionalVariantOverTupleWithOptionalsType();
+        UNIT_ASSERT(!NArrow::IsArrowCompatible(variantType));
+
+        auto values = context.CreateDoubleOptionalVariantOverTupleWithOptionals(100);
+        auto array = NArrow::MakeArray(values, variantType);
+        UNIT_ASSERT(array->ValidateFull().ok());
+        UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+
+        auto firstStructArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(firstStructArray->num_fields() == 1);
+        UNIT_ASSERT(firstStructArray->field(0)->type_id() == arrow::Type::STRUCT);
+
+        auto secondStructArray = static_pointer_cast<arrow::StructArray>(firstStructArray->field(0));
+        UNIT_ASSERT(secondStructArray->num_fields() == 1);
+        UNIT_ASSERT(secondStructArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+
+        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(secondStructArray->field(0));
+        UNIT_ASSERT(unionArray->num_fields() == 5);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BOOL);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::INT16);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::UINT16);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(unionArray->field(4)->type_id() == arrow::Type::UINT32);
+        auto boolArray = static_pointer_cast<arrow::BooleanArray>(unionArray->field(0));
+        auto i16Array = static_pointer_cast<arrow::Int16Array>(unionArray->field(1));
+        auto ui16Array = static_pointer_cast<arrow::UInt16Array>(unionArray->field(2));
+        auto i32Array = static_pointer_cast<arrow::Int32Array>(unionArray->field(3));
+        auto ui32Array = static_pointer_cast<arrow::UInt32Array>(unionArray->field(4));
+        for (ui64 index = 0; index < values.size(); ++index) {
+            auto value = values[index];
+            if (!value.HasValue()) {
+                if (value && !value.GetOptionalValue()) {
+                    // Optional(NULL)
+                    UNIT_ASSERT(secondStructArray->IsNull(index));
+                } else if (!value) {
+                    // NULL
+                    UNIT_ASSERT(firstStructArray->IsNull(index));
+                }
+                continue;
+            }
+
+            UNIT_ASSERT(!firstStructArray->IsNull(index) && !secondStructArray->IsNull(index));
+
+            UNIT_ASSERT(value.GetVariantIndex() == static_cast<ui32>(unionArray->child_id(index)));
+            auto fieldIndex = unionArray->value_offset(index);
+            if (value.GetVariantIndex() == 0) {
+                bool valueArrow = boolArray->Value(fieldIndex);
+                auto valueInner = value.GetVariantItem().Get<bool>();
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+            } else if (value.GetVariantIndex() == 1) {
+                auto valueArrow = i16Array->Value(fieldIndex);
+                auto valueInner = value.GetVariantItem().Get<i16>();
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+            } else if (value.GetVariantIndex() == 2) {
+                auto valueArrow = ui16Array->Value(fieldIndex);
+                auto valueInner = value.GetVariantItem().Get<ui16>();
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+            } else if (value.GetVariantIndex() == 3) {
+                auto valueArrow = i32Array->Value(fieldIndex);
+                auto valueInner = value.GetVariantItem().Get<i32>();
+                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+            } else if (value.GetVariantIndex() == 4) {
+                if (!value.GetVariantItem().HasValue()) {
+                    UNIT_ASSERT(ui32Array->IsNull(fieldIndex));
+                } else {
+                    auto valueArrow = ui32Array->Value(fieldIndex);
+                    auto valueInner = value.GetVariantItem().Get<ui32>();
+                    UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
                 }
             }
         }
@@ -870,27 +1308,45 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         auto array = NArrow::MakeArray(values, doubleOptionalType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT_EQUAL(static_cast<ui64>(array->length()), values.size());
-        UNIT_ASSERT_EQUAL(array->type_id(), arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
-        UNIT_ASSERT_EQUAL(structArray->num_fields(), 2);
-        UNIT_ASSERT_EQUAL(structArray->field(0)->type_id(), arrow::Type::UINT64);
-        UNIT_ASSERT_EQUAL(structArray->field(1)->type_id(), arrow::Type::INT32);
-        auto depthArray = static_pointer_cast<arrow::UInt64Array>(structArray->field(0));
-        auto i32Array = static_pointer_cast<arrow::Int32Array>(structArray->field(1));
 
         auto index = 0;
         for (auto value: values) {
-            auto depth = depthArray->Value(index);
-            while (depth > 0) {
-                UNIT_ASSERT(value.HasValue());
+            std::shared_ptr<arrow::Array> currentArray = array;
+            int depth = 0;
+
+            while (currentArray->type()->id() == arrow::Type::STRUCT) {
+                auto structArray = static_pointer_cast<arrow::StructArray>(currentArray);
+                UNIT_ASSERT_EQUAL(structArray->num_fields(), 1);
+
+                if (structArray->IsNull(index)) {
+                    break;
+                }
+
+                ++depth;
+
+                auto childArray = structArray->field(0);
+                if (childArray->type()->id() == arrow::Type::DENSE_UNION) {
+                    break;
+                }
+
+                currentArray = childArray;
+            }
+
+            while (depth--) {
+                UNIT_ASSERT(value);
                 value = value.GetOptionalValue();
-                --depth;
             }
+
             if (value.HasValue()) {
-                UNIT_ASSERT_EQUAL(value.Get<i32>(), i32Array->Value(index));
+                if (currentArray->type()->id() == arrow::Type::INT32) {
+                    UNIT_ASSERT_EQUAL(value.Get<i32>(), static_pointer_cast<arrow::Int32Array>(currentArray)->Value(index));
+                } else {
+                    UNIT_ASSERT(!currentArray->IsNull(index));
+                }
             } else {
-                UNIT_ASSERT(i32Array->IsNull(index));
+                UNIT_ASSERT(currentArray->IsNull(index));
             }
+
             ++index;
         }
     }
@@ -995,18 +1451,78 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         }
     }
 
+    Y_UNIT_TEST(OptionalVariantOverStruct) {
+        TTestContext context;
+
+        auto optionalVariantType = context.GetOptionalVariantOverStructType();
+        UNIT_ASSERT(!NArrow::IsArrowCompatible(optionalVariantType));
+
+        auto values = context.CreateOptionalVariantOverStruct(100);
+        auto array = NArrow::MakeArray(values, optionalVariantType);
+        auto restoredValues = NArrow::ExtractUnboxedValues(array, optionalVariantType, context.HolderFactory);
+        UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
+        for (ui64 index = 0; index < values.size(); ++index) {
+            AssertUnboxedValuesAreEqual(values[index], restoredValues[index], optionalVariantType);
+        }
+    }
+
+    Y_UNIT_TEST(DoubleOptionalVariantOverStruct) {
+        TTestContext context;
+
+        auto doubleOptionalVariantType = context.GetDoubleOptionalVariantOverStructType();
+        UNIT_ASSERT(!NArrow::IsArrowCompatible(doubleOptionalVariantType));
+
+        auto values = context.CreateDoubleOptionalVariantOverStruct(100);
+        auto array = NArrow::MakeArray(values, doubleOptionalVariantType);
+        auto restoredValues = NArrow::ExtractUnboxedValues(array, doubleOptionalVariantType, context.HolderFactory);
+        UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
+        for (ui64 index = 0; index < values.size(); ++index) {
+            AssertUnboxedValuesAreEqual(values[index], restoredValues[index], doubleOptionalVariantType);
+        }
+    }
+
     Y_UNIT_TEST(VariantOverTupleWithOptionals) {
         TTestContext context;
 
         auto variantType = context.GetVariantOverTupleWithOptionalsType();
         UNIT_ASSERT(NArrow::IsArrowCompatible(variantType));
 
-        auto values = context.CreateVariantOverStruct(100);
+        auto values = context.CreateVariantOverTupleWithOptionals(100);
         auto array = NArrow::MakeArray(values, variantType);
         auto restoredValues = NArrow::ExtractUnboxedValues(array, variantType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], variantType);
+        }
+    }
+
+    Y_UNIT_TEST(OptionalVariantOverTupleWithOptionals) {
+        TTestContext context;
+
+        auto optionalVariantType = context.GetOptionalVariantOverTupleWithOptionalsType();
+        UNIT_ASSERT(!NArrow::IsArrowCompatible(optionalVariantType));
+
+        auto values = context.CreateOptionalVariantOverTupleWithOptionals(100);
+        auto array = NArrow::MakeArray(values, optionalVariantType);
+        auto restoredValues = NArrow::ExtractUnboxedValues(array, optionalVariantType, context.HolderFactory);
+        UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
+        for (ui64 index = 0; index < values.size(); ++index) {
+            AssertUnboxedValuesAreEqual(values[index], restoredValues[index], optionalVariantType);
+        }
+    }
+
+    Y_UNIT_TEST(DoubleOptionalVariantOverTupleWithOptionals) {
+        TTestContext context;
+
+        auto doubleOptionalVariantType = context.GetDoubleOptionalVariantOverTupleWithOptionalsType();
+        UNIT_ASSERT(!NArrow::IsArrowCompatible(doubleOptionalVariantType));
+
+        auto values = context.CreateDoubleOptionalVariantOverTupleWithOptionals(100);
+        auto array = NArrow::MakeArray(values, doubleOptionalVariantType);
+        auto restoredValues = NArrow::ExtractUnboxedValues(array, doubleOptionalVariantType, context.HolderFactory);
+        UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
+        for (ui64 index = 0; index < values.size(); ++index) {
+            AssertUnboxedValuesAreEqual(values[index], restoredValues[index], doubleOptionalVariantType);
         }
     }
 

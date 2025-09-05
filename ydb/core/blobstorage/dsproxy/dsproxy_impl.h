@@ -234,7 +234,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
                 SetStateUnconfiguredTimeout();
             } else if (CurrentStateFunc() == &TThis::StateEstablishingSessions) {
                 ErrorDescription = TStringBuilder() << "Too many requests while establishing sessions (DSPE5)."
-                        << " EstablishingSessionsTs# " << EstablishingSessionsTs;
+                        << " EstablishingSessionsStateTs# " << EstablishingSessionsStateTs;
                 SetStateEstablishingSessionsTimeout();
             }
         }

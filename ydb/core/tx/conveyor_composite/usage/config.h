@@ -160,6 +160,7 @@ public:
 namespace NKikimr::NConveyorComposite {
 class TCPULimitsConfig {
     YDB_OPT(double, CPUGroupThreadsLimit);
+    YDB_OPT(TString, CPUGroupName);
     YDB_READONLY(double, Weight, 1);
 
 public:

@@ -3,7 +3,7 @@
 #include "iface.h"
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>

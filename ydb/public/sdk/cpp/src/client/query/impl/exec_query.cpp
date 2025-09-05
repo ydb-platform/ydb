@@ -3,9 +3,9 @@
 #include "client_session.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/kqp_session_common/kqp_session_common.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_pool/session_pool.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/session/kqp_session_common.h>
+#include <ydb/public/sdk/cpp/src/client/impl/session/session_pool.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 #undef INCLUDE_YDB_INTERNAL_H
 

@@ -1,7 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/plain_status/status.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
 #include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 

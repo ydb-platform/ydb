@@ -497,28 +497,7 @@
         );
     }
 
-    function createIssue(test,owner,success_count, fail_count) {
-        const full_name = test.trim();
-        const pieces = /(.+)\/([^$]+)$/.exec(full_name);
-
-        if (!pieces) {
-            console.error("Unable to split path/test name from %o", full_name);
-            return;
-        }
-        let [path, testName] = [pieces[1], pieces[2]];
-        
-        if (success_count + fail_count != 0){
-            let url = "https://github.com/ydb-platform/ydb/issues/new?title=Mute "+ encodeURIComponent(path)+"/"+ encodeURIComponent(testName) + "&body=" + encodeURIComponent(path)+"/"+ encodeURIComponent(testName) +"%0A%0A**Add%20line%20to%20[muted_ya.txt](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/muted_ya.txt):**%0A%60" + encodeURIComponent(path)+" "+ encodeURIComponent(testName)+"%60%0A%0A%20Owner:%20[TEAM:@ydb-platform/"+owner+"](https://github.com/orgs/ydb-platform/teams/"+owner+")%0A%0A**Read%20more%20in%20[mute_rules.md](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/mute_rules.md)**%20%20%0A%0A**Summary%20history:**%0A%20Success%20rate%20**"+(success_count/(success_count+fail_count)*100)+"%25**%0APass:"+success_count+"%20Fail:"+fail_count+"%20%0A%0A**Test%20run%20history:**%20[link](https://datalens.yandex/34xnbsom67hcq?branch={{branch}}&full_name=" +path+ "/"+ testName+ ")%0A%0AMore%20info%20in%20[dashboard](https://datalens.yandex/4un3zdm0zcnyr)&labels=mute"
-            window.open(url, '_blank');
-        }
-        else {
-            let url = "https://github.com/ydb-platform/ydb/issues/new?title=Mute "+ encodeURIComponent(path)+"/"+ encodeURIComponent(testName) + "&body=" + encodeURIComponent(path)+"/"+ encodeURIComponent(testName) +"%0A%0A**Add%20line%20to%20[muted_ya.txt](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/muted_ya.txt):**%0A%60" + encodeURIComponent(path)+" "+ encodeURIComponent(testName)+"%60%0A%0A%20Owner:%20[TEAM:@ydb-platform/"+owner+"](https://github.com/orgs/ydb-platform/teams/"+owner+")%0A%0A**Read%20more%20in%20[mute_rules.md](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/mute_rules.md)**%20%20%0A%0A**Summary%20history:**%0APass:"+success_count+"%20Fail:"+fail_count+"%20%0A%0A**Test%20run%20history:**%20[link](https://datalens.yandex/34xnbsom67hcq?branch={{branch}}&full_name=" +path+ "/"+ testName+ ")%0A%0AMore%20info%20in%20[dashboard](https://datalens.yandex/4un3zdm0zcnyr)&labels=mute"
-            window.open(url, '_blank');
-        }
-         
-    }
-
-    function createSanitizerIssue(test, owner, errorText) {
+    function createIssue(test, owner, success_count, fail_count, is_sanitizer, errorText) {
         const full_name = test.trim();
         const pieces = /(.+)\/([^$]+)$/.exec(full_name);
 
@@ -531,30 +510,66 @@
         // Get build preset and other contextual information
         const buildPreset = "{{ build_preset }}";
         const branch = "{{ branch }}";
-        const reportUrl = window.location.href;
         
-        // Create sanitizer-specific issue title and body
-        const title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
-        
-        let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
-        body += "**Sanitizer Error Detected**%0A%0A";
-        body += "**Build Information:**%0A";
-        body += "- Version/Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
-        body += "- Branch: " + encodeURIComponent(branch) + "%0A";
-        body += "- Report Link: " + encodeURIComponent(reportUrl) + "%0A%0A";
-        
-        if (errorText && errorText.trim() !== "") {
-            body += "**Error Details:**%0A```%0A" + encodeURIComponent(errorText.trim()) + "%0A```%0A%0A";
+        if (is_sanitizer) {
+            // Create sanitizer-specific issue
+            const reportUrl = window.location.href;
+            const title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+            
+            let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
+            body += "**Sanitizer Error Detected**%0A%0A";
+            body += "**Build Information:**%0A";
+            body += "- Version/Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
+            body += "- Branch: " + encodeURIComponent(branch) + "%0A";
+            body += "- Report Link: " + encodeURIComponent(reportUrl) + "%0A%0A";
+            
+            if (errorText && errorText.trim() !== "") {
+                body += "**Error Details:**%0A```%0A" + encodeURIComponent(errorText.trim()) + "%0A```%0A%0A";
+            }
+            
+            body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
+            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(path) + "/" + encodeURIComponent(testName) + ")%0A%0A";
+            body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
+            
+            // Determine sanitizer-specific label based on build preset
+            let sanitizerLabel = "sanitizer";
+            if (buildPreset.includes("asan")) {
+                sanitizerLabel += ",asan";
+            } else if (buildPreset.includes("msan")) {
+                sanitizerLabel += ",msan";
+            } else if (buildPreset.includes("tsan")) {
+                sanitizerLabel += ",tsan";
+            }
+            
+            const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + sanitizerLabel + ",bug";
+            window.open(url, '_blank');
+        } else {
+            // Create regular issue (not mute issue)
+            const title = "Test failure in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+            
+            let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
+            body += "**Test Failure**%0A%0A";
+            body += "**Build Information:**%0A";
+            body += "- Version/Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
+            body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
+            
+            body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
+            
+            if (success_count + fail_count != 0) {
+                body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+            } else {
+                body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+            }
+            
+            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(path) + "/" + encodeURIComponent(testName) + ")%0A%0A";
+            body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
+            
+            const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=bug";
+            window.open(url, '_blank');
         }
-        
-        body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
-        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(path) + "/" + encodeURIComponent(testName) + ")%0A%0A";
-        body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
-        
-        const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=sanitizer,bug";
-        
-        window.open(url, '_blank');
     }
+
+
 
     function openHistory(test) {
         const full_name = test.trim();
@@ -738,24 +753,14 @@
         createIssueButton.forEach(button => {
             button.addEventListener('click', function(event) {
                 event.preventDefault();
-                const success_count = findParentBySelector(event.target,'tr').querySelectorAll('.svg_passed').length
-                const fail_count = findParentBySelector(event.target,'tr').querySelectorAll('.svg_failure').length + findParentBySelector(event.target,'tr').querySelectorAll('.svg_mute').length
-
-                createIssue(
-                    findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText,
-                    findParentBySelector(event.target,'tr').querySelector('.test_owner').innerText,
-                    success_count,fail_count
-                );
-            });
-        });
-        
-        const createSanitizerIssueButton = document.querySelectorAll(".create_sanitizer_issue");
-        createSanitizerIssueButton.forEach(button => {
-            button.addEventListener('click', function(event) {
-                event.preventDefault();
                 const testRow = findParentBySelector(event.target,'tr');
+                const success_count = testRow.querySelectorAll('.svg_passed').length;
+                const fail_count = testRow.querySelectorAll('.svg_failure').length + testRow.querySelectorAll('.svg_mute').length;
                 const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
                 const owner = testRow.querySelector('.test_owner').innerText;
+                
+                // Check if this is a sanitizer issue by looking for the SANITIZER badge
+                const is_sanitizer = testRow.querySelector('.test_name span[style*="background-color: #ff4500"]') !== null;
                 
                 // Get error text from the test description if available
                 let errorText = '';
@@ -766,10 +771,11 @@
                         errorText = errorContent.textContent;
                     }
                 }
-                
-                createSanitizerIssue(testName, owner, errorText);
+
+                createIssue(testName, owner, success_count, fail_count, is_sanitizer, errorText);
             });
         });
+
 
         const headers = document.querySelectorAll(".collapsible-header");
         headers.forEach(header => {
@@ -896,7 +902,7 @@
                         </div>
                         <span class="button-text">Copy run command</span>
                     </button>
-                    {% if status.name == "FAIL" %} 
+                    {% if status.is_error %} 
                     <button class="button mute" title="Copy mute string to clipboard" >
                         <div class="icon-container"> 
                             <svg  class="mute_svg"  xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left" stroke="none" viewBox="2 0 30 17">
@@ -925,25 +931,9 @@
                                 <path class="cls-2" d="M14.7,8.39l-3.78,5L9.29,11.28a1,1,0,0,0-1.58,1.23l2.43,3.11a1,1,0,0,0,.79.38h0a1,1,0,0,0,.79-.39l4.57-6a1,1,0,1,0-1.6-1.22Z"/>
                             </svg>
                         </div>
-                        <span class="button-text">Create mute issue</span>
+                        <span class="button-text">Create issue</span>
                     </button>
-                    {% if t.is_sanitizer_issue %}
-                    <button class="button create_sanitizer_issue" title="Create sanitizer issue">
-                        <div class="icon-container"> 
-                            <svg class="sanitizer_issue_svg" xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left" stroke="none" viewBox="2 0 30 17">
-                                <!-- First icon: warning triangle -->
-                                <path transform="translate(20, 0)" d="M8.9 1.5c-.4-.7-1.4-.7-1.8 0L.4 13.1c-.4.7.1 1.6.9 1.6h13.4c.8 0 1.3-.9.9-1.6L8.9 1.5ZM8 5c.6 0 1 .4 1 1v3c0 .6-.4 1-1 1s-1-.4-1-1V6c0-.6.4-1 1-1Zm1 8c0 .6-.4 1-1 1s-1-.4-1-1 .4-1 1-1 1 .4 1 1Z" />
-                                <!-- Second icon: bug -->
-                                <path transform="translate(0, 0)" d="M8 1.5a2.5 2.5 0 0 1 2.5 2.5v2h1.5a.5.5 0 0 1 0 1h-1.5v1h1.5a.5.5 0 0 1 0 1h-1.5v1h1.5a.5.5 0 0 1 0 1h-1.5v.5A2.5 2.5 0 0 1 8 13.5a2.5 2.5 0 0 1-2.5-2.5V10H4a.5.5 0 0 1 0-1h1.5V8H4a.5.5 0 0 1 0-1h1.5V6H4a.5.5 0 0 1 0-1h1.5V4A2.5 2.5 0 0 1 8 1.5ZM6.5 4v7a1.5 1.5 0 0 0 3 0V4a1.5 1.5 0 0 0-3 0Z" />
-                            </svg>
-                            <svg class="done-icon" width="16" height="16" viewBox="0 0 26 26" fill="green" display="none">
-                                <path class="cls-2" d="M12,2A10,10,0,1,0,22,12,10,10,0,0,0,12,2Zm0,18a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z"/>
-                                <path class="cls-2" d="M14.7,8.39l-3.78,5L9.29,11.28a1,1,0,0,0-1.58,1.23l2.43,3.11a1,1,0,0,0,.79.38h0a1,1,0,0,0,.79-.39l4.57-6a1,1,0,1,0-1.6-1.22Z"/>
-                            </svg>
-                        </div>
-                        <span class="button-text">Create sanitizer issue</span>
-                    </button>
-                    {% endif %}
+
                      {% endif %}
                     <button class="button open_history" title="Show history">
                         <div class="icon-container"> 

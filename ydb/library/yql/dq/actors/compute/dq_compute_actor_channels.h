@@ -160,7 +160,7 @@ private:
             explicit TInFlightMessage(i64 freeSpace)
                 : FreeSpace(freeSpace) {}
 
-            const i64 FreeSpace;
+            i64 FreeSpace;
         };
         TMap<ui64, TInFlightMessage> InFlight;
 

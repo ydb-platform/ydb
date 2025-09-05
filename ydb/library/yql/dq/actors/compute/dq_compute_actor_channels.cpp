@@ -736,11 +736,8 @@ void TDqComputeActorChannels::SendChannelDataAck(TInputChannelState& inputChanne
         << ", seqNo: " << inputChannel.LastRecvSeqNo
         << ", finished: " << inputChannel.Finished);
 
-    inputChannel.InFlight.emplace(
-        inputChannel.LastRecvSeqNo,
-        TInputChannelState::TInFlightMessage(
+    inputChannel.InFlight[inputChannel.LastRecvSeqNo] = TInputChannelState::TInFlightMessage(
             freeSpace
-        )
     );
 
     auto ackEv = MakeHolder<TEvDqCompute::TEvChannelDataAck>();

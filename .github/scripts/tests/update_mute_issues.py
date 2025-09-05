@@ -455,22 +455,34 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
 def get_muted_tests_from_issues():
     issues = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
     muted_tests = {}
+    
+    # First, collect all issues for each test
     for issue in issues:
         if issues[issue]["state"] != 'CLOSED':
             for test in issues[issue]['tests']:
                 if test not in muted_tests:
                     muted_tests[test] = []
-                    muted_tests[test].append(
-                        {
-                            'url': issues[issue]['url'],
-                            'createdAt': issues[issue]['createdAt'],
-                            'status_updated': issues[issue]['status_updated'],
-                            'status': issues[issue]['status'],
-                            'state': issues[issue]['state'],
-                            'branches': issues[issue]['branches'],
-                            'id': issue,
-                        }
-                    )
+                muted_tests[test].append(
+                    {
+                        'url': issues[issue]['url'],
+                        'createdAt': issues[issue]['createdAt'],
+                        'status_updated': issues[issue]['status_updated'],
+                        'status': issues[issue]['status'],
+                        'state': issues[issue]['state'],
+                        'branches': issues[issue]['branches'],
+                        'id': issue,
+                    }
+                )
+    
+    # Then, for each test, keep only the latest issue (by createdAt)
+    for test in muted_tests:
+        if len(muted_tests[test]) > 1:
+            # Sort by createdAt (most recent first) and keep only the first one
+            muted_tests[test] = sorted(
+                muted_tests[test], 
+                key=lambda x: x['createdAt'], 
+                reverse=True
+            )[:1]
 
     return muted_tests
 

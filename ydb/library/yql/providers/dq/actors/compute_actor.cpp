@@ -86,6 +86,7 @@ IActor* CreateComputeActor(
             options.QuoterServiceActorId,
             options.ComputeActorOwnsCounters);
     }
+    //
 }
 
 } /* namespace NYql */

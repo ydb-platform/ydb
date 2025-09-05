@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -61,6 +62,8 @@ public:
         Y_ABORT_UNLESS(tableInfo);
         std::cerr << "DataShard.AddUserTable\n";
         DataShard.AddUserTable(pathId, tableInfo);
+        //TDataShardLocksDb locksDb(DataShard, txc);
+        //DataShard.AddUserTable(pathId, tableInfo, &locksDb);
 
         if (tableInfo->NeedSchemaSnapshots()) {
             std::cerr << "DataShard.AddSchemaSnapshot)\n";

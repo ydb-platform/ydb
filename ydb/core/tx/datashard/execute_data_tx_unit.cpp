@@ -58,6 +58,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
                                              TTransactionContext& txc,
                                              const TActorContext& ctx)
 {
+    std::cerr << "TExecuteDataTxUnit::Execute\n";
     if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
         return EExecutionStatus::Executed;
     }

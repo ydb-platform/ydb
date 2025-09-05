@@ -452,18 +452,20 @@ void TLockLocker::AddWriteLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTabl
 }
 
 TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at) const {
-    std::cerr << "TLockLocker::GetLock\n";
+    std::cerr << "TLockLocker::GetLock " << (ui64) &Locks << "\n";
     auto it = Locks.find(lockTxId);
     if (it != Locks.end()) {
         TLockInfo::TPtr lock = it->second;
         if (!lock->IsBroken(at)) {
-            std::cerr << "lock is not broken\n";
+            std::cerr << "lock is not broken " << (ui64) &Locks << "\n";
             return lock;
         } else {
-            std::cerr << "lock is broken\n";
+            std::cerr << "lock is broken " << (ui64) &Locks << "\n";
         }
+    } else {
+        std::cerr << "it == Locks.end() " << (ui64) &Locks << "\n";
     }
-    std::cerr << "return nullptr\n";
+    std::cerr << "return nullptr " << (ui64) &Locks << "\n";
     return nullptr;
 }
 
@@ -527,10 +529,10 @@ void TLockLocker::RemoveBrokenRanges() {
 }
 
 TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
-    std::cerr << "GetOrAddLock " << lockId << "\n";
+    std::cerr << "GetOrAddLock " << lockId << " " << (ui64) &Locks << "\n";
     auto it = Locks.find(lockId);
     if (it != Locks.end()) {
-        std::cerr << "Lock exist " << it->second->GetGeneration() << "\n";
+        std::cerr << "Lock exist " << it->second->GetGeneration() << " " << (ui64) &Locks << "\n";
         if (it->second->IsInList<TLockInfoExpireListTag>()) {
             ExpireQueue.PushBack(it->second.Get());
         }
@@ -562,7 +564,7 @@ TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
 
     TLockInfo::TPtr lock(new TLockInfo(this, lockId, lockNodeId));
     Y_ABORT_UNLESS(!lock->IsPersistent());
-    std::cerr << "Lock created " << lock->GetGeneration() << "\n";
+    std::cerr << "Lock created " << lock->GetGeneration() << " " << (ui64) &Locks << "\n";
     Locks[lockId] = lock;
     if (lockNodeId) {
         PendingSubscribeLocks.emplace_back(lockId, lockNodeId);
@@ -572,7 +574,7 @@ TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
 }
 
 TLockInfo::TPtr TLockLocker::AddLock(const ILocksDb::TLockRow& row) {
-    std::cerr << "AddLock " << row.LockId << "\n";
+    std::cerr << "AddLock " << row.LockId << " " << (ui64) &Locks << "\n";
     Y_ABORT_UNLESS(Locks.find(row.LockId) == Locks.end());
 
     TLockInfo::TPtr lock(new TLockInfo(this, row));
@@ -629,7 +631,7 @@ void TLockLocker::RemoveLock(ui64 lockId, ILocksDb* db) {
 }
 
 void TLockLocker::UpdateSchema(const TPathId& tableId, const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
-    std::cerr << "UpdateSchema\n";
+    std::cerr << "UpdateSchema " << (ui64) &Locks << "\n";
     TTableLocks::TPtr& table = Tables[tableId];
     if (!table)
         table.Reset(new TTableLocks(tableId));
@@ -638,7 +640,7 @@ void TLockLocker::UpdateSchema(const TPathId& tableId, const TVector<NScheme::TT
 
 void TLockLocker::RemoveSchema(const TPathId& tableId, ILocksDb* db) {
     // Make sure all persistent locks are removed from the database
-    std::cerr << "RemoveSchema\n";
+    std::cerr << "RemoveSchema " << (ui64) &Locks << "\n";
     for (auto& pr : Locks) {
         if (pr.second->IsPersistent()) {
             pr.second->PersistRemoveLock(db);
@@ -649,7 +651,7 @@ void TLockLocker::RemoveSchema(const TPathId& tableId, ILocksDb* db) {
     Tables.erase(tableId);
     Y_ABORT_UNLESS(Tables.empty());
     if (Locks.size()) {
-        std::cerr << "locks became empty\n";
+        std::cerr << "locks became empty " << (ui64) &Locks << "\n";
     }
     Locks.clear();
     ShardLocks.clear();
@@ -894,7 +896,7 @@ ui64 TSysLocks::ExtractLockTxId(const TArrayRef<const TCell>& key) const {
 }
 
 TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
-    std::cerr << "TSysLocks::GetLock\n";
+    std::cerr << "TSysLocks::GetLock " << (ui64) this << "\n";
     ui64 lockTxId, tabletId;
     bool ok = TLocksTable::ExtractKey(key, TLocksTable::EColumns::LockId, lockTxId);
     ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::DataShard, tabletId);
@@ -913,7 +915,7 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
     auto &checkVersion = Update->CheckVersion;
     TLockInfo::TPtr txLock = Locker.GetLock(lockTxId, checkVersion);
     if (txLock) {
-        std::cerr << "fond lock " << lockTxId << " generation " << txLock->GetGeneration() << "\n";
+        std::cerr << "fond lock " << lockTxId << " generation " << txLock->GetGeneration() << " " << (ui64) this << "\n";
         if (key.size() == 2) { // locks v1
             const auto& tableIds = txLock->GetReadTables();
             Y_ABORT_UNLESS(tableIds.size() == 1);
@@ -1151,6 +1153,7 @@ bool TSysLocks::HasWriteLocks(const TTableId& tableId) const {
 }
 
 EEnsureCurrentLock TSysLocks::EnsureCurrentLock() {
+    std::cerr << "EnsureCurrentLock\n";
     Y_ABORT_UNLESS(Update && Update->LockTxId);
     Y_ABORT_UNLESS(Db, "EnsureCurrentLock needs a valid locks database");
 

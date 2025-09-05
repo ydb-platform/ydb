@@ -143,6 +143,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
                "Trying to ALTER TABLE at " << DataShard.TabletID()
                << " version " << version);
+    std::cerr << "this " << (ui64) this << "\n";
 
     TPathId tableId(DataShard.GetPathOwnerId(), alterTableTx.GetId_Deprecated());
     if (alterTableTx.HasPathId()) {

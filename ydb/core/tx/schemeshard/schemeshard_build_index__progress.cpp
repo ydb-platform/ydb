@@ -681,6 +681,7 @@ public:
     }
 
     bool OnProgress(TTransactionContext& txc, const TActorContext& ctx) {
+        std::cerr << "OnProgress\n";
         const NKikimrTxDataShard::TEvBuildIndexProgressResponse& record = ShardProgress->Get()->Record;
 
         LOG_I("TTxReply : TEvBuildIndexProgressResponse"
@@ -708,13 +709,23 @@ public:
 
         switch (buildInfo->State) {
         case TIndexBuildInfo::EState::AlterMainTable:
+            std::cerr << "buildInfo->Stat == AlterMainTable\n";
+            Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::Invalid:
+            std::cerr << "buildInfo->Stat == Invalid\n";
+            Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::Locking:
+            std::cerr << "buildInfo->Stat == Locking\n";
+            Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::GatheringStatistics:
+            std::cerr << "buildInfo->Stat == GatheringStatistics\n";
+            Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::Initiating:
+            std::cerr << "buildInfo->Stat == Initiating\n";
             Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::Filling:
         {
+            std::cerr << "buildInfo->Stat == Filling\n";
             TIndexBuildInfo::TShardStatus& shardStatus = buildInfo->Shards.at(shardIdx);
 
             auto actualSeqNo = std::pair<ui64, ui64>(Self->Generation(), shardStatus.SeqNoRound);
@@ -776,14 +787,19 @@ public:
 
             switch (shardStatus.Status) {
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::INVALID:
+                std::cerr << "shardStatus.Status == INVALID\n";
                 Y_ABORT("Unreachable");
 
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED:
+                std::cerr << "shardStatus.Status == ACCEPTED\n";
+                break;
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS:
+                std::cerr << "shardStatus.Status == INPROGRESS\n";
                 // no oop, wait resolution. Progress key are persisted
                 break;
 
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE:
+                std::cerr << "shardStatus.Status == DONE\n";
                 if (buildInfo->InProgressShards.contains(shardIdx)) {
                     buildInfo->InProgressShards.erase(shardIdx);
                     buildInfo->DoneShards.emplace(shardIdx);
@@ -795,6 +811,7 @@ public:
                 break;
 
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::ABORTED:
+                std::cerr << "shardStatus.Status == ABORTED\n";
                 // datashard gracefully rebooted, reschedule shard
                 if (buildInfo->InProgressShards.contains(shardIdx)) {
                     buildInfo->ToUploadShards.push_front(shardIdx);
@@ -807,6 +824,7 @@ public:
                 break;
 
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR:
+                std::cerr << "shardStatus.Status == BUILD_ERROR\n";
                 buildInfo->Issue += TStringBuilder()
                     << "One of the shards report BUILD_ERROR at Filling stage, process has to be canceled"
                     << ", shardId: " << shardId
@@ -817,6 +835,7 @@ public:
                 Progress(buildId);
                 break;
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::BAD_REQUEST:
+                std::cerr << "shardStatus.Status == BAD_REQUEST\n";
                 buildInfo->Issue += TStringBuilder()
                     << "One of the shards report BAD_REQUEST at Filling stage, process has to be canceled"
                     << ", shardId: " << shardId
@@ -831,15 +850,41 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Applying:
+            std::cerr << "buildInfo->Stat == Applying\n";
+            Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::Unlocking:
+            std::cerr << "buildInfo->Stat == Unlocking\n";
+            Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::Done:
+            std::cerr << "buildInfo->Stat == Done\n";
             Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::Cancellation_Applying:
+            std::cerr << "buildInfo->Stat == Cancellation_Applying\n";
+            LOG_D("TTxReply : TEvBuildIndexProgressResponse"
+                  << " superfluous message " << record.ShortDebugString());
+            break;
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
+            std::cerr << "buildInfo->Stat == Cancellation_Unlocking\n";
+            LOG_D("TTxReply : TEvBuildIndexProgressResponse"
+                  << " superfluous message " << record.ShortDebugString());
+            break;
         case TIndexBuildInfo::EState::Cancelled:
+            std::cerr << "buildInfo->Stat == Cancelled\n";
+            LOG_D("TTxReply : TEvBuildIndexProgressResponse"
+                  << " superfluous message " << record.ShortDebugString());
+            break;
         case TIndexBuildInfo::EState::Rejection_Applying:
+            std::cerr << "buildInfo->Stat == Rejection_Applying\n";
+            LOG_D("TTxReply : TEvBuildIndexProgressResponse"
+                  << " superfluous message " << record.ShortDebugString());
+            break;
         case TIndexBuildInfo::EState::Rejection_Unlocking:
+            std::cerr << "buildInfo->Stat == Rejection_Unlocking\n";
+            LOG_D("TTxReply : TEvBuildIndexProgressResponse"
+                  << " superfluous message " << record.ShortDebugString());
+            break;
         case TIndexBuildInfo::EState::Rejected:
+                std::cerr << "buildInfo->Stat == Rejected\n";
             LOG_D("TTxReply : TEvBuildIndexProgressResponse"
                   << " superfluous message " << record.ShortDebugString());
             break;

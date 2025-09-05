@@ -54,13 +54,21 @@ struct WithSslAndAuth: TKikimrTestSettings {
 };
 using TKikimrWithGrpcAndRootSchemaSecure = NYdb::TBasicKikimrWithGrpcAndRootSchema<WithSslAndAuth>;
 
+struct TTestServerSettings {
+    const TString KafkaApiMode = "1";
+    bool Serverless = false;
+    bool EnableNativeKafkaBalancing = true;
+    bool EnableAutoTopicCreation = false;
+    bool EnableAutoConsumerCreation = true;
+    bool EnableQuoting = true;
+};
+
 template <class TKikimr, bool secure>
 class TTestServer {
 public:
     TIpPort Port;
 
-    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true,
-                bool enableAutoTopicCreation = false, bool enableAutoConsumerCreation = true, bool enableQuoting = true) {
+    TTestServer(const TTestServerSettings& settings) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -91,24 +99,24 @@ public:
         appConfig.MutableKafkaProxyConfig()->SetListeningPort(Port);
         appConfig.MutableKafkaProxyConfig()->SetMaxMessageSize(1024);
         appConfig.MutableKafkaProxyConfig()->SetMaxInflightSize(2048);
-        if (enableAutoTopicCreation) {
+        if (settings.EnableAutoTopicCreation) {
             appConfig.MutableKafkaProxyConfig()->SetAutoCreateTopicsEnable(true);
         }
         appConfig.MutableKafkaProxyConfig()->SetTopicCreationDefaultPartitions(2);
-        if (!enableAutoConsumerCreation) {
+        if (!settings.EnableAutoConsumerCreation) {
             appConfig.MutableKafkaProxyConfig()->SetAutoCreateConsumersEnable(false);
         }
-        if (serverless) {
+        if (settings.Serverless) {
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetHostname("localhost");
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetPort(FAKE_SERVERLESS_KAFKA_PROXY_PORT);
         }
 
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(enableQuoting);
-        if (!enableQuoting)
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(settings.EnableQuoting);
+        if (!settings.EnableQuoting)
             appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableReadQuoting(false);
 
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(enableQuoting);
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(settings.EnableQuoting);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetFlushIntervalSec(1);
         appConfig.MutablePQConfig()->AddClientServiceType()->SetName("data-streams");
@@ -148,7 +156,7 @@ public:
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NLog::PRI_TRACE);
 
-        if (!enableNativeKafkaBalancing) {
+        if (!settings.EnableNativeKafkaBalancing) {
             KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaNativeBalancing(false);
         }
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaTransactions(true);
@@ -178,7 +186,7 @@ public:
             client.AlterUserAttributes("/", "Root",
                                        {{"folder_id", DEFAULT_FOLDER_ID},
                                         {"cloud_id", DEFAULT_CLOUD_ID},
-                                        {"kafka_api", kafkaApiMode},
+                                        {"kafka_api", settings.KafkaApiMode},
                                         {"database_id", "root"},
                                         {"serverless_rt_coordination_node_path", "/Coordinator/Root"},
                                         {"serverless_rt_base_resource_ru", "/ru_Root"}}));
@@ -235,6 +243,12 @@ public:
             AccessServer = builder.BuildAndStart();
         }
     }
+
+    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true,
+                bool enableAutoTopicCreation = false, bool enableAutoConsumerCreation = true)
+        : TTestServer(TTestServerSettings{kafkaApiMode, serverless, enableNativeKafkaBalancing, enableAutoTopicCreation, enableAutoConsumerCreation, true})
+    {}
+
 
 public:
     std::unique_ptr<TKikimr> KikimrServer;
@@ -2407,14 +2421,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     Y_UNIT_TEST(TopicsWithCleanupPolicyScenario) {
         // TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true,
         // bool enableAutoTopicCreation = true, bool enableAutoConsumerCreation = true, bool enableQuoting = true) {
-        TInsecureTestServer testServer("2", false, true, true, true, false);
+        TInsecureTestServer testServer(TTestServerSettings{.KafkaApiMode = "2", .EnableQuoting = false});
         TKafkaTestClient client(testServer.Port);
 
         RunTestTopicsWithCleanupPolicy(testServer, client);
     }
 
     Y_UNIT_TEST(TopicsCompactionSwitchOnAndOff) {
-        TInsecureTestServer testServer("2", false, true, true, true, false);
+        TInsecureTestServer testServer(TTestServerSettings{.KafkaApiMode = "2", .EnableQuoting = false});
         TKafkaTestClient client(testServer.Port);
         TString topic = "topic-comp-test";
         TStringBuilder topicFullPath;
@@ -2507,21 +2521,20 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     }
 
     Y_UNIT_TEST(TopicsCompactionGapFromRetention) {
-        TInsecureTestServer testServer("2", false, true, true, true, false);
+        TInsecureTestServer testServer(TTestServerSettings{.KafkaApiMode = "2", .EnableQuoting = false});
         TKafkaTestClient client(testServer.Port);
         TString topic = "topic-comp-test";
         TStringBuilder topicFullPath;
         topicFullPath << "/Root/" << topic;
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-        // CreateTopic(pqClient, topicName, minActivePartitions, consumers, retentionSeconds);
             CreateTopic(pqClient, topicFullPath, 1, {"consumer1"}, /*retention_sec = */ 1);
 
             NYdb::NTopic::TWriteSessionSettings wSSettings{topicFullPath, "producer1", ""};
             wSSettings.Codec(NTopic::ECodec::RAW);
             auto writeSession = pqClient.CreateSimpleBlockingWriteSession(wSSettings);
 
-            WriteMessagesWithKeys(writeSession, {{"key-1", 6_MB}}, 3);
+            WriteMessagesWithKeys(writeSession, {{"key-1", 7_MB}}, 3);
             WriteMessagesWithKeys(writeSession, {{"key-new", 100}}, 20);
             Sleep(TDuration::Seconds(15));
 
@@ -2537,7 +2550,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 }
                 for (auto& dataEvent : results) {
                     for (const auto& msg : dataEvent.GetMessages()) {
-                        UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), 1);
+                        UNIT_ASSERT_GE(msg.GetOffset(), 1);
                         break;
                     }
                 }

@@ -317,7 +317,8 @@ ui64 TReadQuoter::GetConsumerReadSpeed(const NKikimrPQ::TPQTabletConfig& pqTable
 }
 
 ui64 TReadQuoter::GetConsumerReadBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& consumerName, const TActorContext& ctx) const {
-    return (AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()  || consumerName == NPQ::CLIENTID_COMPACTION_CONSUMER)
+    bool doLimitInternalConsumer = AppData(ctx)->PQConfig.GetQuotingConfig().GetEnableQuoting() && consumerName == NPQ::CLIENTID_COMPACTION_CONSUMER;
+    return (AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()  || doLimitInternalConsumer)
         ? pqTabletConfig.GetPartitionConfig().GetBurstSize() * 2
         : DEFAULT_READ_SPEED_AND_BURST;
 }

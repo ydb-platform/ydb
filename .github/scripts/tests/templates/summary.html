@@ -111,6 +111,27 @@
             fill: blue;
         }
 
+        .issue-button {
+            display: inline-block;
+            background-color: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            color: #0969da;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: 500;
+            text-decoration: none;
+            margin-left: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+
+        .issue-button:hover {
+            background-color: #f3f4f6;
+            border-color: #d0d7de;
+            text-decoration: none;
+        }
+
         .svg-icon {
             float: left;
             width: 14px;
@@ -497,6 +518,39 @@
         );
     }
 
+    function getTestRunCommand(test) {
+        const full_name = test.trim();
+        let pieces 
+        if (full_name.includes('.py.'))
+        {
+            pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(full_name);
+        } else
+        {
+            pieces = /(.+)\/([^$]+)$/.exec(full_name);
+        }
+
+        if (!pieces) {
+            console.error("Unable to split path/test name from %o", full_name);
+            return "";
+        }
+        let [path, testName] = [pieces[1], pieces[2]];
+
+        const namePieces = testName.split('.');
+
+        if (namePieces.length === 2) {
+            testName = namePieces[0] + '::' + namePieces[1];
+        } else {
+            testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
+        }
+
+        return `./ya make -ttt {{ buid_preset_params }} -F '${testName}' ${path}`;
+    }
+
+    function getOwnerAreaLabel(owner) {
+        const ownerMapping = {{ owner_area_mapping | tojson }};
+        return ownerMapping[owner] || "";
+    }
+
     function createIssue(test, owner, success_count, fail_count, is_sanitizer, errorText) {
         const full_name = test.trim();
         const pieces = /(.+)\/([^$]+)$/.exec(full_name);
@@ -510,10 +564,12 @@
         // Get build preset and other contextual information
         const buildPreset = "{{ build_preset }}";
         const branch = "{{ branch }}";
+        const reportUrl = window.location.href;
+        const testRunCommand = getTestRunCommand(full_name);
+        const ownerAreaLabel = getOwnerAreaLabel(owner);
         
         if (is_sanitizer) {
             // Create sanitizer-specific issue
-            const reportUrl = window.location.href;
             const title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
             
             let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
@@ -527,24 +583,30 @@
                 body += "**Error Details:**%0A```%0A" + encodeURIComponent(errorText.trim()) + "%0A```%0A%0A";
             }
             
+            body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
             body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
-            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(path) + "/" + encodeURIComponent(testName) + ")%0A%0A";
+            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "&build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
             body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
             
             // Determine sanitizer-specific label based on build preset
-            let sanitizerLabel = "sanitizer";
+            let labels = "bug,sanitizer";
             if (buildPreset.includes("asan")) {
-                sanitizerLabel += ",asan";
+                labels += ",asan";
             } else if (buildPreset.includes("msan")) {
-                sanitizerLabel += ",msan";
+                labels += ",msan";
             } else if (buildPreset.includes("tsan")) {
-                sanitizerLabel += ",tsan";
+                labels += ",tsan";
             }
             
-            const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + sanitizerLabel + ",bug";
+            // Add owner-based area label if available
+            if (ownerAreaLabel) {
+                labels += "," + ownerAreaLabel;
+            }
+            
+            const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels;
             window.open(url, '_blank');
         } else {
-            // Create regular issue (not mute issue)
+            // Create regular issue
             const title = "Test failure in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
             
             let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
@@ -553,6 +615,7 @@
             body += "- Version/Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
             body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
             
+            body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
             body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
             
             if (success_count + fail_count != 0) {
@@ -561,19 +624,69 @@
                 body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
             }
             
-            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(path) + "/" + encodeURIComponent(testName) + ")%0A%0A";
+            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "&build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
             body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
             
-            const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=bug";
+            // Prepare labels
+            let labels = "bug";
+            if (ownerAreaLabel) {
+                labels += "," + ownerAreaLabel;
+            }
+            
+            const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels;
             window.open(url, '_blank');
         }
     }
 
+    function createMuteIssue(test, owner, success_count, fail_count) {
+        const full_name = test.trim();
+        const pieces = /(.+)\/([^$]+)$/.exec(full_name);
 
+        if (!pieces) {
+            console.error("Unable to split path/test name from %o", full_name);
+            return;
+        }
+        let [path, testName] = [pieces[1], pieces[2]];
+        
+        // Get build preset and other contextual information
+        const buildPreset = "{{ build_preset }}";
+        const branch = "{{ branch }}";
+        const ownerAreaLabel = getOwnerAreaLabel(owner);
+        
+        const title = "Mute test " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+        
+        let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
+        body += "**Test mute request**%0A%0A";
+        body += "**Build Information:**%0A";
+        body += "- Version/Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
+        body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
+        
+        body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
+        
+        if (success_count + fail_count != 0) {
+            body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+        } else {
+            body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+        }
+        
+        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "&build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+        body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
+        
+        // Prepare labels for mute issue
+        let labels = "mute";
+        if (ownerAreaLabel) {
+            labels += "," + ownerAreaLabel;
+        }
+        
+        const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels;
+        window.open(url, '_blank');
+    }
 
     function openHistory(test) {
         const full_name = test.trim();
-        let url = "https://datalens.yandex/34xnbsom67hcq?branch={{branch}}&full_name="+full_name
+        const buildPreset = "{{ build_preset }}";
+        const branch = "{{ branch }}";
+        let url = "https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset);
         window.open(url, '_blank');
     }
 
@@ -775,6 +888,20 @@
                 createIssue(testName, owner, success_count, fail_count, is_sanitizer, errorText);
             });
         });
+        
+        const createMuteIssueButton = document.querySelectorAll(".create_mute_issue");
+        createMuteIssueButton.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const testRow = findParentBySelector(event.target,'tr');
+                const success_count = testRow.querySelectorAll('.svg_passed').length;
+                const fail_count = testRow.querySelectorAll('.svg_failure').length + testRow.querySelectorAll('.svg_mute').length;
+                const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
+                const owner = testRow.querySelector('.test_owner').innerText;
+
+                createMuteIssue(testName, owner, success_count, fail_count);
+            });
+        });
 
 
         const headers = document.querySelectorAll(".collapsible-header");
@@ -879,6 +1006,9 @@
         <td class="test_name">
         {% endif %}
             <span>{{ t.full_name }}</span>
+            {% if status.is_error %}
+                <button class="issue-button create_issue" title="Create issue">+ ISSUE</button>
+            {% endif %}
             {% if t.is_sanitizer_issue %}
                 <span style="background-color: #ff4500; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">SANITIZER</span>
             {% endif %}
@@ -918,7 +1048,7 @@
                         </div>
                         <span class="button-text">Copy mute string</span>
                     </button>
-                    <button class="button create_issue" title="Create issue">
+                    <button class="button create_mute_issue" title="Create mute issue">
                         <div class="icon-container"> 
                             <svg class="issue_svg" xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left"  stroke="none" viewBox="2 0 30 17">
                                 <!-- First icon: plus -->
@@ -931,7 +1061,7 @@
                                 <path class="cls-2" d="M14.7,8.39l-3.78,5L9.29,11.28a1,1,0,0,0-1.58,1.23l2.43,3.11a1,1,0,0,0,.79.38h0a1,1,0,0,0,.79-.39l4.57-6a1,1,0,1,0-1.6-1.22Z"/>
                             </svg>
                         </div>
-                        <span class="button-text">Create issue</span>
+                        <span class="button-text">Create mute issue</span>
                     </button>
 
                      {% endif %}

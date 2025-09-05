@@ -20,7 +20,7 @@
 #include <util/string/printf.h>
 #include <util/generic/scope.h>
 
-
+// Minor change to trigger CI test run for issue creation report verification
 namespace NKikimr::NKqp {
 
 using namespace NYdb;

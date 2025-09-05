@@ -88,6 +88,10 @@ private:
     virtual TStatus HandleBackup(NNodes::TKiBackup node, TExprContext& ctx) = 0;
     virtual TStatus HandleBackupIncremental(NNodes::TKiBackupIncremental node, TExprContext& ctx) = 0;
     virtual TStatus HandleRestore(NNodes::TKiRestore node, TExprContext& ctx) = 0;
+    // secrets
+    virtual TStatus HandleCreateSecret(NNodes::TKiCreateSecret node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterSecret(NNodes::TKiAlterSecret node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropSecret(NNodes::TKiDropSecret node, TExprContext& ctx) = 0;
 };
 
 class TKikimrKey {
@@ -106,6 +110,7 @@ public:
         BackupCollection,
         Sequence,
         Transfer,
+        Secret,
     };
 
     struct TViewDescription {
@@ -219,6 +224,12 @@ public:
                 .Prefix = *ExplicitPrefix,
                 .Name = Target,
             };
+    }
+
+    const TString& GetSecretPath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Secret);
+        return Target;
     }
 
     bool Extract(const TExprNode& key);

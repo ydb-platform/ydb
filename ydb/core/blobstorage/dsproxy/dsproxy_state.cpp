@@ -32,6 +32,7 @@ namespace NKikimr {
         EstablishingSessionStartTime = TActivationContext::Now();
         ConfigureQueryTimeoutEv = nullptr;
         ClearTimeoutCounters();
+        EstablishingSessionsStateTs = TActivationContext::Monotonic();
         EstablishingSessionsTimeoutEv = new TEvEstablishingSessionTimeout();
         Become(&TThis::StateEstablishingSessions, ProxyEstablishSessionsTimeout, EstablishingSessionsTimeoutEv);
         SwitchToWorkWhenGoodToGo();
@@ -58,6 +59,7 @@ namespace NKikimr {
         ErrorDescription = "StateUnconfigured (DSPE9).";
         EstablishingSessionsTimeoutEv = nullptr;
         ClearTimeoutCounters();
+        UnconfiguredStateTs = TActivationContext::Monotonic();
         ConfigureQueryTimeoutEv = new TEvConfigureQueryTimeout();
         Become(&TThis::StateUnconfigured, ProxyConfigurationTimeout, ConfigureQueryTimeoutEv);
     }
@@ -172,6 +174,9 @@ namespace NKikimr {
             }
             SetStateEstablishingSessions();
         } else { // configuration has been reset, we have to request it via NodeWarden
+            UnconfiguredStateReason = prevInfo
+                    ? EUnconfiguredStateReason::GenerationChanged
+                    : EUnconfiguredStateReason::UnknownGroup;
             SetStateUnconfigured();
         }
     }
@@ -180,9 +185,14 @@ namespace NKikimr {
         if (ev && ev->Get() != ConfigureQueryTimeoutEv) {
             return;
         }
+
+        TString details = TStringBuilder() << "UnconfiguredStateTs# " << UnconfiguredStateTs
+                << " UnconfiguredStateReason# " << UnconfiguredStateReasonStr(UnconfiguredStateReason);
+
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-                << " Unconfigured Wakeup TIMEOUT Marker# DSP05");
-        ErrorDescription = "Configuration timeout occured (DSPE1).";
+                << " Unconfigured Wakeup TIMEOUT Marker# DSP05 " << details);
+                
+        ErrorDescription = "Configuration timeout occured (DSPE1). " + details;
         EstablishingSessionsPutMuteChecker.Unmute();
         SetStateUnconfiguredTimeout();
     }
@@ -205,9 +215,11 @@ namespace NKikimr {
         if (ev && ev->Get() != EstablishingSessionsTimeoutEv) {
             return;
         }
+        TString details = TStringBuilder() << "EstablishingSessionsStateTs# " << EstablishingSessionsStateTs
+                << " NumUnconnectedDisks# " << NumUnconnectedDisks;
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-                << " StateEstablishingSessions Wakeup TIMEOUT Marker# DSP12");
-        ErrorDescription = "Timeout while establishing sessions (DSPE4).";
+                << " StateEstablishingSessions Wakeup TIMEOUT Marker# DSP12 " << details);
+        ErrorDescription = "Timeout while establishing sessions (DSPE4). " + details;
         SetStateEstablishingSessionsTimeout();
     }
 
@@ -247,7 +259,7 @@ namespace NKikimr {
                 ErrorDescription = "Created as unconfigured in error state (DSPE11). It happens when the request was sent for an invalid groupID";
                 ExtraLogInfo = "The request was sent for an invalid groupID ";
             } else {
-                ErrorDescription = "Created as unconfigured in error state (DSPE7). It happens when group doesn't present in BSC";
+                ErrorDescription = "Created as unconfigured in error state (DSPE7). It happens when group isn't present in BSC";
             }
             Become(&TThis::StateEjected);
         } else {

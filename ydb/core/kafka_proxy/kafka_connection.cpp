@@ -354,7 +354,8 @@ protected:
             header->CorrelationId,
             message,
             Context->ConnectionId,
-            Context->DatabasePath
+            Context->DatabasePath,
+            Context->ResourceDatabasePath
         ));
     }
 
@@ -363,7 +364,8 @@ protected:
             header->CorrelationId,
             message,
             Context->ConnectionId,
-            Context->DatabasePath
+            Context->DatabasePath,
+            Context->ResourceDatabasePath
         ));
     }
 
@@ -372,7 +374,8 @@ protected:
             header->CorrelationId,
             message,
             Context->ConnectionId,
-            Context->DatabasePath
+            Context->DatabasePath,
+            Context->ResourceDatabasePath
         ));
     }
 
@@ -381,7 +384,8 @@ protected:
             header->CorrelationId,
             message,
             Context->ConnectionId,
-            Context->DatabasePath
+            Context->DatabasePath,
+            Context->ResourceDatabasePath
         ));
     }
 

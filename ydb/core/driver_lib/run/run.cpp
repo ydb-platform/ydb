@@ -47,6 +47,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/config_metrics.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/nameservice.h>
@@ -56,6 +57,7 @@
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/alloc.pb.h>
+#include <ydb/core/protos/config_metrics.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 
@@ -1151,6 +1153,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasReplicationConfig()) {
         AppData->ReplicationConfig = runConfig.AppConfig.GetReplicationConfig();
+    }
+
+    if (runConfig.AppConfig.HasMetricsConfig()) {
+        AppData->MetricsConfig.InitializeFromProto(runConfig.AppConfig.GetMetricsConfig());
     }
 
     // setup resource profiles

@@ -3,12 +3,14 @@ from __future__ import annotations
 import ydb
 import pytest
 import allure
+import time
 import traceback
 
 from .clickbench import ClickbenchParallelBase
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from threading import Thread, Event
 from datetime import datetime
+from matplotlib import pyplot
 
 
 class ResourcePool:
@@ -104,7 +106,9 @@ class WorkloadMangerClickbenchBase(ClickbenchParallelBase):
             sessions_pool.execute_with_retries(pool.get_create_users_sql())
             sessions_pool.execute_with_retries(pool.get_create_sql())
 
+        time.sleep(30)
         check_thread = Thread(target=cls.check_signals_thread)
+        cls.stop_checking.clear()
         check_thread.start()
         try:
             super().do_setup_class()
@@ -150,7 +154,7 @@ class TestWorkloadMangerClickbenchConcurentQueryLimit(WorkloadMangerClickbenchBa
 
 class TestWorkloadMangerClickbenchComputeSheduler(WorkloadMangerClickbenchBase):
     threads = 1
-    metrics = []
+    metrics: list[(float, dict[str, float])] = []
     metrics_keys = set()
 
     @classmethod
@@ -164,11 +168,45 @@ class TestWorkloadMangerClickbenchComputeSheduler(WorkloadMangerClickbenchBase):
     @classmethod
     def after_workload(cls):
         keys = sorted(cls.metrics_keys)
-        report = '<html><body><table border=1 valign="center" width="100%">\n<tr>' + ''.join([f'<th style="padding-left: 10; padding-right: 10">{k}</th>' for k in keys]) + '</tr>\n'
-        for record in cls.metrics:
-            report += '<tr>' + ''.join([f'<td style="padding-left: 10; padding-right: 10">{record.get(k)}</td>' for k in keys]) + '</tr>\n'
+        report = ('<html><body><table border=1 valign="center" width="100%">'
+                  '<tr><th style="padding-left: 10; padding-right: 10">time</th>' +
+                  ''.join([f'<th style="padding-left: 10; padding-right: 10">{k[:-2] if k.endswith(' d') else k}</th>' for k in keys]) +
+                  '</tr>\n')
+        norm_metrics = []
+        for r in range(len(cls.metrics)):
+            record: dict[str, float] = {}
+            cur_t, cur_m = cls.metrics[r]
+            for k, v in cur_m.items():
+                if k.endswith(' d'):
+                    if r == 0:
+                        record[k] = 0.
+                    else:
+                        prev_t, prev_m = cls.metrics[r - 1]
+                        record[k] = (v - prev_m.get(k, 0.)) / (cur_t - prev_t)
+                else:
+                    record[k] = v
+            norm_metrics.append(record)
+            report += (f'<tr><th style="padding-left: 10; padding-right: 10">{datetime.fromtimestamp(cur_t)}</th>' +
+                       ''.join([f'<td style="padding-left: 10; padding-right: 10">{record.get(k):.1f}</td>' for k in keys]) + '</tr>\n')
         report += '</table></body></html>'
         allure.attach(report, 'metrics', allure.attachment_type.HTML)
+        times = [t for t, _ in cls.metrics]
+        fig, axs = pyplot.subplots(4, 1, layout='constrained', figsize=(6.4, 25.6))
+        for pool in cls.get_resource_pools():
+            axs[0].plot(times, [m.get(f'{pool.name} satisfaction') for m in norm_metrics], label=pool.name)
+            axs[0].set_ylabel('satisfaction')
+            axs[1].plot(times, [m.get(f'{pool.name} usage d') for m in norm_metrics], label=pool.name)
+            axs[1].set_ylabel('usage')
+            axs[2].plot(times, [m.get(f'{pool.name} throttle d') for m in norm_metrics], label=pool.name)
+            axs[2].set_ylabel('throttle')
+            axs[3].plot(times, [m.get(f'{pool.name} fair share d') for m in norm_metrics], label=pool.name)
+            axs[3].set_ylabel('fair share')
+        for a in axs:
+            a.legend()
+
+        pyplot.savefig('satisfaction.plot.svg', format='svg')
+        with open('satisfaction.plot.svg') as s:
+            allure.attach(s.read(), 'satisfaction.plot.svg', allure.attachment_type.SVG)
 
     @classmethod
     def check_signals(cls) -> str:
@@ -176,9 +214,9 @@ class TestWorkloadMangerClickbenchComputeSheduler(WorkloadMangerClickbenchBase):
         for pool in cls.get_resource_pools():
             metrics_request.update({
                 f'{pool.name} satisfaction': {'scheduler/pool': pool.name, 'sensor': 'Satisfaction'},
-                f'{pool.name} usage': {'scheduler/pool': pool.name, 'sensor': 'Usage'},
-                f'{pool.name} throttle': {'scheduler/pool': pool.name, 'sensor': 'Throttle'},
-                f'{pool.name} fair share': {'scheduler/pool': pool.name, 'sensor': 'FairShare'},
+                f'{pool.name} usage d': {'scheduler/pool': pool.name, 'sensor': 'Usage'},
+                f'{pool.name} throttle d': {'scheduler/pool': pool.name, 'sensor': 'Throttle'},
+                f'{pool.name} fair share d': {'scheduler/pool': pool.name, 'sensor': 'FairShare'},
             })
         metrics = YdbCluster.get_metrics(db_only=True, counters='kqp', metrics=metrics_request)
         sum = {}
@@ -187,5 +225,5 @@ class TestWorkloadMangerClickbenchComputeSheduler(WorkloadMangerClickbenchBase):
                 sum.setdefault(k, 0.)
                 sum[k] += v
                 cls.metrics_keys.add(k)
-        cls.metrics.append(sum)
+        cls.metrics.append((time.time(), sum))
         return ''

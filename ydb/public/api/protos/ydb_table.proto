@@ -79,19 +79,19 @@ message VectorIndexSettings {
         VECTOR_TYPE_BIT = 4;
     }
 
-    Metric metric = 1;
+    optional Metric metric = 1;
 
-    VectorType vector_type = 2;
+    optional VectorType vector_type = 2;
 
-    uint32 vector_dimension = 3;
+    optional uint32 vector_dimension = 3;
 }
 
 message KMeansTreeSettings {
     VectorIndexSettings settings = 1;
-    // average count of clusters on each level of tree, 0 -- means auto
-    uint32 clusters = 2;
-    // average count of levels in the tree, 0 -- means auto
-    uint32 levels = 3;
+
+    optional uint32 clusters = 2;
+    
+    optional uint32 levels = 3;
 }
 
 message GlobalIndex {

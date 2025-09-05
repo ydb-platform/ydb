@@ -4032,6 +4032,263 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateTableVectorIndexInvalidSettingsPublicApi) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // valid settings:
+            auto builder = TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Embedding", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key")
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {TVectorIndexSettings{
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    1024,
+                }, 10, 3});
+
+            auto result = session.CreateTable("/Root/TestTable1", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // invalid settings:
+            auto builder = TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Embedding", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key")
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {TVectorIndexSettings{
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    100500,
+                }, 10, 3});
+
+            auto result = session.CreateTable("/Root/TestTable2", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 16384");
+        }
+
+        // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
+    }
+
+    Y_UNIT_TEST(AlterTableVectorIndexInvalidSettingsPublicApi) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // create table:
+            auto builder = TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Embedding", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key");
+
+            auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // valid settings:
+            TIndexDescription index("vector_idx1", EIndexType::GlobalVectorKMeansTree, {"Embedding"}, {}, {}, TKMeansTreeSettings{
+                TVectorIndexSettings{
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    1024
+                }, 10, 3
+            });
+
+            TAlterTableSettings alterSettings;
+            alterSettings.AppendAddIndexes({ index });
+
+            auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // invalid settings:
+            TIndexDescription index("vector_idx2", EIndexType::GlobalVectorKMeansTree, {"Embedding"}, {}, {}, TKMeansTreeSettings{
+                TVectorIndexSettings{
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    100500
+                }, 10, 3
+            });
+
+            TAlterTableSettings alterSettings;
+            alterSettings.AppendAddIndexes({ index });
+
+            auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 16384");
+        }
+
+        // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
+    }
+
+    Y_UNIT_TEST_TWIN(CreateTableAlterTableVectorIndexInvalidSettings, CreateTable) {
+        TKikimrRunner kikimr;
+        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        ui32 tableId = 0;
+
+        {
+            TString query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        auto check = [&](const TString& indexSettings, const TString& expectedError) {
+            TStringBuilder explain;
+            explain << (CreateTable ? "CREATE" : "ALTER") <<  " WITH (" << indexSettings << ")" << Endl;
+            Cerr << explain;
+
+            TString query;
+
+            if (CreateTable) {
+                query = Sprintf(R"(
+                    --!syntax_v1
+                    CREATE TABLE `/Root/TestTable%d` (
+                        Key Uint64,
+                        Embedding String,
+                        Covered String,
+                        PRIMARY KEY (Key),
+                        INDEX vector_idx
+                            GLOBAL USING vector_kmeans_tree
+                            ON (Embedding)
+                            WITH (%s)
+                    );
+                )", ++tableId, indexSettings.c_str());
+            } else {
+                query = Sprintf(R"(
+                    --!syntax_v1
+                    ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx%d 
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (%s);
+                )", ++tableId, indexSettings.c_str());
+            }
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            explain << result.GetStatus() << Endl;
+            explain << result.GetIssues().ToString() << Endl;
+            Cerr << explain;
+
+            if (expectedError) {
+                UNIT_ASSERT_C(result.GetStatus() == EStatus::GENERIC_ERROR || result.GetStatus() == EStatus::BAD_REQUEST, explain);
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedError, explain);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, explain);
+            }
+        };
+
+        // valid settings:
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10", "");
+
+        // unknown index setting: 
+        check("XxX=YyY, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Unknown index setting: XxX");
+        check("XxX=42, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Unknown index setting: XxX");
+        
+        // distance:
+        check("distance=XxX, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid distance: XxX");
+        check("distance=42, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid distance: 42");
+        
+        // similarity
+        check("similarity=XxX, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid similarity: XxX");
+        check("similarity=42, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid similarity: 42");
+        check("similarity=True, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid similarity: True");
+
+        // distance + similarity (none or both)
+        check("distance=manhattan, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "only one of distance or similarity should be set, not both");
+        check("vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "either distance or similarity should be set");
+
+        // vector_type
+        check("similarity=inner_product, vector_type=XxX, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid vector_type: XxX");
+        check("similarity=inner_product, vector_type=42, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid vector_type: 42");
+        check("similarity=inner_product, vector_dimension=1024, levels=3, clusters=10",
+            "vector_type should be set");
+        
+        // vector_dimension
+        check("similarity=inner_product, vector_type=float, vector_dimension=XxX, levels=3, clusters=10",
+            "Invalid vector_dimension: XxX");
+        check("similarity=inner_product, vector_type=float, vector_dimension=0, levels=3, clusters=10",
+            "Invalid vector_dimension: 0 should be between 1 and 16384");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1, levels=3, clusters=10", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=10, levels=3, clusters=10", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=16384, levels=3, clusters=10", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=16385, levels=3, clusters=10",
+            "Invalid vector_dimension: 16385 should be between 1 and 16384");
+        check("similarity=inner_product, vector_type=float, vector_dimension=999999999999, levels=3, clusters=10",
+            "Invalid vector_dimension: 999999999999");
+        check("similarity=inner_product, vector_type=float, vector_dimension=99999999999999999999, levels=3, clusters=10",
+            "Invalid vector_dimension: 99999999999999999999");
+        check("similarity=inner_product, vector_type=float, levels=3, clusters=10",
+            "vector_dimension should be set");
+            
+        // levels
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=XxX, clusters=2",
+            "Invalid levels: XxX");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=0, clusters=2",
+            "Invalid levels: 0 should be between 1 and 16");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=2", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=16, clusters=2", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=17, clusters=2",
+            "Invalid levels: 17 should be between 1 and 16");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=999999999999, clusters=2",
+            "Invalid levels: 999999999999");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=99999999999999999999, clusters=2",
+            "Invalid levels: 99999999999999999999");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, clusters=2",
+            "levels should be set");
+
+        // clusters
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=XxX",
+            "Invalid clusters: XxX");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=0",
+            "Invalid clusters: 0 should be between 2 and 2048");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=1",
+            "Invalid clusters: 1");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=10", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2048", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2049",
+            "Invalid clusters: 2049 should be between 2 and 2048");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=999999999999",
+            "Invalid clusters: 999999999999");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=99999999999999999999",
+            "Invalid clusters: 99999999999999999999");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1",
+            "clusters should be set");
+        
+        // clusters^levels
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=10, clusters=10",
+            "Invalid clusters^levels: 10^10 should be less than 1073741824");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=16, clusters=1024",
+            "Invalid clusters^levels: 1024^16 should be less than 1073741824");
+        
+        // vector_dimension*clusters
+        check("similarity=inner_product, vector_type=float, vector_dimension=2048, levels=1, clusters=2048", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=2049, levels=1, clusters=2048",
+            "Invalid vector_dimension*clusters: 2049*2048 should be less than 4194304");
+    }
+
     Y_UNIT_TEST(CreateTableWithVectorIndexPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
@@ -4048,7 +4305,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
                     NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                     1024,
-                }});
+                }, 10, 3});
 
             auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -4088,7 +4345,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
                     NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                     1024,
-                }});
+                }, 10, 3});
 
             auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

@@ -296,20 +296,24 @@ static INode::TPtr CreateVectorIndexSettings(const TVectorIndexSettings& vectorI
 
     auto settings = Y();
 
-    if (vectorIndexSettings.Distance && vectorIndexSettings.Similarity) {
-        Y_ENSURE(false, "distance and similarity shouldn't be set at the same time");
-    } else if (vectorIndexSettings.Distance) {
+    if (vectorIndexSettings.Distance) {
         settings = L(settings, Q(Y(Q("distance"), Q(ToString(*vectorIndexSettings.Distance)))));
-    } else if (vectorIndexSettings.Similarity) {
-        settings = L(settings, Q(Y(Q("similarity"), Q(ToString(*vectorIndexSettings.Similarity)))));
-    } else {
-        Y_ENSURE(false, "distance or similarity should be set");
     }
-
-    settings = L(settings, Q(Y(Q("vector_type"), Q(ToString(*vectorIndexSettings.VectorType)))));
-    settings = L(settings, Q(Y(Q("vector_dimension"), Q(ToString(vectorIndexSettings.VectorDimension)))));
-    settings = L(settings, Q(Y(Q("clusters"), Q(ToString(vectorIndexSettings.Clusters)))));
-    settings = L(settings, Q(Y(Q("levels"), Q(ToString(vectorIndexSettings.Levels)))));
+    if (vectorIndexSettings.Similarity) {
+        settings = L(settings, Q(Y(Q("similarity"), Q(ToString(*vectorIndexSettings.Similarity)))));
+    }
+    if (vectorIndexSettings.VectorType) {
+        settings = L(settings, Q(Y(Q("vector_type"), Q(ToString(*vectorIndexSettings.VectorType)))));
+    }
+    if (vectorIndexSettings.VectorDimension) {
+        settings = L(settings, Q(Y(Q("vector_dimension"), Q(ToString(*vectorIndexSettings.VectorDimension)))));
+    }
+    if (vectorIndexSettings.Clusters) {
+        settings = L(settings, Q(Y(Q("clusters"), Q(ToString(*vectorIndexSettings.Clusters)))));
+    }
+    if (vectorIndexSettings.Levels) {
+        settings = L(settings, Q(Y(Q("levels"), Q(ToString(*vectorIndexSettings.Levels)))));
+    }
 
     return settings;
 }

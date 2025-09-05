@@ -157,6 +157,7 @@ private:
         bool Finished = false;
 
         struct TInFlightMessage {
+            TInFlightMessage() = default;
             explicit TInFlightMessage(i64 freeSpace)
                 : FreeSpace(freeSpace) {}
 

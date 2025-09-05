@@ -491,6 +491,20 @@ private:
 
         planNode.Type = EPlanNodeType::Connection;
 
+        if (auto connectionType = connection.Output().Ref().GetTypeAnn()) {
+            YQL_ENSURE(connectionType->GetKind() == ETypeAnnotationKind::List);
+            auto inputItemType = connectionType->Cast<TListExprType>()->GetItemType();
+            if (inputItemType->GetKind() == ETypeAnnotationKind::Struct) {
+                // auto structType = inputItemType->Cast<TStructExprType>();
+                //
+            }
+            Cerr << *inputItemType << Endl;
+        }
+
+        if (auto lambdaType = connection.Output().Stage().Program().Body().Ref().GetTypeAnn()) {
+            Cerr << *lambdaType << Endl;
+        }
+
         if (connection.Maybe<TDqCnUnionAll>()) {
             planNode.TypeName = "UnionAll";
         } else if (connection.Maybe<TDqCnBroadcast>()) {
@@ -3281,7 +3295,6 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const 
             txPlans.push_back(txPlan);
         }
     }
-
     NJsonWriter::TBuf writer;
     writer.BeginObject();
 

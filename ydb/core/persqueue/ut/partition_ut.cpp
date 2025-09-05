@@ -2570,7 +2570,7 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
 Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_DisableExpiration, TPartitionFixture)
 {
     // TODO(abcdef): temporarily deleted
-    return;
+    //return;
 
     TestWriteSubDomainOutOfSpace(TDuration::MilliSeconds(0), false);
 }
@@ -2578,7 +2578,7 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_DisableExpiration, TPartitionFixture)
 Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_IgnoreQuotaDeadline, TPartitionFixture)
 {
     // TODO(abcdef): temporarily deleted
-    return;
+    //return;
 
     TestWriteSubDomainOutOfSpace_DeadlineWork(true);
 }

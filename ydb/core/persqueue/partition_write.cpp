@@ -193,7 +193,7 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
             break;
         }
 
-        if (WaitingForSubDomainQuota(ctx, currentSize)) {
+        if (WaitingForSubDomainQuota(currentSize)) {
             PQ_LOG_D("Reserve processing: SubDomainOutOfSpace. Partition: " << Partition);
             break;
         }
@@ -771,7 +771,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
             ++*offset;
         }
     }
-    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) {
+    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota()) {
         SetDeadlinesForWrites(ctx);
     }
     WriteInflightSize += size;
@@ -1020,7 +1020,7 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
 }
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
-    PQ_LOG_D("PreProcessRequest(TWriteMsg& p) CanWrite()=" << CanWrite() << " DiskIsFull=" << DiskIsFull);
+    PQ_LOG_D("PreProcessRequest(TWriteMsg& p) CanWrite()=" << CanWrite() << " DiskIsFull=" << DiskIsFull << " SubDomainOutOfSpace=" << SubDomainOutOfSpace);
 
     if (!CanWrite()) {
         WriteInflightSize -= p.Msg.Data.size();
@@ -1036,6 +1036,15 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
                            "Disk is full");
         return EProcessResult::ContinueDrop;
     }
+
+    if (WaitingForSubDomainQuota(p.Msg.Data.size())) {
+        WriteInflightSize -= p.Msg.Data.size();
+        ScheduleReplyError(p.Cookie, false,
+                           NPersQueue::NErrorCode::OVERLOAD,
+                           "database size exceeded");
+        return EProcessResult::ContinueDrop;
+    }
+
     if (TxAffectedSourcesIds.contains(p.Msg.SourceId)) {
         return EProcessResult::Blocked;
     }
@@ -1641,7 +1650,7 @@ bool TPartition::RequestBlobQuota()
 
 void TPartition::HandlePendingRequests(const TActorContext& ctx)
 {
-    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx) || NeedDeletePartition) {
+    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota() || NeedDeletePartition) {
         return;
     }
     if (RequestBlobQuota()) {
@@ -1812,7 +1821,7 @@ bool TPartition::WaitingForPreviousBlobQuota() const {
     return TopicQuotaRequestCookie != 0;
 }
 
-bool TPartition::WaitingForSubDomainQuota(const TActorContext& /*ctx*/, const ui64 withSize) const {
+bool TPartition::WaitingForSubDomainQuota(const ui64 withSize) const {
     if (!SubDomainOutOfSpace || !AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota()) {
         return false;
     }

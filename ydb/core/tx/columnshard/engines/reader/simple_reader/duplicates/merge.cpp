@@ -69,7 +69,8 @@ void TBuildDuplicateFilters::DoOnCannotExecute(const TString& reason) {
 
 THashMap<ui64, NArrow::TColumnFilter> TBuildDuplicateFilters::BuildFiltersOnInterval(const TColumnDataSplitter::TBorder& begin,
     const TColumnDataSplitter::TBorder& end, const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData) {
-    NArrow::NMerger::TMergePartialStream merger(Context.GetPKSchema(), nullptr, false, GetVersionColumnNames(), std::nullopt, std::nullopt);
+    NArrow::NMerger::TMergePartialStream merger(
+        Context.GetPKSchema(), nullptr, false, GetVersionColumnNames(), ScanSnapshotBatch, MinUncommittedSnapshotBatch);
     merger.PutControlPoint(*end.GetKey(), false);
     TFiltersBuilder filtersBuilder;
     THashMap<ui64, TRowRange> nonEmptySources;

@@ -59,6 +59,8 @@ private:
     TBuildFilterContext Context;
     TDuplicateSourceCacheResult ColumnData;
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
+    NArrow::NMerger::TCursor ScanSnapshotBatch;
+    NArrow::NMerger::TCursor MinUncommittedSnapshotBatch;
 
 private:
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override;
@@ -74,6 +76,12 @@ private:
         return IIndexInfo::GetSnapshotColumnNames();
     }
 
+    NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId) {
+        NArrow::TGeneralContainer batch(1);
+        IIndexInfo::AddSnapshotColumns(batch, snapshot, writeId);
+        return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
+    };
+
 public:
     TBuildDuplicateFilters(TBuildFilterContext&& context,
         THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& columns,
@@ -81,6 +89,8 @@ public:
         : Context(std::move(context))
         , ColumnData(std::move(columns))
         , AllocationGuard(allocationGuard)
+        , ScanSnapshotBatch(GetVersionBatch(Context.GetContext()->GetRequest()->Get()->GetMaxVersion(), std::numeric_limits<ui64>::max()))
+        , MinUncommittedSnapshotBatch(GetVersionBatch(TSnapshot::Max(), 0))
     {
     }
 

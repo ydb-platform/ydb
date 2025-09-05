@@ -102,6 +102,7 @@ namespace NKikimr {
     class TResourceProfiles;
     class TControlBoard;
     class TFeatureFlags;
+    class TMetricsConfig;
 }
 
 namespace NKikimr {
@@ -253,6 +254,7 @@ struct TAppData {
     NKikimrProto::TDataIntegrityTrailsConfig& DataIntegrityTrailsConfig;
     NKikimrConfig::TDataErasureConfig& DataErasureConfig;
     NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
+    TMetricsConfig& MetricsConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request

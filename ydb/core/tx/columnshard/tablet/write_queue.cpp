@@ -20,8 +20,9 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) co
 
     AFL_VERIFY(writeOperation);
     writeOperation->SetBehaviour(Behaviour);
+    const auto& applyToMvccSnapshot = MvccSnapshot.Valid() ? MvccSnapshot : NOlap::TSnapshot::Max();
     NOlap::TWritingContext wContext(owner->TabletID(), owner->SelfId(), Schema, owner->StoragesManager,
-        owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max(),
+        owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, applyToMvccSnapshot,
         writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationPortionsWriteActorId);
     ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId.InternalPathId)->GetBucketPositions());
     writeOperation->Start(*owner, ArrowData, SourceId, wContext);

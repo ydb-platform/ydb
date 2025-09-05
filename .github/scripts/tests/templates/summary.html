@@ -518,6 +518,44 @@
          
     }
 
+    function createSanitizerIssue(test, owner, errorText) {
+        const full_name = test.trim();
+        const pieces = /(.+)\/([^$]+)$/.exec(full_name);
+
+        if (!pieces) {
+            console.error("Unable to split path/test name from %o", full_name);
+            return;
+        }
+        let [path, testName] = [pieces[1], pieces[2]];
+        
+        // Get build preset and other contextual information
+        const buildPreset = "{{ build_preset }}";
+        const branch = "{{ branch }}";
+        const reportUrl = window.location.href;
+        
+        // Create sanitizer-specific issue title and body
+        const title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+        
+        let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
+        body += "**Sanitizer Error Detected**%0A%0A";
+        body += "**Build Information:**%0A";
+        body += "- Version/Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
+        body += "- Branch: " + encodeURIComponent(branch) + "%0A";
+        body += "- Report Link: " + encodeURIComponent(reportUrl) + "%0A%0A";
+        
+        if (errorText && errorText.trim() !== "") {
+            body += "**Error Details:**%0A```%0A" + encodeURIComponent(errorText.trim()) + "%0A```%0A%0A";
+        }
+        
+        body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
+        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(path) + "/" + encodeURIComponent(testName) + ")%0A%0A";
+        body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
+        
+        const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=sanitizer,bug";
+        
+        window.open(url, '_blank');
+    }
+
     function openHistory(test) {
         const full_name = test.trim();
         let url = "https://datalens.yandex/34xnbsom67hcq?branch={{branch}}&full_name="+full_name
@@ -710,6 +748,28 @@
                 );
             });
         });
+        
+        const createSanitizerIssueButton = document.querySelectorAll(".create_sanitizer_issue");
+        createSanitizerIssueButton.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const testRow = findParentBySelector(event.target,'tr');
+                const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
+                const owner = testRow.querySelector('.test_owner').innerText;
+                
+                // Get error text from the test description if available
+                let errorText = '';
+                const errorButton = testRow.querySelector('.error-button');
+                if (errorButton && errorButton.nextElementSibling) {
+                    const errorContent = errorButton.nextElementSibling.querySelector('pre code');
+                    if (errorContent) {
+                        errorText = errorContent.textContent;
+                    }
+                }
+                
+                createSanitizerIssue(testName, owner, errorText);
+            });
+        });
 
         const headers = document.querySelectorAll(".collapsible-header");
         headers.forEach(header => {
@@ -867,6 +927,23 @@
                         </div>
                         <span class="button-text">Create mute issue</span>
                     </button>
+                    {% if t.is_sanitizer_issue %}
+                    <button class="button create_sanitizer_issue" title="Create sanitizer issue">
+                        <div class="icon-container"> 
+                            <svg class="sanitizer_issue_svg" xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left" stroke="none" viewBox="2 0 30 17">
+                                <!-- First icon: warning triangle -->
+                                <path transform="translate(20, 0)" d="M8.9 1.5c-.4-.7-1.4-.7-1.8 0L.4 13.1c-.4.7.1 1.6.9 1.6h13.4c.8 0 1.3-.9.9-1.6L8.9 1.5ZM8 5c.6 0 1 .4 1 1v3c0 .6-.4 1-1 1s-1-.4-1-1V6c0-.6.4-1 1-1Zm1 8c0 .6-.4 1-1 1s-1-.4-1-1 .4-1 1-1 1 .4 1 1Z" />
+                                <!-- Second icon: bug -->
+                                <path transform="translate(0, 0)" d="M8 1.5a2.5 2.5 0 0 1 2.5 2.5v2h1.5a.5.5 0 0 1 0 1h-1.5v1h1.5a.5.5 0 0 1 0 1h-1.5v1h1.5a.5.5 0 0 1 0 1h-1.5v.5A2.5 2.5 0 0 1 8 13.5a2.5 2.5 0 0 1-2.5-2.5V10H4a.5.5 0 0 1 0-1h1.5V8H4a.5.5 0 0 1 0-1h1.5V6H4a.5.5 0 0 1 0-1h1.5V4A2.5 2.5 0 0 1 8 1.5ZM6.5 4v7a1.5 1.5 0 0 0 3 0V4a1.5 1.5 0 0 0-3 0Z" />
+                            </svg>
+                            <svg class="done-icon" width="16" height="16" viewBox="0 0 26 26" fill="green" display="none">
+                                <path class="cls-2" d="M12,2A10,10,0,1,0,22,12,10,10,0,0,0,12,2Zm0,18a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z"/>
+                                <path class="cls-2" d="M14.7,8.39l-3.78,5L9.29,11.28a1,1,0,0,0-1.58,1.23l2.43,3.11a1,1,0,0,0,.79.38h0a1,1,0,0,0,.79-.39l4.57-6a1,1,0,1,0-1.6-1.22Z"/>
+                            </svg>
+                        </div>
+                        <span class="button-text">Create sanitizer issue</span>
+                    </button>
+                    {% endif %}
                      {% endif %}
                     <button class="button open_history" title="Show history">
                         <div class="icon-container"> 

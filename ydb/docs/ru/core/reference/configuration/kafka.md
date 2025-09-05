@@ -1,7 +1,6 @@
 # kafka_proxy_config
 
-В разделе `kafka_proxy_config` файла конфигурации YDB включается и конфигурируется Kafka Proxy,
-которая дает доступ к работе с [YDB Topics](../../concepts/datamodel/topic.md) по [Kafka API](../../reference/kafka-api/index.md).
+В разделе `kafka_proxy_config` файла конфигурации {{ ydb-short-name }} включается и конфигурируется Kafka Proxy, которая дает доступ к работе с [{{ ydb-short-name }} Topics](../../concepts/datamodel/topic.md) по [Kafka API](../../reference/kafka-api/index.md).
 
 ## Описание параметров
 

@@ -800,7 +800,14 @@ protected:
                          YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, "Not enough computation units to execute query"));
                     break;
                 }
-
+                case NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN: {
+                    for (auto& task : record.GetNotStartedTasks()) {
+                        if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN) {
+                            Planner->SendStartKqpTasksRequest(task.GetrequestId(), SelfId());
+                        }
+                    }
+                    break;
+                }
                 case NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR: {
                     InternalError("KqpNode internal error");
                     break;

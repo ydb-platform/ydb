@@ -5,6 +5,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -49,7 +50,6 @@ private:
 
     YDB_ACCESSOR(EModificationType, ModificationType, EModificationType::Replace);
     YDB_READONLY(TMonotonic, WriteStartInstant, TMonotonic::Now());
-    std::optional<ui64> LockId;
     const std::shared_ptr<TWriteFlowCounters> Counters;
     mutable NOlap::NCounters::TStateSignalsOperator<NEvWrite::EWriteStage>::TGuard StateGuard;
 
@@ -64,18 +64,6 @@ public:
         }
     }
 
-    void SetLockId(const ui64 lockId) {
-        LockId = lockId;
-    }
-
-    ui64 GetLockIdVerified() const {
-        AFL_VERIFY(LockId);
-        return *LockId;
-    }
-
-    std::optional<ui64> GetLockIdOptional() const {
-        return LockId;
-    }
 
     bool IsGuaranteeWriter() const {
         switch (ModificationType) {

@@ -3622,4 +3622,19 @@ bool TVectorIndexSettings::Validate(TContext& ctx) const {
     return true;
 }
 
+bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::TOperationMode mode) {
+    if (!Value) {
+        ctx.Error(stmBeginPos) << "parameter VALUE must be set";
+        return false;
+    }
+    if (mode == TOperationMode::Alter) {
+        if (InheritPermissions) {
+            ctx.Error(stmBeginPos) << "parameter INHERIT_PERMISSIONS is not supported for alter operation";
+            return false;
+        }
+    }
+
+    return true;
+}
+
 } // namespace NSQLTranslationV1

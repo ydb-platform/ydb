@@ -5179,6 +5179,146 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
     }
 }
 
+bool TSqlTranslation::StoreSecretInheritPermissions(
+    const TRule_secret_setting_value& value,
+    const TString& key,
+    TSecretParameters& secretParams
+) {
+    if (secretParams.InheritPermissions) {
+        Error() << "Duplicate parameter: " << key;
+        return false;
+    }
+    const NSQLv1Generated::TToken* errToken = nullptr;
+    switch (value.Alt_case()) {
+        // secret_setting_value: STRING_VALUE | bool_value | bind_parameter
+        case TRule_secret_setting_value::kAltSecretSettingValue2: {
+            if (auto inheritPermissions = ParseBool(Ctx_, value.GetAlt_secret_setting_value2().GetRule_bool_value1())) {
+                secretParams.InheritPermissions = TDeferredAtom(Ctx_.Pos(), *inheritPermissions ? "1" : "0");
+            } else {
+                errToken = &value.GetAlt_secret_setting_value2().GetRule_bool_value1().GetToken1();
+            }
+            break;
+        }
+        case TRule_secret_setting_value::kAltSecretSettingValue1: {
+            errToken = &value.GetAlt_secret_setting_value1().GetToken1();
+            break;
+        }
+        case TRule_secret_setting_value::kAltSecretSettingValue3: {
+            errToken = &value.GetAlt_secret_setting_value3().GetRule_bind_parameter1().GetToken1();
+            break;
+        }
+        default: {
+            return false;
+        }
+    }
+    if (errToken) {
+        Ctx_.Error(Ctx_.TokenPosition(*errToken)) << "Unsupported type for parameter: " << key << ". Bool was expected";
+        return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::StoreSecretValue(
+    const TRule_secret_setting_value& value,
+    const TString& key,
+    TSecretParameters& secretParams
+) {
+    if (secretParams.Value) {
+        Error() << "Duplicate parameter: " << key;
+        return false;
+    }
+    const NSQLv1Generated::TToken* errToken = nullptr;
+    switch (value.Alt_case()) {
+        case TRule_secret_setting_value::kAltSecretSettingValue1: {
+            const auto& token = value.GetAlt_secret_setting_value1().GetToken1();
+            auto content = StringContent(Ctx_, Ctx_.Pos(), Ctx_.Token(token));
+            if (!content) {
+                errToken = &value.GetAlt_secret_setting_value1().GetToken1();
+            } else {
+                secretParams.Value = TDeferredAtom(Ctx_.Pos(), std::move(content->Content));
+            }
+            break;
+        }
+        case TRule_secret_setting_value::kAltSecretSettingValue3: {
+            TDeferredAtom result;
+            if (!BindParameterClause(value.GetAlt_secret_setting_value3().GetRule_bind_parameter1(), result)) {
+                errToken = &value.GetAlt_secret_setting_value3().GetRule_bind_parameter1().GetToken1();
+            } else {
+                secretParams.Value = std::move(result);
+            }
+            break;
+        }
+        case TRule_secret_setting_value::kAltSecretSettingValue2: {
+            errToken = &value.GetAlt_secret_setting_value2().GetRule_bool_value1().GetToken1();
+            break;
+        }
+        default: {
+            return false;
+        }
+    }
+    if (errToken) {
+        Ctx_.Error(Ctx_.TokenPosition(*errToken)) << "Unsupported type for parameter: " << key << ". String (or named expression with type String) was expected";
+        return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::StoreSecretSettingEntry(const TIdentifier& id, const TRule_secret_setting_value& value, TSecretParameters& secretParams) {
+    const TString key = to_upper(id.Name);
+    if (key == "INHERIT_PERMISSIONS") {
+        return StoreSecretInheritPermissions(value, key, secretParams);
+    } else if (key == "VALUE") {
+        return StoreSecretValue(value, key, secretParams);
+    }
+
+    Error() << "Unknown parameter: " << key;
+    return false;
+}
+
+bool TSqlTranslation::ParseSecretSettings(
+    const TPosition pos,
+    const TRule_with_secret_settings& settingsNode,
+    TSecretParameters& secretParams,
+    const TSecretParameters::TOperationMode mode
+) {
+    // with_secret_settings: WITH LPAREN secret_setting_entry (COMMA secret_setting_entry)* RPAREN;
+    auto tryStoreEntry = [&](const auto& entry) -> bool {
+        return StoreSecretSettingEntry(
+            IdEx(entry.GetRule_an_id1(), *this),
+            entry.GetRule_secret_setting_value3(),
+            secretParams
+        );
+    };
+
+    const auto& firstEntry = settingsNode.GetRule_secret_setting_entry3();
+    if (!tryStoreEntry(firstEntry)) {
+        return false;
+    }
+
+    for (auto& block : settingsNode.GetBlock4()) {
+        const auto& entry = block.GetRule_secret_setting_entry2();
+        if (!tryStoreEntry(entry)) {
+            return false;
+        }
+    }
+
+    return secretParams.ValidateParameters(Ctx_, pos, mode);
+}
+
+bool TSqlTranslation::ParseSecretId(const TRule_id_or_at& node, TString& objectId) {
+    const auto idOrAt = Id(node, *this);
+    if (idOrAt.first) { // has @
+        Error() << "'@' is not allowed prefix for secret name";
+        return false;
+    }
+    objectId = idOrAt.second;
+    if (objectId.empty()) {
+        Error() << "Empty secret name";
+        return false;
+    }
+    return true;
+}
+
 bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result) {
     const static TSet<TStringBuf> allAuthFields{
         "service_account_id",

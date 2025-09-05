@@ -1346,6 +1346,20 @@ namespace NSQLTranslationV1 {
         TMaybe<TDeferredAtom> Increment;
     };
 
+    class TSecretParameters {
+    public:
+        enum class TOperationMode {
+            Create,
+            Alter,
+        };
+
+        TMaybe<TDeferredAtom> Value;
+        TMaybe<TDeferredAtom> InheritPermissions;
+
+    public:
+        bool ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::TOperationMode mode);
+    };
+
     struct TTopicConsumerSettings {
         struct TLocalSinkSettings {
             // no special settings
@@ -1642,6 +1656,23 @@ namespace NSQLTranslationV1 {
         const TRestoreParameters& params,
         const TObjectOperatorContext& context);
 
+    TNodePtr BuildCreateSecret(
+        TPosition pos,
+        const TString& objectId,
+        const TSecretParameters& secretParams,
+        const TObjectOperatorContext& context,
+        TScopedStatePtr scoped);
+    TNodePtr BuildAlterSecret(
+        TPosition pos,
+        const TString& objectId,
+        const TSecretParameters& secretParams,
+        const TObjectOperatorContext& context,
+        TScopedStatePtr scoped);
+    TNodePtr BuildDropSecret(
+        TPosition pos,
+        const TString& objectId,
+        const TObjectOperatorContext& context,
+        TScopedStatePtr scoped);
 
     template<class TContainer>
     TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) {

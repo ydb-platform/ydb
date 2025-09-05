@@ -149,6 +149,9 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
             return parseConclusion;
         }
     }
+    if (proto.HasMaxBatchSize()) {
+        MaxBatchSize = proto.GetMaxBatchSize();
+    }
 
     return TConclusionStatus::Success();
 }

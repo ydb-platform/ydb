@@ -65,6 +65,7 @@ private:
     YDB_READONLY(ui32, WorkersPoolId, 0);
     YDB_READONLY_DEF(TThreadsCountInfo, WorkersCountInfo);
     YDB_READONLY_DEF(std::vector<TWorkerPoolCategoryUsage>, Links);
+    YDB_READONLY(ui64, MaxBatchSize, 30);
 
 public:
     const TString& GetName() const;

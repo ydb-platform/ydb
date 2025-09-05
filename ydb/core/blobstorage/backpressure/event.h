@@ -79,13 +79,22 @@ public:
             if (hasEvent) {
                 auto eventBase = ev->ReleaseBase();
 
-                auto rcBufAlloc = TlsActivationContext ?
-                    TlsActivationContext->AsActorContext().ActorSystem()->GetRcBufAllocator() : GetDefaultRcBufAllocator();
+                std::optional<TRope> rope;
+                bool fallback = false;
 
-                auto rope = eventBase->SerializeToRope(
-                    [rcBufAlloc](ui32 size) -> TRcBuf {
-                        return rcBufAlloc->AllocRcBuf(size, 0, 0);
-                    });
+                do {
+                    auto rcBufAlloc = (TlsActivationContext && !fallback) ?
+                        TlsActivationContext->AsActorContext().ActorSystem()->GetRcBufAllocator() : GetDefaultRcBufAllocator();
+
+                    rope = eventBase->SerializeToRope(
+                        [rcBufAlloc](ui32 size) -> TRcBuf {
+                            return rcBufAlloc->AllocRcBuf(size, 0, 0);
+                        });
+
+                    Y_ABORT_UNLESS(!fallback || rope, "Unable to allocate rope with default allocator");
+
+                    fallback = true;
+                } while (!rope);
 
                 Buffer = MakeIntrusive<TEventSerializedData>(
                     std::move(*rope), eventBase->CreateSerializationInfo()

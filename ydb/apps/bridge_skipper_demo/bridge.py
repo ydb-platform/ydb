@@ -653,11 +653,11 @@ class BridgeSkipper:
     def _save_state(self):
         if not self.state_path:
             return
-        tmp_path = self.state_path
+        state_path = self.state_path
         # Truncate and write binary pickle, fsync for durability
         fd = None
         try:
-            fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+            fd = os.open(state_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
             with os.fdopen(fd, "wb") as f:
                 pickle.dump((self.current_state, self.state_history), f, protocol=pickle.HIGHEST_PROTOCOL)
                 f.flush()

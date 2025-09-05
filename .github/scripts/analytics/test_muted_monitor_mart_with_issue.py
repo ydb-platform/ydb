@@ -9,41 +9,9 @@ from datetime import datetime, timezone, timedelta
 import sys
 import re
 
-# Parse body function extracted from update_mute_issues.py
-def parse_body(body):
-    """Parse GitHub issue body to extract test names and branches"""
-    tests = []
-    branches = []
-    prepared_body = ''
-    start_mute_list = "<!--mute_list_start-->"
-    end_mute_list = "<!--mute_list_end-->"
-    start_branch_list = "<!--branch_list_start-->"
-    end_branch_list = "<!--branch_list_end-->"
-
-    # tests
-    if all(x in body for x in [start_mute_list, end_mute_list]):
-        idx1 = body.find(start_mute_list)
-        idx2 = body.find(end_mute_list)
-        lines = body[idx1 + len(start_mute_list) + 1 : idx2].split('\n')
-    else:
-        if body.startswith('Mute:'):
-            prepared_body = body.split('Mute:', 1)[1].strip()
-        elif body.startswith('Mute'):
-            prepared_body = body.split('Mute', 1)[1].strip()
-        elif body.startswith('ydb'):
-            prepared_body = body
-        lines = prepared_body.split('**Add line to')[0].split('\n')
-    tests = [line.strip() for line in lines if line.strip().startswith('ydb/')]
-
-    # branch
-    if all(x in body for x in [start_branch_list, end_branch_list]):
-        idx1 = body.find(start_branch_list)
-        idx2 = body.find(end_branch_list)
-        branches = [branch.strip() for branch in body[idx1 + len(start_branch_list) + 1 : idx2].split('\n') if branch.strip()]
-    else:
-        branches = ['main']
-
-    return tests, branches
+# Import shared GitHub issue utilities
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from github_issue_utils import parse_body, create_test_issue_mapping
 
 # Load YDB configuration
 dir = os.path.dirname(__file__)
@@ -54,8 +22,42 @@ config.read(config_file_path)
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
-def get_muted_test_data(driver):
+def get_muted_test_data_from_existing_mart(driver):
     """Get muted test data from the existing test_muted_monitor_mart table"""
+    query = """
+    SELECT *
+    FROM `test_results/analytics/test_muted_monitor_mart`
+    """
+    
+    print("Fetching muted test data from existing data mart...")
+    start_time = time.time()
+    
+    results = []
+    column_types = None
+    
+    try:
+        scan_query = ydb.ScanQuery(query, {})
+        it = driver.table_client.scan_query(scan_query)
+        
+        while True:
+            try:
+                result = next(it)
+                if column_types is None:
+                    column_types = [(col.name, col.type) for col in result.result_set.columns]
+                results.extend(result.result_set.rows)
+            except StopIteration:
+                break
+    except Exception as e:
+        print(f"Warning: Could not fetch muted test data from existing mart: {e}")
+        print("Falling back to direct query from tests_monitor table...")
+        return get_muted_test_data_fallback(driver)
+
+    end_time = time.time()
+    print(f'Fetched {len(results)} muted test records from existing mart, duration: {end_time - start_time}s')
+    return results, column_types
+
+def get_muted_test_data_fallback(driver):
+    """Fallback: Get muted test data directly from tests_monitor table"""
     query = """
     SELECT 
         state_filtered, 
@@ -103,7 +105,7 @@ def get_muted_test_data(driver):
         END ) = TRUE
     """
     
-    print("Fetching muted test data...")
+    print("Fetching muted test data directly from tests_monitor...")
     start_time = time.time()
     
     results = []
@@ -122,12 +124,12 @@ def get_muted_test_data(driver):
             except StopIteration:
                 break
     except Exception as e:
-        print(f"Warning: Could not fetch muted test data: {e}")
+        print(f"Warning: Could not fetch muted test data from tests_monitor: {e}")
         print("This might be because the tests_monitor table doesn't exist yet.")
         return [], []
 
     end_time = time.time()
-    print(f'Fetched {len(results)} muted test records, duration: {end_time - start_time}s')
+    print(f'Fetched {len(results)} muted test records from tests_monitor, duration: {end_time - start_time}s')
     return results, column_types
 
 def get_github_issues_data(driver):
@@ -170,37 +172,9 @@ def get_github_issues_data(driver):
     print(f'Fetched {len(results)} GitHub issues, duration: {end_time - start_time}s')
     return results
 
-def create_test_issue_mapping(issues_data):
-    """Create a mapping from test names to GitHub issue URLs"""
-    print("Creating test-to-issue mapping...")
-    test_to_issue = {}
-    
-    for issue in issues_data:
-        body = issue.get('body', '')
-        url = issue.get('url', '')
-        
-        if not body or not url:
-            continue
-            
-        try:
-            # Use the existing parse_body function from update_mute_issues.py
-            tests, branches = parse_body(body)
-            
-            for test in tests:
-                if test not in test_to_issue:
-                    test_to_issue[test] = []
-                test_to_issue[test].append({
-                    'url': url,
-                    'title': issue.get('title', ''),
-                    'issue_number': issue.get('issue_number', 0),
-                    'branches': branches
-                })
-        except Exception as e:
-            print(f"Warning: Could not parse issue body for issue {url}: {e}")
-            continue
-    
-    print(f"Created mapping for {len(test_to_issue)} unique test names")
-    return test_to_issue
+def create_test_issue_mapping_from_db_data(issues_data):
+    """Create a mapping from test names to GitHub issue URLs using shared utilities"""
+    return create_test_issue_mapping(issues_data)
 
 def enhance_muted_tests_with_issues(muted_tests, test_to_issue):
     """Enhance muted test data with GitHub issue information"""
@@ -370,8 +344,8 @@ def main():
             driver.wait(timeout=10, fail_fast=True)
             
             with ydb.SessionPool(driver) as pool:
-                # Get muted test data
-                muted_tests, original_column_types = get_muted_test_data(driver)
+                # Get muted test data (try existing mart first, fallback to direct query)
+                muted_tests, original_column_types = get_muted_test_data_from_existing_mart(driver)
                 
                 if not muted_tests:
                     print("No muted test data found")
@@ -384,8 +358,10 @@ def main():
                 # Get GitHub issues data
                 issues_data = get_github_issues_data(driver)
                 
-                # Create test-to-issue mapping
-                test_to_issue = create_test_issue_mapping(issues_data)
+                # Create test-to-issue mapping using shared utilities
+                print("Creating test-to-issue mapping...")
+                test_to_issue = create_test_issue_mapping_from_db_data(issues_data)
+                print(f"Created mapping for {len(test_to_issue)} unique test names")
                 
                 # Enhance muted tests with issue information
                 enhanced_tests = enhance_muted_tests_with_issues(muted_tests, test_to_issue)

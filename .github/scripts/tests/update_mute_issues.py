@@ -3,6 +3,9 @@ import requests
 from github import Github #pip3 install PyGithub
 from urllib.parse import quote_plus
 
+# Import shared GitHub issue utilities
+from github_issue_utils import parse_body
+
 
 ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
@@ -396,40 +399,6 @@ def generate_github_issue_title_and_body(test_data):
         body_template,
     )
 
-
-def parse_body(body):
-    tests = []
-    branches = []
-    prepared_body = ''
-    start_mute_list = "<!--mute_list_start-->"
-    end_mute_list = "<!--mute_list_end-->"
-    start_branch_list = "<!--branch_list_start-->"
-    end_branch_list = "<!--branch_list_end-->"
-
-    # tests
-    if all(x in body for x in [start_mute_list, end_mute_list]):
-        idx1 = body.find(start_mute_list)
-        idx2 = body.find(end_mute_list)
-        lines = body[idx1 + len(start_mute_list) + 1 : idx2].split('\n')
-    else:
-        if body.startswith('Mute:'):
-            prepared_body = body.split('Mute:', 1)[1].strip()
-        elif body.startswith('Mute'):
-            prepared_body = body.split('Mute', 1)[1].strip()
-        elif body.startswith('ydb'):
-            prepared_body = body
-        lines = prepared_body.split('**Add line to')[0].split('\n')
-    tests = [line.strip() for line in lines if line.strip().startswith('ydb/')]
-
-    # branch
-    if all(x in body for x in [start_branch_list, end_branch_list]):
-        idx1 = body.find(start_branch_list)
-        idx2 = body.find(end_branch_list)
-        branches = body[idx1 + len(start_branch_list) + 1 : idx2].split('\n')
-    else:
-        branches = ['main']
-
-    return tests, branches
 
 
 def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):

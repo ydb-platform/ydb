@@ -822,7 +822,7 @@ public:
             }
         }
 
-        if (deadline != TInstant::Max()) {
+        if (true || deadline != TInstant::Max()) {
             Schedule(deadline, new TKikimrEvents::TEvWakeup);
         }
     }

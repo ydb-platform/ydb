@@ -717,11 +717,8 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
         //const auto& with = node.GetBlock4();
         auto& index = indexes.back();
         if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree) {
-            auto& vectorSettings = index.IndexSettings.emplace<TVectorIndexSettings>();
+            index.IndexSettings.emplace<TVectorIndexSettings>();
             if (!CreateIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.Type, index.IndexSettings)) {
-                return false;
-            }
-            if (!vectorSettings.Validate(Ctx_)) {
                 return false;
             }
 
@@ -845,50 +842,63 @@ bool TSqlTranslation::CreateIndexSettings(const TRule_with_index_settings& setti
     return true;
 }
 
-template<typename T>
-std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    T value{};
-    // id_or_type
-    if (node.HasAlt_index_setting_value1()) {
-        const TString stringValue = to_lower(IdEx(node.GetAlt_index_setting_value1().GetRule_id_or_type1(), *this).Name);
-        if (!TryFromString<T>(stringValue, value)) {
-            return {false, value, stringValue};
+TString TSqlTranslation::GetIndexSettingStringValue(const TRule_index_setting_value& node) {
+    switch (node.GetAltCase()) {
+        case NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue1: // id_or_type
+            return IdEx(node.GetAlt_index_setting_value1().GetRule_id_or_type1(), *this).Name;
+        case NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue2: { // STRING_VALUE
+            const TString stringValue = Token(node.GetAlt_index_setting_value2().GetToken1());
+            const auto unescaped = StringContent(Ctx_, Ctx_.Pos(), stringValue);
+            return unescaped ? unescaped->Content : "";
         }
-        return {true, value, stringValue};
-    }
-    // STRING_VALUE
-    else if (node.HasAlt_index_setting_value2()) {
-        const TString stringValue = to_lower(Token(node.GetAlt_index_setting_value2().GetToken1()));
-        const auto unescaped = StringContent(Ctx_, Ctx_.Pos(), stringValue);
-        if (!unescaped) {
-            return {false, value, stringValue};
-        }
-        if (!TryFromString<T>(unescaped->Content, value)) {
-            return {false, value, stringValue};
-        }
-        return {true, value, unescaped->Content};
-    } else {
-        Y_ABORT("You should change implementation according to grammar changes");
+        case NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue3: // integer
+            return Token(node.GetAlt_index_setting_value3().GetRule_integer1().GetToken1());
+        case NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue4: // bool_value
+            return Token(node.GetAlt_index_setting_value4().GetRule_bool_value1().GetToken1());
+        case NSQLv1Generated::TRule_index_setting_value::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 }
 
-template<>
-std::tuple<bool, ui64, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    const auto& intNode = node.GetAlt_index_setting_value3().GetRule_integer1();
-    const TString stringValue = Token(intNode.GetToken1());
-    ui64 value = 0;
-    TString suffix;
-    if (!ParseNumbers(Ctx_, stringValue, value, suffix)) {
+template<typename T>
+std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
+    T value{};
+    const TString stringValue = GetIndexSettingStringValue(node);
+    if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue1
+        && node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue2
+        || stringValue.empty())
+    {
+        return {false, value, stringValue};
+    }
+    if (!TryFromString<T>(to_lower(stringValue), value)) {
         return {false, value, stringValue};
     }
     return {true, value, stringValue};
 }
 
 template<>
+std::tuple<bool, ui32, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
+    ui32 value = 0;
+    const TString stringValue = GetIndexSettingStringValue(node);
+    if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue3 || stringValue.empty()) {
+        return {false, value, stringValue};
+    }
+    TString suffix;
+    ui64 value64;
+    if (!ParseNumbers(Ctx_, stringValue, value64, suffix) || value64 > Max<ui32>()) {
+        return {false, value, stringValue};
+    }
+    return {true, value = static_cast<ui32>(value64), stringValue};
+}
+
+template<>
 std::tuple<bool, bool, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
     bool value = false;
-    const TString stringValue = to_lower(Token(node.GetAlt_index_setting_value4().GetRule_bool_value1().GetToken1()));;
-    if (!TryFromString<bool>(stringValue, value)) {
+    const TString stringValue = GetIndexSettingStringValue(node);
+    if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue4 || stringValue.empty()) {
+        return {false, value, stringValue};
+    }
+    if (!TryFromString<bool>(to_lower(stringValue), value)) {
         return {false, value, stringValue};
     }
     return {true, value, stringValue};
@@ -925,22 +935,22 @@ bool TSqlTranslation::CreateIndexSettingEntry(const TIdentifier &id,
             }
             vectorIndexSettings.VectorType = value;
         } else if (to_lower(id.Name) == "vector_dimension") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
-            if (!success || value > Max<ui32>()) {
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui32>(node);
+            if (!success) {
                 Ctx_.Error() << "Invalid vector_dimension: " << stringValue;
                 return false;
             }
             vectorIndexSettings.VectorDimension = value;
         } else if (to_lower(id.Name) == "clusters") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
-            if (!success || value > Max<ui32>()) {
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui32>(node);
+            if (!success) {
                 Ctx_.Error() << "Invalid clusters: " << stringValue;
                 return false;
             }
             vectorIndexSettings.Clusters = value;
         } else if (to_lower(id.Name) == "levels") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
-            if (!success || value > Max<ui32>()) {
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui32>(node);
+            if (!success) {
                 Ctx_.Error() << "Invalid levels: " << stringValue;
                 return false;
             }

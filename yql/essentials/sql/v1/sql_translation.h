@@ -185,6 +185,7 @@ protected:
     bool CreateTableIndex(const TRule_table_index& node, TVector<TIndexDescription>& indexes);
     bool CreateIndexSettings(const TRule_with_index_settings& settingsNode, TIndexDescription::EType indexType, TIndexDescription::TIndexSettings& indexSettings);
     bool CreateIndexSettingEntry(const TIdentifier& id, const TRule_index_setting_value& value, TIndexDescription::EType indexType, TIndexDescription::TIndexSettings& indexSettings);
+    TString GetIndexSettingStringValue(const TRule_index_setting_value& node);
     template<typename T>
     std::tuple<bool, T, TString> GetIndexSettingValue(const TRule_index_setting_value& node);
 

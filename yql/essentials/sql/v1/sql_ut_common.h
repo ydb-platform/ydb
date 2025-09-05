@@ -3375,41 +3375,49 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(CreateTableAddIndexVector) {
-        const auto result = SqlToYql(R"(USE plato;
+        const auto result = SqlToYql(R"sql(USE plato;
             CREATE TABLE table (
                 pk INT32 NOT NULL,
                 col String,
                 INDEX idx GLOBAL USING vector_kmeans_tree
                     ON (col) COVER (col)
-                    WITH (distance=cosine, vector_type=float, vector_dimension=1024,),
+                    WITH (distance=cosine, vector_type=float, vector_dimension=1024, levels=3, clusters=10),
                 PRIMARY KEY (pk))
-                )");
+                )sql");
         UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
     }
 
     Y_UNIT_TEST(AlterTableAddIndexVector) {
-        const auto result = SqlToYql(R"(USE plato;
+        const auto result = SqlToYql(R"sql(USE plato;
             ALTER TABLE table ADD INDEX idx
                 GLOBAL USING vector_kmeans_tree
                 ON (col) COVER (col)
-                WITH (distance=cosine, vector_type="float", vector_dimension=1024)
-                )");
+                WITH (distance=cosine, vector_type="float", vector_dimension=1024, levels=3, clusters=10)
+                )sql");
         UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexVectorIsNotCorrect) {
+        ExpectFailWithError(R"sql(USE plato;
+            ALTER TABLE table ADD INDEX idx
+                GLOBAL USING vector_kmeans_tree
+                ON (col) COVER (col)
+                WITH (distance=cosine, vector_type="float", vector_dimension=asdf, levels=3, clusters=10)
+                )sql",
+            "<main>:5:78: Error: Invalid vector_dimension: asdf\n");
+
+        ExpectFailWithError(R"sql(USE plato;
+            ALTER TABLE table ADD INDEX idx
+                GLOBAL USING vector_kmeans_tree
+                ON (col) COVER (col)
+                WITH (distance=42, vector_type="float", vector_dimension=1024, levels=3, clusters=10)
+                )sql",
+            "<main>:5:32: Error: Invalid distance: 42\n");
     }
 
     Y_UNIT_TEST(AlterTableAddIndexUnknownSubtype) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL USING unknown ON (col)",
             "<main>:1:57: Error: UNKNOWN index subtype is not supported\n");
-    }
-
-    Y_UNIT_TEST(AlterTableAddIndexMissedParameter) {
-        ExpectFailWithError(R"(USE plato;
-            ALTER TABLE table ADD INDEX idx
-                GLOBAL USING vector_kmeans_tree
-                ON (col)
-                WITH (distance=cosine, vector_type=float)
-                )",
-            "<main>:5:52: Error: vector_dimension should be set\n");
     }
 
     Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {

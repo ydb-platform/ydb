@@ -551,7 +551,7 @@
         return ownerMapping[owner] || "";
     }
 
-    function createIssue(test, owner, success_count, fail_count, is_sanitizer, errorText) {
+    function createIssue(test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
         const full_name = test.trim();
         const pieces = /(.+)\/([^$]+)$/.exec(full_name);
 
@@ -585,7 +585,17 @@
             
             body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
             body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
-            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "&build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+            
+            // Include logs if available
+            if (logUrls && Object.keys(logUrls).length > 0) {
+                body += "**Logs:**%0A";
+                for (const [logName, logUrl] of Object.entries(logUrls)) {
+                    body += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
+                }
+                body += "%0A";
+            }
+            
+            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
             body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
             
             // Determine sanitizer-specific label based on build preset
@@ -603,7 +613,7 @@
                 labels += "," + ownerAreaLabel;
             }
             
-            const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels;
+            const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
             window.open(url, '_blank');
         } else {
             // Create regular issue
@@ -618,13 +628,22 @@
             body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
             body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
             
+            // Include logs if available
+            if (logUrls && Object.keys(logUrls).length > 0) {
+                body += "**Logs:**%0A";
+                for (const [logName, logUrl] of Object.entries(logUrls)) {
+                    body += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
+                }
+                body += "%0A";
+            }
+            
             if (success_count + fail_count != 0) {
                 body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
             } else {
                 body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
             }
             
-            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "&build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
             body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
             
             // Prepare labels
@@ -633,12 +652,12 @@
                 labels += "," + ownerAreaLabel;
             }
             
-            const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels;
+            const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
             window.open(url, '_blank');
         }
     }
 
-    function createMuteIssue(test, owner, success_count, fail_count) {
+    function createMuteIssue(test, owner, success_count, fail_count, logUrls = {}) {
         const full_name = test.trim();
         const pieces = /(.+)\/([^$]+)$/.exec(full_name);
 
@@ -663,13 +682,22 @@
         
         body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
         
+        // Include logs if available
+        if (logUrls && Object.keys(logUrls).length > 0) {
+            body += "**Logs:**%0A";
+            for (const [logName, logUrl] of Object.entries(logUrls)) {
+                body += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
+            }
+            body += "%0A";
+        }
+        
         if (success_count + fail_count != 0) {
             body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
         } else {
             body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
         }
         
-        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "&build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
         body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
         
         // Prepare labels for mute issue
@@ -678,7 +706,7 @@
             labels += "," + ownerAreaLabel;
         }
         
-        const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels;
+        const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
         window.open(url, '_blank');
     }
 
@@ -884,8 +912,19 @@
                         errorText = errorContent.textContent;
                     }
                 }
+                
+                // Extract log URLs from the test row
+                let logUrls = {};
+                const logCells = testRow.querySelectorAll('td:last-child a');
+                logCells.forEach(link => {
+                    const logName = link.textContent.trim();
+                    const logUrl = link.href;
+                    if (logName && logUrl) {
+                        logUrls[logName] = logUrl;
+                    }
+                });
 
-                createIssue(testName, owner, success_count, fail_count, is_sanitizer, errorText);
+                createIssue(testName, owner, success_count, fail_count, is_sanitizer, errorText, logUrls);
             });
         });
         
@@ -898,8 +937,19 @@
                 const fail_count = testRow.querySelectorAll('.svg_failure').length + testRow.querySelectorAll('.svg_mute').length;
                 const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
                 const owner = testRow.querySelector('.test_owner').innerText;
+                
+                // Extract log URLs from the test row
+                let logUrls = {};
+                const logCells = testRow.querySelectorAll('td:last-child a');
+                logCells.forEach(link => {
+                    const logName = link.textContent.trim();
+                    const logUrl = link.href;
+                    if (logName && logUrl) {
+                        logUrls[logName] = logUrl;
+                    }
+                });
 
-                createMuteIssue(testName, owner, success_count, fail_count);
+                createMuteIssue(testName, owner, success_count, fail_count, logUrls);
             });
         });
 

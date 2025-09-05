@@ -595,7 +595,7 @@
                 body += "%0A";
             }
             
-            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(full_name) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
             body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
             
             // Determine sanitizer-specific label based on build preset
@@ -643,7 +643,7 @@
                 body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
             }
             
-            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(full_name) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
             body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
             
             // Prepare labels
@@ -697,7 +697,7 @@
             body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
         }
         
-        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(full_name) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
         body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
         
         // Prepare labels for mute issue

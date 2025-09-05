@@ -724,6 +724,7 @@ const TDqComputeActorChannels::TOutputChannelStats* TDqComputeActorChannels::Get
 
 void TDqComputeActorChannels::SendChannelDataAck(i64 channelId, i64 freeSpace) {
     TInputChannelState& inputChannel = InCh(channelId);
+    inputChannel.PollRequest.reset();
     SendChannelDataAck(inputChannel, freeSpace);
 }
 

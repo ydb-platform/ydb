@@ -118,7 +118,7 @@ TString TKafkaListGroupsActor::GetYqlWithTableNames(const TString& templateStr) 
     TString templateWithConsumerStateTable = std::regex_replace(
         templateStr.c_str(),
         std::regex("<consumer_state_table_name>"),
-        NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()
+        NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
     );
     return templateWithConsumerStateTable;
 }

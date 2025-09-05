@@ -273,19 +273,21 @@ struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModifi
 };
 
 struct TEvAddPartitionsToTxnRequest : public TEventLocal<TEvAddPartitionsToTxnRequest, EvAddPartitionsToTxnRequest> {
-    TEvAddPartitionsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddPartitionsToTxnRequestData>& request, const TActorId connectionId, const TString& databasePath)
+    TEvAddPartitionsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddPartitionsToTxnRequestData>& request, const TActorId connectionId,
+                                 const TString& databasePath, const TString& resourceDatabasePath)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
     , DatabasePath(databasePath)
+    , ResourceDatabasePath(resourceDatabasePath)
     {}
 
     ui64 CorrelationId;
     const TMessagePtr<TAddPartitionsToTxnRequestData> Request;
     TActorId ConnectionId;
     TString DatabasePath;
+    TString ResourceDatabasePath;
 };
-
 struct TEvTopicDescribeResponse : public NActors::TEventLocal<TEvTopicDescribeResponse, EvDescribeTopicsResponse>
                                 , public NKikimr::NGRpcProxy::V1::TLocalResponseBase
 {
@@ -306,45 +308,54 @@ struct TEvTopicDescribeResponse : public NActors::TEventLocal<TEvTopicDescribeRe
 };
 
 struct TEvAddOffsetsToTxnRequest : public TEventLocal<TEvAddOffsetsToTxnRequest, EvAddOffsetsToTxnRequest> {
-    TEvAddOffsetsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddOffsetsToTxnRequestData>& request, const TActorId connectionId, const TString& databasePath)
+    TEvAddOffsetsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddOffsetsToTxnRequestData>& request, const TActorId connectionId,
+                             const TString& databasePath, const TString& resourceDatabasePath)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
     , DatabasePath(databasePath)
+    , ResourceDatabasePath(resourceDatabasePath)
     {}
 
     ui64 CorrelationId;
     const TMessagePtr<TAddOffsetsToTxnRequestData> Request;
     TActorId ConnectionId;
     TString DatabasePath;
+    TString ResourceDatabasePath;
 };
 
 struct TEvTxnOffsetCommitRequest : public TEventLocal<TEvTxnOffsetCommitRequest, EvTxnOffsetCommitRequest> {
-    TEvTxnOffsetCommitRequest(const ui64 correlationId, const TMessagePtr<TTxnOffsetCommitRequestData>& request, const TActorId connectionId, const TString& databasePath)
+    TEvTxnOffsetCommitRequest(const ui64 correlationId, const TMessagePtr<TTxnOffsetCommitRequestData>& request, const TActorId connectionId,
+                              const TString& databasePath, const TString& resourceDatabasePath)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
     , DatabasePath(databasePath)
+    , ResourceDatabasePath(resourceDatabasePath)
     {}
 
     ui64 CorrelationId;
     const TMessagePtr<TTxnOffsetCommitRequestData> Request;
     TActorId ConnectionId;
     TString DatabasePath;
+    TString ResourceDatabasePath;
 };
 
 struct TEvEndTxnRequest : public TEventLocal<TEvEndTxnRequest, EvEndTxnRequest> {
-    TEvEndTxnRequest(const ui64 correlationId, const TMessagePtr<TEndTxnRequestData>& request, const TActorId connectionId, const TString& databasePath)
+    TEvEndTxnRequest(const ui64 correlationId, const TMessagePtr<TEndTxnRequestData>& request, const TActorId connectionId,
+                     const TString& databasePath, const TString& resourceDatabasePath)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
     , DatabasePath(databasePath)
+    , ResourceDatabasePath(resourceDatabasePath)
     {}
 
     ui64 CorrelationId;
     const TMessagePtr<TEndTxnRequestData> Request;
     TActorId ConnectionId;
     TString DatabasePath;
+    TString ResourceDatabasePath;
 };
 
 /*

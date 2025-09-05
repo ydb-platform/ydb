@@ -362,7 +362,7 @@ namespace NKafka {
         return std::regex_replace(
             templateStr.c_str(),
             std::regex("<table_name>"),
-            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->GetStorageTablePath().c_str()
+            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
         );
     }
 

@@ -11,7 +11,7 @@ The `kafka_proxy_config` section of the YDB configuration file enables and confi
 | `transaction_timeout_ms` | uint32 | `300000` (5 minutes) | The maximum timeout for Kafka transactions, after which the transaction will be cancelled. |
 | `auto_create_topics_enable` | bool | `false` | Enables automatic creation of topics when they are accessed. Analogous to [the same option](https://kafka.apache.org/documentation/#brokerconfigs_auto.create.topics.enable) in Apache Kafka. |
 | `auto_create_consumers_enable` | bool | `true` | Enables automatic registration of consumers when they are accessed. |
-| `topic_creation_default_partitions` | uint32 | `1` | The number of partitions that will be created if the number of partitions is not specified when adding a topic via the Kafka protocol. |
+| `topic_creation_default_partitions` | uint32 | `1` | The number of partitions that will be created if the number of partitions is not specified when adding a topic via the Kafka protocol. Analogous to [num.partitions](https://kafka.apache.org/documentation/#brokerconfigs_num.partitions) option in Apache Kafka. |
 | `ssl_cerificate` | string | — | The path to the SSL certificate file, which includes both the certificate file and the key file. When this parameter is specified, Kafka Proxy automatically starts processing requests using the specified SSL certificate. |
 | `cert` | string | — | The path to the SSL certificate file. When this parameter is specified, Kafka Proxy automatically starts processing requests using the specified SSL certificate. |
 | `key` | string | — | The path to the SSL key file. |

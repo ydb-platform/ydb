@@ -851,12 +851,16 @@ public:
     }
 
     void Compile(TString optLLVM, IStatsRegistry* stats) {
-        if (IsPatternCompiled.load())
+        std::unique_lock lock(CompileMutex);
+
+        if (IsPatternCompiled) {
             return;
+        }
 
 #ifndef MKQL_DISABLE_CODEGEN
-        if (!Codegen)
+        if (!Codegen) {
             Codegen = NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native);
+        }
 
         const auto& nodes = PatternNodes->GetNodes();
 
@@ -947,11 +951,12 @@ public:
         Y_UNUSED(stats);
 #endif
 
-        IsPatternCompiled.store(true);
+        IsPatternCompiled = true;
     }
 
+    // thread-unsafe
     bool IsCompiled() const {
-        return IsPatternCompiled.load();
+        return IsPatternCompiled;
     }
 
     size_t CompiledCodeSize() const {
@@ -959,17 +964,16 @@ public:
     }
 
     void RemoveCompiledCode() {
-        IsPatternCompiled.store(false);
+        std::unique_lock lock(CompileMutex);
+
+        IsPatternCompiled = false;
         CompileStats = {};
         Codegen.reset();
     }
 
     THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) {
-        if (IsPatternCompiled.load()) {
-            return MakeHolder<TComputationGraph>(PatternNodes, compOpts, Codegen);
-        }
-
-        return MakeHolder<TComputationGraph>(PatternNodes, compOpts, nullptr);
+        std::unique_lock lock(CompileMutex);
+        return MakeHolder<TComputationGraph>(PatternNodes, compOpts, IsPatternCompiled ? Codegen : nullptr);
     }
 
     bool GetSuitableForCache() const {
@@ -992,9 +996,11 @@ private:
 
     TTypeEnvironment* TypeEnv = nullptr;
     TPatternNodes::TPtr PatternNodes;
-    NYql::NCodegen::ICodegen::TSharedPtr Codegen;
-    std::atomic<bool> IsPatternCompiled = false;
-    NYql::NCodegen::TCompileStats CompileStats;
+
+    std::mutex CompileMutex;
+    NYql::NCodegen::ICodegen::TSharedPtr Codegen; // protected by CompileMutex
+    bool IsPatternCompiled = false;               // protected by CompileMutex
+    NYql::NCodegen::TCompileStats CompileStats;   // protected by CompileMutex
 };
 
 

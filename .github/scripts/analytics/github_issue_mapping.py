@@ -37,8 +37,7 @@ def get_github_issues_data(driver):
         created_at,
         updated_at
     FROM `github_data/issues`
-    WHERE state = 'OPEN'
-    AND body IS NOT NULL
+    WHERE body IS NOT NULL
     AND body != ''
     """
     
@@ -73,17 +72,17 @@ def create_test_issue_mapping_table(session, table_path):
     create_table_sql = f"""
     CREATE TABLE IF NOT EXISTS `{table_path}` (
         `full_name` Utf8 NOT NULL,
+        `branch` Utf8 NOT NULL,
         `github_issue_url` Utf8,
         `github_issue_title` Utf8,
-        `github_issue_number` Uint64,
-        `branches` List<Utf8>,
-        `created_at` Datetime,
-        PRIMARY KEY (full_name)
+        `github_issue_number` Uint64 NOT NULL,
+        `github_issue_state` Utf8 NOT NULL,
+        `created_at` Datetime NOT NULL,
+        PRIMARY KEY (full_name,branch,github_issue_number,github_issue_state)
     )
     PARTITION BY HASH(full_name)
     WITH (
-        STORE = COLUMN,
-        TTL = Interval("PT86400M") ON created_at  -- 60 days TTL
+        STORE = COLUMN
     )
     """
 
@@ -96,17 +95,22 @@ def convert_mapping_to_table_data(test_to_issue_mapping):
     table_data = []
     
     for test_name, issues in test_to_issue_mapping.items():
-        # For each test, we'll take the first issue (could be enhanced later to handle multiple)
         if issues:
-            issue = issues[0]  # Take the first issue for now
-            table_data.append({
-                'full_name': test_name,
-                'github_issue_url': issue['url'],
-                'github_issue_title': issue['title'],
-                'github_issue_number': issue['issue_number'],
-                'branches': issue['branches'],
-                'created_at': int(time.time())  # Current timestamp
-            })
+            # Sort issues by created_at (most recent first) and take the latest one
+            sorted_issues = sorted(issues, key=lambda x: x.get('created_at', 0), reverse=True)
+            latest_issue = sorted_issues[0]
+            
+            # Create a separate record for each branch of the latest issue
+            for branch in latest_issue['branches']:
+                table_data.append({
+                    'full_name': test_name,
+                    'branch': branch,
+                    'github_issue_url': latest_issue['url'],
+                    'github_issue_title': latest_issue['title'],
+                    'github_issue_number': latest_issue['issue_number'],
+                    'github_issue_state': latest_issue['state'],
+                    'created_at': int(time.time())  # Current timestamp
+                })
     
     return table_data
 
@@ -118,10 +122,11 @@ def bulk_upsert_mapping_data(table_client, table_path, mapping_data):
     
     column_types = ydb.BulkUpsertColumns()
     column_types.add_column('full_name', ydb.PrimitiveType.Utf8)
+    column_types.add_column('branch', ydb.PrimitiveType.Utf8)
     column_types.add_column('github_issue_url', ydb.OptionalType(ydb.PrimitiveType.Utf8))
     column_types.add_column('github_issue_title', ydb.OptionalType(ydb.PrimitiveType.Utf8))
     column_types.add_column('github_issue_number', ydb.OptionalType(ydb.PrimitiveType.Uint64))
-    column_types.add_column('branches', ydb.ListType(ydb.PrimitiveType.Utf8))
+    column_types.add_column('github_issue_state', ydb.PrimitiveType.Utf8)
     column_types.add_column('created_at', ydb.OptionalType(ydb.PrimitiveType.Datetime))
 
     table_client.bulk_upsert(table_path, mapping_data, column_types)

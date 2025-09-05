@@ -80,6 +80,8 @@ def create_test_issue_mapping(issues_data):
                     'url': url,
                     'title': issue.get('title', ''),
                     'issue_number': issue.get('issue_number', 0),
+                    'state': issue.get('state', ''),
+                    'created_at': issue.get('created_at', 0),
                     'branches': branches
                 })
         except Exception as e:

@@ -352,8 +352,8 @@ public:
     };
 
     TReadInfo ReadInfo;
-    TMaybe<TVector<TShardReadInfo>> Reads;  // if not set -> no reads
-    TMaybe<TWriteInfo> Writes;         // if not set -> no writes
+    TMaybe<TVector<TShardReadInfo>> Reads; // if not set -> no reads
+    TMaybe<TWriteInfo> Writes;             // if not set -> no writes
 
     TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
 };
@@ -366,11 +366,13 @@ using TTask = NYql::NDq::TTask<TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskO
 
 class TKqpTasksGraph : public NYql::NDq::TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskOutputMeta> {
 public:
-    explicit TKqpTasksGraph(const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc);
+    explicit TKqpTasksGraph(const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
+        const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings);
 
     void BuildSysViewScanTasks(TStageInfo& stageInfo);
     bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
     THashSet<ui64> BuildDatashardTasks(TStageInfo& stageInfo); // returns shards with effects
+    void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, const TMap<ui64, ui64>& shardIdToNodeId);
 
     void FillKqpTasksGraphStages(const TVector<IKqpGateway::TPhysicalTxData>& txs);
     void BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
@@ -409,8 +411,11 @@ private:
 
     void SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) const;
 
+    ui32 GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 nodeId, bool enableShuffleElimination = false) const;
+
 private:
     NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
+    const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     THolder<TPartitionPruner> PartitionPruner;
 };
 

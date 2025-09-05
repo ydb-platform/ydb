@@ -20,6 +20,8 @@ namespace NKikimrTxDataShard {
 
 namespace NKikimr::NKqp {
 
+class TPartitionPruner;
+
 struct TTransaction : private TMoveOnly {
     NYql::NNodes::TKqpPhysicalTx Node;
     TQueryData::TPtr Params;
@@ -364,8 +366,11 @@ using TTask = NYql::NDq::TTask<TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskO
 
 class TKqpTasksGraph : public NYql::NDq::TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskOutputMeta> {
 public:
-    void BuildSysViewScanTasks(TStageInfo& stageInfo, const IKqpGateway::TExecPhysicalRequest& request);
-    bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount);
+    explicit TKqpTasksGraph(const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc);
+
+    void BuildSysViewScanTasks(TStageInfo& stageInfo);
+    bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
+    THashSet<ui64> BuildDatashardTasks(TStageInfo& stageInfo); // returns shards with effects
 
     void FillKqpTasksGraphStages(const TVector<IKqpGateway::TPhysicalTxData>& txs);
     void BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
@@ -403,6 +408,10 @@ private:
         bool serializeAsyncIoSettings, bool& enableMetering) const;
 
     void SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) const;
+
+private:
+    NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
+    THolder<TPartitionPruner> PartitionPruner;
 };
 
 void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta);

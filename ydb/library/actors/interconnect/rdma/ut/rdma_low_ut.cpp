@@ -145,7 +145,7 @@ TEST(RdmaLow, CqOverflow) {
     auto [actorSystem, ctx] = PrepareTestRuntime("::1");
     auto cqActorId = actorSystem->Register(CreateCqActor(1));
 
-    auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
+    auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool(nullptr);
     
     // Number of attempt to trigger overflow
     int attempt = 10000;

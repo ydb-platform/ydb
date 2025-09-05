@@ -9,6 +9,10 @@
 
 struct ibv_mr;
 
+namespace NMonitoring {
+    struct TDynamicCounters;
+}
+
 namespace NInterconnect::NRdma {
 
     class IMemPool;
@@ -92,6 +96,6 @@ namespace NInterconnect::NRdma {
     };
 
     std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept;
-    std::shared_ptr<IMemPool> CreateIncrementalMemPool() noexcept;
-    std::shared_ptr<IMemPool> CreateSlotMemPool() noexcept;
+    std::shared_ptr<IMemPool> CreateIncrementalMemPool(NMonitoring::TDynamicCounters* counters) noexcept;
+    std::shared_ptr<IMemPool> CreateSlotMemPool(NMonitoring::TDynamicCounters* counters) noexcept;
 }

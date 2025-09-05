@@ -376,7 +376,7 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
 
     Y_UNIT_TEST(SendRdmaWithGlueWithRegionOffset) {
         TTestICCluster cluster(2);
-        auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
+        auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool(nullptr);
         auto* ev = MakeTestEvent(123, memPool.get(), true, true);
 
         auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
@@ -404,7 +404,7 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
 
     Y_UNIT_TEST(SendRdmaWithGlue) {
         TTestICCluster cluster(2);
-        auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
+        auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool(nullptr);
         auto* ev = MakeTestEvent(123, memPool.get(), true, false);
 
         auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
@@ -430,7 +430,7 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
 
     Y_UNIT_TEST(SendRdmaWithMultiGlue) {
         TTestICCluster cluster(2);
-        auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
+        auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool(nullptr);
         auto* ev = MakeMultuGlueTestEvent(123, memPool.get());
 
         auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {

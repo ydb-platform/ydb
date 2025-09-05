@@ -1757,7 +1757,7 @@ namespace NActors {
         }
 
         if (UseRdmaAllocator) {
-            auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
+            auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool(nullptr);
             setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(memPool);
         }
 

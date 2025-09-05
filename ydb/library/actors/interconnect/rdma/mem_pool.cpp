@@ -2,6 +2,8 @@
 #include "link_manager.h"
 #include "ctx.h"
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 
 #include <util/thread/lfstack.h>
@@ -21,6 +23,8 @@
 
 static constexpr size_t CacheLineSz = 64;
 static constexpr size_t HPageSz = (1 << 21);
+
+using ::NMonitoring::TDynamicCounters;
 
 namespace NInterconnect::NRdma {
 
@@ -237,13 +241,24 @@ namespace NInterconnect::NRdma {
         return TRcBuf(IContiguousChunk::TPtr(region));
     }
 
-    class TMemPoolBase: public IMemPool, public std::enable_shared_from_this<TMemPoolBase> {
+    static NMonitoring::TDynamicCounterPtr MakeCounters(TDynamicCounters* counters) {
+        if (!counters) {
+                static NMonitoring::TDynamicCounterPtr dummy(new TDynamicCounters());
+                return dummy;
+        }
+        return counters;
+    }
+
+    class TMemPoolBase: public IMemPool {
     public:
-        TMemPoolBase(size_t maxChunk)
+        TMemPoolBase(size_t maxChunk, NMonitoring::TDynamicCounterPtr counter)
             : Ctxs(NInterconnect::NRdma::NLinkMgr::GetAllCtxs())
             , MaxChunk(maxChunk)
             , Alignment(NSystemInfo::GetPageSize())
         {
+            AllocatedCounter = counter->GetCounter("RdmaPoolAllocatedUserBytes", false);
+            AllocatedChunksCounter = counter->GetCounter("RdmaPoolAllocatedChunks", false);
+
             Y_ABORT_UNLESS((Alignment & Alignment - 1) == 0, "Alignment must be a power of two %zu", Alignment);
         }
     protected:
@@ -274,6 +289,7 @@ namespace NInterconnect::NRdma {
             void* auxPtr = std::aligned_alloc(CacheLineSz, CacheLineSz);
             auxPtr = new (auxPtr)TAuxData;
 
+            AllocatedChunksCounter->Inc();
             AllocatedChunks++;
 
             return MakeIntrusive<TChunk>(std::move(mrs), this, auxPtr);
@@ -282,11 +298,14 @@ namespace NInterconnect::NRdma {
         void NotifyDealocated() noexcept override {
             const std::lock_guard<std::mutex> lock(Mutex);
             AllocatedChunks--;
+            AllocatedChunksCounter->Dec();
         }
 
         const NInterconnect::NRdma::NLinkMgr::TCtxsMap Ctxs;
         const size_t MaxChunk;
         const size_t Alignment;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AllocatedCounter;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunksCounter;
         size_t AllocatedChunks = 0;
         std::mutex Mutex;
     };
@@ -294,7 +313,7 @@ namespace NInterconnect::NRdma {
     class TDummyMemPool: public TMemPoolBase {
     public:
         TDummyMemPool()
-            : TMemPoolBase(-1)
+            : TMemPoolBase(-1, nullptr)
         {}
 
         TMemRegion* AllocImpl(int size, ui32) noexcept override {
@@ -319,9 +338,10 @@ namespace NInterconnect::NRdma {
 
     class TIncrementalMemPool: public TMemPoolBase {
     public:
-        TIncrementalMemPool()
-            : TMemPoolBase(MaxChunks)
+        TIncrementalMemPool(NMonitoring::TDynamicCounterPtr counter)
+            : TMemPoolBase(MaxChunks, counter)
         {
+            InactiveAfterReclamation = counter->GetCounter("RdmaPoolInactiveAfterReclamation", false);
             for (auto& x : ActiveAndFree) {
                 x.store(nullptr);
             }
@@ -432,11 +452,13 @@ namespace NInterconnect::NRdma {
             while (PushChunk(startPos, ActiveAndFree, chunk.Get()) == -1) {
                 std::this_thread::yield();
             }
+            AllocatedCounter->Add(size);
             return new TMemRegion(chunk, offset + allignmentOffset, size);
         }
 
-        void Free(TMemRegion&&, TChunk& chunk) noexcept override {
+        void Free(TMemRegion&& reg, TChunk& chunk) noexcept override {
             TAuxChunkData* auxData = CastToAuxChunkData(&chunk);
+            AllocatedCounter->Sub(reg.GetSize());
             if (auxData->IsInactive() && chunk.RefCount() == (1 + 1)) { // last MemRegion for chunk: 1 ref from TMemRegion and 1 is "manual" during allocation 
                 Y_ABORT_UNLESS(auxData->InactivePos < (int)Inactive.size());
                 Y_ABORT_UNLESS(Inactive[auxData->InactivePos].load() == &chunk, "chunk: %p, expected: %p",
@@ -525,6 +547,7 @@ namespace NInterconnect::NRdma {
             if (!ReclaimMutex.try_lock()) {
                 return;
             }
+            size_t inactiveAfterReclamation = 0;
 #if defined(__clang__)
             #pragma nounroll
 #endif
@@ -551,10 +574,14 @@ namespace NInterconnect::NRdma {
                             TChunkPtr(p)->UnRef();
                         }
                     }
+                } else {
+                    inactiveAfterReclamation++;
                 }
             }
+            *InactiveAfterReclamation = inactiveAfterReclamation;
             ReclaimMutex.unlock();
         }
+        ::NMonitoring::TDynamicCounters::TCounterPtr InactiveAfterReclamation;
         
         alignas(64) TChunkContainer ActiveAndFree;
         alignas(64) TChunkContainer Inactive; 
@@ -730,8 +757,8 @@ namespace NInterconnect::NRdma {
 
         
     public:
-        TSlotMemPool()
-            : TMemPoolBase(128)
+        TSlotMemPool(NMonitoring::TDynamicCounterPtr counter)
+            : TMemPoolBase(128, counter)
         {
             for (ui32 i = GetPowerOfTwo(MinAllocSz); i <= GetPowerOfTwo(MaxAllocSz); ++i) {
                 Chains[GetChainIndex(1 << i)].Init(1 << i);
@@ -750,11 +777,13 @@ namespace NInterconnect::NRdma {
         TMemRegion* AllocImpl(int size, ui32 flags) noexcept override {
             if (auto memReg = LocalCache.AllocImpl(size, flags, *this)) {
                 memReg->Resize(size);
+                AllocatedCounter->Add(size);
                 return memReg;
             }
             return nullptr;
         }
         void Free(TMemRegion&& mr, TChunk&) noexcept override {
+            AllocatedCounter->Sub(mr.GetSize());
             LocalCache.Free(std::move(mr), *this);
         }
     
@@ -773,13 +802,13 @@ namespace NInterconnect::NRdma {
         return std::shared_ptr<TDummyMemPool>(pool, [](TDummyMemPool*) {});
     }
 
-    std::shared_ptr<IMemPool> CreateIncrementalMemPool() noexcept {
-        auto* pool = Singleton<TIncrementalMemPool>();
+    std::shared_ptr<IMemPool> CreateIncrementalMemPool(TDynamicCounters* counters) noexcept {
+        auto* pool = Singleton<TIncrementalMemPool>(MakeCounters(counters));
         return std::shared_ptr<TIncrementalMemPool>(pool, [](TIncrementalMemPool*) {});
     }
 
-    std::shared_ptr<IMemPool> CreateSlotMemPool() noexcept {
-        auto* pool = HugeSingleton<TSlotMemPool>();
+    std::shared_ptr<IMemPool> CreateSlotMemPool(TDynamicCounters* counters) noexcept {
+        auto* pool = HugeSingleton<TSlotMemPool>(MakeCounters(counters));
         return std::shared_ptr<TSlotMemPool>(pool, [](TSlotMemPool*) {});
     }
 }

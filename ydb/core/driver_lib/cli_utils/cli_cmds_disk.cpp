@@ -2,6 +2,9 @@
 #include <ydb/core/util/random.h>
 #include "cli.h"
 #include "cli_cmds.h"
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
+#include <google/protobuf/text_format.h>
+#include <google/protobuf/util/json_util.h>
 
 namespace NKikimr {
 namespace NDriverClient {
@@ -215,6 +218,151 @@ public:
     }
 };
 
+class TClientCommandDiskMetadataRead : public TClientCommand {
+public:
+    TClientCommandDiskMetadataRead()
+        : TClientCommand("read", {}, "Read metadata from disk")
+    {}
+
+    TString Path;
+    TVector<NPDisk::TKey> MainKeyTmp;
+    NPDisk::TMainKey MainKey;
+
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+};
+
+class TClientCommandDiskMetadataWrite : public TClientCommand {
+public:
+    TClientCommandDiskMetadataWrite()
+        : TClientCommand("write", {}, "Write metadata to disk from proto or JSON")
+    {}
+
+    TString Path;
+    TString ProtoFile;
+    TString JsonFile;
+    TVector<NPDisk::TKey> MainKeyTmp;
+    NPDisk::TMainKey MainKey;
+
+    void Config(TConfig& config) override {
+        TClientCommand::Config(config);
+        config.SetFreeArgsNum(1);
+        SetFreeArgTitle(0, "<PATH>", "Disk path");
+        config.Opts->AddLongOption("from-proto", "read TPDiskMetadataRecord from text-proto file")
+            .Optional().RequiredArgument("PATH").StoreResult(&ProtoFile);
+        config.Opts->AddLongOption("from-json", "read TPDiskMetadataRecord from JSON file")
+            .Optional().RequiredArgument("PATH").StoreResult(&JsonFile);
+        config.Opts->AddLongOption('k', "main-key", "encryption main-key to use for metadata operations").RequiredArgument("NUM")
+            .Optional().AppendTo(&MainKeyTmp);
+        config.Opts->AddLongOption("master-key", "obsolete: use main-key").RequiredArgument("NUM")
+            .Optional().AppendTo(&MainKeyTmp);
+    }
+
+    void Parse(TConfig& config) override {
+        TClientCommand::Parse(config);
+        Path = config.ParseResult->GetFreeArgs()[0];
+        MainKey = {};
+        for (auto& key : MainKeyTmp) {
+            MainKey.Keys.push_back(key);
+        }
+        if (MainKey.Keys.empty()) {
+            MainKey.Initialize();
+        } else {
+            MainKey.IsInitialized = true;
+        }
+    }
+
+    int Run(TConfig& /*config*/) override {
+        if (!ProtoFile && !JsonFile) {
+            Cerr << "Specify exactly one of --from-proto or --from-json" << Endl;
+            return EXIT_FAILURE;
+        }
+        TString data;
+        try {
+            data = TUnbufferedFileInput(ProtoFile ? ProtoFile : JsonFile).ReadAll();
+        } catch (const yexception& ex) {
+            Cerr << "Failed to read input file: " << ex.what() << Endl;
+            return EXIT_FAILURE;
+        }
+        NKikimrBlobStorage::TPDiskMetadataRecord rec;
+        bool parsed = false;
+        if (ProtoFile) {
+            parsed = google::protobuf::TextFormat::ParseFromString(data, &rec);
+        } else {
+            auto st = google::protobuf::util::JsonStringToMessage(std::string(data.data(), data.size()), &rec);
+            parsed = st.ok();
+            if (!st.ok()) {
+                Cerr << "JSON parse error: " << st.ToString() << Endl;
+            }
+        }
+        if (!parsed) {
+            Cerr << "Failed to parse TPDiskMetadataRecord from input" << Endl;
+            return EXIT_FAILURE;
+        }
+        try {
+            WritePDiskMetadata(Path, rec, MainKey);
+            Cout << "OK" << Endl;
+            return EXIT_SUCCESS;
+        } catch (const yexception& ex) {
+            Cerr << ex.what() << Endl;
+            return EXIT_FAILURE;
+        }
+    }
+};
+
+void TClientCommandDiskMetadataRead::Config(TConfig& config) {
+    TClientCommand::Config(config);
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<PATH>", "Disk path");
+    config.Opts->AddLongOption('k', "main-key", "encryption main-key to use while reading metadata").RequiredArgument("NUM")
+        .Optional().AppendTo(&MainKeyTmp);
+    config.Opts->AddLongOption("master-key", "obsolete: use main-key").RequiredArgument("NUM")
+        .Optional().AppendTo(&MainKeyTmp);
+}
+
+
+void TClientCommandDiskMetadataRead::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    Path = config.ParseResult->GetFreeArgs()[0];
+    MainKey = {};
+    for (auto& key : MainKeyTmp) {
+        MainKey.Keys.push_back(key);
+    }
+    if (MainKey.Keys.empty()) {
+        MainKey.Initialize();
+    } else {
+        MainKey.IsInitialized = true;
+    }
+}
+
+
+int TClientCommandDiskMetadataRead::Run(TConfig& /*config*/) {
+    auto rec = ReadPDiskMetadata(Path, MainKey);
+    if (rec.ByteSizeLong() == 0) {
+        Cerr << "Failed to read PDisk metadata from: " << Path << Endl;
+        return EXIT_FAILURE;
+    }
+    TString text;
+    if (!google::protobuf::TextFormat::PrintToString(rec, &text)) {
+        Cerr << "Could not serialize metadata to text" << Endl;
+        return EXIT_FAILURE;
+    }
+    Cout << text;
+    return EXIT_SUCCESS;
+}
+
+
+class TClientCommandDiskMetadata : public TClientCommandTree {
+public:
+    TClientCommandDiskMetadata()
+        : TClientCommandTree("metadata", {}, "Disk metadata management")
+    {
+        AddCommand(std::make_unique<TClientCommandDiskMetadataRead>());
+        AddCommand(std::make_unique<TClientCommandDiskMetadataWrite>());
+    }
+};
+
 class TClientCommandDisk : public TClientCommandTree {
 public:
     TClientCommandDisk()
@@ -223,6 +371,7 @@ public:
         AddCommand(std::make_unique<TClientCommandDiskInfo>());
         AddCommand(std::make_unique<TClientCommandDiskFormat>());
         AddCommand(std::make_unique<TClientCommandDiskObliterate>());
+        AddCommand(std::make_unique<TClientCommandDiskMetadata>());
     }
 };
 

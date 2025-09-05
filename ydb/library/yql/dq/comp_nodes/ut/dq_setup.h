@@ -1,3 +1,5 @@
+#pragma once
+
 #include "dq_factories.h"
 
 #include <ydb/library/yql/dq/comp_nodes/dq_program_builder.h>

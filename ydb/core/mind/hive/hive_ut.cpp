@@ -8295,6 +8295,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             Runtime.AddAppDataInit([this](ui32, TAppData& appData) {
                 appData.BridgeConfig = BridgeConfig;
                 appData.BridgeModeEnabled = true;
+                appData.SuppressBridgeModeBootstrapperLogic = true;
             });
             Observe();
         }

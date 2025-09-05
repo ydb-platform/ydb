@@ -641,7 +641,7 @@ const char* ConvertIndexTypeToSQL(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             return "GLOBAL ASYNC";
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            return "GLOBAL UNIQUE";
+            return "GLOBAL UNIQUE SYNC";
         default:
             UNIT_FAIL("No conversion to SQL for this index type");
             return nullptr;
@@ -2373,6 +2373,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeSolomonVolume:
             case EPathTypeFileStore:
                 break; // other projects
+            case EPathTypeStreamingQuery:
+                break; // https://github.com/ydb-platform/ydb/issues/22571
             default:
                 UNIT_FAIL("Client backup/restore were not implemented for this scheme object");
                 // please don't forget to add:
@@ -2386,8 +2388,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
-            case EIndexTypeGlobalVectorKmeansTree:
             case EIndexTypeGlobalUnique:
+            case EIndexTypeGlobalVectorKmeansTree:
                 return TestTableWithIndexBackupRestore(Value);
             case EIndexTypeInvalid:
                 break; // not applicable
@@ -3204,6 +3206,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeSolomonVolume:
             case EPathTypeFileStore:
                 break; // other projects
+            case EPathTypeStreamingQuery:
+                break; // https://github.com/ydb-platform/ydb/issues/22571
             default:
                 UNIT_FAIL("S3 backup/restore were not implemented for this scheme object");
         }
@@ -3215,8 +3219,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
-            case EIndexTypeGlobalVectorKmeansTree:
             case EIndexTypeGlobalUnique:
+            case EIndexTypeGlobalVectorKmeansTree:
                 TestTableWithIndexBackupRestore(Value);
                 break;
             case EIndexTypeInvalid:

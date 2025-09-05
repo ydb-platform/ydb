@@ -83,6 +83,7 @@ bool IsCreate(ETxType t) {
         case TxCreateLongIncrementalRestoreOp:
         case TxCreateLongIncrementalBackupOp:
         case TxCreateSecret:
+        case TxCreateStreamingQuery:
             return true; // IsCreate
         case TxIncrementalRestoreFinalize:
             return false; // IsCreate
@@ -125,6 +126,7 @@ bool IsCreate(ETxType t) {
         case TxDropResourcePool:
         case TxDropBackupCollection:
         case TxDropSysView:
+        case TxDropStreamingQuery:
         case TxDropSecret:
             return false; // IsCreate
         case TxAlterPQGroup:
@@ -164,6 +166,7 @@ bool IsCreate(ETxType t) {
         case TxAlterBackupCollection:
         case TxChangePathState:
         case TxAlterSecret:
+        case TxAlterStreamingQuery:
             return false; // IsCreate
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -212,6 +215,7 @@ bool IsDrop(ETxType t) {
         case TxDropBackupCollection:
         case TxDropSysView:
         case TxDropSecret:
+        case TxDropStreamingQuery:
             return true; // IsDrop
         case TxIncrementalRestoreFinalize:
             return false; // IsDrop
@@ -257,6 +261,7 @@ bool IsDrop(ETxType t) {
         case TxCreateLongIncrementalRestoreOp:
         case TxCreateLongIncrementalBackupOp:
         case TxCreateSecret:
+        case TxCreateStreamingQuery:
             return false; // IsDrop
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -294,6 +299,7 @@ bool IsDrop(ETxType t) {
         case TxAlterBackupCollection:
         case TxChangePathState:
         case TxAlterSecret:
+        case TxAlterStreamingQuery:
             return false; // IsDrop
         case TxRotateCdcStream:
         case TxRotateCdcStreamAtTable:
@@ -346,6 +352,7 @@ bool CanDeleteParts(ETxType t) {
         case TxDropSysView:
         case TxCreateLongIncrementalRestoreOp:
         case TxCreateLongIncrementalBackupOp:
+        case TxDropStreamingQuery:
             return false; // CanDeleteParts
         case TxMkDir:
         case TxCreateTable:
@@ -386,6 +393,7 @@ bool CanDeleteParts(ETxType t) {
         case TxCreateSysView:
         case TxCreateSecret:
         case TxDropSecret:
+        case TxCreateStreamingQuery:
             return false; // CanDeleteParts
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -427,6 +435,7 @@ bool CanDeleteParts(ETxType t) {
         case TxRotateCdcStream:
         case TxRotateCdcStreamAtTable:
         case TxAlterSecret:
+        case TxAlterStreamingQuery:
             return false; // CanDeleteParts
         case TxIncrementalRestoreFinalize:
             return false; // CanDeleteParts
@@ -561,6 +570,9 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         case NKikimrSchemeOp::ESchemeOpCreateSecret: return TxCreateSecret;
         case NKikimrSchemeOp::ESchemeOpAlterSecret: return TxAlterSecret;
         case NKikimrSchemeOp::ESchemeOpDropSecret: return TxDropSecret;
+        case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery: return TxCreateStreamingQuery;
+        case NKikimrSchemeOp::ESchemeOpAlterStreamingQuery: return TxAlterStreamingQuery;
+        case NKikimrSchemeOp::ESchemeOpDropStreamingQuery: return TxDropStreamingQuery;
 
         // no matching tx-type
         case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:

@@ -618,9 +618,15 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TAutoPtr<IEventHandle> handle;
 
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "1", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .Name = "2", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "pile0", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .Name = "pile1", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
         bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
+        bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(0)] = &bridgeInfo->Piles[0];
+        bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(1)] = &bridgeInfo->Piles[1];
+
+        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), nullptr, false, nullptr);
+        nodeWardenStorageConfig->BridgeInfo = bridgeInfo;
+        runtime.Send(new IEventHandle(GetNameserviceActorId(), runtime.AllocateEdgeActor(), nodeWardenStorageConfig));
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -2212,9 +2218,14 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         dynamicNameserviceConfig->MaxDynamicNodeId = runtime.GetNodeId(server.StaticNodes() + server.DynamicNodes() - 1);
 
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "1", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .Name = "2", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "pile0", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .Name = "pile1", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
         bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
+        bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(0)] = &bridgeInfo->Piles[0];
+
+        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), nullptr, false, nullptr);
+        nodeWardenStorageConfig->BridgeInfo = bridgeInfo;
+        runtime.Send(new IEventHandle(GetNameserviceActorId(), runtime.AllocateEdgeActor(), nodeWardenStorageConfig));
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             auto type = ev->GetTypeRewrite();
@@ -2262,8 +2273,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             }
         }
         UNIT_ASSERT(bscTabletIssueFoundInResult);
-        
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("static").Pile("1"));
+
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("static").Pile("pile0"));
     }
 
     Y_UNIT_TEST(ShardsLimit999) {
@@ -2895,10 +2906,18 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TTestActorRuntime& runtime = *server.GetRuntime();
 
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "1", .State = NKikimrBridge::TClusterState::SYNCHRONIZED, .IsPrimary = true});
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .Name = "2", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "pile0", .State = NKikimrBridge::TClusterState::SYNCHRONIZED, .IsPrimary = true});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .Name = "pile1", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
         bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
         bridgeInfo->PrimaryPile = bridgeInfo->Piles.data();
+        bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(0)] = &bridgeInfo->Piles[0];
+        bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(1)] = &bridgeInfo->Piles[0];
+        bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(2)] = &bridgeInfo->Piles[1];
+        bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(3)] = &bridgeInfo->Piles[1];
+
+        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), nullptr, false, nullptr);
+        nodeWardenStorageConfig->BridgeInfo = bridgeInfo;
+        runtime.Send(new IEventHandle(GetNameserviceActorId(), runtime.AllocateEdgeActor(), nodeWardenStorageConfig));
 
         auto configObserver = runtime.AddObserver<TEvNodeWardenStorageConfig>([&](TEvNodeWardenStorageConfig::TPtr& ev) {
             ev->Get()->BridgeInfo = bridgeInfo;
@@ -2942,7 +2961,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
 
         Ctest << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "NODES_TIME_DIFFERENCE", Ydb::Monitoring::StatusFlag::YELLOW, 1, TLocationFilter().Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "CLOCK_SKEW", Ydb::Monitoring::StatusFlag::YELLOW, 1, TLocationFilter().Pile("pile0"));
     }
 }
 }

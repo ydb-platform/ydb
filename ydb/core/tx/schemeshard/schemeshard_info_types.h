@@ -4056,6 +4056,13 @@ struct TSecretInfo : TSimpleRefCount<TSecretInfo> {
     NKikimrSchemeOp::TSecretDescription Description;
 };
 
+struct TStreamingQueryInfo : TSimpleRefCount<TStreamingQueryInfo> {
+    using TPtr = TIntrusivePtr<TStreamingQueryInfo>;
+
+    ui64 AlterVersion = 0;
+    NKikimrSchemeOp::TStreamingQueryProperties Properties;
+};
+
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const TMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const TMap<ui32, TTableInfo::TColumn>& alterColumns,

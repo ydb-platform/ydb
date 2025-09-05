@@ -142,6 +142,7 @@ public:
     bool IsResourcePool() const;
     bool IsBackupCollection() const;
     bool IsSecret() const;
+    bool IsStreamingQuery() const;
     TVirtualTimestamp GetCreateTS() const;
     TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);

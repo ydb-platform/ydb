@@ -251,8 +251,6 @@ def _run_tui(args, path_to_cli, piles):
 def main():
     args = _parse_args()
 
-    # check state path
-
     _setup_logging(args)
 
     path_to_cli = args.ydb

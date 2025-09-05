@@ -39,15 +39,11 @@ bool TOverloadManagerServiceOperator::RequestResources(ui64 writesCount, ui64 wr
 
     auto resWritesInFlight = WritesInFlight.Add(writesCount);
     auto resWriteSizeInFlight = WritesSizeInFlight.Add(writesSize);
-    if (resWritesInFlight < GetShardWritesInFlyLimit() && resWriteSizeInFlight < GetShardWritesSizeInFlyLimit()) {
-        return true;
+    if (resWritesInFlight >= GetShardWritesInFlyLimit() || resWriteSizeInFlight >= GetShardWritesSizeInFlyLimit()) {
+        LimitReached = true;
     }
 
-    LimitReached = true;
-    WritesInFlight.Sub(writesCount);
-    WritesSizeInFlight.Sub(writesSize);
-
-    return false;
+    return true;
 }
 
 void TOverloadManagerServiceOperator::ReleaseResources(ui64 writesCount, ui64 writesSize) {

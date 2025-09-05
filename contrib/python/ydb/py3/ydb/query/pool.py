@@ -4,12 +4,15 @@ from typing import (
     Callable,
     Optional,
     List,
+    Dict,
+    Any,
+    Union,
 )
 import time
 import threading
 import queue
 
-from .base import BaseQueryTxMode
+from .base import BaseQueryTxMode, QueryExplainResultFormat
 from .base import QueryClientSettings
 from .session import (
     QuerySession,
@@ -269,6 +272,29 @@ class QuerySessionPool:
             *args,
             **kwargs,
         )
+
+    def explain_with_retries(
+        self,
+        query: str,
+        parameters: Optional[dict] = None,
+        *,
+        result_format: QueryExplainResultFormat = QueryExplainResultFormat.STR,
+        retry_settings: Optional[RetrySettings] = None,
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Explain a query in retriable way. No real query execution will happen.
+
+        :param query: A query, yql or sql text.
+        :param parameters: dict with parameters and YDB types;
+        :param result_format: Return format: string or dict.
+        :param retry_settings: RetrySettings object.
+        :return: Parsed query plan.
+        """
+
+        def callee(session: QuerySession):
+            return session.explain(query, parameters, result_format=result_format)
+
+        return self.retry_operation_sync(callee, retry_settings)
 
     def stop(self, timeout=None):
         acquire_timeout = timeout if timeout is not None else -1

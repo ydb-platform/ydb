@@ -575,7 +575,7 @@ class UnaryUnaryCall(_UnaryResponseMixin, Call, _base_call.UnaryUnaryCall):
         # https://github.com/python/cpython/blob/edad4d89e357c92f70c0324b937845d652b20afd/Lib/asyncio/tasks.py#L785
         try:
             serialized_response = await self._cython_call.unary_unary(
-                serialized_request, self._metadata, self._context
+                serialized_request, self._metadata,
             )
         except asyncio.CancelledError:
             if not self.cancelled():

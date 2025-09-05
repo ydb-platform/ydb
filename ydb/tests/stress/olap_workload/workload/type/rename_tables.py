@@ -58,6 +58,8 @@ class WorkloadRenameTables(WorkloadBase):
                 print(e)
             except ydb.issues.SchemeError as e:
                 print(e)
+            except ydb.issues.Overloaded as e:
+                print(e)
 
     def _write_loop(self):
         while not self.is_stop_requested():

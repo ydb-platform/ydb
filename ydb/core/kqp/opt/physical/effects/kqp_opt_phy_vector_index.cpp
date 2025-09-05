@@ -52,8 +52,14 @@ TExprBase BuildVectorIndexPostingRows(const TKikimrTableDescription& table,
     // Generate input type for vector resolve
     TVector<const TItemExprType*> rowItems;
     for (const auto& column : indexTableColumns) {
-        auto type = table.GetColumnType(TString(column));
-        YQL_ENSURE(type, "No key column: " << column);
+        const TTypeAnnotationNode* type;
+        if (column == NTableIndex::NKMeans::ParentColumn) {
+            // Parent cluster ID for the prefixed index
+            type = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64);
+        } else {
+            type = table.GetColumnType(TString(column));
+            YQL_ENSURE(type, "No key column: " << column);
+        }
         auto itemType = ctx.MakeType<TItemExprType>(column, type);
         YQL_ENSURE(itemType->Validate(pos, ctx));
         rowItems.push_back(itemType);
@@ -119,6 +125,181 @@ TVector<TStringBuf> BuildVectorIndexPostingColumns(const TKikimrTableDescription
     }
 
     return indexTableColumns;
+}
+
+TVector<TExprBase> MakeColumnGetters(const TExprBase& rowArgument, const TVector<TStringBuf>& columnNames, TPositionHandle pos, TExprContext& ctx) {
+    TVector<TExprBase> columnGetters;
+    columnGetters.reserve(columnNames.size());
+    for (const auto& column : columnNames) {
+        const auto tuple = Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(column)
+            .template Value<TCoMember>()
+                .Struct(rowArgument)
+                .Name().Build(column)
+                .Build()
+            .Done();
+        columnGetters.emplace_back(std::move(tuple));
+    }
+    return columnGetters;
+}
+
+TExprBase BuildVectorIndexPrefixRows(const TKikimrTableDescription& table, const TKikimrTableDescription& prefixTable,
+    bool withData, const TIndexDescription* indexDesc, const TExprBase& inputRows,
+    TVector<TStringBuf>& indexTableColumns, TPositionHandle pos, TExprContext& ctx)
+{
+    // This whole method does a very simple thing:
+    // SELECT i.<indexColumns>, p.__ydb_id AS __ydb_parent FROM <inputRows> i INNER JOIN prefixTable p ON p.<prefixColumns>=i.<prefixColumns>
+    // To implement it, we use a StreamLookup in Join mode.
+    // It takes <lookup key, left row> tuples as input and returns <left row, right row, cookie> tuples as output ("cookie" contains read stats).
+
+    TVector<TStringBuf> prefixColumns(indexDesc->KeyColumns.begin(), indexDesc->KeyColumns.end()-1);
+    THashSet<TStringBuf> postingColumnsSet;
+    TVector<TStringBuf> postingColumns;
+    auto embeddingColumn = indexDesc->KeyColumns.back();
+    YQL_ENSURE(postingColumnsSet.emplace(embeddingColumn).second);
+    postingColumns.emplace_back(embeddingColumn);
+    for (const auto& column : table.Metadata->KeyColumnNames) {
+        if (postingColumnsSet.insert(column).second) {
+            postingColumns.emplace_back(column);
+        }
+    }
+    if (withData) {
+        for (const auto& column : indexDesc->DataColumns) {
+            if (postingColumnsSet.emplace(column).second) {
+                postingColumns.emplace_back(column);
+            }
+        }
+    }
+
+    TKqpStreamLookupSettings streamLookupSettings;
+    streamLookupSettings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
+
+    TVector<const TItemExprType*> prefixItems;
+    for (auto& column : prefixColumns) {
+        auto type = prefixTable.GetColumnType(TString(column));
+        YQL_ENSURE(type, "No prefix column: " << column);
+        auto itemType = ctx.MakeType<TItemExprType>(column, type);
+        prefixItems.push_back(itemType);
+    }
+    auto prefixType = ctx.MakeType<TStructExprType>(prefixItems);
+
+    TVector<const TItemExprType*> postingItems;
+    for (auto& column : postingColumns) {
+        auto type = table.GetColumnType(TString(column));
+        YQL_ENSURE(type, "No index column: " << column);
+        auto itemType = ctx.MakeType<TItemExprType>(column, type);
+        postingItems.push_back(itemType);
+    }
+    auto postingType = ctx.MakeType<TStructExprType>(postingItems);
+
+    TVector<const TTypeAnnotationNode*> joinItemItems;
+    joinItemItems.push_back(ctx.MakeType<TOptionalExprType>(prefixType));
+    joinItemItems.push_back(postingType);
+    auto joinItemType = ctx.MakeType<TTupleExprType>(joinItemItems);
+    auto joinInputType = ctx.MakeType<TListExprType>(joinItemType);
+
+    auto stagedInput = (inputRows.Maybe<TDqCnUnionAll>()
+        ? inputRows
+        : Build<TDqCnUnionAll>(ctx, pos)
+            .Output<TDqOutput>()
+                .Stage(ReadTableToStage(inputRows, ctx))
+                .Index().Build(0)
+                .Build()
+            .Done());
+
+    const auto rowArg = Build<TCoArgument>(ctx, pos).Name("inputRow").Done();
+    const auto rowsArg = Build<TCoArgument>(ctx, pos).Name("inputRows").Done();
+    auto prefixTableNode = BuildTableMeta(prefixTable, pos, ctx);
+    auto lookup = Build<TKqpCnStreamLookup>(ctx, pos)
+        .Output()
+            .Stage<TDqStage>()
+                .Inputs()
+                    .Add(stagedInput)
+                    .Build()
+                .Program()
+                    .Args({rowsArg})
+                    .Body<TCoToStream>()
+                        .Input<TCoMap>()
+                            .Input(rowsArg)
+                            .Lambda()
+                                .Args({rowArg})
+                                // Join StreamLookup takes <key, left row> tuples as input - build them
+                                .Body<TExprList>()
+                                    .Add<TCoJust>()
+                                        .Input<TCoAsStruct>()
+                                            .Add(MakeColumnGetters(rowArg, prefixColumns, pos, ctx))
+                                            .Build()
+                                        .Build()
+                                    .Add<TCoAsStruct>()
+                                        .Add(MakeColumnGetters(rowArg, postingColumns, pos, ctx))
+                                        .Build()
+                                    .Build()
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Build()
+                .Settings().Build()
+                .Build()
+            .Index().Build(0)
+            .Build()
+        .Table(prefixTableNode)
+        .Columns(BuildColumnsList(prefixTable.Metadata->KeyColumnNames, pos, ctx))
+        .InputType(ExpandType(pos, *joinInputType, ctx))
+        .Settings(streamLookupSettings.BuildNode(ctx, pos))
+        .Done();
+
+    // Join StreamLookup returns <left row, right row, cookie> tuples as output
+    // But we need left row + 1 field of the right row - build it using TCoMap
+
+    const auto lookupArg = Build<TCoArgument>(ctx, pos).Name("lookupRow").Done();
+    const auto leftRow = Build<TCoNth>(ctx, pos)
+        .Tuple(lookupArg)
+        .Index().Value("0").Build()
+        .Done();
+    const auto rightRow = Build<TCoNth>(ctx, pos)
+        .Tuple(lookupArg)
+        .Index().Value("1").Build()
+        .Done();
+
+    auto mapLambda = Build<TCoLambda>(ctx, pos)
+        .Args({lookupArg})
+        .Body<TCoAsStruct>()
+            .Add(MakeColumnGetters(leftRow, postingColumns, pos, ctx))
+            .Add<TCoNameValueTuple>()
+                .Name().Build(NTableIndex::NKMeans::ParentColumn)
+                .template Value<TCoMember>()
+                    .Struct<TCoUnwrap>().Optional(rightRow).Build()
+                    .Name().Build(NTableIndex::NKMeans::IdColumn)
+                    .Build()
+                .Build()
+            .Build()
+        .Done();
+
+    auto mapStage = Build<TDqStage>(ctx, pos)
+        .Inputs()
+            .Add(lookup)
+            .Build()
+        .Program()
+            .Args({"rows"})
+            .Body<TCoToStream>()
+                .Input<TCoMap>()
+                    .Input("rows")
+                    .Lambda(mapLambda)
+                    .Build()
+                .Build()
+            .Build()
+        .Settings().Build()
+        .Done();
+
+    postingColumns.push_back(NTableIndex::NKMeans::ParentColumn);
+    indexTableColumns = std::move(postingColumns);
+
+    return Build<TDqCnUnionAll>(ctx, pos)
+        .Output()
+            .Stage(mapStage)
+            .Index().Build(0)
+            .Build()
+        .Done();
 }
 
 } // namespace NKikimr::NKqp::NOpt

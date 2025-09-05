@@ -478,11 +478,20 @@ void BuildVectorResolveChannels(TKqpTasksGraph& graph, const TStageInfo& stageIn
     *settings->MutableCopyColumnIndexes() = vectorResolve.GetCopyColumnIndexes();
     settings->SetVectorColumnIndex(vectorResolve.GetVectorColumnIndex());
     settings->SetClusterColumnOutPos(vectorResolve.GetClusterColumnOutPos());
+    if (vectorResolve.HasRootClusterColumnIndex()) {
+        settings->SetRootClusterColumnIndex(vectorResolve.GetRootClusterColumnIndex());
+    }
 
     // Now fill InputTypes & InputTypeInfos
 
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
     for (const auto& inputColumn : vectorResolve.GetColumns()) {
+        if (inputColumn == NTableIndex::NKMeans::ParentColumn) {
+            // Parent cluster ID for the prefixed index
+            settings->AddInputColumnTypes(NScheme::NTypeIds::Uint64);
+            *settings->AddInputColumnTypeInfos() = NKikimrProto::TTypeInfo();
+            continue;
+        }
         auto columnIt = tableInfo->Columns.find(inputColumn);
         YQL_ENSURE(columnIt != tableInfo->Columns.end(), "Unknown column: " << inputColumn);
 

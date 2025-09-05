@@ -44,7 +44,7 @@ TDqPhyPrecompute PrecomputeDictKeys(const TCondenseInputResult& condenseResult, 
 TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
     const TSecondaryIndexes& indexes, const TKqlDeleteRowsIndex& del,
     const TExprBase& lookupKeys, std::function<TExprBase(const TVector<TStringBuf>&)> project,
-    TExprContext& ctx) {
+    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     const auto& pk = table.Metadata->KeyColumnNames;
 
     auto tableDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
@@ -75,6 +75,12 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
         auto deleteIndexKeys = project(indexTableColumns);
 
         if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            if (indexDesc->KeyColumns.size() > 1) {
+                const auto& prefixTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
+                    << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
+                deleteIndexKeys = BuildVectorIndexPrefixRows(table, prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumns, del.Pos(), ctx);
+            }
+
             auto resolveUnion = BuildVectorIndexPostingRows(table, del.Table(), indexDesc->Name,
                 indexTableColumns, deleteIndexKeys, false, del.Pos(), ctx);
 
@@ -124,7 +130,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
         auto lookupKeys = ProjectColumns(del.Input(), pk, ctx);
         return BuildDeleteIndexStagesImpl(table, indexes, del, lookupKeys, [&](const TVector<TStringBuf>& indexTableColumns) {
             return ProjectColumns(del.Input(), indexTableColumns, ctx);
-        }, ctx);
+        }, ctx, kqpCtx);
     }
 
     auto payloadSelector = Build<TCoLambda>(ctx, del.Pos())
@@ -153,7 +159,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     return BuildDeleteIndexStagesImpl(table, indexes, del, lookupKeys, [&](const TVector<TStringBuf>& indexTableColumns) {
         return MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumns, del.Pos(), ctx);
-    }, ctx);
+    }, ctx, kqpCtx);
 }
 
 } // namespace NKikimr::NKqp::NOpt

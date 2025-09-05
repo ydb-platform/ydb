@@ -1751,7 +1751,8 @@ R"(column0:   [
 
         {
             auto batches = ExecuteAndCombineBatches(client, R"(
-                SELECT [App, Host] FROM Logs;
+                SELECT [App, Host] FROM Logs
+                ORDER BY App;
             )", /* assertSize */ false);
 
             UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
@@ -1764,6 +1765,10 @@ R"(column0:   [
 
             const TString expected =
 R"(column0:   [
+    [
+      "apache",
+      "front-42"
+    ],
     [
       "kikimr-db",
       "kikimr-db-10"
@@ -1795,10 +1800,6 @@ R"(column0:   [
     [
       "ydb",
       "ydb-1000"
-    ],
-    [
-      "apache",
-      "front-42"
     ]
   ]
 )";

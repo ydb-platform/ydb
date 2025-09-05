@@ -77,6 +77,17 @@ BELONGS ya.make
         src/support/Utf8.cpp [1:1]
         src/support/Utf8.h [1:1]
 
+KEEP     COPYRIGHT_SERVICE_LABEL b115b1013944e5434a14342ab4e8a321
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2022 The ANTLR Project. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/atn/HashUtils.h [1:1]
+
 KEEP     COPYRIGHT_SERVICE_LABEL b87a6df5f745dd87f65713e3965bc8bb
 BELONGS ya.make
     License text:

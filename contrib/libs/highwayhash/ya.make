@@ -16,7 +16,6 @@ SRCS(
     # Dispatcher
     arch_specific.cc
     instruction_sets.cc
-    nanobenchmark.cc
     os_specific.cc
     # SipHash
     sip_hash.cc

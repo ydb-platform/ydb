@@ -389,6 +389,10 @@ namespace NKikimr::NBsController {
             Fit.OnlyToLessOccupiedPDisk = true;
         }
 
+        if (cmd.GetWithAttentionToReplication()) {
+            Fit.WithAttentionToReplication = true;
+        }
+
         Fit.PoolsAndGroups.emplace(group->StoragePoolId, group->ID);
     }
 

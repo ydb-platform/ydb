@@ -104,6 +104,7 @@ struct TTestContext {
         NActors::NLog::EPriority otherPriority = NLog::PRI_INFO;
 
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, pqPriority);
+        runtime.SetLogPriority(NKikimrServices::PQ_TX, pqPriority);
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, pqPriority);
 
         runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, pqPriority);

@@ -130,7 +130,8 @@ SYS_SCHEMA = {
 SELECTORS_CONFIGS = dict(
     type="object",
     properties=dict(
-        request_type=dict(type="string"),
+        request_types=dict(type="array", items=dict(type="string")),
+        database=dict(type="string"),
     ),
     required=[],
     additionalProperties=False,

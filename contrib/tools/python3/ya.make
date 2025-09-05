@@ -46,16 +46,6 @@ CFLAGS(
     -DPLATLIBDIR=\"lib\"
 )
 
-IF (BUILD_TYPE == "RELEASE")
-    CFLAGS(
-        -DABIFLAGS=\"\"
-    )
-ELSE()
-    CFLAGS(
-        -DABIFLAGS=\"d\"
-    )
-ENDIF()
-
 IF (CLANG_CL)
     CFLAGS(
         -Wno-invalid-token-paste

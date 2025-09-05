@@ -130,6 +130,22 @@ class RefreshTokenGrantTest(TestCase):
                           self.request)
         self.mock_validator.client_authentication_required.assert_called_once_with(self.request)
 
+
+    def test_authentication_required_populate_client_id(self):
+        """
+        Make sure that request.client_id is populated from
+        request.client.client_id if None.
+
+        """
+        self.mock_validator.client_authentication_required.return_value = True
+        self.mock_validator.authenticate_client.return_value = True
+        # self.mock_validator.authenticate_client_id.return_value = False
+        # self.request.code = 'waffles'
+        self.request.client_id = None
+        self.request.client.client_id = 'foobar'
+        self.auth.validate_token_request(self.request)
+        self.request.client_id = 'foobar'
+
     def test_invalid_grant_type(self):
         self.request.grant_type = 'wrong_type'
         self.assertRaises(errors.UnsupportedGrantTypeError,
@@ -168,7 +184,7 @@ class RefreshTokenGrantTest(TestCase):
         # all ok but without request.scope
         del self.request.scope
         self.auth.validate_token_request(self.request)
-        self.assertEqual(self.request.scopes, 'foo bar baz'.split())
+        self.assertEqual(self.request.scopes, ['foo', 'bar', 'baz'])
 
     # CORS
 

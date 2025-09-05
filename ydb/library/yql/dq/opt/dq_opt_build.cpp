@@ -407,18 +407,22 @@ THolder<IGraphTransformer> CreateDqPhyStageTransformer(const TStageOptimizer& fu
 bool CanRebuildForWideChannelOutput(const TDqPhyStage& stage) {
     auto stageSettings = TDqStageSettings::Parse(stage);
     if (stageSettings.WideChannels) {
+Cerr << "CanRebuildForWideChannelOutput ALREADY WIDE\n";
         return false;
     }
 
     auto stageOutputType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
     if (stageOutputType->GetSize() != 1 || stage.Outputs().IsValid()) {
+Cerr << "CanRebuildForWideChannelOutput TUPLE EXPR\n";
         return false;
     }
 
     if (stageOutputType->GetItems()[0]->Cast<TListExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Struct) {
+Cerr << "CanRebuildForWideChannelOutput NOT STRUCT\n";
         return false;
     }
 
+Cerr << "CanRebuildForWideChannelOutput OK\n";
     return true;
 }
 
@@ -521,7 +525,7 @@ TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, TExprContext& ctx
     newArgs.reserve(stage.Inputs().Size());
     newInputs.reserve(stage.Inputs().Size());
     TNodeOnNodeOwnedMap argsMap;
-
+Cerr << "RebuildStageInputsAsWide\n";
     YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
 
     bool needRebuild = false;
@@ -532,6 +536,13 @@ TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, TExprContext& ctx
         newArgs.emplace_back(newArg);
 
         auto maybeConn = stage.Inputs().Item(i).Maybe<TDqConnection>();
+Cerr << "IsSupportedForWide " << (maybeConn && IsSupportedForWide(maybeConn.Cast())) << Endl;
+    if (!maybeConn) {
+        Cerr << "EMPTY CONN" << Endl;
+    } else if (!IsSupportedForWide(maybeConn.Cast())) {
+        Cerr << stage.Inputs().Item(i).Raw()->Content() << Endl;
+    }
+
 
         if (maybeConn && IsSupportedForWide(maybeConn.Cast()) && CanRebuildForWideChannelOutput(maybeConn.Cast().Output())) {
             needRebuild = true;
@@ -612,6 +623,7 @@ TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, TExprContext& ctx
                 newInputs.push_back(ctx.ChangeChild(conn.Ref(), TDqConnection::idx_Output, newOutput.Ptr()));
             }
         } else {
+Cerr << "CAN'T RebuildStageInputsAsWide\n";
             argsMap.emplace(arg.Raw(), newArg.Ptr());
             newInputs.push_back(stage.Inputs().Item(i).Ptr());
         }
@@ -798,7 +810,7 @@ TDqPhyStage RebuildStageInputsAsWideBlock(bool forceBlocks, const TDqPhyStage& s
     newArgs.reserve(stage.Inputs().Size());
     newInputs.reserve(stage.Inputs().Size());
     TNodeOnNodeOwnedMap argsMap;
-
+Cerr << "RebuildStageInputsAsWideBlock\n";
     YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
 
     size_t blockInputs = 0;
@@ -827,6 +839,7 @@ TDqPhyStage RebuildStageInputsAsWideBlock(bool forceBlocks, const TDqPhyStage& s
                 .Done();
             newInputs.push_back(ctx.ChangeChild(conn.Ref(), TDqConnection::idx_Output, newOutput.Ptr()));
         } else {
+Cerr << "CAN'T RebuildStageInputsAsWideBlock\n";
             argsMap.emplace(arg.Raw(), newArg.Ptr());
             newInputs.push_back(stage.Inputs().Item(i).Ptr());
         }
@@ -875,7 +888,7 @@ TAutoPtr<IGraphTransformer> CreateDqBuildPhyStagesTransformer(bool allowDependan
         new TDqBuildPhysicalStagesTransformer(),
         "BuildPhysicalStages",
         TIssuesIds::DEFAULT_ERROR));
-
+Cerr << "CreateDqBuildPhyStagesTransformer mode = " << (int)mode << Endl;
     if (mode != CHANNEL_SCALAR) {
         transformers.push_back(TTransformStage(CreateDqPhyStageTransformer(&DqEnableWideChannelsInputForStage, &typesCtx),
             "EnableWideChannels",
@@ -887,7 +900,7 @@ TAutoPtr<IGraphTransformer> CreateDqBuildPhyStagesTransformer(bool allowDependan
 
 TAutoPtr<IGraphTransformer> CreateDqBuildWideBlockChannelsTransformer(TTypeAnnotationContext& typesCtx, EChannelMode mode) {
     TVector<TTransformStage> transformers;
-
+Cerr << "CreateDqBuildWideBlockChannelsTransformer mode = " << (int)mode << Endl;
     if (mode == CHANNEL_WIDE_AUTO_BLOCK || mode == CHANNEL_WIDE_FORCE_BLOCK) {
         transformers.push_back(TTransformStage(CreateDqPhyStageTransformer(
             [mode, &typesCtx](const TDqPhyStage& stage, TExprContext& ctx) {

@@ -587,7 +587,7 @@ public:
     {
         TTypeInfoHelper helper;
         YQL_ENSURE(OutputWidth_ > KeyColumns_.size());
-
+Cerr << "TDqOutputHashPartitionConsumerBlock\n";
         TVector<const NMiniKQL::TType*> blockTypes;
         for (auto& columnType : OutputType_->GetElements()) {
             YQL_ENSURE(columnType->IsBlock());

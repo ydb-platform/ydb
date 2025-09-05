@@ -615,7 +615,7 @@ class TestBridgeSkipperDecisions(unittest.TestCase):
         keeper._do_healthcheck()
         d2 = keeper._decide()
         self.assertIsNotNone(d2)
-        p2, cmds2 = d1
+        p2, cmds2 = d2
         self.assertEqual(p2, "pile2")
         self.assertEqual(cmds2, [])
 

@@ -15,11 +15,6 @@ namespace NYdb::inline Dev {
 ui64 GetNodeIdFromSession(const std::string& sessionId);
 
 class TKqpSessionCommon;
-class TSessionBalancer;
-
-namespace NSessionPool {
-    class TSessionPool;
-}
 
 class IServerCloseHandler {
 public:

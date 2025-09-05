@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-
 namespace NYdb::inline Dev {
 
 class TKqpSessionCommon;
@@ -12,6 +10,7 @@ public:
 
     virtual void DeleteSession(TKqpSessionCommon* sessionImpl) = 0;
 
+    // TODO: Try to remove from ISessionClient
     virtual bool ReturnSession(TKqpSessionCommon* sessionImpl) = 0;
 };
 

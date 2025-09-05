@@ -175,11 +175,12 @@ std::function<void(TKqpSessionCommon*)> TKqpSessionCommon::GetSmartDeleter(std::
                 client->DeleteSession(sessionImpl);
                 break;
             case TKqpSessionCommon::S_IDLE:
-            case TKqpSessionCommon::S_ACTIVE:
+            case TKqpSessionCommon::S_ACTIVE: {
                 if (!client->ReturnSession(sessionImpl)) {
                     client->DeleteSession(sessionImpl);
                 }
                 break;
+            }
         }
     };
 }

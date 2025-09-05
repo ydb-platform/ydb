@@ -137,7 +137,7 @@ protected:
                 input.Cast(),
                 false,              // analyticsHopping
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                true,               // defaultWatermarksMode
+                false,               // defaultWatermarksMode
                 true);              // syncActor
         } else {
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());

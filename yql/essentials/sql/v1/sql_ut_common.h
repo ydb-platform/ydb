@@ -9508,7 +9508,27 @@ Y_UNIT_TEST_SUITE(Aggregation) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, count["percentile_traits_factory"]);
     }
+}
 
+Y_UNIT_TEST_SUITE(AggregationPhases) {
+    Y_UNIT_TEST(TwoArg) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT AvgIf(a, a % 2 == 0) FROM (SELECT 1 AS k, 2 AS a) GROUP BY k;
+            SELECT AvgIf(a, a % 2 == 0) FROM (SELECT 1 AS k, 2 AS a) GROUP BY k WITH Combine;
+            SELECT AvgIf(a, a % 2 == 0) FROM (SELECT 1 AS k, 2 AS a) GROUP BY k WITH Finalize;
+        )sql");
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(SingleArg) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT AvgIf(a) FROM (SELECT 1 AS k, 2 AS a) GROUP BY k WITH CombineState;
+            SELECT AvgIf(a) FROM (SELECT 1 AS k, 2 AS a) GROUP BY k WITH MergeState;
+        )sql");
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+    }
 }
 
 Y_UNIT_TEST_SUITE(Watermarks) {

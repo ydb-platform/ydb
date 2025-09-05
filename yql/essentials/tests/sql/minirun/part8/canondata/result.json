@@ -153,6 +153,20 @@
             "uri": "https://{canondata_backend}/1903280/3699ae4c92af7f4904493b5c372c9966ecfea9cc/resource.tar.gz#test.test_agg_apply-sum_type_group_by-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_phases-agg_list_n_null-default.txt-Debug]": [
+        {
+            "checksum": "0f7d80f323572c8e5e9d0337cd6ebefa",
+            "size": 1953,
+            "uri": "https://{canondata_backend}/1775059/1a03de67ea83d8e1a68ef0d18e7c006bc9d9165e/resource.tar.gz#test.test_agg_phases-agg_list_n_null-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-agg_list_n_null-default.txt-Results]": [
+        {
+            "checksum": "244ed89b85af16aa0d28d7d8536b631f",
+            "size": 5936,
+            "uri": "https://{canondata_backend}/1775059/1a03de67ea83d8e1a68ef0d18e7c006bc9d9165e/resource.tar.gz#test.test_agg_phases-agg_list_n_null-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases-count_opt-default.txt-Debug]": [
         {
             "checksum": "fa0346f0a27ba3c37e3ec024837bda1d",
@@ -165,6 +179,20 @@
             "checksum": "79f87a4273c8577e8a0fef446732d314",
             "size": 5864,
             "uri": "https://{canondata_backend}/1784117/7d6bbbf5f8e161e9f0d062dde40c8534c2579f6f/resource.tar.gz#test.test_agg_phases-count_opt-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[agg_phases-max_by-default.txt-Debug]": [
+        {
+            "checksum": "8c8770c921e80fd55e586204df457fb6",
+            "size": 2302,
+            "uri": "https://{canondata_backend}/1936947/654dad2a3a65d8b8a14b753d29d2216416e09d55/resource.tar.gz#test.test_agg_phases-max_by-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-max_by-default.txt-Results]": [
+        {
+            "checksum": "1567f1d1e5f8bbc5c25805f82db3c814",
+            "size": 7379,
+            "uri": "https://{canondata_backend}/1936947/654dad2a3a65d8b8a14b753d29d2216416e09d55/resource.tar.gz#test.test_agg_phases-max_by-default.txt-Results_/results.txt"
         }
     ],
     "test.test[agg_phases_agg_apply-avg_decimal-default.txt-Debug]": [

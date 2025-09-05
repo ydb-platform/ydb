@@ -334,8 +334,8 @@ INSTANTIATE_TEST_SUITE_P(
     Allocator,
     WithAllPools,
     ::testing::Values(
-        NInterconnect::NRdma::CreateIncrementalMemPool(),
-        NInterconnect::NRdma::CreateSlotMemPool(),
+        NInterconnect::NRdma::CreateIncrementalMemPool(nullptr),
+        NInterconnect::NRdma::CreateSlotMemPool(nullptr),
         NInterconnect::NRdma::CreateDummyMemPool()
     ),
     [](const testing::TestParamInfo<std::shared_ptr<NInterconnect::NRdma::IMemPool>>& info) {

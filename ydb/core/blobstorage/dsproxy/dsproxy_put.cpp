@@ -672,7 +672,7 @@ public:
         );
 
         Become(&TBlobStorageGroupPutRequest::StateWait);
-        ScheduleWakeup(TInstant::Zero());
+        ScheduleNextWakeup(TInstant::Zero());
 
         PartSets.resize(PutImpl.Blobs.size());
         for (auto& partSet : PartSets) {
@@ -742,7 +742,7 @@ public:
             }
         }
         if (!ReplyAndDieWithLastResponse(putResults)) {
-            ScheduleWakeup(now);
+            ScheduleNextWakeup(now);
         }
     }
 
@@ -810,7 +810,7 @@ public:
             << " State# " << PutImpl.DumpFullState());
     }
 
-    void ScheduleWakeup(TInstant lastWakeup) {
+    void ScheduleNextWakeup(TInstant lastWakeup) {
         TInstant now = TActivationContext::Now();
         TInstant deadline = lastWakeup + DsMinimumDelayBetweenPutWakeups;
 
@@ -822,7 +822,9 @@ public:
             }
         }
 
-        Schedule(deadline, new TKikimrEvents::TEvWakeup);
+        if (deadline != TInstant::Max()) {
+            Schedule(deadline, new TKikimrEvents::TEvWakeup);
+        }
     }
 
     STATEFN(StateWait) {

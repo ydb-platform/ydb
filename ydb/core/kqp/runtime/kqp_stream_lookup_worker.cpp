@@ -683,7 +683,7 @@ public:
         std::deque<TUnprocessedLeftRow> duplicatedRows;
 
         while (!UnprocessedRows.empty()) {
-            auto unprocessedRow = std::move(UnprocessedRows.front());
+            TUnprocessedLeftRow unprocessedRow = std::move(UnprocessedRows.front());
             UnprocessedRows.pop_front();
 
             if (PendingLeftRowsByKey.contains(unprocessedRow.JoinKey)) {
@@ -737,11 +737,10 @@ public:
             }
 
             if (hasRanges) {
-                auto [it, success] = PendingLeftRowsByKey.emplace(
-                    std::move(unprocessedRow.JoinKey), TLeftRowInfo(unprocessedRow.JoinKeyId));
-                it->second.ResultSeqNos.push_back(unprocessedRow.RowSeqNo);
+                auto [it, success] = PendingLeftRowsByKey.emplace(std::move(unprocessedRow.JoinKey), TLeftRowInfo());
+                it->second.ResultSeqNos.emplace_back(unprocessedRow.RowSeqNo, unprocessedRow.JoinKeyId);
             } else {
-                ResultRowsBySeqNo[unprocessedRow.RowSeqNo].OnJoinKeyFinished(HolderFactory, unprocessedRow.JoinKeyId);
+                ResultRowsBySeqNo.at(unprocessedRow.RowSeqNo).OnJoinKeyFinished(HolderFactory, unprocessedRow.JoinKeyId);
             }
         }
 
@@ -791,9 +790,9 @@ public:
             auto it = PendingLeftRowsByKey.find(row.JoinKey);
             YQL_ENSURE(it != PendingLeftRowsByKey.end());
 
-            it->second.ResultSeqNos.push_back(row.RowSeqNo);
+            it->second.ResultSeqNos.emplace_back(row.RowSeqNo, row.JoinKeyId);
 
-            auto& result = ResultRowsBySeqNo[row.RowSeqNo];
+            auto& result = ResultRowsBySeqNo.at(row.RowSeqNo);
             for(TSizedUnboxedValue row : it->second.CachedRows) {
                 result.TryBuildResultRow(HolderFactory, std::move(row));
             }
@@ -828,8 +827,8 @@ public:
             auto leftRowIt = PendingLeftRowsByKey.find(joinKeyCells);
             YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
             auto rightRow = leftRowIt->second.AttachRightRow(HolderFactory, Settings, ReadColumns, row);
-            for(ui64 seqNo: leftRowIt->second.ResultSeqNos) {
-                auto& resultRows = ResultRowsBySeqNo[seqNo];
+            for(auto [seqNo, _]: leftRowIt->second.ResultSeqNos) {
+                auto& resultRows = ResultRowsBySeqNo.at(seqNo);
                 resultRows.TryBuildResultRow(HolderFactory, rightRow);
                 YQL_ENSURE(IsRowSeqNoValid(seqNo));
             }
@@ -840,8 +839,8 @@ public:
                 auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(key));
                 YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
                 if (leftRowIt->second.FinishReadId(record.GetReadId())) {
-                    for(ui64 seqNo : leftRowIt->second.ResultSeqNos) {
-                        ResultRowsBySeqNo[seqNo].OnJoinKeyFinished(HolderFactory, leftRowIt->second.JoinKeyId);
+                    for(auto [seqNo, joinKeyId] : leftRowIt->second.ResultSeqNos) {
+                        ResultRowsBySeqNo.at(seqNo).OnJoinKeyFinished(HolderFactory, joinKeyId);
                     }
 
                     PendingLeftRowsByKey.erase(leftRowIt);
@@ -955,15 +954,13 @@ public:
     }
 private:
     struct TLeftRowInfo {
-        explicit TLeftRowInfo(ui64 joinKeyId)
-        : JoinKeyId(joinKeyId)
+        explicit TLeftRowInfo()
         {
         }
 
         std::unordered_set<ui64> PendingReads;
         std::deque<TSizedUnboxedValue> CachedRows;
-        std::vector<ui64> ResultSeqNos;
-        const ui64 JoinKeyId;
+        std::vector<std::pair<ui64, ui64>> ResultSeqNos;
 
         bool FinishReadId(ui64 readId) {
             auto it = PendingReads.find(readId);

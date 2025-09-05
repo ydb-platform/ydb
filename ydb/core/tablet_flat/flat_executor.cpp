@@ -18,6 +18,7 @@
 #include "flat_boot_oven.h"
 #include "flat_executor_tx_env.h"
 #include "flat_executor_counters.h"
+#include "flat_executor_backup.h"
 #include "logic_snap_main.h"
 #include "logic_alter_main.h"
 #include "flat_abi_evol.h"
@@ -30,6 +31,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -207,6 +209,8 @@ void TExecutor::PassAway() {
     Owner = nullptr;
 
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister());
+
+    Send(BackupWriter, new TEvents::TEvPoisonPill());
 
     return TActor::PassAway();
 }
@@ -528,6 +532,8 @@ void TExecutor::Active(const TActorContext &ctx) {
     }
 
     PlanTransactionActivation();
+
+    StartBackup();
 
     Owner->ActivateExecutor(OwnerCtx());
 
@@ -5026,6 +5032,14 @@ void TExecutor::ApplyCompactionChanges(
 
 void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
     PreloadTablesData = std::move(tables);
+}
+
+
+void TExecutor::StartBackup() {
+    const auto& backupConfig = AppData()->SystemTabletBackupConfig;
+    if (Owner->IsClusterLevelTablet() && Owner->IsSystemTablet() && backupConfig.HasFilesystem()) {
+        BackupWriter = Register(CreateBackupWriter(), TMailboxType::HTSwap, AppData()->IOPoolId);
+    }
 }
 
 }

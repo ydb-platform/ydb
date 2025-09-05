@@ -436,6 +436,8 @@ enum EServiceKikimr {
     TRANSFER = 3500;
 
     TOKEN_MANAGER = 3600;
+
+    LOCAL_DB_BACKUP = 3700;
 };
 
 message TActivity {

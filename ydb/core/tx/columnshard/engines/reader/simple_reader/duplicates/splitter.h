@@ -13,41 +13,34 @@ public:
     class TBorder {
     private:
         YDB_READONLY_DEF(bool, IsLast);
-        NArrow::NMerger::TSortableBatchPosition Key;
+        YDB_READONLY_DEF(std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>, Key);
         YDB_READONLY_DEF(ui64, PortionId);
 
-        TBorder(const bool isLast, const NArrow::TSimpleRow key, const ui64 portionId)
+        TBorder(const bool isLast, const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const ui64 portionId)
             : IsLast(isLast)
-            , Key(NArrow::NMerger::TSortableBatchPosition(key.ToBatch(), 0, false))
+            , Key(key)
             , PortionId(portionId)
         {
         }
 
     public:
-        static TBorder First(NArrow::TSimpleRow&& key, const ui64 portionId) {
-            return TBorder(false, std::move(key), portionId);
+        static TBorder First(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const ui64 portionId) {
+            return TBorder(false, key, portionId);
         }
-        static TBorder Last(NArrow::TSimpleRow&& key, const ui64 portionId) {
-            return TBorder(true, std::move(key), portionId);
-        }
-        TBorder(const TPortionBorderView& border, const TPortionInfo::TConstPtr& source)
-            : TBorder(border.IsLast(), border.GetIndexKey(*source), source->GetPortionId())
-        {
+        static TBorder Last(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const ui64 portionId) {
+            return TBorder(true, key, portionId);
         }
 
         bool operator<(const TBorder& other) const {
-            return std::tie(Key, IsLast, PortionId) < std::tie(other.Key, other.IsLast, PortionId);
+            return std::tie(*Key, IsLast, PortionId) < std::tie(*other.Key, other.IsLast, PortionId);
         };
         bool IsEquivalent(const TBorder& other) const {
             return Key == other.Key && IsLast == other.IsLast;
         };
 
-        const NArrow::NMerger::TSortableBatchPosition& GetKey() const {
-            return Key;
-        }
-
         TString DebugString() const {
-            return TStringBuilder() << (IsLast ? "Last:" : "First:") << Key.GetSorting()->DebugJson(0);
+            return TStringBuilder() << "{" << (IsLast ? "Last:" : "First:") << "Portion=" << PortionId
+                                    << ";Data=" << Key->GetSorting()->DebugJson(0) << "}";
         }
 
         TPortionBorderView MakeView() const {
@@ -59,11 +52,11 @@ private:
     std::vector<TBorder> Borders;
 
 public:
-    TColumnDataSplitter(const THashMap<ui64, TPortionInfo::TConstPtr>& sources) {
+    TColumnDataSplitter(const THashMap<ui64, TSortableBorders>& sources) {
         AFL_VERIFY(sources.size());
-        for (const auto& [id, source] : sources) {
-            Borders.emplace_back(TBorder::First(source->GetMeta().IndexKeyStart(), id));
-            Borders.emplace_back(TBorder::Last(source->GetMeta().IndexKeyEnd(), id));
+        for (const auto& [id, borders] : sources) {
+            Borders.emplace_back(TBorder::First(borders.GetBegin(), id));
+            Borders.emplace_back(TBorder::Last(borders.GetEnd(), id));
         }
         std::sort(Borders.begin(), Borders.end());
     }
@@ -76,7 +69,7 @@ public:
 
         for (const auto& currentBorder : Borders) {
             if (lastBorder && !currentBorder.IsEquivalent(*lastBorder)) {
-                if (!callback(TIntervalBordersView(lastBorder->MakeView(), currentBorder.MakeView()), currentPortions)) {
+                if (!callback(*lastBorder, currentBorder, currentPortions)) {
                     break;
                 }
             }
@@ -87,6 +80,17 @@ public:
             }
             lastBorder = &currentBorder;
         }
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "[";
+        for (const auto& border : Borders) {
+            sb << border.DebugString();
+            sb << ";";
+        }
+        sb << "]";
+        return sb;
     }
 };
 

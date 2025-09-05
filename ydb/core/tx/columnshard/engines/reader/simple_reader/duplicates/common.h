@@ -63,6 +63,8 @@ public:
     }
 };
 
+class TPortionStore;
+
 class TPortionBorderView {
 private:
     enum class EBorder {
@@ -82,13 +84,6 @@ private:
     }
 
 public:
-    static TPortionBorderView First(const ui64 portionId) {
-        return TPortionBorderView(portionId, EBorder::FIRST);
-    }
-    static TPortionBorderView Last(const ui64 portionId) {
-        return TPortionBorderView(portionId, EBorder::LAST);
-    }
-
     NArrow::TSimpleRow GetIndexKey(const TPortionInfo& portion) const {
         AFL_VERIFY(PortionId == portion.GetPortionId());
         switch (Border) {
@@ -99,11 +94,13 @@ public:
         }
     }
 
-    NArrow::TSimpleRow GetIndexKeyVerified(const THashMap<ui64, TPortionInfo::TConstPtr>& portions) const {
-        auto* findPortion = portions.FindPtr(PortionId);
-        AFL_VERIFY(findPortion)("id", PortionId)("portions", portions.size());
-        AFL_VERIFY(*findPortion);
-        return GetIndexKey(**findPortion);
+    NArrow::TSimpleRow GetIndexKeyVerified(const TPortionStore& portions) const;
+
+    static TPortionBorderView First(const ui64 portionId) {
+        return TPortionBorderView(portionId, EBorder::FIRST);
+    }
+    static TPortionBorderView Last(const ui64 portionId) {
+        return TPortionBorderView(portionId, EBorder::LAST);
     }
 
     operator size_t() const {
@@ -117,6 +114,29 @@ public:
             case EBorder::LAST:
                 return true;
         }
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << (IsLast() ? "Last:" : "First") << PortionId;
+        return sb;
+    }
+};
+
+class TPortionStore: TMoveOnly {
+private:
+    THashMap<ui64, TPortionInfo::TConstPtr> Portions;
+
+public:
+    TPortionStore(THashMap<ui64, TPortionInfo::TConstPtr>&& portions)
+        : Portions(std::move(portions))
+    {
+    }
+
+    TPortionInfo::TConstPtr GetPortionVerified(const ui64 portionId) const {
+        auto* findPortion = Portions.FindPtr(portionId);
+        AFL_VERIFY(findPortion)("portion", portionId);
+        return *findPortion;
     }
 };
 
@@ -141,6 +161,26 @@ public:
 
     operator size_t() const {
         return CombineHashes((size_t)Begin, (size_t)End);
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "{Begin=" << Begin.DebugString() << ";End=" << End.DebugString() << "}";
+        return sb;
+    }
+};
+
+class TSortableBorders {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>, Begin);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>, End);
+
+public:
+    TSortableBorders(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& begin,
+        const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& end)
+        : Begin(begin)
+        , End(end)
+    {
     }
 };
 

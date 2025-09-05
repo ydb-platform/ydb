@@ -57,19 +57,19 @@ private:
 
 private:
     inline static const ui64 FILTER_CACHE_SIZE = 10000000;  // 10 MiB
-
-    inline static TAtomicCounter NextRequestId = 0;
+    inline static const ui64 BORDER_CACHE_SIZE_COUNT = 10000;
 
     const std::shared_ptr<ISnapshotSchema> LastSchema;
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
     const std::shared_ptr<arrow::Schema> PKSchema;
     const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     const TPortionIntervalTree Intervals;
-    const THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
+    const std::shared_ptr<TPortionStore> Portions;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
 
     TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter, TNoopDelete, TFilterSizeProvider> FiltersCache;
+    TLRUCache<ui64, TSortableBorders> MaterializedBordersCache;
     THashMap<TIntervalBordersView, THashMap<ui64, std::vector<TIntervalFilterCallback>>> IntervalsInFlight;
     ui64 ExpectedIntersectionCount = 0;
 
@@ -83,13 +83,13 @@ private:
         return intervals;
     }
 
-    static THashMap<ui64, std::shared_ptr<TPortionInfo>> MakePortionsIndex(const TPortionIntervalTree& intervals) {
-        THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
+    static std::shared_ptr<TPortionStore> MakePortionsIndex(const TPortionIntervalTree& intervals) {
+        THashMap<ui64, TPortionInfo::TConstPtr> portions;
         intervals.EachRange(
             [&portions](const TPortionIntervalTree::TOwnedRange& /*range*/, const std::shared_ptr<TPortionInfo>& portion) mutable {
                 AFL_VERIFY(portions.emplace(portion->GetPortionId(), portion).second);
             });
-        return portions;
+        return std::make_shared<TPortionStore>(std::move(portions));
     }
 
 private:
@@ -122,16 +122,6 @@ private:
         PassAway();
     }
 
-    const std::shared_ptr<TPortionInfo>& GetPortionVerified(const ui64 portionId) const {
-        const auto* portion = Portions.FindPtr(portionId);
-        AFL_VERIFY(portion)("portion", portionId);
-        return *portion;
-    }
-
-    ui64 MakeRequestId() {
-        return NextRequestId.Inc();
-    }
-
     std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const {
         std::map<ui32, std::shared_ptr<arrow::Field>> fieldsByColumn;
         {
@@ -143,6 +133,19 @@ private:
             }
         }
         return fieldsByColumn;
+    }
+
+    TSortableBorders GetBorders(const ui64 portionId) {
+        auto findCached = MaterializedBordersCache.Find(portionId);
+        if (findCached != MaterializedBordersCache.End()) {
+            return findCached.Value();
+        }
+        const auto& portion = Portions->GetPortionVerified(portionId);
+        TSortableBorders result =
+            TSortableBorders(std::make_shared<NArrow::NMerger::TSortableBatchPosition>(portion->IndexKeyStart().BuildSortablePosition()),
+                std::make_shared<NArrow::NMerger::TSortableBatchPosition>(portion->IndexKeyEnd().BuildSortablePosition()));
+        MaterializedBordersCache.Insert(portionId, result);
+        return result;
     }
 
 public:

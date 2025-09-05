@@ -1,6 +1,7 @@
 #pragma once
 
 #include "events.h"
+#include "splitter.h"
 
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
@@ -112,50 +113,55 @@ public:
     ui64 GetMemoryGroupId() const {
         return GroupGuard->GetGroupId();
     }
+
+    ui64 GetDataSize() const {
+        return Filters.capacity() * sizeof(std::optional<NArrow::TColumnFilter>);
+    }
 };
 
 class TBuildFilterContext: NColumnShard::TMonitoringObjectsCounter<TBuildFilterContext>, TMoveOnly {
 private:
     using TFieldByColumn = std::map<ui32, std::shared_ptr<arrow::Field>>;
+    using TIntervals = std::vector<std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>>;
     using TPortionIndex = THashMap<ui64, TPortionInfo::TConstPtr>;
     YDB_READONLY_DEF(TActorId, Owner);
     YDB_READONLY_DEF(std::shared_ptr<TFilterAccumulator>, Context);
-    YDB_READONLY_DEF(TPortionIndex, Portions);
-    YDB_READONLY_DEF(std::vector<TIntervalBordersView>, Intervals);
+    YDB_READONLY_DEF(TPortionIndex, RequiredPortions);
+    YDB_READONLY_DEF(TIntervals, Intervals);
     YDB_READONLY_DEF(TFieldByColumn, Columns);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
     YDB_READONLY_DEF(std::shared_ptr<NColumnFetching::TColumnDataManager>, ColumnDataManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>, Counters);
-    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> IntersectionsMemory;
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> SelfMemory;
 
 public:
     TBuildFilterContext(const TActorId owner, const std::shared_ptr<TFilterAccumulator>& context, TPortionIndex&& portions,
-        std::vector<TIntervalBordersView>&& intervals, const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema,
-        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
+        std::vector<std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>>&& intervals, const TFieldByColumn& columns,
+        const std::shared_ptr<arrow::Schema>& pkSchema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters,
-        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& insersectionsMemory)
+        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory)
         : Owner(owner)
         , Context(context)
-        , Portions(std::move(portions))
+        , RequiredPortions(std::move(portions))
         , Intervals(std::move(intervals))
         , Columns(columns)
         , PKSchema(pkSchema)
         , ColumnDataManager(columnDataManager)
         , DataAccessorsManager(dataAccessorsManager)
         , Counters(counters)
-        , IntersectionsMemory(insersectionsMemory)
+        , SelfMemory(contextMemory)
     {
         AFL_VERIFY(Owner);
         AFL_VERIFY(Context);
-        AFL_VERIFY(Portions.size());
+        AFL_VERIFY(RequiredPortions.size());
         AFL_VERIFY(Intervals.size());
         AFL_VERIFY(Columns.size());
         AFL_VERIFY(ColumnDataManager);
         AFL_VERIFY(DataAccessorsManager);
         AFL_VERIFY(Counters);
-        AFL_VERIFY(IntersectionsMemory);
+        AFL_VERIFY(SelfMemory);
     }
 
     std::set<ui32> GetFetchingColumnIds() const {
@@ -170,9 +176,18 @@ public:
         TStringBuilder sb;
         sb << '{';
         sb << "intervals=" << Intervals.size() << ';';
-        sb << "portions=" << Portions.size() << ';';
         sb << '}';
         return sb;
+    }
+
+    static ui64 GetApproximateDataSize(const ui64 intersectionCount) {
+        return intersectionCount *
+               (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>) +
+                   sizeof(std::optional<NArrow::TColumnFilter>));
+    }
+    ui64 GetDataSize() const {
+        return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr)) +
+               Intervals.capacity() * sizeof(std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>) + Context->GetDataSize();
     }
 };
 

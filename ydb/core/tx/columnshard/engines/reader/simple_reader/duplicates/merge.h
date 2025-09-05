@@ -68,8 +68,8 @@ private:
         return "BUILD_DUPLICATE_FILTERS";
     }
 
-    THashMap<ui64, NArrow::TColumnFilter> BuildFiltersOnInterval(
-        const TIntervalBordersView& interval, const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData);
+    THashMap<ui64, NArrow::TColumnFilter> BuildFiltersOnInterval(const TColumnDataSplitter::TBorder& begin,
+        const TColumnDataSplitter::TBorder& end, const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData);
     std::vector<std::string> GetVersionColumnNames() const {
         return IIndexInfo::GetSnapshotColumnNames();
     }

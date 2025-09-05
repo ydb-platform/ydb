@@ -48,10 +48,17 @@
 # as bad and itself as good. Nothing should happen, pile1 should be good (not marked bad)
 #
 # Test cases, which emulate skipper (keeper) restart:
-## 14. As 10b. But also we emulate skipper restart. It should read proper generation from saved state and ignore
+#
+# 14. Should start with empty non-existing state.
+# 15. Should fail to start when path to state has non-existing item.
+# 16. Start with exmpty state, run healthcheck, check that state is saved.
+# 17. Start with existing state, check that it is loaded.
+#
+# 18. As 10b. But also we emulate skipper restart. It should read proper generation from saved state and ignore
 # older generations
 
 import bridge
+import skipper
 import health
 
 import logging
@@ -60,6 +67,8 @@ import unittest
 from unittest.mock import patch
 
 import time
+import os
+import tempfile
 
 
 # Add custom TRACE log level (lower than DEBUG)
@@ -934,6 +943,213 @@ class TestBridgeSkipperDecisions(unittest.TestCase):
         self.assertEqual(state.primary_name, "pile1")
         self.assertFalse(state.piles["pile1"].is_good())
         self.assertTrue(state.piles["pile1"].marked_bad)
+
+    def test_case_14_start_with_empty_non_existing_state(self):
+        state_dir = tempfile.mkdtemp(prefix="keeper_state_dir_")
+        state_path = os.path.join(state_dir, "state.bin")
+        try:
+            with patch("bridge.health.AsyncHealthcheckRunner") as FakeRunner, patch("bridge.time.sleep", return_value=None):
+                runner = FakeRunner.return_value
+                runner.start.return_value = None
+                # Do not call do_healthcheck to avoid creating the file
+                keeper = bridge.BridgeSkipper(path_to_cli="ydb", initial_piles=self.initial_piles, auto_failover=True, state_path=state_path)
+                keeper.async_checker = runner
+                self.assertIsNone(keeper.current_state)
+                self.assertFalse(os.path.exists(state_path))
+        finally:
+            try:
+                os.remove(state_path)
+            except Exception:
+                pass
+            try:
+                os.rmdir(state_dir)
+            except Exception:
+                pass
+
+    def test_case_15_fail_on_non_existing_state_directory(self):
+        # Construct a path where parent does not exist
+        tmp_base = tempfile.mkdtemp(prefix="keeper_base_")
+        nonexist_dir = os.path.join(tmp_base, "no_such_dir")
+        state_path = os.path.join(nonexist_dir, "state.bin")
+        try:
+            # Build argv and run skipper.main expecting SystemExit(2)
+            argv = [
+                "skipper.py",
+                "--endpoint", "dummy-endpoint",
+                "--ydb", "/bin/true",
+                "--state", state_path,
+            ]
+            with patch("sys.argv", argv), \
+                 patch("bridge.resolve", return_value={"pile1": ["h1","h2","h3"], "pile2": ["h4","h5","h6"]}):
+                with self.assertRaises(SystemExit) as ctx:
+                    skipper.main()
+            self.assertEqual(ctx.exception.code, 2)
+        finally:
+            try:
+                os.rmdir(tmp_base)
+            except Exception:
+                pass
+
+    def test_case_16_start_empty_then_saved(self):
+        fd, state_path = tempfile.mkstemp(prefix="keeper_state_", suffix=".bin")
+        os.close(fd)
+        try:
+            os.remove(state_path)
+        except Exception:
+            pass
+        try:
+            views = {
+                "pile1": health.PileWorldView(
+                    "pile1",
+                    health=_mk_pile_health("pile1", "GOOD", []),
+                    admin_states=_mk_admin_states(1, primary="pile1"),
+                ),
+                "pile2": health.PileWorldView(
+                    "pile2",
+                    health=_mk_pile_health("pile2", "GOOD", []),
+                    admin_states=_mk_admin_states(1, primary="pile1"),
+                ),
+            }
+            with patch("bridge.health.AsyncHealthcheckRunner") as FakeRunner, patch("bridge.time.sleep", return_value=None):
+                runner = FakeRunner.return_value
+                runner.start.return_value = None
+                runner.get_health_state.return_value = views
+                keeper = bridge.BridgeSkipper(path_to_cli="ydb", initial_piles=self.initial_piles, auto_failover=True, state_path=state_path)
+                keeper.async_checker = runner
+                keeper._do_healthcheck()
+                self.assertTrue(os.path.exists(state_path))
+                self.assertGreater(os.path.getsize(state_path), 0)
+        finally:
+            try:
+                os.remove(state_path)
+            except Exception:
+                pass
+
+    def test_case_17_start_with_existing_state_then_loaded(self):
+        fd, state_path = tempfile.mkstemp(prefix="keeper_state_", suffix=".bin")
+        os.close(fd)
+        try:
+            # First keeper to write state
+            views1 = {
+                "pile1": health.PileWorldView(
+                    "pile1",
+                    health=_mk_pile_health("pile1", "GOOD", []),
+                    admin_states=_mk_admin_states(1, primary="pile1"),
+                ),
+                "pile2": health.PileWorldView(
+                    "pile2",
+                    health=_mk_pile_health("pile2", "GOOD", []),
+                    admin_states=_mk_admin_states(2, primary="pile2"),
+                ),
+            }
+            with patch("bridge.health.AsyncHealthcheckRunner") as FakeRunner, patch("bridge.time.sleep", return_value=None):
+                runner1 = FakeRunner.return_value
+                runner1.start.return_value = None
+                runner1.get_health_state.return_value = views1
+                keeper1 = bridge.BridgeSkipper(path_to_cli="ydb", initial_piles=self.initial_piles, auto_failover=True, state_path=state_path)
+                keeper1.async_checker = runner1
+                keeper1._do_healthcheck()
+                self.assertTrue(os.path.exists(state_path))
+
+            # Second keeper to load state
+            views2 = {
+                "pile1": health.PileWorldView(
+                    "pile1",
+                    health=_mk_pile_health("pile1", "GOOD", []),
+                    admin_states=_mk_admin_states(1, primary="pile1"),
+                ),
+                "pile2": health.PileWorldView(
+                    "pile2",
+                    health=_mk_pile_health("pile2", None, [], responsive=False),
+                    admin_states=None,
+                ),
+            }
+            with patch("bridge.health.AsyncHealthcheckRunner") as FakeRunner2, patch("bridge.time.sleep", return_value=None):
+                runner2 = FakeRunner2.return_value
+                runner2.start.return_value = None
+                runner2.get_health_state.return_value = views2
+                keeper2 = bridge.BridgeSkipper(path_to_cli="ydb", initial_piles=self.initial_piles, auto_failover=True, state_path=state_path)
+                keeper2.async_checker = runner2
+                # Loaded state should be present before healthcheck
+                self.assertIsNotNone(keeper2.current_state)
+                self.assertEqual(keeper2.current_state.generation, 2)
+                self.assertEqual(keeper2.current_state.primary_name, "pile2")
+        finally:
+            try:
+                os.remove(state_path)
+            except Exception:
+                pass
+
+    def test_case_18_restart_uses_saved_generation_and_ignores_older(self):
+        # Prepare a temp state file
+        fd, state_path = tempfile.mkstemp(prefix="keeper_state_", suffix=".bin")
+        os.close(fd)
+        try:
+            # First run: accept gen2, primary pile2
+            views1 = {
+                "pile1": health.PileWorldView(
+                    "pile1",
+                    health=_mk_pile_health("pile1", "GOOD", []),
+                    admin_states=_mk_admin_states(1, primary="pile1"),
+                ),
+                "pile2": health.PileWorldView(
+                    "pile2",
+                    health=_mk_pile_health("pile2", "GOOD", []),
+                    admin_states=_mk_admin_states(2, primary="pile2"),
+                ),
+            }
+
+            with patch("bridge.health.AsyncHealthcheckRunner") as FakeRunner, patch("bridge.time.sleep", return_value=None):
+                runner1 = FakeRunner.return_value
+                runner1.start.return_value = None
+                runner1.get_health_state.return_value = views1
+
+                keeper1 = bridge.BridgeSkipper(path_to_cli="ydb", initial_piles=self.initial_piles, auto_failover=True, state_path=state_path)
+                keeper1.async_checker = runner1
+
+                keeper1._do_healthcheck()
+                d1 = keeper1._decide()
+                self.assertIsNotNone(d1)
+                p1, cmds1 = d1
+                self.assertEqual(p1, "pile2")
+                self.assertEqual(cmds1, [])
+
+            # Second run (restart): older gen1 from pile1, pile2 unresponsive
+            views2 = {
+                "pile1": health.PileWorldView(
+                    "pile1",
+                    health=_mk_pile_health("pile1", "GOOD", []),
+                    admin_states=_mk_admin_states(1, primary="pile1"),
+                ),
+                "pile2": health.PileWorldView(
+                    "pile2",
+                    health=_mk_pile_health("pile2", None, [], responsive=False),
+                    admin_states=None,
+                ),
+            }
+
+            with patch("bridge.health.AsyncHealthcheckRunner") as FakeRunner2, patch("bridge.time.sleep", return_value=None):
+                runner2 = FakeRunner2.return_value
+                runner2.start.return_value = None
+                runner2.get_health_state.return_value = views2
+
+                keeper2 = bridge.BridgeSkipper(path_to_cli="ydb", initial_piles=self.initial_piles, auto_failover=True, state_path=state_path)
+                keeper2.async_checker = runner2
+
+                keeper2._do_healthcheck()
+                d2 = keeper2._decide()
+                self.assertIsNotNone(d2)
+                p2, cmds2 = d2
+                # Should use saved generation/primary (gen2, pile2) and ignore older gen1
+                state2, _ = keeper2.get_state_and_history()
+                self.assertEqual(state2.generation, 2)
+                self.assertEqual(state2.primary_name, "pile2")
+                self.assertEqual(p2, "pile2")
+        finally:
+            try:
+                os.remove(state_path)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

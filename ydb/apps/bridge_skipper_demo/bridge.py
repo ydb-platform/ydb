@@ -1,4 +1,7 @@
 import health
+import json
+import pickle
+import os
 from cli_wrapper import *
 
 import collections
@@ -436,11 +439,12 @@ class TransitionHistory:
 
 
 class BridgeSkipper:
-    def __init__(self, path_to_cli: str, initial_piles: Dict[str, List[str]], use_https: bool = False, auto_failover: bool = True):
+    def __init__(self, path_to_cli: str, initial_piles: Dict[str, List[str]], use_https: bool = False, auto_failover: bool = True, state_path: Optional[str] = None):
         self.path_to_cli = path_to_cli
         self.initial_piles = initial_piles
         self.use_https = use_https
         self.auto_failover = auto_failover
+        self.state_path = state_path
 
         self.async_checker = health.AsyncHealthcheckRunner(path_to_cli, initial_piles, use_https=use_https)
         self.async_checker.start()
@@ -450,6 +454,12 @@ class BridgeSkipper:
 
         self.current_state = None
         self.state_history = TransitionHistory()
+
+        # Attempt to load previous state if provided
+        try:
+            self._load_state()
+        except Exception as e:
+            logger.debug(f"Failed to load saved state: {e}")
 
         self._state_lock = threading.Lock()
         self._run_thread = None
@@ -476,6 +486,10 @@ class BridgeSkipper:
         with self._state_lock:
             self.current_state = new_state
             self.state_history.add_state(self.current_state)
+        try:
+            self._save_state()
+        except Exception as e:
+            logger.error(f"Failed to save state: {e}")
 
     def _decide(self) -> Optional[Tuple[str, List[List[str]]]]:
         # decide is called within the same thread as do_healthcheck,
@@ -580,6 +594,10 @@ class BridgeSkipper:
                     logger.info(f"{succeeded_count} failover {commands_s} executed successfully, expecting gen >= {new_min_gen}")
                     with self._state_lock:
                         self.current_state.wait_for_generation = new_min_gen
+                    try:
+                        self._save_state()
+                    except Exception as e:
+                        logger.error(f"Failed to save state: {e}")
 
     def _maintain_once(self):
         self._do_healthcheck()
@@ -631,6 +649,40 @@ class BridgeSkipper:
             state_copy = copy.deepcopy(self.current_state) if self.current_state is not None else None
             transitions_copy = list(self.state_history.get_transitions())
         return (state_copy, transitions_copy)
+
+    def _save_state(self):
+        if not self.state_path:
+            return
+        tmp_path = self.state_path
+        # Truncate and write binary pickle, fsync for durability
+        fd = None
+        try:
+            fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+            with os.fdopen(fd, "wb") as f:
+                pickle.dump((self.current_state, self.state_history), f, protocol=pickle.HIGHEST_PROTOCOL)
+                f.flush()
+                os.fsync(f.fileno())
+            fd = None
+        finally:
+            try:
+                if fd is not None:
+                    os.close(fd)
+            except Exception:
+                pass
+
+    def _load_state(self):
+        if not self.state_path:
+            return
+        if not os.path.exists(self.state_path):
+            return
+        try:
+            with open(self.state_path, "rb") as f:
+                state, history = pickle.load(f)
+            # Assign loaded objects as-is
+            self.current_state = state
+            self.state_history = history
+        except Exception as e:
+            logger.debug(f"Failed to read state file: {e}")
 
 
 def get_max_status_length():

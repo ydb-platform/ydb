@@ -77,6 +77,7 @@ If Ya Make fails due to network restrictions:
 
 ### Manual Validation After Changes
 - **Build validation**: Verify executables are created in expected locations
+- **Repository structure check**: Verify key directories exist: `ls -d ydb/{core,library,apps} library util`
 - **Functionality testing**: If modifying core components, run a basic YDB scenario:
   1. Start server: `./ydb/apps/ydbd/ydbd --help` (verify it runs)
   2. Check CLI: `./ydb/apps/ydb/ydb --help` (verify it runs)
@@ -136,6 +137,21 @@ If Ya Make fails due to network restrictions:
 - **PR categories**: Choose one: New Feature, Improvement, Bugfix, etc.
 - **Documentation**: Update if API or behavior changes
 - **Review process**: Core team reviews, automated checks must pass
+
+## Common File Patterns and Repository Statistics
+
+### File Discovery Patterns (Validated)
+- **Unit tests**: `find ydb/core -name "*_ut.cpp"` (hundreds of test files)
+- **Ya Make files**: `find ydb/core -name "ya.make"` (1000+ build files)
+- **Test directories**: `find ydb/core -name "ut" -type d` (165+ test directories)
+- **Core modules**: `find ydb/core -name "*.cpp" | grep -v "_ut.cpp"` (main implementation)
+
+### Repository Scale (Reference)
+- **Repository size**: ~2.4GB source code
+- **Build artifacts**: Can expand to 50-80GB during builds
+- **Test directories**: 165+ unit test directories in core alone
+- **Build files**: 1000+ ya.make files across the project
+- **Primary languages**: C++ (core), Python (tools/scripts), JavaScript (UI)
 
 ## Timeouts and Performance Expectations
 

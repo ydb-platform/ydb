@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/core/base/hive.h>
+
 namespace NKikimr::NCmsTest {
 
 using namespace Ydb::Maintenance;
@@ -87,13 +89,13 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         const auto &a1 = response.action_group_states(0).action_states(0);
         UNIT_ASSERT_VALUES_EQUAL(a1.status(), ActionState::ACTION_STATUS_PERFORMED);
         UNIT_ASSERT_VALUES_EQUAL(a1.reason(), ActionState::ACTION_REASON_OK);
-        UNIT_ASSERT(a1.reason_details().empty());
+        UNIT_ASSERT(a1.details().empty());
 
         UNIT_ASSERT_VALUES_EQUAL(response.action_group_states(1).action_states().size(), 1);
         const auto &a2 = response.action_group_states(1).action_states(0);
         UNIT_ASSERT_VALUES_EQUAL(a2.status(), ActionState::ACTION_STATUS_PENDING);
         UNIT_ASSERT_VALUES_EQUAL(a2.reason(), ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS);
-        UNIT_ASSERT(a2.reason_details().Contains("too many unavailable vdisks"));
+        UNIT_ASSERT(a2.details().Contains("too many unavailable vdisks"));
     }
 
     Y_UNIT_TEST(SimplifiedMirror3DC) {
@@ -316,6 +318,40 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
             const auto& a = response.action_group_states(i).action_states(0);
             UNIT_ASSERT_VALUES_EQUAL(a.status(), ActionState::ACTION_STATUS_PERFORMED);
         }
+    }
+
+    Y_UNIT_TEST(TestDrainAction) {
+        TCmsTestEnv env(8);
+
+        auto observer = env.AddObserver([&](auto&& ev) {
+            if (ev->Type == TEvHive::EvDrainNode) {
+                env.Send(new IEventHandle(ev->Sender, env.GetSender(), new TEvHive::TEvDrainNodeAck()), 0);
+            }
+        });
+
+        env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            MakeActionGroup(
+                MakeDrainAction(env.GetNodeId(1))
+            )
+        );
+
+        auto getResult = env.CheckMaintenanceTaskGet("task-1", Ydb::StatusIds::SUCCESS);
+        auto status = getResult.action_group_states(0).action_states(0).status();
+        UNIT_ASSERT(status == ActionState::ACTION_STATUS_IN_PROGRESS || status == ActionState::ACTION_STATUS_PERFORMED);
+    }
+
+    Y_UNIT_TEST(TestCordonAction) {
+        TCmsTestEnv env(8);
+
+        env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            MakeActionGroup(
+                MakeCordonAction(env.GetNodeId(1))
+            )
+        );
+
+        auto getResult = env.CheckMaintenanceTaskGet("task-1", Ydb::StatusIds::SUCCESS);
+        auto status = getResult.action_group_states(0).action_states(0).status();
+        UNIT_ASSERT_VALUES_EQUAL(status, ActionState::ACTION_STATUS_PERFORMED);
     }
 }
 

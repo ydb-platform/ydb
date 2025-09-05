@@ -203,7 +203,7 @@ def _parse_args():
     parser.add_argument("--endpoint", "-e", required=True,
                         help="Single endpoint used to resolve piles and their endpoints")
 
-    parser.add_argument("--state", "-s", required=True, help="Path to keeper state file (JSON)")
+    parser.add_argument("--state", "-s", required=True, help="Path to keeper state file (pickle format)")
 
     parser.add_argument("--ydb", required=False, help="Path to ydb cli")
     parser.add_argument("--disable-auto-failover", action="store_true", help="Disable automatical failover")

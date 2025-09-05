@@ -34,6 +34,10 @@ protected:
         Hive->RemoveSubActor(this);
         for (TGetNodes getNodes{Hive}; auto nodeId : std::visit(getNodes, Target)) {
             Hive->BalancerNodes.erase(nodeId);
+            auto node = Hive->FindNode(nodeId);
+            if (node) {
+                node->DrainActor = nullptr;
+            }
         }
         return IActor::PassAway();
     }

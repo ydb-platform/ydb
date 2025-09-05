@@ -73,6 +73,7 @@ public:
         if (ShouldStartDrain) {
             auto* node = Self->FindNode(NodeId);
             if (node) {
+                Y_DEBUG_ABORT_UNLESS(node->DrainActor == nullptr);
                 node->DrainActor = Self->StartHiveDrain(NodeId, std::move(Settings));
             }
             if (Initiator) {

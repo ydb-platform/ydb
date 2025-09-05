@@ -3019,15 +3019,14 @@ void THive::UpdatePiles() {
 }
 
 std::optional<TActorId> THive::GetPipeToTenantHive(const TNodeInfo* nodeInfo) {
-    if (nodeInfo && nodeInfo->ServicedDomains.size() == 1) {
-        TDomainInfo* domainInfo = FindDomain(nodeInfo->ServicedDomains.front());
-        if (domainInfo != nullptr) {
-            if (domainInfo->HiveId != 0 && domainInfo->HiveId != TabletID()) {
-                return domainInfo->GetPipeToHive(this);
-            }
-        }
+    if (!nodeInfo || nodeInfo->ServicedDomains.size() != 1) {
+        return std::nullopt;
     }
-    return std::nullopt;
+    TDomainInfo* domainInfo = FindDomain(nodeInfo->ServicedDomains.front());
+    if (!domainInfo || domainInfo->HiveId == 0 == domainInfo->HiveId == TabletID()) {
+        return std::nullopt;
+    }
+    return domainInfo->GetPipeToHive(this);
 }
 
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
@@ -3718,13 +3717,6 @@ void THive::Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr&) {
 
 void THive::Handle(TEvHive::TEvSetDown::TPtr& ev) {
     Execute(CreateSetDown(ev));
-    auto nodeId = ev->Get()->Record.GetNodeId();
-    auto* node = FindNode(nodeId);
-    auto tenantHive = GetPipeToTenantHive(node);
-    if (tenantHive) {
-        auto sender = ev->Sender;
-        NTabletPipe::SendData(sender, *tenantHive, std::move(ev)->Get());
-    }
 }
 
 void THive::MakeScaleRecommendation() {

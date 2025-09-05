@@ -613,6 +613,7 @@ bool TCms::CheckAction(const TAction &action, const TActionOptions &opts, TError
         case TAction::REPLACE_DEVICES:
             return CheckActionReplaceDevices(action, opts.PermissionDuration, error);
         case TAction::DRAIN_NODE:
+        case TAction::CORDON_NODE:
             return true;
         case TAction::START_SERVICES:
         case TAction::STOP_SERVICES:

@@ -553,15 +553,12 @@ class TCreateMaintenanceTask
     static void ConvertScope(const Ydb::Maintenance::ActionScope& scope, NKikimrCms::TAction& cmsAction) {
         switch (scope.scope_case()) {
         case Ydb::Maintenance::ActionScope::kNodeId:
-            cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
             cmsAction.SetHost(ToString(scope.node_id()));
             break;
         case Ydb::Maintenance::ActionScope::kHost:
-            cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
             cmsAction.SetHost(scope.host());
             break;
         case Ydb::Maintenance::ActionScope::kPdisk: {
-            cmsAction.SetType(NKikimrCms::TAction::REPLACE_DEVICES);
             auto& pdisk = scope.pdisk();
             if (pdisk.has_pdisk_id()) {
                 ConvertPDiskId(pdisk.pdisk_id(), *cmsAction.add_devices());
@@ -578,7 +575,13 @@ class TCreateMaintenanceTask
     }
 
     static void ConvertAction(const Ydb::Maintenance::LockAction& action, NKikimrCms::TAction& cmsAction) {
-        cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
+        switch (action.scope().scope_case()) {
+        case Ydb::Maintenance::ActionScope::kPdisk:
+            cmsAction.SetType(NKikimrCms::TAction::REPLACE_DEVICES);
+        default:
+            cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
+        }
+
         cmsAction.SetDuration(TimeUtil::DurationToMicroseconds(action.duration()));
 
         ConvertScope(action.scope(), cmsAction);
@@ -831,6 +834,7 @@ public:
             Send(CmsActorId, std::move(cmsRequest));
             WaitingForCms = true;
         }
+
         Become(&TThis::StateWork);
 
         MaybeReply();
@@ -910,12 +914,12 @@ public:
     }
 
     void Handle(TEvHive::TEvResponseDrainInfo::TPtr& ev) {
-        auto cookie = ev->Cookie;
+        const auto cookie = ev->Cookie;
         auto it = PendingDrainActions.find(cookie);
         if (it == PendingDrainActions.end()) {
             return;
         }
-        TActionIdx actionIdx = it->second;
+        const TActionIdx actionIdx = it->second;
         PendingDrainActions.erase(it);
 
         auto& result = *Response->Record.MutableResult();
@@ -928,17 +932,16 @@ public:
         }
 
         auto cmsState = GetCmsState();
-        auto permissionId = actionInfo.action_uid().action_id();
+        const auto permissionId = actionInfo.action_uid().action_id();
         auto cmsIt = cmsState->Permissions.find(permissionId);
         if (cmsIt == cmsState->Permissions.end()) {
-            MaybeReply();
-            return;
+            return MaybeReply();
         }
-        ui64 expectedSeqNo = FromString(cmsIt->second.Action.GetMaintenanceTaskContext());
-        ui64 seqNo = record.GetDrainSeqNo();
-        if (seqNo > expectedSeqNo || (seqNo == expectedSeqNo && !record.GetDrainInProgress())) {
+        const ui64 expectedSeqNo = FromString(cmsIt->second.Action.GetMaintenanceTaskContext());
+        const ui64 actualSeqNo = record.GetDrainSeqNo();
+        if (actualSeqNo > expectedSeqNo || (actualSeqNo == expectedSeqNo && !record.GetDrainInProgress())) {
             actionInfo.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PERFORMED);
-        } else if (seqNo == expectedSeqNo && record.GetDrainInProgress()) {
+        } else if (actualSeqNo == expectedSeqNo && record.GetDrainInProgress()) {
             actionInfo.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_IN_PROGRESS);
             if (record.HasProgress()) {
                 actionInfo.set_details(Sprintf("Progress: %.2f%%", record.GetProgress()));
@@ -966,6 +969,7 @@ public:
         TBase::PassAway();
     }
 
+private:
     THolder<TEvCms::TEvGetMaintenanceTaskResponse> Response = MakeHolder<TEvCms::TEvGetMaintenanceTaskResponse>();
     std::unordered_map<ui64, TActionIdx> PendingDrainActions;
     bool WaitingForCms = false;
@@ -1023,8 +1027,9 @@ class TDropMaintenanceTask
             cmsRequest->Record.AddPermissions(id);
             const auto& permission = GetCmsState()->Permissions.at(id);
             if (permission.Action.GetType() == NKikimrCms::TAction::DRAIN_NODE ||
-                permission.Action.GetType() == NKikimrCms::TAction::CORDON_NODE) {
-                ui32 nodeId = FromString(permission.Action.GetHost());
+                permission.Action.GetType() == NKikimrCms::TAction::CORDON_NODE) 
+            {
+                const ui32 nodeId = FromString(permission.Action.GetHost());
                 NTabletPipe::SendData(SelfId(), HivePipe(SelfId()), new TEvHive::TEvSetDown(nodeId, false));
             }
         }

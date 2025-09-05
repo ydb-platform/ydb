@@ -245,6 +245,7 @@ protected:
     friend class TTxProcessUpdateFollowers;
     friend class TTxMonEvent_StopDomain;
     friend class TTxUpdatePiles;
+    friend class TTxSetDown;
 
     friend class TDeleteTabletActor;
 

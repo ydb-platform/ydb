@@ -11105,8 +11105,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // disable publications
         {
-            TAtomic unused;
-            runtime.GetAppData().Icb->SetValue("SchemeShard_DisablePublicationsOfDropping", true, unused);
+            TControlBoard::SetValue(true, runtime.GetAppData().Icb->SchemeShardControls.DisablePublicationsOfDropping);
         }
 
         createFn(runtime, txId);
@@ -11143,8 +11142,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // enable publications
         {
-            TAtomic unused;
-            runtime.GetAppData().Icb->SetValue("SchemeShard_DisablePublicationsOfDropping", false, unused);
+            TControlBoard::SetValue(false, runtime.GetAppData().Icb->SchemeShardControls.DisablePublicationsOfDropping);
         }
 
         createFn(runtime, txId);

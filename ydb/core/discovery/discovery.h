@@ -7,6 +7,8 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
+#include <util/generic/set.h>
+
 namespace NKikimr {
 
 struct TEvDiscovery {

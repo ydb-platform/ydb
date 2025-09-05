@@ -139,7 +139,12 @@ public:
             cachedMessage = LookupResponse->CachedMessage;
             cachedMessageSsl = LookupResponse->CachedMessageSsl;
         } else {
-            NDiscovery::TCachedMessageData cachedMessageData(LookupResponse->InfoEntries, endpointId, services);
+            NDiscovery::TCachedMessageData cachedMessageData(
+                LookupResponse->InfoEntries,
+                NameserviceResponse,
+                endpointId,
+                services
+            );
 
             cachedMessage = std::move(cachedMessageData.CachedMessage);
             cachedMessageSsl = std::move(cachedMessageData.CachedMessageSsl);

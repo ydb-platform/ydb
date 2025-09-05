@@ -218,14 +218,14 @@ namespace NKafka {
         TString templateWithProducerStateTable = std::regex_replace(
             templateStr.c_str(),
             std::regex("<producer_state_table_name>"),
-            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->GetStorageTablePath().c_str()
+            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->FormPathToResourceTable(ResourceDatabasePath).c_str()
         );
 
         if (!OffsetsToCommit.empty()) {
             return std::regex_replace(
                 templateWithProducerStateTable.c_str(),
                 std::regex("<consumer_state_table_name>"),
-                NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()
+                NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(ResourceDatabasePath).c_str()
             );
         }
 

@@ -11,7 +11,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/impl/endpoints
     ydb/public/sdk/cpp/src/client/types/operation
     ydb/public/sdk/cpp/src/library/operation_id
-    
 )
 
 END()

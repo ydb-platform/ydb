@@ -26,7 +26,7 @@ private:
         ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<NGeneralCache::TColumnDataCachePolicy>&& errorAddresses) override {
         if (errorAddresses.HasErrors()) {
             TActorContext::AsActorContext().Send(
-                Request.GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorAddresses.GetErrorMessage())));
+                Request.GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorAddresses.GetErrorMessage()), Request.ExtractRequestGuard()));
             return;
         }
 
@@ -52,7 +52,7 @@ public:
     void OnError(const TString& errorMessage) {
         AFL_VERIFY(Request.GetOwner());
         TActorContext::AsActorContext().Send(
-            Request.GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorMessage)));
+            Request.GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorMessage), Request.ExtractRequestGuard()));
     }
 };
 

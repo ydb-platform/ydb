@@ -60,11 +60,13 @@ void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/
                                                                         "portions", Context.GetRequiredPortions().size())(
                                                                         "intervals", Context.GetIntervals().size());
 
-    TActivationContext::AsActorContext().Send(Context.GetOwner(), new NPrivate::TEvFilterConstructionResult(std::move(filters)));
+    TActivationContext::AsActorContext().Send(
+        Context.GetOwner(), new NPrivate::TEvFilterConstructionResult(std::move(filters), Context.ExtractRequestGuard()));
 }
 
 void TBuildDuplicateFilters::DoOnCannotExecute(const TString& reason) {
-    TActivationContext::AsActorContext().Send(Context.GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(reason)));
+    TActivationContext::AsActorContext().Send(
+        Context.GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(reason), Context.ExtractRequestGuard()));
 }
 
 THashMap<ui64, NArrow::TColumnFilter> TBuildDuplicateFilters::BuildFiltersOnInterval(const TColumnDataSplitter::TBorder& begin,

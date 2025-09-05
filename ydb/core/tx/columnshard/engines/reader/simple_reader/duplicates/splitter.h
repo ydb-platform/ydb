@@ -32,10 +32,10 @@ public:
         }
 
         bool operator<(const TBorder& other) const {
-            return std::tie(*Key, IsLast, PortionId) < std::tie(*other.Key, other.IsLast, PortionId);
+            return std::tie(*Key, IsLast, PortionId) < std::tie(*other.Key, other.IsLast, other.PortionId);
         };
         bool IsEquivalent(const TBorder& other) const {
-            return Key == other.Key && IsLast == other.IsLast;
+            return *Key == *other.Key && IsLast == other.IsLast;
         };
 
         TString DebugString() const {

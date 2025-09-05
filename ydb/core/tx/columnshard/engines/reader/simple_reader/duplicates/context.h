@@ -119,6 +119,33 @@ public:
     }
 };
 
+class TRequestInFlightGuard: TMoveOnly {
+private:
+    std::shared_ptr<TFilterAccumulator> Accumulator;
+
+public:
+    TRequestInFlightGuard(const std::shared_ptr<TFilterAccumulator>& accumulator)
+        : Accumulator(accumulator)
+    {
+    }
+
+    TRequestInFlightGuard(TRequestInFlightGuard&& other)
+        : Accumulator(other.Accumulator)
+    {
+        other.Accumulator.reset();
+    }
+    TRequestInFlightGuard& operator=(TRequestInFlightGuard&& other) {
+        std::swap(Accumulator, other.Accumulator);
+        return *this;
+    }
+
+    ~TRequestInFlightGuard() {
+        if (Accumulator) {
+            AFL_VERIFY(Accumulator->IsDone())("accumulator", Accumulator->DebugString());
+        }
+    }
+};
+
 class TBuildFilterContext: NColumnShard::TMonitoringObjectsCounter<TBuildFilterContext>, TMoveOnly {
 private:
     using TFieldByColumn = std::map<ui32, std::shared_ptr<arrow::Field>>;
@@ -134,6 +161,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>, Counters);
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> SelfMemory;
+    TRequestInFlightGuard RequestGuard;
 
 public:
     TBuildFilterContext(const TActorId owner, const std::shared_ptr<TFilterAccumulator>& context, TPortionIndex&& portions,
@@ -152,6 +180,7 @@ public:
         , DataAccessorsManager(dataAccessorsManager)
         , Counters(counters)
         , SelfMemory(contextMemory)
+        , RequestGuard(Context)
     {
         AFL_VERIFY(Owner);
         AFL_VERIFY(Context);
@@ -188,6 +217,10 @@ public:
     ui64 GetDataSize() const {
         return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr)) +
                Intervals.capacity() * sizeof(std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>) + Context->GetDataSize();
+    }
+
+    TRequestInFlightGuard&& ExtractRequestGuard() {
+        return std::move(RequestGuard);
     }
 };
 

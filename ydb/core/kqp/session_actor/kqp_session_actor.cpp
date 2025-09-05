@@ -1060,6 +1060,19 @@ public:
             return false;
         }
 
+        if (QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE
+                && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO
+                && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_SCAN
+                && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_AST_SCAN
+                && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
+                && QueryState->TxCtx->HasOlapTable) {
+            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            TStringBuilder()
+                                << "Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. "
+                                << "Use Serializable or Snapshot Read-Only mode instead.");
+            return false;
+        }
+
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
         if (phyQuery.GetForceImmediateEffectsExecution()) {
             Counters->ForcedImmediateEffectsExecution->Inc();

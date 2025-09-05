@@ -580,7 +580,6 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
     outputChannel.InFlight.emplace(
         seqNo,
         TOutputChannelState::TInFlightMessage(
-            seqNo,
             std::move(channelData),
             finished
         )
@@ -740,7 +739,6 @@ void TDqComputeActorChannels::SendChannelDataAck(TInputChannelState& inputChanne
     inputChannel.InFlight.emplace(
         inputChannel.LastRecvSeqNo,
         TInputChannelState::TInFlightMessage(
-            inputChannel.LastRecvSeqNo,
             freeSpace
         )
     );

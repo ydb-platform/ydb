@@ -168,7 +168,7 @@ public:
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
-        , TasksGraph(Request.TxAlloc, AggregationSettings)
+        , TasksGraph(SelfId().NodeId(), Request.TxAlloc, AggregationSettings)
     {
         if (executerConfig.TableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
@@ -995,7 +995,7 @@ protected:
                         case NKqpProto::TKqpSource::kExternalSource: {
                             YQL_ENSURE(!isScan);
                             auto it = scheduledTaskCount.find(stageIdx);
-                            BuildReadTasksFromSource(stageInfo, ResourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
+                            TasksGraph.BuildReadTasksFromSource(stageInfo, ResourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0, SecureParams);
                         } break;
                         default:
                             YQL_ENSURE(false, "unknown source type");
@@ -1141,93 +1141,6 @@ protected:
         } else {
             task.Meta.NodeId = resourceSnapshot[nodeOffset % resourceSnapshot.size()].GetNodeId();
             task.Meta.Type = TTaskMeta::TTaskType::Scan;
-        }
-    }
-
-    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount) {
-        auto& intros = stageInfo.Introspections;
-        const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-
-        YQL_ENSURE(stage.GetSources(0).HasExternalSource());
-        YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
-
-        const auto& stageSource = stage.GetSources(0);
-        const auto& externalSource = stageSource.GetExternalSource();
-
-        ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
-        intros.push_back("Using number of PartitionedTaskParams from external source - " + ToString(taskCount));
-
-        auto taskCountHint = stage.GetTaskCount();
-        TString introHint;
-        if (taskCountHint == 0) {
-            taskCountHint = scheduledTaskCount;
-            introHint = "(Using scheduled task count as hint for override - " + ToString(taskCountHint) + ")";
-        }
-
-        if (taskCountHint) {
-            if (taskCount > taskCountHint) {
-                taskCount = taskCountHint;
-                if (!introHint.empty()) {
-                    intros.push_back(introHint);
-                }
-                intros.push_back("Manually overridden - " + ToString(taskCount));
-            }
-        } else if (!resourceSnapshot.empty()) {
-            ui32 maxTaskcount = resourceSnapshot.size() * 2;
-            if (taskCount > maxTaskcount) {
-                taskCount = maxTaskcount;
-                intros.push_back("Using less tasks because of resource snapshot size - " + ToString(taskCount));
-            }
-        }
-
-        auto sourceName = externalSource.GetSourceName();
-        TString structuredToken;
-        if (sourceName) {
-            structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
-        }
-
-        ui64 nodeOffset = 0;
-        for (size_t i = 0; i < resourceSnapshot.size(); ++i) {
-            if (resourceSnapshot[i].GetNodeId() == SelfId().NodeId()) {
-                nodeOffset = i;
-                break;
-            }
-        }
-
-        if (TasksGraph.GetMeta().IsRestored) {
-            for (const auto taskId : stageInfo.Tasks) {
-                auto& task = TasksGraph.GetTask(taskId);
-                FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
-            }
-            return;
-        }
-
-        TVector<ui64> tasksIds;
-        tasksIds.reserve(taskCount);
-
-        // generate all tasks
-        for (ui32 i = 0; i < taskCount; i++) {
-            auto& task = TasksGraph.AddTask(stageInfo);
-
-            if (!externalSource.GetEmbedded()) {
-                auto& input = task.Inputs[stageSource.GetInputIndex()];
-                input.ConnectionInfo = NYql::NDq::TSourceInput{};
-                input.SourceSettings = externalSource.GetSettings();
-                input.SourceType = externalSource.GetType();
-            }
-
-            FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
-
-            tasksIds.push_back(task.Id);
-        }
-
-        // distribute read ranges between them
-        ui32 currentTaskIndex = 0;
-        for (const TString& partitionParam : externalSource.GetPartitionedTaskParams()) {
-            TasksGraph.GetTask(tasksIds[currentTaskIndex]).Meta.ReadRanges.push_back(partitionParam);
-            if (++currentTaskIndex >= tasksIds.size()) {
-                currentTaskIndex = 0;
-            }
         }
     }
 

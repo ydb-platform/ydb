@@ -11,5 +11,5 @@ DROP TOPIC topic_path;
 The following command will delete the topic named `my_topic`:
 
 ```yql
-DROP TOPIC `my_topic`;
+DROP TOPIC my_topic;
 ```

@@ -35,6 +35,6 @@ TString IClassBehaviour::GetInternalStorageHistoryTablePath() const {
 }
 
 TString IClassBehaviour::FormPathToResourceTable(const TString& resourceDatabasePath) const {
-    return resourceDatabasePath + "\\.metadata\\" + GetInternalStorageTablePath();
+    return "/" + resourceDatabasePath + "/.metadata/" + GetInternalStorageTablePath();
 }
 }

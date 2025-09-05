@@ -27,7 +27,11 @@ enum class EBalancingPolicy {
     UseAllNodes,
     //! Use preferable location,
     //! params is a name of location (VLA, MAN), if params is empty local datacenter is used
-    UsePreferableLocation
+    UsePreferableLocation,
+    //! EXPERIMENTAL
+    //! Use pile with preferable state,
+    //! params is a state of pile (primary, secondary), if params is empty primary pile is used
+    UsePreferablePile,
 };
 
 } // namespace NYdb

@@ -1190,6 +1190,11 @@ message TCheckpointsConfig {
     optional uint64 CheckpointingSnapshotRotationPeriod = 8; // 0 - All checkpoints are snapshots, 1 - 1 increment/ 1 snapshot, 20 - 20 increment / 1 snapshot.
 }
 
+message TStreamingQueriesConfig {
+    optional uint64 MaxQueryExecutions = 1 [default = 30];
+    optional bool PrivateSystemTables = 2 [default = true];
+}
+
 message TQueryServiceConfig {
     optional uint64 ScriptOperationTimeoutDefaultSeconds = 1 [default = 604800]; // default = 1 week
     optional uint64 ScriptForgetAfterDefaultSeconds = 2 [default = 31536000]; // default = 1 year; 0 = infinity
@@ -1216,6 +1221,7 @@ message TQueryServiceConfig {
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
     optional TCheckpointsConfig CheckpointsConfig = 24;
+    optional TStreamingQueriesConfig StreamingQueries = 25;
 }
 
 // Config describes immediate controls and allows

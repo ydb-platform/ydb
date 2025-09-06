@@ -4,8 +4,6 @@
 
 {% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
 
-{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
-
 {% endif %}
 
 ## Добавление индекса {#add-index}

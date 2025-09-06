@@ -1,6 +1,6 @@
   * common parameters for all vector indexes:
     * `vector_dimension` - embedding vector dimensionality (should be between 1 and 16384)
-    * `vector_type` - vector value type (`float`, `uint8`, `int8`, or `bit`)
+    * `vector_type` - vector value type (`float`, `uint8`, or `int8`)
     * `distance` - distance function (`cosine`, `manhattan`, or `euclidean`), mutually exclusive with `similarity`
 	  * `similarity` - similarity function (`inner_product` or `cosine`), mutually exclusive with `distance`
   * specific parameters for `vector_kmeans_tree` (see [the reference](../../../../dev/vector-indexes.md#kmeans-tree-type)):

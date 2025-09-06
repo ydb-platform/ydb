@@ -707,7 +707,7 @@ namespace Tests {
         // Setup discovery for typically used services on the node
         {
             TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
-            desc->Address = options.Host;
+            desc->Address = Settings->GrpcHost ? Settings->GrpcHost : options.Host;
             desc->Port = options.Port;
             desc->Ssl = !options.SslData.Empty();
 

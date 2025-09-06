@@ -213,6 +213,32 @@ struct TTestContext {
         return values;
     }
 
+    TType* GetOptionalListOfOptional() {
+        TType* itemType = TOptionalType::Create(TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv), TypeEnv);
+        return TOptionalType::Create(TListType::Create(itemType, TypeEnv), TypeEnv);
+    }
+
+    TUnboxedValueVector CreateOptionalListOfOptional(ui32 quantity) {
+        TUnboxedValueVector values;
+        for (ui64 value = 0; value < quantity; ++value) {
+            if (value % 2 == 0) {
+                values.emplace_back(NUdf::TUnboxedValuePod());
+                continue;
+            }
+
+            TUnboxedValueVector items;
+            items.reserve(value);
+            for (ui64 i = 0; i < value; ++i) {
+                NUdf::TUnboxedValue item = ((value + i) % 2 == 0) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(i);
+                items.push_back(std::move(item).MakeOptional());
+            }
+
+            auto listValue = Vb.NewList(items.data(), value);
+            values.emplace_back(std::move(listValue).MakeOptional());
+        }
+        return values;
+    }
+
     TType* GetVariantOverStructType() {
         TStructMember members[4] = {
             {"0_yson", TDataType::Create(NUdf::TDataType<NUdf::TYson>::Id, TypeEnv)},
@@ -807,24 +833,37 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         auto values = context.CreateDictUtf8ToInterval(100);
         auto array = NArrow::MakeArray(values, dictType);
         UNIT_ASSERT(array->ValidateFull().ok());
-        UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::MAP);
-        auto mapArray = static_pointer_cast<arrow::MapArray>(array);
 
-        UNIT_ASSERT(mapArray->num_fields() == 1);
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        auto wrapArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT_VALUES_EQUAL(wrapArray->num_fields(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(wrapArray->length()), values.size());
+
+        UNIT_ASSERT(wrapArray->field(0)->type_id() == arrow::Type::MAP);
+        auto mapArray = static_pointer_cast<arrow::MapArray>(wrapArray->field(0));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(mapArray->length()), values.size());
+
+        UNIT_ASSERT(wrapArray->field(1)->type_id() == arrow::Type::UINT64);
+        auto customArray = static_pointer_cast<arrow::Int64Array>(wrapArray->field(1));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(customArray->length()), values.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(mapArray->num_fields(), 1);
+
         UNIT_ASSERT(mapArray->keys()->type_id() == arrow::Type::STRING);
-        UNIT_ASSERT(mapArray->items()->type_id() == arrow::Type::DURATION);
         auto utf8Array = static_pointer_cast<arrow::StringArray>(mapArray->keys());
+
+        UNIT_ASSERT(mapArray->items()->type_id() == arrow::Type::DURATION);
         auto intervalArray = static_pointer_cast<arrow::NumericArray<arrow::DurationType>>(mapArray->items());
+
         ui64 index = 0;
         for (const auto& value: values) {
-            UNIT_ASSERT(value.GetDictLength() == static_cast<ui64>(mapArray->value_length(index)));
+            UNIT_ASSERT_VALUES_EQUAL(value.GetDictLength(), static_cast<ui64>(mapArray->value_length(index)));
             for (auto subindex = mapArray->value_offset(index); subindex < mapArray->value_offset(index + 1); ++subindex) {
                 auto keyArrow = utf8Array->GetView(subindex);
                 NUdf::TUnboxedValue key = MakeString(NUdf::TStringRef(keyArrow.data(), keyArrow.size()));
                 UNIT_ASSERT(value.Contains(key));
                 NUdf::TUnboxedValue payloadValue = value.Lookup(key);
-                UNIT_ASSERT(intervalArray->Value(subindex) == payloadValue.Get<i64>());
+                UNIT_ASSERT_VALUES_EQUAL(intervalArray->Value(subindex), payloadValue.Get<i64>());
             }
             ++index;
         }
@@ -857,6 +896,48 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
                 auto stringRef = item.AsStringRef();
                 std::string itemList(stringRef.Data(), stringRef.Size());
                 UNIT_ASSERT(itemList == itemArrow);
+                ++innerIndex;
+            }
+            ++index;
+        }
+    }
+
+    Y_UNIT_TEST(OptionalListOfOptional) {
+        TTestContext context;
+
+        auto listType = context.GetOptionalListOfOptional();
+        Y_ABORT_UNLESS(NArrow::IsArrowCompatible(listType));
+
+        auto values = context.CreateOptionalListOfOptional(100);
+        auto array = NArrow::MakeArray(values, listType);
+        UNIT_ASSERT(array->ValidateFull().ok());
+        UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
+        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
+
+        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT(listArray->num_fields() == 1);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::INT32);
+
+        auto i32Array = static_pointer_cast<arrow::Int32Array>(listArray->values());
+        auto index = 0;
+        auto innerIndex = 0;
+        for (const auto& value: values) {
+            if (!value.HasValue()) {
+                UNIT_ASSERT(listArray->IsNull(index));
+                ++index;
+                continue;
+            }
+
+            auto listValue = value.GetOptionalValue();
+
+            UNIT_ASSERT_VALUES_EQUAL(listValue.GetListLength(), static_cast<ui64>(listArray->value_length(index)));
+            const auto iter = listValue.GetListIterator();
+            for (NUdf::TUnboxedValue item; iter.Next(item);) {
+                if (!item.HasValue()) {
+                    UNIT_ASSERT(i32Array->IsNull(innerIndex));
+                } else {
+                    UNIT_ASSERT(i32Array->Value(innerIndex) == item.GetOptionalValue().Get<i32>());
+                }
                 ++innerIndex;
             }
             ++index;
@@ -1265,8 +1346,20 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         auto array = NArrow::MakeArray(values, dictType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT_EQUAL(static_cast<ui64>(array->length()), values.size());
-        UNIT_ASSERT_EQUAL(array->type_id(), arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT_EQUAL(array->type_id(), arrow::Type::STRUCT);
+
+        auto wrapArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT_EQUAL(wrapArray->num_fields(), 2);
+        UNIT_ASSERT_EQUAL(wrapArray->field(0)->type_id(), arrow::Type::LIST);
+
+        UNIT_ASSERT_EQUAL(wrapArray->field(1)->type_id(), arrow::Type::UINT64);
+        auto listArray = static_pointer_cast<arrow::ListArray>(wrapArray->field(0));
+        UNIT_ASSERT_EQUAL(static_cast<ui64>(listArray->length()), values.size());
+
+        UNIT_ASSERT_EQUAL(wrapArray->field(1)->type_id(), arrow::Type::UINT64);
+        auto customArray = static_pointer_cast<arrow::UInt64Array>(wrapArray->field(1));
+        UNIT_ASSERT_EQUAL(static_cast<ui64>(customArray->length()), values.size());
+
         UNIT_ASSERT_EQUAL(listArray->value_type()->id(), arrow::Type::STRUCT);
         auto structArray = static_pointer_cast<arrow::StructArray>(listArray->values());
 
@@ -1428,6 +1521,21 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         Y_ABORT_UNLESS(NArrow::IsArrowCompatible(listType));
 
         auto values = context.CreateListOfJsons(100);
+        auto array = NArrow::MakeArray(values, listType);
+        auto restoredValues = NArrow::ExtractUnboxedValues(array, listType, context.HolderFactory);
+        UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
+        for (ui64 index = 0; index < values.size(); ++index) {
+            AssertUnboxedValuesAreEqual(values[index], restoredValues[index], listType);
+        }
+    }
+
+    Y_UNIT_TEST(OptionalListOfOptional) {
+        TTestContext context;
+
+        auto listType = context.GetOptionalListOfOptional();
+        Y_ABORT_UNLESS(NArrow::IsArrowCompatible(listType));
+
+        auto values = context.CreateOptionalListOfOptional(100);
         auto array = NArrow::MakeArray(values, listType);
         auto restoredValues = NArrow::ExtractUnboxedValues(array, listType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());

@@ -247,13 +247,23 @@ std::shared_ptr<arrow::DataType> GetArrowType(const TListType* listType) {
 std::shared_ptr<arrow::DataType> GetArrowType(const TDictType* dictType) {
     auto keyType = dictType->GetKeyType();
     auto payloadType = dictType->GetPayloadType();
+
+    auto keyArrowType = NArrow::GetArrowType(keyType);
+    auto payloadArrowType = NArrow::GetArrowType(payloadType);
+
+    auto custom = std::make_shared<arrow::Field>("", arrow::uint64(), false);
+
     if (keyType->GetKind() == TType::EKind::Optional) {
-        std::vector<std::shared_ptr<arrow::Field>> fields;
-        fields.emplace_back(std::make_shared<arrow::Field>("", NArrow::GetArrowType(keyType)));
-        fields.emplace_back(std::make_shared<arrow::Field>("", NArrow::GetArrowType(payloadType)));
-        return arrow::list(arrow::struct_(fields));
+        std::vector<std::shared_ptr<arrow::Field>> items;
+        items.emplace_back(std::make_shared<arrow::Field>("", keyArrowType));
+        items.emplace_back(std::make_shared<arrow::Field>("", payloadArrowType));
+
+        auto fieldList = std::make_shared<arrow::Field>("", arrow::list(arrow::struct_(items)), false);
+        return arrow::struct_({fieldList, custom});
     }
-    return arrow::map(NArrow::GetArrowType(keyType), NArrow::GetArrowType(payloadType));
+
+    auto fieldMap = std::make_shared<arrow::Field>("", arrow::map(keyArrowType, payloadArrowType), false);
+    return arrow::struct_({fieldMap, custom});
 }
 
 std::shared_ptr<arrow::DataType> GetArrowType(const TVariantType* variantType) {
@@ -701,37 +711,55 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
             auto keyType = dictType->GetKeyType();
             auto payloadType = dictType->GetPayloadType();
 
-            arrow::ArrayBuilder* keyBuilder;
-            arrow::ArrayBuilder* itemBuilder;
+            arrow::ArrayBuilder* keyBuilder = nullptr;
+            arrow::ArrayBuilder* itemBuilder = nullptr;
             arrow::StructBuilder* structBuilder = nullptr;
+
+            Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::STRUCT);
+            arrow::StructBuilder* wrapBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
+            Y_DEBUG_ABORT_UNLESS(wrapBuilder->num_fields() == 2);
+
+            auto status = wrapBuilder->Append();
+            Y_VERIFY_S(status.ok(), status.ToString());
+
             if (keyType->GetKind() == TType::EKind::Optional) {
-                Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::LIST);
-                auto listBuilder = reinterpret_cast<arrow::ListBuilder*>(builder);
+                Y_DEBUG_ABORT_UNLESS(wrapBuilder->field_builder(0)->type()->id() == arrow::Type::LIST);
+                auto listBuilder = reinterpret_cast<arrow::ListBuilder*>(wrapBuilder->field_builder(0));
                 Y_DEBUG_ABORT_UNLESS(listBuilder->value_builder()->type()->id() == arrow::Type::STRUCT);
+
                 // Start a new list in ListArray of structs
                 auto status = listBuilder->Append();
                 Y_VERIFY_S(status.ok(), status.ToString());
+
                 structBuilder = reinterpret_cast<arrow::StructBuilder*>(listBuilder->value_builder());
                 Y_DEBUG_ABORT_UNLESS(structBuilder->num_fields() == 2);
+
                 keyBuilder = structBuilder->field_builder(0);
                 itemBuilder = structBuilder->field_builder(1);
             } else {
-                Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::MAP);
-                auto mapBuilder = reinterpret_cast<arrow::MapBuilder*>(builder);
+                Y_DEBUG_ABORT_UNLESS(wrapBuilder->field_builder(0)->type()->id() == arrow::Type::MAP);
+                auto mapBuilder = reinterpret_cast<arrow::MapBuilder*>(wrapBuilder->field_builder(0));
+
                 // Start a new map in MapArray
                 auto status = mapBuilder->Append();
                 Y_VERIFY_S(status.ok(), status.ToString());
+
                 keyBuilder = mapBuilder->key_builder();
                 itemBuilder = mapBuilder->item_builder();
             }
+
+            arrow::Int64Builder* customBuilder = reinterpret_cast<arrow::Int64Builder*>(wrapBuilder->field_builder(1));
+            status = customBuilder->Append(0);
+            Y_VERIFY_S(status.ok(), status.ToString());
 
             const auto iter = value.GetDictIterator();
             // We do not sort dictionary before appending it to builder.
             for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) {
                 if (structBuilder != nullptr) {
-                    auto status = structBuilder->Append();
+                    status = structBuilder->Append();
                     Y_VERIFY_S(status.ok(), status.ToString());
                 }
+
                 AppendElement(key, keyBuilder, keyType);
                 AppendElement(payload, itemBuilder, payloadType);
             }
@@ -907,9 +935,18 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
             std::shared_ptr<arrow::Array> payloadArray = nullptr;
             ui64 dictLength = 0;
             ui64 offset = 0;
+
+            Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::STRUCT);
+            auto wrapArray = static_pointer_cast<arrow::StructArray>(array);
+            Y_DEBUG_ABORT_UNLESS(wrapArray->num_fields() == 2);
+
+            auto dictSlice = wrapArray->field(0);
+            auto customSlice = wrapArray->field(1);
+            Y_UNUSED(customSlice); // Custom destructor for matching YQL-15332
+
             if (keyType->GetKind() == TType::EKind::Optional) {
-                Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::LIST);
-                auto listArray = static_pointer_cast<arrow::ListArray>(array);
+                Y_DEBUG_ABORT_UNLESS(dictSlice->type_id() == arrow::Type::LIST);
+                auto listArray = static_pointer_cast<arrow::ListArray>(dictSlice);
                 auto arraySlice = listArray->value_slice(row);
                 Y_DEBUG_ABORT_UNLESS(arraySlice->type_id() == arrow::Type::STRUCT);
                 auto structArray = static_pointer_cast<arrow::StructArray>(arraySlice);
@@ -918,8 +955,8 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
                 keyArray = structArray->field(0);
                 payloadArray = structArray->field(1);
             } else {
-                Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::MAP);
-                auto mapArray = static_pointer_cast<arrow::MapArray>(array);
+                Y_DEBUG_ABORT_UNLESS(dictSlice->type_id() == arrow::Type::MAP);
+                auto mapArray = static_pointer_cast<arrow::MapArray>(dictSlice);
                 dictLength = mapArray->value_length(row);
                 offset = mapArray->value_offset(row);
                 keyArray = mapArray->keys();

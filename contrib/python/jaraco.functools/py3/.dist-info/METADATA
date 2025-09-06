@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: jaraco.functools
-Version: 4.2.1
+Version: 4.3.0
 Summary: Functools like those found in stdlib
 Author-email: "Jason R. Coombs" <jaraco@jaraco.com>
 License-Expression: MIT

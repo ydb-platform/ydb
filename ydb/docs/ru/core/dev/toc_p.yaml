@@ -20,6 +20,8 @@ items:
   href: secondary-indexes.md
 - name: Векторные индексы
   href: vector-indexes.md
+- name: Векторный индекс вида vector_kmeans_tree
+  href: vector-indexes-kmeans-tree-type.md
 - name: Оптимизация планов запросов
   href: query-plans-optimization.md
 - name: Пакетная загрузка

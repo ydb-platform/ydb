@@ -20,6 +20,36 @@
 namespace NKikimr {
 namespace NKqp {
 
+namespace {
+
+void TerminateHandler() {
+    Cerr << "======= terminate() call stack ========" << Endl;
+    FormatBackTrace(&Cerr);
+    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
+        Cerr << "======== exception call stack =========" << Endl;
+        backtrace.PrintTo(Cerr);
+    }
+    Cerr << "=======================================" << Endl;
+
+    if (std::current_exception()) {
+        Cerr << "Uncaught exception: " << CurrentExceptionMessage() << Endl;
+    } else {
+        Cerr << "Terminate for unknown reason (no current exception)" << Endl;
+    }
+
+    abort();
+}
+
+void BackTraceSignalHandler(int signal) {
+    Cerr << "======= Signal " << signal << " call stack ========" << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << "===============================================" << Endl;
+
+    abort();
+}
+
+} // anonymous namespace
+
 using namespace NYdb::NTable;
 
 const TString EXPECTED_EIGHTSHARD_VALUE1 = R"(
@@ -101,6 +131,11 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
 
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     EnableYDBBacktraceFormat();
+
+    std::set_terminate(&TerminateHandler);
+    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
+        signal(sig, &BackTraceSignalHandler);
+    }
 
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();

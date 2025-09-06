@@ -23,6 +23,7 @@ struct TKqpRunScriptActorSettings {
     TIntrusivePtr<TKqpCounters> Counters;
     bool SaveQueryPhysicalGraph = false;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
+    bool DisableDefaultTimeout = false;
 };
 
 NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig);

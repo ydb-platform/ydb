@@ -229,4 +229,5 @@ message TFeatureFlags {
     optional bool EnableSchemaSecrets = 203 [default = false];
     optional bool EnableTableCacheModes = 204 [default = false];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = false];
+    optional bool EnableStreamingQueries = 206 [default = false];
 }

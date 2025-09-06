@@ -1,4 +1,6 @@
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
+ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
+ydb/core/blobstorage/pdisk/ut TPDiskTest.AllRequestsAreAnsweredOnPDiskRestart
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge [*/*] chunk chunk
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
@@ -23,13 +25,20 @@ ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter+StreamLookup
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
 ydb/core/kqp/ut/olap KqpOlapAggregations.BlockGenericWithDistinct
 ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[false,false,1,0,0,0,BLOOM_FILTER]
+ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[false,true,1024,10,0,0.5,BLOOM_FILTER]
+ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants[true,true,1,10,1000,0]
 ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants[10,true,1024,1000,1000000,0.5]
+ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterVariants[1,true,0,10,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterVariants[10,true,0,1000,1000000,0]
 ydb/core/kqp/ut/olap KqpOlapJson.RestoreFirstLevelVariants[10,false,1024,10,100,0.5]
+ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants[1,true,1,0,0,0]
+ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants[10,false,1,10,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants[10,false,1024,1000,1000000,0]
 ydb/core/kqp/ut/olap KqpOlapLocks.DeleteAbsentMultipleShards+Reboot
 ydb/core/kqp/ut/olap KqpOlapOptimizer.OptimizationAfterDeletion
+ydb/core/kqp/ut/olap KqpOlapTiering.EvictionIncreaseDuration
 ydb/core/kqp/ut/olap KqpOlapTiering.NoBackoffUnavailableS3
+ydb/core/kqp/ut/olap KqpOlapTiering.TieringGC
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
@@ -39,6 +48,7 @@ ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpAcl.AclRevoke-UseSink+IsOlap
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
+ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/tx KqpSinkMvcc.OlapNamedStatement
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltp
@@ -69,10 +79,14 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.Upsert_DifferentBatch
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.RunScan
+ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
+ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_export_reboots_s3 [*/*] chunk chunk
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.IndexPartitioning
 ydb/core/tx/schemeshard/ut_index_build_reboots [*/*] chunk chunk
+ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed[TabletReboots]
+ydb/core/tx/schemeshard/ut_vector_index_build_reboots [*/*] chunk chunk
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable2
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.DatashardRunAtOtherNodeWhenOneNodeIsStopped
@@ -92,6 +106,7 @@ ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync10
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryService
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryServiceStreamCall
 ydb/services/ydb/sdk_sessions_ut [*/*] chunk chunk
+ydb/services/ydb/ut LocalityOperation.LocksFromAnotherTenants-UseSink
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/services/ydb/ut YdbQueryService.TestCreateAndAttachSession
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
@@ -116,6 +131,7 @@ ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1_state
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1_state_and_parts
 ydb/tests/functional/cms test_cms_erasure.py.TestDegradedGroupBlock42Keep.test_no_degraded_groups_after_shutdown
+ydb/tests/functional/cms test_cms_restart.py.TestCmsStateStorageRestartsMirrorKeep.test_restart_as_much_as_can
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
 ydb/tests/functional/serverless [test_serverless.py */*] chunk chunk

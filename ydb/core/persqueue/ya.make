@@ -22,7 +22,6 @@ SRCS(
     subscriber.cpp
     type_codecs_defs.cpp
     user_info.cpp
-    utils.cpp
     write_meta.cpp
     write_quoter.cpp
     microseconds_sliding_window.cpp

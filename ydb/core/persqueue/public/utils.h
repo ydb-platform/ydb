@@ -9,6 +9,9 @@
 
 namespace NKikimr::NPQ {
 
+static const TString CLIENTID_COMPACTION_CONSUMER = "__ydb_compaction_consumer";
+
+
 ui64 TopicPartitionReserveSize(const NKikimrPQ::TPQTabletConfig& config);
 ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config);
 

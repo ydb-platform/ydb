@@ -5,7 +5,7 @@
 #include <util/generic/fwd.h>
 #include <ydb/core/persqueue/events/internal.h>
 
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 namespace NKikimr::NPQ {
 

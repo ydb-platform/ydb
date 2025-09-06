@@ -3,7 +3,7 @@
 #include "blob.h"
 #include "header.h"
 #include "partition_id.h"
-#include "utils.h"
+#include <ydb/core/persqueue/public/utils.h>
 
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/base/appdata.h>

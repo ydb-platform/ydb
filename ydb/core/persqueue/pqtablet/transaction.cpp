@@ -1,5 +1,5 @@
 #include "transaction.h"
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 
 #include <ydb/library/wilson_ids/wilson.h>

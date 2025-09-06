@@ -4,7 +4,7 @@
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/event_helpers.h>
 #include <ydb/core/persqueue/read.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/tracing_support.h>
 #include <ydb/core/protos/config.pb.h>
 

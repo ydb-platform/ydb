@@ -11,7 +11,7 @@
 #include <ydb/core/persqueue/quota_tracker.h>
 #include <ydb/core/persqueue/subscriber.h>
 #include <ydb/core/persqueue/user_info.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/read_quoter.h>
 #include "partition_blob_encoder.h"
 

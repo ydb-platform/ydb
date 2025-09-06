@@ -132,23 +132,27 @@ public:
                 if (!EnsureAtom(*c, ctx)) {
                     return nullptr;
                 }
-                auto index = itemSchema->FindItem(c->Content());
+
+                const auto columnName = c->Content();
+                const auto index = itemSchema->FindItem(columnName);
                 if (!index) {
                     ctx.AddError(TIssue(ctx.GetPosition(topic->Pos()), TStringBuilder()
-                        << "Unable to find column: " << c->Content()));
+                        << "Unable to find column: " << columnName));
                     return nullptr;
                 }
-                columnOrder.AddColumn(TString(c->Content()));
+
+                columnOrder.AddColumn(TString(columnName));
                 items.push_back(itemSchema->GetItems()[*index]);
-                addedFields.emplace(c->Content());
+                addedFields.emplace(columnName);
             }
 
             for (auto c : itemSchema->GetItems()) {
-                if (addedFields.contains(TString(c->GetName()))) {
+                const TString columnName(c->GetName());
+                if (addedFields.contains(columnName)) {
                     continue;
                 }
 
-                columnOrder.AddColumn(TString(c->GetName()));
+                columnOrder.AddColumn(columnName);
                 items.push_back(c);
             }
         } else {

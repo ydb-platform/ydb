@@ -252,6 +252,5 @@ types_not_supported_yet_in_columnshard = {
     "Bool",
     "DyNumber",
     "UUID",
-    "Interval",
-    "Interval64",
+    "Interval"
 }

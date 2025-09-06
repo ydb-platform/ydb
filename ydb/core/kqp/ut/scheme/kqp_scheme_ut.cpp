@@ -11902,6 +11902,24 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 }
 
+namespace {
+
+void TestUnsupportedColumnTypeError(NScheme::TTypeId type) {
+    TKikimrSettings runnerSettings;
+    runnerSettings.WithSampleTables = false;
+    TTestHelper testHelper(runnerSettings);
+
+    TVector<TTestHelper::TColumnSchema> schema = {
+        TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+        TTestHelper::TColumnSchema().SetName("level").SetType(type).SetNullable(true)
+    };
+    TTestHelper::TColumnTable testTable;
+    testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+    testHelper.CreateTable(testTable, NYdb::EStatus::SCHEME_ERROR);
+}
+
+}
+
 Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(DropTable) {
@@ -12531,19 +12549,13 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[]");
     }
 
-    Y_UNIT_TEST(BulkError) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Uuid).SetNullable(true)
-        };
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable, NYdb::EStatus::SCHEME_ERROR);
+    Y_UNIT_TEST(UnsupportedColumnTypes) {
+        TestUnsupportedColumnTypeError(NScheme::NTypeIds::Bool);
+        TestUnsupportedColumnTypeError(NScheme::NTypeIds::Uuid);
+        TestUnsupportedColumnTypeError(NScheme::NTypeIds::DyNumber);
+        TestUnsupportedColumnTypeError(NScheme::NTypeIds::Interval);
     }
+
     Y_UNIT_TEST(DropColumn) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

@@ -134,6 +134,7 @@ public:
         , LeaveGroupRequestData(
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
+        , ResourceDatabasePath(context->ResourceDatabasePath)
     {
         RequestType = JOIN_GROUP;
         CurrentStep = STEP_NONE;
@@ -173,6 +174,7 @@ public:
         , LeaveGroupRequestData(
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
+        , ResourceDatabasePath(context->ResourceDatabasePath ? context->ResourceDatabasePath : context->DatabasePath)
     {
         RequestType = SYNC_GROUP;
         CurrentStep = STEP_NONE;
@@ -197,6 +199,7 @@ public:
         , LeaveGroupRequestData(
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
+        , ResourceDatabasePath(context->ResourceDatabasePath ? context->ResourceDatabasePath : context->DatabasePath)
     {
         RequestType = HEARTBEAT;
         CurrentStep = STEP_NONE;
@@ -221,6 +224,7 @@ public:
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
         , LeaveGroupRequestData(message)
+        , ResourceDatabasePath(context->ResourceDatabasePath ? context->ResourceDatabasePath : context->DatabasePath)
     {
         RequestType = LEAVE_GROUP;
         CurrentStep = STEP_NONE;
@@ -384,6 +388,7 @@ private:
     TMessagePtr<THeartbeatRequestData> HeartbeatGroupRequestData;
     TMessagePtr<TLeaveGroupRequestData> LeaveGroupRequestData;
 
+    TString ResourceDatabasePath;
 };
 
 } // namespace NKafka

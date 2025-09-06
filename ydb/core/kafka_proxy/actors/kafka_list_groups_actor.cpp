@@ -24,7 +24,7 @@ NActors::IActor* CreateKafkaListGroupsActor(const TContext::TPtr context, const 
 }
 
 void TKafkaListGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
-    Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
+    Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
     if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
         Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
         Become(&TKafkaListGroupsActor::StateWork);
@@ -118,7 +118,7 @@ TString TKafkaListGroupsActor::GetYqlWithTableNames(const TString& templateStr) 
     TString templateWithConsumerStateTable = std::regex_replace(
         templateStr.c_str(),
         std::regex("<consumer_state_table_name>"),
-        NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()
+        NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
     );
     return templateWithConsumerStateTable;
 }

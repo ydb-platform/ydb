@@ -209,6 +209,7 @@ namespace NKafka::NTests {
             auto context = std::make_shared<TContext>(kafkaConfig);
             context->ConnectionId = edge;
             context->DatabasePath = "/Root";
+            context->ResourceDatabasePath = "/Root";
             context->UserToken = new NACLib::TUserToken("root@builtin", {});
 
             TActorId actorId;

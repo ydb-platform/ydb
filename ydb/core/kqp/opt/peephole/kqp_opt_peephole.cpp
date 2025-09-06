@@ -15,7 +15,6 @@
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 
 #include <util/generic/size_literals.h>
@@ -305,29 +304,25 @@ bool CanPropagateWideBlockThroughChannel(
     TTypeAnnotationContext& typesCtx)
 {
     const auto& program = programs.at(output.Stage().Ref().UniqueId());
-// Cerr << "CanPropagateWideBlockThroughChannel" << Endl << NCommon::ExprToPrettyString(ctx, *output.Stage().Raw()) << Endl;
+
     ui32 index = FromString<ui32>(output.Index().Value());
     if (index != 0) {
         // stage has multiple outputs
-// Cerr << "FALSE for Multi Output\n";
         return false;
     }
 
     if (!stageSettings.WideChannels) {
-// Cerr << "FALSE for not WideChannels\n";
         return false;
     }
 
     YQL_ENSURE(stageSettings.OutputNarrowType);
 
     if (!IsCompatibleWithBlocks(program.Pos(), *stageSettings.OutputNarrowType, ctx, typesCtx)) {
-// Cerr << "FALSE for not Block compatible\n";
         return false;
     }
 
     // Ensure that stage has blocks on top level (i.e. (WideFromBlocks(...))).
     if (!program.Lambda().Body().Maybe<TCoWideFromBlocks>()) {
-// Cerr << "FALSE for not TCoWideFromBlocks\n";
         return false;
     }
 
@@ -336,12 +331,10 @@ bool CanPropagateWideBlockThroughChannel(
     YQL_ENSURE(typeAnnotation, "Program for stage " << output.Stage().Ref().UniqueId() << " doesn't have type annotation");
 
     if (IsWideBlockType(*typeAnnotation->Cast<TStreamExprType>()->GetItemType())) {
-// Cerr << "FALSE for output is already IsWideBlockType\n";
         // output is already wide block
         return false;
     }
 
-// Cerr << "TRUE\n";
     return true;
 }
 
@@ -382,7 +375,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                             .Add(0, newArg.Ptr())
                         .Seal()
                         .Build();
-// Cerr << "PROPAGATE\n";
+
                     argsMap.emplace(oldArg.Raw(), newArgNode);
 
                     auto stageUid = connection.Cast().Output().Stage().Ref().UniqueId();

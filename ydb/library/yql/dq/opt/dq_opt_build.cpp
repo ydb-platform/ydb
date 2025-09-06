@@ -412,12 +412,10 @@ bool CanRebuildForWideChannelOutput(const TDqPhyStage& stage) {
 
     auto stageOutputType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
     if (stageOutputType->GetSize() != 1 || stage.Outputs().IsValid()) {
-        Cerr << "CanRebuildForWideChannelOutput - CANNOT for Multi (\?\?\?) Output\n";
         return false;
     }
 
     if (stageOutputType->GetItems()[0]->Cast<TListExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Struct) {
-        Cerr << "CanRebuildForWideChannelOutput - CANNOT for NOT STRUCT\n";
         return false;
     }
 
@@ -441,14 +439,12 @@ bool IsSupportedForWide(const TDqConnection& conn) {
           conn.Maybe<TDqCnBroadcast>() ||
           conn.Maybe<TDqCnMap>()))
     {
-        Cerr << "IsSupportedForWide FALSE for UNALLOWED DqCn " << conn.Raw()->Content() << Endl;
         return false;
     }
 
     ui32 index = FromString<ui32>(conn.Output().Index().Value());
     if (index != 0) {
         // stage has multiple outputs
-        Cerr << "IsSupportedForWide FALSE for MULTI OUTPUT" << Endl;
         return false;
     }
 
@@ -525,6 +521,7 @@ TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, TExprContext& ctx
     newArgs.reserve(stage.Inputs().Size());
     newInputs.reserve(stage.Inputs().Size());
     TNodeOnNodeOwnedMap argsMap;
+
     YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
 
     bool needRebuild = false;
@@ -535,11 +532,7 @@ TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, TExprContext& ctx
         newArgs.emplace_back(newArg);
 
         auto maybeConn = stage.Inputs().Item(i).Maybe<TDqConnection>();
-        if (!maybeConn) {
-            if (stage.Inputs().Item(i).Raw()->Content() != "DqSource") {
-                Cerr << "CAN'T RebuildStageInputsAsWide for " << stage.Inputs().Item(i).Raw()->Content() << Endl;
-            }
-        }
+
         if (maybeConn && IsSupportedForWide(maybeConn.Cast()) && CanRebuildForWideChannelOutput(maybeConn.Cast().Output())) {
             needRebuild = true;
             auto itemType = arg.Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -805,6 +798,7 @@ TDqPhyStage RebuildStageInputsAsWideBlock(bool forceBlocks, const TDqPhyStage& s
     newArgs.reserve(stage.Inputs().Size());
     newInputs.reserve(stage.Inputs().Size());
     TNodeOnNodeOwnedMap argsMap;
+
     YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
 
     size_t blockInputs = 0;
@@ -815,11 +809,7 @@ TDqPhyStage RebuildStageInputsAsWideBlock(bool forceBlocks, const TDqPhyStage& s
         newArgs.emplace_back(newArg);
 
         auto maybeConn = stage.Inputs().Item(i).Maybe<TDqConnection>();
-        if (!maybeConn) {
-            if (stage.Inputs().Item(i).Raw()->Content() != "DqSource") {
-                Cerr << "CAN'T RebuildStageInputsAsWideBlock for " << stage.Inputs().Item(i).Raw()->Content() << Endl;
-            }
-        }
+
         if (maybeConn && IsSupportedForWideBlocks(maybeConn.Cast()) && CanRebuildForWideBlockChannelOutput(forceBlocks, maybeConn.Cast().Output(), ctx, typesCtx)) {
             ++blockInputs;
             // input will actually be wide block stream - convert it to wide stream first
@@ -885,9 +875,7 @@ TAutoPtr<IGraphTransformer> CreateDqBuildPhyStagesTransformer(bool allowDependan
         new TDqBuildPhysicalStagesTransformer(),
         "BuildPhysicalStages",
         TIssuesIds::DEFAULT_ERROR));
-    if (mode == CHANNEL_SCALAR) {
-        Cerr << "DqEnableWideChannelsInputForStage SKIPPED for mode == CHANNEL_SCALAR" << Endl;
-    }
+
     if (mode != CHANNEL_SCALAR) {
         transformers.push_back(TTransformStage(CreateDqPhyStageTransformer(&DqEnableWideChannelsInputForStage, &typesCtx),
             "EnableWideChannels",
@@ -899,9 +887,7 @@ TAutoPtr<IGraphTransformer> CreateDqBuildPhyStagesTransformer(bool allowDependan
 
 TAutoPtr<IGraphTransformer> CreateDqBuildWideBlockChannelsTransformer(TTypeAnnotationContext& typesCtx, EChannelMode mode) {
     TVector<TTransformStage> transformers;
-    if (mode == CHANNEL_SCALAR) {
-        Cerr << "RebuildStageInputsAsWideBlock+DqPullReplicateScalarsFromInputs SKIPPED for mode == CHANNEL_SCALAR" << Endl;
-    }
+
     if (mode == CHANNEL_WIDE_AUTO_BLOCK || mode == CHANNEL_WIDE_FORCE_BLOCK) {
         transformers.push_back(TTransformStage(CreateDqPhyStageTransformer(
             [mode, &typesCtx](const TDqPhyStage& stage, TExprContext& ctx) {

@@ -52,7 +52,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                     PROPERTIES("Status") {
                         PROPERTY("State", NKikimrPQ::ETopicPartitionStatus_Name(PartitionConfig->GetStatus()));
                         PROPERTY("Disk", (DiskIsFull ? "Full" : "Normal"));
-                        PROPERTY("Quota", (WaitingForSubDomainQuota(ctx) ? "Out of space" : "Normal"));
+                        PROPERTY("Quota", (WaitingForSubDomainQuota() ? "Out of space" : "Normal"));
                     }
 
                     PROPERTIES("Information") {

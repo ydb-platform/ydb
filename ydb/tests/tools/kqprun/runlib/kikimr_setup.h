@@ -25,7 +25,7 @@ public:
 
     static TString FormatMonitoringLink(ui16 port, const TString& uri);
 
-    static TString FormatGrpcLink(ui16 port); 
+    static TString FormatGrpcLink(ui16 port);
 
     virtual NActors::TTestActorRuntime* GetRuntime() const = 0;
 

@@ -27,11 +27,7 @@ SRCS(
     partition_write.cpp
     partition.cpp
     percentile_counter.cpp
-    pq.cpp
     pq_database.cpp
-    pq_impl_app.cpp
-    pq_impl_app_sendreadset.cpp
-    pq_impl.cpp
     pq_l2_cache.cpp
     pq_rl_helpers.cpp
     quota_tracker.cpp
@@ -69,6 +65,7 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/pqrb
+    ydb/core/persqueue/pqtablet
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/library/logger
@@ -89,6 +86,7 @@ RECURSE(
     partition_index_generator
     partition_key_range
     pqrb
+    pqtablet
     writer
 )
 

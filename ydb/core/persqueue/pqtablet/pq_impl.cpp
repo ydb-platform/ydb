@@ -1,13 +1,13 @@
 
 #include "pq_impl.h"
 #include "pq_impl_types.h"
-#include "event_helpers.h"
-#include "partition_log.h"
-#include "partition.h"
-#include "read.h"
-#include "utils.h"
-#include "tracing_support.h"
-#include "ydb/core/protos/config.pb.h"
+#include <ydb/core/persqueue/event_helpers.h>
+#include <ydb/core/persqueue/partition_log.h>
+#include <ydb/core/persqueue/partition.h>
+#include <ydb/core/persqueue/read.h>
+#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/tracing_support.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/feature_flags.h>
@@ -5615,3 +5615,11 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
 }
 
 } // namespace NKikimr::NPQ
+
+namespace NKikimr {
+
+IActor* CreatePersQueue(const TActorId& tablet, TTabletStorageInfo *info) {
+    return new NPQ::TPersQueue(tablet, info);
+}
+
+} // namespace NKikimr

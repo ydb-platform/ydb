@@ -1,9 +1,8 @@
 
 #include "pq_impl.h"
 #include "pq_impl_types.h"
+#include "pq_log.h"
 #include <ydb/core/persqueue/event_helpers.h>
-#include <ydb/core/persqueue/partition_log.h>
-#include <ydb/core/persqueue/partition.h>
 #include <ydb/core/persqueue/read.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/core/persqueue/tracing_support.h>
@@ -45,6 +44,13 @@ static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
 static constexpr ui32 MAX_TXS = 1000;
+
+IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
+               const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
+               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
+               const TActorId& writeQuoterActorId,
+               TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
+               bool newPartition = false);
 
 struct TChangeNotification {
     TChangeNotification(const TActorId& actor, const ui64 txId)
@@ -5079,7 +5085,7 @@ TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
     return quoterId;
 }
 
-TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
+IActor* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                                              const NPersQueue::TTopicConverterPtr topicConverter,
                                              const NKikimrPQ::TPQTabletConfig& config,
                                              bool newPartition,
@@ -5088,7 +5094,7 @@ TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
     int channels = Info()->Channels.size() - NKeyValue::BLOB_CHANNEL; // channels 0,1 are reserved in tablet
     Y_ABORT_UNLESS(channels > 0);
 
-    return new TPartition(TabletID(),
+    return NPQ::CreatePartitionActor(TabletID(),
                           partitionId,
                           ctx.SelfID,
                           GetGeneration(),

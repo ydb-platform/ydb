@@ -1,7 +1,7 @@
 #pragma once
 
-#include "header.h"
-#include "utils.h"
+#include <ydb/core/persqueue/header.h>
+#include <ydb/core/persqueue/utils.h>
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>

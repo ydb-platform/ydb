@@ -1,7 +1,7 @@
 #pragma once
 
-#include "key.h"
-#include "blob.h"
+#include <ydb/core/persqueue/key.h>
+#include <ydb/core/persqueue/blob.h>
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>

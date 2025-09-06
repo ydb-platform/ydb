@@ -1,11 +1,11 @@
-#include "event_helpers.h"
+#include <ydb/core/persqueue/event_helpers.h>
 #include "mirrorer.h"
-#include "offload_actor.h"
+#include <ydb/core/persqueue/offload_actor.h>
 #include "partition_util.h"
 #include "partition_common.h"
 #include "partition_compactification.h"
 #include "partition_log.h"
-#include "tracing_support.h"
+#include <ydb/core/persqueue/tracing_support.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/appdata.h>
@@ -4214,5 +4214,17 @@ void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
     PQ_LOG_D("Topic '" << TopicConverter->GetClientsideName() << "'" << " partition " << Partition
                        << ": Acquired RW Lock, send compacter KV request    ");
     Send(BlobCache, CompacterKvRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
+}
+
+
+IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration,
+    const TActorId& blobCache, const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
+               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace,
+               ui32 numChannels, const TActorId& writeQuoterActorId, 
+               TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition) {
+
+    return new TPartition(tabletId, partition, tablet, tabletGeneration, blobCache, topicConverter, dcId, isServerless,
+        config, counters, SubDomainOutOfSpace, numChannels, writeQuoterActorId, samplingControl,
+        newPartition);
 }
 } // namespace NKikimr::NPQ

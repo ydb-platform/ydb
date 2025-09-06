@@ -1,4 +1,4 @@
-#include "partition_util.h"
+#include <ydb/core/persqueue/pqtablet/partition/partition_util.h>
 #include "read_quoter.h"
 
 namespace NKikimr::NPQ  {

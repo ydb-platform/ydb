@@ -1,7 +1,7 @@
 #include "partition.h"
 #include "partition_compactification.h"
 #include "partition_log.h"
-#include "write_meta.h"
+#include <ydb/core/persqueue/write_meta.h>
 #include "partition_util.h"
 
 namespace NKikimr::NPQ {

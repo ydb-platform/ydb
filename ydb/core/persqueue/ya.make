@@ -13,19 +13,8 @@ SRCS(
     key.cpp
     metering_sink.cpp
     list_all_topics_actor.cpp
-    mirrorer.cpp
-    mirrorer.h
     ownerinfo.cpp
     offload_actor.cpp
-    partition_blob_encoder.cpp
-    partition_compaction.cpp
-    partition_compactification.cpp
-    partition_init.cpp
-    partition_monitoring.cpp
-    partition_read.cpp
-    partition_sourcemanager.cpp
-    partition_write.cpp
-    partition.cpp
     percentile_counter.cpp
     pq_database.cpp
     pq_l2_cache.cpp
@@ -33,9 +22,7 @@ SRCS(
     quota_tracker.cpp
     account_read_quoter.cpp
     read_quoter.cpp
-    sourceid.cpp
     subscriber.cpp
-    transaction.cpp
     type_codecs_defs.cpp
     user_info.cpp
     utils.cpp

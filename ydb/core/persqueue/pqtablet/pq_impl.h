@@ -2,7 +2,7 @@
 
 #include <ydb/core/persqueue/percentile_counter.h>
 #include <ydb/core/persqueue/metering_sink.h>
-#include <ydb/core/persqueue/transaction.h>
+#include "transaction.h"
 
 #include <ydb/core/keyvalue/keyvalue_flat_impl.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -402,7 +402,7 @@ private:
 
     TActorId GetPartitionQuoter(const TPartitionId& partitionId);
 
-    TPartition* CreatePartitionActor(const TPartitionId& partitionId,
+    IActor* CreatePartitionActor(const TPartitionId& partitionId,
                                      const NPersQueue::TTopicConverterPtr topicConverter,
                                      const NKikimrPQ::TPQTabletConfig& config,
                                      bool newPartition,
@@ -613,7 +613,6 @@ private:
     bool HasTxDeleteSpan = false;
     ui8 WriteTxsSpanVerbosity = 0;
 };
-
 
 }// NPQ
 }// NKikimr

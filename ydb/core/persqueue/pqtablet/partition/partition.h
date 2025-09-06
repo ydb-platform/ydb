@@ -1,17 +1,18 @@
 #pragma once
 
-#include "blob.h"
-#include "header.h"
-#include "key.h"
+#include "sourceid.h"
+
+#include <ydb/core/persqueue/blob.h>
+#include <ydb/core/persqueue/header.h>
+#include <ydb/core/persqueue/key.h>
 #include "partition_init.h"
 #include "partition_sourcemanager.h"
 #include "partition_types.h"
-#include "quota_tracker.h"
-#include "sourceid.h"
-#include "subscriber.h"
-#include "user_info.h"
-#include "utils.h"
-#include "read_quoter.h"
+#include <ydb/core/persqueue/quota_tracker.h>
+#include <ydb/core/persqueue/subscriber.h>
+#include <ydb/core/persqueue/user_info.h>
+#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/read_quoter.h>
 #include "partition_blob_encoder.h"
 
 #include "partition_compactification.h"

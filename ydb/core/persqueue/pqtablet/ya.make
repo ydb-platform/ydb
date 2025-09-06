@@ -4,21 +4,20 @@ SRCS(
     pq_impl.cpp
     pq_impl_app.cpp
     pq_impl_app_sendreadset.cpp
+    transaction.cpp
 )
 
 
 
 PEERDIR(
-    contrib/libs/fmt
-    ydb/library/actors/core
-    ydb/core/base
-    ydb/core/engine/minikql
-    ydb/core/persqueue/events
-    ydb/core/persqueue/partition_key_range
-    ydb/library/logger
+    ydb/core/persqueue/pqtablet/partition
 )
 
 END()
+
+RECURSE(
+    partition
+)
 
 RECURSE_FOR_TESTS(
 #    ut

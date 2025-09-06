@@ -1,9 +1,9 @@
-#include "event_helpers.h"
+#include <ydb/core/persqueue/event_helpers.h>
 #include "mirrorer.h"
 #include "partition_log.h"
 #include "partition_util.h"
 #include "partition.h"
-#include "read.h"
+#include <ydb/core/persqueue/read.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>

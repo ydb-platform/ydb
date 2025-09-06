@@ -1,11 +1,11 @@
-#include "event_helpers.h"
-#include "common_app.h"
+#include <ydb/core/persqueue/event_helpers.h>
+#include <ydb/core/persqueue/common_app.h>
 #include "mirrorer.h"
 #include "partition_compactification.h"
 #include "partition_util.h"
 #include "partition.h"
-#include "read.h"
-#include "transaction.h"
+#include <ydb/core/persqueue/read.h>
+//#include <ydb/core/persqueue/transaction.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>

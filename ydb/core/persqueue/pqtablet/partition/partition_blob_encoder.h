@@ -1,8 +1,8 @@
 #pragma once
 
-#include "blob.h"
-#include "key.h"
-#include "events/internal.h"
+#include <ydb/core/persqueue/blob.h>
+#include <ydb/core/persqueue/key.h>
+#include <ydb/core/persqueue/events/internal.h>
 
 namespace NKikimr::NPQ {
 

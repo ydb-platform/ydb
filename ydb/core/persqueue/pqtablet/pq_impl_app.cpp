@@ -1,8 +1,9 @@
 #include "pq_impl.h"
 #include "pq_impl_types.h"
+#include "pq_log.h"
+
 
 #include <ydb/core/persqueue/common_app.h>
-#include <ydb/core/persqueue/partition_log.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
 

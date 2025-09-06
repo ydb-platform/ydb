@@ -1,10 +1,11 @@
 #pragma once
 
+#include "sourceid.h"
+
 #include <util/generic/fwd.h>
 #include <ydb/core/persqueue/events/internal.h>
 
-#include "sourceid.h"
-#include "utils.h"
+#include <ydb/core/persqueue/utils.h>
 
 namespace NKikimr::NPQ {
 

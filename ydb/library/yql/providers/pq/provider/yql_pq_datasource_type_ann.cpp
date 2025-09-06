@@ -142,14 +142,17 @@ public:
                 items.push_back(itemSchema->GetItems()[*index]);
                 addedFields.emplace(c->Content());
             }
-        }
 
-        for (auto c : itemSchema->GetItems()) {
-            if (addedFields.contains(TString(c->GetName()))) {
-                continue;
+            for (auto c : itemSchema->GetItems()) {
+                if (addedFields.contains(TString(c->GetName()))) {
+                    continue;
+                }
+
+                columnOrder.AddColumn(TString(c->GetName()));
+                items.push_back(c);
             }
-
-            items.push_back(c);
+        } else {
+            items = itemSchema->GetItems();
         }
 
         return ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(items));
@@ -237,6 +240,11 @@ public:
             world->GetTypeAnn(),
             schema
         }));
+
+        if (!columns) {
+            return TStatus::Ok;
+        }
+
         return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
     }
 

@@ -8,6 +8,7 @@ PEERDIR(
     yql/essentials/utils/log
     library/cpp/digest/crc32c
 )
+
 IF (ARCH_X86_64)
 
 SRCS(
@@ -20,7 +21,6 @@ CFLAGS(
 )
 
 ENDIF()
-
 
 YQL_LAST_ABI_VERSION()
 

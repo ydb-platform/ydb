@@ -73,6 +73,7 @@ RECURSE(
     partition_key_range
     pqrb
     pqtablet
+    public
     writer
 )
 

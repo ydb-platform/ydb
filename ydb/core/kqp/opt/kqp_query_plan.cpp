@@ -2815,14 +2815,10 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
         if (txId < peepHoleOptimizedQuery.Transactions().Size()) {
             VisitExpr(peepHoleOptimizedQuery.Transactions().Item(txId).Ref(),
                 [&serializerCtx](const TExprNode& node) {
-                try {
                     if (auto maybeStage = TMaybeNode<TDqPhyStage>(&node)) {
                         auto stageGuid = NDq::TDqStageSettings::Parse(maybeStage.Cast()).Id;
                         serializerCtx.OptimizedStages[stageGuid] = maybeStage.Raw();
                     }
-                } catch (const std::exception& e) {
-                    Cerr << e.what() << Endl;
-                }
                     return true;
                 }
             );

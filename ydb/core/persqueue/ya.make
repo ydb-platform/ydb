@@ -10,7 +10,6 @@ SRCS(
     header.cpp
     heartbeat.cpp
     key.cpp
-    metering_sink.cpp
     list_all_topics_actor.cpp
     ownerinfo.cpp
     offload_actor.cpp

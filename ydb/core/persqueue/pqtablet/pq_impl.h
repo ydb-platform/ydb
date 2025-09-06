@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/percentile_counter.h>
-#include <ydb/core/persqueue/metering_sink.h>
+#include "metering_sink.h"
 #include "transaction.h"
 
 #include <ydb/core/keyvalue/keyvalue_flat_impl.h>

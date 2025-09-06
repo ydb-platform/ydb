@@ -1,9 +1,5 @@
 LIBRARY()
 
-SRCS(
-    tuple.cpp
-)
-
 PEERDIR(
     contrib/libs/apache/arrow
     yql/essentials/types/binary_json
@@ -12,11 +8,19 @@ PEERDIR(
     yql/essentials/utils/log
     library/cpp/digest/crc32c
 )
+IF (ARCH_X86_64)
+
+SRCS(
+    tuple.cpp
+)
 
 CFLAGS(
     -mprfchw
     -mavx2
 )
+
+ENDIF()
+
 
 YQL_LAST_ABI_VERSION()
 

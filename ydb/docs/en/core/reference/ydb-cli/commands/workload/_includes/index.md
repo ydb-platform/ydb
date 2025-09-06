@@ -28,4 +28,3 @@ The following types of load tests are supported at the moment:
 * [TPC-H](../../../workload-tpch.md): [TPC-H benchmark](https://www.tpc.org/tpch/).
 * [TPC-DS](../../../workload-tpcds.md): [TPC-DS benchmark](https://www.tpc.org/tpcds/).
 * [Topic](../../../workload-topic.md): Topic load.
-* [Transfer](../../../workload-transfer.md): Transfer load.

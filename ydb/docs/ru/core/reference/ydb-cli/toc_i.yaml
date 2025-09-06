@@ -138,8 +138,6 @@ items:
       href: workload-kv.md
     - name: Topic нагрузка
       href: workload-topic.md
-    - name: Transfer нагрузка
-      href: workload-transfer.md
     - name: TPC-C нагрузка
       href: workload-tpcc.md
     - name: TPC-H нагрузка

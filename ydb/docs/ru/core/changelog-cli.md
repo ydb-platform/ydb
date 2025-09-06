@@ -343,10 +343,10 @@
 * В командах [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md) и [ydb scripting yql](reference/ydb-cli/scripting-yql.md) добавлена опция `--flame-graph`, задающая путь до файла, в котором необходимо сохранить визуализацию статистики выполнения запросов.
 * [Специальные команды](reference/ydb-cli/interactive-cli.md#spec-commands) интерактивного режима выполнения запросов теперь не чувствительны к регистру.
 * Добавлена валидация [специальных команд](reference/ydb-cli/interactive-cli.md#spec-commands) и их [параметров](reference/ydb-cli/interactive-cli.md#internal-vars).
-* Добавлено чтение из таблицы в сценарии с транзакциями в команде [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run).
-* Добавлена опция `--commit-messages` в команде [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run), задающая число сообщений в одной транзакции.
-* Добавлены опции `--only-table-in-tx` и `--only-topic-in-tx` в команде [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run), задающие ограничения на виды запросов в одной транзакции.
-* Добавлены новые колонки `Select time` и `Upsert time` в таблице статистики в команде [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run).
+* Добавлено чтение из таблицы в сценарии с транзакциями в команде ydb workload transfer topic-to-table run.
+* Добавлена опция `--commit-messages` в команде ydb workload transfer topic-to-table run, задающая число сообщений в одной транзакции.
+* Добавлены опции `--only-table-in-tx` и `--only-topic-in-tx` в команде ydb workload transfer topic-to-table run, задающие ограничения на виды запросов в одной транзакции.
+* Добавлены новые колонки `Select time` и `Upsert time` в таблице статистики в команде ydb workload transfer topic-to-table run.
 
 ### Исправления ошибок
 
@@ -359,7 +359,7 @@
 ### Функциональность
 
 * В [ydb workload tpch run](reference/ydb-cli/workload-tpch.md#run) добавлена опция `--path`, содержащая путь до директории с таблицами, созданными командой [ydb workload tpch init](reference/ydb-cli/workload-tpch.md#init).
-* Добавлена команда [ydb workload transfer topic-to-table](reference/ydb-cli/workload-transfer.md), которая нагружает базу запросами на чтение из топиков и запись в таблицу.
+* Добавлена команда ydb workload transfer topic-to-table, которая нагружает базу запросами на чтение из топиков и запись в таблицу.
 * Добавлена опция `--consumer-prefix` в командax [ydb workload topic init](reference/ydb-cli/workload-topic.md#init), [ydb workload topic run read|full](reference/ydb-cli/workload-topic.md#run-read), задающая префиксы имен читателей.
 * Добавлена опция `--partition-ids` в команде [ydb topic read](reference/ydb-cli/topic-read.md), задающая список id партиций топика для чтения, разделенных запятой.
 * Добавлена поддержка форматов параметров CSV и TSV в командах исполнения [YQL запросов](reference/ydb-cli/parameterized-queries-cli.md).

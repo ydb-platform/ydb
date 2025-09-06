@@ -302,3 +302,30 @@ class ParameterTests(TestCase):
         finally:
             signals.scope_changed.disconnect(record_scope_change)
         del os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE']
+
+
+    def test_parse_expires(self):
+        for title, arg, expected in [
+                ('none', (None, None), (None, None, None)),
+                ('expires_in only', (3600, None), (3600, 4600, 4600)),
+                ('expires_in and expires_at', (3600, 200), (3600, 200, 200)),
+                ('expires_in and expires_at float', (3600, 200.42), (3600, 200.42, 200.42)),
+                ('expires_in and expires_at str-int', (3600, "200"), (3600, 200, 200)),
+                ('expires_in and expires_at str-float', (3600, "200.42"), (3600, 200.42, 200.42)),
+                ('expires_in float only', (3600.12, None), (3600, 4600, 4600)),
+                ('expires_in float and expires_at', (3600.12, 200), (3600, 200, 200)),
+                ('expires_in float and expires_at float', (3600.12, 200.42), (3600, 200.42, 200.42)),
+                ('expires_in float and expires_at str-int', (3600.12, "200"), (3600, 200, 200)),
+                ('expires_in float and expires_at str-float', (3600.12, "200.42"), (3600, 200.42, 200.42)),
+                ('expires_in str only', ("3600", None), (3600, 4600, 4600)),
+                ('expires_in str and expires_at', ("3600", 200), (3600, 200, 200)),
+                ('expires_in str and expires_at float', ("3600", 200.42), (3600, 200.42, 200.42)),
+                ('expires_in str and expires_at str-int', ("3600", "200"), (3600, 200, 200)),
+                ('expires_in str and expires_at str-float', ("3600", "200.42"), (3600, 200.42, 200.42)),
+        ]:
+            with self.subTest(msg=title):
+                params = {
+                    "expires_in": arg[0],
+                    "expires_at": arg[1]
+                }
+                self.assertEqual(expected, parse_expires(params))

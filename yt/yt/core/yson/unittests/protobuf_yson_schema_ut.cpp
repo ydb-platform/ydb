@@ -56,7 +56,7 @@ TEST(TProtobufYsonSchemaTest, WriteMessageSchema)
 
     EXPECT_TRUE(AreNodesEqual(actualNode, expectedNode))
         << "Expected: " << ConvertToYsonString(expectedNode, EYsonFormat::Pretty).AsStringBuf() << "\n\n"
-        << "Actual: " << ConvertToYsonString(actualNode, EYsonFormat::Text).AsStringBuf() << "\n\n";
+        << "Actual: " << ConvertToYsonString(actualNode, EYsonFormat::Pretty).AsStringBuf() << "\n\n";
 }
 
 TEST(TProtobufYsonSchemaTest, CamelCaseNames)

@@ -3606,19 +3606,18 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
     return new TNamedExprNode(parent);
 }
 
-bool TVectorIndexSettings::Validate(TContext& ctx) const {
-    if (!Distance && !Similarity) {
-        ctx.Error() << "either distance or similarity should be set";
+bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::TOperationMode mode) {
+    if (!Value) {
+        ctx.Error(stmBeginPos) << "parameter VALUE must be set";
         return false;
     }
-    if (!VectorType) {
-        ctx.Error() << "vector_type should be set";
-        return false;
+    if (mode == TOperationMode::Alter) {
+        if (InheritPermissions) {
+            ctx.Error(stmBeginPos) << "parameter INHERIT_PERMISSIONS is not supported for alter operation";
+            return false;
+        }
     }
-    if (!VectorDimension) {
-        ctx.Error() << "vector_dimension should be set";
-        return false;
-    }
+
     return true;
 }
 

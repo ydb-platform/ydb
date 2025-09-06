@@ -370,7 +370,24 @@ public:
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
-        ui32 adjustArgsCount = isFactory ? 0 : 2;
+        TStringBuf suffix;
+        if (src != nullptr) {
+            suffix = src->GetGroupBySuffix();
+        } else {
+            suffix = "";
+        }
+
+        bool isStateRecieving = !(suffix == "" || suffix == "Combine" || suffix == "Finalize");
+
+        ui32 adjustArgsCount;
+        if (isFactory) {
+            adjustArgsCount = 0;
+        } else if (isStateRecieving) {
+            adjustArgsCount = 1;
+        } else {
+            adjustArgsCount = 2;
+        }
+
         if (exprs.size() != adjustArgsCount) {
             ctx.Error(Pos_) << "Aggregation function " << (isFactory ? "factory " : "") << Name_ << " requires " <<
                 adjustArgsCount << " arguments, given: " << exprs.size();
@@ -383,7 +400,11 @@ private:
 
         if (!isFactory) {
             Payload_ = exprs.front();
-            Predicate_ = exprs.back();
+            if (!isStateRecieving) {
+                Predicate_ = exprs.back();
+            } else {
+                Predicate_ = Y("InstanceOf", Y("DataType", Q("Bool")));
+            }
             Name_ = src->MakeLocalName(Name_);
         }
 

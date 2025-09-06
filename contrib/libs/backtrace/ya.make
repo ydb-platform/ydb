@@ -40,7 +40,7 @@ IF (OS_DARWIN)
     SRCS(
         macho.c
     )
-ELSEIF (OS_LINUX OR OS_ANDROID)
+ELSEIF (OS_LINUX OR OS_ANDROID OR OS_FREEBSD)
     SRCS(
         elf.c
     )

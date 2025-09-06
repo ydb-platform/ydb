@@ -3192,7 +3192,7 @@ const roaring_bitmap_t *roaring_bitmap_frozen_view(const char *buf,
     return rb;
 }
 
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 roaring_bitmap_t *roaring_bitmap_portable_deserialize_frozen(const char *buf) {
     char *start_of_buf = (char *)buf;
     uint32_t cookie;

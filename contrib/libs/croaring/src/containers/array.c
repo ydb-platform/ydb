@@ -86,7 +86,7 @@ array_container_t *array_container_create_range(uint32_t min, uint32_t max) {
 }
 
 /* Duplicate container */
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 array_container_t *array_container_clone(const array_container_t *src) {
     array_container_t *newcontainer =
         array_container_create_given_capacity(src->capacity);
@@ -396,7 +396,7 @@ void array_container_intersection_inplace(array_container_t *src_1,
     }
 }
 
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 int array_container_to_uint32_array(void *vout, const array_container_t *cont,
                                     uint32_t base) {
 #if CROARING_IS_X64

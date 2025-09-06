@@ -240,7 +240,7 @@ Check how {{ ydb-short-name }} works:
     storage-sample-8    1/1     Running   0          1m
     ```
 
- 2. Start a new pod with [{{ ydb-short-name }} CLI]((../reference/ydb-cli/index.md)):
+ 2. Start a new pod with [{{ ydb-short-name }} CLI](../../../reference/ydb-cli/index.md):
 
     ```bash
     kubectl run -it --image=cr.yandex/crptqonuodf51kdj7a7d/ydb:24.4.4.2 --rm ydb-cli bash

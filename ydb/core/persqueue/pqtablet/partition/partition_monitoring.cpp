@@ -1,5 +1,5 @@
 #include <ydb/core/persqueue/event_helpers.h>
-#include <ydb/core/persqueue/common_app.h>
+#include <ydb/core/persqueue/common/common_app.h>
 #include "mirrorer.h"
 #include "partition_compactification.h"
 #include "partition_util.h"

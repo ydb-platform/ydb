@@ -1,6 +1,6 @@
 #include "pq_impl.h"
 
-#include <ydb/core/persqueue/common_app.h>
+#include <ydb/core/persqueue/common/common_app.h>
 #include <fmt/format.h>
 
 namespace NKikimr::NPQ {

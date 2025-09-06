@@ -4,7 +4,6 @@ SRCS(
     actor_persqueue_client_iface.h
     blob.cpp
     blob_serialization.cpp
-    common_app.cpp
     cluster_tracker.cpp
     event_helpers.cpp
     fetch_request_actor.cpp
@@ -68,6 +67,7 @@ END()
 
 RECURSE(
     codecs
+    common
     config
     events
     partition_index_generator

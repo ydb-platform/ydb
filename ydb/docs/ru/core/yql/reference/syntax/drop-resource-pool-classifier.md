@@ -14,7 +14,7 @@ DROP RESOURCE POOL CLASSIFIER <name>
 
 ## Разрешения
 
-Требуется [разрешение](../yql/reference/syntax/grant#permissions-list) `ALL` на базу данных, пример выдачи такого разрешения:
+Требуется [разрешение](../syntax/grant#permissions-list) `ALL` на базу данных, пример выдачи такого разрешения:
 
 ```yql
 GRANT 'ALL' ON `/my_db` TO `user1@domain`;

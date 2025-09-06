@@ -24,9 +24,6 @@ public:
         static inline constexpr char Run[] = "run";
         static inline constexpr char ResourcePool[] = "resource_pool";
         static inline constexpr char Force[] = "force";
-
-        // Internal properties
-        static inline constexpr char LastOperationCase[] = "__last_operation_case";
     };
 
     static NMetadata::IClassBehaviour::TPtr GetBehaviour();

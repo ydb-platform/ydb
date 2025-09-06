@@ -12079,18 +12079,22 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr->GetQueryClient();
 
         {
-            const auto result = db.ExecuteQuery(R"(
+            const auto result = db.ExecuteQuery(TStringBuilder() << R"(
+                CREATE TABLE test_table (Key Int32 NOT NULL, PRIMARY KEY (Key));
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE,
                     RESOURCE_POOL = "my_pool"
-                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic END DO)",
+                ) AS DO /*комментарий*/)" << "\r" << R"(BEGIN
+PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
+INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic
+END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "my_pool"},
-                {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
+                {"__query_text", "\nPRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;\nINSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic\n"}
             });
         }
 
@@ -12344,18 +12348,22 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr->GetQueryClient();
 
         {
-            const auto result = db.ExecuteQuery(R"(
+            const auto result = db.ExecuteQuery(TStringBuilder() << R"(
+                CREATE TABLE test_table (Key Int32 NOT NULL, PRIMARY KEY (Key));
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE,
                     RESOURCE_POOL = "my_pool"
-                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
+                ) AS DO /*комментарий*/)" << "\r" << R"(BEGIN
+PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
+INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "my_pool"},
-                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
+                {"__query_text", "\nPRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;\nINSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic\n"}
             });
         }
 

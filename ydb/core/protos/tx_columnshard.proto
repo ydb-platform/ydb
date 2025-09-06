@@ -270,6 +270,7 @@ message TCreateTable {
 message TMoveTable {
     optional uint64 SrcPathId = 1;
     optional uint64 DstPathId = 2;
+    optional string DstPath = 3;
 }
 
 message TInitShard {

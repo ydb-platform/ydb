@@ -1,6 +1,6 @@
 #include <ydb/core/persqueue/event_helpers.h>
 #include "mirrorer.h"
-#include "partition_log.h"
+#include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include "partition_util.h"
 #include "partition.h"
 #include <ydb/core/persqueue/read.h>

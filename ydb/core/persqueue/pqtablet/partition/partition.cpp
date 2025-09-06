@@ -4,7 +4,7 @@
 #include "partition_util.h"
 #include "partition_common.h"
 #include "partition_compactification.h"
-#include "partition_log.h"
+#include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/tracing_support.h>
 
 #include <ydb/library/wilson_ids/wilson.h>

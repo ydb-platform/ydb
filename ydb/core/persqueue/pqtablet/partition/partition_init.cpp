@@ -1,7 +1,7 @@
 #include <ydb/core/persqueue/offload_actor.h>
 #include "partition.h"
 #include "partition_compactification.h"
-#include "partition_log.h"
+#include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include "partition_util.h"
 
 #include <memory>

@@ -1,5 +1,5 @@
 #include "partition.h"
-#include "partition_log.h"
+#include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include "partition_util.h"
 #include <util/string/escape.h>
 

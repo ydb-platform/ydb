@@ -1,6 +1,6 @@
 #include "transaction.h"
 #include <ydb/core/persqueue/utils.h>
-#include "pq_log.h"
+#include <ydb/core/persqueue/pqtablet/common/logging.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
 

@@ -1,7 +1,7 @@
 
 #include "pq_impl.h"
 #include "pq_impl_types.h"
-#include "pq_log.h"
+#include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/event_helpers.h>
 #include <ydb/core/persqueue/read.h>
 #include <ydb/core/persqueue/utils.h>

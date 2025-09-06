@@ -10,12 +10,14 @@ SRCS(
 
 
 PEERDIR(
+    ydb/core/persqueue/pqtablet/common
     ydb/core/persqueue/pqtablet/partition
 )
 
 END()
 
 RECURSE(
+    common
     partition
 )
 

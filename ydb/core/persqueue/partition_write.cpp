@@ -1035,14 +1035,6 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
         return EProcessResult::ContinueDrop;
     }
 
-    if (WaitingForSubDomainQuota()) {
-        WriteInflightSize -= p.Msg.Data.size();
-        ScheduleReplyError(p.Cookie, false,
-                            NPersQueue::NErrorCode::OVERLOAD,
-                            "database size exceeded");
-        return EProcessResult::ContinueDrop;
-    }
-
     if (TxAffectedSourcesIds.contains(p.Msg.SourceId)) {
         return EProcessResult::Blocked;
     }

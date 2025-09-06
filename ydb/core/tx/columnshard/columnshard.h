@@ -5,6 +5,7 @@
 
 #include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
@@ -195,18 +196,6 @@ namespace TEvColumnShard {
 
         TActorId GetSource() const {
             return ActorIdFromProto(Record.GetSource());
-        }
-    };
-
-    struct TEvCancelTransactionProposal
-        : public TEventPB<TEvCancelTransactionProposal,
-                          NKikimrTxColumnShard::TEvCancelTransactionProposal,
-                          EvCancelTransactionProposal>
-    {
-        TEvCancelTransactionProposal() = default;
-
-        explicit TEvCancelTransactionProposal(ui64 txId) {
-            Record.SetTxId(txId);
         }
     };
 

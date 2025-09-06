@@ -209,7 +209,7 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
     if (!GroupsToFetch.empty()) {
         // if topics were not specified for some groups,
         // topics for such groups will be retrieved from the table
-        Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
+        Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
         Kqp->SendCreateSessionRequest(ctx);
         KAFKA_LOG_D("Creating KQP Session");
     } else {
@@ -348,7 +348,7 @@ void TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr
         return;
     }
     NYdb::TParamsBuilder params = BuildFetchAssignmentsParams(GroupsToFetch);
-    Kqp->SendYqlRequest(Sprintf(FETCH_ASSIGNMENTS.c_str(), NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpCookie, ctx);
+    Kqp->SendYqlRequest(Sprintf(FETCH_ASSIGNMENTS.c_str(), NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()), params.Build(), KqpCookie, ctx);
 }
 
 void NKafka::TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
@@ -500,6 +500,7 @@ void TKafkaOffsetFetchActor::CreateTopicIfNecessary(const TString& topicName,
     ContextForTopicCreation->ConnectionId = ctx.SelfID;
     ContextForTopicCreation->UserToken = Context->UserToken;
     ContextForTopicCreation->DatabasePath = Context->DatabasePath;
+    ContextForTopicCreation->ResourceDatabasePath = Context->ResourceDatabasePath;
 
     TActorId actorId = ctx.Register(new TKafkaCreateTopicsActor(ContextForTopicCreation,
         1,

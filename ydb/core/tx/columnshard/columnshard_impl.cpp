@@ -411,6 +411,10 @@ void TColumnShard::RunMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, c
 
     const auto srcPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetSrcPathId());
     const auto dstPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetDstPathId());
+    if (proto.HasDstPath()) { //This check can be deleted in 25.3 or later
+        OwnerPath = proto.GetDstPath();
+        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPath, OwnerPath);
+    }
     TablesManager.MoveTableProgress(db, srcPathId, dstPathId);
 }
 

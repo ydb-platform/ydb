@@ -1846,10 +1846,7 @@ R"(column0:   -- is_valid: all not null
         }
     }
 
-    /**
-     * Arrow format is supported for dict types.
-     */
-    Y_UNIT_TEST(ArrowFormat_Types_Dict) {
+    Y_UNIT_TEST(ArrowFormat_Types_Dict_1) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
 
@@ -1864,27 +1861,38 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::MAP, "Column type must be map");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be STRUCT");
 
             const TString expected = 
-R"(column0:   [
-    keys:
+R"(column0:   -- is_valid: all not null
+  -- child 0 type: map<binary, int32>
     [
-      61,
-      63,
-      62
+      keys:
+      [
+        61,
+        63,
+        62
+      ]
+      values:
+      [
+        1,
+        3,
+        2
+      ]
     ]
-    values:
+  -- child 1 type: uint64
     [
-      1,
-      3,
-      2
+      0
     ]
-  ]
 )";
 
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
         }
+    }
+
+    Y_UNIT_TEST(ArrowFormat_Types_Dict_2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+        auto client = kikimr.GetQueryClient();
 
         {
             auto batches = ExecuteAndCombineBatches(client, R"(
@@ -1897,24 +1905,30 @@ R"(column0:   [
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be list");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be STRUCT");
 
             const TString expected =
-R"(column0:   [
-    -- is_valid: all not null
-    -- child 0 type: binary
-      [
-        61,
-        62,
-        null
-      ]
-    -- child 1 type: int32
-      [
-        1,
-        2,
-        3
-      ]
-  ]
+R"(column0:   -- is_valid: all not null
+  -- child 0 type: list<item: struct<: binary, : int32>>
+    [
+      -- is_valid: all not null
+      -- child 0 type: binary
+        [
+          61,
+          62,
+          null
+        ]
+      -- child 1 type: int32
+        [
+          1,
+          2,
+          3
+        ]
+    ]
+  -- child 1 type: uint64
+    [
+      0
+    ]
 )";
 
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);

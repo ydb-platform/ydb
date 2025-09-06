@@ -14,7 +14,6 @@ SRCS(
     ownerinfo.cpp
     offload_actor.cpp
     percentile_counter.cpp
-    pq_database.cpp
     pq_l2_cache.cpp
     pq_rl_helpers.cpp
     quota_tracker.cpp

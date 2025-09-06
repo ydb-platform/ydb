@@ -1,5 +1,5 @@
 #include "cluster_tracker.h"
-#include "pq_database.h"
+#include <ydb/core/persqueue/public/pq_database.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp.h>

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    pq_database.cpp
 )
 
 PEERDIR(

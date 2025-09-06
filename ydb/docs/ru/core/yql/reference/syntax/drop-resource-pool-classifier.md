@@ -1,6 +1,6 @@
 # DROP RESOURCE POOL CLASSIFIER
 
-`DROP RESOURCE POOL CLASSIFIER` удаляет [классификатор пулов ресурсов](../../../../concepts/gloassary#resource-pool-classifier).
+`DROP RESOURCE POOL CLASSIFIER` удаляет [классификатор пулов ресурсов](../../../../concepts/glossary#resource-pool-classifier).
 
 ## Синтаксис
 

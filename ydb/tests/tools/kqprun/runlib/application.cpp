@@ -94,8 +94,8 @@ void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettin
         .OptionalArgument("uint")
         .Handler1([&settings](const NLastGetopt::TOptsParser* option) {
             settings.MonitoringEnabled = true;
-            if (const char* port = option->CurVal()) {
-                settings.FirstMonitoringPort = FromString(port);
+            if (const char* portStr = option->CurVal()) {
+                settings.FirstMonitoringPort = FromString(portStr);
             }
         });
 
@@ -103,8 +103,8 @@ void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettin
         .OptionalArgument("uint")
         .Handler1([&settings](const NLastGetopt::TOptsParser* option) {
             settings.GrpcEnabled = true;
-            if (const char* port = option->CurVal()) {
-                settings.FirstGrpcPort = FromString(port);
+            if (const char* portStr = option->CurVal()) {
+                settings.FirstGrpcPort = FromString(portStr);
             }
         });
 

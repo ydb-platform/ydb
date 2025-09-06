@@ -1020,9 +1020,6 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
 }
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
-    PQ_LOG_D("PreProcessRequest(TWriteMsg& p) CanWrite()=" << CanWrite() << " DiskIsFull=" << DiskIsFull << " SubDomainOutOfSpace=" << SubDomainOutOfSpace
-        << " WaitingQuota=" << WaitingForSubDomainQuota(p.Msg.Data.size()));
-
     if (!CanWrite()) {
         WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
@@ -1039,14 +1036,11 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     }
 
     if (WaitingForSubDomainQuota()) {
-        //if ((QuotaDeadline == TInstant::Zero() || QuotaDeadline > TInstant::Now() /*ctx.Now()*/) && !p.Msg.IgnoreQuotaDeadline) {
-            WriteInflightSize -= p.Msg.Data.size();
-            ScheduleReplyError(p.Cookie, false,
-                               NPersQueue::NErrorCode::OVERLOAD,
-                               "database size exceeded");
-            return EProcessResult::ContinueDrop;
-        //}
-        //return EProcessResult::Blocked;
+        WriteInflightSize -= p.Msg.Data.size();
+        ScheduleReplyError(p.Cookie, false,
+                            NPersQueue::NErrorCode::OVERLOAD,
+                            "database size exceeded");
+        return EProcessResult::ContinueDrop;
     }
 
     if (TxAffectedSourcesIds.contains(p.Msg.SourceId)) {

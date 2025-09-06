@@ -2065,12 +2065,10 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     const auto minWriteLatency = TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetMinWriteLatencyMs());
 
     if (response.HasCookie() && (response.GetCookie() == ERequestCookie::WriteBlobsForCompaction)) {
-        PQ_LOG_D("Received TEvKeyValue::TEvResponse BlobsForCompactionWereWrite");
         BlobsForCompactionWereWrite();
         return;
     }
 
-    PQ_LOG_D("Received TEvKeyValue::TEvResponse writeDuration > minWriteLatency = " << (writeDuration > minWriteLatency));
     if (writeDuration > minWriteLatency) {
         OnHandleWriteResponse(ctx);
     } else {
@@ -2407,8 +2405,6 @@ void TPartition::RunPersist() {
             AttachPersistRequestSpan(TxForPersistSpans.back());
         }
         TxForPersistTraceIds.clear();
-
-        PQ_LOG_D(">>>>> " << PersistRequest->Record.DebugString());
 
         PersistRequestSpan.Attribute("bytes", static_cast<i64>(PersistRequest->Record.ByteSizeLong()));
         ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
@@ -3309,8 +3305,6 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TMessag
     if (WriteCycleSize >= MAX_WRITE_CYCLE_SIZE) {
         return EProcessResult::Blocked;
     }
-
-    PQ_LOG_D("PreProcessUserActionOrTransaction");
 
     auto result = EProcessResult::Continue;
     if (msg.IsWrite()) {

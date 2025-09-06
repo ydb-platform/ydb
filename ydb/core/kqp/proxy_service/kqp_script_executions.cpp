@@ -2149,17 +2149,17 @@ public:
             }
 
             if (const auto& plan = result.ColumnParser("plan").GetOptionalJsonDocument()) {
-                Metadata.mutable_exec_stats()->set_query_plan(*plan);
+                Info.Metadata.mutable_exec_stats()->set_query_plan(*plan);
             } else if (const auto& plan = ParseCompressedColumn("plan", result)) {
-                Metadata.mutable_exec_stats()->set_query_plan(*plan);
+                Info.Metadata.mutable_exec_stats()->set_query_plan(*plan);
             } else {
-                Metadata.mutable_exec_stats()->set_query_plan("{}");
+                Info.Metadata.mutable_exec_stats()->set_query_plan("{}");
             }
 
             if (const auto& ast = result.ColumnParser("ast").GetOptionalUtf8()) {
-                Metadata.mutable_exec_stats()->set_query_ast(*ast);
+                Info.Metadata.mutable_exec_stats()->set_query_ast(*ast);
             } else if (const auto& ast = ParseCompressedColumn("ast", result)) {
-                Metadata.mutable_exec_stats()->set_query_ast(*ast);
+                Info.Metadata.mutable_exec_stats()->set_query_ast(*ast);
             }
 
             Issues = ParseScriptExecutionIssues(result);

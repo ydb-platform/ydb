@@ -132,10 +132,9 @@ TExprNode::TPtr TStreamingQueryOptimizer::ExtractWorldFeatures(TCoNameValueTuple
         .Done();
 
     if (!ast) {
-        ast = ctx.NewWorld(features.Pos());
-    } else if (TMaybeNode<TCoWorld>(ast)) {
-        ctx.AddError(NYql::TIssue(ctx.GetPosition(ast->Pos()), "Streaming query must have at least one streaming read from topic"));
-        return nullptr;
+        ast = Build<TCoVoid>(ctx, features.Pos())
+            .Done()
+            .Ptr();
     }
 
     return ast;
@@ -157,7 +156,7 @@ TStatus TStreamingQueryOptimizer::ValidateObjectNodeAnnotation(TExprNode::TPtr n
 
     EnsureWorldType(*ast, ctx);
 
-    if (TMaybeNode<TCoWorld>(ast)) {
+    if (TMaybeNode<TCoVoid>(ast)) {
         return TStatus::Ok;
     }
 
@@ -169,7 +168,9 @@ TStatus TStreamingQueryOptimizer::ValidateObjectNodeAnnotation(TExprNode::TPtr n
         return TStatus::Error;
     }
 
-    node->ChildRef(astIdx) = ctx.NewWorld(ast->Pos());
+    node->ChildRef(astIdx) = Build<TCoVoid>(ctx, ast->Pos())
+        .Done()
+        .Ptr();
 
     return TStatus::Repeat;
 }

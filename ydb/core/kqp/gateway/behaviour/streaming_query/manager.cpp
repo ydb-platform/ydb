@@ -33,7 +33,6 @@ struct TFeatureFlagExtractor : public IFeatureFlagExtractor {
 
 [[nodiscard]] TYqlConclusionStatus FillStreamingQueryDesc(NKikimrSchemeOp::TStreamingQueryDescription& streamingQueryDesc, const TString& name, const NYql::TObjectSettingsImpl& settings) {
     streamingQueryDesc.SetName(name);
-    streamingQueryDesc.SetReplaceIfExists(settings.GetReplaceIfExists());
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();
     auto& properties = *streamingQueryDesc.MutableProperties()->MutableProperties();
@@ -184,6 +183,7 @@ TYqlConclusionStatus TStreamingQueryManager::PrepareCreateStreamingQuery(NKqpPro
     schemeTx.SetWorkingDir(workingDir);
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateStreamingQuery);
     schemeTx.SetFailedOnAlreadyExists(!settings.GetExistingOk());
+    schemeTx.SetReplaceIfExists(settings.GetReplaceIfExists());
 
     return FillStreamingQueryDesc(*schemeTx.MutableCreateStreamingQuery(), name, settings);
 }

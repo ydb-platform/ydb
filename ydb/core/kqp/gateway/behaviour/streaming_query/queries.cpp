@@ -588,7 +588,7 @@ public:
                     const auto& description = result.StreamingQueryInfo->Description;
                     Info = TSchemeInfo{
                         .Properties = description.GetProperties(),
-                        .Version = description.GetVersion(),
+                        .Version = pathInfo.GetVersion().GetStreamingQueryVersion(),
                         .PathId = TPathId(pathInfo.GetSchemeshardId(), pathInfo.GetPathId()),
                     };
                     Finish(Ydb::StatusIds::SUCCESS);
@@ -2491,7 +2491,7 @@ protected:
 
 private:
     static EOnExists GetActionOnExists(const NKikimrSchemeOp::TModifyScheme& schemeTx) {
-        if (schemeTx.GetCreateStreamingQuery().GetReplaceIfExists()) {
+        if (schemeTx.GetReplaceIfExists()) {
             return EOnExists::Replace;
         }
 

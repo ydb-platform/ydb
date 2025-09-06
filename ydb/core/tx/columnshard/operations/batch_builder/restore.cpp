@@ -68,6 +68,7 @@ TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeD
     , Merger(merger)
     , IncomingData(incomingData)
     , Context(context) {
+    AFL_VERIFY(context.GetApplyToSnapshot().Valid());
 }
 
 void TModificationRestoreTask::SendErrorMessage(

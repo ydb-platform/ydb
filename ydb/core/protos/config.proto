@@ -1876,6 +1876,7 @@ message TAuditConfig {
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
     repeated TLogClassConfig LogClassConfig = 4;
+    optional uint32 HeartbeatIntervalSeconds = 5; // Make heartbeat records to audit log every HeartbeatInterval seconds. 0 means that heartbeat is disabled
 };
 
 message THiveTabletLimit {

@@ -141,7 +141,7 @@ namespace NCloudEvents {
             AUDIT_PART("component", componentName)
             AUDIT_PART("id", evInfo.Id)
             AUDIT_PART("operation", evInfo.Type)
-            AUDIT_PART("status", TString(evInfo.Issue.empty() ? "SUCCESS" : "ERROR"))
+            AUDIT_PART("status", evInfo.Issue.empty() ? "SUCCESS" : "ERROR")
             AUDIT_PART("reason", evInfo.Issue, !evInfo.Issue.empty())
             AUDIT_PART("remote_address", evInfo.RemoteAddress)
             AUDIT_PART("subject", evInfo.UserSID)

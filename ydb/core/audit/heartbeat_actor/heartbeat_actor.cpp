@@ -1,0 +1,57 @@
+#include "heartbeat_actor.h"
+
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+
+#include <ydb/core/audit/audit_log.h>
+
+namespace NKikimr::NAudit {
+
+namespace {
+
+class THeartbeatActor : public NActors::TActorBootstrapped<THeartbeatActor> {
+public:
+    explicit THeartbeatActor(TDuration heartbeatInterval)
+        : HeartbeatInterval(heartbeatInterval)
+    {
+    }
+
+    void Bootstrap() {
+        Become(&THeartbeatActor::StateFunc);
+        PerformHeartbeat();
+    }
+
+    void HeartbeatLog() {
+        AUDIT_LOG(
+            AUDIT_PART("component", "audit")
+            AUDIT_PART("subject", "metadata@system")
+            AUDIT_PART("operation", "HEARTBEAT")
+        );
+    }
+
+    void ScheduleNextEvent() {
+        Schedule(HeartbeatInterval, new NActors::TEvents::TEvWakeup());
+    }
+
+    void PerformHeartbeat() {
+        HeartbeatLog();
+        ScheduleNextEvent();
+    }
+
+    STRICT_STFUNC(StateFunc,
+        sFunc(NActors::TEvents::TEvWakeup, PerformHeartbeat)
+    )
+
+private:
+    const TDuration HeartbeatInterval;
+};
+
+}
+
+std::unique_ptr<NActors::IActor> CreateHeartbeatActor(TDuration heartbeatInterval) {
+    return std::make_unique<THeartbeatActor>(heartbeatInterval);
+}
+
+} // namespace NKikimr::NAudit

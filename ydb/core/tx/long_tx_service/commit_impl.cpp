@@ -43,9 +43,7 @@ namespace NLongTxService {
             : Parent(parent)
             , Params(std::move(params))
             , LogPrefix("LongTxService.Commit ")
-        { 
-            AFL_VERIFY(false); //TODO delete this class in 25.3
-        }
+        { }
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::LONG_TX_SERVICE_COMMIT;

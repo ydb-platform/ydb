@@ -1,15 +1,9 @@
 #pragma once
 
 #include <ydb/core/persqueue/partition_id.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 #include <util/system/types.h>
-
-namespace NActors {
-
-class IActor;
-struct TActorId;
-
-}
 
 namespace NKikimrPQ {
 

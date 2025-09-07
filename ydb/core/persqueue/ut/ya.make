@@ -31,7 +31,6 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    blob_ut.cpp
     counters_ut.cpp
     pqtablet_mock.cpp
     internals_ut.cpp

@@ -1,5 +1,5 @@
 #pragma once
-#include "key.h"
+#include <ydb/core/persqueue/key.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>

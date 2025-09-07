@@ -18,6 +18,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    blob
     common
     partition
 )

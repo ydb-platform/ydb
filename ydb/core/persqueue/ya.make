@@ -2,8 +2,6 @@ LIBRARY()
 
 SRCS(
     actor_persqueue_client_iface.h
-    blob.cpp
-    blob_serialization.cpp
     cluster_tracker.cpp
     event_helpers.cpp
     fetch_request_actor.cpp

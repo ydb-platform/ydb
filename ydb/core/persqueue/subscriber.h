@@ -1,6 +1,6 @@
 #pragma once
 
-#include "blob.h"
+#include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include "header.h"
 #include "partition_id.h"
 #include <ydb/core/persqueue/public/utils.h>

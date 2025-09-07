@@ -1,4 +1,4 @@
-#include <ydb/core/persqueue/blob_int.h>
+#include "blob_int.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 

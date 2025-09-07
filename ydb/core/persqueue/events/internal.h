@@ -4,7 +4,6 @@
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/persqueue/blob.h>
 #include <ydb/core/persqueue/blob_refcounter.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/common/metering.h>

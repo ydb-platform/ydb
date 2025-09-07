@@ -48,6 +48,7 @@ private:
             NScheme::ESchemeEntryType::CoordinationNode,
             NScheme::ESchemeEntryType::Replication,
             NScheme::ESchemeEntryType::SysView,
+            NScheme::ESchemeEntryType::Transfer,
         };
 
         return values;
@@ -176,6 +177,10 @@ public:
 
     bool IsSystemView() const {
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::SysView;
+    }
+
+    bool IsTransfer() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Transfer;
     }
 
     bool IsListed() const {

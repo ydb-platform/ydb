@@ -821,6 +821,71 @@ void BackupReplication(
 
 namespace {
 
+TString BuildCreateTransferQuery(
+        const TString& db,
+        const TString& backupRoot,
+        const TString& name,
+        const NReplication::TTransferDescription& desc)
+{            
+    TVector<TString> options(::Reserve(7));
+    
+    const auto& connectionParams = desc.GetConnectionParams();
+    options.push_back(BuildOption("CONNECTION_STRING", Quote(BuildConnectionString(connectionParams))));
+    switch (connectionParams.GetCredentials()) {
+        case NReplication::TConnectionParams::ECredentials::Static:
+            options.push_back(BuildOption("USER", Quote(connectionParams.GetStaticCredentials().User)));
+            options.push_back(BuildOption("PASSWORD_SECRET_NAME", Quote(connectionParams.GetStaticCredentials().PasswordSecretName)));
+            break;
+        case NReplication::TConnectionParams::ECredentials::OAuth:
+            if (const auto& secret = connectionParams.GetOAuthCredentials().TokenSecretName; !secret.empty()) {
+                options.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(secret)));
+            }
+            break;
+    }
+
+    options.push_back(BuildOption("CONSUMER", desc.GetConsumerName().c_str()));
+
+    const auto& batchingSettings = desc.GetBatchingSettings();
+    options.push_back(BuildOption("BATCH_SIZE_BYTES", ToString(batchingSettings.SizeBytes)));
+    options.push_back(BuildOption("FLUSH_INTERVAL", ToString(batchingSettings.FlushInterval)));
+
+    return std::format(
+            "-- database: \"{}\"\n-- backup root: \"{}\"\n"
+            "CREATE TRANSFER `{}`\n"
+            "FROM `{}` TO `{}` USING `{}`\n"
+            "WITH (\n{}\n);",
+            db.c_str(), backupRoot.c_str(),
+            name.c_str(), 
+            desc.GetSrcPath().c_str(), desc.GetDstPath().c_str(), desc.GetTransformationLambda().c_str(),
+            JoinSeq(",\n", options).c_str()
+        );        
+}
+
+} // namespace
+
+void BackupTransfer(
+    TDriver driver,
+    const TString& db,
+    const TString& dbBackupRoot,
+    const TString& dbPathRelativeToBackupRoot,
+    const TFsPath& fsBackupFolder)
+{
+    Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
+    const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
+
+    LOG_I("Backup transfer " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    NReplication::TReplicationClient client(driver);
+    TMaybe<NReplication::TTransferDescription> desc;
+    VerifyStatus(NDump::DescribeTransfer(client, dbPath, desc), "describe transfer");
+    const auto creationTransferQuery = BuildCreateTransferQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
+
+    WriteCreationQueryToFile(creationTransferQuery, fsBackupFolder, NDump::NFiles::CreateTransfer());
+    BackupPermissions(driver, dbPath, fsBackupFolder);    
+}
+
+namespace {
+
 std::string ToString(std::string_view key, std::string_view value) {
     // indented to follow the default YQL formatting
     return std::format(R"(  {} = '{}')", key, value);
@@ -1052,6 +1117,8 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
             } else if (dbIt.IsSystemView()) {
                 BackupSystemView(driver, dbIt.GetFullPath(), childFolderPath);
+            } else if (dbIt.IsTransfer()) {
+                BackupTransfer(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
             } else if (!dbIt.IsTable() && !dbIt.IsDir()) {
                 LOG_W("Skipping " << dbIt.GetFullPath().Quote() << ": dumping objects of type " << dbIt.GetCurrentNode()->Type << " is not supported");
                 childFolderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();

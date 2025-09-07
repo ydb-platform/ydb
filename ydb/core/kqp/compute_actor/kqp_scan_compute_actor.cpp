@@ -279,9 +279,12 @@ void TKqpScanComputeActor::DoBootstrap() {
     auto taskRunner = MakeDqTaskRunner(GetAllocatorPtr(), execCtx, settings, logger);
     TBase::SetTaskRunner(taskRunner);
 
-    auto wakeup = [this] { ContinueExecute(); };
+    auto selfId = this->SelfId();
+    auto wakeupCallback = [actorSystem, selfId]() {
+        actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+    };
     auto errorCallback = [this](const TString& error){ SendError(error); };
-    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeup), std::move(errorCallback)));
+    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
 
     ComputeCtx.AddTableScan(0, Meta, GetStatsMode());
     ScanData = &ComputeCtx.GetTableScan(0);

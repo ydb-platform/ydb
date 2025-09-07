@@ -222,7 +222,7 @@ public:
                     return TConclusionStatus::Fail("incorrect sending shards list");
                 }
             }
-    }
+        }
 
         Generation = lock.GetGeneration();
         InternalGenerationCounter = lock.GetCounter();
@@ -399,6 +399,14 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                 sendError("haven't lock for commit: " + ::ToString(commitOperation->GetLockId()),
                     NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
             } else {
+                for (const auto& op : lockInfo->GetWriteOperations()) {
+                    if (!TablesManager.ResolveInternalPathId(op->GetPathId().GetSchemeShardLocalPathId(), false)) {
+                        //Table renamed or dropped
+                        sendError("unknown table path id: " + ::ToString(op->GetPathId().GetSchemeShardLocalPathId()),
+                            NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED);
+                        return;
+                    }
+                }
                 if (commitOperation->NeedSyncLocks()) {
                     if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
                         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "CommitWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN), "tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) + " != " + ::ToString(commitOperation->GetGeneration()));

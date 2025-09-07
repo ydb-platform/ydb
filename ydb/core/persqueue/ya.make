@@ -14,7 +14,6 @@ SRCS(
     write_meta.cpp
     dread_cache_service/caching_service.cpp
     write_id.cpp
-    tracing_support.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(sourceid_info.h)

@@ -94,6 +94,7 @@
                                                                                 "Node Type": "Filter-TableFullScan",
                                                                                 "Operators": [
                                                                                     {
+                                                                                        "Blocks": "True",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1

@@ -1,5 +1,5 @@
 #include "sourceid.h"
-#include <ydb/core/persqueue/ownerinfo.h>
+#include "ownerinfo.h"
 
 #include "partition.h"
 

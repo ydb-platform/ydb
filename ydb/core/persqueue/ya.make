@@ -8,7 +8,6 @@ SRCS(
     heartbeat.cpp
     key.cpp
     list_all_topics_actor.cpp
-    ownerinfo.cpp
     percentile_counter.cpp
     pq_l2_cache.cpp
     type_codecs_defs.cpp

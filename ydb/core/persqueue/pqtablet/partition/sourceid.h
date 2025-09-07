@@ -4,7 +4,7 @@
 #include <ydb/core/persqueue/heartbeat.h>
 #include <ydb/core/persqueue/sourceid_info.h>
 #include <ydb/core/persqueue/key.h>
-#include <ydb/core/persqueue/ownerinfo.h>
+#include "ownerinfo.h"
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 

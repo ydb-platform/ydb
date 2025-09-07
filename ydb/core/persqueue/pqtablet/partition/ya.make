@@ -4,6 +4,7 @@ SRCS(
     account_read_quoter.cpp
     mirrorer.cpp
     offload_actor.cpp
+    ownerinfo.cpp
     partition.cpp
     partition_blob_encoder.cpp
     partition_compactification.cpp

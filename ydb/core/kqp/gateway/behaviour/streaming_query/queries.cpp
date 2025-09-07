@@ -57,7 +57,7 @@ struct TSchemeInfo {
             || schemeInfo.GetLocalPathId() != PathId.LocalPathId;
     }
 
-    void Synchronize(NKikimrKqp::TStreamingQueryState& state) const {
+    void Sync(NKikimrKqp::TStreamingQueryState& state) const {
         auto& schemeInfo = *state.MutableSchemeInfo();
         schemeInfo.SetAlterVersion(Version);
         schemeInfo.SetOwnerSchemeshardId(PathId.OwnerId);
@@ -78,7 +78,7 @@ struct TEvPrivate {
         EvUpdateStreamingQueryResult,
         EvCleanupStreamingQueryResult,
         EvStartStreamingQueryResult,
-        EvSynchronizeStreamingQueryResult,
+        EvSyncStreamingQueryResult,
 
         // Query locking
         EvLockStreamingQueryResult,
@@ -137,8 +137,8 @@ struct TEvPrivate {
         const NKikimrKqp::TStreamingQueryState State;
     };
 
-    struct TEvSynchronizeStreamingQueryResult : public TEvResultBase<TEvSynchronizeStreamingQueryResult, EvSynchronizeStreamingQueryResult> {
-        TEvSynchronizeStreamingQueryResult(Ydb::StatusIds::StatusCode status, NKikimrKqp::TStreamingQueryState state, bool existsInSS, NYql::TIssues issues = {})
+    struct TEvSyncStreamingQueryResult : public TEvResultBase<TEvSyncStreamingQueryResult, EvSyncStreamingQueryResult> {
+        TEvSyncStreamingQueryResult(Ydb::StatusIds::StatusCode status, NKikimrKqp::TStreamingQueryState state, bool existsInSS, NYql::TIssues issues = {})
             : TEvResultBase(status, std::move(issues))
             , State(std::move(state))
             , ExistsInSS(existsInSS)
@@ -1904,8 +1904,8 @@ private:
 
 // Interrupt previous not completed query action and update query state according to properties from SS
 
-class TSynchronizeStreamingQueryTableActor : public TActionActorBase<TSynchronizeStreamingQueryTableActor> {
-    using TBase = TActionActorBase<TSynchronizeStreamingQueryTableActor>;
+class TSyncStreamingQueryTableActor : public TActionActorBase<TSyncStreamingQueryTableActor> {
+    using TBase = TActionActorBase<TSyncStreamingQueryTableActor>;
 
 public:
     using TBase::LogPrefix;
@@ -1916,7 +1916,7 @@ public:
         NKikimrConfig::TStreamingQueriesConfig Config;
     };
 
-    TSynchronizeStreamingQueryTableActor(const TExternalContext& context, const TString& queryPath, const TSettings& settings)
+    TSyncStreamingQueryTableActor(const TExternalContext& context, const TString& queryPath, const TSettings& settings)
         : TBase(__func__, queryPath)
         , Context(context)
         , Settings(settings)
@@ -1947,7 +1947,7 @@ public:
             return;
         }
 
-        SynchronizeQuery();
+        SyncQuery();
     }
 
     STRICT_STFUNC(RemoveQueryStateFunc,
@@ -2001,7 +2001,7 @@ public:
         }
         State.ClearCurrentExecutionId();
 
-        SynchronizeQuery();
+        SyncQuery();
     }
 
     void Handle(TEvPrivate::TEvUpdateStreamingQueryResult::TPtr& ev) {
@@ -2009,7 +2009,7 @@ public:
             return;
         }
 
-        SynchronizeQuery();
+        SyncQuery();
     }
 
     void Handle(TEvPrivate::TEvStartStreamingQueryResult::TPtr& ev) {
@@ -2036,8 +2036,8 @@ public:
 protected:
     bool BeforeFinish(Ydb::StatusIds::StatusCode status) override {
         if (SchemeInfo.IsChanged(State)) {
-            Become(&TSynchronizeStreamingQueryTableActor::FinalizeStateFunc);
-            SchemeInfo.Synchronize(State);
+            Become(&TSyncStreamingQueryTableActor::FinalizeStateFunc);
+            SchemeInfo.Sync(State);
             UpdateQueryState("sync scheme info");
 
             FinalStatus = status;
@@ -2048,7 +2048,7 @@ protected:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status) override {
-        Send(Owner, new TEvPrivate::TEvSynchronizeStreamingQueryResult(status, State, ExistsInSS, std::move(Issues)));
+        Send(Owner, new TEvPrivate::TEvSyncStreamingQueryResult(status, State, ExistsInSS, std::move(Issues)));
     }
 
 private:
@@ -2076,7 +2076,7 @@ private:
     }
 
     void RemoveQuery() {
-        Become(&TSynchronizeStreamingQueryTableActor::RemoveQueryStateFunc);
+        Become(&TSyncStreamingQueryTableActor::RemoveQueryStateFunc);
 
         if (State.HasCurrentExecutionId() || State.PreviousExecutionIdsSize() > 0) {
             const auto& cleanupActorId = Register(new TCleanupStreamingQueryStateTableActor(Context, QueryPath, {
@@ -2142,8 +2142,8 @@ private:
         LOG_D("Start TStartStreamingQueryTableActor " << startActorId);
     }
 
-    void SynchronizeQuery() {
-        Become(&TSynchronizeStreamingQueryTableActor::StateFunc);
+    void SyncQuery() {
+        Become(&TSyncStreamingQueryTableActor::StateFunc);
 
         switch (State.GetStatus()) {
             case NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED:
@@ -2356,7 +2356,7 @@ public:
     STFUNC(StateFuncSync) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvDescribeStreamingQueryResult, HandleSync);
-            hFunc(TEvPrivate::TEvSynchronizeStreamingQueryResult, HandleSync);
+            hFunc(TEvPrivate::TEvSyncStreamingQueryResult, HandleSync);
             default:
                 TBase::StateFuncBase(ev);
         }
@@ -2370,15 +2370,15 @@ public:
         TBase::SchemeInfo = ev->Get()->Info;
         LOG_D("Describe streaming query success, query exists: " << TBase::SchemeInfo.has_value() << ", alter version: " << (TBase::SchemeInfo ? TBase::SchemeInfo->Version : 0));
 
-        const auto& synchronizeActorId = TBase::Register(new TSynchronizeStreamingQueryTableActor(TBase::Context, TBase::QueryPath, {
+        const auto& syncActorId = TBase::Register(new TSyncStreamingQueryTableActor(TBase::Context, TBase::QueryPath, {
             .InitialState = TBase::QueryState,
             .SchemeInfo = TBase::SchemeInfo,
             .Config = TBase::QueryServiceConfig.GetStreamingQueries(),
         }));
-        LOG_D("Start TSynchronizeStreamingQueryTableActor " << synchronizeActorId << " to sync previous state");
+        LOG_D("Start TSyncStreamingQueryTableActor " << syncActorId << " to sync previous state");
     }
 
-    void HandleSync(TEvPrivate::TEvSynchronizeStreamingQueryResult::TPtr& ev) {
+    void HandleSync(TEvPrivate::TEvSyncStreamingQueryResult::TPtr& ev) {
         if (TBase::HandleResult(ev, TStringBuilder() << "Streaming query initialization (recover previous query state, try to repeat request)")) {
             return;
         }
@@ -2388,7 +2388,7 @@ public:
             TBase::SchemeInfo = std::nullopt;
         }
 
-        LOG_D("Synchronize query with scheme shard success"
+        LOG_D("Sync query with scheme shard success"
             << ", status: " << NKikimrKqp::TStreamingQueryState::EStatus_Name(TBase::QueryState.GetStatus())
             << ", execution id: " << TBase::QueryState.GetCurrentExecutionId()
             << ", scheme info: " << TBase::QueryState.GetSchemeInfo().ShortDebugString()
@@ -2436,7 +2436,7 @@ public:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvExecuteSchemeTransactionResult, Handle);
-            hFunc(TEvPrivate::TEvSynchronizeStreamingQueryResult, Handle);
+            hFunc(TEvPrivate::TEvSyncStreamingQueryResult, Handle);
             default:
                 StateFuncBase(ev);
         }
@@ -2453,7 +2453,7 @@ public:
         LOG_D("Start TDescribeStreamingQuerySchemeActor " << describerId << " after query creation");
     }
 
-    void Handle(TEvPrivate::TEvSynchronizeStreamingQueryResult::TPtr& ev) {
+    void Handle(TEvPrivate::TEvSyncStreamingQueryResult::TPtr& ev) {
         if (HandleResult(ev, "Streaming query initialization")) {
             return;
         }
@@ -2463,7 +2463,7 @@ public:
             SchemeInfo = std::nullopt;
         }
 
-        LOG_D("Synchronize query with scheme shard success"
+        LOG_D("Sync query with scheme shard success"
             << ", query created: " << QueryCreated
             << ", status: " << NKikimrKqp::TStreamingQueryState::EStatus_Name(QueryState.GetStatus())
             << ", execution id: " << QueryState.GetCurrentExecutionId()
@@ -2479,12 +2479,12 @@ protected:
             if (!SchemeInfo) {
                 FatalError(Ydb::StatusIds::INTERNAL_ERROR, "Query info not found after creation");
             } else {
-                const auto& synchronizeActorId = Register(new TSynchronizeStreamingQueryTableActor(Context, QueryPath, {
+                const auto& syncActorId = Register(new TSyncStreamingQueryTableActor(Context, QueryPath, {
                     .InitialState = QueryState,
                     .SchemeInfo = *SchemeInfo,
                     .Config = QueryServiceConfig.GetStreamingQueries(),
                 }));
-                LOG_D("Start TSynchronizeStreamingQueryTableActor " << synchronizeActorId << " to finish creation");
+                LOG_D("Start TSyncStreamingQueryTableActor " << syncActorId << " to finish creation");
             }
             return;
         }
@@ -2572,7 +2572,7 @@ public:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvExecuteSchemeTransactionResult, Handle);
-            hFunc(TEvPrivate::TEvSynchronizeStreamingQueryResult, Handle);
+            hFunc(TEvPrivate::TEvSyncStreamingQueryResult, Handle);
             default:
                 StateFuncBase(ev);
         }
@@ -2586,7 +2586,7 @@ public:
         if (!SchemeInfo) {
             FatalError(Ydb::StatusIds::INTERNAL_ERROR, "Can not continue alter without previous query state");
         } else {
-            const auto& synchronizeActorId = Register(new TSynchronizeStreamingQueryTableActor(Context, QueryPath, {
+            const auto& syncActorId = Register(new TSyncStreamingQueryTableActor(Context, QueryPath, {
                 .InitialState = QueryState,
                 .SchemeInfo = TSchemeInfo{
                     .Properties = SchemeTx.GetCreateStreamingQuery().GetProperties(),
@@ -2595,11 +2595,11 @@ public:
                 },
                 .Config = QueryServiceConfig.GetStreamingQueries(),
             }));
-            LOG_D("Start TSynchronizeStreamingQueryTableActor " << synchronizeActorId << " to finish alter");
+            LOG_D("Start TSyncStreamingQueryTableActor " << syncActorId << " to finish alter");
         }
     }
 
-    void Handle(TEvPrivate::TEvSynchronizeStreamingQueryResult::TPtr& ev) {
+    void Handle(TEvPrivate::TEvSyncStreamingQueryResult::TPtr& ev) {
         if (HandleResult(ev, "Streaming query alter")) {
             return;
         }
@@ -2609,7 +2609,7 @@ public:
             SchemeInfo = std::nullopt;
         }
 
-        LOG_D("Synchronize query with scheme shard success"
+        LOG_D("Sync query with scheme shard success"
             << ", status: " << NKikimrKqp::TStreamingQueryState::EStatus_Name(QueryState.GetStatus())
             << ", execution id: " << QueryState.GetCurrentExecutionId()
             << ", scheme info: " << QueryState.GetSchemeInfo().ShortDebugString()

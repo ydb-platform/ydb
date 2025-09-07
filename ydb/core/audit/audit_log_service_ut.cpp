@@ -1,6 +1,7 @@
 #include "audit_log_service.h"
 #include "audit_log.h"
 
+#include <ydb/core/audit/heartbeat_actor/heartbeat_actor.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
@@ -81,7 +82,7 @@ struct TTestAuditLogActorSystem : public NActors::TTestActorRuntimeBase {
     }
 
     void Init(TAuditLogBackends&& backends) {
-        AddLocalService(MakeAuditServiceID(), NActors::TActorSetupCmd(CreateAuditWriter(std::move(backends)).Release(), NActors::TMailboxType::Simple, 0));
+        AddLocalService(MakeAuditServiceID(), NActors::TActorSetupCmd(CreateAuditWriter(std::move(backends)), NActors::TMailboxType::Simple, 0));
         InitNodes();
         SetLogBackend(new TStreamLogBackend(&Cerr));
         AppendToLogSettings(
@@ -116,7 +117,16 @@ public:
 
     TString SendAuditLog(TAuditLogParts&& parts) { // Send log and wait for result
         NAudit::SendAuditLog(Runtime.SingleSys(), std::move(parts));
+        return WaitAuditLog();
+    }
+
+    TString WaitAuditLog() {
         return LogQueue->Pop();
+    }
+
+    void MakeHeartbeatActor(TDuration interval) {
+        auto actor = CreateHeartbeatActor(interval);
+        Runtime.Register(actor.release());
     }
 
 private:
@@ -156,6 +166,22 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
         };
 
         UNIT_ASSERT_STRING_CONTAINS(test.SendAuditLog(std::move(parts)), R"("@log_type":"audit","name":"value","fe":"FEFE"})");
+    }
+}
+
+Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
+    Y_UNIT_TEST(LoggingHeartbeat) {
+        TTestAuditLogService test(NKikimrConfig::TAuditConfig::TXT);
+        test.MakeHeartbeatActor(TDuration::MilliSeconds(100));
+
+        auto waitAndCheckLog = [&]() {
+            const TString log = test.WaitAuditLog();
+            UNIT_ASSERT_STRING_CONTAINS(log, "component=audit, subject=metadata@system, operation=HEARTBEAT");
+        };
+
+        waitAndCheckLog();
+        waitAndCheckLog();
+        waitAndCheckLog();
     }
 }
 

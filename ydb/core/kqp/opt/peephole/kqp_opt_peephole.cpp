@@ -299,7 +299,6 @@ bool IsCompatibleWithBlocks(TPositionHandle pos, const TStructExprType& type, TE
 bool CanPropagateWideBlockThroughChannel(
     const TDqOutput& output,
     const THashMap<ui64, TKqpProgram>& programs,
-    const TDqStageSettings& stageSettings,
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx)
 {
@@ -310,6 +309,8 @@ bool CanPropagateWideBlockThroughChannel(
         // stage has multiple outputs
         return false;
     }
+
+    auto stageSettings = TDqStageSettings::Parse(output.Stage());
 
     if (!stageSettings.WideChannels) {
         return false;
@@ -380,7 +381,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 newArgs.emplace_back(newArg);
 
                 if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); scalarHashShuffleCount <= 1 && connection &&
-                    CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, TDqStageSettings::Parse(stage), ctx, typesCtx))
+                    CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, ctx, typesCtx))
                 {
                     TExprNode::TPtr newArgNode = ctx.Builder(oldArg.Pos())
                         .Callable("WideFromBlocks")

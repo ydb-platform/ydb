@@ -326,7 +326,7 @@ def main():
     bot_token = args.bot_token or os.getenv('TELEGRAM_BOT_TOKEN')
     
     # Get team channels
-    team_channels_json = getattr(args, 'team_channels', None) or os.getenv('TEAM_CHANNELS')
+    team_channels_json = args.team_channels or os.getenv('TEAM_CHANNELS')
     team_channels = load_team_channels(team_channels_json)
     
     # Validate configuration
@@ -335,7 +335,7 @@ def main():
         print("   Use --team-channels parameter or set TEAM_CHANNELS environment variable")
         sys.exit(1)
     
-    print(f"📋 Loaded channel configurations for {len(team_channels)} teams")
+    print(f"📋 Loaded channel configurations for {len(team_channels.get('teams', {}))} teams")
     
     # Check if we need Telegram connection (not for dry run)
     if not args.dry_run or args.test_connection:

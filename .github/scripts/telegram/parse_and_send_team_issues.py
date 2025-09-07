@@ -123,16 +123,14 @@ def format_team_message(team_name, issues, team_responsible=None):
     return message
 
 
-def send_team_messages(teams, bot_token, chat_id, delay=2, message_thread_id=None, max_retries=5, retry_delay=10, team_channels=None):
+def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10, team_channels=None):
     """
     Send separate messages for each team.
     
     Args:
         teams (dict): Dictionary with team names and their issues
         bot_token (str): Telegram bot token
-        chat_id (str): Default Telegram chat ID
         delay (int): Delay between messages in seconds
-        message_thread_id (int, optional): Default thread ID for group messages
         max_retries (int): Maximum number of retry attempts for failed messages
         retry_delay (int): Delay between retry attempts in seconds
         team_channels (dict): Dictionary mapping team names to their specific channel configs
@@ -149,10 +147,10 @@ def send_team_messages(teams, bot_token, chat_id, delay=2, message_thread_id=Non
             
         # Get responsible users and channel from team_channels
         team_responsible = None
-        team_chat_id = chat_id
-        team_thread_id = message_thread_id
+        team_chat_id = None
+        team_thread_id = None
         
-        if team_channels and 'teams' in team_channels and team_name in team_channels['teams']:
+        if 'teams' in team_channels and team_name in team_channels['teams']:
             team_config = team_channels['teams'][team_name]
             
             # Get responsible users
@@ -166,19 +164,23 @@ def send_team_messages(teams, bot_token, chat_id, delay=2, message_thread_id=Non
                     team_chat_id, team_thread_id = parse_chat_and_thread_id(team_channels['channels'][channel_name])
                     print(f"📨 Using channel '{channel_name}' for team {team_name}: {team_chat_id}" + (f" (thread {team_thread_id})" if team_thread_id else ""))
                 else:
-                    print(f"⚠️ Channel '{channel_name}' not found in channels config, using fallback")
+                    print(f"❌ Channel '{channel_name}' not found in channels config")
+                    continue
             else:
-                print(f"📨 No channel specified for team {team_name}, using fallback")
-        elif team_channels and 'default_channel' in team_channels:
+                print(f"❌ No channel specified for team {team_name}")
+                continue
+        elif 'default_channel' in team_channels:
             # Use default channel from configuration
             default_channel_name = team_channels['default_channel']
             if 'channels' in team_channels and default_channel_name in team_channels['channels']:
                 team_chat_id, team_thread_id = parse_chat_and_thread_id(team_channels['channels'][default_channel_name])
                 print(f"📨 Using default channel '{default_channel_name}' for team {team_name}: {team_chat_id}" + (f" (thread {team_thread_id})" if team_thread_id else ""))
             else:
-                print(f"⚠️ Default channel '{default_channel_name}' not found, using fallback")
+                print(f"❌ Default channel '{default_channel_name}' not found")
+                continue
         else:
-            print(f"📨 Using fallback channel for team {team_name}")
+            print(f"❌ No channel configuration found for team {team_name}")
+            continue
         
         message = format_team_message(team_name, issues, team_responsible)
         
@@ -308,42 +310,32 @@ def main():
     # Required arguments
     parser.add_argument('--file', required=True, help='Path to file with formatted results')
     parser.add_argument('--bot-token', help='Telegram bot token (or use TELEGRAM_BOT_TOKEN env var)')
-    parser.add_argument('--chat-id', help='Telegram chat ID (or use TELEGRAM_CHAT_ID env var)')
+    parser.add_argument('--team-channels', required=True, help='JSON string mapping teams to their channel configurations (or use TEAM_CHANNELS env var)')
     
     # Optional arguments
     parser.add_argument('--delay', type=int, default=2, help='Delay between messages in seconds (default: 2)')
     parser.add_argument('--dry-run', action='store_true', help='Parse and show teams without sending messages')
     parser.add_argument('--test-connection', action='store_true', help='Test Telegram connection only')
-    parser.add_argument('--team-channels', help='JSON string or path to JSON file with team channel configurations (or use TEAM_CHANNELS env var)')
     parser.add_argument('--message-thread-id', type=int, help='Thread ID for group messages (optional)')
     parser.add_argument('--max-retries', type=int, default=5, help='Maximum number of retry attempts for failed messages (default: 5)')
     parser.add_argument('--retry-delay', type=int, default=10, help='Delay between retry attempts in seconds (default: 10)')
     
     args = parser.parse_args()
     
-    # Get bot token and chat ID
+    # Get bot token
     bot_token = args.bot_token or os.getenv('TELEGRAM_BOT_TOKEN')
-    chat_id_str = args.chat_id or os.getenv('TELEGRAM_CHAT_ID')
-    
-    # Parse chat ID and thread ID
-    if chat_id_str:
-        chat_id, thread_id = parse_chat_and_thread_id(chat_id_str)
-        # Override thread_id if explicitly provided via argument
-        if args.message_thread_id is not None:
-            thread_id = args.message_thread_id
-    else:
-        chat_id = None
-        thread_id = None
     
     # Get team channels
     team_channels_json = getattr(args, 'team_channels', None) or os.getenv('TEAM_CHANNELS')
     team_channels = load_team_channels(team_channels_json)
     
-    # Show team channels status
+    # Validate configuration
     if not team_channels:
-        print("⚠️ No team channels loaded, using default channel for all teams")
-    else:
-        print(f"📋 Loaded channel configurations for {len(team_channels)} teams")
+        print("❌ Team channels configuration is required")
+        print("   Use --team-channels parameter or set TEAM_CHANNELS environment variable")
+        sys.exit(1)
+    
+    print(f"📋 Loaded channel configurations for {len(team_channels)} teams")
     
     # Check if we need Telegram connection (not for dry run)
     if not args.dry_run or args.test_connection:
@@ -351,27 +343,19 @@ def main():
             print("❌ Bot token not provided. Use --bot-token or set TELEGRAM_BOT_TOKEN environment variable")
             sys.exit(1)
         
-        if not chat_id:
-            print("❌ Chat ID not provided. Use --chat-id or set TELEGRAM_CHAT_ID environment variable")
-            sys.exit(1)
-        
-        # Test connection and thread
-        if not test_telegram_connection(bot_token, chat_id, thread_id):
-            if thread_id is not None:
-                print(f"⚠️ Thread {thread_id} not found, trying without thread...")
-                if test_telegram_connection(bot_token, chat_id, None):
-                    print("✅ Connection successful without thread, continuing...")
-                    thread_id = None
-                else:
-                    print("❌ Connection failed even without thread")
-                    sys.exit(1)
-            else:
-                print("❌ Connection failed")
-                sys.exit(1)
-        
-        # If this was just a connection test, exit here
+        # Test connection for each team's channel
         if args.test_connection:
-            print("✅ Connection test successful!")
+            print("🔍 Testing connections for all team channels...")
+            for team_name, team_config in team_channels.get('teams', {}).items():
+                if 'channel' in team_config:
+                    channel_name = team_config['channel']
+                    if 'channels' in team_channels and channel_name in team_channels['channels']:
+                        chat_id, thread_id = parse_chat_and_thread_id(team_channels['channels'][channel_name])
+                        if test_telegram_connection(bot_token, chat_id, thread_id):
+                            print(f"✅ Connection successful for team {team_name} (channel {channel_name})")
+                        else:
+                            print(f"❌ Connection failed for team {team_name} (channel {channel_name})")
+            print("✅ Connection test completed!")
             sys.exit(0)
     
     # Read file
@@ -444,7 +428,7 @@ def main():
         return
     
     # Send messages
-    send_team_messages(teams, bot_token, chat_id, args.delay, thread_id, args.max_retries, args.retry_delay, team_channels)
+    send_team_messages(teams, bot_token, args.delay, args.max_retries, args.retry_delay, team_channels)
 
 
 if __name__ == "__main__":

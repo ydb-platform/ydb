@@ -8,15 +8,14 @@ Script for parsing GitHub issues creation results and sending separate messages 
 python .github/scripts/telegram/parse_and_send_team_issues.py \
   --file "created_issues.txt" \
   --bot-token "YOUR_BOT_TOKEN" \
-  --chat-id "CHAT_ID"
+  --team-channels '{"channels": {"main": "1234567890/1"}, "teams": {"team1": {"channel": "main", "responsible": ["@lead1"]}}, "default_channel": "main"}'
 ```
 
 ## Parameters
 
 - `--file` - Path to results file (required)
 - `--bot-token` - Telegram bot token (or TELEGRAM_BOT_TOKEN env var)
-- `--chat-id` - Chat/channel ID (or TELEGRAM_CHAT_ID env var)
-- `--team-channels` - JSON string mapping teams to their channel configurations (or TEAM_CHANNELS env var)
+- `--team-channels` - JSON string mapping teams to their channel configurations (or TEAM_CHANNELS env var) (required)
 - `--message-thread-id` - Thread ID for group messages (optional)
 - `--delay` - Delay between messages in seconds (default: 2)
 - `--dry-run` - Parse only without sending messages

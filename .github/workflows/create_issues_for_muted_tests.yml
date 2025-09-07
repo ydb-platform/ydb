@@ -82,12 +82,10 @@ jobs:
       - name: Send team-specific messages to Telegram
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_MUTE_CHAT_ID }}
           TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
         run: |
           python .github/scripts/telegram/parse_and_send_team_issues.py \
             --file "${{ steps.create_issues.outputs.created_issues_file }}" \
             --bot-token "$TELEGRAM_BOT_TOKEN" \
-            --chat-id "$TELEGRAM_CHAT_ID" \
             --team-channels "$TEAM_CHANNELS" \
             --delay 2

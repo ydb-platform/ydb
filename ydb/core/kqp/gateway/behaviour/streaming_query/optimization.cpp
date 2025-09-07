@@ -154,10 +154,12 @@ TStatus TStreamingQueryOptimizer::ValidateObjectNodeAnnotation(TExprNode::TPtr n
         return TStatus::Ok;
     }
 
-    EnsureWorldType(*ast, ctx);
-
     if (TMaybeNode<TCoVoid>(ast)) {
         return TStatus::Ok;
+    }
+
+    if (!EnsureWorldType(*ast, ctx)) {
+        return TStatus::Error;
     }
 
     TIssueScopeGuard issueScopeRead(ctx.IssueManager, [&]() {

@@ -123,14 +123,20 @@ public:
     virtual void ValidateWorkloadServiceCounters(bool checkTableCounters = true, const TString& poolId = "") const = 0;
     virtual TEvFetchDatabaseResponse::TPtr FetchDatabase(const TString& database) const = 0;
 
-    // Coomon helpers
+    // Common helpers
+    virtual ui64 GetGrpcPort() const = 0;
     virtual TTestActorRuntime* GetRuntime() const = 0;
     virtual const TYdbSetupSettings& GetSettings() const = 0;
     static void WaitFor(TDuration timeout, TString description, std::function<bool(TString&)> callback);
 
-    virtual TLocalPathId GetDedicatedTenantPathId() const = 0;
-    virtual TLocalPathId GetSharedTenantPathId() const = 0;
-    virtual TLocalPathId GetServerlessTenantPathId() const = 0;
+    struct TTenantInfo {
+        TLocalPathId PathId;
+        ui64 GrpcPort = 0;
+        ui32 NodeIdx = 0;
+    };
+    virtual TTenantInfo GetDedicatedTenantInfo() const = 0;
+    virtual TTenantInfo GetSharedTenantInfo() const = 0;
+    virtual TTenantInfo GetServerlessTenantInfo() const = 0;
 };
 
 // Test queries

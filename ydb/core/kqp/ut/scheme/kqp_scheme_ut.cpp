@@ -7704,21 +7704,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
-        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
 
         // Shared, enabled
-        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
 
         // Serverless, disabled
-        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSourceSql, settings));
         checkDisabled(ydb->ExecuteQuery(createTableSql, settings));
         checkNotFound(ydb->ExecuteQuery(dropTableSql, settings), "Executing ESchemeOpDropExternalTable");
@@ -10953,19 +10953,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
-        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Shared, enabled
-        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Serverless, disabled
-        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSql, settings));
         checkNotFound(ydb->ExecuteQuery(alterSql, settings));
         checkNotFound(ydb->ExecuteQuery(dropSql, settings));
@@ -11281,19 +11281,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
-        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Shared, enabled
-        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Serverless, disabled
-        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSql, settings));
         checkDisabled(ydb->ExecuteQuery(alterSql, settings));
         checkNotFound(ydb->ExecuteQuery(dropSql, settings));
@@ -11478,6 +11478,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             .EnableResourcePoolsOnServerless(true)
             .Create();
 
+        const auto nodeIdx = ydb->GetServerlessTenantInfo().NodeIdx;
         const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
         ydb->ExecuteQueryRetry("Wait EnableResourcePoolsOnServerless", R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
@@ -11487,12 +11488,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             NWorkload::TQueryRunnerSettings()
                 .PoolId("")
                 .Database(serverlessTenant)
-                .NodeIndex(1)
+                .NodeIndex(nodeIdx)
         );
 
         const auto pathId = ydb->FetchDatabase(serverlessTenant)->Get()->PathId;
         UNIT_ASSERT_VALUES_EQUAL(
-            FetchResourcePoolClassifiers(*ydb->GetRuntime(), 1),
+            FetchResourcePoolClassifiers(*ydb->GetRuntime(), nodeIdx),
             TStringBuilder() << "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"resource_pool\":\"test_pool\"},\"database\":\"" << pathId.OwnerId << ":" << pathId.LocalPathId << ":\\/Root\\/test-serverless\"}]}"
         );
     }
@@ -11671,21 +11672,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
-        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(upsertSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Shared, enabled
-        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(upsertSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Serverless, disabled
-        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSql, settings));
         checkDisabled(ydb->ExecuteQuery(alterSql, settings));
         checkDisabled(ydb->ExecuteQuery(upsertSql, settings));
@@ -11916,7 +11917,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             .SetEnableResourcePools(true)
             .SetInitFederatedQuerySetupFactory(true));
 
-        const auto result = kikimr->GetQueryClient().ExecuteQuery(fmt::format(R"(
+        const auto result = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT)).ExecuteQuery(fmt::format(R"(
             CREATE TOPIC MyTopic;
             CREATE EXTERNAL DATA SOURCE MySource WITH (
                 SOURCE_TYPE = "Ydb",
@@ -11933,7 +11934,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(DisableStreamingQueries) {
         auto kikimr = SetupStreamingSource(/* enableStreamingQueries */ false);
-        auto db = kikimr->GetQueryClient();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
 
         auto checkQuery = [&db](const TString& query, EStatus status, const TString& error) {
             Cerr << "Check query:\n" << query << "\n";
@@ -11967,7 +11968,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(StreamingQueriesValidation) {
         auto kikimr = SetupStreamingSource();
-        auto db = kikimr->GetQueryClient();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
 
         // Test create
 
@@ -12076,7 +12077,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(CreateStreamingQueryBasic) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
 
         {
             const auto result = db.ExecuteQuery(TStringBuilder() << R"(
@@ -12146,7 +12147,7 @@ END DO)",
     }
 
     void CheckStreamingQueryBodyValidation(TKikimrRunner& kikimr, const TString& prefix) {
-        auto db = kikimr.GetQueryClient();
+        auto db = kikimr.GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
 
         {
             const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
@@ -12236,7 +12237,7 @@ END DO)",
     Y_UNIT_TEST(CreateStreamingQueryErrors) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -12298,7 +12299,7 @@ END DO)",
 
     Y_UNIT_TEST(ParallelCreateStreamingQuery) {
         auto kikimr = SetupStreamingSource();
-        auto db = kikimr->GetQueryClient();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
 
         constexpr ui64 PARALLEL_QUERIES = 100;
         std::vector<NQuery::TAsyncExecuteQueryResult> results;
@@ -12345,7 +12346,7 @@ END DO)",
     Y_UNIT_TEST(AlterStreamingQueryBasic) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
 
         {
             const auto result = db.ExecuteQuery(TStringBuilder() << R"(
@@ -12418,7 +12419,7 @@ END DO)",
     Y_UNIT_TEST(AlterStreamingQueryErrors) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -12474,7 +12475,7 @@ END DO)",
     Y_UNIT_TEST(ParallelAlterStreamingQuery) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -12528,10 +12529,10 @@ END DO)",
         });
     }
 
-    Y_UNIT_TEST(DropStreamingQuery) {
+    Y_UNIT_TEST(DropStreamingQueryBasic) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -12566,7 +12567,7 @@ END DO)",
     Y_UNIT_TEST(DropStreamingQueryErrors) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -12608,7 +12609,7 @@ END DO)",
     Y_UNIT_TEST(ParallelDropStreamingQuery) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -12659,10 +12660,10 @@ END DO)",
     Y_UNIT_TEST(StreamingQueriesWithResourcePools) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
 
         {
-            const auto result = db.ExecuteQuery(R"(
+            const auto result = kikimr->GetQueryClient().ExecuteQuery(R"(
                 CREATE RESOURCE POOL my_pool WITH (
                     CONCURRENT_QUERY_LIMIT = 0
                 ))",
@@ -12704,6 +12705,165 @@ END DO)",
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool my_pool was disabled due to zero concurrent query limit");
         }
+    }
+
+    Y_UNIT_TEST(StreamingQueriesAclValidation) {
+        auto kikimr = SetupStreamingSource();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        constexpr char createUser[] = "create@builtin";
+        constexpr char removeUser[] = "remove@builtin";
+        constexpr char describeUser[] = "describe@builtin";
+        constexpr char alterUser[] = "alter@builtin";
+        constexpr char emptyUser[] = "empty@builtin";
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                GRANT ALL ON `/Root/MySource` TO `{create_user}`, `{remove_user}`, `{describe_user}`, `{alter_user}`, `{empty_user}`;
+                GRANT CREATE TABLE ON `/Root` TO `{create_user}`;
+                GRANT REMOVE SCHEMA, DESCRIBE SCHEMA ON `/Root` TO `{remove_user}`;
+                GRANT DESCRIBE SCHEMA ON `/Root` TO `{describe_user}`;
+                GRANT ALTER SCHEMA, DESCRIBE SCHEMA ON `/Root` TO `{alter_user}`;)",
+                "create_user"_a = createUser,
+                "remove_user"_a = removeUser,
+                "describe_user"_a = describeUser,
+                "alter_user"_a = alterUser,
+                "empty_user"_a = emptyUser),
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        const auto checkNotFound = [&](const char* sql, const char* user) {
+            const auto result = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(user))
+                .ExecuteQuery(sql, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "not found or you don't have access permissions");
+        };
+
+        const auto checkAccessDenied = [&](const char* sql, const char* user, const TString& error) {
+            const auto result = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(user))
+                .ExecuteQuery(sql, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), error);
+        };
+
+        const auto checkSuccess = [&](const char* sql, const char* user) {
+            const auto result = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(user))
+                .ExecuteQuery(sql, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        };
+
+        {   // Test create permissions
+            constexpr char sql[] = R"(
+                CREATE STREAMING QUERY MyStreamingQuery WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)";
+
+            checkAccessDenied(sql, emptyUser, "Access denied");
+            checkAccessDenied(sql, removeUser, "Access denied");
+            checkAccessDenied(sql, describeUser, "Access denied");
+            checkAccessDenied(sql, alterUser, "Access denied");
+            checkSuccess(sql, createUser);
+        }
+
+        {   // Test describe permissions
+            const auto checkDescribeAccessDenied = [&](const char* user) {
+                const auto result = NYdb::NScheme::TSchemeClient(kikimr->GetDriver(), TCommonClientSettings().AuthToken(user))
+                    .DescribePath("/Root/MyStreamingQuery").ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToOneLineString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Access denied");
+            };
+
+            const auto checkDescribeSuccess = [&](const char* user) {
+                const auto result = NYdb::NScheme::TSchemeClient(kikimr->GetDriver(), TCommonClientSettings().AuthToken(user))
+                    .DescribePath("/Root/MyStreamingQuery").ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            };
+
+            checkDescribeAccessDenied(emptyUser);
+            checkDescribeSuccess(createUser);
+            checkDescribeSuccess(describeUser);
+            checkDescribeSuccess(removeUser);
+            checkDescribeSuccess(alterUser);
+        }
+
+        {   // Test alter permissions
+            constexpr char sql[] = R"(
+                ALTER STREAMING QUERY MyStreamingQuery SET (
+                    RUN = TRUE
+                ))";
+
+            checkNotFound(sql, emptyUser);
+            checkAccessDenied(sql, removeUser, "You don't have access permissions for streaming query /Root/MyStreamingQuery");
+            checkAccessDenied(sql, describeUser, "You don't have access permissions for streaming query /Root/MyStreamingQuery");
+            checkSuccess(sql, alterUser);
+            checkSuccess(sql, createUser);
+        }
+
+        {   // Test remove permissions
+            constexpr char sql[] = "DROP STREAMING QUERY MyStreamingQuery";
+
+            checkNotFound(sql, emptyUser);
+            checkAccessDenied(sql, alterUser, "You don't have access permissions for streaming query /Root/MyStreamingQuery");
+            checkAccessDenied(sql, describeUser, "You don't have access permissions for streaming query /Root/MyStreamingQuery");
+            checkSuccess(sql, removeUser);
+        }
+    }
+
+    Y_UNIT_TEST(StreamingQueriesOnServerless) {
+        auto ydb = NWorkload::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .Create();
+
+        const auto& tenantName = ydb->GetSettings().GetServerlessTenantName();
+        const auto settings = NWorkload::TQueryRunnerSettings()
+            .PoolId("")
+            .Database(tenantName)
+            .NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
+
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(fmt::format(R"(
+                CREATE TOPIC MyTopic;
+                CREATE EXTERNAL DATA SOURCE MySource WITH (
+                    SOURCE_TYPE = "Ydb",
+                    LOCATION = "localhost:{port}",
+                    DATABASE_NAME = "{database}",
+                    AUTH_METHOD = "NONE"
+                );
+            )",
+            "port"_a = ydb->GetGrpcPort(),
+            "database"_a = tenantName
+        ), settings));
+
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
+            CREATE STREAMING QUERY MyStreamingQuery WITH (
+                RUN = TRUE
+            ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO
+        )", settings));
+
+        const auto queryName = TStringBuilder() << tenantName << "/MyStreamingQuery";
+        CheckObjectProperties(*ydb->GetRuntime(), queryName, {
+            {"run", "true"},
+            {"resource_pool", "default"},
+            {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
+        });
+
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
+            ALTER STREAMING QUERY MyStreamingQuery SET (
+                FORCE = TRUE
+            ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic END DO
+        )", settings));
+
+        CheckObjectProperties(*ydb->GetRuntime(), queryName, {
+            {"run", "true"},
+            {"resource_pool", "default"},
+            {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
+        });
+
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
+            DROP STREAMING QUERY MyStreamingQuery
+        )", settings));
+
+        CheckObjectNotFound(*ydb->GetRuntime(), queryName);
     }
 }
 

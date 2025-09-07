@@ -99,7 +99,9 @@ public:
 
     std::shared_ptr<TQueryClient> GetQueryClient() {
         if (!QueryClient) {
-            QueryClient = std::make_shared<TQueryClient>(GetKikimrRunner()->GetQueryClient());
+            QueryClient = std::make_shared<TQueryClient>(
+                GetKikimrRunner()->GetQueryClient(TClientSettings().AuthToken(BUILTIN_ACL_ROOT))
+            );
         }
 
         return QueryClient;

@@ -58,6 +58,7 @@ struct TSchemeInfo {
     NKikimrSchemeOp::TStreamingQueryProperties Properties;
     ui64 Version = 0;
     TPathId PathId;
+    TIntrusivePtr<TSecurityObject> SecurityObject;
 
     bool IsChanged(const NKikimrKqp::TStreamingQueryState& state) const {
         const auto& schemeInfo = state.GetSchemeInfo();
@@ -596,6 +597,7 @@ public:
                         .Properties = result.StreamingQueryInfo->Description.GetProperties(),
                         .Version = pathInfo.GetVersion().GetStreamingQueryVersion(),
                         .PathId = TPathId(pathInfo.GetSchemeshardId(), pathInfo.GetPathId()),
+                        .SecurityObject = result.SecurityObject,
                     };
                     Finish(Ydb::StatusIds::SUCCESS);
                 }
@@ -2185,9 +2187,10 @@ class TRequestHandlerBase : public TActionActorBase<TDerived> {
 public:
     using TBase::LogPrefix;
 
-    TRequestHandlerBase(const TString& operationName, const NKikimrSchemeOp::TModifyScheme& schemeTx, const TString& queryName, const TExternalContext& context, IStreamingQueryOperationController::TPtr controller)
+    TRequestHandlerBase(const TString& operationName, const NKikimrSchemeOp::TModifyScheme& schemeTx, const TString& queryName, const TExternalContext& context, IStreamingQueryOperationController::TPtr controller, ui32 access)
         : TBase(operationName, schemeTx.GetWorkingDir(), queryName)
         , Controller(std::move(controller))
+        , Access(access)
         , StartedAt(TInstant::Now())
         , Context(context)
         , SchemeTx(schemeTx)
@@ -2240,6 +2243,20 @@ public:
         }
 
         SchemeInfo = ev->Get()->Info;
+        if (Context.GetUserToken() && SchemeInfo && SchemeInfo->SecurityObject) {
+            if (const auto& securityObject = *SchemeInfo->SecurityObject; !securityObject.CheckAccess(Access, *Context.GetUserToken())) {
+                LOG_W("Access denied for " << Context.GetUserToken()->GetUserSID() << ", access: " << Access);
+
+                if (!securityObject.CheckAccess(NACLib::DescribeSchema, *Context.GetUserToken())) {
+                    TBase::FatalError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Streaming query " << TBase::QueryPath << " not found or you don't have access permissions");
+                } else {
+                    TBase::FatalError(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for streaming query " << TBase::QueryPath);
+                }
+
+                return;
+            }
+        }
+
         LOG_D("Describe streaming query success, SchemeInfo: " << (SchemeInfo ? SchemeInfo->DebugString() : "null"));
 
         OnQueryDescribed();
@@ -2317,7 +2334,7 @@ protected:
     void DescribeQuery(const TString& info) {
         // Access by user token will be checked during scheme transaction execution
         const auto& describerId = TBase::Register(new TDescribeStreamingQuerySchemeActor(Context.GetDatabase(), TBase::QueryPath, NACLib::TUserToken(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}), 0));
-        LOG_D("Start TDescribeStreamingQuerySchemeActor " << describerId << "(" << info << ")");
+        LOG_D("Start TDescribeStreamingQuerySchemeActor " << describerId << " (" << info << ")");
     }
 
 private:
@@ -2348,6 +2365,7 @@ private:
 
 private:
     const IStreamingQueryOperationController::TPtr Controller;
+    const ui32 Access = 0;
     Ydb::StatusIds::StatusCode FinalStatus;
 
 protected:
@@ -2447,7 +2465,7 @@ public:
     using TBase::LogPrefix;
 
     TCreateStreamingQueryActor(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalContext& context, IStreamingQueryOperationController::TPtr controller)
-        : TBase(__func__, schemeTx, schemeTx.GetCreateStreamingQuery().GetName(), context, std::move(controller))
+        : TBase(__func__, schemeTx, schemeTx.GetCreateStreamingQuery().GetName(), context, std::move(controller), NACLib::DescribeSchema | NACLib::CreateTable)
         , ActionOnExists(GetActionOnExists(schemeTx))
     {}
 
@@ -2566,7 +2584,7 @@ public:
     using TBase::LogPrefix;
 
     TAlterStreamingQueryActor(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalContext& context, IStreamingQueryOperationController::TPtr controller)
-        : TBase(__func__, schemeTx, schemeTx.GetCreateStreamingQuery().GetName(), context, std::move(controller))
+        : TBase(__func__, schemeTx, schemeTx.GetCreateStreamingQuery().GetName(), context, std::move(controller), NACLib::DescribeSchema | NACLib::AlterSchema)
         , SuccessOnNotExist(schemeTx.GetSuccessOnNotExist())
     {}
 
@@ -2677,7 +2695,7 @@ public:
     using TBase::LogPrefix;
 
     TDropStreamingQueryActor(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalContext& context, IStreamingQueryOperationController::TPtr controller)
-        : TBase(__func__, schemeTx, schemeTx.GetDrop().GetName(), context, std::move(controller))
+        : TBase(__func__, schemeTx, schemeTx.GetDrop().GetName(), context, std::move(controller), NACLib::DescribeSchema | NACLib::RemoveSchema)
         , SuccessOnNotExist(schemeTx.GetSuccessOnNotExist())
     {}
 

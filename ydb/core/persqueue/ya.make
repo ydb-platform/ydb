@@ -11,7 +11,6 @@ SRCS(
     ownerinfo.cpp
     percentile_counter.cpp
     pq_l2_cache.cpp
-    subscriber.cpp
     type_codecs_defs.cpp
     write_meta.cpp
     dread_cache_service/caching_service.cpp

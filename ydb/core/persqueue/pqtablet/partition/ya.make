@@ -16,6 +16,7 @@ SRCS(
     quota_tracker.cpp
     read_quoter.cpp
     sourceid.cpp
+    subscriber.cpp
     user_info.cpp
     write_quoter.cpp
 )

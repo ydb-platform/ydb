@@ -9,7 +9,7 @@
 #include "partition_init.h"
 #include "partition_sourcemanager.h"
 #include "partition_types.h"
-#include <ydb/core/persqueue/subscriber.h>
+#include "subscriber.h"
 #include <ydb/core/persqueue/public/utils.h>
 #include "read_quoter.h"
 #include "partition_blob_encoder.h"

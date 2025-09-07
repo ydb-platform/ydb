@@ -5,7 +5,6 @@ SRCS(
     cluster_tracker.cpp
     event_helpers.cpp
     fetch_request_actor.cpp
-    header.cpp
     heartbeat.cpp
     key.cpp
     list_all_topics_actor.cpp

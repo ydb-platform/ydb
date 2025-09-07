@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     blob.cpp
     blob_serialization.cpp
+    header.cpp
 )
 
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
-#include "header.h"
+#include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include "partition_id.h"
 #include <ydb/core/persqueue/public/utils.h>
 

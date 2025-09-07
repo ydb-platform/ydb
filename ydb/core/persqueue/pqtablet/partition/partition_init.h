@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/persqueue/header.h>
+#include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/core/persqueue/public/utils.h>
 
 #include <ydb/core/keyvalue/keyvalue_events.h>

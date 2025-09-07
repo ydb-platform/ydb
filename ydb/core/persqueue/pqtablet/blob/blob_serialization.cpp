@@ -1,6 +1,6 @@
 #include "blob.h"
 #include "blob_int.h"
-#include <ydb/core/persqueue/header.h>
+#include "header.h"
 #include <ydb/core/persqueue/type_codecs.h>
 
 #include <util/string/builder.h>

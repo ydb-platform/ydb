@@ -1,5 +1,5 @@
 #include "blob.h"
-#include <ydb/core/persqueue/header.h>
+#include "header.h"
 
 #include <util/string/builder.h>
 #include <util/string/escape.h>

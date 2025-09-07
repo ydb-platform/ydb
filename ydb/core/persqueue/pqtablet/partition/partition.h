@@ -3,7 +3,7 @@
 #include "sourceid.h"
 
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
-#include <ydb/core/persqueue/header.h>
+#include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/core/persqueue/key.h>
 #include "partition_init.h"
 #include "partition_sourcemanager.h"

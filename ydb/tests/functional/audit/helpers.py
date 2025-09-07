@@ -65,7 +65,7 @@ class CanonicalCaptureAuditFileOutput:
         if value and value != '{none}':
             json_record[field_name] = placeholder_value if placeholder_value else f'<canonized_{field_name}>'
 
-    def __canonize_regex(self, json_record, regex_str, replace_str):
+    def __canonize_apply_regex(self, json_record, regex_str, replace_str):
         for k, v in json_record.items():
             replace_result = re.sub(regex_str, replace_str, v)
             if replace_result != v:
@@ -88,12 +88,13 @@ class CanonicalCaptureAuditFileOutput:
         self.__canonize_field(json_record, 'end_time')
         self.__canonize_field(json_record, 'remote_address')
         self.__canonize_field(json_record, 'tx_id')
-        self.__canonize_regex(json_record, r'txid=\d+', 'txid=<canonized_txid>')
-        self.__canonize_regex(json_record, r'cmstid=\d+', 'txid=<canonized_cmstid>')
-        self.__canonize_regex(json_record, r'\.cpp:\d+', '.cpp:<canonized_line>')
-        self.__canonize_regex(json_record, r'OwnerId: \d+', 'OwnerId: <canonized_owner_id>')
-        self.__canonize_regex(json_record, r'LocalPathId: \d+', 'LocalPathId: <canonized_local_path_id>')
-        self.__canonize_regex(json_record, r'Host: \"[^\"]+\"', 'Host: \"<canonized_host_name>\"')
+        self.__canonize_apply_regex(json_record, r'txid=\d+', 'txid=<canonized_txid>')
+        self.__canonize_apply_regex(json_record, r'cmstid=\d+', 'txid=<canonized_cmstid>')
+        self.__canonize_apply_regex(json_record, r'OwnerId: \d+', 'OwnerId: <canonized_owner_id>')
+        self.__canonize_apply_regex(json_record, r'LocalPathId: \d+', 'LocalPathId: <canonized_local_path_id>')
+        self.__canonize_apply_regex(json_record, r'Host: \"[^\"]+\"', 'Host: \"<canonized_host_name>\"')
+        # source_location is used only in debug builds like relwithdebinfo and debug
+        self.__canonize_apply_regex(json_record, r', source_location: [A-Za-z0-9_/.]+\.(cpp|h):\d+', '')
         return json.dumps(json_record, sort_keys=True) + '\n'
 
     def __exit__(self, *exc):

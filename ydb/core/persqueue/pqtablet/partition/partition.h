@@ -9,10 +9,9 @@
 #include "partition_init.h"
 #include "partition_sourcemanager.h"
 #include "partition_types.h"
-#include <ydb/core/persqueue/quota_tracker.h>
 #include <ydb/core/persqueue/subscriber.h>
 #include <ydb/core/persqueue/public/utils.h>
-#include <ydb/core/persqueue/read_quoter.h>
+#include "read_quoter.h"
 #include "partition_blob_encoder.h"
 
 #include "partition_compactification.h"

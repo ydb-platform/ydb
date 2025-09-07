@@ -11,13 +11,9 @@ SRCS(
     ownerinfo.cpp
     percentile_counter.cpp
     pq_l2_cache.cpp
-    quota_tracker.cpp
-    account_read_quoter.cpp
-    read_quoter.cpp
     subscriber.cpp
     type_codecs_defs.cpp
     write_meta.cpp
-    write_quoter.cpp
     dread_cache_service/caching_service.cpp
     write_id.cpp
     tracing_support.cpp

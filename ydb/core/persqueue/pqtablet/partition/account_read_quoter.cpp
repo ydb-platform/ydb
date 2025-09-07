@@ -1,5 +1,5 @@
 #include "account_read_quoter.h"
-#include "event_helpers.h"
+#include <ydb/core/persqueue/event_helpers.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    account_read_quoter.cpp
     mirrorer.cpp
     offload_actor.cpp
     partition.cpp
@@ -12,8 +13,11 @@ SRCS(
     partition_read.cpp
     partition_sourcemanager.cpp
     partition_write.cpp
+    quota_tracker.cpp
+    read_quoter.cpp
     sourceid.cpp
     user_info.cpp
+    write_quoter.cpp
 )
 
 

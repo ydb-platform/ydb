@@ -11961,7 +11961,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // DROP STREAMING QUERY
         checkQuery("DROP STREAMING QUERY MyQuery;",
-            EStatus::GENERIC_ERROR,
+            EStatus::NOT_FOUND,
             "Streaming query /Root/MyQuery not found or you don't have access permissions");
     }
 
@@ -12073,7 +12073,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
     }
 
-    Y_UNIT_TEST(CreateStreamingQuery) {
+    Y_UNIT_TEST(CreateStreamingQueryBasic) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
         auto db = kikimr->GetQueryClient();
@@ -12264,7 +12264,7 @@ END DO)",
                     INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic
                 END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Streaming query /Root/MyFolder/MyStreamingQuery already exists");
         }
 
@@ -12317,7 +12317,7 @@ END DO)",
             const auto result = resultFeature.ExtractValueSync();
             if (result.GetStatus() == EStatus::SUCCESS) {
                 ++successCount;
-            } else if (result.GetStatus() == EStatus::GENERIC_ERROR) {
+            } else if (result.GetStatus() == EStatus::SCHEME_ERROR) {
                 const auto& issues = result.GetIssues().ToString();
                 if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already exists") &&
                     !issues.contains("Scheme transaction ESchemeOpCreateStreamingQuery failed StatusAlreadyExists: execution completed, streaming query /Root/MyFolder/MyStreamingQuery already exists")) {
@@ -12342,7 +12342,7 @@ END DO)",
         });
     }
 
-    Y_UNIT_TEST(AlterStreamingQuery) {
+    Y_UNIT_TEST(AlterStreamingQueryBasic) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
         auto db = kikimr->GetQueryClient();
@@ -12443,7 +12443,7 @@ END DO)",
                     RUN = FALSE
                 );)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Streaming query /Root/MyFolder/MyStreamingQuery not found or you don't have access permissions");
         }
 
@@ -12584,7 +12584,7 @@ END DO)",
             const auto result = db.ExecuteQuery(R"(
                 DROP STREAMING QUERY `MyFolder/MyStreamingQuery`;)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Streaming query /Root/MyFolder/MyStreamingQuery not found or you don't have access permissions");
         }
 
@@ -12635,11 +12635,11 @@ END DO)",
             const auto result = resultFeature.ExtractValueSync();
             if (result.GetStatus() == EStatus::SUCCESS) {
                 ++successCount;
-            } else if (result.GetStatus() == EStatus::GENERIC_ERROR) {
+            } else if (result.GetStatus() == EStatus::NOT_FOUND) {
                 const auto& issues = result.GetIssues().ToString();
                 if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery not found or you don't have access permissions") &&
                     !issues.contains("Path does not exist")) {
-                    UNIT_FAIL(TStringBuilder() << "Unexpected GENERIC_ERROR error: " << issues);
+                    UNIT_FAIL(TStringBuilder() << "Unexpected NOT_FOUND error: " << issues);
                 }
             } else if (result.GetStatus() == EStatus::ABORTED) {
                 const auto& issues = result.GetIssues().ToString();

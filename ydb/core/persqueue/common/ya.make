@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     common_app.cpp
+    microseconds_sliding_window.cpp
 )
 
 
@@ -14,4 +15,5 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
+    ut
 )

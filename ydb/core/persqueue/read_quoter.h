@@ -3,7 +3,7 @@
 #include "quota_tracker.h"
 #include "account_read_quoter.h"
 #include "user_info.h"
-#include "microseconds_sliding_window.h"
+#include <ydb/core/persqueue/common/microseconds_sliding_window.h>
 
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/persqueue/events/internal.h>

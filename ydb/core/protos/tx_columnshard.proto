@@ -184,10 +184,6 @@ message TEvProposeTransactionResult {
     optional uint64 Step = 9;
 }
 
-message TEvCancelTransactionProposal {
-    optional uint64 TxId = 1;
-}
-
 message TEvNotifyTxCompletion {
     optional uint64 TxId = 1;
 }

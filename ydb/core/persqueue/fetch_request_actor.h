@@ -4,8 +4,6 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/aclib/aclib.h>
 
-#include "user_info.h"
-
 namespace NKikimr::NPQ {
 
 struct TPartitionFetchRequest {

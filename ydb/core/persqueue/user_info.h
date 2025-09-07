@@ -5,6 +5,7 @@
 #include "percentile_counter.h"
 #include "quota_tracker.h"
 #include "account_read_quoter.h"
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/pqtablet/metering_sink.h>
 #include "dread_cache_service/caching_service.h"
 

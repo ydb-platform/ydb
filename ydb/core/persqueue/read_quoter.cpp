@@ -1,6 +1,8 @@
 #include "read_quoter.h"
 #include "account_read_quoter.h"
 
+#include <ydb/core/persqueue/public/constants.h>
+
 
 namespace NKikimr {
 namespace NPQ {

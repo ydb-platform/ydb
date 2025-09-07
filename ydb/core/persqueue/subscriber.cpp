@@ -1,5 +1,4 @@
 #include "subscriber.h"
-#include "user_info.h"
 #include <ydb/core/protos/counters_pq.pb.h>
 
 namespace NKikimr {

@@ -5,6 +5,8 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/protos/config.pb.h>
 
+#include <memory>
+
 class TLogBackend;
 
 namespace NActors {
@@ -19,6 +21,6 @@ inline NActors::TActorId MakeAuditServiceID() {
 
 using TAuditLogBackends = TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>>;
 
-THolder<NActors::IActor> CreateAuditWriter(TAuditLogBackends&& logBackends);
+std::unique_ptr<NActors::IActor> CreateAuditWriter(TAuditLogBackends&& logBackends);
 
 }   // namespace NKikimr::NAudit

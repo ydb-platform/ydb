@@ -70,6 +70,17 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20303:Add `--iam-token-file` argument to ydb-dstool. [#20303](https://github.com/ydb-platform/ydb/pull/20303) ([kruall](https://github.com/kruall))
 * 22511:Added the ICB control to change ReadRequestsInFlightLimit via changing dynconfig. [#22511](https://github.com/ydb-platform/ydb/pull/22511) ([kruall](https://github.com/kruall))
 * 21997:Enabled the new compute scheduler based on the HDRF model. [#21997](https://github.com/ydb-platform/ydb/pull/21997) ([Ivan](https://github.com/abyss7))
+* 23922:Block Hash Hoin utils. [#23922](https://github.com/ydb-platform/ydb/pull/23922) ([Vyacheslav Boev](https://github.com/spaikus))
+* 23817:* Supported runtime ast saving for script executions
+* Compressed script plan before saving [#23817](https://github.com/ydb-platform/ydb/pull/23817) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 23799:Make histogram bounds configurable like this:
+```
+metrics_config:
+  common_latency_hist_bounds:
+    rot: [0.25, 0.5]
+    ssd: [0.25, 0.5]
+    nvme: [0.25, 0.5]
+``` [#23799](https://github.com/ydb-platform/ydb/pull/23799) ([Semyon Danilov](https://github.com/SammyVimes))
 
 ### Bug fixes
 
@@ -130,6 +141,14 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20670:Resolved the issue with DDL errors for external sources and added more information to the `ALTER TABLE ... RENAME TO` error. [#20670](https://github.com/ydb-platform/ydb/pull/20670) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20519:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20520) that caused VDisk to freeze in infinite local recovery mode when a ChunkRead request failed. This change will allow loader actor to terminate properly on PDisk errors, and LocalRecovery to get notified about this error and to finish with proper status. [#20519](https://github.com/ydb-platform/ydb/pull/20519) ([Sergey Belyakov](https://github.com/serbel324))
 * 22298:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20812) where attach streams remained active after session shutdown, causing unexpected BadSession errors. [#22298](https://github.com/ydb-platform/ydb/pull/22298) ([Kirill Kurdyukov](https://github.com/KirillKurdyukov))
+* 24282:Unpoison trace id to prevent false msan alert [#24282](https://github.com/ydb-platform/ydb/pull/24282) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 24272:Поправлена ошибка, когда при записи сообщений kafka , использующих формат батча v0 и v1 сохранялось только первое сообщение батча (все остальные игнорировались) [#24272](https://github.com/ydb-platform/ydb/pull/24272) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 24251:Fixes issue https://github.com/ydb-platform/ydb/issues/24143 [#24251](https://github.com/ydb-platform/ydb/pull/24251) ([Semyon Danilov](https://github.com/SammyVimes))
+* 24164:Fix replication query error in Bridge mode [#24164](https://github.com/ydb-platform/ydb/pull/24164) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 24030:solves problem with access denied on /viewer/capabilities handler
+closes #24013 [#24030](https://github.com/ydb-platform/ydb/pull/24030) ([Alexey Efimov](https://github.com/adameat))
+* 24010:Fix node warden assertion [#24010](https://github.com/ydb-platform/ydb/pull/24010) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 23908:Fix crashing on kikimr stop due to a bug in deduplication [#23908](https://github.com/ydb-platform/ydb/pull/23908) ([Semyon](https://github.com/swalrus1))
 
 ### YDB UI
 
@@ -155,4 +174,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
+* 23762:It happened: when bulk upsert was added to several datashards, if an error occurred when writing to at least one of them, then the entire write operation was rolled back, and it had to be completely retrained.
+Become: bulk upsert itself will re-write only to those datashards that it could not write to the first time. [#23762](https://github.com/ydb-platform/ydb/pull/23762) ([Nikolay Shestakov](https://github.com/nshestakov))
 

@@ -10,7 +10,6 @@ SRCS(
     key.cpp
     list_all_topics_actor.cpp
     ownerinfo.cpp
-    offload_actor.cpp
     percentile_counter.cpp
     pq_l2_cache.cpp
     pq_rl_helpers.cpp

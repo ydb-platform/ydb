@@ -1,6 +1,6 @@
 #include <ydb/core/persqueue/event_helpers.h>
 #include "mirrorer.h"
-#include <ydb/core/persqueue/offload_actor.h>
+#include "offload_actor.h"
 #include "partition_util.h"
 #include "partition_common.h"
 #include "partition_compactification.h"

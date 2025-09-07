@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     mirrorer.cpp
+    offload_actor.cpp
     partition.cpp
     partition_blob_encoder.cpp
     partition_compactification.cpp

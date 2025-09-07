@@ -22,7 +22,7 @@
 #define AUDIT_PART_NO_COND(key, value) AUDIT_PART_COND(key, value, true)
 #define AUDIT_PART_COND(key, value, condition)                                                                                    \
     do {                                                                                                                          \
-        if (condition && !value.empty()) {                                                                                        \
+        if (condition && !TStringBuf(value).empty()) {                                                                            \
             auditParts.emplace_back(key, value);                                                                                  \
         }                                                                                                                         \
     } while (0);

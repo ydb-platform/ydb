@@ -32,12 +32,10 @@ class TEvFilterConstructionResult
 private:
     using TFilters = THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>;
     TConclusion<TFilters> Result;
-    TRequestInFlightGuard RequestGuard;
 
 public:
-    TEvFilterConstructionResult(TConclusion<TFilters>&& result, TRequestInFlightGuard&& requestGuard)
+    TEvFilterConstructionResult(TConclusion<TFilters>&& result)
         : Result(std::move(result))
-        , RequestGuard(std::move(requestGuard))
     {
     }
 

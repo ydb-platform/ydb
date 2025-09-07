@@ -26,7 +26,7 @@ private:
         ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<NGeneralCache::TColumnDataCachePolicy>&& errorAddresses) override {
         if (errorAddresses.HasErrors()) {
             TActorContext::AsActorContext().Send(
-                Request.GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorAddresses.GetErrorMessage()), Request.ExtractRequestGuard()));
+                Request.GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorAddresses.GetErrorMessage())));
             return;
         }
 
@@ -52,7 +52,7 @@ public:
     void OnError(const TString& errorMessage) {
         AFL_VERIFY(Request.GetOwner());
         TActorContext::AsActorContext().Send(
-            Request.GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorMessage), Request.ExtractRequestGuard()));
+            Request.GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorMessage)));
     }
 };
 
@@ -214,6 +214,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
 
     THashMap<ui64, TPortionInfo::TConstPtr> intersectingPortions;
     const std::shared_ptr<const TPortionInfo>& mainPortion = Portions->GetPortionVerified(constructor->GetRequest()->Get()->GetSourceId());
+    const ui64 mainPortionId = mainPortion->GetPortionId();
     {
         const auto collector = [&intersectingPortions](
                                    const TPortionIntervalTree::TRange& /*interval*/, const std::shared_ptr<TPortionInfo>& portion) {
@@ -226,11 +227,11 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     ExpectedIntersectionCount = intersectingPortions.size();
 
     LOCAL_LOG_TRACE("event", "request_filter")
-    ("source", constructor->GetRequest()->Get()->GetSourceId())("fetching_sources", intersectingPortions.size());
+    ("source", constructor->GetRequest()->Get()->GetSourceId())("intersecting_portions", intersectingPortions.size());
     AFL_VERIFY(intersectingPortions.size());
 
     if (intersectingPortions.size() == 1) {
-        AFL_VERIFY((*intersectingPortions.begin()).first == mainPortion->GetPortionId());
+        AFL_VERIFY((*intersectingPortions.begin()).first == mainPortionId);
         auto filter = NArrow::TColumnFilter::BuildAllowFilter();
         filter.Add(true, mainPortion->GetRecordsCount());
         constructor->SetIntervalsCount(1);
@@ -244,40 +245,28 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
         materializedBorders.emplace(portionId, GetBorders(portionId));
     }
     TColumnDataSplitter splitter(materializedBorders);
+    LOCAL_LOG_TRACE("event", "split_portion")
+    ("source", constructor->GetRequest()->Get()->GetSourceId())("splitter", splitter.DebugString())(
+        "intersection_portions", intersectingPortions.size());
     THashSet<ui64> portionIdsToFetch;
     std::vector<std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>> intervalsToBuild;
     THashMap<ui32, NArrow::TColumnFilter> readyFilters;
     {
         ui64 nextIntervalIdx = 0;
-        bool intersectionsStarted = false;
         auto scheduleInterval = [&](const TColumnDataSplitter::TBorder& begin, const TColumnDataSplitter::TBorder& end,
-                                    const THashSet<ui64>& portions) mutable {
-            if (!intersectionsStarted) {
-                if (begin.GetPortionId() == mainPortion->GetPortionId()) {
-                    AFL_VERIFY(!begin.GetIsLast());
-                    intersectionsStarted = true;
-                } else {
-                    return true;
-                }
-            } else {
-                if (begin.GetPortionId() == mainPortion->GetPortionId()) {
-                    AFL_VERIFY(begin.GetIsLast());
-                    return false;
-                }
-            }
-
+                                    const THashSet<ui64>& portions) {
             ++nextIntervalIdx;
             TIntervalBordersView intervalView(begin.MakeView(), end.MakeView());
-            if (auto findCached = FiltersCache.Find(
-                    TDuplicateMapInfo(constructor->GetRequest()->Get()->GetMaxVersion(), intervalView, mainPortion->GetPortionId()));
+            if (auto findCached =
+                    FiltersCache.Find(TDuplicateMapInfo(constructor->GetRequest()->Get()->GetMaxVersion(), intervalView, mainPortionId));
                 findCached != FiltersCache.End()) {
                 AFL_VERIFY(readyFilters.emplace(nextIntervalIdx - 1, findCached.Value()).second);
                 Counters->OnFilterCacheHit();
                 return true;
             }
             auto [inFlight, emplaced] = IntervalsInFlight.emplace(intervalView, THashMap<ui64, std::vector<TIntervalFilterCallback>>());
-            AFL_VERIFY(!inFlight->second.contains(mainPortion->GetPortionId()));
-            inFlight->second[mainPortion->GetPortionId()].emplace_back(TIntervalFilterCallback(nextIntervalIdx - 1, constructor));
+            AFL_VERIFY(!inFlight->second.contains(mainPortionId));
+            inFlight->second[mainPortionId].emplace_back(TIntervalFilterCallback(nextIntervalIdx - 1, constructor));
             if (emplaced) {
                 intervalsToBuild.emplace_back(begin, end);
                 portionIdsToFetch.insert(portions.begin(), portions.end());
@@ -287,7 +276,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
             }
             return true;
         };
-        splitter.ForEachInterval(std::move(scheduleInterval));
+        splitter.ForEachInterval(std::move(scheduleInterval), mainPortionId);
         constructor->SetIntervalsCount(nextIntervalIdx);
     }
     for (auto&& [idx, filter] : std::move(readyFilters)) {
@@ -301,8 +290,8 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
 
     if (portionIdsToFetch.size()) {
         AFL_VERIFY(!constructor->IsDone());
-        AFL_VERIFY(portionIdsToFetch.contains(mainPortion->GetPortionId()))("borders", splitter.DebugString())(
-            "main_portion", mainPortion->GetPortionId())("required_portions", JoinSeq(',', portionIdsToFetch));
+        AFL_VERIFY(portionIdsToFetch.contains(mainPortionId))("borders", splitter.DebugString())("main_portion", mainPortionId)(
+            "required_portions", JoinSeq(',', portionIdsToFetch));
         TBuildFilterContext columnFetchingRequest(SelfId(), constructor, std::move(portionsToFetch), std::move(intervalsToBuild),
             GetFetchingColumns(), PKSchema, ColumnDataManager, DataAccessorsManager, Counters, memoryGuard);
         memoryGuard->Update(columnFetchingRequest.GetDataSize());

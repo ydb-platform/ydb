@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
@@ -118,7 +119,7 @@ public:
 
     TString DebugString() const {
         TStringBuilder sb;
-        sb << (IsLast() ? "Last:" : "First") << PortionId;
+        sb << (IsLast() ? "Last:" : "First:") << PortionId;
         return sb;
     }
 };
@@ -181,6 +182,13 @@ public:
         : Begin(begin)
         , End(end)
     {
+        AFL_VERIFY(Begin->Compare(*End) != std::partial_ordering::greater)("borders", DebugString());
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "[" << Begin->DebugJson() << ";" << End->DebugJson() << "]";
+        return sb;
     }
 };
 

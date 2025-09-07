@@ -33,7 +33,8 @@ public:
 
         bool operator<(const TBorder& other) const {
             return std::tie(*Key, IsLast, PortionId) < std::tie(*other.Key, other.IsLast, other.PortionId);
-        };
+        }
+        bool operator==(const TBorder& other) = delete;
         bool IsEquivalent(const TBorder& other) const {
             return *Key == *other.Key && IsLast == other.IsLast;
         };
@@ -62,23 +63,38 @@ public:
     }
 
     template <class Callback>
-    void ForEachInterval(Callback&& callback) const {
+    void ForEachInterval(Callback&& callback, const ui64 intersectingPortionId) const {
         AFL_VERIFY(Borders.size());
         THashSet<ui64> currentPortions;
-        const TBorder* lastBorder = nullptr;
+        const TBorder* prevBorder = &Borders.front();
 
-        for (const auto& currentBorder : Borders) {
-            if (lastBorder && !currentBorder.IsEquivalent(*lastBorder)) {
-                if (!callback(*lastBorder, currentBorder, currentPortions)) {
+        bool intersectionsStarted = false;
+        for (ui64 i = 1; i < Borders.size(); ++i) {
+            const auto& currentBorder = Borders[i];
+
+            if (prevBorder->GetIsLast()) {
+                AFL_VERIFY(currentPortions.erase(prevBorder->GetPortionId()));
+            } else {
+                AFL_VERIFY(currentPortions.insert(prevBorder->GetPortionId()).second);
+            }
+
+            if (prevBorder->GetPortionId() == intersectingPortionId) {
+                if (prevBorder->GetIsLast()) {
+                    AFL_VERIFY(intersectionsStarted);
+                    break;
+                } else {
+                    AFL_VERIFY(!intersectionsStarted);
+                    intersectionsStarted = true;
+                }
+            }
+
+            if (intersectionsStarted && !currentBorder.IsEquivalent(*prevBorder)) {
+                if (!callback(*prevBorder, currentBorder, currentPortions)) {
                     break;
                 }
             }
-            if (currentBorder.GetIsLast()) {
-                AFL_VERIFY(currentPortions.erase(currentBorder.GetPortionId()));
-            } else {
-                AFL_VERIFY(currentPortions.insert(currentBorder.GetPortionId()).second);
-            }
-            lastBorder = &currentBorder;
+
+            prevBorder = &currentBorder;
         }
     }
 

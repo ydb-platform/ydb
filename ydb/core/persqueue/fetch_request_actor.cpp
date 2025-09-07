@@ -6,7 +6,7 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
-#include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/persqueue/write_meta.h>
 

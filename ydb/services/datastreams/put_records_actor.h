@@ -5,7 +5,7 @@
 
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>

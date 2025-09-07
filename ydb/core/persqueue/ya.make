@@ -11,7 +11,6 @@ SRCS(
     ownerinfo.cpp
     percentile_counter.cpp
     pq_l2_cache.cpp
-    pq_rl_helpers.cpp
     quota_tracker.cpp
     account_read_quoter.cpp
     read_quoter.cpp

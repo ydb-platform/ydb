@@ -1,5 +1,6 @@
 #include "datashard_ut_common_pq.h"
 
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>

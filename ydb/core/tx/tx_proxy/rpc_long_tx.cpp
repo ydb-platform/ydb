@@ -30,7 +30,7 @@ ui64 GetMemoryInFlightLimit(bool isColumnTable) {
 
     if (DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load() == 0) {
         ui64 oldValue = 0;
-        const ui64 newValue = NKqp::TStagePredictor::GetUsableThreads() * 15 * 1024 * 1024;
+        const ui64 newValue = NKqp::TStagePredictor::GetUsableThreads() * 10 * 1024 * 1024;
         DEFAULT_MEMORY_IN_FLIGHT_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
     return DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load();

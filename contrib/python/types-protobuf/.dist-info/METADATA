@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: types-protobuf
-Version: 6.30.2.20250809
+Version: 6.30.2.20250822
 Summary: Typing stubs for protobuf
 License-Expression: Apache-2.0
 Project-URL: Homepage, https://github.com/python/typeshed
@@ -17,15 +17,15 @@ Dynamic: license-file
 
 ## Typing stubs for protobuf
 
-This is a [PEP 561](https://peps.python.org/pep-0561/) type stub package for
-the [`protobuf`](https://github.com/protocolbuffers/protobuf) package. It can be used by type checkers
+This is a [type stub package](https://typing.python.org/en/latest/tutorials/external_libraries.html)
+for the [`protobuf`](https://github.com/protocolbuffers/protobuf) package. It can be used by type checkers
 to check code that uses `protobuf`. This version of
 `types-protobuf` aims to provide accurate annotations for
 `protobuf~=6.30.2`.
 
 Partially generated using [mypy-protobuf==3.6.0](https://github.com/nipunn1313/mypy-protobuf/tree/v3.6.0) and libprotoc 29.0 on [protobuf v30.2](https://github.com/protocolbuffers/protobuf/releases/tag/v30.2) (python `protobuf==6.30.2`).
 
-This stub package is marked as [partial](https://peps.python.org/pep-0561/#partial-stub-packages).
+This stub package is marked as [partial](https://typing.python.org/en/latest/spec/distributing.html#partial-stub-packages).
 If you find that annotations are missing, feel free to contribute and help complete them.
 
 
@@ -37,8 +37,8 @@ for more details. The source for this package can be found in the
 directory.
 
 This package was tested with the following type checkers:
-* [mypy](https://github.com/python/mypy/) 1.16.1
-* [pyright](https://github.com/microsoft/pyright) 1.1.403
+* [mypy](https://github.com/python/mypy/) 1.17.1
+* [pyright](https://github.com/microsoft/pyright) 1.1.404
 
 It was generated from typeshed commit
-[`91ba0da4aad754c912a82b9e052cb4f8191ce520`](https://github.com/python/typeshed/commit/91ba0da4aad754c912a82b9e052cb4f8191ce520).
+[`ca44e4c45dc40fb47602dc79a3145ba61879add8`](https://github.com/python/typeshed/commit/ca44e4c45dc40fb47602dc79a3145ba61879add8).

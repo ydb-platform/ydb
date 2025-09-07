@@ -126,7 +126,7 @@ namespace NActors {
             AddLocalService(
                 NKikimr::NAudit::MakeAuditServiceID(),
                 TActorSetupCmd(
-                    NKikimr::NAudit::CreateAuditWriter(std::move(AuditLogBackends)).Release(),
+                    NKikimr::NAudit::CreateAuditWriter(std::move(AuditLogBackends)),
                     TMailboxType::HTSwap,
                     0
                 ),

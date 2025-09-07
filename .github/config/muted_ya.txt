@@ -141,6 +141,7 @@ ydb/tests/fq/control_plane_storage *
 ydb/tests/fq/s3 test_bindings_1.py.TestBindings.test_count_for_pg_binding[v2-pg_syntax-client0]
 ydb/tests/fq/s3 test_bindings_1.py.TestBindings.test_pg_binding[v2-client0]
 ydb/tests/fq/s3 test_format_setting.py.TestS3.test_precompute_with_pg_binding[v2-pg_types-pg_syntax-client0]
+ydb/tests/fq/pq_async_io TDqPqReadActorTest.LoadCorruptedState
 ydb/tests/functional/audit *
 ydb/tests/functional/cms test_cms_erasure.py.TestDegradedGroupBlock42Keep.test_no_degraded_groups_after_shutdown
 ydb/tests/functional/cms test_cms_erasure.py.TestDegradedGroupBlock42Max.test_no_degraded_groups_after_shutdown

@@ -4,6 +4,7 @@
 #include "helpers.h"
 #include "read_init_auth_actor.h"
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 
 #include <library/cpp/protobuf/util/repeated_field_utils.h>

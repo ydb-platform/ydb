@@ -16,7 +16,6 @@ SRCS(
     read_quoter.cpp
     subscriber.cpp
     type_codecs_defs.cpp
-    user_info.cpp
     write_meta.cpp
     write_quoter.cpp
     dread_cache_service/caching_service.cpp

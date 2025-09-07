@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/aclib/aclib.h>

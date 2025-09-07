@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sourceid.h"
+#include "user_info.h"
 
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
@@ -10,7 +11,6 @@
 #include "partition_types.h"
 #include <ydb/core/persqueue/quota_tracker.h>
 #include <ydb/core/persqueue/subscriber.h>
-#include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/read_quoter.h>
 #include "partition_blob_encoder.h"

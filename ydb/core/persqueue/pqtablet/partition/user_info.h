@@ -1,13 +1,13 @@
 #pragma once
 
-#include "working_time_counter.h"
-#include "subscriber.h"
-#include "percentile_counter.h"
-#include "quota_tracker.h"
-#include "account_read_quoter.h"
+#include <ydb/core/persqueue/working_time_counter.h>
+#include <ydb/core/persqueue/subscriber.h>
+#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/quota_tracker.h>
+#include <ydb/core/persqueue/account_read_quoter.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/pqtablet/metering_sink.h>
-#include "dread_cache_service/caching_service.h"
+#include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/counters_pq.pb.h>

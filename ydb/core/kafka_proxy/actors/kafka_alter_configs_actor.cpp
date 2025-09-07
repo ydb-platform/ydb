@@ -4,6 +4,7 @@
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
 

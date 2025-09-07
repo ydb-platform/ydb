@@ -35,8 +35,8 @@ Specialized script for parsing GitHub issues and sending team-specific notificat
 See [team_leads_example.json](team_leads_example.json) for example configuration.
 
 **Supported formats:**
-- Single responsible: `"team": "@username"`
-- Multiple responsible: `"team": ["@user1", "@user2", "@user3"]`
+- Single responsible: `"team": "@team-lead"`
+- Multiple responsible: `"team": ["@lead1", "@lead2", "@lead3"]`
 
 ## GitHub Actions Setup
 

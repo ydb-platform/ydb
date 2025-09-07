@@ -9,13 +9,13 @@ Universal script for sending messages to Telegram channels.
 python .github/scripts/telegram/send_telegram_message.py \
   --message "path/to/file.txt" \
   --bot-token "YOUR_BOT_TOKEN" \
-  --chat-id "CHAT_ID"
+  --chat-id "1234567890"
 
 # Send direct message
 python .github/scripts/telegram/send_telegram_message.py \
   --message "Hello, World!" \
   --bot-token "YOUR_BOT_TOKEN" \
-  --chat-id "CHAT_ID"
+  --chat-id "1234567890"
 ```
 
 ## Parameters

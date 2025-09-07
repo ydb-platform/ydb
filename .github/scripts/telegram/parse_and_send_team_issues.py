@@ -98,17 +98,18 @@ def format_team_message(team_name, issues, team_responsible=None):
     # Get current date in DD-MM-YY format
     current_date = datetime.now().strftime("%d-%m-%y")
     
-    # Start with title and team tag
-    message = f"🔇 **{current_date} new muted tests for [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** #{team_name}\n\n"
+    # Start with title and team tag (replace - with _ in tag)
+    team_tag = team_name.replace('-', '')
+    message = f"🔇 **{current_date} new muted tests for [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** #{team_tag}\n\n"
     
     # Add responsible users on new line with "fyi:" prefix
     if team_responsible and team_name in team_responsible:
         responsible = team_responsible[team_name]
         # Handle both single responsible and list of responsibles
         if isinstance(responsible, list):
-            responsible_str = " ".join(f"@{r}" if not r.startswith('@') else r for r in responsible)
+            responsible_str = " ".join(f"@{r.replace('_', '\\_')}" if not r.startswith('@') else r.replace('_', '\\_') for r in responsible)
         else:
-            responsible_str = f"@{responsible}" if not responsible.startswith('@') else responsible
+            responsible_str = f"@{responsible.replace('_', '\\_')}" if not responsible.startswith('@') else responsible.replace('_', '\\_')
         message += f"fyi: {responsible_str}\n\n"
     
     for issue in issues:
@@ -122,19 +123,19 @@ def format_team_message(team_name, issues, team_responsible=None):
     return message
 
 
-def send_team_messages(teams, bot_token, chat_id, delay=2, team_responsible=None, message_thread_id=None, max_retries=5, retry_delay=10):
+def send_team_messages(teams, bot_token, chat_id, delay=2, message_thread_id=None, max_retries=5, retry_delay=10, team_channels=None):
     """
     Send separate messages for each team.
     
     Args:
         teams (dict): Dictionary with team names and their issues
         bot_token (str): Telegram bot token
-        chat_id (str): Telegram chat ID
+        chat_id (str): Default Telegram chat ID
         delay (int): Delay between messages in seconds
-        team_responsible (dict): Dictionary mapping team names to responsible usernames
-        message_thread_id (int, optional): Thread ID for group messages
+        message_thread_id (int, optional): Default thread ID for group messages
         max_retries (int): Maximum number of retry attempts for failed messages
         retry_delay (int): Delay between retry attempts in seconds
+        team_channels (dict): Dictionary mapping team names to their specific channel configs
     """
     
     total_teams = len(teams)
@@ -146,6 +147,39 @@ def send_team_messages(teams, bot_token, chat_id, delay=2, team_responsible=None
         if not issues:
             continue
             
+        # Get responsible users and channel from team_channels
+        team_responsible = None
+        team_chat_id = chat_id
+        team_thread_id = message_thread_id
+        
+        if team_channels and 'teams' in team_channels and team_name in team_channels['teams']:
+            team_config = team_channels['teams'][team_name]
+            
+            # Get responsible users
+            if 'responsible' in team_config:
+                team_responsible = {team_name: team_config['responsible']}
+            
+            # Get channel
+            if 'channel' in team_config:
+                channel_name = team_config['channel']
+                if 'channels' in team_channels and channel_name in team_channels['channels']:
+                    team_chat_id, team_thread_id = parse_chat_and_thread_id(team_channels['channels'][channel_name])
+                    print(f"📨 Using channel '{channel_name}' for team {team_name}: {team_chat_id}" + (f" (thread {team_thread_id})" if team_thread_id else ""))
+                else:
+                    print(f"⚠️ Channel '{channel_name}' not found in channels config, using fallback")
+            else:
+                print(f"📨 No channel specified for team {team_name}, using fallback")
+        elif team_channels and 'default_channel' in team_channels:
+            # Use default channel from configuration
+            default_channel_name = team_channels['default_channel']
+            if 'channels' in team_channels and default_channel_name in team_channels['channels']:
+                team_chat_id, team_thread_id = parse_chat_and_thread_id(team_channels['channels'][default_channel_name])
+                print(f"📨 Using default channel '{default_channel_name}' for team {team_name}: {team_chat_id}" + (f" (thread {team_thread_id})" if team_thread_id else ""))
+            else:
+                print(f"⚠️ Default channel '{default_channel_name}' not found, using fallback")
+        else:
+            print(f"📨 Using fallback channel for team {team_name}")
+        
         message = format_team_message(team_name, issues, team_responsible)
         
         if not message.strip():
@@ -153,7 +187,7 @@ def send_team_messages(teams, bot_token, chat_id, delay=2, team_responsible=None
         
         print(f"📨 Sending message for team: {team_name} ({len(issues)} issues)")
         
-        if send_telegram_message(bot_token, chat_id, message, "Markdown", message_thread_id, True, max_retries, retry_delay):
+        if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay):
             sent_count += 1
             print(f"✅ Message sent for team: {team_name}")
         else:
@@ -234,37 +268,37 @@ def test_telegram_connection(bot_token, chat_id, message_thread_id=None):
         return False
 
 
-def load_team_responsible(team_responsible_json):
+def load_team_channels(team_channels_json):
     """
-    Load team responsible mapping from JSON string or file.
+    Load team channels configuration from JSON string or file.
     
     Args:
-        team_responsible_json (str): JSON string or path to JSON file
+        team_channels_json (str): JSON string or path to JSON file
         
     Returns:
-        dict: Dictionary mapping team names to responsible usernames
+        dict: Dictionary mapping team names to their channel configurations
     """
-    if not team_responsible_json:
+    if not team_channels_json:
         return None
     
     try:
         # Try to parse as JSON string first
-        if team_responsible_json.strip().startswith('{'):
-            return json.loads(team_responsible_json)
+        if team_channels_json.strip().startswith('{'):
+            return json.loads(team_channels_json)
         else:
             # Try to read as file
-            file_path = Path(team_responsible_json)
+            file_path = Path(team_channels_json)
             if file_path.exists():
                 with open(file_path, 'r', encoding='utf-8') as f:
                     return json.load(f)
             else:
-                print(f"⚠️ Team responsible file not found: {file_path}")
+                print(f"⚠️ Team channels file not found: {file_path}")
                 return None
     except json.JSONDecodeError as e:
-        print(f"❌ Error parsing team responsible JSON: {e}")
+        print(f"❌ Error parsing team channels JSON: {e}")
         return None
     except Exception as e:
-        print(f"❌ Error loading team responsible: {e}")
+        print(f"❌ Error loading team channels: {e}")
         return None
 
 
@@ -280,7 +314,7 @@ def main():
     parser.add_argument('--delay', type=int, default=2, help='Delay between messages in seconds (default: 2)')
     parser.add_argument('--dry-run', action='store_true', help='Parse and show teams without sending messages')
     parser.add_argument('--test-connection', action='store_true', help='Test Telegram connection only')
-    parser.add_argument('--team-responsible', help='JSON string or path to JSON file with team responsible mapping (or use TEAM_RESPONSIBLE env var)')
+    parser.add_argument('--team-channels', help='JSON string or path to JSON file with team channel configurations (or use TEAM_CHANNELS env var)')
     parser.add_argument('--message-thread-id', type=int, help='Thread ID for group messages (optional)')
     parser.add_argument('--max-retries', type=int, default=5, help='Maximum number of retry attempts for failed messages (default: 5)')
     parser.add_argument('--retry-delay', type=int, default=10, help='Delay between retry attempts in seconds (default: 10)')
@@ -301,13 +335,15 @@ def main():
         chat_id = None
         thread_id = None
     
-    # Get team responsible
-    team_responsible_json = getattr(args, 'team_responsible', None) or os.getenv('TEAM_RESPONSIBLE')
-    team_responsible = load_team_responsible(team_responsible_json)
+    # Get team channels
+    team_channels_json = getattr(args, 'team_channels', None) or os.getenv('TEAM_CHANNELS')
+    team_channels = load_team_channels(team_channels_json)
     
-    # Show team responsible status
-    if not team_responsible:
-        print("⚠️ No team responsible loaded")
+    # Show team channels status
+    if not team_channels:
+        print("⚠️ No team channels loaded, using default channel for all teams")
+    else:
+        print(f"📋 Loaded channel configurations for {len(team_channels)} teams")
     
     # Check if we need Telegram connection (not for dry run)
     if not args.dry_run or args.test_connection:
@@ -361,26 +397,54 @@ def main():
     print(f"📋 Found {len(teams)} teams:")
     for team_name, issues in teams.items():
         responsible_info = ""
-        if team_responsible and team_name in team_responsible:
-            responsible = team_responsible[team_name]
-            if isinstance(responsible, list):
-                responsible_str = ", ".join(responsible)
+        channel_info = ""
+        
+        if team_channels and 'teams' in team_channels and team_name in team_channels['teams']:
+            team_config = team_channels['teams'][team_name]
+            
+            # Get responsible info
+            if 'responsible' in team_config:
+                responsible = team_config['responsible']
+                if isinstance(responsible, list):
+                    responsible_str = ", ".join(responsible)
+                else:
+                    responsible_str = responsible
+                responsible_info = f" (Responsible: {responsible_str})"
+            
+            # Get channel info
+            if 'channel' in team_config:
+                channel_name = team_config['channel']
+                if 'channels' in team_channels and channel_name in team_channels['channels']:
+                    channel_info = f" (Channel: {channel_name} -> {team_channels['channels'][channel_name]})"
+                else:
+                    channel_info = f" (Channel: {channel_name} - not found)"
             else:
-                responsible_str = responsible
-            responsible_info = f" (Responsible: {responsible_str})"
-        print(f"  - {team_name}: {len(issues)} issues{responsible_info}")
+                channel_info = " (Channel: default)"
+        elif team_channels and 'default_channel' in team_channels:
+            channel_info = f" (Channel: {team_channels['default_channel']} - default)"
+        else:
+            channel_info = " (Channel: fallback)"
+        
+        print(f"  - {team_name}: {len(issues)} issues{responsible_info}{channel_info}")
     
     if args.dry_run:
         print("\n🔍 Dry run - showing formatted messages:")
         for team_name, issues in teams.items():
             if issues:
+                # Get responsible users from team_channels
+                team_responsible = None
+                if team_channels and 'teams' in team_channels and team_name in team_channels['teams']:
+                    team_config = team_channels['teams'][team_name]
+                    if 'responsible' in team_config:
+                        team_responsible = {team_name: team_config['responsible']}
+                
                 message = format_team_message(team_name, issues, team_responsible)
                 print(f"\n--- Team: {team_name} ---")
                 print(message)
         return
     
     # Send messages
-    send_team_messages(teams, bot_token, chat_id, args.delay, team_responsible, thread_id, args.max_retries, args.retry_delay)
+    send_team_messages(teams, bot_token, chat_id, args.delay, thread_id, args.max_retries, args.retry_delay, team_channels)
 
 
 if __name__ == "__main__":

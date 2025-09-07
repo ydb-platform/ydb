@@ -83,11 +83,11 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_MUTE_CHAT_ID }}
-          TEAM_TO_RESPONSIBLE_TG: ${{ vars.TEAM_TO_RESPONSIBLE_TG }}
+          TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
         run: |
           python .github/scripts/telegram/parse_and_send_team_issues.py \
             --file "${{ steps.create_issues.outputs.created_issues_file }}" \
             --bot-token "$TELEGRAM_BOT_TOKEN" \
             --chat-id "$TELEGRAM_CHAT_ID" \
-            --team-responsible "$TEAM_TO_RESPONSIBLE_TG" \
+            --team-channels "$TEAM_CHANNELS" \
             --delay 2

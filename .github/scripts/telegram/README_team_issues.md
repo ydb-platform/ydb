@@ -16,7 +16,7 @@ python .github/scripts/telegram/parse_and_send_team_issues.py \
 - `--file` - Path to results file (required)
 - `--bot-token` - Telegram bot token (or TELEGRAM_BOT_TOKEN env var)
 - `--chat-id` - Chat/channel ID (or TELEGRAM_CHAT_ID env var)
-- `--team-responsible` - JSON string mapping teams to responsible users (or TEAM_RESPONSIBLE env var)
+- `--team-channels` - JSON string mapping teams to their channel configurations (or TEAM_CHANNELS env var)
 - `--message-thread-id` - Thread ID for group messages (optional)
 - `--delay` - Delay between messages in seconds (default: 2)
 - `--dry-run` - Parse only without sending messages
@@ -35,15 +35,48 @@ fyi: @responsible1 @responsible2
 
 ```
 
-## Responsible Users Configuration
+## Team Channels Configuration
 
 ```json
 {
-  "team1": "@username",
-  "team2": ["@user1", "@user2"],
-  "team3": "@user3"
+  "channels": {
+    "main": "1234567890/1",
+    "secondary": "1234567890/5"
+  },
+  "teams": {
+    "engineering": {
+      "channel": "secondary",
+      "responsible": ["@engineering-lead"]
+    },
+    "appteam": {
+      "channel": "secondary",
+      "responsible": ["@appteam-lead"]
+    },
+    "docs": {
+      "channel": "main",
+      "responsible": ["@docs-lead"]
+    }
+  },
+  "default_channel": "main"
 }
 ```
+
+### Channel Selection Logic
+
+1. **Team-specific channel**: If team exists in `teams` → use its `channel` from `channels`
+2. **Default channel**: If team not found → use `default_channel` from `channels`
+3. **Fallback**: If no `TEAM_CHANNELS` or `default_channel` → use `--chat-id` parameter
+
+### Configuration Structure
+
+- **`channels`** - Maps channel names to actual chat IDs
+- **`teams`** - Maps team names to their channel and responsible users
+- **`default_channel`** - Default channel name for teams not specified
+
+### Responsible Users Logic
+
+1. **From `teams[team].responsible`**: If team has `responsible` → use it
+2. **Empty**: If no responsible found → no responsible users in message
 
 ## Supported Input File Format
 

@@ -20,11 +20,15 @@ python .github/scripts/telegram/parse_and_send_team_issues.py \
 - `--message-thread-id` - Thread ID for group messages (optional)
 - `--delay` - Delay between messages in seconds (default: 2)
 - `--dry-run` - Parse only without sending messages
+- `--max-retries` - Maximum number of retry attempts for failed messages (default: 5)
+- `--retry-delay` - Delay between retry attempts in seconds (default: 10)
 
 ## Message Format
 
 ```
-🆕 **New muted tests for [team-name](https://github.com/orgs/ydb-platform/teams/team-name)** @responsible
+🆕 **07-09-24 new muted tests for [team-name](https://github.com/orgs/ydb-platform/teams/team-name)** #team-name
+
+fyi: @responsible1 @responsible2
 
  - 🎯 [Issue URL](Issue URL) - `Issue Title`
  - 🎯 [Issue URL](Issue URL) - `Issue Title`
@@ -55,8 +59,10 @@ python .github/scripts/telegram/parse_and_send_team_issues.py \
 ## Features
 
 - ✅ Separate messages for each team
-- ✅ Markdown formatting with links
+- ✅ Markdown formatting with proper escaping
 - ✅ Responsible user mentions in messages
 - ✅ Message thread support
 - ✅ Dry run mode for testing
+- ✅ Automatic retry mechanism (5 retries with 10s delay by default)
+- ✅ Detailed error logging with failed message content
 - ✅ Automatic chat_id/thread_id parsing from "2018419243/1" format

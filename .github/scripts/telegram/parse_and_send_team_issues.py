@@ -5,10 +5,14 @@ Script to parse GitHub issues results and send separate messages for each team.
 
 import os
 import sys
+import time
+import requests
 import argparse
 import re
 import json
+from datetime import datetime
 from pathlib import Path
+from send_telegram_message import send_telegram_message
 
 
 def parse_team_issues(content):
@@ -80,7 +84,7 @@ def escape_markdown(text):
     
     for char in special_chars:
         text = text.replace(char, f'\\{char}')
-    
+    print(text)
     return text
 
 
@@ -99,7 +103,13 @@ def format_team_message(team_name, issues, team_responsible=None):
     if not issues:
         return ""
     
-    # Add team responsible mention in the same line as title if available
+    # Get current date in DD-MM-YY format
+    current_date = datetime.now().strftime("%d-%m-%y")
+    
+    # Start with title and team tag
+    message = f"⚠️ **{current_date} new muted tests for [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** #{team_name}\n\n"
+    
+    # Add responsible users on new line with "fyi:" prefix
     if team_responsible and team_name in team_responsible:
         responsible = team_responsible[team_name]
         # Handle both single responsible and list of responsibles
@@ -107,9 +117,7 @@ def format_team_message(team_name, issues, team_responsible=None):
             responsible_str = " ".join(f"@{r}" if not r.startswith('@') else r for r in responsible)
         else:
             responsible_str = f"@{responsible}" if not responsible.startswith('@') else responsible
-        message = f"🆕 **New muted tests for [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** {responsible_str}\n\n"
-    else:
-        message = f"🆕 **New muted tests for [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})**\n\n"
+        message += f"fyi: {responsible_str}\n\n"
     
     for issue in issues:
         # Escape the title for Markdown and wrap in backticks
@@ -122,7 +130,7 @@ def format_team_message(team_name, issues, team_responsible=None):
     return message
 
 
-def send_team_messages(teams, bot_token, chat_id, delay=2, team_responsible=None, message_thread_id=None):
+def send_team_messages(teams, bot_token, chat_id, delay=2, team_responsible=None, message_thread_id=None, max_retries=5, retry_delay=10):
     """
     Send separate messages for each team.
     
@@ -133,9 +141,9 @@ def send_team_messages(teams, bot_token, chat_id, delay=2, team_responsible=None
         delay (int): Delay between messages in seconds
         team_responsible (dict): Dictionary mapping team names to responsible usernames
         message_thread_id (int, optional): Thread ID for group messages
+        max_retries (int): Maximum number of retry attempts for failed messages
+        retry_delay (int): Delay between retry attempts in seconds
     """
-    from .send_telegram_message import send_telegram_message
-    import time
     
     total_teams = len(teams)
     sent_count = 0
@@ -153,11 +161,11 @@ def send_team_messages(teams, bot_token, chat_id, delay=2, team_responsible=None
         
         print(f"📨 Sending message for team: {team_name} ({len(issues)} issues)")
         
-        if send_telegram_message(bot_token, chat_id, message, "Markdown", message_thread_id):
+        if send_telegram_message(bot_token, chat_id, message, "Markdown", message_thread_id, True, max_retries, retry_delay):
             sent_count += 1
             print(f"✅ Message sent for team: {team_name}")
         else:
-            print(f"❌ Failed to send message for team: {team_name}")
+            print(f"❌ Failed to send message for team: {team_name} after {max_retries} retries")
         
         # Add delay between messages
         if sent_count < total_teams:
@@ -205,7 +213,6 @@ def test_telegram_connection(bot_token, chat_id, message_thread_id=None):
     Returns:
         bool: True if connection is valid
     """
-    import requests
     
     print(f"🔍 Testing Telegram connection to chat {chat_id}...")
     if message_thread_id:
@@ -283,6 +290,8 @@ def main():
     parser.add_argument('--test-connection', action='store_true', help='Test Telegram connection only')
     parser.add_argument('--team-responsible', help='JSON string or path to JSON file with team responsible mapping (or use TEAM_RESPONSIBLE env var)')
     parser.add_argument('--message-thread-id', type=int, help='Thread ID for group messages (optional)')
+    parser.add_argument('--max-retries', type=int, default=5, help='Maximum number of retry attempts for failed messages (default: 5)')
+    parser.add_argument('--retry-delay', type=int, default=10, help='Delay between retry attempts in seconds (default: 10)')
     
     args = parser.parse_args()
     
@@ -379,7 +388,7 @@ def main():
         return
     
     # Send messages
-    send_team_messages(teams, bot_token, chat_id, args.delay, team_responsible, thread_id)
+    send_team_messages(teams, bot_token, chat_id, args.delay, team_responsible, thread_id, args.max_retries, args.retry_delay)
 
 
 if __name__ == "__main__":

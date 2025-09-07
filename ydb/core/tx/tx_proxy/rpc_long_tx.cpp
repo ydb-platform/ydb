@@ -1,6 +1,7 @@
 #include "global.h"
 
 #include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/data_events/shard_writer.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -14,6 +15,28 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 
 namespace NKikimr {
+
+namespace {
+
+ui64 GetMemoryInFlightLimit(bool isColumnTable) {
+    static std::atomic_uint64_t DEFAULT_MEMORY_IN_FLIGHT_LIMIT{0};
+    if (!isColumnTable) {
+        return NTxProxy::TLimits::MemoryInFlightWriting;
+    }
+
+    if (HasAppData() && AppDataVerified().ColumnShardConfig.GetProxyMemoryInFlightLimit()) {
+        return AppDataVerified().ColumnShardConfig.GetProxyMemoryInFlightLimit();
+    }
+
+    if (DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load() == 0) {
+        ui64 oldValue = 0;
+        const ui64 newValue = NKqp::TStagePredictor::GetUsableThreads() * 15 * 1024 * 1024;
+        DEFAULT_MEMORY_IN_FLIGHT_LIMIT.compare_exchange_strong(oldValue, newValue);
+    }
+    return DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load();
+}
+
+}
 
 namespace NTxProxy {
 using namespace NActors;
@@ -31,12 +54,13 @@ protected:
     using TThis = typename TBase::TThis;
 
 public:
-    TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token, const TLongTxId& longTxId, const TString& dedupId)
+    TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token, const TLongTxId& longTxId, const TString& dedupId, bool isColumnTable)
         : DatabaseName(databaseName)
         , Path(path)
         , DedupId(dedupId)
         , LongTxId(longTxId)
-        , ActorSpan(0, NWilson::TTraceId::NewTraceId(0, Max<ui32>()), "TLongTxWriteBase") {
+        , ActorSpan(0, NWilson::TTraceId::NewTraceId(0, Max<ui32>()), "TLongTxWriteBase")
+        , IsColumnTable(isColumnTable) {
         if (token) {
             UserToken.emplace(token);
         }
@@ -70,7 +94,7 @@ protected:
         AFL_VERIFY(!InFlightSize);
         InFlightSize = accessor->GetSize();
         const i64 sizeInFlight = MemoryInFlight.Add(InFlightSize);
-        if (TLimits::MemoryInFlightWriting < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {
+        if (GetMemoryInFlightLimit(IsColumnTable) < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {
             return ReplyError(Ydb::StatusIds::OVERLOADED, "a lot of memory in flight");
         }
         if (NCSIndex::TServiceOperator::IsEnabled()) {
@@ -198,6 +222,7 @@ private:
     NEvWrite::TWritersController::TPtr InternalController;
     bool ColumnShardReady = false;
     bool IndexReady = false;
+    bool IsColumnTable = false;
 };
 
 // LongTx Write implementation called from the inside of YDB (e.g. as a part of BulkUpsert call)
@@ -230,8 +255,8 @@ class TLongTxWriteInternal: public TLongTxWriteBase<TLongTxWriteInternal> {
 public:
     explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId, const TString& databaseName,
         const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-        std::shared_ptr<NYql::TIssues> issues)
-        : TBase(databaseName, path, TString(), longTxId, dedupId)
+        std::shared_ptr<NYql::TIssues> issues, bool isColumnTable)
+        : TBase(databaseName, path, TString(), longTxId, dedupId, isColumnTable)
         , ReplyTo(replyTo)
         , NavigateResult(navigateResult)
         , Batch(batch)
@@ -278,8 +303,8 @@ private:
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
     const TString& dedupId, const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-    std::shared_ptr<NYql::TIssues> issues) {
-    return ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues));
+    std::shared_ptr<NYql::TIssues> issues, bool isColumnTable) {
+    return ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues, isColumnTable));
 }
 
 //

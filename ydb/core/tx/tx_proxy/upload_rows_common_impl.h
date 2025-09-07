@@ -107,7 +107,7 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
     const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-    std::shared_ptr<NYql::TIssues> issues);
+    std::shared_ptr<NYql::TIssues> issues, bool isColumnTable);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -198,6 +198,8 @@ protected:
     float RuCost = 0.0;
 
     NWilson::TSpan Span;
+
+    ui64 WrittenBytes = 0;
 
     NSchemeCache::TSchemeCacheNavigate::EKind GetTableKind() const {
         return TableKind;
@@ -349,7 +351,7 @@ private:
         return ok;
     }
 
-    TConclusionStatus CheckRequiredColumns(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, 
+    TConclusionStatus CheckRequiredColumns(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
                                          const TVector<std::pair<TString, Ydb::Type>>& reqColumns) {
         THashSet<TString> allColumnsLeft;
         for (auto&& [_, colInfo] : entry.Columns) {
@@ -364,7 +366,7 @@ private:
         if (!allColumnsLeft.empty()) {
             return TConclusionStatus::Fail(Sprintf("All columns are required during BulkUpsert for column table. Missing columns: %s", JoinSeq(", ", allColumnsLeft).c_str()));
         }
-        
+
         return TConclusionStatus::Success();
     }
 
@@ -763,7 +765,8 @@ private:
         }
 
         if (Batch) {
-            UploadCounters.OnRequest(Batch->num_rows());
+            WrittenBytes = NArrow::GetBatchDataSize(Batch);
+            UploadCounters.OnRequest(Batch->num_rows(), WrittenBytes);
         }
 
         if (TableKind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
@@ -906,7 +909,7 @@ private:
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
         DoLongTxWriteSameMailbox(
-            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
+            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, TableKind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
@@ -1374,7 +1377,7 @@ private:
     }
 
     void ReplyWithResult(const TUploadStatus& status, const TActorContext& ctx) {
-        UploadCountersGuard.OnReply(status);
+        UploadCountersGuard.OnReply(status, WrittenBytes);
         SendResult(ctx, status.GetCode());
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, TStringBuilder() << "completed with status " << status.GetCode());

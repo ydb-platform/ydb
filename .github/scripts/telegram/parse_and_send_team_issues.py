@@ -73,18 +73,10 @@ def escape_markdown(text):
     Returns:
         str: Escaped text
     """
-    # Only escape characters that can break Markdown parsing outside of code blocks
-    # Don't escape characters that are essential for Markdown links: [ ] ( )
-    # Don't escape common filename characters: _ . - + 
-    # Don't escape characters inside backticks as they are already protected
-    
-    # Escape only the most problematic characters that can break parsing
-    # Be very conservative - only escape what absolutely breaks parsing
-    special_chars = ['*', '~', '>', '#', '=', '|', '{', '}', '!', '+', '[', ']']
+    special_chars = ['*', '~', '>', '#', '=', '|', '{', '}', '!']
     
     for char in special_chars:
         text = text.replace(char, f'\\{char}')
-    print(text)
     return text
 
 
@@ -107,7 +99,7 @@ def format_team_message(team_name, issues, team_responsible=None):
     current_date = datetime.now().strftime("%d-%m-%y")
     
     # Start with title and team tag
-    message = f"⚠️ **{current_date} new muted tests for [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** #{team_name}\n\n"
+    message = f"🔇 **{current_date} new muted tests for [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** #{team_name}\n\n"
     
     # Add responsible users on new line with "fyi:" prefix
     if team_responsible and team_name in team_responsible:

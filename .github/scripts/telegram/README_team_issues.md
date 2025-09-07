@@ -26,7 +26,7 @@ python .github/scripts/telegram/parse_and_send_team_issues.py \
 ## Message Format
 
 ```
-🆕 **07-09-24 new muted tests for [team-name](https://github.com/orgs/ydb-platform/teams/team-name)** #team-name
+🔇 **07-09-24 new muted tests for [team-name](https://github.com/orgs/ydb-platform/teams/team-name)** #team-name
 
 fyi: @responsible1 @responsible2
 

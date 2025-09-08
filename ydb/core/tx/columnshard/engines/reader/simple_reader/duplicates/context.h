@@ -124,12 +124,11 @@ public:
 class TBuildFilterContext: NColumnShard::TMonitoringObjectsCounter<TBuildFilterContext>, TMoveOnly {
 private:
     using TFieldByColumn = std::map<ui32, std::shared_ptr<arrow::Field>>;
-    using TIntervals = std::vector<std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>>;
     using TPortionIndex = THashMap<ui64, TPortionInfo::TConstPtr>;
     YDB_READONLY_DEF(TActorId, Owner);
     YDB_READONLY_DEF(std::shared_ptr<TFilterAccumulator>, Context);
     YDB_READONLY_DEF(TPortionIndex, RequiredPortions);
-    YDB_READONLY_DEF(TIntervals, Intervals);
+    YDB_READONLY_DEF(std::vector<TIntervalInfo>, Intervals);
     YDB_READONLY_DEF(TFieldByColumn, Columns);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
     YDB_READONLY_DEF(std::shared_ptr<NColumnFetching::TColumnDataManager>, ColumnDataManager);
@@ -139,8 +138,8 @@ private:
 
 public:
     TBuildFilterContext(const TActorId owner, const std::shared_ptr<TFilterAccumulator>& context, TPortionIndex&& portions,
-        std::vector<std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>>&& intervals, const TFieldByColumn& columns,
-        const std::shared_ptr<arrow::Schema>& pkSchema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
+        std::vector<TIntervalInfo>&& intervals, const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema,
+        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters,
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory)
@@ -164,6 +163,10 @@ public:
         AFL_VERIFY(DataAccessorsManager);
         AFL_VERIFY(Counters);
         // AFL_VERIFY(SelfMemory);  // may be null
+        for (ui64 i = 1; i < Intervals.size(); ++i) {
+            AFL_VERIFY_DEBUG(
+                Intervals[i - 1].GetEnd() < Intervals[i].GetBegin() || Intervals[i - 1].GetEnd().IsEquivalent(Intervals[i].GetBegin()));
+        }
     }
 
     std::set<ui32> GetFetchingColumnIds() const {
@@ -184,12 +187,11 @@ public:
 
     static ui64 GetApproximateDataSize(const ui64 intersectionCount) {
         return intersectionCount *
-               (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>) +
-                   sizeof(std::optional<NArrow::TColumnFilter>));
+               (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(TIntervalInfo) + sizeof(std::optional<NArrow::TColumnFilter>));
     }
     ui64 GetDataSize() const {
-        return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr)) +
-               Intervals.capacity() * sizeof(std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>) + Context->GetDataSize();
+        return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr)) + Intervals.capacity() * sizeof(TIntervalInfo) +
+               Context->GetDataSize();
     }
 };
 

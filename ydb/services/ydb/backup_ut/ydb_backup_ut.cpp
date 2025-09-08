@@ -2389,6 +2389,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
                 return TestTableWithIndexBackupRestore(Value);
+            case EIndexTypeGlobalFulltext:
+                // TODO: will be added later
+                break;
             case EIndexTypeInvalid:
                 break; // not applicable
             default:
@@ -3218,6 +3221,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
                 TestTableWithIndexBackupRestore(Value);
+                break;
+            case EIndexTypeGlobalFulltext:
+                // TODO: will be added later
                 break;
             case EIndexTypeInvalid:
                 break; // not applicable

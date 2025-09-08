@@ -105,7 +105,7 @@ namespace NKikimr {
             case EUnconfiguredStateReason::GenerationChanged:
                 return "GenerationChanged";
             default:
-                Y_DEBUG_ABORT_S("Unknown EUnconfiguredStateReason value# " << static_cast<ui8>(reason));
+                Y_DEBUG_ABORT_S("Unknown EUnconfiguredStateReason value# " << static_cast<ui32>(reason));
                 return "UnknownReason";
         }
     }

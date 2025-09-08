@@ -553,7 +553,8 @@ Ydb::Table::KMeansTreeSettings FillSettings(const TVector<std::pair<TString, TSt
         }
     }
 
-    NKikimr::NKMeans::ValidateSettings(result, error);
+    ValidateSettings(result, error);
+
     return result;
 }
 

@@ -72,6 +72,31 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         }
     }
 
+    Y_UNIT_TEST(CreateSecretInSubdomain) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "SubDomain"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateSecret(runtime, ++txId, "/MyRoot/SubDomain",
+            R"(
+                Name: "test-secret"
+                Value: "test-value"
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/SubDomain/test-secret");
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
+            ExpectEqualSecretDescription(describeResult, "test-secret", "test-value", 0);
+        }
+    }
+
     Y_UNIT_TEST(CreateExistingSecret) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

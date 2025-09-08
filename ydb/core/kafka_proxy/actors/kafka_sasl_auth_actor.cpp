@@ -194,6 +194,7 @@ void TKafkaSaslAuthActor::GetPathByPathId(const TPathId& pathId, const TActorCon
     entry.RequestType = NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
     entry.Operation = NKikimr::NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.SyncVersion = false;
+    entry.RedirectRequired = false;
     schemeCacheRequest->ResultSet.emplace_back(entry);
     // schemeCacheRequest->DatabaseName = CanonizePath(DatabasePath);
     ctx.Send(NKikimr::MakeSchemeCacheID(), MakeHolder<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));

@@ -844,7 +844,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(mapArray->length()), values.size());
 
         UNIT_ASSERT(wrapArray->field(1)->type_id() == arrow::Type::UINT64);
-        auto customArray = static_pointer_cast<arrow::Int64Array>(wrapArray->field(1));
+        auto customArray = static_pointer_cast<arrow::UInt64Array>(wrapArray->field(1));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(customArray->length()), values.size());
 
         UNIT_ASSERT_VALUES_EQUAL(mapArray->num_fields(), 1);

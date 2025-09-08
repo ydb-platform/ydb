@@ -748,7 +748,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
                 itemBuilder = mapBuilder->item_builder();
             }
 
-            arrow::Int64Builder* customBuilder = reinterpret_cast<arrow::Int64Builder*>(wrapBuilder->field_builder(1));
+            arrow::UInt64Builder* customBuilder = reinterpret_cast<arrow::UInt64Builder*>(wrapBuilder->field_builder(1));
             status = customBuilder->Append(0);
             Y_VERIFY_S(status.ok(), status.ToString());
 

@@ -6294,11 +6294,14 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
 
     Y_UNIT_TEST(ShouldSucceedOnSingleTopic) {
         auto topic = NDescUT::TSimpleTopic(0, 2);
-        ShouldSucceed({{topic.GetDir(),
+        ShouldSucceed({
             {
-                EPathTypePersQueueGroup,
-                topic.GetPublicProto().DebugString()
+                topic.GetDir(),
+                {
+                    EPathTypePersQueueGroup,
+                    topic.GetPublicProto().DebugString()
+                }
             }
-        }}, topic.GetImportRequest());
+        }, topic.GetImportRequest());
     }
 }

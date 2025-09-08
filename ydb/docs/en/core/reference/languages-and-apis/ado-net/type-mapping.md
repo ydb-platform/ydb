@@ -31,7 +31,7 @@ These are the return types when using `YdbCommand.ExecuteScalarAsync()`, `YdbDat
 | `JsonDocument`                | `string`                            |
 | `Yson`                        | `byte[]`                            |
 
-## Decimal { #decimal }
+## Decimal {#decimal}
 
 Decimal is a parameterized {{ ydb-short-name }} type (see the [documentation for details](../../../yql/reference/types/primitive.md#numeric)). `Precision` is the total number of significant digits; `Scale` is the number of digits after the decimal point.
 

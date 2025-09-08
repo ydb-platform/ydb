@@ -31,7 +31,7 @@
 | `JsonDocument`             | `string`                       |
 | `Yson`                     | `byte[]`                       |
 
-## Decimal { #decimal }
+## Decimal {#decimal}
 
 `Decimal` — параметризованный тип {{ ydb-short-name }}} (подробнее см. [документацию](../../../yql/reference/types/primitive.md#numeric)). `Precision` — общее количество значащих цифр, `Scale` — количество цифр после десятичной точки.
 

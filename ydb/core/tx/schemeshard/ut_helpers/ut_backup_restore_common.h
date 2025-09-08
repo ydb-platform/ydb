@@ -117,8 +117,9 @@ protected:
     const TString Path;
 };
 
-class TPermissions : public TPublicProtoDescriber<Ydb::Scheme::ModifyPermissionsRequest>
-                   , public TFileDescriber
+class TPermissions 
+    : public TPublicProtoDescriber<Ydb::Scheme::ModifyPermissionsRequest>
+    , public TFileDescriber
 {
 public:
     TPermissions(const TString& dir) 
@@ -134,8 +135,9 @@ public:
 };
 
 template <typename TSchemeProto, typename TPublicProto>
-class TObjectDescriber : public TSchemeDescriber<TSchemeProto>
-                       , public TPublicProtoDescriber<TPublicProto>
+class TObjectDescriber 
+    : public TSchemeDescriber<TSchemeProto>
+    , public TPublicProtoDescriber<TPublicProto>
 {
 public:
     template <typename TFormat>
@@ -193,7 +195,8 @@ private:
     )";
 };
 
-class TExportRequest : public TXxportRequest {
+class TExportRequest
+    : public TXxportRequest {
 public:
     TExportRequest(ui16 port, const TVector<TString>& items)
         : TXxportRequest("ExportToS3", items, port)
@@ -204,7 +207,8 @@ public:
     {}
 };
 
-class TImportRequest : public TXxportRequest {
+class TImportRequest 
+    : public TXxportRequest {
 public:
     TImportRequest(ui16 port, const TVector<TString>& items)
         : TXxportRequest("ImportFromS3", items, port)
@@ -216,8 +220,9 @@ public:
 };
 
 template <typename TSchemeProto, typename TPublicProto>
-class TSchemeObjectDescriber : public TObjectDescriber<TSchemeProto, TPublicProto> 
-                             , public TFileDescriber
+class TSchemeObjectDescriber
+    : public TObjectDescriber<TSchemeProto, TPublicProto> 
+    , public TFileDescriber
 {
 public:
     TSchemeObjectDescriber(const TString& dir, const TString& name) 
@@ -289,12 +294,12 @@ private:
     )";
 };
 
-class TSimpleTopic : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription,
-                                                   Ydb::Topic::CreateTopicRequest> 
+class TSimpleTopic
+    : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription, Ydb::Topic::CreateTopicRequest> 
 {
 private:
-    class TSimpleConsumer : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer,
-                                                    Ydb::Topic::Consumer> 
+    class TSimpleConsumer 
+        : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer, Ydb::Topic::Consumer> 
     {
     public:
         TSimpleConsumer(ui64 number, bool important = false) {

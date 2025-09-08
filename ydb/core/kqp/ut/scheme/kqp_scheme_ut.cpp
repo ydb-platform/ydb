@@ -38,8 +38,8 @@ using namespace NYdb::NReplication;
 
 Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(UseUnauthorizedTable) {
-        TKikimrRunner kikimr("test_user@builtin");
-        auto db = kikimr.GetTableClient();
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken("test_user@builtin"));
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(

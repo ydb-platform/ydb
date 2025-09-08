@@ -49,9 +49,9 @@ void AddConnectPermission(const TKikimrRunner& kikimr, const TString& subject) {
 
 Y_UNIT_TEST_SUITE(KqpAcl) {
     Y_UNIT_TEST(FailNavigate) {
-        TKikimrRunner kikimr(UserName);
+        TKikimrRunner kikimr;
 
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken(UserName));
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(

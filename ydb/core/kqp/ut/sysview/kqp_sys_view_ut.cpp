@@ -657,8 +657,8 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST(FailNavigate) {
-        TKikimrRunner kikimr("user0@builtin");
-        auto client = kikimr.GetTableClient();
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken("user0@builtin"));
 
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT PathId FROM `/Root/.sys/partition_stats`;

@@ -46,6 +46,13 @@ namespace NKafka {
         HandleTransactionalRequest<TEndTxnResponseData>(ev, ctx);
     };
 
+    void TTransactionsCoordinator::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext&) {
+        TablesInited++;
+        if (TablesInited == TABLES_COUNT) {
+            KAFKA_LOG_D("All tables are prepared");
+        }
+    };
+
     void TTransactionsCoordinator::Handle(TEvKafka::TEvTransactionActorDied::TPtr& ev, const TActorContext&) {
         auto it = ProducersByTransactionalId.find(ev->Get()->TransactionalId);
         const TProducerInstanceId& deadActorProducerState = ev->Get()->ProducerState;

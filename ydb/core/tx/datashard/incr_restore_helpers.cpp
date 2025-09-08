@@ -44,12 +44,15 @@ std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cell
         return std::nullopt;
     }
     
-    THashMap<ui32, bool> tagToNullState;
-    THashMap<ui32, bool> tagToChangedState;
+    struct TColumnState {
+        bool IsNull = false;
+        bool IsChanged = false;
+    };
+    
+    THashMap<ui32, TColumnState> tagToColumnState;
     if (hasNullStateData) {
         for (const auto& columnState : columnStateMap.GetColumnStates()) {
-            tagToNullState[columnState.GetTag()] = columnState.GetIsNull();
-            tagToChangedState[columnState.GetTag()] = columnState.GetIsChanged();
+            tagToColumnState[columnState.GetTag()] = {columnState.GetIsNull(), columnState.GetIsChanged()};
         }
     }
     
@@ -65,12 +68,11 @@ std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cell
         
         
         if (hasNullStateData) {
-            auto nullStateIt = tagToNullState.find(tag);
-            auto changedStateIt = tagToChangedState.find(tag);
+            auto columnStateIt = tagToColumnState.find(tag);
             
-            if (changedStateIt != tagToChangedState.end() && !changedStateIt->second) {
+            if (columnStateIt != tagToColumnState.end() && !columnStateIt->second.IsChanged) {
                 continue;
-            } else if (nullStateIt != tagToNullState.end() && nullStateIt->second) {
+            } else if (columnStateIt != tagToColumnState.end() && columnStateIt->second.IsNull) {
                 updates.emplace_back(tag, ECellOp::Set, TRawTypeValue());
             } else {
                 updates.emplace_back(tag, ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), it->second.Type.GetTypeId()));

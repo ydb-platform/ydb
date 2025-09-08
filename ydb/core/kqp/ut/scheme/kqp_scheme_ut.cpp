@@ -13254,7 +13254,11 @@ END DO)",
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
 
-        UNIT_ASSERT_C(kikimr.GetTestClient().Ls("/Root/secret-name"), "the secret has been dropped somehow");
+        // checking setup for the next step
+        {
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret has been dropped somehow");
+        }
 
         // ok
         {
@@ -13264,7 +13268,7 @@ END DO)",
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
-            UNIT_ASSERT_C(kikimr.GetTestClient().Ls("/Root/secret-name"), "the secret somehow exists");
+            UNIT_ASSERT_C(!describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret somehow exists");
         }
     }
 

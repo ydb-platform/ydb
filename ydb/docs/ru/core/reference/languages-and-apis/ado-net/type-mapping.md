@@ -26,10 +26,18 @@
 | `Date`                     | `DateTime` |
 | `Datetime`                 | `DateTime` |
 | `Timestamp`                | `DateTime` |
-| `Decimal(22,9)`            | `Decimal`  |
+| `Decimal($p, $s)`          | `Decimal`  |
 | `Json`                     | `string`   |
 | `JsonDocument`             | `string`   |
 | `Yson`                     | `byte[]`   |
+
+{% note info %}
+
+Чтобы передать произвольное значение `decimal`, задайте `Precision` и `Scale` в `YdbParameter`. По умолчанию используется значение `Decimal(22, 9)`.
+
+Например для Decimal(5, 3), нужно передать параметр `new YdbParameter { Value = 1.5m, Precision = 5, Scale = 3 }`.
+
+{% endnote %}
 
 ## Таблица сопоставления типов на запись
 
@@ -51,7 +59,7 @@
 | `Date`                     | `Date`                                                                                    | `DateTime`                   |
 | `Datetime`                 | `DateTime`                                                                                | `DateTime`                   |
 | `Timestamp`                | `DateTime2` (для .NET типа `DateTime`), `DateTimeOffset` (для .NET типа `DateTimeOffset`) | `DateTime`, `DateTimeOffset` |
-| `Decimal(22,9)`            | `Decimal`, `Currency`                                                                     | `decimal`                    |
+| `Decimal($p, $s)`          | `Decimal`, `Currency`                                                                     | `decimal`                    |
 
 {% note info %}
 

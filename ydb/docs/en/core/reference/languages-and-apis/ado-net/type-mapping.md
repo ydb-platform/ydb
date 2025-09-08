@@ -26,10 +26,18 @@ These are the return types when using `YdbCommand.ExecuteScalarAsync()`, `YdbDat
 | `Date`                        | `DateTime` |
 | `Datetime`                    | `DateTime` |
 | `Timestamp`                   | `DateTime` |
-| `Decimal(22,9)`               | `Decimal`  |
+| `Decimal($p, $s)`             | `Decimal`  |
 | `Json`                        | `string`   |
 | `JsonDocument`                | `string`   |
 | `Yson`                        | `byte[]`   |
+
+{% note info %}
+
+To pass an arbitrary `decimal`, set the Precision and Scale on the YdbParameter. By default, use `Decimal(22, 9)`.
+
+For example, for Decimal(5, 3), you need to pass the parameter `new YdbParameter { Value = 1.5m, Precision = 5, Scale = 3 }`.
+
+{% endnote %}
 
 ## Type Mapping Table for Writing
 
@@ -51,7 +59,7 @@ These are the return types when using `YdbCommand.ExecuteScalarAsync()`, `YdbDat
 | `Date`                        | `Date`                                                                                    | `DateTime`                   |
 | `Datetime`                    | `DateTime`                                                                                | `DateTime`                   |
 | `Timestamp`                   | `DateTime2` (for .NET type `DateTime`), `DateTimeOffset` (for .NET type `DateTimeOffset`) | `DateTime`, `DateTimeOffset` |
-| `Decimal(22,9)`               | `Decimal`, `Currency`                                                                     | `decimal`                    |
+| `Decimal($p, $s)`             | `Decimal`, `Currency`                                                                     | `decimal`                    |
 
 {% note info %}
 

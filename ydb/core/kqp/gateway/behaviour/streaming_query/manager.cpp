@@ -67,19 +67,6 @@ TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& tableName, 
     return pathPair;
 }
 
-[[nodiscard]] TYqlConclusionStatus ErrorFromActivityType(TStreamingQueryManager::EActivityType activityType) {
-    using EActivityType = TStreamingQueryManager::EActivityType;
-
-    switch (activityType) {
-        case EActivityType::Undefined:
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Undefined operation for STREAMING_QUERY object");
-        case EActivityType::Upsert:
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Upsert operation for STREAMING_QUERY objects is not implemented");
-        default:
-            throw yexception() << "Unexpected status to fail: " << activityType;
-    }
-}
-
 class TObjectOperationController : public IStreamingQueryOperationController {
 public:
     explicit TObjectOperationController(NThreading::TPromise<TYqlConclusionStatus> promise)
@@ -160,8 +147,10 @@ TYqlConclusionStatus TStreamingQueryManager::DoPrepare(NKqpProto::TKqpSchemeOper
                 return PrepareAlterStreamingQuery(schemeOperation, settings, context);
             case EActivityType::Drop:
                 return PrepareDropStreamingQuery(schemeOperation, settings, context);
-            default:
-                return ErrorFromActivityType(context.GetActivityType());
+            case EActivityType::Undefined:
+                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Undefined operation for STREAMING_QUERY object");
+            case EActivityType::Upsert:
+                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Upsert operation for STREAMING_QUERY objects is not implemented");
         }
     } catch (...) {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during preparation of STREAMING_QUERY modification operation: " << CurrentExceptionMessage());

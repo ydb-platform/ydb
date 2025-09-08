@@ -113,35 +113,7 @@ message GlobalVectorKMeansTreeIndex {
     KMeansTreeSettings vector_settings = 3;
 }
 
-message FulltextIndexSettings {
-    // Specifies the layout strategy for storing and updating the full-text index
-    enum Layout {
-        LAYOUT_UNSPECIFIED = 0;
-
-        // Uses a single flat inverted index table (indexImplTable)
-        // Example source table:
-        //     ┌────┬────────────────────────────┐
-        //     │ id │ text                       │
-        //     ├────┼────────────────────────────┤
-        //     │ 1  │ "The quick brown fox"      │
-        //     │ 2  │ "The quick blue hare"      │
-        //     └────┴────────────────────────────┘
-        // Example inverted index table (indexImplTable):
-        //     ┌──────────────┬────┐
-        //     │ __ydb_token  │ id │
-        //     ├──────────────┼────┤
-        //     │ "blue"       │ 2  │
-        //     │ "brown"      │ 1  │
-        //     │ "fox"        │ 1  │
-        //     │ "hare"       │ 2  │
-        //     │ "quick"      │ 1  │
-        //     │ "quick"      │ 2  │
-        //     │ "The"        │ 1  │
-        //     │ "The"        │ 2  │
-        //     └──────────────┴────┘
-        FLAT = 1;
-    }
-
+message FulltextIndexAnalyzerSettings {
     // Specifies how text is tokenized during indexing
     enum Tokenizer {
         TOKENIZER_UNSPECIFIED = 0;
@@ -168,16 +140,13 @@ message FulltextIndexSettings {
         KEYWORD = 3;
     }
 
-    // See Layout enum
-    Layout layout = 1;
-
     // See Tokenizer enum
-    Tokenizer tokenizer = 2;
+    Tokenizer tokenizer = 1;
 
     // Language used for language-sensitive operations like stopword filtering
     // Example: language = "english"
     // By default is not specified and no language-specific logic is applied
-    string language = 3;
+    string language = 2;
 
     // Whether to convert tokens to lowercase
     // Example:
@@ -229,6 +198,54 @@ message FulltextIndexSettings {
     // Maximum token length to keep (inclusive)
     // Must be used with use_filter_length
     int32 filter_length_max = 132 [(Ydb.value) = ">= 0"];
+}
+
+// Represents fulltext index settings for a single column
+message FulltextIndexColumnSettings {
+    // Name of the column to be indexed
+    string column = 1;
+
+    // Fulltext index analyzer settings specific to this column
+    FulltextIndexAnalyzerSettings settings = 2;
+}
+
+message FulltextIndexSettings {
+    // Specifies the layout strategy for storing and updating the full-text index
+    enum Layout {
+        LAYOUT_UNSPECIFIED = 0;
+
+        // Uses a single flat inverted index table (indexImplTable)
+        // Example source table:
+        //     ┌────┬────────────────────────────┐
+        //     │ id │ text                       │
+        //     ├────┼────────────────────────────┤
+        //     │ 1  │ "The quick brown fox"      │
+        //     │ 2  │ "The quick blue hare"      │
+        //     └────┴────────────────────────────┘
+        // Example inverted index table (indexImplTable):
+        //     ┌──────────────┬────┐
+        //     │ __ydb_token  │ id │
+        //     ├──────────────┼────┤
+        //     │ "blue"       │ 2  │
+        //     │ "brown"      │ 1  │
+        //     │ "fox"        │ 1  │
+        //     │ "hare"       │ 2  │
+        //     │ "quick"      │ 1  │
+        //     │ "quick"      │ 2  │
+        //     │ "The"        │ 1  │
+        //     │ "The"        │ 2  │
+        //     └──────────────┴────┘
+        // Supports single column only
+        FLAT = 1;
+    }
+
+    // See Layout enum
+    Layout layout = 1;
+
+    // List of columns and their fulltext settings
+    // Currently, this list should contain a single entry
+    // And provided column should be the only one in the TableIndex.index_columns list
+    repeated FulltextIndexColumnSettings columns = 2;
 }
 
 message GlobalFulltextIndex {

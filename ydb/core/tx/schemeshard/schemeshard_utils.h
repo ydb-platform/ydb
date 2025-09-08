@@ -194,6 +194,18 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                 error = TStringBuilder() << "fulltext index can only have a single key text column";
                 return false;
             }
+            if (indexDesc.GetFulltextIndexDescription().GetSettings().Getcolumns().size() != 1) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                error = TStringBuilder() << "fulltext index should have single '" << indexKeys.KeyColumns.at(0) << "' column settings"
+                    << " but have " << indexDesc.GetFulltextIndexDescription().GetSettings().Getcolumns().size() << " of them";
+                return false;
+            }
+            if (indexDesc.GetFulltextIndexDescription().GetSettings().Getcolumns().at(0).Getcolumn() != indexKeys.KeyColumns.at(0)) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                error = TStringBuilder() << "fulltext index should have '" << indexKeys.KeyColumns.at(0) << "' column settings"
+                    << " but have '" << indexDesc.GetFulltextIndexDescription().GetSettings().Getcolumns().at(0).Getcolumn() << "' column settings";
+                return false;
+            }
     
             const TString& indexColumnName = indexKeys.KeyColumns.back();
             Y_ABORT_UNLESS(baseColumnTypes.contains(indexColumnName));

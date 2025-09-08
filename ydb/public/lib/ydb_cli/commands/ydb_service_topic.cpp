@@ -1004,6 +1004,9 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("message-group-id", "Message group identifier. If not set, all messages from input will get the same identifier based on hex string\nrepresentation of 3 random bytes")
             .Optional()
             .StoreResult(&MessageGroupId_);
+        config.Opts->AddLongOption("init-seqno-timeout", "Max wait duration for initial seqno")
+            .Optional()
+            .StoreResult(&MessagesWaitTimeoutSeconds_);
 
         AddTransform(config);
     }
@@ -1049,6 +1052,13 @@ namespace NYdb::NConsoleClient {
         return settings;
     }
 
+    TMaybe<TDuration> TCommandTopicWrite::GetMessagesWaitTimeout() const {
+        if (MessagesWaitTimeoutSeconds_.Defined()) {
+            return TDuration::Seconds(*MessagesWaitTimeoutSeconds_);
+        }
+        return Nothing();
+    }
+
     int TCommandTopicWrite::Run(TConfig& config) {
         SetInterruptHandlers();
 
@@ -1060,7 +1070,8 @@ namespace NYdb::NConsoleClient {
             auto writeSession = NTopic::TTopicClient(*driver).CreateWriteSession(std::move(PrepareWriteSessionSettings()));
             auto writer =
                 TTopicWriter(writeSession, std::move(TTopicWriterParams(MessagingFormat, Delimiter_, MessageSizeLimit_, BatchDuration_,
-                                                                        BatchSize_, BatchMessagesCount_, GetTransform())));
+                                                                        BatchSize_, BatchMessagesCount_, GetTransform(),
+                                                                        GetMessagesWaitTimeout())));
 
             if (int status = writer.Init(); status) {
                 return status;

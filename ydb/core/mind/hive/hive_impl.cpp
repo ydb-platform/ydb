@@ -2972,6 +2972,7 @@ void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects)
     if (tablet == nullptr) {
         return;
     }
+    Y_ENSURE(tablet->IsDeleting());
     if (DeleteTabletInProgress < MAX_DELETE_TABLET_IN_PROGRESS) {
         ++DeleteTabletInProgress;
         if (!tablet->InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {

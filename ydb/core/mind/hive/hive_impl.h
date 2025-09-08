@@ -449,7 +449,7 @@ protected:
     ui64 UpdateTabletMetricsInProgress = 0;
     static constexpr ui64 MAX_UPDATE_TABLET_METRICS_IN_PROGRESS = 10000; // 10K
     i64 DeleteTabletInProgress = 0;
-    static constexpr i64 MAX_DELETE_TABLET_IN_PROGRESS = 100;
+    static constexpr i64 MAX_DELETE_TABLET_IN_PROGRESS = 2;
     std::queue<TTabletId> DeleteTabletQueue;
 
     TString BootStateBooting = "Booting";

@@ -7,10 +7,8 @@ SRCS(
 
 
 PEERDIR(
-    ydb/core/base
     ydb/core/keyvalue
     ydb/core/persqueue/pqtablet/blob
-    ydb/library/logger
 )
 
 END()

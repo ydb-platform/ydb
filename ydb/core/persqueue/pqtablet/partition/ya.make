@@ -25,11 +25,7 @@ SRCS(
 
 
 PEERDIR(
-    contrib/libs/fmt
-    ydb/library/actors/core
     ydb/core/backup/impl
-    ydb/core/base
-    ydb/core/engine/minikql
     ydb/core/persqueue/events
     ydb/core/persqueue/common
     ydb/core/persqueue/common/proxy
@@ -39,7 +35,6 @@ PEERDIR(
     ydb/core/persqueue/pqtablet/blob
     ydb/core/persqueue/pqtablet/cache
     ydb/core/persqueue/pqtablet/common
-    ydb/library/logger
 )
 
 END()

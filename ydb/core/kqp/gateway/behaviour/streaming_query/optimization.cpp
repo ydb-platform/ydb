@@ -162,7 +162,7 @@ TStatus TStreamingQueryOptimizer::ValidateObjectNodeAnnotation(TExprNode::TPtr n
         return TStatus::Error;
     }
 
-    TIssueScopeGuard issueScopeRead(ctx.IssueManager, [&]() {
+    TIssueScopeGuard issueScopeObject(ctx.IssueManager, [&]() {
         return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()), "At STREAMING_QUERY object operation");
     });
 

@@ -1,5 +1,6 @@
 #include "schemeshard_path_describer.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/annotations/sensitive.pb.h>
 
 #include <ydb/core/base/appdata.h>
@@ -216,8 +217,10 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                 return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+                return TPathElement::EPathSubType::EPathSubTypeFulltextIndexImplTable; 
             default:
-                Y_DEBUG_ABORT("%s", (TStringBuilder() << "unexpected indexInfo->Type# " << indexInfo->Type).data());
+                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
                 return TPathElement::EPathSubType::EPathSubTypeEmpty;
         }
     } else if (parentPath.IsCdcStream()) {
@@ -1471,14 +1474,23 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     }
     entry.SetDataSize(dataSize);
 
-    if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-        if (const auto* vectorIndexKmeansTreeDescription = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&indexInfo->SpecializedIndexDescription)) {
-           *entry.MutableVectorIndexKmeansTreeDescription() = *vectorIndexKmeansTreeDescription;
-        } else {
-            Y_FAIL_S("SpecializedIndexDescription should be set");
-        }
+    switch (indexInfo->Type) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            // no specialized index description
+            Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            *entry.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            *entry.MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
+            break;
+        default:
+            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
+            break;
     }
-
 }
 
 void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,

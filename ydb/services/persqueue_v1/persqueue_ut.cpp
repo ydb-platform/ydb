@@ -2575,7 +2575,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
     Y_UNIT_TEST(SetupWriteSession) {
         NPersQueue::TTestServer server{PQSettings(0, 2), false};
-        server.ServerSettings.SetEnableSystemViews(false);
         server.StartServer();
 
         server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_INFO);

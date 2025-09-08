@@ -450,8 +450,7 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
 
     TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
-    if (AppData()->FeatureFlags.GetEnableSystemViews() &&
-        ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) {
+    if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) {
         const auto& pathDescription = ev->Get()->GetRecord().GetPathDescription();
         const auto& self = pathDescription.GetSelf();
 

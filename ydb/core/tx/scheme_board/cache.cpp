@@ -2798,8 +2798,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 };
 
                 NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
-                if (AppData()->FeatureFlags.GetEnableSystemViews() &&
-                    SystemViewResolver->IsSystemViewPath(entry.Path, sysViewPath)) {
+                if (SystemViewResolver->IsSystemViewPath(entry.Path, sysViewPath)) {
                     auto& fallbackEntryInfo = context->EntriesFallbackInfo[i];
                     context->HasSysViewEntries = true;
                     if (fallbackEntryInfo.IsImplicit) {

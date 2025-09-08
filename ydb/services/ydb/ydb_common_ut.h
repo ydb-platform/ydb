@@ -28,7 +28,6 @@ struct TKikimrTestSettings {
     static constexpr bool SSL = false;
     static constexpr bool AUTH = false;
     static constexpr bool PrecreatePools = true;
-    static constexpr bool EnableSystemViews = true;
 
     static TString GetCaCrt() { return NYdbSslTestData::CaCrt; }
     static TString GetServerCrt() { return NYdbSslTestData::ServerCrt; }
@@ -69,10 +68,6 @@ struct TKikimrTestWithServerCert : TKikimrTestWithAuthAndSsl {
     static TString GetServerKey() {
         return GetServerCert().PrivateKey.c_str();
     }
-};
-
-struct TKikimrTestNoSystemViews : TKikimrTestSettings {
-    static constexpr bool EnableSystemViews = false;
 };
 
 template <typename TestSettings = TKikimrTestSettings>
@@ -116,7 +111,6 @@ public:
         ServerSettings->SetEnableDataColumnForIndexTable(true);
         ServerSettings->SetEnableNotNullColumns(true);
         ServerSettings->SetEnableParameterizedDecimal(true);
-        ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews);
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
         ServerSettings->PQConfig = appConfig.GetPQConfig();
@@ -369,7 +363,6 @@ struct TTestOlap {
 using TKikimrWithGrpcAndRootSchema = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestSettings>;
 using TKikimrWithGrpcAndRootSchemaWithAuth = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth>;
 using TKikimrWithGrpcAndRootSchemaWithAuthAndSsl = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl>;
-using TKikimrWithGrpcAndRootSchemaNoSystemViews = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestNoSystemViews>;
 
 Ydb::StatusIds::StatusCode WaitForStatus(
     std::shared_ptr<grpc::Channel> channel, const TString& opId,

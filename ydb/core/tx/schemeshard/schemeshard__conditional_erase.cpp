@@ -430,16 +430,14 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
 
         Self->PersistTablePartitionCondErase(db, tableId, partitionIdx, tableInfo);
 
-        if (AppData(ctx)->FeatureFlags.GetEnableSystemViews()) {
-            StatsCollectorEv = MakeHolder<NSysView::TEvSysView::TEvUpdateTtlStats>(
-                Self->GetDomainKey(tableId), tableId, std::make_pair(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()))
-            );
+        StatsCollectorEv = MakeHolder<NSysView::TEvSysView::TEvUpdateTtlStats>(
+            Self->GetDomainKey(tableId), tableId, std::make_pair(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()))
+        );
 
-            auto& stats = StatsCollectorEv->Stats;
-            stats.SetLastRunTime(now.MilliSeconds());
-            stats.SetLastRowsProcessed(record.GetStats().GetRowsProcessed());
-            stats.SetLastRowsErased(record.GetStats().GetRowsErased());
-        }
+        auto& stats = StatsCollectorEv->Stats;
+        stats.SetLastRunTime(now.MilliSeconds());
+        stats.SetLastRowsProcessed(record.GetStats().GetRowsProcessed());
+        stats.SetLastRowsErased(record.GetStats().GetRowsErased());
 
         Y_ABORT_UNLESS(lag.Defined());
         Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());

@@ -494,6 +494,9 @@ public:
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) = 0;
 };
 
+class IInternalRequestOpCtx : public IRequestOpCtx {
+};
+
 class IRequestNoOpCtx : public IRequestCtx {
 };
 

@@ -4,7 +4,7 @@
 
 namespace NKikimr::NReplication {
 
-class TLocalProxyRequest : public NKikimr::NGRpcService::IRequestOpCtx {
+class TLocalProxyRequest : public NKikimr::NGRpcService::IInternalRequestOpCtx {
 public:
     using TRequest = TLocalProxyRequest;
 

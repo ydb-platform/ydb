@@ -276,6 +276,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         TPQGrpcSchemaBase(NGRpcService::IRequestOpCtx *request, const TString& topicPath)
             : TBase(request)
             , TActorBase(topicPath, this->Request_->GetDatabaseName().GetOrElse(""))
+            , InternalRequest(!!dynamic_cast<NGRpcService::IInternalRequestOpCtx*>(request))
         {
         }
         TPQGrpcSchemaBase(NGRpcService::IRequestOpCtx* request)
@@ -320,7 +321,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             SetDatabase(proposal.get(), *this->Request_);
 
-            if (this->Request_->GetSerializedToken().empty()) {
+            if (this->Request_->GetSerializedToken().empty() && !InternalRequest) {
                 if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                     return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                           "Unauthenticated access is forbidden, please provide credentials");
@@ -407,6 +408,7 @@ namespace NKikimr::NGRpcProxy::V1 {
     private:
         TMaybe<TString> PrivateTopicName;
         TMaybe<TString> CdcStreamName;
+        bool InternalRequest = false;
     };
 
     //-----------------------------------------------------------------------------------

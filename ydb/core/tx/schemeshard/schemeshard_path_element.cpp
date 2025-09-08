@@ -485,7 +485,8 @@ void TPathElement::SerializeRuntimeAttrs(
     process(FileStoreSpaceHDD, "__filestore_space_allocated_hdd");
     process(FileStoreSpaceSSDSystem, "__filestore_space_allocated_ssd_system");
 
-    if (IsAsyncReplica) {
+    // Set __async_replica attribute only for true async replica tables, not for incremental backup tables
+    if (IsAsyncReplica && !IsIncrementalRestoreTable) {
         auto* attr = userAttrs->Add();
         attr->SetKey(ToString(ATTR_ASYNC_REPLICA));
         attr->SetValue("true");

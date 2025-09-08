@@ -6,7 +6,7 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/partition.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>

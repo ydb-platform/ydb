@@ -6,13 +6,12 @@
 #include "kafka_test_client.h"
 
 #include <ydb/core/client/flat_ut_client.h>
-#include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
-#include <ydb/core/persqueue/user_info.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 #include <ydb/services/ydb/ydb_keys_ut.h>
 

@@ -4,7 +4,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/user_info.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>

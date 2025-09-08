@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>

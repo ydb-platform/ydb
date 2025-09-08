@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/size_literals.h>
 #include <ydb/core/metering/metering.h>
-#include "metering_sink.h"
+#include <ydb/core/persqueue/pqtablet/metering_sink.h>
 
 
 namespace NKikimr::NPQ {

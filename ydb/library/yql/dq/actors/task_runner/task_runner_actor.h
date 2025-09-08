@@ -46,7 +46,6 @@ struct ITaskRunnerActorFactory {
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TTxId& txId,
         ui64 taskId,
-        THashSet<ui32>&& inputChannelsWithDisabledCheckpoints = {},
         THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota = {}) = 0;
 };
 

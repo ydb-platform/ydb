@@ -736,15 +736,31 @@ public:
         ythrow yexception() << "unimplemented";
     }
 
-    void Pause() override {
+    void PauseByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    void Resume() override {
+    void ResumeByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    bool IsPaused() const override {
+    bool IsPausedByCheckpoint() const override {
+        return false;
+    }
+
+    void PauseByWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    void AddWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    void ResumeByWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    bool IsPausedByWatermark() const override {
         return false;
     }
 
@@ -891,15 +907,31 @@ public:
         return InputType;
     }
 
-    void Pause() override {
+    void PauseByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    void Resume() override {
+    void ResumeByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    bool IsPaused() const override {
+    bool IsPausedByCheckpoint() const override {
+        return false;
+    }
+
+    void PauseByWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    void AddWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    void ResumeByWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    bool IsPausedByWatermark() const override {
         return false;
     }
 
@@ -1012,10 +1044,17 @@ public:
     }
 
     // <| producer methods
-    [[nodiscard]]
-    bool IsFull() const override {
+    EDqFillLevel GetFillLevel() const override {
+        Y_ABORT("Unimplemented");
+    }
+
+    EDqFillLevel UpdateFillLevel() override {
         ythrow yexception() << "unimplemented";
     };
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {
+        Y_ABORT("Unimplemented");
+    }
 
     // can throw TDqChannelStorageException
     void Push(NUdf::TUnboxedValue&& value) override {
@@ -1249,7 +1288,15 @@ public:
         Y_ABORT("Checkpoints are not supported");
     }
 
-    bool IsFull() const override {
+    EDqFillLevel GetFillLevel() const override {
+        Y_ABORT("Unimplemented");
+    }
+
+    EDqFillLevel UpdateFillLevel() override {
+        Y_ABORT("Unimplemented");
+    }
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {
         Y_ABORT("Unimplemented");
     }
 
@@ -1673,6 +1720,10 @@ public:
     }
 
     void SetSpillerFactory(std::shared_ptr<ISpillerFactory>) override {
+    }
+
+    TString GetOutputDebugString() override {
+        return "";
     }
 
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,

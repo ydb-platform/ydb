@@ -1,6 +1,6 @@
 # DROP TOPIC
 
-You can delete a [topic](../../../../concepts/datamodel/topic) using the `DROP TOPIC` statement.
+Deletes the specified [topic](../../../../concepts/datamodel/topic).
 
 The general form of the command:
 

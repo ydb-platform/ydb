@@ -21,10 +21,10 @@ void TKafkaBalancerActor::Bootstrap(const NActors::TActorContext& ctx) {
         SendResponseFail(ctx, EKafkaErrors::MEMBER_ID_REQUIRED, TStringBuilder() << "Empty MemberId.");
         return;
     }
-    
-    Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
-    Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
-    
+    if (Context->DatabasePath == AppData(ctx)->TenantName) {
+        Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
+        Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
+    }
     Become(&TKafkaBalancerActor::StateWork);
 }
 

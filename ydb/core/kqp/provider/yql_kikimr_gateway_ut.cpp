@@ -683,7 +683,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TestCreateResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
     }
 
-    Y_UNIT_TEST(TestALterResourcePool) {
+    Y_UNIT_TEST(TestAlterResourcePool) {
         TKikimrRunner kikimr = GetKikimrRunnerWithResourcePools();
         TestCreateResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
         TestAlterResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
@@ -700,7 +700,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
     }
 
-    Y_UNIT_TEST(TestALterStreamingQuery) {
+    Y_UNIT_TEST(TestAlterStreamingQuery) {
         TKikimrRunner kikimr = GetKikimrRunnerWithStreamingQuerys();
         TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
         TestAlterStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");

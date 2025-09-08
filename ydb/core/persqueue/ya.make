@@ -17,13 +17,6 @@ PEERDIR(
     ydb/core/metering
     ydb/core/persqueue/config
     ydb/core/persqueue/events
-    ydb/core/persqueue/public/cluster_tracker
-    ydb/core/persqueue/public/fetcher
-    ydb/core/persqueue/public/list_topics
-    ydb/core/persqueue/partition_key_range
-    ydb/core/persqueue/pqrb
-    ydb/core/persqueue/pqtablet
-    ydb/core/persqueue/writer
     ydb/core/protos
     ydb/library/logger
     ydb/library/persqueue/counter_time_keeper
@@ -32,6 +25,15 @@ PEERDIR(
     ydb/public/lib/base
     ydb/public/sdk/cpp/src/client/persqueue_public
     #ydb/library/dbgtrace
+
+    ydb/core/persqueue/public/cluster_tracker
+    ydb/core/persqueue/public/fetcher
+    ydb/core/persqueue/public/list_topics
+    ydb/core/persqueue/partition_key_range
+    ydb/core/persqueue/pqrb
+    ydb/core/persqueue/pqtablet
+    ydb/core/persqueue/writer
+
 )
 
 END()

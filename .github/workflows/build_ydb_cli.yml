@@ -143,16 +143,9 @@ jobs:
         run: |
           git commit -m "YDB CLI release ${{ steps.update-version.outputs.new-version }}"
 
-      - name: Create tag
-        run: |
-          TAG_NAME="CLI_${{ steps.update-version.outputs.new-version }}"
-          git tag "$TAG_NAME"
-          echo "Created tag: $TAG_NAME"
-
-      - name: Push branch and tag
+      - name: Push branch
         run: |
           git push origin "${{ steps.create-branch.outputs.branch-name }}"
-          git push origin "CLI_${{ steps.update-version.outputs.new-version }}"
 
   build-matrix:
     name: Build platform matrix
@@ -339,6 +332,11 @@ jobs:
           git merge "origin/${{ needs.prepare-release.outputs.branch-name }}" --no-ff -m "Merge CLI release ${{ needs.prepare-release.outputs.new-version }}"
           git push origin main
 
+      - name: Create release tag
+        run: |
+          git tag "CLI_${{ needs.prepare-release.outputs.new-version }}"
+          git push origin "CLI_${{ needs.prepare-release.outputs.new-version }}"
+
       - name: Delete release branch
         run: |
           git push origin --delete "${{ needs.prepare-release.outputs.branch-name }}"
@@ -360,11 +358,8 @@ jobs:
           git config --global user.email ydbot@ydb.tech
           git config --global user.name YDBot
 
-      - name: Delete release branch and tag
+      - name: Delete release branch
         run: |
           # Delete the branch
           git push origin --delete "${{ needs.prepare-release.outputs.branch-name }}" || echo "Branch already deleted"
-
-          # Delete the tag - we're cleaning up a failed release
-          git push origin --delete "CLI_${{ needs.prepare-release.outputs.new-version }}" || echo "Tag already deleted"
 

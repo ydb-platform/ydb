@@ -12,7 +12,7 @@ LWTRACE_USING(YDB_CS);
 bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) const {
     owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
-    auto writeOperation = owner->OperationsManager->CreateWriteOperation(PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, IsBulk);
+    auto writeOperation = owner->OperationsManager->CreateWriteOperation(PathId.GetInternalPathId(), LockId, Cookie, GranuleShardingVersionId, ModificationType, IsBulk);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
         "in_flight", owner->Counters.GetWritesMonitor()->GetWritesInFlight())(
@@ -26,7 +26,7 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) co
         writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationPortionsWriteActorId);
     // We don't need to split here portions by the last level
     // ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId.InternalPathId)->GetBucketPositions());
-    writeOperation->Start(*owner, ArrowData, SourceId, wContext);
+    writeOperation->Start(*owner, ArrowData, SourceId, PathId.GetSchemeShardLocalPathId(), wContext);
     return true;
 }
 

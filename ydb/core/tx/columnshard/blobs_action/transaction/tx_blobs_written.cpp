@@ -113,7 +113,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
             continue;
         }
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
-        pathIds.emplace(op->GetPathId().InternalPathId);
+        pathIds.emplace(op->GetPathId());
         if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock || op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite || Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
                 auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(

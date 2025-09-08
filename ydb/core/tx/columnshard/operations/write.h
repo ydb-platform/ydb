@@ -50,7 +50,7 @@ enum class EOperationBehaviour : ui32 {
 class TWriteOperation: public TMonitoringObjectsCounter<TWriteOperation> {
 private:
     YDB_READONLY(TString, Identifier, TGUID::CreateTimebased().AsGuidString());
-    YDB_READONLY_DEF(TUnifiedPathId, PathId);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY(EOperationStatus, Status, EOperationStatus::Draft);
     YDB_READONLY_DEF(TInstant, CreatedAt);
     YDB_READONLY_DEF(TOperationWriteId, WriteId);
@@ -70,11 +70,11 @@ public:
         *Activity = 0;
     }
 
-    TWriteOperation(const TUnifiedPathId& pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
+    TWriteOperation(const TInternalPathId& pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
         const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType, const bool isBulk);
 
     void Start(
-        TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const NOlap::TWritingContext& context);
+        TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const TSchemeShardLocalPathId& schemeShardLocalPathId, const NOlap::TWritingContext& context);
     void OnWriteFinish(
         NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds, const bool ephemeralFlag);
     void CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const;

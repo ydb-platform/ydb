@@ -226,7 +226,7 @@ public:
         return *result;
     }
 
-    TWriteOperation::TPtr CreateWriteOperation(const TUnifiedPathId& pathId, const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
+    TWriteOperation::TPtr CreateWriteOperation(const TInternalPathId& pathId, const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
         const NEvWrite::EModificationType mType, const bool isBulk);
     bool RegisterLock(const ui64 lockId, const ui64 generationId) {
         if (LockFeatures.contains(lockId)) {

@@ -1,4 +1,4 @@
-#include <ydb/core/persqueue/event_helpers.h>
+#include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include "mirrorer.h"
 #include "offload_actor.h"
 #include "partition_util.h"

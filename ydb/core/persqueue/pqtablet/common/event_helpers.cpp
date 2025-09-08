@@ -2,7 +2,6 @@
 
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
-
 #include <ydb/library/actors/core/log.h>
 
 #include <util/string/builder.h>

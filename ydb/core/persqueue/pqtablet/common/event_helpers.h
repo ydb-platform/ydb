@@ -1,12 +1,11 @@
 #pragma once
 
-#include "partition_id.h"
+#include <ydb/core/persqueue/partition_id.h>
 
 #include <ydb/core/tablet/tablet_counters.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
-
-#include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr {
 namespace NPQ {

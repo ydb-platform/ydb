@@ -18,14 +18,14 @@
 * *Stale Read-Only* — чтения данных в транзакции возвращают результаты с возможным отставанием от актуальных (доли секунды). Данные в каждом отдельно взятом чтении консистентны, между разными чтениями консистентность данных не гарантируется.
 * *Snapshot Read-Only* — все чтения транзакции производятся из снапшота базы данных, при этом все чтения данных консистентны. Взятие снапшота происходит в момент старта транзакции, т.е. транзакция видит все изменения, закоммиченные до момента своего начала.
 
-{% note warning %}
+{% note warning "Ограничение для Online Read-Only и Stale Read-Only" %}
 
-Ограничение для Online Read-Only и Stale Read-Only:  
-Эти режимы не поддерживают чтение из колоночных таблиц. Попытка чтения вызовет ошибку:
+Эти режимы не поддерживают чтение из колоночных таблиц. Попытка чтения вызовет ошибку следующего вида:
 
-`Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. Use Serializable or Snapshot Read-Only mode instead`.
+`Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. Use Serializable or Snapshot Read-Only mode instead.`
 
 Для транзакций с чтением из колоночных таблиц используйте:
+
 * Serializable — режим по умолчанию;
 * Snapshot Read-Only — режим чтения из консистентного снапшота.
 

@@ -22,14 +22,16 @@ If consistency or freshness requirement for data read by a transaction can be re
 
 {% note warning %}
 
-Limitation for Online Read-Only and Stale Read-Only:  
-Reading from column tables is not supported in these modes. Attempts will fail with the following error:
+{% note warning "Limitation for Online Read-Only and Stale Read-Only" %}
 
-`Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. Use Serializable or Snapshot Read-Only mode instead`.
+Reading from [column-oriented tables](../datamodel/table.md#column-oriented-tables) is not supported in these modes. Attempts fail with the following error:
 
-For transactions that read column tables, use:
-* Serializable — the default mode;
-* Snapshot Read-Only — provides a read from consistent snapshot.
+`Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. Use Serializable or Snapshot Read-Only mode instead.`
+
+For transactions that read column-oriented tables, use:
+
+* Serializable — the default mode.
+* Snapshot Read-Only — provides a read from a consistent snapshot.
 
 {% endnote %}
 

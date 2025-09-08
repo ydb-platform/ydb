@@ -93,6 +93,11 @@ struct TSizedUnboxedValue {
 
 
 void UpdateContinuationData(const NKikimrTxDataShard::TEvReadResult& record, TReadState& state) {
+    if (record.GetFinished()) {
+        state.FirstUnprocessedQuery = state.PendingKeys.size();
+        return;
+    }
+
     YQL_ENSURE(record.HasContinuationToken(), "Successful TEvReadResult should contain continuation token");
     NKikimrTxDataShard::TReadContinuationToken continuationToken;
     bool parseResult = continuationToken.ParseFromString(record.GetContinuationToken());
@@ -505,14 +510,10 @@ public:
     }
 
     struct TUnprocessedLeftRow {
-        TOwnedCellVec JoinKey;
-        ui64 JoinKeyId = 0;
-        ui64 RowSeqNo;
+        TConstArrayRef<TCell> JoinKey;
 
-        explicit TUnprocessedLeftRow(TOwnedCellVec joinKey, ui64 joinKeyId, ui64 rowSeqNo)
+        explicit TUnprocessedLeftRow(TConstArrayRef<TCell> joinKey)
             : JoinKey(std::move(joinKey))
-            , JoinKeyId(joinKeyId)
-            , RowSeqNo(rowSeqNo)
         {}
     };
 
@@ -548,15 +549,37 @@ public:
         TSizedUnboxedValue row{.Data=std::move(std::move(inputRow.GetElement(1))), .StorageBytes=0};
         row.ComputeSize = NYql::NDq::TDqDataSerializer::EstimateSize(row.Data, GetLeftRowType());
         ui64 joinKeyId = JoinKeySeqNo++;
-        ResultRowsBySeqNo[rowSeqNo].AcceptLeftRow(std::move(row), joinKeyId, rowSeqNo, firstRow, lastRow);
-        UnprocessedRows.emplace_back(
-            TUnprocessedLeftRow(
-                std::move(TOwnedCellVec(joinKeyCells)),
-                joinKeyId,
-                rowSeqNo
-            )
-        );
+        TOwnedCellVec cellVec(std::move(joinKeyCells));
+        ResultRowsBySeqNo[rowSeqNo].AcceptLeftRow(std::move(row), rowSeqNo, firstRow, lastRow);
+        if (!IsKeyAllowed(cellVec)) {
+            ResultRowsBySeqNo[rowSeqNo].AddJoinKey(joinKeyId);
+            ResultRowsBySeqNo[rowSeqNo].OnJoinKeyFinished(HolderFactory, joinKeyId);
+        } else {
+            auto [it, success] = PendingLeftRowsByKey.emplace(cellVec, TJoinKeyInfo(joinKeyId));
+            if (success) {
+                UnprocessedRows.emplace_back(TUnprocessedLeftRow(cellVec));
+            }
+            it->second.ResultSeqNos.push_back(rowSeqNo);
+            ResultRowsBySeqNo[rowSeqNo].AddJoinKey(it->second.JoinKeyId);
+        }
     }
+
+    bool IsKeyAllowed(const TOwnedCellVec& cellVec) {
+        auto allowNullKeysPrefixSize = Settings.AllowNullKeysPrefixSize;
+        if (allowNullKeysPrefixSize >= cellVec.size()) {
+            // all lookup key components can contain null
+            return true;
+        }
+
+        // otherwise we can use nulls only for first allowNullKeysPrefixSize key components
+        for (size_t i = 0; i < cellVec.size(); ++i) {
+            if (cellVec[i].IsNull() && i >= allowNullKeysPrefixSize) {
+                return false;
+            }
+        }
+
+        return true;
+    };
 
     void AddInputRow(TConstArrayRef<TCell>) final {
         YQL_ENSURE(false);
@@ -582,12 +605,6 @@ public:
 
         ui32 firstUnprocessedQuery = state.FirstUnprocessedQuery;
         const auto& lastProcessedKey = state.LastProcessedKey;
-
-        for (ui32 i = 0; i < firstUnprocessedQuery; ++i) {
-            auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(ranges[i]));
-            YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
-            leftRowIt->second.PendingReads.erase(prevReadId);
-        }
 
         if (lastProcessedKey) {
             YQL_ENSURE(firstUnprocessedQuery < ranges.size());
@@ -681,66 +698,42 @@ public:
         }
 
         while (!UnprocessedRows.empty()) {
-            const auto& unprocessedRow = UnprocessedRows.front();
-
-            if (PendingLeftRowsByKey.contains(unprocessedRow.JoinKey)) {
-                // TODO: skip key duplicate
-                break;
-            }
-
-            auto isKeyAllowed = [&](const TOwnedCellVec& cellVec) {
-                auto allowNullKeysPrefixSize = Settings.AllowNullKeysPrefixSize;
-                if (allowNullKeysPrefixSize >= cellVec.size()) {
-                    // all lookup key components can contain null
-                    return true;
-                }
-
-                // otherwise we can use nulls only for first allowNullKeysPrefixSize key components
-                for (size_t i = 0; i < cellVec.size(); ++i) {
-                    if (cellVec[i].IsNull() && i >= allowNullKeysPrefixSize) {
-                        return false;
-                    }
-                }
-
-                return true;
-            };
-
-            bool hasRanges = false;
-            if (isKeyAllowed(unprocessedRow.JoinKey)) {
-                std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
-                if (unprocessedRow.JoinKey.size() < Settings.KeyColumns.size()) {
-                    // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
-                    std::vector <TCell> fromCells(Settings.KeyColumns.size() - unprocessedRow.JoinKey.size());
-                    fromCells.insert(fromCells.begin(), unprocessedRow.JoinKey.begin(), unprocessedRow.JoinKey.end());
-                    bool fromInclusive = true;
-                    bool toInclusive = false;
-
-                    partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(),
-                        TOwnedTableRange(fromCells, fromInclusive, unprocessedRow.JoinKey, toInclusive)
-                    );
-                } else {
-                    // full pk, build point
-                    partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), TOwnedTableRange(unprocessedRow.JoinKey));
-                }
-
-                for (auto[shardId, range] : partitions) {
-                    hasRanges = true;
-                    if (range.Point) {
-                        pointsPerShard[shardId].push_back(std::move(range));
-                    } else {
-                        rangesPerShard[shardId].push_back(std::move(range));
-                    }
-                }
-            }
-
-            if (hasRanges) {
-                PendingLeftRowsByKey.insert(
-                    std::make_pair(std::move(unprocessedRow.JoinKey), TLeftRowInfo(unprocessedRow.RowSeqNo, unprocessedRow.JoinKeyId)));
-            } else {
-                ResultRowsBySeqNo[unprocessedRow.RowSeqNo].OnJoinKeyFinished(HolderFactory, unprocessedRow.JoinKeyId);
-            }
-
+            TUnprocessedLeftRow unprocessedRow = std::move(UnprocessedRows.front());
             UnprocessedRows.pop_front();
+            bool hasRanges = false;
+            std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
+            if (unprocessedRow.JoinKey.size() < Settings.KeyColumns.size()) {
+                // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
+                std::vector <TCell> fromCells(Settings.KeyColumns.size() - unprocessedRow.JoinKey.size());
+                fromCells.insert(fromCells.begin(), unprocessedRow.JoinKey.begin(), unprocessedRow.JoinKey.end());
+                bool fromInclusive = true;
+                bool toInclusive = false;
+
+                partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(),
+                    TOwnedTableRange(fromCells, fromInclusive, unprocessedRow.JoinKey, toInclusive)
+                );
+            } else {
+                // full pk, build point
+                partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), TOwnedTableRange(unprocessedRow.JoinKey));
+            }
+
+            for (auto[shardId, range] : partitions) {
+                hasRanges = true;
+                if (range.Point) {
+                    pointsPerShard[shardId].push_back(std::move(range));
+                } else {
+                    rangesPerShard[shardId].push_back(std::move(range));
+                }
+            }
+
+            if (!hasRanges) {
+                auto it = PendingLeftRowsByKey.find(unprocessedRow.JoinKey);
+                YQL_ENSURE(it != PendingLeftRowsByKey.end());
+                for(ui64 seqNo : it->second.ResultSeqNos) {
+                    ResultRowsBySeqNo.at(seqNo).OnJoinKeyFinished(HolderFactory, it->second.JoinKeyId);
+                }
+                PendingLeftRowsByKey.erase(it);
+            }
         }
 
         std::vector<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> requests;
@@ -806,26 +799,33 @@ public:
 
             auto leftRowIt = PendingLeftRowsByKey.find(joinKeyCells);
             YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
-
-            auto& resultRows = ResultRowsBySeqNo[leftRowIt->second.SeqNo];
             auto rightRow = leftRowIt->second.AttachRightRow(HolderFactory, Settings, ReadColumns, row);
-            resultRows.TryBuildResultRow(HolderFactory, std::move(rightRow));
-            YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
+            for(auto seqNo: leftRowIt->second.ResultSeqNos) {
+                auto& resultRows = ResultRowsBySeqNo.at(seqNo);
+                resultRows.TryBuildResultRow(HolderFactory, rightRow);
+                YQL_ENSURE(IsRowSeqNoValid(seqNo));
+            }
+        }
+
+        ui32 startAt = pendingKeysIt->second.FirstUnprocessedQuery;
+        UpdateContinuationData(record, pendingKeysIt->second);
+        ui32 endAt = pendingKeysIt->second.FirstUnprocessedQuery;
+
+        const auto& ranges = pendingKeysIt->second.PendingKeys;
+        for (; startAt < endAt; ++startAt) {
+            auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(ranges[startAt]));
+            YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
+            if (leftRowIt->second.FinishReadId(record.GetReadId())) {
+                for(ui64 seqNo : leftRowIt->second.ResultSeqNos) {
+                    ResultRowsBySeqNo.at(seqNo).OnJoinKeyFinished(HolderFactory, leftRowIt->second.JoinKeyId);
+                }
+
+                PendingLeftRowsByKey.erase(leftRowIt);
+            }
         }
 
         if (record.GetFinished()) {
-            for (const auto& key : pendingKeysIt->second.PendingKeys) {
-                auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(key));
-                YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
-                if (leftRowIt->second.FinishReadId(record.GetReadId())) {
-                    ResultRowsBySeqNo[leftRowIt->second.SeqNo].OnJoinKeyFinished(HolderFactory, leftRowIt->second.JoinKeyId);
-                    PendingLeftRowsByKey.erase(leftRowIt);
-                }
-            }
-
             ReadStateByReadId.erase(pendingKeysIt);
-        } else {
-            UpdateContinuationData(record, pendingKeysIt->second);
         }
     }
 
@@ -879,18 +879,6 @@ public:
         TReadResultStats resultStats;
         batch.clear();
 
-        // we should process left rows that haven't received last row flags.
-        for (auto leftRowIt = PendingLeftRowsByKey.begin(); leftRowIt != PendingLeftRowsByKey.end();) {
-            if (leftRowIt->second.PendingReads.empty()) {
-                auto& result = ResultRowsBySeqNo[leftRowIt->second.SeqNo];
-                result.OnJoinKeyFinished(HolderFactory, leftRowIt->second.JoinKeyId);
-                YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
-                PendingLeftRowsByKey.erase(leftRowIt++);
-            } else {
-                ++leftRowIt;
-            }
-        }
-
         auto getNextResult = [&]() {
             if (!ShoulKeepRowsOrder()) {
                 return ResultRowsBySeqNo.begin();
@@ -941,23 +929,20 @@ public:
         ResultRowsBySeqNo.clear();
     }
 private:
-    struct TLeftRowInfo {
-        explicit TLeftRowInfo(ui64 seqNo, ui64 joinKeyId)
-        : SeqNo(seqNo)
-        , JoinKeyId(joinKeyId)
-        {
-        }
+    struct TJoinKeyInfo {
+        TJoinKeyInfo(ui64 joinKeyId)
+            : JoinKeyId(joinKeyId)
+        {}
 
+        ui64 JoinKeyId = 0;
         std::unordered_set<ui64> PendingReads;
-        const ui64 SeqNo;
-        const ui64 JoinKeyId;
+        std::deque<TSizedUnboxedValue> CachedRows;
+        std::vector<ui64> ResultSeqNos;
 
         bool FinishReadId(ui64 readId) {
             auto it = PendingReads.find(readId);
-            if (it != PendingReads.end()) {
-                PendingReads.erase(readId);
-            }
-
+            YQL_ENSURE(it != PendingReads.end());
+            PendingReads.erase(it);
             return Completed();
         }
 
@@ -967,8 +952,8 @@ private:
             TMaybe<ui64> shardId = {})
         {
             NUdf::TUnboxedValue* rightRowItems = nullptr;
-
-            TSizedUnboxedValue row;
+            CachedRows.emplace_back();
+            TSizedUnboxedValue& row = CachedRows.back();
             row.Data = std::move(HolderFactory.CreateDirectArrayHolder(Settings.Columns.size(), rightRowItems));
             row.ComputeSize = 0;
             row.StorageBytes = 0;
@@ -1027,10 +1012,13 @@ private:
             }
         }
 
-        void AcceptLeftRow(TSizedUnboxedValue&& leftRow, ui64 joinKeyId, ui64 seqNo, bool firstRow, bool lastRow) {
+        void AddJoinKey(ui64 joinKeyId) {
+            PendingJoinKeys.emplace(joinKeyId);
+        }
+
+        void AcceptLeftRow(TSizedUnboxedValue&& leftRow, ui64 seqNo, bool firstRow, bool lastRow) {
             RowSeqNo = seqNo;
             LeftRow = std::move(leftRow);
-            PendingJoinKeys.emplace(joinKeyId);
             if (firstRow)
                 FirstRow = true;
 
@@ -1176,7 +1164,7 @@ private:
     std::deque<TUnprocessedLeftRow> UnprocessedRows;
     std::deque<TOwnedTableRange> UnprocessedKeys;
     std::unordered_map<ui64, TReadState> ReadStateByReadId;
-    absl::flat_hash_map<TOwnedCellVec, TLeftRowInfo, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PendingLeftRowsByKey;
+    absl::flat_hash_map<TOwnedCellVec, TJoinKeyInfo, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PendingLeftRowsByKey;
     std::unordered_map<ui64, TResultBatch> ResultRowsBySeqNo;
     ui64 InputRowSeqNo = 0;
     ui64 JoinKeySeqNo = 0;

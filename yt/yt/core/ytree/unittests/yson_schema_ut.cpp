@@ -52,6 +52,29 @@ struct TTestSubStructLite
     }
 };
 
+class TRefCountedEntity final
+{ };
+
+using TRefCountedEntityPtr = TIntrusivePtr<TRefCountedEntity>;
+
+void Serialize(const TRefCountedEntityPtr& /*entity*/, NYson::IYsonConsumer* /*consumer*/)
+{ }
+void Deserialize(const TRefCountedEntity& /*entity*/, NYTree::INodePtr /*node*/)
+{ }
+void Deserialize(const TRefCountedEntity& /*entity*/, TYsonPullParserCursor* /*pullParser*/)
+{ }
+
+struct TTestStructWithNonDefaultIntrusivePtrParameter
+    : public virtual TYsonStruct
+{
+    TRefCountedEntityPtr MyPtr;
+    REGISTER_YSON_STRUCT(TTestStructWithNonDefaultIntrusivePtrParameter);
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("my_ptr", &TThis::MyPtr);
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTestYsonStruct
@@ -243,6 +266,13 @@ void CheckSchema(const TYsonStructPtr& ysonStruct, TStringBuf expected)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TEST(TYsonStructSchemaTest, TestCanOmitNonDefaullIntrusivePtrValue)
+{
+    auto structWithIntrusiveParameter = New<TTestStructWithNonDefaultIntrusivePtrParameter>();
+    bool canOmit = structWithIntrusiveParameter->GetMeta()->GetParameter("my_ptr")->CanOmitValue(structWithIntrusiveParameter.Get());
+    EXPECT_FALSE(canOmit);
+}
 
 TEST(TYsonStructSchemaTest, TestYsonStruct)
 {

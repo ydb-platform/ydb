@@ -266,14 +266,14 @@ private:
     }
 
     TStatus HandleCreateObject(TKiCreateObject node, TExprContext& ctx) override {
-        Y_UNUSED(ctx);
         Y_UNUSED(node);
+        Y_UNUSED(ctx);
         return TStatus::Ok;
     }
 
     TStatus HandleAlterObject(TKiAlterObject node, TExprContext& ctx) override {
-        Y_UNUSED(ctx);
         Y_UNUSED(node);
+        Y_UNUSED(ctx);
         return TStatus::Ok;
     }
 

@@ -621,9 +621,7 @@ private:
     }
 
     void Handle(TEvSaveScriptPhysicalGraphResponse::TPtr& ev) {
-        const auto status = ev->Get()->Status;
-        const auto& issues = ev->Get()->Issues;
-        LOG_D("Script physical graph saved " << ev->Sender << ", Status: " << status << ", Issues: " << issues.ToOneLineString());
+        LOG_D("Script physical graph saved " << ev->Sender << ", Status: " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
 
         Y_ABORT_UNLESS(PhysicalGraphSender);
         Forward(ev, *PhysicalGraphSender);

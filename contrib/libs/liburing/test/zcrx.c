@@ -44,7 +44,7 @@ static char str[] = "iv5t4dl500w7wsrf14fsuq8thptto0z7i2q62z1p8dwrv5u4kaxpqhm2rb7
 static int probe_zcrx(void *area)
 {
 	struct io_uring_zcrx_area_reg area_reg = {
-		.addr = (__u64)(unsigned long)area,
+		.addr = uring_ptr_to_u64(area),
 		.len = AREA_SZ,
 		.flags = 0,
 	};
@@ -52,7 +52,7 @@ static int probe_zcrx(void *area)
 		.if_idx = ifidx,
 		.if_rxq = rxq,
 		.rq_entries = RQ_ENTRIES,
-		.area_ptr = (__u64)(unsigned long)&area_reg,
+		.area_ptr = uring_ptr_to_u64(&area_reg),
 	};
 	struct io_uring ring;
 	int ret;
@@ -100,7 +100,7 @@ static int test_invalid_if(void *area)
 {
 	int ret;
 	struct io_uring_zcrx_area_reg area_reg = {
-		.addr = (__u64)(unsigned long)area,
+		.addr = uring_ptr_to_u64(area),
 		.len = AREA_SZ,
 		.flags = 0,
 	};
@@ -108,7 +108,7 @@ static int test_invalid_if(void *area)
 		.if_idx = -1,
 		.if_rxq = rxq,
 		.rq_entries = RQ_ENTRIES,
-		.area_ptr = (__u64)(unsigned long)&area_reg,
+		.area_ptr = uring_ptr_to_u64(&area_reg),
 	};
 
 	ret = try_register_ifq(&reg);
@@ -132,7 +132,7 @@ static int test_invalid_ifq_collision(void *area)
 {
 	struct io_uring ring, ring2;
 	struct io_uring_zcrx_area_reg area_reg = {
-		.addr = (__u64)(unsigned long)area,
+		.addr = uring_ptr_to_u64(area),
 		.len = AREA_SZ,
 		.flags = 0,
 	};
@@ -140,7 +140,7 @@ static int test_invalid_ifq_collision(void *area)
 		.if_idx = ifidx,
 		.if_rxq = rxq,
 		.rq_entries = RQ_ENTRIES,
-		.area_ptr = (__u64)(unsigned long)&area_reg,
+		.area_ptr = uring_ptr_to_u64(&area_reg),
 	};
 	int ret;
 
@@ -183,7 +183,7 @@ static int test_rq_setup(void *area)
 {
 	int ret;
 	struct io_uring_zcrx_area_reg area_reg = {
-		.addr = (__u64)(unsigned long)area,
+		.addr = uring_ptr_to_u64(area),
 		.len = AREA_SZ,
 		.flags = 0,
 	};
@@ -192,7 +192,7 @@ static int test_rq_setup(void *area)
 		.if_idx = ifidx,
 		.if_rxq = rxq,
 		.rq_entries = 0,
-		.area_ptr = (__u64)(unsigned long)&area_reg,
+		.area_ptr = uring_ptr_to_u64(&area_reg),
 	};
 
 	ret = try_register_ifq(&reg);
@@ -233,7 +233,7 @@ static int test_null_area_reg_struct(void)
 		.if_idx = ifidx,
 		.if_rxq = rxq,
 		.rq_entries = RQ_ENTRIES,
-		.area_ptr = (__u64)(unsigned long)0,
+		.area_ptr = uring_ptr_to_u64(0),
 	};
 
 	ret = try_register_ifq(&reg);
@@ -245,7 +245,7 @@ static int test_null_area(void)
 	int ret;
 
 	struct io_uring_zcrx_area_reg area_reg = {
-		.addr = (__u64)(unsigned long)0,
+		.addr = uring_ptr_to_u64(0),
 		.len = AREA_SZ,
 		.flags = 0,
 	};
@@ -254,7 +254,7 @@ static int test_null_area(void)
 		.if_idx = ifidx,
 		.if_rxq = rxq,
 		.rq_entries = RQ_ENTRIES,
-		.area_ptr = (__u64)(unsigned long)&area_reg,
+		.area_ptr = uring_ptr_to_u64(&area_reg),
 	};
 
 	ret = try_register_ifq(&reg);
@@ -265,7 +265,7 @@ static int test_misaligned_area(void *area)
 {
 	int ret;
 	struct io_uring_zcrx_area_reg area_reg = {
-		.addr = (__u64)(unsigned long)(area + 1),
+		.addr = uring_ptr_to_u64(area + 1),
 		.len = AREA_SZ,
 		.flags = 0,
 	};
@@ -274,13 +274,13 @@ static int test_misaligned_area(void *area)
 		.if_idx = ifidx,
 		.if_rxq = rxq,
 		.rq_entries = RQ_ENTRIES,
-		.area_ptr = (__u64)(unsigned long)&area_reg,
+		.area_ptr = uring_ptr_to_u64(&area_reg),
 	};
 
 	if (!try_register_ifq(&reg))
 		return T_EXIT_FAIL;
 
-	area_reg.addr = (__u64)(unsigned long)area;
+	area_reg.addr = uring_ptr_to_u64(area);
 	area_reg.len = AREA_SZ - 1;
 	ret = try_register_ifq(&reg);
 	return ret ? T_EXIT_PASS : T_EXIT_FAIL;
@@ -290,7 +290,7 @@ static int test_larger_than_alloc_area(void *area)
 {
 	int ret;
 	struct io_uring_zcrx_area_reg area_reg = {
-		.addr = (__u64)(unsigned long)area,
+		.addr = uring_ptr_to_u64(area),
 		.len = AREA_SZ + 4096,
 		.flags = 0,
 	};
@@ -299,7 +299,7 @@ static int test_larger_than_alloc_area(void *area)
 		.if_idx = ifidx,
 		.if_rxq = rxq,
 		.rq_entries = RQ_ENTRIES,
-		.area_ptr = (__u64)(unsigned long)&area_reg,
+		.area_ptr = uring_ptr_to_u64(&area_reg),
 	};
 
 	ret = try_register_ifq(&reg);
@@ -316,7 +316,7 @@ static int test_area_access(void)
 		.if_idx = ifidx,
 		.if_rxq = rxq,
 		.rq_entries = RQ_ENTRIES,
-		.area_ptr = (__u64)(unsigned long)&area_reg,
+		.area_ptr = uring_ptr_to_u64(&area_reg),
 	};
 	int i, ret;
 	void *area;
@@ -332,7 +332,7 @@ static int test_area_access(void)
 			return T_EXIT_FAIL;
 		}
 
-		area_reg.addr = (__u64)(unsigned long)area;
+		area_reg.addr = uring_ptr_to_u64(area);
 
 		ret = try_register_ifq(&reg);
 		if (ret != -EFAULT) {
@@ -349,7 +349,7 @@ static int test_area_access(void)
 static int create_ring_with_ifq(struct io_uring *ring, void *area, __u32 *id)
 {
 	struct io_uring_zcrx_area_reg area_reg = {
-		.addr = (__u64)(unsigned long)area,
+		.addr = uring_ptr_to_u64(area),
 		.len = AREA_SZ,
 		.flags = 0,
 	};
@@ -357,7 +357,7 @@ static int create_ring_with_ifq(struct io_uring *ring, void *area, __u32 *id)
 		.if_idx = ifidx,
 		.if_rxq = rxq,
 		.rq_entries = RQ_ENTRIES,
-		.area_ptr = (__u64)(unsigned long)&area_reg,
+		.area_ptr = uring_ptr_to_u64(&area_reg),
 	};
 	int ret;
 
@@ -654,7 +654,7 @@ static void *recv_fn(void *data)
 	struct io_uring ring;
 	int ret, sock;
 	struct io_uring_zcrx_area_reg area_reg = {
-		.addr = (__u64)(unsigned long)rd->area,
+		.addr = uring_ptr_to_u64(rd->area),
 		.len = AREA_SZ,
 		.flags = 0,
 	};
@@ -662,7 +662,7 @@ static void *recv_fn(void *data)
 		.if_idx = ifidx,
 		.if_rxq = rxq,
 		.rq_entries = RQ_ENTRIES,
-		.area_ptr = (__u64)(unsigned long)&area_reg,
+		.area_ptr = uring_ptr_to_u64(&area_reg),
 	};
 
 	p.flags = RING_FLAGS;

@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    actor_persqueue_client_iface.h
     heartbeat.cpp
     key.cpp
     list_all_topics_actor.cpp

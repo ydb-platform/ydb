@@ -14,6 +14,10 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    proxy
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

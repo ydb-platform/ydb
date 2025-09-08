@@ -218,7 +218,6 @@ private:
     NEvWrite::TWritersController::TPtr InternalController;
     bool ColumnShardReady = false;
     bool IndexReady = false;
-    bool IsColumnTable = false;
 };
 
 // LongTx Write implementation called from the inside of YDB (e.g. as a part of BulkUpsert call)
@@ -251,8 +250,8 @@ class TLongTxWriteInternal: public TLongTxWriteBase<TLongTxWriteInternal> {
 public:
     explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId, const TString& databaseName,
         const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-        std::shared_ptr<NYql::TIssues> issues, bool isColumnTable)
-        : TBase(databaseName, path, TString(), longTxId, dedupId, isColumnTable)
+        std::shared_ptr<NYql::TIssues> issues)
+        : TBase(databaseName, path, TString(), longTxId, dedupId)
         , ReplyTo(replyTo)
         , NavigateResult(navigateResult)
         , Batch(batch)

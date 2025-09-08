@@ -8,7 +8,7 @@
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/common/metering.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/public/percentile_counter.h>
 #include <ydb/core/persqueue/sourceid_info.h>
 #include <ydb/core/persqueue/write_id.h>
 #include <ydb/core/tablet/tablet_counters.h>

@@ -61,6 +61,8 @@ enum class ERequestType: size_t {
     DISCOVERY_NODEREGISTRATION,
     DISCOVERY_LISTENDPOINTS,
 
+    TOPIC_PROPOSE_TRANSACTION,
+
     REQUEST_TYPES_CNT, // Add new types above this line
 };
 
@@ -115,6 +117,8 @@ static const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Discovery.WhoAmI", ERequestType::DISCOVERY_WHOAMI},
     {"Discovery.NodeRegistration", ERequestType::DISCOVERY_NODEREGISTRATION},
     {"Discovery.ListEndpoints", ERequestType::DISCOVERY_LISTENDPOINTS},
+
+    {"Topic.Transaction", ERequestType::TOPIC_PROPOSE_TRANSACTION},
 };
 
 struct TRequestDiscriminator {

@@ -1197,9 +1197,14 @@ class StaticConfigGenerator(object):
         def get_selectors(selectors):
             selectors_pb = config_pb2.TTracingConfig.TSelectors()
 
-            request_type = selectors["request_type"]
-            if request_type is not None:
-                selectors_pb.RequestType = request_type
+            request_types = selectors["request_types"]
+            if request_types is not None:
+                for request_type in request_types:
+                    selectors_pb.RequestTypes.append(request_type)
+
+            # database = selectors["database"]
+            # if database is not None:
+            #     selectors_pb.Database = database
 
             return selectors_pb
 

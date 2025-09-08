@@ -454,31 +454,8 @@
     }
 
     function copyTestNameToClipboard(text) {
-        const full_name = text.trim();
-        let pieces 
-        if (full_name.includes('.py.'))
-        {
-            pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(full_name);
-        } else
-        {
-            pieces = /(.+)\/([^$]+)$/.exec(full_name);
-        }
-
-        if (!pieces) {
-            console.error("Unable to split path/test name from %o", full_name);
-            return;
-        }
-        let [path, testName] = [pieces[1], pieces[2]];
-
-        const namePieces = testName.split('.');
-
-        if (namePieces.length === 2) {
-            testName = namePieces[0] + '::' + namePieces[1];
-        } else {
-            testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
-        }
-
-        const cmdArg = `./ya make -ttt {{ buid_preset_params }} -F '${testName}' ${path}`;
+        const cmdArg = getTestRunCommand(text);
+        if (!cmdArg) return;
 
         console.log(cmdArg);
 
@@ -493,16 +470,10 @@
         );
     }
     function copyTestNameForMuteToClipboard(text) {
-        const full_name = text.trim();
-        const pieces = /(.+)\/([^$]+)$/.exec(full_name);
-
-        if (!pieces) {
-            console.error("Unable to split path/test name from %o", full_name);
-            return;
-        }
-        let [path, testName] = [pieces[1], pieces[2]];
-
-
+        const parsed = parseTestName(text);
+        if (!parsed) return;
+        
+        const [path, testName] = parsed;
         const cmdArg = `${path} ${testName}`;
 
         console.log(cmdArg);
@@ -518,23 +489,32 @@
         );
     }
 
-    function getTestRunCommand(test) {
-        const full_name = test.trim();
-        let pieces 
-        if (full_name.includes('.py.'))
-        {
-            pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(full_name);
-        } else
-        {
-            pieces = /(.+)\/([^$]+)$/.exec(full_name);
+    // Configuration constants
+    const MAX_URL_LENGTH = 8000; // GitHub URL limit is 8201, stay under 8000 to be safe
+    const LOG_ENTRY_ESTIMATE = 150; // Estimated characters per log entry
+    const MIN_REMAINING_SPACE = 100; // Minimum space needed for log section
+    const ERROR_BUFFER_SPACE = 50; // Buffer space when adding error details
+
+    // Utility functions
+    function parseTestName(full_name) {
+        const trimmed = full_name.trim();
+        let pieces;
+        
+        if (trimmed.includes('.py.')) {
+            pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(trimmed);
+        } else {
+            pieces = /(.+)\/([^$]+)$/.exec(trimmed);
         }
 
         if (!pieces) {
-            console.error("Unable to split path/test name from %o", full_name);
-            return "";
+            console.error("Unable to split path/test name from %o", trimmed);
+            return null;
         }
-        let [path, testName] = [pieces[1], pieces[2]];
+        
+        return [pieces[1], pieces[2]];
+    }
 
+    function formatTestCommand(path, testName) {
         const namePieces = testName.split('.');
 
         if (namePieces.length === 2) {
@@ -546,217 +526,60 @@
         return `./ya make -ttt {{ buid_preset_params }} -F '${testName}' ${path}`;
     }
 
+    function getTestRunCommand(test) {
+        const parsed = parseTestName(test);
+        if (!parsed) return "";
+        
+        const [path, testName] = parsed;
+        return formatTestCommand(path, testName);
+    }
+
     function getOwnerAreaLabel(owner) {
         const ownerMapping = {{ owner_area_mapping | tojson }};
         return ownerMapping[owner] || "";
     }
 
-    function createIssue(test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
-        const full_name = test.trim();
-        const pieces = /(.+)\/([^$]+)$/.exec(full_name);
-
-        if (!pieces) {
-            console.error("Unable to split path/test name from %o", full_name);
-            return;
-        }
-        let [path, testName] = [pieces[1], pieces[2]];
+    function buildLabels(issueType, buildPreset, ownerAreaLabel) {
+        let labels = [];
         
-        // Get build preset and other contextual information
-        const buildPreset = "{{ build_preset }}";
-        const branch = "{{ branch }}";
-        const commitSha = "{{ commit_sha }}";
-        const reportUrl = window.location.href;
-        const testRunCommand = getTestRunCommand(full_name);
-        const ownerAreaLabel = getOwnerAreaLabel(owner);
-        
-        if (is_sanitizer) {
-            // Create sanitizer-specific issue
-            const title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
-            
-            // Build core body components
-            let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
-            body += "**Build Information:**%0A";
-            if (commitSha && commitSha !== "") {
-                body += "- Version: " + encodeURIComponent(commitSha) + "%0A";
-            }
-            body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
-            body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
-            
-            body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
-            body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
-            
-            // Always include test run history link as requested
-            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(full_name) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
-            
-            // Always include report link as requested
-            body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
-            
-            // Prepare labels and calculate base URL length
-            let labels = "bug,sanitizer";
-            if (buildPreset.includes("asan")) {
-                labels += ",asan";
-            } else if (buildPreset.includes("msan")) {
-                labels += ",msan";
-            } else if (buildPreset.includes("tsan")) {
-                labels += ",tsan";
-            }
-            
-            // Add owner-based area label if available
-            if (ownerAreaLabel) {
-                labels += "," + ownerAreaLabel;
-            }
-            
-            const baseUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
-            
-            // Smart content addition based on URL length limits (GitHub limit is ~2048 chars, stay under 1900 to be safe)
-            let remainingSpace = 1900 - baseUrl.length;
-            
-            // Add logs if space allows
-            if (logUrls && Object.keys(logUrls).length > 0 && remainingSpace > 100) {
-                let logsSection = "**Logs:**%0A";
-                let logCount = 0;
-                const maxLogs = Math.min(Object.keys(logUrls).length, Math.floor(remainingSpace / 150)); // Estimate ~150 chars per log entry
-                
-                for (const [logName, logUrl] of Object.entries(logUrls)) {
-                    if (logCount >= maxLogs) break;
-                    const logEntry = "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
-                    if (logsSection.length + logEntry.length < remainingSpace - 50) {
-                        logsSection += logEntry;
-                        logCount++;
-                    } else {
-                        break;
-                    }
-                }
-                
-                if (Object.keys(logUrls).length > logCount) {
-                    logsSection += "- (and " + (Object.keys(logUrls).length - logCount) + " more logs in report)%0A";
-                }
-                logsSection += "%0A";
-                
-                body += logsSection;
-                remainingSpace -= logsSection.length;
-            }
-            
-            // Add error details if space allows
-            if (errorText && errorText.trim() !== "" && remainingSpace > 50) {
-                const maxErrorLength = Math.min(errorText.trim().length, remainingSpace - 50); // Leave some buffer
-                const errorToShow = errorText.trim().substring(0, maxErrorLength);
-                let errorSection = "**Error Summary:** " + encodeURIComponent(errorToShow);
-                if (errorText.trim().length > maxErrorLength) {
-                    errorSection += "... (see full error in test report)";
-                }
-                errorSection += "%0A%0A";
-                body += errorSection;
-            }
-            
-            const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
-            window.open(url, '_blank');
+        if (issueType === 'mute') {
+            labels.push('mute');
         } else {
-            // Create regular issue
-            const title = "Test failure in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+            labels.push('bug');
             
-            // Build core body components
-            let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
-            body += "**Test Failure**%0A%0A";
-            body += "**Build Information:**%0A";
-            if (commitSha && commitSha !== "") {
-                body += "- Version: " + encodeURIComponent(commitSha) + "%0A";
-            }
-            body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
-            body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
-            
-            body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
-            body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
-            
-            // Always include summary history
-            if (success_count + fail_count != 0) {
-                body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
-            } else {
-                body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
-            }
-            
-            // Always include test run history link as requested
-            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(full_name) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
-            
-            // Always include report link as requested
-            body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
-            
-            // Prepare labels and calculate base URL length
-            let labels = "bug";
-            if (ownerAreaLabel) {
-                labels += "," + ownerAreaLabel;
-            }
-            
-            const baseUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
-            
-            // Smart content addition based on URL length limits (GitHub limit is ~2048 chars, stay under 1900 to be safe)
-            let remainingSpace = 1900 - baseUrl.length;
-            
-            // Add logs if space allows
-            if (logUrls && Object.keys(logUrls).length > 0 && remainingSpace > 100) {
-                let logsSection = "**Logs:**%0A";
-                let logCount = 0;
-                const maxLogs = Math.min(Object.keys(logUrls).length, Math.floor(remainingSpace / 150)); // Estimate ~150 chars per log entry
+            if (issueType === 'sanitizer') {
+                labels.push('sanitizer');
                 
-                for (const [logName, logUrl] of Object.entries(logUrls)) {
-                    if (logCount >= maxLogs) break;
-                    const logEntry = "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
-                    if (logsSection.length + logEntry.length < remainingSpace - 50) {
-                        logsSection += logEntry;
-                        logCount++;
-                    } else {
-                        break;
-                    }
+                if (buildPreset.includes("asan")) {
+                    labels.push("asan");
+                } else if (buildPreset.includes("msan")) {
+                    labels.push("msan");
+                } else if (buildPreset.includes("tsan")) {
+                    labels.push("tsan");
                 }
-                
-                if (Object.keys(logUrls).length > logCount) {
-                    logsSection += "- (and " + (Object.keys(logUrls).length - logCount) + " more logs in report)%0A";
-                }
-                logsSection += "%0A";
-                
-                body += logsSection;
-                remainingSpace -= logsSection.length;
             }
-            
-            // Add error details if space allows
-            if (errorText && errorText.trim() !== "" && remainingSpace > 50) {
-                const maxErrorLength = Math.min(errorText.trim().length, remainingSpace - 50); // Leave some buffer
-                const errorToShow = errorText.trim().substring(0, maxErrorLength);
-                let errorSection = "**Error Summary:** " + encodeURIComponent(errorToShow);
-                if (errorText.trim().length > maxErrorLength) {
-                    errorSection += "... (see full error in test report)";
-                }
-                errorSection += "%0A%0A";
-                body += errorSection;
-            }
-            
-            const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
-            window.open(url, '_blank');
         }
+        
+        if (ownerAreaLabel) {
+            labels.push(ownerAreaLabel);
+        }
+        
+        return labels.join(',');
     }
 
-    function createMuteIssue(test, owner, success_count, fail_count, logUrls = {}) {
-        const full_name = test.trim();
-        const pieces = /(.+)\/([^$]+)$/.exec(full_name);
-
-        if (!pieces) {
-            console.error("Unable to split path/test name from %o", full_name);
-            return;
-        }
-        let [path, testName] = [pieces[1], pieces[2]];
-        
-        // Get build preset and other contextual information
-        const buildPreset = "{{ build_preset }}";
-        const branch = "{{ branch }}";
-        const commitSha = "{{ commit_sha }}";
-        const testRunCommand = getTestRunCommand(full_name);
-        const ownerAreaLabel = getOwnerAreaLabel(owner);
-        
-        const title = "Mute test " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
-        
-        // Build core body components
+    function buildIssueBody(issueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText) {
         let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
-        body += "**Test mute request**%0A%0A";
+        
+        // Add type-specific header
+        if (issueType === 'sanitizer') {
+            // No header for sanitizer issues as requested
+        } else if (issueType === 'mute') {
+            body += "**Test mute request**%0A%0A";
+        } else {
+            body += "**Test Failure**%0A%0A";
+        }
+        
+        // Build information
         body += "**Build Information:**%0A";
         if (commitSha && commitSha !== "") {
             body += "- Version: " + encodeURIComponent(commitSha) + "%0A";
@@ -764,43 +587,44 @@
         body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
         body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
         
+        // Run command
         body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
+        
+        // Owner
         body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
         
-        // Always include summary history
-        if (success_count + fail_count != 0) {
-            body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
-        } else {
-            body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+        // Summary history (only for non-sanitizer issues)
+        if (issueType !== 'sanitizer') {
+            if (success_count + fail_count != 0) {
+                body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+            } else {
+                body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+            }
         }
         
-        // Always include test run history link as requested
-        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(full_name) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+        // Always include test run history link
+        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(path + "/" + testName) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
         
-        // Always include report link as requested
+        // Always include report link
         body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
         
-        // Prepare labels and calculate base URL length
-        let labels = "mute";
-        if (ownerAreaLabel) {
-            labels += "," + ownerAreaLabel;
-        }
-        
-        const baseUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
-        
-        // Smart content addition based on URL length limits (GitHub limit is ~2048 chars, stay under 1900 to be safe)
-        let remainingSpace = 1900 - baseUrl.length;
+        return body;
+    }
+
+    function addOptionalContent(baseBody, logUrls, errorText, remainingSpace) {
+        let body = baseBody;
+        let availableSpace = remainingSpace;
         
         // Add logs if space allows
-        if (logUrls && Object.keys(logUrls).length > 0 && remainingSpace > 100) {
+        if (logUrls && Object.keys(logUrls).length > 0 && availableSpace > MIN_REMAINING_SPACE) {
             let logsSection = "**Logs:**%0A";
             let logCount = 0;
-            const maxLogs = Math.min(Object.keys(logUrls).length, Math.floor(remainingSpace / 150)); // Estimate ~150 chars per log entry
+            const maxLogs = Math.min(Object.keys(logUrls).length, Math.floor(availableSpace / LOG_ENTRY_ESTIMATE));
             
             for (const [logName, logUrl] of Object.entries(logUrls)) {
                 if (logCount >= maxLogs) break;
                 const logEntry = "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
-                if (logsSection.length + logEntry.length < remainingSpace - 50) {
+                if (logsSection.length + logEntry.length < availableSpace - ERROR_BUFFER_SPACE) {
                     logsSection += logEntry;
                     logCount++;
                 } else {
@@ -814,10 +638,77 @@
             logsSection += "%0A";
             
             body += logsSection;
+            availableSpace -= logsSection.length;
         }
         
-        const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
-        window.open(url, '_blank');
+        // Add error details if space allows
+        if (errorText && errorText.trim() !== "" && availableSpace > ERROR_BUFFER_SPACE) {
+            const maxErrorLength = Math.min(errorText.trim().length, availableSpace - ERROR_BUFFER_SPACE);
+            const errorToShow = errorText.trim().substring(0, maxErrorLength);
+            let errorSection = "**Error Summary:** " + encodeURIComponent(errorToShow);
+            if (errorText.trim().length > maxErrorLength) {
+                errorSection += "... (see full error in test report)";
+            }
+            errorSection += "%0A%0A";
+            body += errorSection;
+        }
+        
+        return body;
+    }
+
+    function createIssueGeneric(issueType, test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
+        const parsed = parseTestName(test);
+        if (!parsed) return;
+        
+        const [path, testName] = parsed;
+        
+        // Get build preset and other contextual information
+        const buildPreset = "{{ build_preset }}";
+        const branch = "{{ branch }}";
+        const commitSha = "{{ commit_sha }}";
+        const testRunCommand = getTestRunCommand(test);
+        const ownerAreaLabel = getOwnerAreaLabel(owner);
+        
+        // Determine issue type based on parameters
+        let actualIssueType = issueType;
+        if (is_sanitizer && issueType === 'bug') {
+            actualIssueType = 'sanitizer';
+        }
+        
+        // Create title based on issue type
+        let title;
+        if (actualIssueType === 'sanitizer') {
+            title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+        } else if (actualIssueType === 'mute') {
+            title = "Mute test " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+        } else {
+            title = "Test failure in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+        }
+        
+        // Build body
+        const body = buildIssueBody(actualIssueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText);
+        
+        // Build labels
+        const labels = buildLabels(actualIssueType, buildPreset, ownerAreaLabel);
+        
+        // Calculate base URL length
+        const baseUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
+        const remainingSpace = MAX_URL_LENGTH - baseUrl.length;
+        
+        // Add optional content based on available space
+        const finalBody = addOptionalContent(body, logUrls, errorText, remainingSpace);
+        
+        // Create final URL and open
+        const finalUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + finalBody + "&labels=" + labels + "&type=Bug";
+        window.open(finalUrl, '_blank');
+    }
+
+    function createIssue(test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
+        createIssueGeneric('bug', test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls);
+    }
+
+    function createMuteIssue(test, owner, success_count, fail_count, logUrls = {}) {
+        createIssueGeneric('mute', test, owner, success_count, fail_count, false, '', logUrls);
     }
 
     function openHistory(test) {

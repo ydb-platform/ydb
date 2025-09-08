@@ -1006,6 +1006,7 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&MessageGroupId_);
         config.Opts->AddLongOption("init-seqno-timeout", "Max wait duration for initial seqno")
             .Optional()
+            .Hidden()
             .StoreResult(&MessagesWaitTimeoutSeconds_);
 
         AddTransform(config);

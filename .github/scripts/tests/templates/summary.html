@@ -645,11 +645,11 @@
         if (errorText && errorText.trim() !== "" && availableSpace > ERROR_BUFFER_SPACE) {
             const maxErrorLength = Math.min(errorText.trim().length, availableSpace - ERROR_BUFFER_SPACE);
             const errorToShow = errorText.trim().substring(0, maxErrorLength);
-            let errorSection = "**Error Summary:** " + encodeURIComponent(errorToShow);
+            let errorSection = "**Error Summary:**%0A```%0A" + encodeURIComponent(errorToShow);
             if (errorText.trim().length > maxErrorLength) {
                 errorSection += "... (see full error in test report)";
             }
-            errorSection += "%0A%0A";
+            errorSection += "%0A```%0A%0A";
             body += errorSection;
         }
         
@@ -707,8 +707,8 @@
         createIssueGeneric('bug', test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls);
     }
 
-    function createMuteIssue(test, owner, success_count, fail_count, logUrls = {}) {
-        createIssueGeneric('mute', test, owner, success_count, fail_count, false, '', logUrls);
+    function createMuteIssue(test, owner, success_count, fail_count, errorText = '', logUrls = {}) {
+        createIssueGeneric('mute', test, owner, success_count, fail_count, false, errorText, logUrls);
     }
 
     function openHistory(test) {
@@ -939,6 +939,16 @@
                 const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
                 const owner = testRow.querySelector('.test_owner').innerText;
                 
+                // Get error text from the test description if available
+                let errorText = '';
+                const errorButton = testRow.querySelector('.error-button');
+                if (errorButton && errorButton.nextElementSibling) {
+                    const errorContent = errorButton.nextElementSibling.querySelector('pre code');
+                    if (errorContent) {
+                        errorText = errorContent.textContent;
+                    }
+                }
+                
                 // Extract log URLs from the test row
                 let logUrls = {};
                 const logCells = testRow.querySelectorAll('td:last-child a');
@@ -950,7 +960,7 @@
                     }
                 });
 
-                createMuteIssue(testName, owner, success_count, fail_count, logUrls);
+                createMuteIssue(testName, owner, success_count, fail_count, errorText, logUrls);
             });
         });
 

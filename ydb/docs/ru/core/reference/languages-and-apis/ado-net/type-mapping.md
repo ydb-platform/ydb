@@ -8,28 +8,28 @@
 
 Возвращаемый тип при использовании `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()` и подобных методов.
 
-| {{ ydb-short-name }} тип   | .NET тип                                         |
-|----------------------------|--------------------------------------------------|
-| `Bool`                     | `bool`                                           |
-| `Text` (синоним `Utf8`)    | `string`                                         |
-| `Bytes` (синоним `String`) | `byte[]`                                         |
-| `Uint8`                    | `byte`                                           |
-| `Uint16`                   | `ushort`                                         |
-| `Uint32`                   | `uint`                                           |
-| `Uint64`                   | `ulong`                                          |
-| `Int8`                     | `sbyte`                                          |
-| `Int16`                    | `short`                                          |
-| `Int32`                    | `int`                                            |
-| `Int64`                    | `long`                                           |
-| `Float`                    | `float`                                          |
-| `Double`                   | `double`                                         |
-| `Date`                     | `DateTime`                                       |
-| `Datetime`                 | `DateTime`                                       |
-| `Timestamp`                | `DateTime`                                       |
-| `Decimal`                  | [cм. раздел Decimal](./type-mapping.md/#decimal) |
-| `Json`                     | `string`                                         |
-| `JsonDocument`             | `string`                                         |
-| `Yson`                     | `byte[]`                                         |
+| {{ ydb-short-name }} тип   | .NET тип                       |
+|----------------------------|--------------------------------|
+| `Bool`                     | `bool`                         |
+| `Text` (синоним `Utf8`)    | `string`                       |
+| `Bytes` (синоним `String`) | `byte[]`                       |
+| `Uint8`                    | `byte`                         |
+| `Uint16`                   | `ushort`                       |
+| `Uint32`                   | `uint`                         |
+| `Uint64`                   | `ulong`                        |
+| `Int8`                     | `sbyte`                        |
+| `Int16`                    | `short`                        |
+| `Int32`                    | `int`                          |
+| `Int64`                    | `long`                         |
+| `Float`                    | `float`                        |
+| `Double`                   | `double`                       |
+| `Date`                     | `DateTime`                     |
+| `Datetime`                 | `DateTime`                     |
+| `Timestamp`                | `DateTime`                     |
+| `Decimal`                  | [cм. раздел Decimal](#decimal) |
+| `Json`                     | `string`                       |
+| `JsonDocument`             | `string`                       |
+| `Yson`                     | `byte[]`                       |
 
 ## Decimal { #decimal }
 

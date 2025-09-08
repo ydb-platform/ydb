@@ -1,7 +1,5 @@
-PRAGMA warning('disable', '4510');
-
 SELECT
-    Yql::WithSideEffectsMode((NOT Yql::WithSideEffectsMode(x, AsAtom('General'))), AsAtom('None'))
+    WithSideEffectsMode((NOT WithSideEffects(x)), 'None')
     AND FALSE
 FROM (
     SELECT

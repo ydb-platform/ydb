@@ -1575,9 +1575,9 @@
     ],
     "test.test[side_effects-logical_bools_override-default.txt-Debug]": [
         {
-            "checksum": "659dd68806d5307bbd1469116079e6fa",
-            "size": 304,
-            "uri": "https://{canondata_backend}/1937367/464904f3fe8948f1469d56c6971b4f31adbe3bda/resource.tar.gz#test.test_side_effects-logical_bools_override-default.txt-Debug_/opt.yql"
+            "checksum": "2299b8c92f2489fa453539c267109e68",
+            "size": 226,
+            "uri": "https://{canondata_backend}/1920236/9791d782773cdc5341138dfbdc4479106ec3adf7/resource.tar.gz#test.test_side_effects-logical_bools_override-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[side_effects-logical_bools_override-default.txt-Results]": [

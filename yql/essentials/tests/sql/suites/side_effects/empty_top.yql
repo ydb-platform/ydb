@@ -1,4 +1,2 @@
 /* custom error: Condition violated */
-pragma warning("disable","4510");
-
-select ListTop(Yql::WithSideEffectsMode(Ensure([1],false),AsAtom('General')),0);
+select ListTop(WithSideEffects(Ensure([1],false)),0);

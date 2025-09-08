@@ -39,7 +39,7 @@ TKey TKey::ForHead(EType type,
                    const ui32 count,
                    const ui16 internalPartsCount)
 {
-    return {type, partition, offset, partNo, count, internalPartsCount, '|'};
+    return {type, partition, offset, partNo, count, internalPartsCount, ESuffix::Head};
 }
 
 TKey TKey::ForFastWrite(EType type,
@@ -49,17 +49,17 @@ TKey TKey::ForFastWrite(EType type,
                         const ui32 count,
                         const ui16 internalPartsCount)
 {
-    return {type, partition, offset, partNo, count, internalPartsCount, '?'};
+    return {type, partition, offset, partNo, count, internalPartsCount, ESuffix::FastWrite};
 }
 
 bool TKey::IsFastWrite() const
 {
-    return GetSuffix() == '?';
+    return GetSuffix() == ESuffix::FastWrite;
 }
 
 void TKey::SetFastWrite()
 {
-    SetSuffix('?');
+    SetSuffix(ESuffix::FastWrite);
 }
 
 TKey TKey::FromKey(const TKey& k,

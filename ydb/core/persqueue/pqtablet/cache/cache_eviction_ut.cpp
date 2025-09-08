@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/persqueue/map_subrange.h>
+#include <ydb/core/persqueue/pqtablet/cache/map_subrange.h>
 
 Y_UNIT_TEST_SUITE(CacheEviction) {
 

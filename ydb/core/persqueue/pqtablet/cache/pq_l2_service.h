@@ -1,9 +1,9 @@
 #pragma once
 
-#include "partition_id.h"
+#include <ydb/core/persqueue/partition_id.h>
 
 #include <ydb/library/actors/core/defs.h>
-#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 #include <atomic>
 

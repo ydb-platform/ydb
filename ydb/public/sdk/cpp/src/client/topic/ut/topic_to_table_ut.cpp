@@ -12,7 +12,7 @@
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/pq_l2_service.h>
+#include <ydb/core/persqueue/pqtablet/cache/pq_l2_service.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>

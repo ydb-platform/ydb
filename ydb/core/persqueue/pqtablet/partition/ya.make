@@ -33,6 +33,7 @@ PEERDIR(
     ydb/core/persqueue/common
     ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/pqtablet/blob
+    ydb/core/persqueue/pqtablet/cache
     ydb/core/persqueue/pqtablet/common
     ydb/library/logger
 )

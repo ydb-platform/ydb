@@ -6,7 +6,6 @@ SRCS(
     key.cpp
     list_all_topics_actor.cpp
     percentile_counter.cpp
-    pq_l2_cache.cpp
     write_meta.cpp
     dread_cache_service/caching_service.cpp
     write_id.cpp

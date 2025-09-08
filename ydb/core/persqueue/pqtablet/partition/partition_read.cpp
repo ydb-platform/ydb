@@ -4,7 +4,7 @@
 #include "partition_util.h"
 #include "partition_common.h"
 #include "partition_compactification.h"
-#include <ydb/core/persqueue/read.h>
+#include <ydb/core/persqueue/pqtablet/cache/read.h>
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 
 #include <ydb/core/base/appdata.h>

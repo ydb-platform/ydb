@@ -47,7 +47,6 @@ SRCS(
     partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
     list_all_topics_ut.cpp
-    cache_eviction_ut.cpp
 )
 
 RESOURCE(

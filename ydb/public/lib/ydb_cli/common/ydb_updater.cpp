@@ -207,7 +207,8 @@ bool TYdbUpdater::GetLatestVersion() {
         SetConfigValue("last_check", TInstant::Now().Seconds());
         return true;
     }
-    Cerr << "(!) Couldn't get latest version from url \"" << versionUrl << "\". " << curlCmd.GetError() << Endl;
+    Cerr << "(!) Couldn't get latest version from url \"" << versionUrl << "\". " << curlCmd.GetError() << Endl
+        << "You can disable further version checks with 'ydb version --disable-checks' command." << Endl;
     return false;
 }
 

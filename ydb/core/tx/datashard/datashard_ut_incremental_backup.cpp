@@ -169,6 +169,23 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         return proto;
     }
 
+    NKikimrChangeExchange::TChangeRecord MakeReset(ui32 key, ui32 value) {
+        auto keyCell = TCell::Make<ui32>(key);
+        auto valueCell = TCell::Make<ui32>(value);
+        NKikimrChangeExchange::TChangeRecord proto;
+
+        auto& dc = *proto.MutableCdcDataChange();
+        auto& dcKey = *dc.MutableKey();
+        dcKey.AddTags(1);
+        dcKey.SetData(TSerializedCellVec::Serialize({keyCell}));
+        
+        auto& reset = *dc.MutableReset();
+        reset.AddTags(2);
+        reset.SetData(TSerializedCellVec::Serialize({valueCell}));
+
+        return proto;
+    }
+
     NKikimrChangeExchange::TChangeRecord MakeErase(ui32 key) {
         auto keyCell = TCell::Make<ui32>(key);
         NKikimrChangeExchange::TChangeRecord proto;
@@ -1916,6 +1933,78 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         // Verify that we have __incremental_backup but NOT __async_replica
         UNIT_ASSERT_C(hasIncrementalBackupAttr, TStringBuilder() << "Incremental backup table at " << foundIncrementalBackupPath << " must have __incremental_backup attribute");
         UNIT_ASSERT_C(!hasAsyncReplicaAttr, TStringBuilder() << "Incremental backup table at " << foundIncrementalBackupPath << " must NOT have __async_replica attribute");
+    }
+
+    Y_UNIT_TEST(ResetOperationIncrementalBackup) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const TActorId edgeActor = runtime.AllocateEdgeActor();
+
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20);
+        )");
+
+        WaitTxNotification(server, edgeActor, AsyncCreateContinuousBackup(server, "/Root", "Table"));
+
+        // Test kReset operation (REPLACE INTO)
+        ExecSQL(server, edgeActor, R"(
+            REPLACE INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (3, 300);
+        )");
+
+        WaitForContent(server, edgeActor, "/Root/Table/0_continuousBackupImpl", {
+            MakeReset(1, 100),
+            MakeReset(3, 300),
+        });
+    }
+
+    Y_UNIT_TEST(ReplaceIntoIncrementalBackup) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2135), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const TActorId edgeActor = runtime.AllocateEdgeActor();
+
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        // Insert initial data
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        WaitTxNotification(server, edgeActor, AsyncCreateContinuousBackup(server, "/Root", "Table"));
+
+        // Test multiple REPLACE operations  
+        ExecSQL(server, edgeActor, R"(
+            REPLACE INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (4, 400);
+        )");
+
+        WaitForContent(server, edgeActor, "/Root/Table/0_continuousBackupImpl", {
+            MakeReset(1, 100),
+            MakeReset(4, 400),
+        });
     }
 
 } // Y_UNIT_TEST_SUITE(IncrementalBackup)

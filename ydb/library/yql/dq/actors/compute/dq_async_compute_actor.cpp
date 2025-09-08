@@ -1159,7 +1159,7 @@ private:
         if (auto watermarkRequest = WatermarksTracker.GetPendingWatermark()) {
             Y_ENSURE(*watermarkRequest >= ContinueRunEvent->WatermarkRequest);
             ContinueRunEvent->WatermarkRequest = *watermarkRequest;
-            MetricsReporter.ReportInjectedToTaskRunnerWatermark(*watermarkRequest);
+            MetricsReporter.ReportInjectedToTaskRunnerWatermark(*watermarkRequest, WatermarksTracker.GetWatermarkDiscrepancy());
         }
 
         if (!UseCpuQuota()) {

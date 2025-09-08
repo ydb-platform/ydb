@@ -258,7 +258,7 @@ void TDuplicateManager::StartIntervalProcessing(const THashSet<ui64>& intersecti
             }
             return true;
         };
-        splitter.ForEachInterval(std::move(scheduleInterval), mainPortion->GetPortionId());
+        splitter.ForEachIntersectingInterval(std::move(scheduleInterval), mainPortion->GetPortionId());
         constructor->SetIntervalsCount(nextIntervalIdx);
     }
     for (auto&& [idx, filter] : std::move(readyFilters)) {

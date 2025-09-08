@@ -23,7 +23,7 @@ public:
     }
 
     template <class Callback>
-    void ForEachInterval(Callback&& callback, const ui64 intersectingPortionId) const {
+    void ForEachIntersectingInterval(Callback&& callback, const ui64 intersectingPortionId) const {
         AFL_VERIFY(Borders.size());
         THashSet<ui64> currentPortions;
         const TIntervalBorder* prevBorder = &Borders.front();

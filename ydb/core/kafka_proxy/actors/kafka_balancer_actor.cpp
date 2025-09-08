@@ -24,6 +24,8 @@ void TKafkaBalancerActor::Bootstrap(const NActors::TActorContext& ctx) {
     if (Context->DatabasePath == AppData(ctx)->TenantName) {
         Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
         Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
+    } else {
+        Kqp->SendCreateSessionRequest(ctx);
     }
     Become(&TKafkaBalancerActor::StateWork);
 }

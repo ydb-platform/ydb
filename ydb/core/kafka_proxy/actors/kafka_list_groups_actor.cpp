@@ -28,6 +28,8 @@ void TKafkaListGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
     if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
         if (Context->DatabasePath == AppData(ctx)->TenantName) {
             Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
+        } else {
+            StartKqpSession(ctx);
         }
         Become(&TKafkaListGroupsActor::StateWork);
     } else {

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/persqueue/codecs)
+UNITTEST_FOR(ydb/core/persqueue/public/codecs)
 
 FORK_SUBTESTS()
 

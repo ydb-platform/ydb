@@ -2,7 +2,7 @@
 #include "persqueue_utils.h"
 
 #include <limits>
-#include <ydb/core/persqueue/codecs/pqv1.h>
+#include <ydb/core/persqueue/public/codecs/pqv1.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 

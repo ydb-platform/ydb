@@ -5,9 +5,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/persqueue/public
-    ydb/public/sdk/cpp/src/client/persqueue_public
-    ydb/public/sdk/cpp/src/client/topic
+    ydb/core/persqueue/public/codecs
+    ydb/core/protos
 )
 
 END()

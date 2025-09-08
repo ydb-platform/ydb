@@ -15,7 +15,6 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/kqp/common
     ydb/core/metering
-    ydb/core/persqueue/codecs
     ydb/core/persqueue/config
     ydb/core/persqueue/events
     ydb/core/persqueue/public/cluster_tracker
@@ -38,7 +37,6 @@ PEERDIR(
 END()
 
 RECURSE(
-    codecs
     common
     config
     events

@@ -1,6 +1,6 @@
 #include "write_meta.h"
 
-#include <ydb/core/persqueue/codecs/pqv1.h>
+#include <ydb/core/persqueue/public/codecs/pqv1.h>
 
 
 namespace NKikimr {

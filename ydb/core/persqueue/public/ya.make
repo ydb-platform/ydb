@@ -15,8 +15,9 @@ PEERDIR(
 END()
 
 RECURSE(
-    counters
     cluster_tracker
+    codecs
+    counters
     fetcher
     list_topics
     write_meta

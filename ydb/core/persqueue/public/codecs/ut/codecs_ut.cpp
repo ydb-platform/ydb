@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/persqueue/codecs/pqv1.h>
+#include <ydb/core/persqueue/public/codecs/pqv1.h>
 
 Y_UNIT_TEST_SUITE(PersQueueCodecs) {
     Y_UNIT_TEST(ToV1Codec) {

@@ -76,7 +76,7 @@ public:
         : Request(std::move(request))
         , Counters(counters)
         , OwnerActor(owner)
-        , TasksGraph(owner.NodeId(), Request.TxAlloc, {}, Counters)
+        , TasksGraph(Request.TxAlloc, {}, Counters)
         , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
         , UserRequestContext(userRequestContext)
     {

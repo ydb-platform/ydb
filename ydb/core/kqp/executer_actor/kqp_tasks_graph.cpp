@@ -2351,7 +2351,7 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
 
     ui64 nodeOffset = 0;
     for (size_t i = 0; i < resourceSnapshot.size(); ++i) {
-        if (resourceSnapshot[i].GetNodeId() == NodeId) {
+        if (resourceSnapshot[i].GetNodeId() == GetMeta().ExecuterId.NodeId()) {
             nodeOffset = i;
             break;
         }
@@ -2561,7 +2561,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         auto& lockTxId = GetMeta().LockTxId;
         if (lockTxId) {
             settings->SetLockTxId(*lockTxId);
-            settings->SetLockNodeId(NodeId);
+            settings->SetLockNodeId(GetMeta().ExecuterId.NodeId());
         }
 
         if (GetMeta().LockMode) {
@@ -2680,7 +2680,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         }
 
         if (shardInfo.KeyReadRanges) {
-            const TMaybe<ui64> nodeId = (isParallelPointRead || singlePartitionedStage) ? TMaybe<ui64>{NodeId} : Nothing();
+            const TMaybe<ui64> nodeId = (isParallelPointRead || singlePartitionedStage) ? TMaybe<ui64>{GetMeta().ExecuterId.NodeId()} : Nothing();
             addPartition(startShard, nodeId, {}, shardInfo, inFlightShards);
             fillRangesForTasks();
             return (isParallelPointRead || singlePartitionedStage) ? TMaybe<size_t>(partitions.size()) : Nothing();
@@ -2696,10 +2696,9 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
     }
 }
 
-TKqpTasksGraph::TKqpTasksGraph(ui32 nodeId, const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
+TKqpTasksGraph::TKqpTasksGraph(const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings, const TKqpRequestCounters::TPtr& counters)
-    : NodeId(nodeId)
-    , TxAlloc(txAlloc)
+    : TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
     , PartitionPruner(MakeHolder<TPartitionPruner>(txAlloc->HolderFactory, txAlloc->TypeEnv))
     , Counters(counters)

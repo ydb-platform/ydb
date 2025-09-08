@@ -161,14 +161,8 @@ public:
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
-        , TasksGraph(SelfId().NodeId(), Request.TxAlloc, AggregationSettings, Counters)
+        , TasksGraph(Request.TxAlloc, AggregationSettings, Counters)
     {
-        {
-            TStringStream ss;
-            ss << "SelfId.NodeId: " << SelfId().NodeId() << Endl;
-            Cerr << ss.Str();
-        }
-
         if (executerConfig.TableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         }
@@ -623,6 +617,8 @@ protected:
     }
 
     void HandleReady(TEvKqpExecuter::TEvTxRequest::TPtr ev) {
+        TasksGraph.GetMeta().ExecuterId = SelfId();
+
         TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
 

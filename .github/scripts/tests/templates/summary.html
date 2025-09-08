@@ -573,6 +573,7 @@
             // Create sanitizer-specific issue
             const title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
             
+            // Build core body components
             let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
             body += "**Build Information:**%0A";
             if (commitSha && commitSha !== "") {
@@ -584,34 +585,13 @@
             body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
             body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
             
-            // Include only first few logs to avoid URL length issues
-            if (logUrls && Object.keys(logUrls).length > 0) {
-                body += "**Logs:**%0A";
-                const logEntries = Object.entries(logUrls).slice(0, 3); // Limit to first 3 logs
-                for (const [logName, logUrl] of logEntries) {
-                    body += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
-                }
-                if (Object.keys(logUrls).length > 3) {
-                    body += "- (and " + (Object.keys(logUrls).length - 3) + " more logs in report)%0A";
-                }
-                body += "%0A";
-            }
-            
+            // Always include test run history link as requested
             body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(full_name) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
             
-            // Add error details as a shorter summary instead of full text
-            if (errorText && errorText.trim() !== "") {
-                const shortError = errorText.trim().substring(0, 200); // Limit to 200 chars
-                body += "**Error Summary:** " + encodeURIComponent(shortError);
-                if (errorText.trim().length > 200) {
-                    body += "... (see full error in test report)";
-                }
-                body += "%0A%0A";
-            }
+            // Always include report link as requested
+            body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
             
-            body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
-            
-            // Determine sanitizer-specific label based on build preset
+            // Prepare labels and calculate base URL length
             let labels = "bug,sanitizer";
             if (buildPreset.includes("asan")) {
                 labels += ",asan";
@@ -626,12 +606,56 @@
                 labels += "," + ownerAreaLabel;
             }
             
+            const baseUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
+            
+            // Smart content addition based on URL length limits (GitHub limit is ~2048 chars, stay under 1900 to be safe)
+            let remainingSpace = 1900 - baseUrl.length;
+            
+            // Add logs if space allows
+            if (logUrls && Object.keys(logUrls).length > 0 && remainingSpace > 100) {
+                let logsSection = "**Logs:**%0A";
+                let logCount = 0;
+                const maxLogs = Math.min(Object.keys(logUrls).length, Math.floor(remainingSpace / 150)); // Estimate ~150 chars per log entry
+                
+                for (const [logName, logUrl] of Object.entries(logUrls)) {
+                    if (logCount >= maxLogs) break;
+                    const logEntry = "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
+                    if (logsSection.length + logEntry.length < remainingSpace - 50) {
+                        logsSection += logEntry;
+                        logCount++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                if (Object.keys(logUrls).length > logCount) {
+                    logsSection += "- (and " + (Object.keys(logUrls).length - logCount) + " more logs in report)%0A";
+                }
+                logsSection += "%0A";
+                
+                body += logsSection;
+                remainingSpace -= logsSection.length;
+            }
+            
+            // Add error details if space allows
+            if (errorText && errorText.trim() !== "" && remainingSpace > 50) {
+                const maxErrorLength = Math.min(errorText.trim().length, remainingSpace - 50); // Leave some buffer
+                const errorToShow = errorText.trim().substring(0, maxErrorLength);
+                let errorSection = "**Error Summary:** " + encodeURIComponent(errorToShow);
+                if (errorText.trim().length > maxErrorLength) {
+                    errorSection += "... (see full error in test report)";
+                }
+                errorSection += "%0A%0A";
+                body += errorSection;
+            }
+            
             const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
             window.open(url, '_blank');
         } else {
             // Create regular issue
             const title = "Test failure in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
             
+            // Build core body components
             let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
             body += "**Test Failure**%0A%0A";
             body += "**Build Information:**%0A";
@@ -644,32 +668,66 @@
             body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
             body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
             
-            // Include only first few logs to avoid URL length issues
-            if (logUrls && Object.keys(logUrls).length > 0) {
-                body += "**Logs:**%0A";
-                const logEntries = Object.entries(logUrls).slice(0, 3); // Limit to first 3 logs
-                for (const [logName, logUrl] of logEntries) {
-                    body += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
-                }
-                if (Object.keys(logUrls).length > 3) {
-                    body += "- (and " + (Object.keys(logUrls).length - 3) + " more logs in report)%0A";
-                }
-                body += "%0A";
-            }
-            
+            // Always include summary history
             if (success_count + fail_count != 0) {
                 body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
             } else {
                 body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
             }
             
+            // Always include test run history link as requested
             body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(full_name) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
-            body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
             
-            // Prepare labels
+            // Always include report link as requested
+            body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
+            
+            // Prepare labels and calculate base URL length
             let labels = "bug";
             if (ownerAreaLabel) {
                 labels += "," + ownerAreaLabel;
+            }
+            
+            const baseUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
+            
+            // Smart content addition based on URL length limits (GitHub limit is ~2048 chars, stay under 1900 to be safe)
+            let remainingSpace = 1900 - baseUrl.length;
+            
+            // Add logs if space allows
+            if (logUrls && Object.keys(logUrls).length > 0 && remainingSpace > 100) {
+                let logsSection = "**Logs:**%0A";
+                let logCount = 0;
+                const maxLogs = Math.min(Object.keys(logUrls).length, Math.floor(remainingSpace / 150)); // Estimate ~150 chars per log entry
+                
+                for (const [logName, logUrl] of Object.entries(logUrls)) {
+                    if (logCount >= maxLogs) break;
+                    const logEntry = "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
+                    if (logsSection.length + logEntry.length < remainingSpace - 50) {
+                        logsSection += logEntry;
+                        logCount++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                if (Object.keys(logUrls).length > logCount) {
+                    logsSection += "- (and " + (Object.keys(logUrls).length - logCount) + " more logs in report)%0A";
+                }
+                logsSection += "%0A";
+                
+                body += logsSection;
+                remainingSpace -= logsSection.length;
+            }
+            
+            // Add error details if space allows
+            if (errorText && errorText.trim() !== "" && remainingSpace > 50) {
+                const maxErrorLength = Math.min(errorText.trim().length, remainingSpace - 50); // Leave some buffer
+                const errorToShow = errorText.trim().substring(0, maxErrorLength);
+                let errorSection = "**Error Summary:** " + encodeURIComponent(errorToShow);
+                if (errorText.trim().length > maxErrorLength) {
+                    errorSection += "... (see full error in test report)";
+                }
+                errorSection += "%0A%0A";
+                body += errorSection;
             }
             
             const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
@@ -696,6 +754,7 @@
         
         const title = "Mute test " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
         
+        // Build core body components
         let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
         body += "**Test mute request**%0A%0A";
         body += "**Build Information:**%0A";
@@ -708,32 +767,53 @@
         body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
         body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
         
-        // Include only first few logs to avoid URL length issues
-        if (logUrls && Object.keys(logUrls).length > 0) {
-            body += "**Logs:**%0A";
-            const logEntries = Object.entries(logUrls).slice(0, 3); // Limit to first 3 logs
-            for (const [logName, logUrl] of logEntries) {
-                body += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
-            }
-            if (Object.keys(logUrls).length > 3) {
-                body += "- (and " + (Object.keys(logUrls).length - 3) + " more logs in report)%0A";
-            }
-            body += "%0A";
-        }
-        
+        // Always include summary history
         if (success_count + fail_count != 0) {
             body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
         } else {
             body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
         }
         
+        // Always include test run history link as requested
         body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(full_name) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
-        body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
         
-        // Prepare labels for mute issue
+        // Always include report link as requested
+        body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
+        
+        // Prepare labels and calculate base URL length
         let labels = "mute";
         if (ownerAreaLabel) {
             labels += "," + ownerAreaLabel;
+        }
+        
+        const baseUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
+        
+        // Smart content addition based on URL length limits (GitHub limit is ~2048 chars, stay under 1900 to be safe)
+        let remainingSpace = 1900 - baseUrl.length;
+        
+        // Add logs if space allows
+        if (logUrls && Object.keys(logUrls).length > 0 && remainingSpace > 100) {
+            let logsSection = "**Logs:**%0A";
+            let logCount = 0;
+            const maxLogs = Math.min(Object.keys(logUrls).length, Math.floor(remainingSpace / 150)); // Estimate ~150 chars per log entry
+            
+            for (const [logName, logUrl] of Object.entries(logUrls)) {
+                if (logCount >= maxLogs) break;
+                const logEntry = "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
+                if (logsSection.length + logEntry.length < remainingSpace - 50) {
+                    logsSection += logEntry;
+                    logCount++;
+                } else {
+                    break;
+                }
+            }
+            
+            if (Object.keys(logUrls).length > logCount) {
+                logsSection += "- (and " + (Object.keys(logUrls).length - logCount) + " more logs in report)%0A";
+            }
+            logsSection += "%0A";
+            
+            body += logsSection;
         }
         
         const url = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";

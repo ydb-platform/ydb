@@ -5,7 +5,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
-#include <ydb/core/persqueue/key.h>
+#include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/common/metering.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>

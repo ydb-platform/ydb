@@ -78,16 +78,16 @@ struct TEvGetScriptExecutionOperationQueryResponse : public TEventLocal<TEvGetSc
         : ExecutionId(executionId)
     {}
 
-    Ydb::StatusIds::StatusCode Status;
-    NYql::TIssues Issues;
-    const TString ExecutionId;
-    TActorId RunScriptActorId;
-    std::optional<EFinalizationStatus> FinalizationStatus;
-    Ydb::Query::ExecuteScriptMetadata Metadata;
-    i64 LeaseGeneration = 0;
     bool Ready = false;
     bool LeaseExpired = false;
+    std::optional<EFinalizationStatus> FinalizationStatus;
+    TActorId RunScriptActorId;
+    TString ExecutionId;
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
+    Ydb::Query::ExecuteScriptMetadata Metadata;
     bool RetryRequired = false;
+    i64 LeaseGeneration = 0;
     bool StateSaved = false;
 };
 
@@ -99,11 +99,11 @@ struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptE
     };
 
     TEvGetScriptExecutionOperationResponse(Ydb::StatusIds::StatusCode status, TInfo&& info, NYql::TIssues issues)
-        : Status(status)
-        , Metadata(std::move(info.Metadata))
-        , Ready(info.Ready)
-        , StateSaved(info.StateSaved)
+        : Ready(info.Ready)
+        , Status(status)
         , Issues(std::move(issues))
+        , Metadata(std::move(info.Metadata))
+        , StateSaved(info.StateSaved)
     {}
 
     TEvGetScriptExecutionOperationResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
@@ -111,11 +111,11 @@ struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptE
         , Issues(std::move(issues))
     {}
 
-    Ydb::StatusIds::StatusCode Status;
-    TMaybe<google::protobuf::Any> Metadata;
     bool Ready = false;
-    bool StateSaved = false;
+    Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
+    TMaybe<google::protobuf::Any> Metadata;
+    bool StateSaved = false;
 };
 
 struct TEvListScriptExecutionOperations : public TEventWithDatabaseId<TEvListScriptExecutionOperations, TKqpScriptExecutionEvents::EvListScriptExecutionOperations> {

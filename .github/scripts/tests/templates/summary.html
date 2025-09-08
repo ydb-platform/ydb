@@ -574,7 +574,6 @@
             const title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
             
             let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
-            body += "**Sanitizer Error Detected**%0A%0A";
             body += "**Build Information:**%0A";
             if (commitSha && commitSha !== "") {
                 body += "- Version: " + encodeURIComponent(commitSha) + "%0A";

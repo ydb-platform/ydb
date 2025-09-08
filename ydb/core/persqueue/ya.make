@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     actor_persqueue_client_iface.h
-    cluster_tracker.cpp
     heartbeat.cpp
     key.cpp
     list_all_topics_actor.cpp
@@ -29,6 +28,7 @@ PEERDIR(
     ydb/core/persqueue/codecs
     ydb/core/persqueue/config
     ydb/core/persqueue/events
+    ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/pqrb
     ydb/core/persqueue/pqtablet

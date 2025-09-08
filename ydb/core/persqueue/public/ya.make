@@ -14,5 +14,6 @@ PEERDIR(
 END()
 
 RECURSE(
+    cluster_tracker
     fetcher
 )

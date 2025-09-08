@@ -1700,11 +1700,12 @@ void TKqpTasksGraph::BuildSysViewScanTasks(TStageInfo& stageInfo) {
     }
 }
 
-static ui32 GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount, std::optional<ui64> aggregationThreads) {
+ui32 TKqpTasksGraph::GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount) {
     auto& intros = stageInfo.Introspections;
-    if (aggregationThreads) {
-        intros.push_back("Considering AggregationComputeThreads value - " + ToString(*aggregationThreads));
-        return std::max<ui32>(1, *aggregationThreads);
+    if (AggregationSettings.HasAggregationComputeThreads()) {
+        auto threads = AggregationSettings.GetAggregationComputeThreads();
+        intros.push_back("Considering AggregationComputeThreads value - " + ToString(threads));
+        return std::max<ui32>(1, threads);
     } else if (nodesCount) {
         const TStagePredictor& predictor = stageInfo.Meta.Tx.Body->GetCalculationPredictor(stageInfo.Id.StageId);
         auto result = predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), previousTasksCount / nodesCount, intros) * nodesCount;
@@ -1805,7 +1806,7 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
             partitionsCount = stage.GetTaskCount();
             intros.push_back("Manually overridden - " + ToString(partitionsCount));
         } else {
-            partitionsCount = std::max(partitionsCount, GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount, /* TODO: pass real value */ {}));
+            partitionsCount = std::max(partitionsCount, GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount));
         }
     }
 

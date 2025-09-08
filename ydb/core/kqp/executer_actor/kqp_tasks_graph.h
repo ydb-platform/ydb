@@ -429,6 +429,7 @@ private:
 
     void SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) const;
 
+    ui32 GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount);
     ui32 GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 nodeId, bool enableShuffleElimination = false) const;
 
 private:

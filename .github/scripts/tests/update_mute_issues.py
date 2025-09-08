@@ -1,7 +1,12 @@
 import os
+import sys
 import requests
 from github import Github #pip3 install PyGithub
 from urllib.parse import quote_plus
+
+# Import shared GitHub issue utilities
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from github_issue_utils import parse_body
 
 
 ORG_NAME = 'ydb-platform'
@@ -397,40 +402,6 @@ def generate_github_issue_title_and_body(test_data):
     )
 
 
-def parse_body(body):
-    tests = []
-    branches = []
-    prepared_body = ''
-    start_mute_list = "<!--mute_list_start-->"
-    end_mute_list = "<!--mute_list_end-->"
-    start_branch_list = "<!--branch_list_start-->"
-    end_branch_list = "<!--branch_list_end-->"
-
-    # tests
-    if all(x in body for x in [start_mute_list, end_mute_list]):
-        idx1 = body.find(start_mute_list)
-        idx2 = body.find(end_mute_list)
-        lines = body[idx1 + len(start_mute_list) + 1 : idx2].split('\n')
-    else:
-        if body.startswith('Mute:'):
-            prepared_body = body.split('Mute:', 1)[1].strip()
-        elif body.startswith('Mute'):
-            prepared_body = body.split('Mute', 1)[1].strip()
-        elif body.startswith('ydb'):
-            prepared_body = body
-        lines = prepared_body.split('**Add line to')[0].split('\n')
-    tests = [line.strip() for line in lines if line.strip().startswith('ydb/')]
-
-    # branch
-    if all(x in body for x in [start_branch_list, end_branch_list]):
-        idx1 = body.find(start_branch_list)
-        idx2 = body.find(end_branch_list)
-        branches = body[idx1 + len(start_branch_list) + 1 : idx2].split('\n')
-    else:
-        branches = ['main']
-
-    return tests, branches
-
 
 def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
     issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
@@ -484,22 +455,34 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
 def get_muted_tests_from_issues():
     issues = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
     muted_tests = {}
+    
+    # First, collect all issues for each test
     for issue in issues:
         if issues[issue]["state"] != 'CLOSED':
             for test in issues[issue]['tests']:
                 if test not in muted_tests:
                     muted_tests[test] = []
-                    muted_tests[test].append(
-                        {
-                            'url': issues[issue]['url'],
-                            'createdAt': issues[issue]['createdAt'],
-                            'status_updated': issues[issue]['status_updated'],
-                            'status': issues[issue]['status'],
-                            'state': issues[issue]['state'],
-                            'branches': issues[issue]['branches'],
-                            'id': issue,
-                        }
-                    )
+                muted_tests[test].append(
+                    {
+                        'url': issues[issue]['url'],
+                        'createdAt': issues[issue]['createdAt'],
+                        'status_updated': issues[issue]['status_updated'],
+                        'status': issues[issue]['status'],
+                        'state': issues[issue]['state'],
+                        'branches': issues[issue]['branches'],
+                        'id': issue,
+                    }
+                )
+    
+    # Then, for each test, keep only the latest issue (by createdAt)
+    for test in muted_tests:
+        if len(muted_tests[test]) > 1:
+            # Sort by createdAt (most recent first) and keep only the first one
+            muted_tests[test] = sorted(
+                muted_tests[test], 
+                key=lambda x: x['createdAt'], 
+                reverse=True
+            )[:1]
 
     return muted_tests
 

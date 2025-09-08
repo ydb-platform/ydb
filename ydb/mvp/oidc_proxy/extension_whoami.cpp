@@ -16,7 +16,7 @@ void TExtensionWhoamiWorker::Bootstrap() {
         [actorId, actorSystem](NYdbGrpc::TGrpcStatus&& status, nebius::iam::v1::GetProfileResponse&& response) -> void {
         if (status.Ok()) {
             actorSystem->Send(actorId, new TEvPrivate::TEvGetProfileResponse(std::move(response)));
-        } else {
+        } else if (status.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
             actorSystem->Send(actorId, new TEvPrivate::TEvErrorResponse(status));
         }
     };

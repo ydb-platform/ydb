@@ -76,6 +76,7 @@ int TMVP::Init() {
 
     BaseHttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
     ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId));
+    AppData.GRpcClientLow = std::make_shared<NYdbGrpc::TGRpcClientLow>();
 
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpCache(BaseHttpProxyId, GetCachePolicy));
 

@@ -36,7 +36,8 @@ SELECT
     END as is_muted_or_skipped,
     gim.github_issue_url as github_issue_url,
     gim.github_issue_number as github_issue_number,
-    gim.github_issue_state as github_issue_state
+    gim.github_issue_state as github_issue_state,
+    gim.github_issue_created_at as github_issue_created_at
 FROM `test_results/analytics/tests_monitor` AS tm
 LEFT JOIN `test_results/analytics/github_issue_mapping` AS gim
     ON tm.full_name = gim.full_name

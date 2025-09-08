@@ -136,7 +136,6 @@ private:
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleShuttingDown);
             default: {
                 LOG_D("Unexpected event" << ev->GetTypeName() << " for TKqpNodeService");
-                Send(ev->Sender, new TEvKqpNode::TEvNodeShutdowned());
             }
         }
     }
@@ -377,9 +376,13 @@ private:
     }
 
     void HandleShuttingDown(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
-        LOG_D("Can't handle StartRequest in ShuttingDown State");
         auto& msg = ev->Get()->Record;
-        ReplyError(msg.GetTxId(), ev->Sender, msg, NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN, ev->Cookie);
+        if (msg.HasSupportShuttingDown() && msg.GetSupportShuttingDown()) {
+            LOG_D("Can't handle StartRequest TxId" << msg.GetTxId() << " in ShuttingDown State");
+            ReplyError(msg.GetTxId(), ev->Sender, msg, NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN, ev->Cookie);
+        } else {
+            HandleWork(ev);
+        }
     }
 private:
     static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
@@ -509,6 +512,7 @@ private:
     void ReplyError(ui64 txId, TActorId executer, const NKikimrKqp::TEvStartKqpTasksRequest& request,
         NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, ui64 requestId, const TString& message = "")
     {
+        
         auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         ev->Record.SetTxId(txId);
         for (auto& task : request.GetTasks()) {
@@ -516,7 +520,7 @@ private:
             resp->SetTaskId(task.GetId());
             resp->SetReason(reason);
             resp->SetMessage(message);
-            resp->SetrequestId(requestId);
+            resp->SetRequestId(requestId);
         }
         Send(executer, ev.Release());
     }

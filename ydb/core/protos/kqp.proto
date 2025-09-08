@@ -648,7 +648,7 @@ message TEvStartKqpTasksRequest {
     optional double PoolMaxCpuShare = 12; // used for TCPULimits for ColumnShards
     optional NKikimrDataEvents.ELockMode LockMode = 19;
     optional string UserToken = 20;
-
+    optional bool SupportShuttingDown = 21 [default = true];
     reserved 15;
     reserved 16;
     reserved 18;
@@ -676,7 +676,7 @@ message TEvStartKqpTasksResponse {
         optional uint64 TaskId = 1;
         optional ENotStartedTaskReason Reason = 2;
         optional string Message = 3;
-        optional uint64 requestId = 4;
+        optional uint64 RequestId = 4;
     }
 
     optional uint64 TxId = 1;
@@ -964,5 +964,3 @@ message TEvRefreshPoolState {
     optional string PoolId = 1;
     optional string Database = 2;
 }
-
-message TEvNodeShutdowned {}

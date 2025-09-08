@@ -71,8 +71,6 @@ struct TEvKqpNode {
     struct TEvCancelKqpTasksResponse : public TEventPB<TEvCancelKqpTasksResponse,
         NKikimrKqp::TEvCancelKqpTasksResponse, TKqpNodeEvents::EvCancelKqpTasksResponse> {};
 
-    struct TEvNodeShutdowned : public TEventPB<TEvNodeShutdowned, NKikimrKqp::TEvNodeShutdowned,
-        TKqpEvents::EvNodeShutdowned> {};
 
 };
 

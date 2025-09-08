@@ -315,6 +315,47 @@ Y_UNIT_TEST_SUITE(WithSDK) {
     Y_UNIT_TEST(TimestampReadLB) {
         TimestampReadImpl(false, true);
     }
+
+    Y_UNIT_TEST(ReadWithBadTopic) {
+        TTopicSdkTestSetup setup = CreateSetup();
+
+        TTopicClient client(setup.MakeDriver());
+
+        std::vector<std::string> topics = { "//", "==", "--", "**", "@@", "!!", "##", "$$", "\%\%", "^^", "::", "&&", "??",
+             "\\\\", "||", "++", "--", ",,", "..", "``", "~~", ";;", "::", "((", "))", "[[", "]]", "{{", "}}", ""};
+        for (auto& topic : topics) {
+            Cerr << "Checking topic: '" << topic << "'" << Endl;
+
+            TReadSessionSettings settings;
+            settings.AppendTopics(TTopicReadSettings().Path(topic));
+            settings.ConsumerName(TEST_CONSUMER);
+            auto session = client.CreateReadSession(settings);
+            auto event = session->GetEvent(true);
+            // check that verify didn`t happened
+            UNIT_ASSERT(event.has_value());
+        }
+    }
+
+    Y_UNIT_TEST(ReadWithBadConsumer) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        std::vector<std::string> consumers = { "//", "==", "--", "**", "@@", "!!", "##", "$$", "\%\%", "^^", "::", "&&", "??",
+             "\\\\", "||", "++", "--", ",,", "..", "``", "~~", ";;", "::", "((", "))", "[[", "]]", "{{", "}}", ""};
+        for (auto& consumer : consumers) {
+            Cerr << "Checking consumer: '" << consumer << "'" << Endl;
+
+            TReadSessionSettings settings;
+            settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC));
+            settings.ConsumerName(consumer);
+            auto session = client.CreateReadSession(settings);
+            auto event = session->GetEvent(true);
+            // check that verify didn`t happened
+            UNIT_ASSERT(event.has_value());
+        }
+    }
 }
 
 } // namespace NKikimr

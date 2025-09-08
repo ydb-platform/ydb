@@ -2100,7 +2100,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         NKikimr::NMetadata::IClassBehaviour::TPtr cBehaviour(NKikimr::NMetadata::IClassBehaviour::TFactory::Construct(typeId));
         YQL_ENSURE(cBehaviour, "Unsupported object type: \"" << typeId << "\"");
 
-        if (const auto optimizationManager = cBehaviour->GetOptimizationManager()) {
+        if (const auto optimizationManager = cBehaviour->ConstructOptimizationManager()) {
             return optimizationManager->ValidateObjectNodeAnnotation(node.Ptr(), ctx);
         }
 

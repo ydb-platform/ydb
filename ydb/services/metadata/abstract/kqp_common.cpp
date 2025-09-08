@@ -38,7 +38,7 @@ TString IClassBehaviour::FormPathToResourceTable(const TString& resourceDatabase
     return "/" + resourceDatabasePath + "/.metadata/" + GetInternalStorageTablePath();
 }
 
-std::shared_ptr<NModifications::IOptimizationManager> IClassBehaviour::GetOptimizationManager() const {
+std::shared_ptr<NModifications::IOptimizationManager> IClassBehaviour::ConstructOptimizationManager() const {
     return nullptr;
 }
 

@@ -1465,7 +1465,7 @@ public:
                 auto mode = settings.Mode.Cast();
 
                 TExprNode::TPtr ast;
-                if (const auto optimizationManager = cBehaviour->GetOptimizationManager()) {
+                if (const auto optimizationManager = cBehaviour->ConstructOptimizationManager()) {
                     ast = optimizationManager->ExtractWorldFeatures(settings.Features, ctx);
                     if (!ast) {
                         return nullptr;

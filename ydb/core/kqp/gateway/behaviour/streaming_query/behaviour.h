@@ -17,7 +17,7 @@ protected:
 public:
     std::shared_ptr<NMetadata::NModifications::IOperationsManager> ConstructOperationsManager() const override;
 
-    std::shared_ptr<NMetadata::NModifications::IOptimizationManager> GetOptimizationManager() const override;
+    std::shared_ptr<NMetadata::NModifications::IOptimizationManager> ConstructOptimizationManager() const override;
 
     TString GetTypeId() const override;
 

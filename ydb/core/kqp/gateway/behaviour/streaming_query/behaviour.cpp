@@ -21,7 +21,7 @@ NMetadata::NModifications::IOperationsManager::TPtr TStreamingQueryBehaviour::Co
     return std::make_shared<TStreamingQueryManager>();
 }
 
-std::shared_ptr<NMetadata::NModifications::IOptimizationManager> TStreamingQueryBehaviour::GetOptimizationManager() const {
+std::shared_ptr<NMetadata::NModifications::IOptimizationManager> TStreamingQueryBehaviour::ConstructOptimizationManager() const {
     return std::make_shared<TStreamingQueryOptimizer>();
 }
 

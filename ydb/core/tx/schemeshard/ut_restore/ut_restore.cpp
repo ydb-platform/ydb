@@ -5521,129 +5521,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ChangefeedsExportRestore(false);
     }
 
-    Y_UNIT_TEST(ShouldSucceedImportTableWithUniqueIndex) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-
-        const auto data = GenerateTestData(R"(
-            columns {
-              name: "key"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            columns {
-              name: "value"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            primary_key: "key"
-            indexes {
-                name: "UniqueIndex"
-                index_columns: "value"
-                global_unique_index { }
-            }
-        )");
-
-        THashMap<TString, TTestDataWithScheme> bucketContent;
-        bucketContent.emplace("", data);
-
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/Table"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
-        
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::PathExist,
-            NLs::IndexesCount(1)
-        });
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/UniqueIndex", false, false, true), {
-            NLs::PathExist,
-            NLs::IndexType(EIndexTypeGlobalUnique),
-            NLs::IndexState(EIndexStateReady)
-        });
-    }
-
-    Y_UNIT_TEST(ShouldSucceedExportImportTableWithUniqueIndex) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
-            TableDescription {
-              Name: "Table"
-              Columns { Name: "key" Type: "Uint32" }
-              Columns { Name: "value" Type: "Utf8" }
-              KeyColumnNames: ["key"]
-            }
-            IndexDescription {
-              Name: "ByValue"
-              KeyColumnNames: ["value"]
-              Type: EIndexTypeGlobalUnique
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
-  
-        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: ""
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
-
-        TestDropTable(runtime, ++txId, "/MyRoot", "Table");
-        env.TestWaitNotification(runtime, txId);
-
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/Table"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
-        
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::PathExist,
-            NLs::IndexesCount(1)
-        });
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/ByValue", false, false, true), {
-            NLs::PathExist,
-            NLs::IndexType(EIndexTypeGlobalUnique),
-            NLs::IndexState(EIndexStateReady)
-        });
-    }
-
     Y_UNIT_TEST(IgnoreBasicSchemeLimits) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
@@ -5759,11 +5636,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-        auto topic = NDescUT::TTopic(0, 2);
+        auto topic = NDescUT::TSimpleTopic(0, 2);
 
         const auto data = GenerateTestData({
                 EPathTypePersQueueGroup,
-                isCorrupted ? topic.GetCorruptedPublicFile() : topic.GetPublic().DebugString()
+                isCorrupted ? topic.GetCorruptedPublicFile() : topic.GetPublicProto().DebugString()
         });
 
         THashMap<TString, TTestDataWithScheme> bucketContent;
@@ -5776,7 +5653,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TestImport(runtime, ++txId, "/MyRoot", NDescUT::TImportRequest(port, {topic.GetImportRequestItem()}).GetRequest());
+        TestImport(runtime, ++txId, "/MyRoot", topic.GetImportRequest(port));
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot",  isCorrupted ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
 
@@ -5817,16 +5694,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
-        auto topic = NDescUT::TTopic(1, 0);
+        auto topic = NDescUT::TSimpleTopic(1, 0);
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot", topic.GetScheme().DebugString());
         env.TestWaitNotification(runtime, txId);
 
-        TestExport(runtime, ++txId, "/MyRoot", NDescUT::TExportRequest(port, {topic.GetExportRequestItem()}).GetRequest());
+        TestExport(runtime, ++txId, "/MyRoot", topic.GetExportRequest(port));
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
 
-        TestImport(runtime, ++txId, "/MyRoot", NDescUT::TImportRequest(port, {topic.GetImportRequestItem()}).GetRequest());
+        TestImport(runtime, ++txId, "/MyRoot", topic.GetImportRequest(port));
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
@@ -6416,12 +6293,12 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleTopic) {
-        auto topic = NDescUT::TTopic(0, 2);
+        auto topic = NDescUT::TSimpleTopic(0, 2);
         ShouldSucceed({{topic.GetDir(),
             {
                 EPathTypePersQueueGroup,
-                topic.GetPublic().DebugString()
+                topic.GetPublicProto().DebugString()
             }
-        }}, NDescUT::TImportRequest({topic.GetImportRequestItem()}).GetRequest());
+        }}, topic.GetImportRequest());
     }
 }

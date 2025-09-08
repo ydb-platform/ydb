@@ -659,10 +659,10 @@ namespace {
           ui64 txId = 100;
           
           TVector<TString> requestItems;
-          TVector<NDescUT::TTopic> expected;
+          TVector<NDescUT::TSimpleTopic> expected;
           
           for (ui64 i = 0; i < topicsCount; ++i) {
-            auto topic = NDescUT::TTopic(i, (topicsCount == 1 || i > 0) ? consumersCount : 0);
+            auto topic = NDescUT::TSimpleTopic(i, (topicsCount == 1 || i > 0) ? consumersCount : 0);
             TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetScheme().DebugString());
             Env().TestWaitNotification(Runtime(), txId);
             requestItems.push_back(topic.GetExportRequestItem());

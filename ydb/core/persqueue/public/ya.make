@@ -4,6 +4,7 @@ SRCS(
     pq_database.cpp
     pq_rl_helpers.cpp
     utils.cpp
+    write_id.cpp
 )
 
 PEERDIR(

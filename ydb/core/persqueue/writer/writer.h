@@ -6,7 +6,7 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
-#include <ydb/core/persqueue/write_id.h>
+#include <ydb/core/persqueue/public/write_id.h>
 #include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 
 #include <variant>

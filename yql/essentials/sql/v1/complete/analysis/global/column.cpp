@@ -275,17 +275,25 @@ namespace NSQLComplete {
             }
 
             std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {
-                antlr4::ParserRuleContext* source = nullptr;
                 if (IsEnclosingStrict(ctx->window_clause()) ||
                     IsEnclosingStrict(ctx->ext_order_by_clause())) {
-                    source = ctx;
-                } else {
-                    source = ctx->join_source(0);
-                    source = source == nullptr ? ctx->join_source(1) : source;
+                    return TInferenceVisitor(Nodes_).visit(ctx);
                 }
 
-                if (source == nullptr) {
+                auto* source = ctx->join_source(0);
+                source = source == nullptr ? ctx->join_source(1) : source;
+
+                if (!source) {
                     return {};
+                }
+
+                auto sources = source->flatten_source();
+                auto** flatten = FindIfPtr(sources, [&](auto* ctx) {
+                    return IsEnclosingStrict(ctx);
+                });
+
+                if (flatten) {
+                    return visitChildren(*flatten);
                 }
 
                 return TInferenceVisitor(Nodes_).visit(source);

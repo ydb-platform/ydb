@@ -1,5 +1,7 @@
 #pragma once
 
+#include "cluster_tracker_factory.h"
+
 #include <ydb/core/base/events.h>
 
 #include <ydb/library/actors/core/actor.h>

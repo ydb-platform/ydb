@@ -7,9 +7,6 @@ namespace NKikimr {
 
 class TTabletStorageInfo;
 
-namespace NPQ {
-
 NActors::IActor* CreatePersQueueReadBalancer(const NActors::TActorId& tablet, TTabletStorageInfo *info);
 
-} // namespace NPQ
 } // namespace NKikimr

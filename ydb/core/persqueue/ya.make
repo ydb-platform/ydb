@@ -18,13 +18,13 @@ PEERDIR(
     ydb/core/metering
     ydb/core/persqueue/config
     ydb/core/persqueue/events
-    ydb/core/protos
-    ydb/library/logger
-    ydb/library/persqueue/counter_time_keeper
-    ydb/library/persqueue/topic_parser
-    ydb/library/protobuf_printer
-    ydb/public/lib/base
-    ydb/public/sdk/cpp/src/client/persqueue_public
+    #ydb/core/protos
+    #ydb/library/logger
+    #ydb/library/persqueue/counter_time_keeper
+    #ydb/library/persqueue/topic_parser
+    #ydb/library/protobuf_printer
+    #ydb/public/lib/base
+    #ydb/public/sdk/cpp/src/client/persqueue_public
     #ydb/library/dbgtrace
 
     ydb/core/persqueue/public/cluster_tracker

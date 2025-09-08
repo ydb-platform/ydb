@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     common_app.cpp
+    heartbeat.cpp
     key.cpp
     microseconds_sliding_window.cpp
 )

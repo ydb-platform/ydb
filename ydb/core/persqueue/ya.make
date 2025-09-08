@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     heartbeat.cpp
     key.cpp
-    write_meta.cpp
     dread_cache_service/caching_service.cpp
 )
 

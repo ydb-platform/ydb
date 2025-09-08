@@ -5,7 +5,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/persqueue/public/pq_database.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/library/persqueue/topic_parser/type_definitions.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>

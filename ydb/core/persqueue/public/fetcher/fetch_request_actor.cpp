@@ -12,7 +12,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 
 #include <ydb/public/lib/base/msgbus_status.h>
 

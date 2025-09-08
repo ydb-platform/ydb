@@ -19,4 +19,5 @@ RECURSE(
     cluster_tracker
     fetcher
     list_topics
+    write_meta
 )

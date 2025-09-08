@@ -10,7 +10,7 @@
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/events/internal.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>

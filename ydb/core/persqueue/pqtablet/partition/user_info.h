@@ -5,7 +5,6 @@
 #include "working_time_counter.h"
 #include "subscriber.h"
 #include <ydb/core/persqueue/public/percentile_counter.h>
-#include "quota_tracker.h"
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/pqtablet/metering_sink.h>
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>

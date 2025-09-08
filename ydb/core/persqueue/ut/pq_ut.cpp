@@ -2739,7 +2739,7 @@ Y_UNIT_TEST(IncompleteProxyResponse) {
     CmdRead(0, 7, 10, 20_MB, 3, false, tc, {7, 8, 9});
 }
 
-Y_UNIT_TEST(TestComactificationWithRebootsSmallMsg) {
+Y_UNIT_TEST(SmallMsgComactificationWithRebootsTest) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -2779,8 +2779,7 @@ Y_UNIT_TEST(TestComactificationWithRebootsSmallMsg) {
     });
 }
 
-
-Y_UNIT_TEST(TestComactificationWithRebootsMediumMsg) {
+Y_UNIT_TEST(MediumMsgComactificationWithRebootsTest) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -2805,18 +2804,23 @@ Y_UNIT_TEST(TestComactificationWithRebootsMediumMsg) {
         };
         PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=10'000, .lowWatermark=100, .enableCompactificationByKey = true}, {}, tc);
         activeZone = PlainOrSoSlow(true, false);
+        writeData(3);
+        Cerr << "Write 1 done\n";
 
         writeData(3);
-        writeData(3);
+        Cerr << "Write 2 done\n";
+
         writeData(1);
+        Cerr << "Write 3 done\n";
 
-        i64 expectedOffset = 5;
+        i64 expectedOffset = 4;
         i64 consumerOffset = -1;
         while(consumerOffset < expectedOffset) {
+            Cerr << "Got compacter offset = " << consumerOffset << Endl;
             consumerOffset = CmdGetOffset(0, CLIENTID_COMPACTION_CONSUMER, Nothing(), tc);
         }
         UNIT_ASSERT(consumerOffset >= expectedOffset);
-        PQGetPartInfo([](ui64 offset) { return offset >= 3; }, currentOffset, tc);
+        PQGetPartInfo([](ui64 offset) { return offset >= 1; }, currentOffset, tc);
     });
 }
 

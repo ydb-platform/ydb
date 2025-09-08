@@ -298,6 +298,13 @@ public:
         if (!clusterState.ReadSession) {
             clusterState.ReadSession = GetTopicClient(clusterState).CreateReadSession(GetReadSessionSettings(clusterState));
             SRC_LOG_I("SessionId: " << GetSessionId(clusterState.Index) << " CreateReadSession");
+            if (WatermarkTracker) {
+                TPartitionKey partitionKey { .Cluster = TString(clusterState.Info.Name) };
+                for (const auto partitionId : GetPartitionsToRead(clusterState)) { // XXX duplicated, but rare
+                    partitionKey.PartitionId = partitionId;
+                    WatermarkTracker->RegisterPartition(partitionKey);
+                }
+            }
         }
         return *clusterState.ReadSession;
     }

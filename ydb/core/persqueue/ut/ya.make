@@ -46,7 +46,6 @@ SRCS(
     pqrb_describes_ut.cpp
     partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
-    list_all_topics_ut.cpp
 )
 
 RESOURCE(

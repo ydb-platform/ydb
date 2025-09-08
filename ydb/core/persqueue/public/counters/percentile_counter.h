@@ -6,6 +6,8 @@
 namespace NKikimr {
 namespace NPQ {
 
+using namespace NPersQueue;
+
 class TMultiCounter {
 public:
     TMultiCounter() = default;

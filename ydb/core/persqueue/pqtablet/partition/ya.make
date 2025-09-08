@@ -32,6 +32,7 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/persqueue/common
     ydb/core/persqueue/common/proxy
+    ydb/core/persqueue/public/counters
     ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/pqtablet/blob
     ydb/core/persqueue/pqtablet/cache

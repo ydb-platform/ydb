@@ -3,7 +3,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/core/persqueue/public/percentile_counter.h>
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>

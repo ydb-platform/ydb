@@ -3,7 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/persqueue/public/percentile_counter.h>
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 

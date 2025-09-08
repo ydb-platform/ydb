@@ -1,6 +1,7 @@
+#include "list_all_topics_actor.h"
+
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
-#include <ydb/core/persqueue/list_all_topics_actor.h>
 
 
 namespace NKikimr::NPersQueueTests {
@@ -12,7 +13,7 @@ Y_UNIT_TEST_SUITE(TListAllTopicsTests) {
                 TTestActorRuntime* runtime, bool recursive,const TMaybe<ui64>& limit = {}, const TString& startFrom = {}
     ) {
         auto edge = runtime->AllocateEdgeActor();
-        runtime->Register(NKikimr::NPersQueue::MakeListAllTopicsActor(
+        runtime->Register(NKikimr::NPQ::MakeListAllTopicsActor(
                     edge, db, "", recursive, startFrom, limit));
 
 

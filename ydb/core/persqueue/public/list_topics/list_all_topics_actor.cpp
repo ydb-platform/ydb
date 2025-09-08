@@ -3,9 +3,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 
-using namespace NActors;
+namespace NKikimr::NPQ {
 
-namespace NKikimr::NPersQueue {
+using namespace NActors;
 
 class TListAllTopicsActor : public NActors::TActorBootstrapped<TListAllTopicsActor> {
 

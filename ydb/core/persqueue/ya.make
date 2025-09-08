@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     heartbeat.cpp
     key.cpp
-    list_all_topics_actor.cpp
     write_meta.cpp
     dread_cache_service/caching_service.cpp
     write_id.cpp
@@ -26,6 +25,8 @@ PEERDIR(
     ydb/core/persqueue/config
     ydb/core/persqueue/events
     ydb/core/persqueue/public/cluster_tracker
+    ydb/core/persqueue/public/fetcher
+    ydb/core/persqueue/public/list_topics
     ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/pqrb
     ydb/core/persqueue/pqtablet

@@ -1,5 +1,5 @@
 items:
-  - name: Аналитическая платформа
+  - name: Аналитика
     include:
       mode: link
       path: olap/toc_p.yaml

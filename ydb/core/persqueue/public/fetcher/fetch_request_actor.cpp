@@ -1,3 +1,5 @@
+#include "fetch_request_actor.h"
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
 
@@ -6,15 +8,14 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/write_meta.h>
 
 #include <ydb/public/lib/base/msgbus_status.h>
 
-#include "events/global.h"
-#include "events/internal.h"
-#include "fetch_request_actor.h"
 
 namespace NKikimr::NPQ {
 

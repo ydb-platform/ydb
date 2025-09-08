@@ -4,7 +4,6 @@ SRCS(
     actor_persqueue_client_iface.h
     cluster_tracker.cpp
     event_helpers.cpp
-    fetch_request_actor.cpp
     heartbeat.cpp
     key.cpp
     list_all_topics_actor.cpp

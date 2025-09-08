@@ -12,3 +12,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    fetcher
+)

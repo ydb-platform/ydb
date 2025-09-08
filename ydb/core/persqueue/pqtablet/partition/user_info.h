@@ -2,7 +2,7 @@
 
 #include "account_read_quoter.h"
 
-#include <ydb/core/persqueue/working_time_counter.h>
+#include "working_time_counter.h"
 #include "subscriber.h"
 #include <ydb/core/persqueue/public/percentile_counter.h>
 #include "quota_tracker.h"

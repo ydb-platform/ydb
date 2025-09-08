@@ -5696,7 +5696,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         auto topic = NDescUT::TSimpleTopic(1, 0);
 
-        TestCreatePQGroup(runtime, ++txId, "/MyRoot", topic.GetScheme().DebugString());
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", topic.GetPrivateProto().DebugString());
         env.TestWaitNotification(runtime, txId);
 
         TestExport(runtime, ++txId, "/MyRoot", topic.GetExportRequest(port));

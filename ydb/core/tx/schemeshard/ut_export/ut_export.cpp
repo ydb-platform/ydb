@@ -663,7 +663,7 @@ namespace {
           
           for (ui64 i = 0; i < topicsCount; ++i) {
             auto topic = NDescUT::TSimpleTopic(i, (topicsCount == 1 || i > 0) ? consumersCount : 0);
-            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetScheme().DebugString());
+            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetPrivateProto().DebugString());
             Env().TestWaitNotification(Runtime(), txId);
             requestItems.push_back(topic.GetExportRequestItem());
             expected.push_back(topic);

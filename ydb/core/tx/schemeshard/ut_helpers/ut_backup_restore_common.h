@@ -8,6 +8,10 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
+#include <util/folder/path.h>
+#include <util/string/builder.h>
+
+#include <google/protobuf/util/message_differencer.h>
 
 using EDataFormat = NKikimr::NDataShard::NBackupRestoreTraits::EDataFormat;
 using ECompressionCodec = NKikimr::NDataShard::NBackupRestoreTraits::ECompressionCodec;
@@ -68,15 +72,15 @@ struct TTypedScheme {
 
 namespace NDescUT {
 
-template <typename TSchemeProto>
-class TSchemeDescriber {
+template <typename TPrivateProto>
+class TPrivateProtoDescriber {
 public:
-    const TSchemeProto& GetScheme() const {
-        return Scheme;
+    const TPrivateProto& GetPrivateProto() const {
+        return PrivateProto;
     }
 
 protected:
-    TSchemeProto Scheme;
+    TPrivateProto PrivateProto;
 };
 
 template <typename TPublicProto>
@@ -90,7 +94,7 @@ public:
         TPublicProto proto;
         google::protobuf::TextFormat::ParseFromString(str, &proto);
 
-        return PublicProto.DebugString() == proto.DebugString();
+        return ::google::protobuf::util::MessageDifferencer::Equals(PublicProto, proto);
     } 
 
 protected:
@@ -99,9 +103,9 @@ protected:
 
 class TFileDescriber {
 public:
-    TFileDescriber(const TString& dir, const TString& name) 
+    TFileDescriber(const TFsPath& dir, const TFsPath& name) 
         : Dir(dir)
-        , Path(dir + name) 
+        , Path(dir / name) 
     {}
 
     const TString& GetDir() const {
@@ -113,8 +117,8 @@ public:
     }
 
 protected:
-    const TString Dir;
-    const TString Path;
+    const TFsPath Dir;
+    const TFsPath Path;
 };
 
 class TPermissions 
@@ -123,7 +127,7 @@ class TPermissions
 {
 public:
     TPermissions(const TString& dir) 
-        : TFileDescriber(dir, "/permissions.pb")
+        : TFileDescriber(dir, "permissions.pb")
     {
         google::protobuf::TextFormat::ParseFromString(
             R"(actions {
@@ -134,18 +138,20 @@ public:
     }
 };
 
-template <typename TSchemeProto, typename TPublicProto>
+template <typename TPrivateProto, typename TPublicProto>
 class TObjectDescriber 
-    : public TSchemeDescriber<TSchemeProto>
+    : public TPrivateProtoDescriber<TPrivateProto>
     , public TPublicProtoDescriber<TPublicProto>
 {
 public:
     template <typename TFormat>
-    TFormat Get() const {return {};}
+    TFormat Get() const {
+        return {};
+    }
 
     template <>
-    const TSchemeProto& Get<const TSchemeProto&>() const {
-        return this->GetScheme();
+    const TPrivateProto& Get<const TPrivateProto&>() const {
+        return this->GetPrivateProto();
     }
 
     template <>
@@ -179,7 +185,7 @@ public:
         return std::accumulate(
             items.begin(), items.end(), TString{},
             [](const TString& acc, const auto& item) {
-                return acc + item + "\n";
+                return TStringBuilder() << acc << item << "\n";
             }
         );
     }
@@ -196,7 +202,8 @@ private:
 };
 
 class TExportRequest
-    : public TXxportRequest {
+    : public TXxportRequest 
+{
 public:
     TExportRequest(ui16 port, const TVector<TString>& items)
         : TXxportRequest("ExportToS3", items, port)
@@ -208,7 +215,8 @@ public:
 };
 
 class TImportRequest 
-    : public TXxportRequest {
+    : public TXxportRequest
+{
 public:
     TImportRequest(ui16 port, const TVector<TString>& items)
         : TXxportRequest("ImportFromS3", items, port)
@@ -219,9 +227,9 @@ public:
     {}
 };
 
-template <typename TSchemeProto, typename TPublicProto>
+template <typename TPrivateProto, typename TPublicProto>
 class TSchemeObjectDescriber
-    : public TObjectDescriber<TSchemeProto, TPublicProto> 
+    : public TObjectDescriber<TPrivateProto, TPublicProto> 
     , public TFileDescriber
 {
 public:
@@ -248,7 +256,7 @@ public:
     }
 
     TString GetRestoredDir() const {
-        return "/Restored" + Dir;
+        return TStringBuilder() << "/Restored" << Dir;
     }
 
     TString GetExportRequest(ui32 port) const {
@@ -303,15 +311,15 @@ private:
     {
     public:
         TSimpleConsumer(ui64 number, bool important = false) {
-            google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerScheme, number), &Scheme);
+            google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerPrivate, number), &PrivateProto);
             google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerPublic, number), &PublicProto);
-            Scheme.SetImportant(important);
+            PrivateProto.SetImportant(important);
             if (important) 
                 PublicProto.set_important(important);
         }
 
     private:
-        const char* ConsumerScheme = R"(
+        const char* ConsumerPrivate = R"(
             Name: "Consumer_%d"
         )";
 
@@ -328,14 +336,14 @@ private:
 
 public:
     TSimpleTopic(ui64 number, ui64 countConsumers = 0) 
-        : TSchemeObjectDescriber(Sprintf("/Topic_%d", number), "/create_topic.pb")
+        : TSchemeObjectDescriber(Sprintf("/Topic_%d", number), "create_topic.pb")
     {
-        google::protobuf::TextFormat::ParseFromString(Sprintf(TopicScheme, number), &Scheme);
+        google::protobuf::TextFormat::ParseFromString(Sprintf(TopicPrivate, number), &PrivateProto);
         google::protobuf::TextFormat::ParseFromString(TopicPublic, &PublicProto);
 
         for (ui64 i = 0; i < countConsumers; ++i) {
             auto consumer = TSimpleConsumer(i, i % 2);
-            *Scheme.MutablePQTabletConfig()->AddConsumers() = consumer.GetScheme();
+            *PrivateProto.MutablePQTabletConfig()->AddConsumers() = consumer.GetPrivateProto();
             *PublicProto.mutable_consumers()->Add() = consumer.GetPublicProto();
         }
     }
@@ -354,7 +362,7 @@ public:
     }
 
 private:
-    const char* TopicScheme = R"(
+    const char* TopicPrivate = R"(
         Name: "Topic_%d"
         TotalGroupCount: 1
         PartitionPerTablet: 1

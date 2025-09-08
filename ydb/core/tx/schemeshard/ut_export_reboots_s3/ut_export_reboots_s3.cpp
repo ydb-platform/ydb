@@ -716,8 +716,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         func(
             {
                 {
-                EPathTypePersQueueGroup,
-                topic.GetScheme().DebugString()
+                    EPathTypePersQueueGroup,
+                    topic.GetPrivateProto().DebugString()
                 }
             }
             , topic.GetExportRequest()

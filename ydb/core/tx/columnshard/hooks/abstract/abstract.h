@@ -17,7 +17,7 @@
 #include <util/generic/singleton.h>
 
 #include <memory>
-#include <atomic>
+#include <shared_mutex>
 
 namespace NKikimr::NColumnShard {
 class TTiersManager;
@@ -403,29 +403,9 @@ public:
 
 class TControllers {
 private:
-    std::atomic<ICSController::TPtr*> CSControllerPtr{nullptr};
+    ICSController::TPtr CSController = std::make_shared<ICSController>();
     IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
-    
-    void EnsureCSController() {
-        ICSController::TPtr* expected = nullptr;
-        if (CSControllerPtr.compare_exchange_strong(expected, nullptr)) {
-            auto* newPtr = new ICSController::TPtr(std::make_shared<ICSController>());
-            CSControllerPtr.store(newPtr);
-        }
-    }
-
-    void ReplaceCSController(const ICSController::TPtr& newController) {
-        ICSController::TPtr* expected = CSControllerPtr.load();
-        while (expected) {
-            auto* newPtr = new ICSController::TPtr(newController);
-            if (CSControllerPtr.compare_exchange_weak(expected, newPtr)) {
-                delete expected;
-                break;
-            } else {
-                delete newPtr;
-            }
-        }
-    }
+    mutable std::shared_mutex CSControllerMutex;
 
 public:
     template <class TController>
@@ -454,7 +434,8 @@ public:
         ~TGuard() {
             if (Controller) {
                 auto* controllers = Singleton<TControllers>();
-                controllers->ReplaceCSController(std::make_shared<ICSController>());
+                std::unique_lock<std::shared_mutex> lock(controllers->CSControllerMutex);
+                controllers->CSController = std::make_shared<ICSController>();
             }
         }
     };
@@ -463,15 +444,15 @@ public:
     static TGuard<T> RegisterCSControllerGuard(Types... args) {
         auto result = std::make_shared<T>(args...);
         auto* controllers = Singleton<TControllers>();
-        controllers->ReplaceCSController(result);
+        std::unique_lock<std::shared_mutex> lock(controllers->CSControllerMutex);
+        controllers->CSController = result;
         return result;
     }
 
     static ICSController::TPtr GetColumnShardController() {
         auto* controllers = Singleton<TControllers>();
-        controllers->EnsureCSController();
-        auto* ptr = controllers->CSControllerPtr.load();
-        return *ptr;
+        std::shared_lock<std::shared_mutex> lock(controllers->CSControllerMutex);
+        return controllers->CSController;
     }
 
     template <class T>

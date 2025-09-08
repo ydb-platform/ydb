@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               KeyColumnNames: ["embedding"]
               DataColumnNames: ["covered1", "covered2"]
               Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 }, clusters: 10, levels: 3 } }
             }
         )");
         env.TestWaitNotification(runtime, txId);

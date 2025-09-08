@@ -1,9 +1,11 @@
 RECURSE(
+    auth/ssa_delegation
     basic_example
     bulk_upsert_simple
     pagination
     secondary_index
     secondary_index_builtin
+    time
     topic_reader
     topic_writer/transaction
     ttl

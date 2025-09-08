@@ -6,7 +6,8 @@ namespace NKikimr::NConveyorComposite {
 TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
     const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
     : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetUsableThreads()))
-    , Counters(counters) {
+    , Counters(counters)
+    , MaxBatchSize(config.GetMaxBatchSize()) {
     Workers.reserve(WorkersCount);
     for (auto&& i : config.GetLinks()) {
         AFL_VERIFY((ui64)i.GetCategory() < categories.size());
@@ -71,7 +72,7 @@ bool TWorkersPool::DrainTasks() {
         TDuration predicted = TDuration::Zero();
         std::vector<TWorkerTask> tasks;
         THashSet<TString> scopes;
-        while (procLocal.size() && (tasks.empty() || predicted < DeliveringDuration.GetValue() * 10) &&
+        while (procLocal.size() && (tasks.empty() || (predicted < DeliveringDuration.GetValue() * 10 && tasks.size() < MaxBatchSize)) &&
                procLocal.front().GetCategory()->HasTasks()) {
             std::pop_heap(procLocal.begin(), procLocal.end(), predHeap);
             auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(procLocal.back().GetCounters(), scopes);

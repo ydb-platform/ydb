@@ -99,6 +99,8 @@ enum t_setup_ret t_register_buffers(struct io_uring *ring,
 				    unsigned nr_iovecs);
 
 bool t_probe_defer_taskrun(void);
+void t_set_nonblock(int fd);
+void t_clear_nonblock(int fd);
 
 unsigned __io_uring_flush_sq(struct io_uring *ring);
 

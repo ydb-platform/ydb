@@ -1,5 +1,5 @@
 #include <ydb/core/base/path.h>
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -12,7 +12,7 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NTableIndex;
-using namespace NKikimr::NTableIndex::NTableVectorKmeansTreeIndex;
+using namespace NKikimr::NTableIndex::NKMeans;
 
 Y_UNIT_TEST_SUITE(TVectorIndexTests) {
     Y_UNIT_TEST(CreateTable) {
@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
       {
         THashSet<TString> indexDataColumns = {"data2", "data1"};
         auto desc = NTableIndex::CalcVectorKmeansTreePostingImplTableDesc(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, "something");
-        std::string_view expected[] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, "data1", "data2"};
+        std::string_view expected[] = {NTableIndex::NKMeans::ParentColumn, "data1", "data2"};
         for (size_t i = 0; auto& column : desc.GetColumns()) {
           UNIT_ASSERT_STRINGS_EQUAL(column.GetName(), expected[i]);
           ++i;

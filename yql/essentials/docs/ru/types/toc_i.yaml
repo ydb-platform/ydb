@@ -15,6 +15,5 @@ items:
   href: type_string.md
 - name: Передача параметров в формате JSON
   href: json.md
-- name: YSON
-  hidden: true
+- name: Тип YSON
   href: yson.md

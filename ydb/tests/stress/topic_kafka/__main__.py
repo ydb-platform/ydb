@@ -2,7 +2,7 @@
 import argparse
 import logging
 import dataclasses
-from ydb.tests.stress.topic_kafka.workload.workload_topic import YdbTopicWorkload, WriteProfile, parse_write_profile
+from ydb.tests.stress.topic_kafka.workload import YdbTopicWorkload, WriteProfile, parse_write_profile
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -30,6 +30,8 @@ if __name__ == '__main__':
         metavar=tuple(f'{field.name.upper()}:{field.type.__name__}' for field in dataclasses.fields(WriteProfile)),
     )
 
+    parser.add_argument('--no-cleanup-policy-compact', action='store_false', dest='cleanup_policy_compact', help='disable "compact" cleanup policy')
+
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
 
     args = parser.parse_args()
@@ -53,6 +55,7 @@ if __name__ == '__main__':
         tables_prefix=args.topic_prefix,
         partitions=args.partitions,
         write_profiles=[parse_write_profile(profile) for profile in args.write_workload],
+        cleanup_policy_compact=args.cleanup_policy_compact,
     )
     workload.tear_up()
     try:

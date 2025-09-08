@@ -94,14 +94,14 @@ inline bool TReaderWriterSpinLock::TryAcquireReaderForkFriendly() noexcept
     auto newValue = oldValue + ReaderDelta;
 
     bool acquired = Value_.compare_exchange_weak(oldValue, newValue, std::memory_order::acquire);
-    NDetail::RecordSpinLockAcquired(acquired);
+    NDetail::MaybeRecordSpinLockAcquired(acquired);
     return acquired;
 }
 
 inline bool TReaderWriterSpinLock::TryAcquireWriterWithExpectedValue(TValue expected) noexcept
 {
     bool acquired = Value_.compare_exchange_weak(expected, WriterMask, std::memory_order::acquire);
-    NDetail::RecordSpinLockAcquired(acquired);
+    NDetail::MaybeRecordSpinLockAcquired(acquired);
     return acquired;
 }
 

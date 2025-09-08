@@ -800,7 +800,7 @@ namespace {
                     dstSettings.EnsureStateDone();
                 } else if (to_lower(value) == "paused") {
                     dstSettings.StatePaused = true;
-                } else if (to_lower(value) == "standby") {
+                } else if (to_lower(value) == "standby" || to_lower(value) == "active") {
                     dstSettings.StateStandBy = true;
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
@@ -980,49 +980,6 @@ namespace {
         return true;
     }
 }
-
-class TKiSinkPlanInfoTransformer : public TGraphTransformerBase {
-public:
-    TKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
-        : QueryExecutor(queryExecutor) {}
-
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ) final {
-        output = input;
-        VisitExpr(input, [](const TExprNode::TPtr& node) {
-            if (auto maybeExec = TMaybeNode<TKiExecDataQuery>(node)) {
-                auto exec = maybeExec.Cast();
-                if (exec.Ast().Maybe<TCoVoid>()) {
-                    YQL_ENSURE(false);
-                }
-            }
-
-            return true;
-        });
-
-        return TStatus::Ok;
-    }
-
-    TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
-        Y_UNUSED(input);
-        return MakeFuture();
-    }
-
-    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext&) final {
-        output = input;
-        return TStatus::Ok;
-    }
-
-    void Rewind() final {
-    }
-private:
-    struct TExecInfo {
-        TKiExecDataQuery Node;
-        TIntrusivePtr<IKikimrQueryExecutor::TAsyncQueryResult> Result;
-    };
-
-private:
-    TIntrusivePtr<IKikimrQueryExecutor> QueryExecutor;
-};
 
 class TKiSourceCallableExecutionTransformer : public TAsyncCallbackTransformer<TKiSourceCallableExecutionTransformer> {
 private:
@@ -1594,6 +1551,8 @@ public:
             NKikimrIndexBuilder::TIndexBuildSettings indexBuildSettings;
             indexBuildSettings.set_source_path(table.Metadata->Name);
 
+            TVector<TSetColumnConstraintSettings> constraintSetObjects;
+
             for (auto action : maybeAlter.Cast().Actions()) {
                 auto name = action.Name().Value();
                 if (name == "renameTo") {
@@ -1640,6 +1599,12 @@ public:
                                         "Column addition with serial data type is unsupported"));
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
+                                    if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), 
+                                            "Default values are not supported in column tables"));
+                                        return SyncError();
+                                    }
+
                                     if (columnBuild == nullptr) {
                                         columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
                                     }
@@ -1699,13 +1664,15 @@ public:
                 } else if (name == "alterColumns") {
                     auto listNode = action.Value().Cast<TExprList>();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
-                        auto alter_columns = alterTableRequest.add_alter_columns();
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();
                         auto columnName = columnTuple.Item(0).Cast<TCoAtom>();
-                        alter_columns->set_name(TString(columnName));
                         auto alterColumnList = columnTuple.Item(1).Cast<TExprList>();
                         auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
+
+                        auto alter_columns = alterTableRequest.add_alter_columns();
+                        alter_columns->set_name(TString(columnName));
+
                         if (alterColumnAction == "setDefault") {
                             auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
                             if (setDefault.Size() == 1) {
@@ -1759,9 +1726,19 @@ public:
                             if (value == "drop_not_null") {
                                 alter_columns->set_not_null(false);
                             } else if (value == "set_not_null") {
-                                ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
-                                    << "SET NOT NULL is currently not supported."));
-                                return SyncError();
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableSetColumnConstraint()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
+                                        << "SET NOT NULL is currently not supported."));
+                                    return SyncError();
+                                } else {
+                                    alterTableRequest.mutable_alter_columns()->RemoveLast();
+
+                                    TSetColumnConstraintSettings value;
+                                    value.SetColumnName(TString(columnName));
+                                    value.SetConstraint(TSetColumnConstraintSettings::NOT_NULL);
+
+                                    constraintSetObjects.push_back(std::move(value));
+                                }
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
                                     << "Unknown operation in changeColumnConstraints"));
@@ -1813,6 +1790,25 @@ public:
                                 } else if (name == "compression_level") {
                                     auto level = FromString<i32>(familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                                     f->set_compression_level(level);
+                                } else if (name == "cache_mode") {
+                                    if (!SessionCtx->Config().FeatureFlags.GetEnableTableCacheModes()) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
+                                            TStringBuilder() << "Setting cache_mode is not allowed"));
+                                        return SyncError();
+                                    }
+                                    auto cacheMode = TString(
+                                        familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+                                    if (to_lower(cacheMode) == "regular") {
+                                        f->set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR);
+                                    } else if (to_lower(cacheMode) == "in_memory") {
+                                        f->set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY);
+                                    } else {
+                                        ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
+                                            TStringBuilder() << "Unknown cache mode '" << cacheMode
+                                                << "' for a column family"));
+                                        return SyncError();
+                                    }
                                 } else {
                                     ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
                                         TStringBuilder() << "Unknown column family setting name: " << name));
@@ -2231,8 +2227,11 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);  // Doesn't set, so always false
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
+            bool isSetConstraint = (!constraintSetObjects.empty());
 
-            if (isTableStore) {
+            if (isSetConstraint) {
+                future = Gateway->SetConstraint(table.Metadata->Name, std::move(constraintSetObjects));
+            } else if (isTableStore) {
                 AFL_VERIFY(false);
                 if (!isColumn) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
@@ -3180,10 +3179,6 @@ TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(
     TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
 {
     return new TKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor);
-}
-
-TAutoPtr<IGraphTransformer> CreateKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor) {
-    return new TKiSinkPlanInfoTransformer(queryExecutor);
 }
 
 } // namespace NYql

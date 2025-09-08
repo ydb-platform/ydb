@@ -36,7 +36,6 @@ void TWriteOperation::Start(
     auto writeMeta = std::make_shared<NEvWrite::TWriteMeta>(
         (ui64)WriteId, PathId, source, GranuleShardingVersionId, GetIdentifier(),
         context.GetWritingCounters()->GetWriteFlowCounters());
-    writeMeta->SetLockId(LockId);
     writeMeta->SetModificationType(ModificationType);
     writeMeta->SetBulk(IsBulk());
     auto writingAction = owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR);

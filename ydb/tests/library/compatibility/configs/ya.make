@@ -24,8 +24,23 @@ RUN_PROGRAM(
 )
 
 RUN_PROGRAM(
+   ydb/tests/library/compatibility/binaries/downloader download stable-25-1-4/release/config-meta.json stable-25-1-4
+   OUT_NOAUTO stable-25-1-4
+)
+
+RUN_PROGRAM(
   ydb/tests/library/compatibility/binaries/downloader download prestable-25-2/release/config-meta.json prestable-25-2
   OUT_NOAUTO prestable-25-2
+)
+
+RUN_PROGRAM(
+  ydb/tests/library/compatibility/binaries/downloader download stable-25-2/release/config-meta.json stable-25-2
+  OUT_NOAUTO stable-25-2
+)
+
+RUN_PROGRAM(
+  ydb/tests/library/compatibility/binaries/downloader download stable-25-2-1/release/config-meta.json stable-25-2-1
+  OUT_NOAUTO stable-25-2-1
 )
 
 RUN_PROGRAM(

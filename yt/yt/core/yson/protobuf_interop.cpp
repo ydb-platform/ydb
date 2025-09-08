@@ -10,6 +10,7 @@
 
 #include <yt/yt_proto/yt/core/yson/proto/protobuf_interop.pb.h>
 
+#include <yt/yt/core/misc/lazy_ptr.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/ypath/helpers.h>
@@ -934,9 +935,10 @@ public:
     {
         BuildYsonFluently(consumer)
             .BeginMap()
-                .Item("type_name").Value("enum")
-                .Item("enum_name").Value(Underlying_->name())
-                .Item("values").DoListFor(0, Underlying_->value_count(), [&] (auto fluent, int index) {
+                .Item("type_name").Value("tagged")
+                .Item("tag").Value(Format("enum/%v", Underlying_->name()))
+                .Item("item").Value("string")
+                .Item("enum").DoListFor(0, Underlying_->value_count(), [&] (auto fluent, int index) {
                     fluent.Item().Value(FindLiteralByValue(Underlying_->value(index)->number()));
                 })
             .EndMap();
@@ -1063,6 +1065,13 @@ int ConvertToProtobufEnumValueUntyped(
 
 class TProtobufTranscoderBase
 {
+public:
+    TProtobufTranscoderBase()
+        : ProtobufInteropConfig_(BIND([] {
+            return GetProtobufInteropConfig();
+        }))
+    { }
+
 protected:
     TYPathStack YPathStack_;
 
@@ -1110,11 +1119,7 @@ protected:
 
     void ValidateString(TStringBuf data, TStringBuf fieldFullName, std::optional<EUtf8Check> utf8Check)
     {
-        // TODO(kmokrov): `.or_else` when C++23 arrives.
-        auto effectiveCheck = utf8Check ? *utf8Check : std::invoke([] {
-            auto config = GetProtobufInteropConfig();
-            return config->Utf8Check;
-        });
+        auto effectiveCheck = utf8Check.value_or(ProtobufInteropConfig_->Utf8Check);
 
         if (effectiveCheck == EUtf8Check::Disable || IsUtf(data)) {
             return;
@@ -1135,6 +1140,9 @@ protected:
                     << TErrorAttribute("proto_field", fieldFullName);
         }
     }
+
+private:
+    TLazyIntrusivePtr<TProtobufInteropConfig> ProtobufInteropConfig_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

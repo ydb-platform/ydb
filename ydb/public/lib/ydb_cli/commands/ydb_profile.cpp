@@ -26,7 +26,7 @@ const TString AuthNode = "authentication";
 TCommandConfig::TCommandConfig()
     : TClientCommandTree("config", {}, "Manage YDB CLI configuration")
 {
-    AddCommand(std::make_unique<TCommandProfile>());
+    AddLocalCommand(std::make_unique<TCommandProfile>());
     AddCommand(std::make_unique<TCommandConnectionInfo>());
 }
 

@@ -1088,6 +1088,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         );
                     } else if (name == "compression_level") {
                         family.CompressionLevel = FromString<i32>(familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                    } else if (name == "cache_mode") {
+                        family.CacheMode = TString(
+                            familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                        );
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
                             TStringBuilder() << "Unknown column family setting name: " << name));
@@ -1314,6 +1318,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 );
             } else if (name == "storeExternalBlobs") {
                 meta->TableSettings.StoreExternalBlobs = TString(setting.Value().Cast<TCoAtom>().Value());
+            } else if (name == "externalDataChannelsCount") {
+                meta->TableSettings.ExternalDataChannelsCount = FromString<ui32>(
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                );
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     TStringBuilder() << "Unknown table profile setting: " << name));

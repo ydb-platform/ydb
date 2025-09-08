@@ -129,6 +129,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
+    if (settings.EnableStorageProxy) {
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetEnabled(true);
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetCheckpointingPeriodMillis(200);
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetMaxInflight(1);
+    }
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
     ServerSettings->SetNodeCount(settings.NodeCount);
@@ -145,6 +150,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
     ServerSettings->SetEnableScriptExecutionBackgroundChecks(settings.EnableScriptExecutionBackgroundChecks);
+    ServerSettings->SetEnableStorageProxy(settings.EnableStorageProxy);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);
@@ -155,10 +161,13 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetEnableMockOnSingleNode(false);
     }
 
-    if (settings.LogStream)
+    if (settings.LogStream) {
         ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
+    }
 
-    if (settings.FederatedQuerySetupFactory) {
+    if (settings.InitFederatedQuerySetupFactory) {
+        ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
+    } else if (settings.FederatedQuerySetupFactory) {
         ServerSettings->SetFederatedQuerySetupFactory(settings.FederatedQuerySetupFactory);
     }
 
@@ -645,7 +654,11 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
     SetupLogLevelFromTestParam(NKikimrServices::SSA_GRAPH_EXECUTION);
-
+    SetupLogLevelFromTestParam(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR);
+    SetupLogLevelFromTestParam(NKikimrServices::STREAMS_STORAGE_SERVICE);
+    SetupLogLevelFromTestParam(NKikimrServices::YDB_SDK);
+    SetupLogLevelFromTestParam(NKikimrServices::DISCOVERY);
+    SetupLogLevelFromTestParam(NKikimrServices::DISCOVERY_CACHE);
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);

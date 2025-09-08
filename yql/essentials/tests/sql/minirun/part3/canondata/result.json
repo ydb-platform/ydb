@@ -561,6 +561,20 @@
             "uri": "https://{canondata_backend}/1942671/d3336f0bb6dbe9e9fd1f3cf5e74ebe4602d13132/resource.tar.gz#test.test_expr-list_from_range-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[expr-nth_no_optional_no_tagged_no_cache-default.txt-Debug]": [
+        {
+            "checksum": "1aa9af53a28b769543e515e500c6c797",
+            "size": 1036,
+            "uri": "https://{canondata_backend}/1942173/4d031afb3e8d48927da6c14d5eb6c4d18097c5f4/resource.tar.gz#test.test_expr-nth_no_optional_no_tagged_no_cache-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-nth_no_optional_no_tagged_no_cache-default.txt-Results]": [
+        {
+            "checksum": "70128e5a26530fdd99dbf079173a4b35",
+            "size": 3782,
+            "uri": "https://{canondata_backend}/1942173/4d031afb3e8d48927da6c14d5eb6c4d18097c5f4/resource.tar.gz#test.test_expr-nth_no_optional_no_tagged_no_cache-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[expr-opt_list_map-default.txt-Debug]": [
         {
             "checksum": "5aed4a678e424baaa9f7fba738a457ff",
@@ -646,6 +660,20 @@
             "checksum": "e126ea59b508604386371e5207bb1f24",
             "size": 1946,
             "uri": "https://{canondata_backend}/1937367/9ad8b37cb00d1bb871bca912f5dd491e7738634c/resource.tar.gz#test.test_flatten_by-flatten_columns_non_struct-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[flatten_by-flatten_optional_by_data--Debug]": [
+        {
+            "checksum": "fb4b51eb61251909730e7765e85db52a",
+            "size": 1243,
+            "uri": "https://{canondata_backend}/212715/c1d5dcd6349aeee7aeaa0cb9666efb95c4bebee1/resource.tar.gz#test.test_flatten_by-flatten_optional_by_data--Debug_/opt.yql"
+        }
+    ],
+    "test.test[flatten_by-flatten_optional_by_data--Results]": [
+        {
+            "checksum": "3d65394dd6cf001635e5b9293b59d8bd",
+            "size": 6228,
+            "uri": "https://{canondata_backend}/212715/c1d5dcd6349aeee7aeaa0cb9666efb95c4bebee1/resource.tar.gz#test.test_flatten_by-flatten_optional_by_data--Results_/results.txt"
         }
     ],
     "test.test[flexible_types-functions-default.txt-Debug]": [

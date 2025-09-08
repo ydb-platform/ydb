@@ -102,6 +102,14 @@ std::optional<bool> TStorageSettings::GetStoreExternalBlobs() const {
     }
 }
 
+std::optional<std::uint32_t> TStorageSettings::GetExternalDataChannelsCount() const {
+    if (GetProto().has_external_data_channels_count()) {
+        return GetProto().external_data_channels_count();
+    } else {
+        return { };
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TColumnFamilyDescription::TImpl {
@@ -140,6 +148,17 @@ std::optional<EColumnFamilyCompression> TColumnFamilyDescription::GetCompression
             return EColumnFamilyCompression::None;
         case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
             return EColumnFamilyCompression::LZ4;
+        default:
+            return { };
+    }
+}
+
+std::optional<EColumnFamilyCacheMode> TColumnFamilyDescription::GetCacheMode() const {
+    switch (GetProto().cache_mode()) {
+        case Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR:
+            return EColumnFamilyCacheMode::Regular;
+        case Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY:
+            return EColumnFamilyCacheMode::InMemory;
         default:
             return { };
     }
@@ -995,6 +1014,11 @@ TStorageSettingsBuilder& TStorageSettingsBuilder::SetStoreExternalBlobs(bool ena
     return *this;
 }
 
+TStorageSettingsBuilder& TStorageSettingsBuilder::SetExternalDataChannelsCount(uint32_t count) {
+    Impl_->Proto.set_external_data_channels_count(count);
+    return *this;
+}
+
 TStorageSettings TStorageSettingsBuilder::Build() const {
     return TStorageSettings(Impl_->Proto);
 }
@@ -1070,6 +1094,18 @@ TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompress
             break;
         case EColumnFamilyCompression::LZ4:
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+            break;
+    }
+    return *this;
+}
+
+TColumnFamilyBuilder& TColumnFamilyBuilder::SetCacheMode(EColumnFamilyCacheMode cacheMode) {
+    switch (cacheMode) {
+        case EColumnFamilyCacheMode::Regular:
+            Impl_->Proto.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR);
+            break;
+        case EColumnFamilyCacheMode::InMemory:
+            Impl_->Proto.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY);
             break;
     }
     return *this;

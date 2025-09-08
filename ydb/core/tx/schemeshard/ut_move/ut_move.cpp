@@ -1,4 +1,4 @@
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/change_exchange.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -9,7 +9,7 @@
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
-using namespace NKikimr::NTableIndex::NTableVectorKmeansTreeIndex;
+using namespace NKikimr::NTableIndex::NKMeans;
 
 void SetEnableMoveIndex(TTestActorRuntime &runtime, TTestEnv&, ui64 schemeShard, bool value) {
     auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();

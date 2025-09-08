@@ -1,5 +1,4 @@
 #pragma once
-#include "header.h"
 #include "key.h"
 
 #include <util/datetime/base.h>
@@ -12,25 +11,26 @@
 namespace NKikimr {
 namespace NPQ {
 
+class TBlobSerializer;
+
+// Large messages are split into small 512KB parts, and stored in separate parts.
+// This structure stores information about the saved part of a large message.
 struct TPartData {
+    // The serial number of the message part. The first part has a value of 0.
     ui16 PartNo;
+    // The number of parts that the message was splitted.
     ui16 TotalParts;
+    // The size of the original message in bytes (the sum of the sizes of all parts)
     ui32 TotalSize;
 
-    TPartData(const ui16 partNo, const ui16 totalParts, const ui32 totalSize)
-        : PartNo(partNo)
-        , TotalParts(totalParts)
-        , TotalSize(totalSize)
-    {}
+    TPartData(const ui16 partNo, const ui16 totalParts, const ui32 totalSize);
+
+    bool IsLastPart() const;
 };
 
 struct TClientBlob {
-
-    static const ui8 HAS_PARTDATA = 1;
-    static const ui8 HAS_TS = 2;
-    static const ui8 HAS_TS2 = 4;
-    static const ui8 HAS_US = 8;
-    static const ui8 HAS_KINESIS = 16;
+    static constexpr ui32 OVERHEAD = sizeof(ui32)/*totalSize*/ + sizeof(ui64)/*SeqNo*/ + sizeof(ui16) /*SourceId*/
+        + sizeof(ui64) /*WriteTimestamp*/ + sizeof(ui64) /*CreateTimestamp*/;
 
     TString SourceId;
     ui64 SeqNo;
@@ -42,66 +42,20 @@ struct TClientBlob {
     TString PartitionKey;
     TString ExplicitHashKey;
 
-    TClientBlob()
-        : SeqNo(0)
-        , UncompressedSize(0)
-    {}
+    TClientBlob();
+    TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
+        const TInstant writeTimestamp, const TInstant createTimestamp,
+        const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey);
 
-    TClientBlob(const TString& sourceId, const ui64 seqNo, const TString&& data, TMaybe<TPartData> &&partData, TInstant writeTimestamp, TInstant createTimestamp,
-                const ui64 uncompressedSize, const TString& partitionKey, const TString& explicitHashKey)
-        : SourceId(sourceId)
-        , SeqNo(seqNo)
-        , Data(std::move(data))
-        , PartData(std::move(partData))
-        , WriteTimestamp(writeTimestamp)
-        , CreateTimestamp(createTimestamp)
-        , UncompressedSize(uncompressedSize)
-        , PartitionKey(partitionKey)
-        , ExplicitHashKey(explicitHashKey)
-    {
-        Y_ABORT_UNLESS(PartitionKey.size() <= 256);
-    }
-
-    ui32 GetPartDataSize() const {
-        if (PartData) {
-            return 1 + sizeof(ui16) + sizeof(ui16) + sizeof(ui32);
-        }
-        return 1;
-    }
-
-    ui32 GetKinesisSize() const {
-        if (PartitionKey.size() > 0) {
-            return 2 + PartitionKey.size() + ExplicitHashKey.size();
-        }
-        return 0;
-    }
-
-    ui32 GetBlobSize() const {
-        return GetPartDataSize() + OVERHEAD + SourceId.size() + Data.size() + (UncompressedSize == 0 ? 0 : sizeof(ui32)) + GetKinesisSize();
-    }
-
-    ui16 GetPartNo() const {
-        return PartData ? PartData->PartNo : 0;
-    }
-
-    ui16 GetTotalParts() const {
-        return PartData ? PartData->TotalParts : 1;
-    }
-
-    ui16 GetTotalSize() const {
-        return PartData ? PartData->TotalSize : UncompressedSize;
-    }
-
-    bool IsLastPart() const {
-        return !PartData || PartData->PartNo + 1 == PartData->TotalParts;
-    }
-
-    static constexpr ui32 OVERHEAD = sizeof(ui32)/*totalSize*/ + sizeof(ui64)/*SeqNo*/ + sizeof(ui16) /*SourceId*/ + sizeof(ui64) /*WriteTimestamp*/ + sizeof(ui64) /*CreateTimestamp*/;
-
-    void SerializeTo(TBuffer& buffer) const;
-    static TClientBlob Deserialize(const char *data, ui32 size);
+    ui32 GetSerializedSize() const;
+    ui16 GetPartNo() const;
+    ui16 GetTotalParts() const;
+    ui16 GetTotalSize() const;
+    bool IsLastPart() const;
 
     static void CheckBlob(const TKey& key, const TString& blob);
+
+    TString DebugString() const;
 };
 
 static constexpr const ui32 MAX_BLOB_SIZE = 8_MB;
@@ -123,95 +77,29 @@ struct TBatch {
     TBuffer PackedData;
     TInstant EndWriteTimestamp;
 
-    TBatch()
-        : Packed(false)
-    {
-        PackedData.Reserve(8_MB);
-    }
+    TBatch();
+    TBatch(const ui64 offset, const ui16 partNo);
+    TBatch(const NKikimrPQ::TBatchHeader &header, const char* data);
 
-    TBatch(const ui64 offset, const ui16 partNo)
-        : TBatch()
-    {
-        Header.SetOffset(offset);
-        Header.SetPartNo(partNo);
-        Header.SetUnpackedSize(0);
-        Header.SetCount(0);
-        Header.SetInternalPartsCount(0);
-    }
+    static TBatch FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs);
 
-    static TBatch FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs) {
-        Y_ABORT_UNLESS(!blobs.empty());
-        TBatch batch(offset, blobs.front().GetPartNo());
-        for (auto& b : blobs) {
-            batch.AddBlob(b);
-        }
-        return batch;
-    }
+    void AddBlob(const TClientBlob &b);
 
-    void AddBlob(const TClientBlob &b) {
-        ui32 count = GetCount();
-        ui32 unpackedSize = GetUnpackedSize();
-        ui32 i = Blobs.size();
-        Blobs.push_back(b);
-        unpackedSize += b.GetBlobSize();
-        if (b.IsLastPart())
-            ++count;
-        else {
-            InternalPartsPos.push_back(i);
-        }
+    ui64 GetOffset() const;
+    ui16 GetPartNo() const;
+    ui32 GetUnpackedSize() const;
+    ui32 GetCount() const;
+    ui16 GetInternalPartsCount() const;
 
-        Header.SetUnpackedSize(unpackedSize);
-        Header.SetCount(count);
-        Header.SetInternalPartsCount(InternalPartsPos.size());
+    bool IsGreaterThan(ui64 offset, ui16 partNo) const;
 
-        EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
-    }
+    bool Empty() const;
+    TInstant GetEndWriteTimestamp() const;
 
-    ui64 GetOffset() const {
-        return Header.GetOffset();
-    }
-
-    ui16 GetPartNo() const {
-        return Header.GetPartNo();
-    }
-
-    ui32 GetUnpackedSize() const {
-        return Header.GetUnpackedSize();
-    }
-
-    ui32 GetCount() const {
-        return Header.GetCount();
-    }
-
-    ui16 GetInternalPartsCount() const {
-        return Header.GetInternalPartsCount();
-    }
-
-    bool IsGreaterThan(ui64 offset, ui16 partNo) const {
-        return GetOffset() > offset || GetOffset() == offset && GetPartNo() > partNo;
-    }
-
-    bool Empty() const {
-        return Blobs.empty();
-    }
-
-    TInstant GetEndWriteTimestamp() const {
-        return EndWriteTimestamp;
-    }
-
-    TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
-        : Packed(true)
-        , Header(header)
-        , PackedData(data, header.GetPayloadSize())
-    {
-    }
-
-    ui32 GetPackedSize() const { Y_ABORT_UNLESS(Packed); return sizeof(ui16) + PackedData.size() + Header.ByteSize(); }
+    ui32 GetPackedSize() const;
     void Pack();
     void Unpack();
     void UnpackTo(TVector<TClientBlob> *result) const;
-    void UnpackToType0(TVector<TClientBlob> *result) const;
-    void UnpackToType1(TVector<TClientBlob> *result) const;
 
     void SerializeTo(TString& res) const;
 
@@ -262,17 +150,10 @@ private:
         TBatch& Batch;
 
     public:
-        explicit TBatchAccessor(TBatch& batch)
-            : Batch(batch)
-        {}
+        explicit TBatchAccessor(TBatch& batch);
 
-        void Pack() {
-            Batch.Pack();
-        }
-
-        void Unpack() {
-            Batch.Unpack();
-        }
+        void Pack();
+        void Unpack();
     };
 
 public:
@@ -333,14 +214,12 @@ public:
     std::optional<TFormedBlobInfo> Add(TClientBlob&& blob);
     std::optional<TFormedBlobInfo> Add(const TKey& key, ui32 size);
 
-    bool IsInited() const { return TotalParts > 0; }
-
+    bool IsInited() const;
     bool IsComplete() const;
+    bool HasFormedBlobs() const;
 
-    bool HasFormedBlobs() const { return !FormedBlobs.empty(); }
-
-    ui64 GetOffset() const { return Offset; }
-    ui16 GetHeadPartNo() const { return HeadPartNo; }
+    ui64 GetOffset() const;
+    ui16 GetHeadPartNo() const;
 
     bool IsNextPart(const TString& sourceId, const ui64 seqNo, const ui16 partNo, TString *reason) const;
 

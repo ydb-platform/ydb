@@ -846,6 +846,8 @@ Arguments:
 
 To check the conditions based on the final calculation result, it's convenient to combine Ensure with [DISCARD SELECT](../syntax/discard.md).
 
+Ensure is not guaranteed to evaluate, if the program's result does not depend on its return value. In particular, you should not use singular types as the first argument to Ensure such as `Null`,`Void`,`EmptyList`,`EmptyDict` or empty `Struct`/`Tuple`.
+
 #### Examples
 
 ```yql

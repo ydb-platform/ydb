@@ -52,7 +52,7 @@ def post_install(self):
 
 
 llvm_libunwind = CMakeNinjaNixProject(
-    owners=["g:cpp-contrib", "g:cpp-committee"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/libunwind",
     nixattr="llvmPackages_latest.libunwind",
     copy_sources=[

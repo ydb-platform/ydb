@@ -985,7 +985,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 return;
                             }
 
-                            auto loadDynamicMetadata = [promise, externalDataSourceMetadata, settings, table, database, externalPath] () mutable {
+                            auto loadDynamicMetadata = [promise, settings, table, database, externalPath] (const TTableMetadataResult& externalDataSourceMetadata) mutable {
                                 NExternalSource::IExternalSource::TPtr externalSource;
                                 if (settings.ExternalSourceFactory) {
                                     try {
@@ -1042,15 +1042,18 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     useTls,
                                     structuredTokenJson,
                                     path)
-                                    .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
-                                        TGetSchemeEntryResult type = result.GetValue();
-                                        if (type == NYdb::NScheme::ESchemeEntryType::Topic) {
-                                            externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NKikimr::NExternalSource::YdbTopicsType);
+                                    .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata, promise] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
+                                        TGetSchemeEntryResult value = result.GetValue();
+                                        if (value.Issues) {
+                                            externalDataSourceMetadata.AddIssues(value.Issues);
                                         }
-                                        f();
+                                        if (value.EntryType == NYdb::NScheme::ESchemeEntryType::Topic) {
+                                            externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NYql::EDatabaseType::YdbTopics);
+                                        }
+                                        f(externalDataSourceMetadata);
                                     });
                             } else {
-                                loadDynamicMetadata();
+                                loadDynamicMetadata(externalDataSourceMetadata);
                             }
                         });
                         break;

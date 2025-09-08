@@ -624,7 +624,7 @@ struct MainTestCase {
         ExecuteDDL(Sprintf(R"(
             ALTER TRANSFER `%s`
             SET (
-                STATE = "StandBy"
+                STATE = "Active"
             );
         )", TransferName.data()));
     }
@@ -686,13 +686,17 @@ struct MainTestCase {
         ExecuteDDL(Sprintf("DROP ASYNC REPLICATION `%s`;", ReplicationName.data()));
     }
 
-    auto DescribeReplication() {
+    auto DescribeReplication(const std::string& name) {
         TReplicationClient client(Driver);
 
         TDescribeReplicationSettings settings;
         settings.IncludeStats(true);
 
-        return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + ReplicationName, settings).ExtractValueSync();
+        return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + name, settings).ExtractValueSync();
+    }
+
+    auto DescribeReplication() {
+        return DescribeReplication(ReplicationName);
     }
 
     TReplicationDescription CheckReplicationState(TReplicationDescription::EState expected) {
@@ -862,7 +866,7 @@ struct MainTestCase {
         UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
     }
 
-    void Run(const TConfig& config) {
+    void Run(const TConfig& config, const CreateTransferSettings settings = {}) {
 
         CreateTable(config.TableDDL);
         CreateTopic();
@@ -874,7 +878,7 @@ struct MainTestCase {
         for (size_t i = 0; i < lambdas.size(); ++i) {
             auto lambda = lambdas[i];
             if (!i) {
-                CreateTransfer(lambda);
+                CreateTransfer(lambda, settings);
             } else {
                 Sleep(TDuration::Seconds(1));
 

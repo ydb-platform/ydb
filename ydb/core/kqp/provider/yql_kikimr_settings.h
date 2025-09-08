@@ -213,7 +213,11 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapPushdownProjections = false;
     bool EnableParallelUnionAllConnectionsForExtend = false;
     bool EnableTempTablesForUser = false;
+    bool EnableOlapPushdownAggregate = false;
+    bool EnableOrderOptimizaionFSM = false;
 
+    bool EnableTopSortSelectIndex = true;
+    bool EnablePointPredicateSortAutoSelectIndex = true;
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
 
     ui32 LangVer = NYql::MinLangVersion;
@@ -226,6 +230,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui64 GetEnabledSpillingNodes() const;
     bool GetEnableOlapPushdownProjections() const;
     bool GetEnableParallelUnionAllConnectionsForExtend() const;
+    bool GetEnableOlapPushdownAggregate() const;
 };
 
 }

@@ -263,4 +263,18 @@ void TFutureState<void>::OnLastPromiseRefLost()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+std::atomic<bool> ContextSwitchInFutureHandlerForbidden;
+
+void ForbidContextSwitchInFutureHandler()
+{
+    ContextSwitchInFutureHandlerForbidden.store(true, std::memory_order::release);
+}
+
+bool IsContextSwitchInFutureHandlerForbidden()
+{
+    return ContextSwitchInFutureHandlerForbidden.load(std::memory_order::acquire);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT

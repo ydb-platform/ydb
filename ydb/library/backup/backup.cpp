@@ -150,10 +150,18 @@ void PrintPrimitive(IOutputStream& out, const TValueParser& parser) {
         CASE_PRINT_PRIMITIVE_TYPE(out, Datetime);
         CASE_PRINT_PRIMITIVE_TYPE(out, Timestamp);
         CASE_PRINT_PRIMITIVE_TYPE(out, Interval);
-        CASE_PRINT_PRIMITIVE_TYPE(out, Date32);
-        CASE_PRINT_PRIMITIVE_TYPE(out, Datetime64);
-        CASE_PRINT_PRIMITIVE_TYPE(out, Timestamp64);
-        CASE_PRINT_PRIMITIVE_TYPE(out, Interval64);
+        case EPrimitiveType::Date32:
+            out << parser.GetDate32().time_since_epoch().count();
+            break;
+        case EPrimitiveType::Datetime64:
+            out << parser.GetDatetime64().time_since_epoch().count();
+            break;
+        case EPrimitiveType::Timestamp64:
+            out << parser.GetTimestamp64().time_since_epoch().count();
+            break;
+        case EPrimitiveType::Interval64:
+            out << parser.GetInterval64().count();
+            break;
         CASE_PRINT_PRIMITIVE_TYPE(out, Uuid);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzDate);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzDatetime);
@@ -916,6 +924,15 @@ TString BuildCreateExternalTableQuery(const Ydb::Table::DescribeExternalTableRes
     );
 }
 
+Ydb::Table::DescribeSystemViewResult DescribeSystemView(TDriver driver, const TString& path) {
+    NTable::TTableClient client(driver);
+    Ydb::Table::DescribeSystemViewResult description;
+    auto status = NDump::DescribeSystemView(client, path, description);
+    VerifyStatus(status, "describe system view");
+    description.clear_self();
+    return description;
+}
+
 }
 
 void BackupExternalTable(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
@@ -926,6 +943,16 @@ void BackupExternalTable(TDriver driver, const TString& dbPath, const TFsPath& f
     const auto creationQuery = BuildCreateExternalTableQuery(description);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalTable());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
+void BackupSystemView(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+    Y_ENSURE(!dbPath.empty());
+    LOG_I("Backup system view " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto description = DescribeSystemView(driver, dbPath);
+
+    WriteProtoToFile(description, fsBackupFolder, NDump::NFiles::SystemView());
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
@@ -1007,7 +1034,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                         auto status = CopyTableAsyncStart(driver, dbIt.GetFullPath(), tmpTablePath);
                         copiedTablesStatuses.emplace(dbIt.GetFullPath(), std::move(status));
                     }
-                } else if (dbIt.IsDir()) {
+                } else if (dbIt.IsDir() && !dbIt.IsSystemDir()) {
                     CreateClusterDirectory(driver, JoinDatabasePath(backupPrefix, dbIt.GetRelPath()));
                 }
             }
@@ -1023,6 +1050,8 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 BackupExternalDataSource(driver, dbIt.GetFullPath(), childFolderPath);
             } else if (dbIt.IsExternalTable()) {
                 BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
+            } else if (dbIt.IsSystemView()) {
+                BackupSystemView(driver, dbIt.GetFullPath(), childFolderPath);
             } else if (!dbIt.IsTable() && !dbIt.IsDir()) {
                 LOG_W("Skipping " << dbIt.GetFullPath().Quote() << ": dumping objects of type " << dbIt.GetCurrentNode()->Type << " is not supported");
                 childFolderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
@@ -1089,7 +1118,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             } else if (dbIt.IsDir()) {
                 MaybeCreateEmptyFile(childFolderPath);
                 BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
-                if (!avoidCopy) {
+                if (!avoidCopy && !dbIt.IsSystemDir()) {
                     RemoveClusterDirectory(driver, tmpTablePath);
                 }
             }

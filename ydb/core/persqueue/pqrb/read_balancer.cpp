@@ -3,6 +3,7 @@
 #include "read_balancer__txpreinit.h"
 #include "read_balancer__txwrite.h"
 #include "read_balancer_log.h"
+#include "mirror_describer.h"
 
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
@@ -90,6 +91,9 @@ void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
     TabletPipes.clear();
     if (PartitionsScaleManager) {
         PartitionsScaleManager->Die(ctx);
+    }
+    if (MirrorTopicDescriberActorId) {
+        ctx.Send(MirrorTopicDescriberActorId, new TEvents::TEvPoisonPill());
     }
     TActor<TPersQueueReadBalancer>::Die(ctx);
 }
@@ -281,6 +285,18 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             PartitionsScaleManager->UpdateBalancerConfig(PathId, Version, TabletConfig);
         }
     }
+    if (SplitMergeEnabled(TabletConfig) && MirroringEnabled(TabletConfig) && AppData(ctx)->FeatureFlags.GetEnableMirroredTopicSplitMerge()) {
+        if (MirrorTopicDescriberActorId) {
+            ctx.Send(MirrorTopicDescriberActorId, new TEvPQ::TEvChangePartitionConfig(nullptr, TabletConfig));
+        } else {
+            MirrorTopicDescriberActorId = ctx.Register(new TMirrorDescriber(SelfId(), Topic, TabletConfig.GetPartitionConfig().GetMirrorFrom()));
+        }
+    } else {
+        if (MirrorTopicDescriberActorId) {
+            ctx.Send(MirrorTopicDescriberActorId, new TEvents::TEvPoisonPill());
+            MirrorTopicDescriberActorId = TActorId();
+        }
+    }
 
     for (auto& p : record.GetTablets()) {
         auto it = TabletsInfo.find(p.GetTabletId());
@@ -455,7 +471,12 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
         }
 
         if (SplitMergeEnabled(TabletConfig) && PartitionsScaleManager) {
-            PartitionsScaleManager->HandleScaleStatusChange(partitionId, partRes.GetScaleStatus(), ctx);
+            PartitionsScaleManager->HandleScaleStatusChange(
+                partitionId,
+                partRes.GetScaleStatus(),
+                partRes.HasScaleParticipatingPartitions() ? MakeMaybe(partRes.GetScaleParticipatingPartitions()) : Nothing(),
+                ctx
+            );
         }
 
         AggregatedStats.AggrStats(partitionId, partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
@@ -970,7 +991,12 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
     }
 
     if (PartitionsScaleManager) {
-        PartitionsScaleManager->HandleScaleStatusChange(record.GetPartitionId(), record.GetScaleStatus(), ctx);
+        PartitionsScaleManager->HandleScaleStatusChange(
+            record.GetPartitionId(),
+            record.GetScaleStatus(),
+            record.HasParticipatingPartitions() ? MakeMaybe(record.GetParticipatingPartitions()) : Nothing(),
+            ctx
+        );
     } else {
         PQ_LOG_NOTICE("Skip TEvPartitionScaleStatusChanged: scale manager isn`t initialized.");
     }
@@ -984,6 +1010,27 @@ void TPersQueueReadBalancer::Handle(TPartitionScaleRequest::TEvPartitionScaleReq
         PartitionsScaleManager->HandleScaleRequestResult(ev, ctx);
     }
 }
+
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx) {
+    if (!MirroringEnabled(TabletConfig)) {
+        return;
+    }
+    if (PartitionsScaleManager) {
+        auto result = PartitionsScaleManager->HandleMirrorTopicDescriptionResult(ev, ctx);
+        if (!result.has_value()) {
+            BroadcastPartitionError(std::move(result).error(), NKikimrServices::EServiceKikimr::PQ_MIRROR_DESCRIBER, ctx);
+        }
+    }
+}
+
+void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, const NKikimrServices::EServiceKikimr service, const TActorContext& ctx) {
+    const TInstant now = TInstant::Now();
+    for (const auto& [_, pipeLocation] : TabletPipes) {
+        THolder<TEvPQ::TBroadcastPartitionError> ev{new TEvPQ::TBroadcastPartitionError(message, service, now)};
+        NTabletPipe::SendData(ctx, pipeLocation.PipeActor, ev.Release());
+    }
+}
+
 
 } // NPQ
 } // NKikimr

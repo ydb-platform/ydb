@@ -816,6 +816,11 @@ bool FillColumnFamily(
     if (from.has_compression_level()) {
         to->SetColumnCodecLevel(from.compression_level());
     }
+    if (from.cache_mode() != Ydb::Table::ColumnFamily::CACHE_MODE_UNSPECIFIED) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = TStringBuilder() << "Field `CACHE_MODE` is not supported for OLAP tables in column family '" << from.name() << "'";
+        return false;
+    }
     return true;
 }
 
@@ -1412,6 +1417,10 @@ void FillStorageSettingsImpl(TYdbProto& out,
                 if (externalThreshold != 0 && externalThreshold != Max<ui32>()) {
                     settings->set_store_external_blobs(Ydb::FeatureFlag::ENABLED);
                 }
+
+                if (const auto externalChannelsCount = family.GetStorageConfig().GetExternalChannelsCount(); externalChannelsCount > 1U) {
+                    settings->set_external_data_channels_count(externalChannelsCount);
+                }
             }
 
             // Check legacy settings for enabled external blobs
@@ -1487,6 +1496,17 @@ void FillColumnFamily(Ydb::Table::ColumnFamily& out, const NKikimrSchemeOp::TFam
     // Check legacy settings for permanent in-memory cache
     if (in.GetInMemory() || in.GetColumnCache() == NKikimrSchemeOp::ColumnCacheEver) {
         out.set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
+    }
+
+    if (!isColumnTable && in.HasColumnCacheMode()) {
+        switch (in.GetColumnCacheMode()) {
+            case NKikimrSchemeOp::ColumnCacheModeRegular:
+                out.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR);
+                break;
+            case NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory:
+                out.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY);
+                break;
+        }
     }
 }
 

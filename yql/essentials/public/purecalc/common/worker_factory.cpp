@@ -59,6 +59,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , LangVer_(options.LangVer)
 {
     // Prepare input struct types and extract all column names from inputs
+    auto typeCtx = PrepareTypeContext(options.ModuleResolver);
 
     const auto& inputSchemas = options.InputSpec.GetSchemas();
     const auto& allVirtualColumns = options.InputSpec.GetAllVirtualColumns();
@@ -69,7 +70,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
 
     for (ui32 i = 0; i < inputsCount; ++i) {
         const auto* originalInputType = MakeTypeFromSchema(inputSchemas[i], ExprContext_);
-        if (!ValidateInputSchema(originalInputType, ExprContext_)) {
+        if (!ValidateInputSchema(originalInputType, ExprContext_, *typeCtx)) {
             ythrow TCompileError("", GetIssues().ToString()) << "invalid schema for #" << i << " input";
         }
 
@@ -97,7 +98,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     auto outputSchema = options.OutputSpec.GetSchema();
     if (!outputSchema.IsNull()) {
         OutputType_ = MakeTypeFromSchema(outputSchema, ExprContext_);
-        if (!ValidateOutputSchema(OutputType_, ExprContext_)) {
+        if (!ValidateOutputSchema(OutputType_, ExprContext_, *typeCtx)) {
             ythrow TCompileError("", GetIssues().ToString()) << "invalid output schema";
         }
     } else {
@@ -112,8 +113,8 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
         SerializedProgram_ = TString{options.Query};
     } else {
         ExprRoot_ = Compile(options.Query, options.TranslationMode,
-            options.ModuleResolver, options.SyntaxVersion, options.LangVer, options.Modules,
-            options.InputSpec, options.OutputSpec, options.UseAntlr4, processorMode);
+            options.SyntaxVersion, options.Modules,
+            options.InputSpec, options.OutputSpec, options.UseAntlr4, processorMode, typeCtx.Get());
 
         RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
 
@@ -136,37 +137,14 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
 }
 
 template <typename TBase>
-TExprNode::TPtr TWorkerFactory<TBase>::Compile(
-    TStringBuf query,
-    ETranslationMode mode,
-    IModuleResolver::TPtr factoryModuleResolver,
-    ui16 syntaxVersion,
-    NYql::TLangVersion langver,
-    const THashMap<TString, TString>& modules,
-    const TInputSpecBase& inputSpec,
-    const TOutputSpecBase& outputSpec,
-    bool useAntlr4,
-    EProcessorMode processorMode
+TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
+    IModuleResolver::TPtr factoryModuleResolver
 ) {
-    Y_ENSURE(useAntlr4, "Antlr3 support is dropped");
-    if (mode == ETranslationMode::PG && processorMode != EProcessorMode::PullList) {
-        ythrow TCompileError("", "") << "only PullList mode is compatible to PostgreSQL syntax";
-    }
-
-    TMaybe<TIssue> verIssue;
-    if (!CheckLangVersion(langver, GetMaxReleasedLangVersion(), verIssue)) {
-        TIssues issues;
-        issues.AddIssue(*verIssue);
-        ythrow TCompileError("", issues.ToString());
-    }
-
     // Prepare type annotation context
 
-    TTypeAnnotationContextPtr typeContext;
-
     IModuleResolver::TPtr moduleResolver = factoryModuleResolver ? factoryModuleResolver->CreateMutableChild() : nullptr;
-    typeContext = MakeIntrusive<TTypeAnnotationContext>();
-    typeContext->LangVer = langver;
+    auto typeContext = MakeIntrusive<TTypeAnnotationContext>();
+    typeContext->LangVer = LangVer_;
     typeContext->UseTypeDiffForConvertToError = true;
     typeContext->RandomProvider = CreateDefaultRandomProvider();
     typeContext->TimeProvider = DeterministicTimeProviderSeed_ ?
@@ -185,6 +163,33 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         modules->AttachUserData(typeContext->UserDataStorage);
     }
 
+    return typeContext;
+}
+
+template <typename TBase>
+TExprNode::TPtr TWorkerFactory<TBase>::Compile(
+    TStringBuf query,
+    ETranslationMode mode,
+    ui16 syntaxVersion,
+    const THashMap<TString, TString>& modules,
+    const TInputSpecBase& inputSpec,
+    const TOutputSpecBase& outputSpec,
+    bool useAntlr4,
+    EProcessorMode processorMode,
+    TTypeAnnotationContext* typeContext
+) {
+    Y_ENSURE(useAntlr4, "Antlr3 support is dropped");
+    if (mode == ETranslationMode::PG && processorMode != EProcessorMode::PullList) {
+        ythrow TCompileError("", "") << "only PullList mode is compatible to PostgreSQL syntax";
+    }
+
+    TMaybe<TIssue> verIssue;
+    if (!CheckLangVersion(LangVer_, GetMaxReleasedLangVersion(), verIssue)) {
+        TIssues issues;
+        issues.AddIssue(*verIssue);
+        ythrow TCompileError("", issues.ToString());
+    }
+
     // Parse SQL/s-expr into AST
 
     TAstParseResult astRes;
@@ -197,7 +202,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             settings.PgParser = true;
         }
 
-        settings.LangVer = langver;
+        settings.LangVer = LangVer_;
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         settings.EmitReadsForExists = true;
@@ -262,7 +267,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     // Translate AST into expression
 
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRes.Root, exprRoot, ExprContext_, moduleResolver.get(), nullptr, 0, syntaxVersion)) {
+    if (!CompileExpr(*astRes.Root, exprRoot, ExprContext_, typeContext->Modules.get(), nullptr, 0, syntaxVersion)) {
         TStringStream astStr;
         astRes.Root->PrettyPrintTo(astStr, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
         ythrow TCompileError(astStr.Str(), GetIssues().ToString()) << "failed to compile";
@@ -303,7 +308,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             CountersProvider_,
             NativeYtTypeFlags_,
             DeterministicTimeProviderSeed_,
-            langver,
+            LangVer_,
             true
         );
 
@@ -366,7 +371,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     pipeline.Add(MakeRootToBlocks(outputSpec.AcceptsBlocks(), processorMode),
                  "RootToBlocks", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Rewrite the root if the output spec accepts blocks");
-    pipeline.Add(MakeOutputAligner(OutputType_, outputSpec.AcceptsBlocks(), processorMode),
+    pipeline.Add(MakeOutputAligner(OutputType_, outputSpec.AcceptsBlocks(), processorMode, *typeContext),
                  "Convert", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Align return type of the program to output schema");
     pipeline.AddCommonOptimization();

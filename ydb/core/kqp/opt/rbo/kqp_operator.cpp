@@ -50,14 +50,15 @@ TExprNode::TPtr AddRenames(TExprNode::TPtr input, TExprContext& ctx, TVector<TIn
     auto arg = Build<TCoArgument>(ctx, input->Pos()).Name("arg").Done().Ptr();
 
     for (auto iu : renames) {
+        // clang-format off
         auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
             .Name().Build("_alias_" + iu.Alias + "." + iu.ColumnName)
             .Value<TCoMember>()
                 .Struct(arg)
                 .Name().Build(iu.ColumnName)
             .Build()
-            .Done();
-        
+        .Done();
+        // clang-format on
         items.push_back(tuple);
     }
 
@@ -74,7 +75,8 @@ TExprNode::TPtr AddRenames(TExprNode::TPtr input, TExprContext& ctx, TVector<TIn
         .Build()
         .Done().Ptr();
     */
-    
+   
+    // clang-format off
     return Build<TCoMap>(ctx, input->Pos())
         .Input(input)
         .Lambda<TCoLambda>()
@@ -83,24 +85,25 @@ TExprNode::TPtr AddRenames(TExprNode::TPtr input, TExprContext& ctx, TVector<TIn
                 .Add(items)
             .Build()
         .Build()
-        .Done().Ptr();
-    
+    .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr BuildSourceStage(TExprNode::TPtr dqsource, TExprContext& ctx) {
     auto arg = Build<TCoArgument>(ctx, dqsource->Pos()).Name("arg").Done().Ptr();
+    // clang-format off
     return Build<TDqPhyStage>(ctx, dqsource->Pos())
         .Inputs()
             .Add({dqsource})
-            .Build()
+        .Build()
         .Program()
             .Args({arg})
             .Body(arg)
-            .Build()
+        .Build()
         .Settings().Build()
-        .Done().Ptr();
+    .Done().Ptr();
+    // clang-format on
 }
-
 }
 
 namespace NKikimr {
@@ -144,12 +147,14 @@ TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;
     }
+    // clang-format off
     return Build<TDqCnBroadcast>(ctx, node->Pos())
         .Output()
             .Stage(inputStage)
             .Index().Build("0")
         .Build()
-        .Done().Ptr();
+    .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) {
@@ -157,12 +162,14 @@ TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TExp
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;
     }
+    // clang-format off
     return Build<TDqCnMap>(ctx, node->Pos())
         .Output()
             .Stage(inputStage)
             .Index().Build("0")
         .Build()
-        .Done().Ptr();
+    .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) {
@@ -170,12 +177,14 @@ TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage,
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;
     }
+    // clang-format off
     return Build<TDqCnUnionAll>(ctx, node->Pos())
         .Output()
             .Stage(inputStage)
             .Index().Build("0")
         .Build()
-        .Done().Ptr();
+    .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) {
@@ -197,6 +206,7 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
         keyColumns.push_back(atom);
     }
 
+    // clang-format off
     return Build<TDqCnHashShuffle>(ctx, node->Pos())
         .Output()
             .Stage(inputStage)
@@ -205,7 +215,8 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
         .KeyColumns()
             .Add(keyColumns)
         .Build()
-        .Done().Ptr();
+    .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) {
@@ -275,19 +286,23 @@ std::shared_ptr<IOperator> TOpMap::Rebuild(TExprContext& ctx) {
     TVector<TExprNode::TPtr> newMapElements;
 
     for (auto mapEl : current.MapElements()) {
+        // clang-format off
         newMapElements.push_back(Build<TKqpOpMapElement>(ctx, Node->Pos())
             .Input(newInput)
             .Variable(mapEl.Variable())
             .Lambda(mapEl.Lambda())
-            .Done().Ptr());
+        .Done().Ptr());
+        // clang-format on
     }
 
+    // clang-format off
     auto node = Build<TKqpOpMap>(ctx, Node->Pos())
         .Input(newInput)
         .MapElements()
             .Add(newMapElements)
         .Build()
-        .Done().Ptr();
+    .Done().Ptr();
+    // clang-format on
     return std::make_shared<TOpMap>(node);
 }
 
@@ -301,18 +316,22 @@ TOpFilter::TOpFilter(TExprNode::TPtr node) : IUnaryOperator(EOperator::Filter, n
 
 TOpFilter::TOpFilter(std::shared_ptr<IOperator> input, TExprNode::TPtr filterLambda, TExprContext& ctx, TPositionHandle pos) : IUnaryOperator(EOperator::Filter) {
     Children.push_back(input);
+    // clang-format off
     Node = Build<TKqpOpFilter>(ctx, pos)
         .Input(Children[0]->Node)
         .Lambda(filterLambda)
-        .Done().Ptr();
+    .Done().Ptr();
+    // clang-format on
 }
 
 std::shared_ptr<IOperator> TOpFilter::Rebuild(TExprContext& ctx) {
     auto current = TKqpOpFilter(Node);
+    // clang-format off
     auto node = Build<TKqpOpFilter>(ctx, Node->Pos())
         .Input(Children[0]->Rebuild(ctx)->Node)
         .Lambda(current.Lambda())
-        .Done().Ptr();
+    .Done().Ptr();
+    // clang-format on
     return std::make_shared<TOpFilter>(node);
 }
 
@@ -411,22 +430,34 @@ std::shared_ptr<IOperator> TOpJoin::Rebuild(TExprContext& ctx) {
     
     TVector<TDqJoinKeyTuple> keys;
     for (auto k : JoinKeys ) {
+        // clang-format off
         keys.push_back(Build<TDqJoinKeyTuple>(ctx, Node->Pos())
-                .LeftLabel().Value(k.first.Alias).Build()
-                .LeftColumn().Value(k.first.ColumnName).Build()
-                .RightLabel().Value(k.second.Alias).Build()
-                .RightColumn().Value(k.second.ColumnName).Build()
-                .Done());
+                .LeftLabel()
+                    .Value(k.first.Alias)
+                .Build()
+                .LeftColumn()
+                    .Value(k.first.ColumnName)
+                .Build()
+                .RightLabel()
+                    .Value(k.second.Alias)
+                .Build()
+                .RightColumn()
+                    .Value(k.second.ColumnName)
+                .Build()
+            .Done());
+        // clang-format on
     }
 
     auto joinKeys = Build<TDqJoinKeyTupleList>(ctx, Node->Pos()).Add(keys).Done();
 
+    // clang-format off
     auto node = Build<TKqpOpJoin>(ctx, Node->Pos())
         .LeftInput(Children[0]->Rebuild(ctx)->Node)
         .RightInput(Children[1]->Rebuild(ctx)->Node)
         .JoinKind().Value(JoinKind).Build()
         .JoinKeys(joinKeys)
-        .Done().Ptr();
+    .Done().Ptr();
+    // clang-format on
     return std::make_shared<TOpJoin>(node);
 }
 
@@ -440,10 +471,12 @@ TOpLimit::TOpLimit(TExprNode::TPtr node) : IUnaryOperator(EOperator::Limit, node
 
 std::shared_ptr<IOperator> TOpLimit::Rebuild(TExprContext& ctx) {
     auto current = TKqpOpLimit(Node);
+    // clang-format off
     auto node = Build<TKqpOpLimit>(ctx, Node->Pos())
         .Input(Children[0]->Rebuild(ctx)->Node)
         .Count(current.Count())
-        .Done().Ptr();
+    .Done().Ptr();
+    // clang-format on
     return std::make_shared<TOpLimit>(node);
 }
 
@@ -456,9 +489,11 @@ TOpRoot::TOpRoot(TExprNode::TPtr node) : IUnaryOperator(EOperator::Root, node) {
 }
 
 std::shared_ptr<IOperator> TOpRoot::Rebuild(TExprContext& ctx) {
+    // clang-format off
     auto node = Build<TKqpOpRoot>(ctx, Node->Pos())
         .Input(Children[0]->Rebuild(ctx)->Node)
-        .Done().Ptr();
+    .Done().Ptr();
+    // clang-format on
     return std::make_shared<TOpRoot>(node);
 }
 
@@ -472,6 +507,5 @@ TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right) 
     }
     return res;
 }
-
 }
 }

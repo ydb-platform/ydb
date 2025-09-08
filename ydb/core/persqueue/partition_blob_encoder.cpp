@@ -164,8 +164,9 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
             if (skip) continue;
 
             if (blobs[i].IsLastPart()) {
-                bool messageSkippingBehaviour = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
-                        readTimestampMs > blobs[i].WriteTimestamp.MilliSeconds();
+                const bool messageSkippingBehaviourEnabledInConfig = PreciseReadFromTimestampBehaviourEnabled(*AppData());
+                bool messageSkippingBehaviour = messageSkippingBehaviourEnabledInConfig
+                    && readTimestampMs > blobs[i].WriteTimestamp.MilliSeconds();
                 ++count;
                 if (messageSkippingBehaviour) { //do not count in limits; message will be skippend in proxy
                     --count;
@@ -180,8 +181,8 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
                     break;
                 }
             }
-            size += blobs[i].GetBlobSize();
-            lastBlobSize += blobs[i].GetBlobSize();
+            size += blobs[i].GetSerializedSize();
+            lastBlobSize += blobs[i].GetSerializedSize();
             res.push_back(blobs[i]);
 
             if (!firstAddedBlobOffset)

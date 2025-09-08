@@ -980,6 +980,37 @@ struct TEvBlobStorage {
         ui32 RestartCounter = 0;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
         std::optional<ui32> ForceGroupGeneration;
+
+        static TString GetRequestName(ui32 eventType) {
+            switch (eventType) {
+            case EvPut:
+                return "Put";
+            case EvGet:
+                return "Get";
+            case EvBlock:
+                return "Block";
+            case EvCollectGarbage:
+                return "CollectGarbase";
+            case EvDiscover:
+                return "Discover";
+            case EvPatch:
+                return "Patch";
+            case EvInplacePatch:
+                return "InplacePatch";
+            case EvCheckIntegrity:
+                return "CheckIntegrity";
+            case EvRange:
+                return "Range";
+            case EvStatus:
+                return "Status";
+            case EvAssimilate:
+                return "Assimilate";
+            case EvGetBlock:
+                return "GetBlock";
+            default:
+                return "Unknown";
+            }
+        }
     };
 
     struct TEvResultCommon {
@@ -1224,7 +1255,6 @@ struct TEvBlobStorage {
 
         std::optional<TReaderTabletData> ReaderTabletData;
         std::optional<TForceBlockTabletData> ForceBlockTabletData;
-        std::optional<ui32> ForceGroupGeneration;
 
         TEvGet(TCloneEventPolicy, const TEvGet& origin)
             : QuerySize(origin.QuerySize)

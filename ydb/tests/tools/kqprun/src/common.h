@@ -13,16 +13,21 @@
 
 namespace NKqpRun {
 
-constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 constexpr ui64 DEFAULT_STORAGE_SIZE = 32_GB;
 constexpr TDuration TENANT_CREATION_TIMEOUT = TDuration::Seconds(30);
 
 struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
-    enum class EVerbose {
+    enum class EVerbosity {
         None,
         Info,
+        LogDefaultError,
         QueriesText,
+        LogDefaultWarn,
         InitLogs,
+        LogDefaultNotice,
+        LogDefaultInfo,
+        LogDefaultDebug,
+        LogDefaultTrace,
         Max
     };
 
@@ -46,7 +51,7 @@ struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
     std::optional<ui64> DiskSize;
 
     bool TraceOptEnabled = false;
-    EVerbose VerboseLevel = EVerbose::Info;
+    EVerbosity VerbosityLevel = EVerbosity::Info;
     NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
 
     NYql::IPqGateway::TPtr PqGateway;

@@ -271,7 +271,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     Y_DEBUG_ABORT_UNLESS(!isFirstStorageConfig || CurrentStateFunc() == &TThis::StateInit);
 
     StorageConfig = std::move(ev->Get()->Config);
-    BridgeInfo = std::move(ev->Get()->BridgeInfo);
+    auto prevBridgeInfo = std::exchange(BridgeInfo, std::move(ev->Get()->BridgeInfo));
     SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
 
     auto prevStaticPDisks = std::exchange(StaticPDisks, {});
@@ -312,6 +312,27 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         }
     }
 
+    // if bridge info has changed, then add any dynamic groups to sys view changed list
+    if (BridgeInfo) {
+        bool changed = false;
+        if (!prevBridgeInfo) {
+            changed = true;
+        } else {
+            Y_ABORT_UNLESS(std::size(prevBridgeInfo->Piles) == std::size(BridgeInfo->Piles));
+            for (size_t k = 0; k < std::size(BridgeInfo->Piles); ++k) {
+                if (prevBridgeInfo->Piles[k].State != BridgeInfo->Piles[k].State) {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if (changed) {
+            for (const auto& [groupId, group] : GroupMap) {
+                SysViewChangedGroups.insert(groupId);
+            }
+        }
+    }
+
     if (SelfManagementEnabled) {
         // assuming that in autoconfig mode HostRecords are managed by the distconf; we need to apply it here to
         // avoid race with box autoconfiguration and node list change
@@ -340,6 +361,8 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     if (Loaded) {
         ApplyStorageConfig();
     }
+
+    ApplyStaticGroupUpdateForSyncers(prevStaticGroups);
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
@@ -1130,7 +1153,7 @@ void TBlobStorageController::TStaticGroupInfo::UpdateStatus(TMonotonic mono, TBl
         if (const auto it = controller->StaticVSlots.find(vslotId); it != controller->StaticVSlots.end()) {
             if (mono <= it->second.ReadySince) { // VDisk can't be treated as READY one
                 failed |= {topology, vdiskId};
-            } else if (const TPDiskInfo *pdisk = controller->FindPDisk(vslotId.ComprisingPDiskId()); !pdisk || !pdisk->HasGoodExpectedStatus()) {
+            } else if (const TPDiskInfo *pdisk = controller->FindPDisk(vslotId.ComprisingPDiskId()); pdisk && !pdisk->HasGoodExpectedStatus()) {
                 failedByPDisk |= {topology, vdiskId};
             }
         } else {
@@ -1164,25 +1187,64 @@ void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageC
     LayoutCorrect = layout.IsCorrect();
 }
 
-TBlobStorageController::TGroupInfo::TGroupStatus TBlobStorageController::TStaticGroupInfo::GetStatus(
-        const TStaticGroupFinder& finder) const {
-    if (Info && Info->IsBridged()) {
-        std::optional<TGroupInfo::TGroupStatus> res;
-        for (TGroupId groupId : Info->GetBridgeGroupIds()) {
-            if (TStaticGroupInfo *g = finder(groupId)) {
-                if (const auto& s = g->GetStatus(finder); res) {
-                    res->MakeWorst(s.OperatingStatus, s.ExpectedStatus);
-                } else {
-                    res.emplace(s);
-                }
-            } else {
-                Y_DEBUG_ABORT();
-            }
+namespace {
+
+    template<typename T, typename TFinder>
+    TBlobStorageController::TGroupInfo::TGroupStatus GetGroupStatus(const T& entity, TFinder&& finder,
+            const TBridgeInfo *bridgeInfo) {
+        const NKikimrBlobStorage::TGroupInfo *groupInfo = nullptr;
+        if constexpr (std::is_same_v<T, TBlobStorageController::TGroupInfo>) {
+            groupInfo = entity.BridgeGroupInfo
+                ? &entity.BridgeGroupInfo.value()
+                : nullptr;
+        } else {
+            Y_DEBUG_ABORT_UNLESS(entity.Info);
+            Y_DEBUG_ABORT_UNLESS(entity.Info->Group);
+            groupInfo = entity.Info && entity.Info->Group && entity.Info->Group->HasBridgeGroupState()
+                ? &entity.Info->Group.value()
+                : nullptr;
         }
-        return res.value_or(TGroupInfo::TGroupStatus());
-    } else {
-        return Status;
+
+        if (groupInfo) {
+            Y_ABORT_UNLESS(bridgeInfo);
+            Y_ABORT_UNLESS(groupInfo->HasBridgeGroupState());
+
+            std::optional<TBlobStorageController::TGroupInfo::TGroupStatus> res;
+            const auto& bridgeGroupState = groupInfo->GetBridgeGroupState();
+            const auto& piles = bridgeGroupState.GetPile();
+
+            for (int pileIndex = 0; pileIndex < piles.size(); ++pileIndex) {
+                const TBridgePileId bridgePileId = TBridgePileId::FromPileIndex(pileIndex);
+                if (NBridge::PileStateTraits(bridgeInfo->GetPile(bridgePileId)->State).RequiresDataQuorum) {
+                    const auto& pile = piles[pileIndex];
+                    const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                    if (const auto *group = finder(groupId)) {
+                        const auto& s = group->GetStatus(finder, bridgeInfo);
+                        if (res) {
+                            res->MakeWorst(s.OperatingStatus, s.ExpectedStatus);
+                        } else {
+                            res.emplace(s);
+                        }
+                    }
+                }
+            }
+
+            return res.value_or(TBlobStorageController::TGroupInfo::TGroupStatus());
+        } else {
+            return entity.Status;
+        }
     }
+
+}
+
+TBlobStorageController::TGroupInfo::TGroupStatus TBlobStorageController::TGroupInfo::GetStatus(
+        const TGroupFinder& finder, const TBridgeInfo *bridgeInfo) const {
+    return GetGroupStatus(*this, finder, bridgeInfo);
+}
+
+TBlobStorageController::TGroupInfo::TGroupStatus TBlobStorageController::TStaticGroupInfo::GetStatus(
+        const TStaticGroupFinder& finder, const TBridgeInfo *bridgeInfo) const {
+    return GetGroupStatus(*this, finder, bridgeInfo);
 }
 
 bool TBlobStorageController::TStaticGroupInfo::IsLayoutCorrect(const TStaticGroupFinder& finder) const {
@@ -1230,7 +1292,7 @@ void TBlobStorageController::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::T
     if (retriable) {
         auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         ev->Record.CopyFrom(cmd.Request);
-        TActivationContext::Schedule(TDuration::MilliSeconds(cmd.Timer.NextBackoffMs()), new IEventHandle(
+        TActivationContext::Schedule(cmd.Timer.Next(), new IEventHandle(
             MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), ev.release(), 0, it->first));
     } else {
         cmd.Callback(record);

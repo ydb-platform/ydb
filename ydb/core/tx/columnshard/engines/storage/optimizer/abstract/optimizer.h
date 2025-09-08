@@ -152,11 +152,28 @@ public:
     }
 
     bool IsOverloaded() const {
+        if (!AppDataVerified().FeatureFlags.GetEnableCompactionOverloadDetection()) {
+            return false;
+        }
         if (NodePortionsCountLimit) {
             if (std::cmp_less_equal(*NodePortionsCountLimit, NodePortionsCounter.Val())) {
                 return true;
             }
         } else if (std::cmp_less_equal(DynamicPortionsCountLimit.load(), NodePortionsCounter.Val())) {
+            return true;
+        }
+        return DoIsOverloaded();
+    }
+
+    bool IsHighPriority() const {
+        if (!AppDataVerified().FeatureFlags.GetEnableCompactionOverloadDetection()) {
+            return false;
+        }
+        if (NodePortionsCountLimit) {
+            if (std::cmp_less_equal(std::max(static_cast<ui64>(0.7 * *NodePortionsCountLimit), ui64(1)), NodePortionsCounter.Val())) {
+                return true;
+            }
+        } else if (std::cmp_less_equal(std::max(static_cast<ui64>(0.7 * DynamicPortionsCountLimit.load()), ui64(1)), NodePortionsCounter.Val())) {
             return true;
         }
         return DoIsOverloaded();

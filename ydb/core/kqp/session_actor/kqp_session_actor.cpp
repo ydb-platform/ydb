@@ -367,7 +367,7 @@ public:
     }
 
     void HandleClientLost(NGRpcService::TEvClientLost::TPtr&) {
-        LOG_D("Got ClientLost event, send AbortExecution to executor: "
+        LOG_D("Got ClientLost event, send AbortExecution to executer: "
             << ExecuterId);
 
         if (ExecuterId) {
@@ -533,6 +533,17 @@ public:
     bool AreAllTheTopicsAndPartitionsKnown() const {
         if (QueryState->HasTopicOperations()) {
             const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperationsFromRequest();
+
+            if (operations.HasTabletId()) {
+                for (const auto& topic : operations.GetTopics()) {
+                    auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
+                    for (const auto& partition : topic.partitions()) {
+                        QueryState->TxCtx->TopicOperations.SetTabletId(path, partition.partition_id(), operations.GetTabletId());
+                    }
+                }
+                return true;
+            }
+
             for (const auto& topic : operations.GetTopics()) {
                 auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
 
@@ -1039,13 +1050,26 @@ public:
         if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->HasOltpTable && QueryState->TxCtx->HasTableWrite
                 && !QueryState->TxCtx->EnableHtapTx.value_or(false) && !QueryState->IsSplitted()) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "Write transactions between column and row tables are disabled at current time.");
+                            "Write transactions that use both row-oriented and column-oriented tables are disabled at current time.");
             return false;
         }
         if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
             && QueryState->TxCtx->HasOltpTable) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "SnapshotRW can only be used with olap tables.");
+            return false;
+        }
+
+        if (QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE
+                && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO
+                && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_SCAN
+                && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_AST_SCAN
+                && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
+                && QueryState->TxCtx->HasOlapTable) {
+            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            TStringBuilder()
+                                << "Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. "
+                                << "Use Serializable or Snapshot Read-Only mode instead.");
             return false;
         }
 
@@ -1682,15 +1706,21 @@ public:
             txCtx->TxManager->AddTopicsToShards();
         }
 
+        std::optional<TLlvmSettings> llvmSettings;
+        if (QueryState && QueryState->PreparedQuery && Settings.TableService.GetEnableKqpScanQueryUseLlvm()) {
+            llvmSettings = QueryState->PreparedQuery->GetLlvmSettings();
+        }
+
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetResultSetFormatSettings() : TResultSetFormatSettings{},
             RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
-            AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
+            AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
-                ? GUCSettings : nullptr, {}, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing());
+                ? GUCSettings : nullptr, {}, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
+            llvmSettings, QueryServiceConfig, QueryState ? QueryState->Generation : 0);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -1828,6 +1858,16 @@ public:
                 stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
                 ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
                 stats.SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
+
+                if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
+                    if (const auto compileResult = QueryState->CompileResult) {
+                        if (const auto preparedQuery = compileResult->PreparedQuery) {
+                            if (const auto& queryAst = preparedQuery->GetPhysicalQuery().GetQueryAst()) {
+                                ev->Get()->Record.SetQueryAst(queryAst);
+                            }
+                        }
+                    }
+                }
             }
 
             LOG_D("Forwarded TEvExecuterProgress to " << QueryState->RequestActorId);

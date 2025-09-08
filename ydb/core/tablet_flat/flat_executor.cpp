@@ -731,9 +731,12 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
 
 void TExecutor::AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection)
 {
-    auto sharedCacheTouches = PrivatePageCache->AddPageCollection(pageCollection);
+    auto syncPages = PrivatePageCache->AddPageCollection(pageCollection);
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode()));
-    SendSharedCacheTouches(std::move(sharedCacheTouches));
+   
+    if (syncPages) {
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvSync(std::move(syncPages)));
+    }
 }
 
 void TExecutor::DropPartStorePageCollections(const NTable::TPart &part)
@@ -765,12 +768,6 @@ void TExecutor::DropPageCollection(const TLogoBlobID &pageCollectionId)
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvDetach(pageCollectionId));
 }
 
-void TExecutor::SendSharedCacheTouches(THashMap<TLogoBlobID, THashSet<TPageId>>&& touches) {
-    if (touches.empty())
-        return;
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvTouch(std::move(touches)));
-}
-
 void TExecutor::UpdateCachePagesForDatabase(bool pendingOnly) {
     const auto& scheme = Scheme();
     for (const auto& [tid, table] : scheme.Tables) {
@@ -789,7 +786,7 @@ void TExecutor::UpdateCachePagesForDatabase(bool pendingOnly) {
                     UpdateCacheModesForPartStore(partView, cacheModes);
                 }
                 if (requestStickyColumns) {
-                    RequestInMemPagesForPartStore(partView, stickyColumns);
+                    RequestStickyPagesForPartStore(partView, stickyColumns);
                 }
             }
         }
@@ -860,7 +857,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
 
     auto executorCaches = CleanupState();
 
-    BootLogic.Reset(new TExecutorBootLogic(this, SelfId(), Owner->Info(), maxBootBytesInFly));
+    BootLogic.Reset(new TExecutorBootLogic(this, SelfId(), ++BootAttempt, Owner->Info(), maxBootBytesInFly));
 
     ProcessIoStats(
         NBlockIO::EDir::Read, NBlockIO::EPriority::Fast,
@@ -901,7 +898,7 @@ void TExecutor::FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext 
 
     auto executorCaches = CleanupState();
 
-    BootLogic.Reset(new TExecutorBootLogic(this, SelfId(), Owner->Info(), maxBootBytesInFly));
+    BootLogic.Reset(new TExecutorBootLogic(this, SelfId(), ++BootAttempt, Owner->Info(), maxBootBytesInFly));
 
     ProcessIoStats(
         NBlockIO::EDir::Read, NBlockIO::EPriority::Fast,
@@ -1314,7 +1311,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
 
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
                 NBlockIO::EPriority::Fast, std::move(fetch.PageCollection), std::move(fetch.Pages)),
-                0, ui64(ESharedCacheRequestType::PendingInit));
+                0, ui64(ERequestTypeCookie::PendingInit));
 
             ++partSwitch.PendingLoads;
             return true;
@@ -1479,7 +1476,7 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
     }
 }
 
-void TExecutor::RequestInMemPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns) {
+void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns) {
     Y_DEBUG_ABORT_UNLESS(stickyColumns);
 
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
@@ -1495,7 +1492,7 @@ void TExecutor::RequestInMemPagesForPartStore(NTable::TPartView& partView, const
             auto partStore = partView.As<NTable::TPartStore>();
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
                 NBlockIO::EPriority::Bkgr, partStore->PageCollections[groupIndex]->PageCollection, partStore->GetPages(groupIndex)),
-                0, ui64(ESharedCacheRequestType::InMemPages));
+                0, ui64(ERequestTypeCookie::StickyPages));
         }
     }
 }
@@ -1557,7 +1554,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         Y_ENSURE(stage && stage->PartView, "Missing bundle result in part switch");
         AddPartStorePageCollections(stage->PartView, cacheModes);
         if (stickyColumns) {
-            RequestInMemPagesForPartStore(stage->PartView, stickyColumns);
+            RequestStickyPagesForPartStore(stage->PartView, stickyColumns);
         }
         newParts.push_back(std::move(stage->PartView));
     }
@@ -2233,7 +2230,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
         request->TraceId = waitPad->GetWaitingTraceId();
         request->WaitPad = waitPad;
         ++waitPad->PendingRequests;
-        Send(MakeSharedPageCacheId(), request, 0, ui64(ESharedCacheRequestType::Transaction));
+        Send(MakeSharedPageCacheId(), request, 0, ui64(ERequestTypeCookie::Transaction));
     }
 
     if (auto logl = Logger->Log(ELnLev::Debug)) {
@@ -2281,7 +2278,6 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
     Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(env.GetStats().NewlyPinnedPages);
     Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(env.GetStats().NewlyPinnedBytes);
 
-    SendSharedCacheTouches(env.ObtainSharedCacheTouches());
     UnpinTransactionPages(*seat);
 
     Memory->ReleaseMemory(*seat);
@@ -3009,7 +3005,7 @@ void TExecutor::Handle(TEvents::TEvFlushLog::TPtr &ev) {
 void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
     NSharedCache::TEvResult *msg = ev->Get();
     const bool failed = (msg->Status != NKikimrProto::OK);
-    const auto requestType = ESharedCacheRequestType(ev->Cookie);
+    const auto requestType = ERequestTypeCookie(ev->Cookie);
 
     if (auto logl = Logger->Log(failed ? ELnLev::Info : ELnLev::Debug)) {
         logl
@@ -3018,12 +3014,13 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
     }
 
     switch (requestType) {
-    case ESharedCacheRequestType::Transaction:
-    case ESharedCacheRequestType::InMemPages:
+    case ERequestTypeCookie::Transaction:
+    case ERequestTypeCookie::StickyPages:
+    case ERequestTypeCookie::TryKeepInMemPages:
         {
             TPrivatePageCache::TPageCollection *pageCollection = PrivatePageCache->FindPageCollection(msg->PageCollection->Label());
             if (!pageCollection) {
-                if (requestType == ESharedCacheRequestType::Transaction) {
+                if (requestType == ERequestTypeCookie::Transaction) {
                     TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
                 }
                 return;
@@ -3041,20 +3038,22 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 return Broken();
             }
 
-            if (requestType == ESharedCacheRequestType::InMemPages) {
+            if (requestType == ERequestTypeCookie::StickyPages) {
                 for (auto& loaded : msg->Pages) {
                     PrivatePageCache->AddStickyPage(loaded.PageId, std::move(loaded.Page), pageCollection);
                 }
-            } else { // requestType == ESharedCacheRequestType::Transaction
+            } else { // requestType == ERequestTypeCookie::Transaction or ERequestTypeCookie::TryKeepInMemPages
                 for (auto& loaded : msg->Pages) {
                     PrivatePageCache->AddPage(loaded.PageId, loaded.Page, pageCollection);
                 }
-                TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
+                if (requestType == ERequestTypeCookie::Transaction) {
+                    TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
+                }
             }
         }
         return;
 
-    case ESharedCacheRequestType::PendingInit:
+    case ERequestTypeCookie::PendingInit:
         {
             const auto *pageCollection = msg->PageCollection.Get();
             TPendingPartSwitch *foundSwitch = nullptr;
@@ -3104,6 +3103,10 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 
             AdvancePendingPartSwitches();
         }
+        return;
+
+    case ERequestTypeCookie::BootLogic:
+        // ignore outdated replies
         return;
 
     default:

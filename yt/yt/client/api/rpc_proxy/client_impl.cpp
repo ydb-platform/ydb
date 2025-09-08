@@ -1031,7 +1031,7 @@ TFuture<void> TClient::RemoveQueueProducerSession(
     return req->Invoke().AsVoid();
 }
 
-TFuture<TGetCurrentUserResultPtr> TClient::GetCurrentUser(const TGetCurrentUserOptions& options)
+TFuture<TGetCurrentUserResult> TClient::GetCurrentUser(const TGetCurrentUserOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
@@ -1039,9 +1039,9 @@ TFuture<TGetCurrentUserResultPtr> TClient::GetCurrentUser(const TGetCurrentUserO
     SetTimeoutOptions(*req, options);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetCurrentUserPtr& rsp) {
-        auto response = New<TGetCurrentUserResult>();
-        response->User = rsp->user();
-        return response;
+        TGetCurrentUserResult result;
+        result.User = rsp->user();
+        return result;
     }));
 }
 
@@ -2629,7 +2629,7 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<std::string>>(rsp->access_control_objects()),
             .Clusters = FromProto<std::vector<std::string>>(rsp->clusters()),
-            .EnginesInfo = TYsonString(rsp->engines_info()),
+            .EnginesInfo = rsp->has_engines_info() ? std::optional(TYsonString(rsp->engines_info())) : std::nullopt,
         };
     }));
 }

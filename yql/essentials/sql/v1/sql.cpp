@@ -184,6 +184,12 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore60: // drop transfer
         case TRule_sql_stmt_core::kAltSqlStmtCore61: // alter database
         case TRule_sql_stmt_core::kAltSqlStmtCore62: // show create table
+        case TRule_sql_stmt_core::kAltSqlStmtCore63: // create streaming query
+        case TRule_sql_stmt_core::kAltSqlStmtCore64: // alter streaming query
+        case TRule_sql_stmt_core::kAltSqlStmtCore65: // drop streaming query
+        case TRule_sql_stmt_core::kAltSqlStmtCore66: // create secret
+        case TRule_sql_stmt_core::kAltSqlStmtCore67: // alter secret
+        case TRule_sql_stmt_core::kAltSqlStmtCore68: // drop secret
             return false;
     }
 }

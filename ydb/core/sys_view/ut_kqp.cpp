@@ -6385,10 +6385,10 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                 [["/Root"];["ydb.generic.use"];["user6tenant1admin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1rootadmin"]];
                 [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
                 [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]];
             ])";
@@ -6418,10 +6418,10 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root"];["ydb.generic.use"];["user6tenant1admin"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["root@builtin"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
+                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1rootadmin"]];
                     [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
                     [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]];
                 ])";
@@ -6468,10 +6468,10 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                 [["/Root"];["ydb.generic.use"];["user6tenant1admin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1rootadmin"]];
                 [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
             ])";
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));

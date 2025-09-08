@@ -10,7 +10,7 @@
 #include <ydb/core/kqp/query_data/kqp_request_predictor.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
@@ -649,6 +649,7 @@ public:
                     rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO)));
                 }
                 ctx.AddError(rootIssue);
+                return false;
             }
         }
 
@@ -1660,7 +1661,7 @@ private:
                 case NKqpProto::EStreamLookupStrategy::SEMI_JOIN: {
                     YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Tuple);
                     const auto inputTupleType = inputItemType->Cast<TTupleExprType>();
-                    YQL_ENSURE(inputTupleType->GetSize() == 2);
+                    YQL_ENSURE(inputTupleType->GetSize() == 2 || inputTupleType->GetSize() == 3);
 
                     YQL_ENSURE(inputTupleType->GetItems()[0]->GetKind() == ETypeAnnotationKind::Optional);
                     const auto joinKeyType = inputTupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
@@ -1674,7 +1675,7 @@ private:
 
                     YQL_ENSURE(resultItemType->GetKind() == ETypeAnnotationKind::Tuple);
                     const auto resultTupleType = resultItemType->Cast<TTupleExprType>();
-                    YQL_ENSURE(resultTupleType->GetSize() == 2);
+                    YQL_ENSURE(resultTupleType->GetSize() == 3);
 
                     YQL_ENSURE(resultTupleType->GetItems()[1]->GetKind() == ETypeAnnotationKind::Optional);
                     auto rightRowOptionalType = resultTupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
@@ -1726,14 +1727,14 @@ private:
             TString levelTablePath = TStringBuilder()
                 << vectorResolve.Table().Path().Value()
                 << "/" << vectorResolve.Index().Value()
-                << "/" << NTableIndex::NTableVectorKmeansTreeIndex::LevelTable;
+                << "/" << NTableIndex::NKMeans::LevelTable;
             auto levelTableMeta = TablesData->ExistingTable(Cluster, levelTablePath).Metadata;
             YQL_ENSURE(levelTableMeta);
 
             tablesMap.emplace(levelTablePath, THashSet<TStringBuf>{});
-            tablesMap[levelTablePath].emplace(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
-            tablesMap[levelTablePath].emplace(NTableIndex::NTableVectorKmeansTreeIndex::IdColumn);
-            tablesMap[levelTablePath].emplace(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::ParentColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::IdColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::CentroidColumn);
 
             vectorResolveProto.MutableLevelTable()->SetPath(levelTablePath);
             vectorResolveProto.MutableLevelTable()->SetOwnerId(levelTableMeta->PathId.OwnerId());
@@ -1775,16 +1776,26 @@ private:
             vectorResolveProto.SetVectorColumnIndex(columnIndexes.at(vectorColumn));
 
             TSet<TString> copyColumns;
+            copyColumns.insert(NTableIndex::NKMeans::ParentColumn);
             for (const auto& keyColumn : tableMeta->KeyColumnNames) {
-                YQL_ENSURE(columnIndexes.contains(keyColumn));
-                vectorResolveProto.AddCopyColumnIndexes(columnIndexes.at(keyColumn));
                 copyColumns.insert(keyColumn);
             }
-            for (const auto& dataColumn : indexDesc->DataColumns) {
-                if (!copyColumns.contains(dataColumn)) {
-                    YQL_ENSURE(columnIndexes.contains(dataColumn));
-                    vectorResolveProto.AddCopyColumnIndexes(columnIndexes.at(dataColumn));
+            if (vectorResolve.WithData() == "true") {
+                for (const auto& dataColumn : indexDesc->DataColumns) {
                     copyColumns.insert(dataColumn);
+                }
+            }
+
+            // Maintain alphabetical output column order
+
+            ui32 pos = 0;
+            for (const auto& copyCol : copyColumns) {
+                if (copyCol == NTableIndex::NKMeans::ParentColumn) {
+                    vectorResolveProto.SetClusterColumnOutPos(pos);
+                } else {
+                    YQL_ENSURE(columnIndexes.contains(copyCol));
+                    vectorResolveProto.AddCopyColumnIndexes(columnIndexes.at(copyCol));
+                    pos++;
                 }
             }
 

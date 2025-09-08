@@ -168,9 +168,11 @@ struct TStageInfoMeta {
 
 // things which are common for all tasks in the graph.
 struct TGraphMeta {
+    bool IsRestored = false;
     IKqpGateway::TKqpSnapshot Snapshot;
     TMaybe<ui64> LockTxId;
     ui32 LockNodeId = 0;
+    NKikimrKqp::EIsolationLevel RequestIsolationLevel;
     TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
@@ -184,6 +186,7 @@ struct TGraphMeta {
     TString Database;
     NKikimrConfig::TTableServiceConfig::EChannelTransportVersion ChannelTransportVersion;
     TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
+    bool CreateSuspended = false;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;

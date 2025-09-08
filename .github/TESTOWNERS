@@ -18,6 +18,7 @@
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
 /ydb/tests/olap @ydb-platform/cs
+/ydb/tests/stress/olap_workload  @ydb-platform/cs
 /ydb/core/kqp/ut/olap @ydb-platform/cs
 
 #Distributed System Infrastructure Team @ijon TEAM:@ydb-platform/system-infra
@@ -102,6 +103,7 @@
 
 #Federative query @uzhastik TEAM:@ydb-platform/fq
 /ydb/tests/fq @ydb-platform/fq
+/ydb/tests/solomon @ydb-platform/fq
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/services/fq/ @ydb-platform/fq
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq

@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/program/program.h>
@@ -434,7 +434,9 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
     settings->SetKeepRowsOrder(streamLookup.GetKeepRowsOrder());
     settings->SetAllowNullKeysPrefixSize(streamLookup.GetAllowNullKeysPrefixSize());
 
-    if (streamLookup.GetIsTableImmutable()) {
+    if (streamLookup.GetIsTableImmutable()
+        && graph.GetMeta().RequestIsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_READ_STALE)
+    {
         settings->SetAllowUseFollowers(true);
         settings->SetIsTableImmutable(true);
     }
@@ -470,11 +472,12 @@ void BuildVectorResolveChannels(TKqpTasksGraph& graph, const TStageInfo& stageIn
     levelMeta->SetSchemaVersion(kqpMeta.GetVersion());
     levelMeta->SetTableKind((ui32)levelTableInfo->TableKind);
 
-    settings->SetLevelTableParentColumnId(levelTableInfo->Columns.at(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn).Id);
-    settings->SetLevelTableClusterColumnId(levelTableInfo->Columns.at(NTableIndex::NTableVectorKmeansTreeIndex::IdColumn).Id);
-    settings->SetLevelTableCentroidColumnId(levelTableInfo->Columns.at(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn).Id);
+    settings->SetLevelTableParentColumnId(levelTableInfo->Columns.at(NTableIndex::NKMeans::ParentColumn).Id);
+    settings->SetLevelTableClusterColumnId(levelTableInfo->Columns.at(NTableIndex::NKMeans::IdColumn).Id);
+    settings->SetLevelTableCentroidColumnId(levelTableInfo->Columns.at(NTableIndex::NKMeans::CentroidColumn).Id);
     *settings->MutableCopyColumnIndexes() = vectorResolve.GetCopyColumnIndexes();
     settings->SetVectorColumnIndex(vectorResolve.GetVectorColumnIndex());
+    settings->SetClusterColumnOutPos(vectorResolve.GetClusterColumnOutPos());
 
     // Now fill InputTypes & InputTypeInfos
 
@@ -1357,7 +1360,8 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
         if (input.Meta.StreamLookupSettings) {
             enableMetering = true;
             YQL_ENSURE(input.Meta.StreamLookupSettings);
-            bool isTableImmutable = input.Meta.StreamLookupSettings->GetIsTableImmutable();
+            bool isTableImmutable = input.Meta.StreamLookupSettings->GetIsTableImmutable() &&
+                tasksGraph.GetMeta().RequestIsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_READ_STALE;
 
             if (snapshot.IsValid() && !isTableImmutable) {
                 input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
@@ -1457,6 +1461,7 @@ void SerializeTaskToProto(
     SerializeCtxToMap(*tasksGraph.GetMeta().UserRequestContext, *result->MutableRequestContext());
 
     result->SetDisableMetering(!enableMetering);
+    result->SetCreateSuspended(tasksGraph.GetMeta().CreateSuspended);
     FillTaskMeta(stageInfo, task, *result);
 }
 
@@ -1483,6 +1488,8 @@ void PersistTasksGraphInfo(const TKqpTasksGraph& tasksGraph, NKikimrKqp::TQueryP
     }
 }
 
+// Restored graph only requires to update authentication secrets
+// and to reassign existing tasks between actual nodes.
 void RestoreTasksGraphInfo(TKqpTasksGraph& tasksGraph, const NKikimrKqp::TQueryPhysicalGraph& graphInfo) {
     const auto restoreDqTransform = [](const auto& protoInfo) -> TMaybe<TTransform> {
         if (!protoInfo.HasTransform()) {
@@ -1590,6 +1597,22 @@ void RestoreTasksGraphInfo(TKqpTasksGraph& tasksGraph, const NKikimrKqp::TQueryP
                     const auto& hashInfo = outputInfo.GetHashPartition();
                     newOutput.KeyColumns.assign(hashInfo.GetKeyColumns().begin(), hashInfo.GetKeyColumns().end());
                     newOutput.PartitionsCount = hashInfo.GetPartitionsCount();
+
+                    switch (hashInfo.GetHashKindCase()) {
+                        case NDqProto::TTaskOutputHashPartition::kHashV1:
+                            newOutput.HashKind = EHashShuffleFuncType::HashV1;
+                            break;
+                        case NDqProto::TTaskOutputHashPartition::kHashV2:
+                            newOutput.HashKind = EHashShuffleFuncType::HashV2;
+                            break;
+                        case NDqProto::TTaskOutputHashPartition::kColumnShardHashV1:
+                            newOutput.HashKind = EHashShuffleFuncType::ColumnShardHashV1;
+                            break;
+                        case NDqProto::TTaskOutputHashPartition::HASHKIND_NOT_SET:
+                            YQL_ENSURE(false, "Hash kind not set");
+                            break;
+                    }
+
                     break;
                 }
                 case NDqProto::TTaskOutput::kBroadcast: {
@@ -1630,6 +1653,8 @@ void RestoreTasksGraphInfo(TKqpTasksGraph& tasksGraph, const NKikimrKqp::TQueryP
         newChannel = channel;
         YQL_ENSURE(id == newChannel.Id);
     }
+
+    tasksGraph.GetMeta().IsRestored = true;
 }
 
 TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const

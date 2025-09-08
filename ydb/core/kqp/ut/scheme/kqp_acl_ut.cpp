@@ -1124,6 +1124,9 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             auto result = sessionRead.ExecuteQuery("SELECT * FROM `/Root/Test`", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
+
+        driverWrite.Stop(true);
+        driverRead.Stop(true);
     }
 }
 

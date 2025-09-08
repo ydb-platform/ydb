@@ -220,6 +220,7 @@ struct TColumnFamily {
     TMaybe<TString> Data;
     TMaybe<TString> Compression;
     TMaybe<i32> CompressionLevel;
+    TMaybe<TString> CacheMode;
 };
 
 struct TTtlSettings {
@@ -257,6 +258,7 @@ struct TTableSettings {
     TResetableSetting<TTtlSettings, void> TtlSettings;
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
+    TMaybe<ui64> ExternalDataChannelsCount;
 
     // These parameters are only used for external sources
     TMaybe<TString> DataSourcePath;
@@ -677,6 +679,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
         return Kind == EKikimrTableKind::Olap;
     }
 };
+
+using TSetColumnConstraintSettings = NKikimrSchemeOp::TSetColumnConstraintSettings;
 
 struct TAlterDatabaseSettings {
     TString DatabasePath;
@@ -1167,6 +1171,8 @@ public:
 
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
 

@@ -665,8 +665,7 @@ TYsonToSkiffConverter CreateTzTypeYsonToSkiffConverter(
     switch (wireType) {
         case EWireType::String32:
             return CreatePrimitiveTypeYsonToSkiffConverter(descriptor, wireType);
-        case EWireType::Tuple:
-        {
+        case EWireType::Tuple: {
             const auto& children = skiffSchema->GetChildren();
             YT_VERIFY(children.size() == 2);
             const auto innerWireType = children[0]->GetWireType();
@@ -1421,8 +1420,7 @@ TSkiffToYsonConverter CreateTzTypeSkiffToYsonConverter(const std::shared_ptr<TSk
     switch (wireType) {
         case EWireType::String32:
             return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
-        case EWireType::Tuple:
-        {
+        case EWireType::Tuple: {
             const auto& children = skiffSchema->GetChildren();
             YT_VERIFY(children.size() == 2);
             const auto innerWireType = children[0]->GetWireType();
@@ -2026,67 +2024,67 @@ void CheckWireType(EWireType wireType, const std::initializer_list<EWireType>& a
 
 void CheckTzType(const std::shared_ptr<TSkiffSchema>& skiffSchema, ESimpleLogicalValueType columnType)
 {
-    auto error = TError(
-        "TzType cannot be represented with Skiff schema %Qv",
-        GetShortDebugString(skiffSchema));
-
     auto wireType = skiffSchema->GetWireType();
     if (wireType == EWireType::String32 || wireType == EWireType::Yson32) {
         return;
     }
-    if (wireType == EWireType::Tuple) {
-        const auto& children = skiffSchema->GetChildren();
-        if (children.size() != 2) {
-            THROW_ERROR_EXCEPTION("Tuple is expected to have two fields for the TzType representation");
-        }
-        const auto innerTimeType = children[0]->GetWireType();
-        const auto innerTimezoneType = children[1]->GetWireType() ;
-        if (innerTimezoneType != EWireType::Uint16) {
-            THROW_ERROR_EXCEPTION("The second field in the tuple is expected to be a uint16");
-        }
-        try {
-            switch (columnType) {
-                case ESimpleLogicalValueType::TzDate32:
-                    CheckWireType(
-                        innerTimeType,
-                        {EWireType::Int32});
-                    break;
-                case ESimpleLogicalValueType::TzDatetime64:
-                    CheckWireType(
-                        innerTimeType,
-                        {EWireType::Int64});
-                    break;
-                case ESimpleLogicalValueType::TzTimestamp64:
-                    CheckWireType(
-                        innerTimeType,
-                        {EWireType::Int64,});
-                    break;
-                case ESimpleLogicalValueType::TzDate:
-                    CheckWireType(
-                        innerTimeType,
-                        {EWireType::Uint16});
-                    break;
-                case ESimpleLogicalValueType::TzDatetime:
-                    CheckWireType(
-                        innerTimeType,
-                        {EWireType::Uint32});
-                    break;
-                case ESimpleLogicalValueType::TzTimestamp:
-                    CheckWireType(
-                        innerTimeType,
-                        {EWireType::Uint64});
-                    break;
-                default:
-                    YT_ABORT();
-            }
-        } catch (const NYT::TErrorException& ex) {
-            error <<= ex.Error();
-            THROW_ERROR(error);
-        }
-        return;
+    if (wireType != EWireType::Tuple) {
+        THROW_ERROR_EXCEPTION(
+            "TzType cannot be represented with Skiff schema %Qv",
+            GetShortDebugString(skiffSchema));
+    }
+    const auto& children = skiffSchema->GetChildren();
+    if (children.size() != 2) {
+        THROW_ERROR_EXCEPTION("Tuple is expected to have two fields for the TzType representation");
+    }
+    const auto innerTimeType = children[0]->GetWireType();
+    const auto innerTimezoneType = children[1]->GetWireType() ;
+    if (innerTimezoneType != EWireType::Uint16) {
+        THROW_ERROR_EXCEPTION("The second field in the tuple is expected to be \"uint16\"");
     }
 
-    THROW_ERROR(error);
+    try {
+        switch (columnType) {
+            case ESimpleLogicalValueType::TzDate32:
+                CheckWireType(
+                    innerTimeType,
+                    {EWireType::Int32});
+                break;
+            case ESimpleLogicalValueType::TzDatetime64:
+                CheckWireType(
+                    innerTimeType,
+                    {EWireType::Int64});
+                break;
+            case ESimpleLogicalValueType::TzTimestamp64:
+                CheckWireType(
+                    innerTimeType,
+                    {EWireType::Int64,});
+                break;
+            case ESimpleLogicalValueType::TzDate:
+                CheckWireType(
+                    innerTimeType,
+                    {EWireType::Uint16});
+                break;
+            case ESimpleLogicalValueType::TzDatetime:
+                CheckWireType(
+                    innerTimeType,
+                    {EWireType::Uint32});
+                break;
+            case ESimpleLogicalValueType::TzTimestamp:
+                CheckWireType(
+                    innerTimeType,
+                    {EWireType::Uint64});
+                break;
+            default:
+                YT_ABORT();
+        }
+    } catch (const NYT::TErrorException& ex) {
+        auto error = TError(
+            "TzType cannot be represented with Skiff schema %Qv",
+            GetShortDebugString(skiffSchema));
+        error <<= ex.Error();
+        THROW_ERROR(error);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

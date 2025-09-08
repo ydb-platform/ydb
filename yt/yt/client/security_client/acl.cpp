@@ -41,36 +41,9 @@ void Serialize(const TSerializableAccessControlEntry& ace, NYson::IYsonConsumer*
             .OptionalItem("subject_tag_filter", ace.SubjectTagFilter)
             .OptionalItem("columns", ace.Columns)
             .OptionalItem("vital", ace.Vital)
+            .OptionalItem("expression", ace.Expression)
+            .OptionalItem(TSerializableAccessControlEntry::ExpressionKey, ace.InapplicableExpressionMode)
         .EndMap();
-}
-
-static void EnsureCorrect(const TSerializableAccessControlEntry& ace)
-{
-    if (ace.Action == ESecurityAction::Undefined) {
-        THROW_ERROR_EXCEPTION("%Qlv action is not allowed",
-            ESecurityAction::Undefined);
-    }
-
-    // Currently, we allow empty permissions with columns. They seem to be no-op.
-    bool onlyReadOrEmpty = None(ace.Permissions & ~EPermission::Read);
-    if (ace.Columns && !onlyReadOrEmpty) {
-        THROW_ERROR_EXCEPTION("ACE specifying columns may contain only %Qlv permission; found %Qlv",
-            EPermission::Read,
-            ace.Permissions);
-    }
-
-    bool hasRegisterQueueConsumer = Any(ace.Permissions & EPermission::RegisterQueueConsumer);
-    bool onlyRegisterQueueConsumer = ace.Permissions == EPermission::RegisterQueueConsumer;
-
-    if (hasRegisterQueueConsumer && !ace.Vital) {
-        THROW_ERROR_EXCEPTION("Permission %Qlv requires vitality to be specified",
-            EPermission::RegisterQueueConsumer);
-    }
-    if (ace.Vital && !onlyRegisterQueueConsumer) {
-        THROW_ERROR_EXCEPTION("ACE specifying vitality must contain a single %Qlv permission; found %Qlv",
-            EPermission::RegisterQueueConsumer,
-            ace.Permissions);
-    }
 }
 
 void Deserialize(TSerializableAccessControlEntry& ace, NYTree::INodePtr node)
@@ -102,7 +75,18 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYTree::INodePtr node)
     } else {
         ace.Vital.reset();
     }
-    EnsureCorrect(ace);
+    if (auto expressionNode = mapNode->FindChild(std::string(TSerializableAccessControlEntry::ExpressionKey))) {
+        Deserialize(ace.Expression, expressionNode);
+    } else {
+        ace.Expression.reset();
+    }
+    if (auto inapplicableExpressionModeNode = mapNode->FindChild(std::string(TSerializableAccessControlEntry::InapplicableExpressionModeKey))) {
+        Deserialize(ace.InapplicableExpressionMode, inapplicableExpressionModeNode);
+    } else {
+        ace.InapplicableExpressionMode.reset();
+    }
+    CheckAceCorrect(ace)
+        .ThrowOnError();
 }
 
 void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCursor* cursor)
@@ -138,6 +122,12 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCur
         } else if (key == TStringBuf("vital")) {
             cursor->Next();
             Deserialize(ace.Vital, cursor);
+        } else if (key == TSerializableAccessControlEntry::ExpressionKey) {
+            cursor->Next();
+            Deserialize(ace.Expression, cursor);
+        } else if (key == TSerializableAccessControlEntry::InapplicableExpressionModeKey) {
+            cursor->Next();
+            Deserialize(ace.InapplicableExpressionMode, cursor);
         } else {
             cursor->Next();
             cursor->SkipComplexValue();
@@ -146,7 +136,8 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCur
     if (!(HasAction && HasSubjects && HasPermissions)) {
         THROW_ERROR_EXCEPTION("Error parsing ACE: \"action\", \"subject\" and \"permissions\" fields are required");
     }
-    EnsureCorrect(ace);
+    CheckAceCorrect(ace)
+        .ThrowOnError();
 }
 
 void TSerializableAccessControlEntry::Persist(const TStreamPersistenceContext& context)

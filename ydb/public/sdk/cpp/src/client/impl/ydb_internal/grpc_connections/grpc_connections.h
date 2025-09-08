@@ -98,6 +98,8 @@ public:
             clientConfig.MaxOutboundMessageSize = MaxOutboundMessageSize_;
         }
 
+        clientConfig.LoadBalancingPolicy = "round_robin";
+
         if (dbState->DiscoveryMode != EDiscoveryMode::Off) {
             if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()
                 || dbState->Database.empty()

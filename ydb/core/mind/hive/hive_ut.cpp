@@ -34,6 +34,7 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/malloc/api/malloc.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <util/stream/null.h>
 #include <util/string/printf.h>
@@ -1520,7 +1521,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
-    Y_UNIT_TEST(TestCheckSubHiveMigration) {
+    void TestMigration(TSubDomainKey objectDomain, NKikimrHive::TEvInitMigration event) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, true);
 
@@ -1588,6 +1589,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createTablet1->Record.AddAllowedDomains();
         createTablet1->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createTablet1->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
+        if (objectDomain) {
+            createTablet1->Record.MutableObjectDomain()->CopyFrom(objectDomain);
+        }
         ui64 tabletId1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true);
 
         MakeSureTabletIsUp(runtime, tabletId1, 0); // tablet up in root hive
@@ -1605,11 +1609,22 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
 
             if (queryMigrationReply->Record.GetMigrationState() == NKikimrHive::EMigrationState::MIGRATION_READY) {
-                THolder<TEvHive::TEvInitMigration> migration = MakeHolder<TEvHive::TEvInitMigration>();
-                runtime.SendToPipe(subHiveTablet, sender, migration.Release(), 0, GetPipeConfigWithRetries());
-                auto initMigrationReply = runtime.GrabEdgeEventRethrow<TEvHive::TEvInitMigrationReply>(handle);
+                NActorsProto::TRemoteHttpInfo pb;
+                pb.SetMethod(HTTP_METHOD_POST);
+                pb.SetPath("/app");
+                auto* p1 = pb.AddQueryParams();
+                p1->SetKey("TabletID");
+                p1->SetValue(TStringBuilder() << hiveTablet);
+                auto* p2 = pb.AddQueryParams();
+                p2->SetKey("page");
+                p2->SetValue("InitMigration");
+                TStringBuilder stringQuery;
+                NProtobufJson::Proto2Json(event, stringQuery);
+                pb.SetPostContent(stringQuery);
+                runtime.SendToPipe(subHiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+                auto initMigrationReply = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
                 UNIT_ASSERT(initMigrationReply);
-                UNIT_ASSERT(initMigrationReply->Record.GetStatus() == NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(initMigrationReply->Json, "{\"Status\":\"OK\"}");
             }
 
             TDispatchOptions options;
@@ -1629,6 +1644,18 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(createTabletReply->Record.GetForwardRequest().GetHiveTabletId(), subHiveTablet);
 
         runtime.SetObserverFunc(prevObserverFunc);
+    }
+
+    Y_UNIT_TEST(TestCheckSubHiveMigration) {
+        TestMigration({}, {});
+    }
+
+    Y_UNIT_TEST(TestServerlessMigration) {
+        // Just use a different object domain to model a serverless db
+        TSubDomainKey objectDomain(999999, 23);
+        NKikimrHive::TEvInitMigration event;
+        event.MutableMigrationFilter()->MutableFilterDomain()->CopyFrom(objectDomain);
+        TestMigration(objectDomain, event);
     }
 
     Y_UNIT_TEST(TestNoMigrationToSelf) {
@@ -8040,6 +8067,152 @@ Y_UNIT_TEST_SUITE(THiveTest) {
       UNIT_ASSERT_VALUES_EQUAL(0, getTabletsStartingCounter());
     }
 
+    Y_UNIT_TEST(TestExternalBootCounters) {
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetMetricsWindowSize(1);
+            app.HiveConfig.SetLockedTabletsSendMetrics(true);
+        });
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+
+        const auto getTabletsCounter = [&]() {
+            return GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_METRICS_CPU);
+        };
+
+        const auto sendMetrics = [&runtime, &hiveTablet](const TActorId& sender, std::vector<std::pair<ui64, ui32>> tabletsIdCpu) {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            for (const auto& info : tabletsIdCpu) {
+                NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
+                metric->SetTabletID(info.first);
+                metric->MutableResourceUsage()->SetCPU(info.second);
+            }
+            runtime.SendToPipe(hiveTablet, sender, metrics.Release());
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEvent<TEvLocal::TEvTabletMetricsAck>(handle);
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(0, getTabletsCounter());
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
+        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(0, getTabletsCounter());
+
+        sendMetrics(runtime.AllocateEdgeActor(0), { std::make_pair(tabletId, 30) });
+        UNIT_ASSERT_VALUES_EQUAL(30, getTabletsCounter());
+
+        THolder<TEvHive::TEvCreateTablet> evExt(new TEvHive::TEvCreateTablet(testerTablet, 1, tabletType, BINDED_CHANNELS));
+        evExt->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
+        const ui64 tabletIdExt = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(evExt), 0, false);
+        MakeSureTabletIsDown(runtime, tabletIdExt, 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(30, getTabletsCounter());
+
+        TAutoPtr<IEventHandle> handle;
+        TActorId owner = runtime.AllocateEdgeActor(0);
+
+        runtime.SendToPipe(
+            hiveTablet,
+            owner,
+            new TEvHive::TEvLockTabletExecution(tabletIdExt));
+        runtime.GrabEdgeEvent<TEvHive::TEvLockTabletExecutionResult>(handle);
+
+        // tablet receives avg metrics after creating, so 30 + 30
+        UNIT_ASSERT_VALUES_EQUAL(60, getTabletsCounter());
+
+        // was 60 and plus delta 80-30=50, result is 80
+        sendMetrics(owner, { std::make_pair(tabletIdExt, 80) });
+        UNIT_ASSERT_VALUES_EQUAL(110, getTabletsCounter());
+
+        // was 110 and plus deltas 90-30=60, result is 170
+        sendMetrics(owner, { std::make_pair(tabletId, 90), std::make_pair(tabletIdExt, 80) });
+        UNIT_ASSERT_VALUES_EQUAL(170, getTabletsCounter());
+
+        runtime.SendToPipe(
+            hiveTablet,
+            owner,
+            new TEvHive::TEvUnlockTabletExecution(tabletIdExt));
+        runtime.GrabEdgeEvent<TEvHive::TEvUnlockTabletExecutionResult>(handle);
+
+        // tablet metrics are not taken into account right after unlock, so result is 30
+        sendMetrics(owner, { std::make_pair(tabletId, 30), std::make_pair(tabletIdExt, 800) });
+        UNIT_ASSERT_VALUES_EQUAL(30, getTabletsCounter());
+    }
+
+    Y_UNIT_TEST(TestLockedTabletsMustNotRestart) {
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetMetricsWindowSize(1);
+            app.HiveConfig.SetLockedTabletsSendMetrics(true);
+        });
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
+        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        THolder<TEvHive::TEvCreateTablet> evExt(new TEvHive::TEvCreateTablet(testerTablet, 1, tabletType, BINDED_CHANNELS));
+        evExt->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
+        const ui64 tabletIdExt = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(evExt), 0, false);
+
+        TAutoPtr<IEventHandle> handle;
+        TActorId owner = runtime.AllocateEdgeActor(0);
+
+        const auto tableState = [&runtime, &hiveTablet](ui64 tabletId)
+        {
+            TActorId sender = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(true));
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+                if (tabletId == tablet.GetTabletID()) {
+                    return (int)tablet.GetVolatileState();
+                }
+            }
+            return -1;
+        };
+
+        runtime.SendToPipe(
+            hiveTablet,
+            owner,
+            new TEvHive::TEvLockTabletExecution(tabletIdExt));
+        runtime.GrabEdgeEvent<TEvHive::TEvLockTabletExecutionResult>(handle);
+        UNIT_ASSERT_EQUAL(NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_UNKNOWN, tableState(tabletIdExt));
+
+        runtime.SendToPipe(
+            hiveTablet,
+            owner,
+            new TEvLocal::TEvSyncTablets());
+        runtime.DispatchEvents();
+        UNIT_ASSERT_EQUAL(NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_UNKNOWN, tableState(tabletIdExt));
+
+        runtime.SendToPipe(
+            hiveTablet,
+            owner,
+            new TEvHive::TEvUnlockTabletExecution(tabletIdExt));
+        runtime.GrabEdgeEvent<TEvHive::TEvUnlockTabletExecutionResult>(handle);
+
+        runtime.SendToPipe(
+            hiveTablet,
+            owner,
+            new TEvLocal::TEvSyncTablets());
+        runtime.DispatchEvents();
+        UNIT_ASSERT_UNEQUAL(NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_UNKNOWN, tableState(tabletIdExt));
+    }
+
     class TDummyBridge {
         TTestBasicRuntime& Runtime;
         TTestActorRuntimeBase::TEventObserverHolder Observer;
@@ -8087,7 +8260,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
     public:
-        TDummyBridge(TTestBasicRuntime& runtime) : Runtime(runtime) 
+        TDummyBridge(TTestBasicRuntime& runtime) : Runtime(runtime)
         {
             std::vector<ui32> nodeIds(Runtime.GetNodeCount());
             for (ui32 i = 0; i < Runtime.GetNodeCount(); ++i) {
@@ -8122,6 +8295,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             Runtime.AddAppDataInit([this](ui32, TAppData& appData) {
                 appData.BridgeConfig = BridgeConfig;
                 appData.BridgeModeEnabled = true;
+                appData.SuppressBridgeModeBootstrapperLogic = true;
             });
             Observe();
         }

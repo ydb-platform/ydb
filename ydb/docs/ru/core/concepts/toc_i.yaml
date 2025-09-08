@@ -5,7 +5,7 @@ items:
   href: architecture.md
 - name: Соединение с БД
   href: connect.md
-- name: Структура кластера
+- name: Схемные объекты
   href: datamodel/index.md
   include:
     path: datamodel/toc_p.yaml
@@ -18,6 +18,8 @@ items:
   href: secondary_indexes.md
 - name: Векторный поиск
   href: vector_search.md
+- name: Спиллинг
+  href: spilling.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
@@ -32,6 +34,11 @@ items:
 - name: Асинхронная репликация
   href: async-replication.md
   when: feature_async_replication
+- name: Режим bridge
+  href: bridge.md
+- name: Трансфер данных
+  href: transfer.md
+  when: feature_transfer
 - name: Оптимизатор запросов
   href: optimizer.md
 - name: Федеративные запросы

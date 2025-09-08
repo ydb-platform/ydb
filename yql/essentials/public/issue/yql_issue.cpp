@@ -42,14 +42,8 @@ void SanitizeNonAscii(TString& s) {
 
 TTextWalker& TTextWalker::Advance(char c) {
     if (c == '\n') {
-        HaveCr_ = false;
-        ++LfCount_;
-        return *this;
-    }
-
-
-    if (c == '\r' && !HaveCr_) {
-        HaveCr_ = true;
+        Position_.Row++;
+        Position_.Column = 0;
         return *this;
     }
 
@@ -58,15 +52,8 @@ TTextWalker& TTextWalker::Advance(char c) {
         charDistance = 0;
     }
 
-    // either not '\r' or second '\r'
-    if (LfCount_) {
-        Position_.Row += LfCount_;
-        Position_.Column = charDistance;
-        LfCount_ = 0;
-    } else {
-        Position_.Column += charDistance + (HaveCr_ && c != '\r');
-    }
-    HaveCr_ = (c == '\r');
+    Position_.Column += charDistance;
+
     return *this;
 }
 

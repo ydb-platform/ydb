@@ -774,6 +774,29 @@ constexpr bool IsPointerStaticCastable = requires { static_cast<TTo*>(static_cas
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TOption>
+std::optional<TOption> IYsonStructParameter::FindOption() const
+{
+    if (auto option = FindOption(typeid(TOption)); option.has_value()) {
+        YT_VERIFY(option.type() == typeid(TOption));
+        return std::any_cast<TOption>(option);
+    } else {
+        return std::nullopt;
+    }
+}
+
+template <class TOption>
+TOption IYsonStructParameter::GetOptionOrThrow() const
+{
+    auto option = FindOption<TOption>();
+    if (!option) {
+        THROW_ERROR_EXCEPTION("Option %Qv is not found", TypeName<TOption>());
+    }
+    return *option;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TStruct, class TValue>
 TYsonFieldAccessor<TStruct, TValue>::TYsonFieldAccessor(TYsonStructField<TStruct, TValue> field)
     : Field_(field)
@@ -1102,6 +1125,14 @@ TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::DefaultNew(TArgs&&..
 }
 
 template <class TValue>
+template <class TOption>
+TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::AddOption(TOption option)
+{
+    EmplaceOrCrash(Options_, typeid(TOption), std::move(option));
+    return *this;
+}
+
+template <class TValue>
 TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::CheckThat(TValidator validator)
 {
     Validators_.push_back(std::move(validator));
@@ -1112,6 +1143,15 @@ template <class TValue>
 IMapNodePtr TYsonStructParameter<TValue>::GetRecursiveUnrecognized(const TYsonStructBase* self) const
 {
     return NPrivate::TGetRecursiveUnrecognized<TValue>::Do(FieldAccessor_->GetValue(self));
+}
+
+template <class TValue>
+std::any TYsonStructParameter<TValue>::FindOption(const std::type_info& typeInfo) const
+{
+    if (auto it = Options_.find(typeInfo); it != Options_.end()) {
+        return it->second;
+    }
+    return {};
 }
 
 template <class TValue>

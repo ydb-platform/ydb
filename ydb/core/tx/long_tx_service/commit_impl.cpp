@@ -438,7 +438,7 @@ namespace NLongTxService {
         void CancelProposal() {
             for (const auto& pr : Params.ColumnShardWrites) {
                 const ui64 tabletId = pr.first;
-                SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvCancelTransactionProposal>(TxId), false);
+                SendToTablet(tabletId, MakeHolder<TEvDataShard::TEvCancelTransactionProposal>(TxId), false);
             }
         }
 

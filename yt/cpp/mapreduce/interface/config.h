@@ -253,6 +253,9 @@ struct TConfig
     /// Redirects stdout to stderr for jobs.
     bool RedirectStdoutToStderr = false;
 
+    /// Append job and operation IDs as shell command options.
+    bool AppendDebugOptions = true;
+
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);
     static TDuration GetDuration(const char* var, TDuration defaultValue);

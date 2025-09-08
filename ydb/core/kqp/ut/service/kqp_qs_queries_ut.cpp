@@ -4370,7 +4370,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().contains("Write transactions between column and row tables are disabled at current time"),
+                insertResult.GetIssues().ToString().contains("Write transactions that use both row-oriented and column-oriented tables are disabled at current time."),
                 insertResult.GetIssues().ToString());
         }
 
@@ -4383,7 +4383,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().contains("Write transactions between column and row tables are disabled at current time"),
+                insertResult.GetIssues().ToString().contains("Write transactions that use both row-oriented and column-oriented tables are disabled at current time."),
                 insertResult.GetIssues().ToString());
         }
 
@@ -4398,7 +4398,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().contains("Write transactions between column and row tables are disabled at current time"),
+                insertResult.GetIssues().ToString().contains("Write transactions that use both row-oriented and column-oriented tables are disabled at current time."),
                 insertResult.GetIssues().ToString());
         }
 
@@ -4412,7 +4412,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().contains("Write transactions between column and row tables are disabled at current time"),
+                insertResult.GetIssues().ToString().contains("Write transactions that use both row-oriented and column-oriented tables are disabled at current time."),
                 insertResult.GetIssues().ToString());
         }
 
@@ -4426,7 +4426,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().contains("Write transactions between column and row tables are disabled at current time"),
+                insertResult.GetIssues().ToString().contains("Write transactions that use both row-oriented and column-oriented tables are disabled at current time."),
                 insertResult.GetIssues().ToString());
         }
 
@@ -5501,6 +5501,143 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    // TODO: flown4qqqq
+    Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSetColumnConstraint(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto createTable = client.ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/test/alterNotNull` (
+                    id Int32 NOT NULL,
+                    val Int32 DEFAULT(0),
+                    PRIMARY KEY (id)
+                );
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+        }
+
+        {
+            auto initValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/alterNotNull` (id, val)
+                VALUES
+                ( 1, 1 ),
+                ( 2, 10 ),
+                ( 3, 100 ),
+                ( 4, NULL ),
+                ( 5, 10000 ),
+                ( 6, 100000 ),
+                ( 7, 1000000 );
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
+        }
+
+        // need to remove
+        {
+            auto setNotNull = client.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/test/alterNotNull`
+                ALTER COLUMN val SET NOT NULL;
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::PRECONDITION_FAILED, setNotNull.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetConstraintInitiate is not implemented. TablePath = '/Root/test/alterNotNull'");
+        }
+
+        // {
+        //     auto setNotNull = client.ExecuteQuery(R"sql(
+        //         ALTER TABLE `/Root/test/alterNotNull`
+        //         ALTER COLUMN val SET NOT NULL;
+        //     )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        //     UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+        //     UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::GENERIC_ERROR, setNotNull.GetIssues().ToString());
+        //     UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "One of the shards report CHECKING_NOT_NULL_ERROR at Filling stage, process has to be canceled");
+        // }
+
+        // {
+        //     auto initNullValues = client.ExecuteQuery(R"sql(
+        //         REPLACE INTO `/Root/test/alterNotNull` (id, val)
+        //         VALUES
+        //         ( 1, NULL ),
+        //         ( 2, NULL );
+        //     )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        //     UNIT_ASSERT_C(initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+        // }
+    }
+
+    // TODO: flown4qqqq
+    Y_UNIT_TEST(AlterTable_SetNotNull_Valid) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSetColumnConstraint(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto createTable = client.ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/test/alterNotNull` (
+                    id Int32 NOT NULL,
+                    val Int32 DEFAULT(0),
+                    PRIMARY KEY (id)
+                );
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+        }
+
+        {
+            auto initValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/alterNotNull` (id, val)
+                VALUES
+                ( 1, 1 ),
+                ( 2, 10 ),
+                ( 3, 100 ),
+                ( 4, 1000 ),
+                ( 5, 10000 ),
+                ( 6, 100000 ),
+                ( 7, 1000000 );
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
+        }
+
+        // need to remove
+        {
+            auto setNotNull = client.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/test/alterNotNull`
+                ALTER COLUMN val SET NOT NULL;
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::PRECONDITION_FAILED, setNotNull.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetConstraintInitiate is not implemented. TablePath = '/Root/test/alterNotNull'");
+        }
+
+        // {
+        //     auto setNotNull = client.ExecuteQuery(R"sql(
+        //         ALTER TABLE `/Root/test/alterNotNull`
+        //         ALTER COLUMN val SET NOT NULL;
+        //     )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        //     UNIT_ASSERT_C(setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+        // }
+
+        // {
+        //     auto initNullValues = client.ExecuteQuery(R"sql(
+        //         REPLACE INTO `/Root/test/alterNotNull` (id, val)
+        //         VALUES
+        //         ( 1, NULL ),
+        //         ( 2, NULL );
+        //     )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        //     UNIT_ASSERT_C(!initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+        //     UNIT_ASSERT_VALUES_EQUAL_C(initNullValues.GetStatus(), EStatus::GENERIC_ERROR, initNullValues.GetIssues().ToString());
+        // }
+    }
+
     Y_UNIT_TEST(AlterTable_DropNotNull_WithSetFamily_Valid) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
 
@@ -6207,7 +6344,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
                 auto result = session.ExecuteQuery(query, TTxControl::Tx(tx), params.Build()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                Sleep(TDuration::MilliSeconds(500));
             }
 
             auto commitResult = tx.Commit().GetValueSync();

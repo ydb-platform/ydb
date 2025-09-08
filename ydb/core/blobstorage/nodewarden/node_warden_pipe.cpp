@@ -113,7 +113,9 @@ void TNodeWarden::SendRegisterNode() {
     }
 
     // report working syncers to the controller
-    FillInWorkingSyncers(ev->Record.MutableSyncerState());
+    for (const TWorkingSyncer& syncer : WorkingSyncers) {
+        FillInWorkingSyncer(ev->Record.MutableSyncerState(), const_cast<TWorkingSyncer&>(syncer), true);
+    }
 
     SendToController(std::move(ev));
 }

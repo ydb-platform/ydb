@@ -185,6 +185,7 @@ enum EServiceKikimr {
     PQ_READ_PROXY = 442;
     PQ_WRITE_PROXY = 443;
     PQ_MIRRORER = 446;
+    PQ_MIRROR_DESCRIBER = 463;
     PQ_RATE_LIMITER = 447;
     PERSQUEUE_READ_BALANCER = 448;
     PQ_MOVE_TOPIC = 449;
@@ -433,6 +434,8 @@ enum EServiceKikimr {
     BRIDGE = 3400;
 
     TRANSFER = 3500;
+
+    TOKEN_MANAGER = 3600;
 };
 
 message TActivity {
@@ -1105,5 +1108,6 @@ message TActivity {
         RECOMPUTE_KMEANS_SCAN_ACTOR = 663;
         BS_HULL_SYNC_FULL_UNORDERED_DATA_PROTOCOL = 664;
         SCHEMESHARD_SYSVIEWS_ROSTER_UPDATE = 665;
+        TOKEN_MANAGER_ACTOR = 666;
     };
 };

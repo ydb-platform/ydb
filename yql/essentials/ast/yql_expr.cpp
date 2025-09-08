@@ -2845,7 +2845,7 @@ TExprNode::TPtr TExprContext::FuseLambdas(const TExprNode& outer, const TExprNod
         });
         newBody = ReplaceNodes(std::move(outerBody), outerReplaces);
     } else if (1U == outerArgs.ChildrenSize()) {
-        newBody.reserve(newBody.size() * body.size());
+        newBody.reserve(outerBody.size() * body.size());
         for (auto item : body) {
             for (auto root : outerBody) {
                 newBody.emplace_back(ReplaceNode(TExprNode::TPtr(root), outerArgs.Head(), TExprNode::TPtr(item)));

@@ -52,6 +52,11 @@ public:
         TMaybe<TLog> logger = Nothing()
     ) const = 0;
 
+    virtual NThreading::TFuture<NYdb::NTopic::TDescribeTopicResult> GetTopicDescription(
+        const NKikimrPQ::TMirrorPartitionConfig& config,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory
+    ) const = 0;
+
     virtual ~IPersQueueMirrorReaderFactory() = default;
 
     TDeferredActorLogBackend::TSharedAtomicActorSystemPtr GetSharedActorSystem() const {
@@ -105,6 +110,7 @@ public:
             .ConsumerName(config.GetConsumer())
             .MaxMemoryUsageBytes(maxMemoryUsageBytes)
             .Decompress(false)
+            .AutoPartitioningSupport(true)
             .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
         if (logger) {
             settings.Log(logger.GetRef());
@@ -118,6 +124,22 @@ public:
 
         NYdb::NTopic::TTopicClient topicClient(*Driver, clientSettings);
         return topicClient.CreateReadSession(settings);
+    }
+
+    NThreading::TFuture<NYdb::NTopic::TDescribeTopicResult> GetTopicDescription(
+        const NKikimrPQ::TMirrorPartitionConfig& config,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory
+    ) const override {
+        NYdb::NTopic::TTopicClientSettings clientSettings = NYdb::NTopic::TTopicClientSettings()
+            .DiscoveryEndpoint(TStringBuilder() << config.GetEndpoint() << ":" << config.GetEndpointPort())
+            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
+            .CredentialsProviderFactory(credentialsProviderFactory)
+            .SslCredentials(NYdb::TSslCredentials(config.GetUseSecureConnection()));
+        if (config.HasDatabase()) {
+            clientSettings.Database(config.GetDatabase());
+        }
+        NYdb::NTopic::TTopicClient topicClient(*Driver, clientSettings);
+        return topicClient.DescribeTopic(config.GetTopic());
     }
 };
 

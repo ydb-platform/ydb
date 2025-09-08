@@ -788,7 +788,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
                 }
                 ConfigSaveTimer.Reset();
             } else {
-                TActivationContext::Schedule(TDuration::MilliSeconds(ConfigSaveTimer.NextBackoffMs()), new IEventHandle(
+                TActivationContext::Schedule(ConfigSaveTimer.Next(), new IEventHandle(
                     SelfId(), {}, new TEvPrivate::TEvRetrySaveConfig(std::move(saveCtx->MainYaml), saveCtx->MainYamlVersion,
                     std::move(saveCtx->StorageYaml), saveCtx->StorageYamlVersion), 0, ExpectedSaveConfigCookie));
             }
@@ -1135,6 +1135,7 @@ void TNodeWarden::Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&) {
     STLOG(PRI_TRACE, BS_NODE, NW39, "Handle(TEvPrivate::TEvSendDiskMetrics)");
     SendDiskMetrics(true);
     ReportLatencies();
+    NotifySyncersProgress();
     Schedule(TDuration::Seconds(10), new TEvPrivate::TEvSendDiskMetrics());
 }
 

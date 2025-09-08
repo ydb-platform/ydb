@@ -289,12 +289,9 @@ message TKqpVectorResolveSettings {
     optional uint32 LevelTableClusterColumnId = 5;
     optional uint32 LevelTableCentroidColumnId = 6;
 
-    //optional TKqpTransaction.TTableMeta PrefixTable = ?;
-
     // Input columns (columns of the source table)
     repeated uint32 InputColumnTypes = 7;
     repeated NKikimrProto.TTypeInfo InputColumnTypeInfos = 8;
-    //repeated uint32 PrefixColumnIds = ?;
     repeated uint32 CopyColumnIndexes = 9;
     optional uint32 VectorColumnIndex = 10;
 
@@ -303,6 +300,9 @@ message TKqpVectorResolveSettings {
     optional uint64 LockTxId = 12;
     optional uint32 LockNodeId = 13;
     optional NKikimrDataEvents.ELockMode LockMode = 14;
+
+    // Output position of the cluster column
+    optional uint32 ClusterColumnOutPos = 15;
 }
 
 message TKqpTaskInfo {
@@ -1623,6 +1623,7 @@ message TEvLocalKMeansResponse {
 
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+    optional bool IsEmpty = 13;
 }
 
 message TEvReshuffleKMeansRequest {

@@ -74,9 +74,9 @@ public:
     TCube(int windowSize, i64 nextIteration);
 
     void Add(TTagIdList tagIds);
-    void AddAll(const TTagIdList& tagIds, const TProjectionSet& projections);
+    void AddAll(const TTagIdSet& tagSet);
     void Remove(TTagIdList tagIds);
-    void RemoveAll(const TTagIdList& tagIds, const TProjectionSet& projections);
+    void RemoveAll(const TTagIdSet& tagSet);
 
     void Update(TTagIdList tagIds, T value);
     void StartIteration();
@@ -115,7 +115,8 @@ public:
         const TTagRegistry& tagRegistry,
         NYTree::TFluentAny fluent) const;
 
-    void DumpCube(NProto::TCube* cube, const std::vector<TTagId>& extraTags) const;
+    // Each projection from `extraProjections` added to each inner projection of this cube.
+    void DumpCube(NProto::TCube* cube, const std::vector<TTagIdList>& extraProjections) const;
 
 private:
     const int WindowSize_;

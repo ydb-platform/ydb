@@ -13,5 +13,5 @@ items:
   href: cast.md
 - name: Text representation of data types
   href: type_string.md
-- name: JSON
+- name: Parameter transfer in JSON format
   href: json.md

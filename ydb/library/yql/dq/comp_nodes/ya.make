@@ -3,6 +3,7 @@ LIBRARY()
 PEERDIR(
     ydb/library/actors/core
     ydb/library/yql/dq/actors/compute
+    ydb/library/yql/dq/comp_nodes/hash_join_utils
     ydb/library/yql/dq/runtime
     yql/essentials/minikql/comp_nodes
     yql/essentials/minikql/computation
@@ -17,6 +18,7 @@ SRCS(
     dq_hash_operator_serdes.cpp
     dq_program_builder.cpp
     dq_block_hash_join.cpp
+    dq_scalar_hash_join.cpp
 )
 
 

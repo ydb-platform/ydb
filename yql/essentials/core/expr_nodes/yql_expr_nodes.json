@@ -996,6 +996,11 @@
             "Match": {"Type": "Callable", "Name": "Json"}
         },
         {
+            "Name": "TCoJsonDocument",
+            "Base": "TCoDataCtor",
+            "Match": {"Type": "Callable", "Name": "JsonDocument"}
+        },
+        {
             "Name": "TCoBool",
             "Base": "TCoDataCtor",
             "Match": {"Type": "Callable", "Name": "Bool"}
@@ -1095,6 +1100,11 @@
             "Name": "TCoUuid",
             "Base": "TCoDataCtor",
             "Match": {"Type": "Callable", "Name": "Uuid"}
+        },
+        {
+            "Name": "TCoDyNumber",
+            "Base": "TCoDataCtor",
+            "Match": {"Type": "Callable", "Name": "DyNumber"}
         },
         {
             "Name": "TCoAsList",

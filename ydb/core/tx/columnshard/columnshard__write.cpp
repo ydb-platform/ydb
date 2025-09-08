@@ -191,18 +191,38 @@ public:
                 return TConclusionStatus::Fail("no arbiter info in request");
             }
             ArbiterColumnShard = locks.GetArbiterColumnShard();
-
-            if (IsPrimary() && !ReceivingShards.contains(ArbiterColumnShard)) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
-                    "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));
-                return TConclusionStatus::Fail("arbiter is absent in receiving lists");
+            if (IsPrimary()) {
+                if (!ReceivingShards.contains(ArbiterColumnShard)) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
+                        "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));
+                    return TConclusionStatus::Fail("arbiter is absent in receiving lists");
+                }
+            } else {
+                auto validateShards = [this](const std::set<ui64>& shards) -> bool {
+                    //shards lists for a secondaty shard must contain either arbiter only or a pair: arbiter and current tablet_id
+                    if (!shards.contains(ArbiterColumnShard)) {
+                        return false;
+                    }
+                    if (shards.size() == 1) {
+                        return true;
+                    }
+                    if ((shards.size() != 2) || !shards.contains(TabletId)) {
+                        return false;
+                    }
+                    return true;
+                };
+                if (!validateShards(ReceivingShards)) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect receiving shards list")(
+                        "arbiter_id", ArbiterColumnShard)("receiving", JoinSeq(", ", ReceivingShards));
+                    return TConclusionStatus::Fail("incorrect receiving shards list");
+                }
+                if (!validateShards(SendingShards)) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect sending shards list")("arbiter_id", ArbiterColumnShard)(
+                        "sending", JoinSeq(", ", SendingShards));
+                    return TConclusionStatus::Fail("incorrect sending shards list");
+                }
             }
-            if (!IsPrimary() && (!ReceivingShards.contains(ArbiterColumnShard) || !SendingShards.contains(ArbiterColumnShard))) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
-                    "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));
-                return TConclusionStatus::Fail("arbiter is absent in sending or receiving lists");
-            }
-        }
+    }
 
         Generation = lock.GetGeneration();
         InternalGenerationCounter = lock.GetCounter();
@@ -437,7 +457,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(operation.GetTableId());
     const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
-    AFL_VERIFY(internalPathId);
+    if (!internalPathId) {
+        LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false, operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), "unknown table");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "unknown_table")("path_id", schemeShardLocalPathId);
+        sendError("unknown table", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        return;
+    }
     const auto& pathId = TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId);
     if (!TablesManager.IsReadyForStartWrite(*internalPathId, false)) {
         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false, operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR), "unknown schema version");
@@ -474,6 +499,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         if (!outOfSpace && record.HasOverloadSubscribe()) {
             const auto rejectReasons = NOverload::MakeRejectReasons(overloadStatus);
             OverloadSubscribers.SetOverloadSubscribed(record.GetOverloadSubscribe(), ev->Recipient, ev->Sender, rejectReasons, result->Record);
+            OverloadSubscribers.ScheduleNotification(SelfId());
         }
         OverloadWriteFail(overloadStatus,
             NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString(),
@@ -496,10 +522,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     const bool isBulk = operation.HasIsBulk() && operation.GetIsBulk();
 
+    const auto& mvccSnapshot = record.HasMvccSnapshot() ? NOlap::TSnapshot{record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId()} : NOlap::TSnapshot::Zero();
+
     LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", true, operation.GetIsBulk(), "", "");
     Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
     WriteTasksQueue->Enqueue(TWriteTask(
-        arrowData, schema, source, granuleShardingVersionId, pathId, cookie, lockId, *mType, behaviour, writeTimeout, record.GetTxId(), isBulk));
+        arrowData, schema, source, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId, *mType, behaviour, writeTimeout, record.GetTxId(), isBulk, record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>()));
     WriteTasksQueue->Drain(false, ctx);
 }
 

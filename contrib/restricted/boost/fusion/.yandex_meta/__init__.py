@@ -9,7 +9,7 @@ def post_install(self):
 boost_fusion = NixSourceProject(
     nixattr="boost_fusion",
     arcdir="contrib/restricted/boost/fusion",
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

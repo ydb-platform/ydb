@@ -92,6 +92,8 @@ const TExprNode& GetLiteralStructMember(const TExprNode& literal, const TExprNod
     ythrow yexception() << "Member '" << member.Content() << "' not found in literal struct.";
 }
 
+const char ForbidConstantDependsOnFuseOptName[] = "ForbidConstantDependsOnFuse";
+
 }
 
 TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx) {
@@ -1271,8 +1273,10 @@ TExprNode::TPtr ExpandFlattenByColumns(const TExprNode::TPtr& node, TExprContext
                 .Seal()
                 .Build();
         } else {
-            isList = flattenInfo.Type->GetKind() == ETypeAnnotationKind::List;
-            isDict = flattenInfo.Type->GetKind() == ETypeAnnotationKind::Dict;
+            if (mode != "optional") {
+                isList = flattenInfo.Type->GetKind() == ETypeAnnotationKind::List;
+                isDict = flattenInfo.Type->GetKind() == ETypeAnnotationKind::Dict;
+            }
         }
 
         if (isDict) {
@@ -1283,6 +1287,34 @@ TExprNode::TPtr ExpandFlattenByColumns(const TExprNode::TPtr& node, TExprContext
         }
 
         if (!isDict && !isList) {
+            bool knownNotNull = flattenInfo.Type->GetKind() != ETypeAnnotationKind::Optional && flattenInfo.Type->GetKind() != ETypeAnnotationKind::Null;
+
+            if (flattenInfo.Type->GetKind() == ETypeAnnotationKind::Pg) {
+                flattenInfo.ListMember = ctx.Builder(structObj->Pos())
+                    .Callable("If")
+                        .Callable(0, "Exists")
+                            .Add(0, flattenInfo.ListMember)
+                        .Seal()
+                        .Callable(1, "Just")
+                            .Add(0, flattenInfo.ListMember)
+                        .Seal()
+                        .Callable(2, "Nothing")
+                            .Callable(0, "OptionalType")
+                                .Callable(0, "TypeOf")
+                                    .Add(0, flattenInfo.ListMember)
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Build();
+            } else if (knownNotNull) {
+                flattenInfo.ListMember = ctx.Builder(structObj->Pos())
+                    .Callable("Just")
+                    .Add(0, flattenInfo.ListMember)
+                    .Seal()
+                    .Build();
+            }
+
             flattenPriority.push_back(&flattenInfo);
         } else {
             flattenPriority.push_front(&flattenInfo);
@@ -1726,17 +1758,14 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, T
         return TExprNode::TPtr();
     }
 
-    if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Void) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        auto res = MakeBool<false>(node->Pos(), ctx);
-        res = KeepWorld(res, *node, ctx, typeCtx);
-        return res;
-    }
-
     if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         auto res = MakeBool<false>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, typeCtx);
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
+        }
+
         return res;
     }
 
@@ -1744,6 +1773,10 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, T
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         auto res = MakeBool<true>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, typeCtx);
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
+        }
+
         return res;
     }
 
@@ -1759,6 +1792,10 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, T
         YQL_CLOG(DEBUG, Core) << node->Content() << " over non-optional";
         auto res = MakeBool<true>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, typeCtx);
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
+        }
+
         return res;
     }
 
@@ -2754,28 +2791,46 @@ bool IsNormalizedDependsOn(const TExprNode& node) {
     return false;
 }
 
-bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner) {
-    auto innerLambdaBody = GetLambdaBody(inner);
-    auto outerLambdaArgs = outer.Head().Children();
-    YQL_ENSURE(outerLambdaArgs.size() == innerLambdaBody.size());
-
-    // inner lambda bodies which used in DependsOn after fuse
-    TExprNode::TListType toCheck;
-    for (size_t i = 0; i < outerLambdaArgs.size(); i++) {
-        if (outerLambdaArgs[i]->IsUsedInDependsOn()) {
-            toCheck.push_back(innerLambdaBody[i]);
-        }
-    }
-    if (toCheck.empty()) {
+bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types) {
+    if (!IsOptimizerEnabled<ForbidConstantDependsOnFuseOptName>(types) || IsOptimizerDisabled<ForbidConstantDependsOnFuseOptName>(types)) {
         return true;
     }
+
+    if (outer.ChildrenSize() == 1) {
+        return true;
+    }
+
+    auto innerLambdaBody = GetLambdaBody(inner);
+    auto outerLambdaArgs = outer.Head().Children();
 
     TNodeSet innerLambdaArgs;
     inner.Head().ForEachChild([&](const TExprNode& arg) {
         innerLambdaArgs.insert(&arg);
     });
 
-    return AreAllDependedOnAny(toCheck, innerLambdaArgs);
+    if (outerLambdaArgs.size() == innerLambdaBody.size()) {
+        // inner lambda bodies which used in DependsOn after fuse
+        TExprNode::TListType toCheck;
+        for (size_t i = 0; i < outerLambdaArgs.size(); i++) {
+            if (outerLambdaArgs[i]->IsUsedInDependsOn()) {
+                toCheck.push_back(innerLambdaBody[i]);
+            }
+        }
+        if (toCheck.empty()) {
+            return true;
+        }
+
+        return AreAllDependedOnAny(toCheck, innerLambdaArgs);
+    } else if (outerLambdaArgs.size() == 1) {
+        if (!outerLambdaArgs.front()->IsUsedInDependsOn()) {
+            return true;
+        }
+
+        // multimap - all inner lambda bodies are used in DependsOn after fuse
+        return AreAllDependedOnAny(innerLambdaBody, innerLambdaArgs);
+    } else {
+        YQL_ENSURE(false, "Incompatible lambdas for fuse");
+    }
 }
 
 }

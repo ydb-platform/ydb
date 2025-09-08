@@ -123,6 +123,22 @@ struct TTenantsTestSettings : TKikimrTestSettings {
 
 namespace {
 
+void ArePermissionsEqual(const THashMap<TString, THashSet<TString>>& lhs, const THashMap<TString, THashSet<TString>>& rhs) {
+    UNIT_ASSERT_VALUES_EQUAL(lhs.size(), rhs.size());
+
+    for (const auto& [subject, permissions] : lhs) {
+        auto it = rhs.find(subject);
+        UNIT_ASSERT_C(it != rhs.end(), TStringBuilder() << "Subject '" << subject << "' not found in rhs");
+        UNIT_ASSERT_VALUES_EQUAL_C(permissions.size(), it->second.size(),
+            TStringBuilder() << "Permission count mismatch for subject '" << subject << "'");
+
+        for (const auto& permission : permissions) {
+            UNIT_ASSERT_C(it->second.contains(permission),
+                TStringBuilder() << "Permission '" << permission << "' not found in rhs for subject '" << subject << "'");
+        }
+    }
+}
+
 #define Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(N, ENUM_TYPE) \
     struct TTestCase##N : public TCurrentTestCase { \
         ENUM_TYPE Value; \
@@ -625,7 +641,7 @@ const char* ConvertIndexTypeToSQL(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             return "GLOBAL ASYNC";
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            return "GLOBAL UNIQUE";
+            return "GLOBAL UNIQUE SYNC";
         default:
             UNIT_FAIL("No conversion to SQL for this index type");
             return nullptr;
@@ -870,6 +886,97 @@ void TestViewDependentOnAnotherViewIsRestored(
 
     restore();
     CompareResults(GetTableContent(session, dependentView), originalContent);
+}
+
+void TestReplaceSystemDirectoryACL(
+    const char* systemDirectory, TSchemeClient& client, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    {
+        TPermissions permissions("user2@builtin",
+            {"ydb.granular.describe_schema", "ydb.granular.select_row"}
+        );
+
+        auto result = client.ModifyPermissions(systemDirectory,
+            TModifyPermissionsSettings().AddGrantPermissions(permissions).AddChangeOwner("user1@builtin")
+        ).ExtractValueSync();
+    }
+
+    auto result = client.DescribePath(systemDirectory).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetEntry().Type, ESchemeEntryType::Directory);
+    const auto dumpedSystemDirOwner = result.GetEntry().Owner;
+    THashMap<TString, THashSet<TString>> dumpedSystemDirPermissions;
+    for (const auto& permission : result.GetEntry().Permissions) {
+        dumpedSystemDirPermissions[permission.Subject].insert(permission.PermissionNames.begin(), permission.PermissionNames.end());
+    }
+
+    backup();
+
+    {
+        auto result = client.ModifyPermissions(systemDirectory,
+            TModifyPermissionsSettings().AddClearAcl().AddChangeOwner("user3@builtin")
+        ).ExtractValueSync();
+    }
+
+    restore();
+
+    result = client.DescribePath(systemDirectory).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetEntry().Type, ESchemeEntryType::Directory);
+    const auto replacedSystemDirOwner = result.GetEntry().Owner;
+    THashMap<TString, THashSet<TString>> replacedSystemDirPermissions;
+    for (const auto& permission : result.GetEntry().Permissions) {
+        replacedSystemDirPermissions[permission.Subject].insert(permission.PermissionNames.begin(), permission.PermissionNames.end());
+
+    }
+
+    ArePermissionsEqual(replacedSystemDirPermissions, dumpedSystemDirPermissions);
+    UNIT_ASSERT_VALUES_EQUAL(replacedSystemDirOwner, dumpedSystemDirOwner);
+}
+
+void TestReplaceSystemViewACL(
+    const char* systemView, TSession& session, TSchemeClient& client, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    {
+        TPermissions permissions("user2@builtin",
+            {"ydb.granular.describe_schema", "ydb.granular.select_row"}
+        );
+
+        auto result = client.ModifyPermissions(systemView,
+            TModifyPermissionsSettings().AddGrantPermissions(permissions).AddChangeOwner("user1@builtin")
+        ).ExtractValueSync();
+    }
+
+    auto result = session.DescribeSystemView(systemView).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetEntry().Type, ESchemeEntryType::SysView);
+    const auto dumpedSysViewOwner = result.GetEntry().Owner;
+    THashMap<TString, THashSet<TString>> dumpedSysViewPermissions;
+    for (const auto& permission : result.GetEntry().Permissions) {
+        dumpedSysViewPermissions[permission.Subject].insert(permission.PermissionNames.begin(), permission.PermissionNames.end());
+    }
+
+    backup();
+
+    {
+        auto result = client.ModifyPermissions(systemView,
+            TModifyPermissionsSettings().AddClearAcl().AddChangeOwner("user3@builtin")
+        ).ExtractValueSync();
+    }
+
+    restore();
+
+    result = session.DescribeSystemView(systemView).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetEntry().Type, ESchemeEntryType::SysView);
+    const auto replacedSysViewOwner = result.GetEntry().Owner;
+    THashMap<TString, THashSet<TString>> replacedSysViewPermissions;
+    for (const auto& permission : result.GetEntry().Permissions) {
+        replacedSysViewPermissions[permission.Subject].insert(permission.PermissionNames.begin(), permission.PermissionNames.end());
+    }
+
+    ArePermissionsEqual(replacedSysViewPermissions, dumpedSysViewPermissions);
+    UNIT_ASSERT_VALUES_EQUAL(replacedSysViewOwner, dumpedSysViewOwner);
 }
 
 std::pair<std::vector<TString>, std::vector<TString>>
@@ -1880,6 +1987,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
+        appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
         TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
 
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
@@ -2021,10 +2129,18 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             driverConfig.SetAuthToken("root@builtin");
         }
         auto driver = TDriver(driverConfig);
-
+        TSchemeClient schemeClient(driver);
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TReplicationClient replicationClient(driver);
+
+        if (useSecret) {
+            TPermissions permissions("root@builtin", {"ydb.generic.full"});
+            const auto result = schemeClient.ModifyPermissions("/Root",
+                TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
 
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
@@ -2043,9 +2159,16 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
 
+        TSchemeClient schemeClient(driver);
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TReplicationClient replicationClient(driver);
+
+        TPermissions permissions("root@builtin", {"ydb.generic.full"});
+        const auto result = schemeClient.ModifyPermissions("/Root",
+            TModifyPermissionsSettings().AddGrantPermissions(permissions)
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
@@ -2166,6 +2289,41 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    void TestSystemViewBackupRestore() {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableRealSystemViewPaths(true);
+        TKikimrWithGrpcAndRootSchema server(config);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
+        TSchemeClient schemeClient(driver);
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+
+        {
+            constexpr const char* systemDirectory = "/Root/.sys";
+            const TTempDir tempDir;
+            const auto& pathToBackup = tempDir.Path();
+            TestReplaceSystemDirectoryACL(
+                systemDirectory,
+                schemeClient,
+                CreateBackupLambda(driver, pathToBackup),
+                CreateRestoreLambda(driver, pathToBackup)
+            );
+        }
+
+        {
+            constexpr const char* sysView = "/Root/.sys/partition_stats";
+            const TTempDir tempDir;
+            const auto& pathToBackup = tempDir.Path();
+            TestReplaceSystemViewACL(
+                sysView,
+                session,
+                schemeClient,
+                CreateBackupLambda(driver, pathToBackup),
+                CreateRestoreLambda(driver, pathToBackup)
+            );
+        }
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
 
@@ -2202,16 +2360,21 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeColumnStore:
             case EPathTypeColumnTable:
                 break; // https://github.com/ydb-platform/ydb/issues/10459
+            case EPathTypeSysView:
+                return TestSystemViewBackupRestore();
+            case EPathTypeSecret:
+                break; // TODO(yurikiselev): Support backups [issue:23489]
             case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
-            case EPathTypeSysView:
                 break; // not applicable
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:
             case EPathTypeSolomonVolume:
             case EPathTypeFileStore:
                 break; // other projects
+            case EPathTypeStreamingQuery:
+                break; // https://github.com/ydb-platform/ydb/issues/22571
             default:
                 UNIT_FAIL("Client backup/restore were not implemented for this scheme object");
                 // please don't forget to add:
@@ -2225,10 +2388,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
+            case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
                 return TestTableWithIndexBackupRestore(Value);
-            case EIndexTypeGlobalUnique:
-                break; // https://github.com/ydb-platform/ydb/issues/10468
             case EIndexTypeInvalid:
                 break; // not applicable
             default:
@@ -2238,6 +2400,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(TestReplaceRestoreOption) {
         NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableRealSystemViewPaths(true);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
 
@@ -2249,6 +2412,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
 
+        TSchemeClient schemeClient(driver);
         TTableClient tableClient(driver);
         auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
         NQuery::TQueryClient queryClient(driver);
@@ -2256,6 +2420,12 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         NTopic::TTopicClient topicClient(driver);
         TReplicationClient replicationClient(driver);
         NCoordination::TClient nodeClient(driver);
+
+        TPermissions permissions("root@builtin", {"ydb.generic.full"});
+        const auto result = schemeClient.ModifyPermissions("/Root",
+            TModifyPermissionsSettings().AddGrantPermissions(permissions)
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
@@ -2277,6 +2447,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         constexpr const char* externalTable = "/Root/externalTable";
         constexpr const char* externalDataSource = "/Root/externalDataSource";
         const std::string kesus = "/Root/kesus";
+        constexpr const char* systemDirectory = "/Root/.sys";
+        constexpr const char* sysView = "/Root/.sys/partition_stats";
 
         const auto restorationSettings = NDump::TRestoreSettings().Replace(true);
 
@@ -2314,6 +2486,16 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), true, restorationSettings
         );
+
+        cleanup();
+        TestReplaceSystemDirectoryACL(systemDirectory, schemeClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
+
+        cleanup();
+        TestReplaceSystemViewACL(sysView, tableSession, schemeClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
     }
 
     Y_UNIT_TEST(TestReplaceRestoreOptionOnNonExistingSchemeObjects) {
@@ -2326,6 +2508,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
 
+        TSchemeClient schemeClient(driver);
         TTableClient tableClient(driver);
         auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
         NQuery::TQueryClient queryClient(driver);
@@ -2333,6 +2516,12 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         NTopic::TTopicClient topicClient(driver);
         TReplicationClient replicationClient(driver);
         NCoordination::TClient nodeClient(driver);
+
+        TPermissions permissions("root@builtin", {"ydb.generic.full"});
+        const auto result = schemeClient.ModifyPermissions("/Root",
+            TModifyPermissionsSettings().AddGrantPermissions(permissions)
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
@@ -2532,6 +2721,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             : Server([&] {
                     NKikimrConfig::TAppConfig appConfig;
                     appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
+                    appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
                     return appConfig;
                 }())
             , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())))
@@ -3004,6 +3194,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeColumnStore:
             case EPathTypeColumnTable:
                 break; // https://github.com/ydb-platform/ydb/issues/10459
+            case EPathTypeSecret:
+                break; // TODO(yurikiselev): Support backups [issue:23489]
             case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
@@ -3014,6 +3206,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeSolomonVolume:
             case EPathTypeFileStore:
                 break; // other projects
+            case EPathTypeStreamingQuery:
+                break; // https://github.com/ydb-platform/ydb/issues/22571
             default:
                 UNIT_FAIL("S3 backup/restore were not implemented for this scheme object");
         }
@@ -3025,11 +3219,10 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
+            case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
                 TestTableWithIndexBackupRestore(Value);
                 break;
-            case EIndexTypeGlobalUnique:
-                break; // https://github.com/ydb-platform/ydb/issues/10468
             case EIndexTypeInvalid:
                 break; // not applicable
             default:

@@ -7,7 +7,8 @@
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/datashard/scan_common.h>
@@ -25,11 +26,11 @@ namespace NSchemeShard {
 ui64 gVectorIndexSeed = 0;
 
 // return count, parts, step
-static std::tuple<NTableIndex::TClusterId, NTableIndex::TClusterId, NTableIndex::TClusterId> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
+static std::tuple<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
     const auto& kmeans = buildInfo.KMeans;
     Y_ENSURE(kmeans.K != 0);
     const auto count = kmeans.ChildCount();
-    NTableIndex::TClusterId step = 1;
+    NTableIndex::NKMeans::TClusterId step = 1;
     auto parts = count;
     auto shards = tableInfo.GetShard2PartitionIdx().size();
     if (!buildInfo.KMeans.NeedsAnotherLevel() || count <= 1 || shards <= 1) {
@@ -62,8 +63,10 @@ protected:
     TActorId Uploader;
     ui32 RetryCount = 0;
     ui32 UploadBytes = 0;
-    const NTableIndex::TClusterId Parent = 0;
-    NTableIndex::TClusterId Child = 0;
+    const NTableIndex::NKMeans::TClusterId Parent = 0;
+    NTableIndex::NKMeans::TClusterId Child = 0;
+    const TString EmptyVector;
+    const ui32 EmptyLevels;
 
     NDataShard::TUploadStatus UploadStatus;
 
@@ -74,8 +77,10 @@ public:
                    const TActorId& responseActorId,
                    TIndexBuildId buildId,
                    TIndexBuildInfo::TSample::TRows sample,
-                   NTableIndex::TClusterId parent,
-                   NTableIndex::TClusterId child)
+                   NTableIndex::NKMeans::TClusterId parent,
+                   NTableIndex::NKMeans::TClusterId child,
+                   const TString& emptyVector,
+                   ui32 emptyLevels)
         : TargetTable(std::move(targetTable))
         , IsPostingLevel(isPostingLevel)
         , ScanSettings(scanSettings)
@@ -84,11 +89,13 @@ public:
         , Sample(std::move(sample))
         , Parent(parent)
         , Child(child)
+        , EmptyVector(emptyVector)
+        , EmptyLevels(emptyLevels)
     {
         LogPrefix = TStringBuilder()
             << "TUploadSampleK: BuildIndexId: " << BuildId
             << " ResponseActorId: " << ResponseActorId;
-        Y_ENSURE(!Sample.empty());
+        Y_ENSURE(!Sample.empty() || EmptyLevels > 0);
         Y_ENSURE(Parent < Child);
         Y_ENSURE(Child != 0);
     }
@@ -118,9 +125,9 @@ public:
         for (auto& [_, row] : Sample) {
             auto child = Child++;
             if (IsPostingLevel) {
-                child = SetPostingParentFlag(child);
+                child = NTableIndex::NKMeans::SetPostingParentFlag(child);
             } else {
-                EnsureNoPostingParentFlag(child);
+                NTableIndex::NKMeans::EnsureNoPostingParentFlag(child);
             }
             pk[1] = TCell::Make(child);
 
@@ -130,13 +137,26 @@ public:
         }
         Sample = {}; // release memory
 
+        if (EmptyLevels > 0) {
+            // Generate a fake hierarchy with N levels and 1 cluster on each level for an empty vector index
+            TVector<TCell> emptyCells = {TCell(EmptyVector.data(), EmptyVector.size())};
+            auto emptyRow = TSerializedCellVec::Serialize(emptyCells);
+            Y_ENSURE(!UploadRows->size());
+            for (ui32 level = 1; level <= EmptyLevels; level++) {
+                pk[0] = TCell::Make((ui64)(level-1));
+                pk[1] = TCell::Make(level == EmptyLevels ? NTableIndex::NKMeans::SetPostingParentFlag((ui64)level) : (ui64)level);
+                UploadBytes += NDataShard::CountRowCellBytes(pk, emptyCells);
+                UploadRows->emplace_back(TSerializedCellVec{pk}, emptyRow);
+            }
+        }
+
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
-        type.set_type_id(NTableIndex::ClusterIdType);
-        (*Types)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
-        (*Types)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
+        type.set_type_id(NTableIndex::NKMeans::ClusterIdType);
+        (*Types)[0] = {NTableIndex::NKMeans::ParentColumn, type};
+        (*Types)[1] = {NTableIndex::NKMeans::IdColumn, type};
         type.set_type_id(Ydb::Type::STRING);
-        (*Types)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
+        (*Types)[2] = {NTableIndex::NKMeans::CentroidColumn, type};
 
         Become(&TThis::StateWork);
 
@@ -328,7 +348,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         indexDataColumns.insert(indexKeys.KeyColumns.back());
     }
 
-    using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+    using namespace NTableIndex::NKMeans;
     modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
@@ -466,16 +486,27 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.UnlockTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
-    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropLock);
-    modifyScheme.SetInternal(true);
-    modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+    auto addUnlock = [&](TPath path) {
+        NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropLock);
+        modifyScheme.SetInternal(true);
+        modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
 
-    TPath path = TPath::Init(buildInfo.TablePathId, ss);
-    modifyScheme.SetWorkingDir(path.Parent().PathString());
+        modifyScheme.SetWorkingDir(path.Parent().PathString());
 
-    auto& lockConfig = *modifyScheme.MutableLockConfig();
-    lockConfig.SetName(path.LeafName());
+        auto& lockConfig = *modifyScheme.MutableLockConfig();
+        lockConfig.SetName(path.LeafName());
+    };
+
+    addUnlock(TPath::Init(buildInfo.TablePathId, ss));
+
+    if (buildInfo.IsValidatingUniqueIndex()) {
+        // Unlock also indexImplTable
+        TPath indexImplTablePath = GetBuildPath(ss, buildInfo, NTableIndex::ImplTable);
+        if (indexImplTablePath.IsResolved() && indexImplTablePath.IsLocked()) {
+            addUnlock(std::move(indexImplTablePath));
+        }
+    }
 
     LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "UnlockPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
@@ -503,6 +534,33 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
 
     LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "CancelPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+
+    return propose;
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.DropColumnsTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
+
+    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropColumnBuild);
+    modifyScheme.SetInternal(true);
+    modifyScheme.SetWorkingDir(TPath::Init(buildInfo.DomainPathId, ss).PathString());
+    modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+
+    auto* columnBuild = modifyScheme.MutableDropColumnBuild();
+    columnBuild->SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
+    columnBuild->SetBuildIndexId(ui64(buildInfo.Id));
+
+    auto* settings = columnBuild->MutableSettings();
+    settings->SetTable(TPath::Init(buildInfo.TablePathId, ss).PathString());
+
+    buildInfo.SerializeToProto(ss, settings);
+
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "DropColumnsPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -687,7 +745,7 @@ private:
         }
 
         ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
-        path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
+        path.Rise().Dive(NTableIndex::NKMeans::LevelTable);
         ev->Record.SetLevelName(path.PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
@@ -725,9 +783,9 @@ private:
         ev->Record.SetChild(buildInfo.KMeans.ChildBegin + (2 * buildInfo.KMeans.TableSize) * shardIndex);
 
         ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
-        path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
+        path.Rise().Dive(NTableIndex::NKMeans::LevelTable);
         ev->Record.SetLevelName(path.PathString());
-        path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable);
+        path.Rise().Dive(NTableIndex::NKMeans::PrefixTable);
         ev->Record.SetPrefixName(path.PathString());
 
         ev->Record.SetPrefixColumns(buildInfo.IndexColumns.size() - 1);
@@ -796,13 +854,45 @@ private:
         ToTabletSend.emplace(shardId, std::move(ev));
     }
 
+    void SendValidateUniqueIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        auto ev = MakeHolder<TEvDataShard::TEvValidateUniqueIndexRequest>();
+        auto& record = ev->Record;
+
+        record.SetId(ui64(BuildId));
+
+        auto& indexShardStatus = buildInfo.Shards.at(shardIdx);
+
+        auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
+        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+
+        record.SetOwnerId(path->PathId.OwnerId);
+        record.SetPathId(path->PathId.LocalPathId);
+
+        record.SetSeqNoGeneration(Self->Generation());
+        record.SetSeqNoRound(++indexShardStatus.SeqNoRound);
+
+        *record.MutableIndexColumns() = {
+            buildInfo.IndexColumns.begin(),
+            buildInfo.IndexColumns.end()
+        };
+
+        TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;
+        record.SetTabletId(ui64(shardId));
+
+        LOG_N("TTxBuildProgress: TEvValidateUniqueIndexRequest: " << record.ShortDebugString());
+
+        ToTabletSend.emplace(shardId, std::move(ev));
+    }
+
     void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
         buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
-        auto path = GetBuildPath(Self, buildInfo, NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
+        auto path = GetBuildPath(Self, buildInfo, NTableIndex::NKMeans::LevelTable);
         Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
         auto actor = new TUploadSampleK(path.PathString(), !buildInfo.KMeans.NeedsAnotherLevel(),
             buildInfo.ScanSettings, Self->SelfId(), BuildId,
-            buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child);
+            buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child,
+            buildInfo.KMeans.IsEmpty ? buildInfo.Clusters->GetEmptyRow() : "",
+            buildInfo.KMeans.IsEmpty ? buildInfo.KMeans.Levels : 0);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
@@ -889,6 +979,7 @@ private:
         if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
         }
+
         auto done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildSecondaryIndexRequest(shardIdx, buildInfo); }) &&
                buildInfo.DoneShards.size() == buildInfo.Shards.size();
 
@@ -897,6 +988,60 @@ private:
         }
 
         return done;
+    }
+
+    bool ValidateSecondaryUniqueIndex(TIndexBuildInfo& buildInfo) {
+        LOG_D("ValidateSecondaryUniqueIndex Start");
+
+        if (NoShardsAdded(buildInfo)) {
+            AddAllShards(buildInfo);
+        }
+
+        auto done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendValidateUniqueIndexRequest(shardIdx, buildInfo); }) &&
+               buildInfo.DoneShards.size() == buildInfo.Shards.size();
+
+        if (done) {
+            LOG_D("ValidateSecondaryUniqueIndex Done");
+        }
+
+        return done;
+    }
+
+    bool FillSecondaryUniqueIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        switch (buildInfo.SubState) {
+        case TIndexBuildInfo::ESubState::None: {
+            if (FillSecondaryIndex(buildInfo)) {
+                ClearAfterFill(TActivationContext::AsActorContext(), buildInfo);
+
+                // After filling unique index we need to validate it.
+                // This includes:
+                // - Locking index shards
+                // - Validating each index shard for index keys uniqueness
+                // - Applying cross-shard validation
+                NIceDb::TNiceDb db{txc.DB};
+                buildInfo.SubState = TIndexBuildInfo::ESubState::UniqIndexValidation;
+                Self->PersistBuildIndexState(db, buildInfo);
+                Self->PersistBuildIndexShardStatusReset(db, buildInfo);
+                ChangeState(BuildId, TIndexBuildInfo::EState::LockBuild);
+                Progress(BuildId);
+            }
+            return false;
+        }
+        case TIndexBuildInfo::ESubState::UniqIndexValidation: {
+            const bool done = ValidateSecondaryUniqueIndex(buildInfo);
+            if (done) {
+                TString errorDesc;
+                if (!PerformCrossShardUniqIndexValidation(buildInfo, errorDesc)) {
+                    NIceDb::TNiceDb db(txc.DB);
+                    Self->PersistBuildIndexAddIssue(db, buildInfo, errorDesc);
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
+                    Progress(BuildId);
+                    return false;
+                }
+            }
+            return done;
+        }
+        }
     }
 
     bool FillPrefixKMeans(TIndexBuildInfo& buildInfo) {
@@ -956,16 +1101,7 @@ private:
 
     void PersistKMeansState(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         NIceDb::TNiceDb db{txc.DB};
-        db.Table<Schema::KMeansTreeProgress>().Key(buildInfo.Id).Update(
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Level>(buildInfo.KMeans.Level),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::State>(buildInfo.KMeans.State),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Parent>(buildInfo.KMeans.Parent),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::ParentBegin>(buildInfo.KMeans.ParentBegin),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Child>(buildInfo.KMeans.Child),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::ChildBegin>(buildInfo.KMeans.ChildBegin),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::TableSize>(buildInfo.KMeans.TableSize),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Round>(buildInfo.KMeans.Round)
-        );
+        Self->PersistBuildIndexKMeansState(db, buildInfo);
     }
 
     bool FillPrefixedVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
@@ -1093,7 +1229,15 @@ private:
             }
             ClearDoneShards(txc, buildInfo);
             if (buildInfo.Sample.Rows.empty()) {
-                // No samples => no data for this cluster
+                // No samples
+                if (buildInfo.KMeans.Parent == 0) {
+                    // Index is empty - add 1 leaf cluster for future index updates
+                    buildInfo.KMeans.IsEmpty = true;
+                    PersistKMeansState(txc, buildInfo);
+                    return FillVectorIndexNextParent(txc, buildInfo);
+                }
+                // No data for a specific cluster - should not happen
+                // Supported to not crash if we have duplicate clusters for some reason
                 return FillVectorIndexNextParent(txc, buildInfo);
             }
             if (buildInfo.KMeans.Rounds > 1) {
@@ -1117,6 +1261,10 @@ private:
             // Just wait until samples are uploaded (saved)
             return false;
         } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
+            if (buildInfo.Sample.Rows.empty() && buildInfo.KMeans.Parent == 0) {
+                // Done
+                return true;
+            }
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
             LOG_D("FillVectorIndex NextState " << buildInfo.DebugString());
             PersistKMeansState(txc, buildInfo);
@@ -1147,7 +1295,7 @@ private:
             }
         }
 
-        if (buildInfo.KMeans.NextLevel()) {
+        if (!buildInfo.KMeans.IsEmpty && buildInfo.KMeans.NextLevel()) {
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
             LOG_D("FillVectorIndex NextLevel " << buildInfo.DebugString());
             PersistKMeansState(txc, buildInfo);
@@ -1158,6 +1306,22 @@ private:
                                     : TIndexBuildInfo::EState::CreateBuild);
             Progress(BuildId);
             return false;
+        }
+
+        if (buildInfo.KMeans.IsEmpty) {
+            if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
+                LOG_D("FillVectorIndex UploadEmpty " << buildInfo.DebugString());
+                buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+                SendUploadSampleKRequest(buildInfo);
+                return false;
+            } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload) {
+                // Wait
+                return false;
+            } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
+                // Pass through
+            } else {
+                Y_ENSURE(false);
+            }
         }
 
         LOG_D("FillVectorIndex Done " << buildInfo.DebugString());
@@ -1187,6 +1351,8 @@ private:
             case TIndexBuildInfo::EBuildKind::BuildSecondaryIndex:
             case TIndexBuildInfo::EBuildKind::BuildColumns:
                 return FillSecondaryIndex(buildInfo);
+            case TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex:
+                return FillSecondaryUniqueIndex(txc, buildInfo);
             case TIndexBuildInfo::EBuildKind::BuildVectorIndex:
                 return FillVectorIndex(txc, buildInfo);
             case TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex:
@@ -1195,6 +1361,49 @@ private:
                 Y_ENSURE(false);
                 return true;
         }
+    }
+
+    bool PerformCrossShardUniqIndexValidation(TIndexBuildInfo& buildInfo, TString& errorDesc) const {
+        if (buildInfo.Shards.size() == 1) {
+            return true;
+        }
+
+        LOG_N("TTxBuildProgress: Performing cross shard unique index validation: " << BuildId << " " << buildInfo.State);
+
+        auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
+        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+
+        // Make index columns type info
+        std::vector<NScheme::TTypeInfoOrder> indexColumnTypeInfos;
+        indexColumnTypeInfos.reserve(buildInfo.IndexColumns.size());
+        for (const TString& columnName : buildInfo.IndexColumns) {
+            bool found = false;
+            for (auto&& [_, columnInfo] : table->Columns) {
+                if (columnInfo.Name == columnName) {
+                    indexColumnTypeInfos.emplace_back(columnInfo.PType);
+                    found = true;
+                    break;
+                }
+            }
+            Y_ENSURE(found);
+        }
+
+        // Arrange shards in ascending order by shard index
+        std::vector<const TSerializedTableRange*> sortedRanges;
+        sortedRanges.reserve(buildInfo.Shards.size());
+        Y_ENSURE(buildInfo.Shards.size() == table->GetPartitions().size());
+        for (const auto& x: table->GetPartitions()) {
+            auto it = buildInfo.Shards.find(x.ShardIdx);
+            Y_ENSURE(it != buildInfo.Shards.end());
+            Y_ENSURE(it->second.Status == NKikimrIndexBuilder::EBuildStatus::DONE);
+            sortedRanges.emplace_back(&it->second.Range);
+        }
+
+        if (!NSchemeShard::PerformCrossShardUniqIndexValidation(indexColumnTypeInfos, buildInfo.IndexColumns, sortedRanges, errorDesc)) {
+            LOG_E("TTxBuildProgress: Cross shard index validation failed. " << errorDesc << ". Cancelling unique index build");
+            return false;
+        }
+        return true;
     }
 
 public:
@@ -1266,9 +1475,13 @@ public:
             break;
         case TIndexBuildInfo::EState::Filling: {
             if (buildInfo.IsCancellationRequested() || FillIndex(txc, buildInfo)) {
+                auto cancelState = buildInfo.IsBuildColumns()
+                    ? TIndexBuildInfo::EState::Cancellation_DroppingColumns
+                    : TIndexBuildInfo::EState::Cancellation_Applying;
+
                 ClearAfterFill(ctx, buildInfo);
                 ChangeState(BuildId, buildInfo.IsCancellationRequested()
-                                         ? TIndexBuildInfo::EState::Cancellation_Applying
+                                         ? cancelState
                                          : TIndexBuildInfo::EState::Applying);
                 Progress(BuildId);
 
@@ -1328,15 +1541,16 @@ public:
             }
             break;
         case TIndexBuildInfo::EState::LockBuild:
-            Y_ENSURE(buildInfo.IsBuildVectorIndex());
+            Y_ENSURE(buildInfo.IsBuildVectorIndex() || buildInfo.IsValidatingUniqueIndex());
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
-                Send(Self->SelfId(), LockPropose(Self, buildInfo, buildInfo.ApplyTxId, GetBuildPath(Self, buildInfo, buildInfo.KMeans.ReadFrom())), 0, ui64(BuildId));
+                const TString tableName = buildInfo.IsValidatingUniqueIndex() ? NTableIndex::ImplTable : buildInfo.KMeans.ReadFrom();
+                Send(Self->SelfId(), LockPropose(Self, buildInfo, buildInfo.ApplyTxId, GetBuildPath(Self, buildInfo, tableName)), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
-                buildInfo.ApplyTxId = {};
+                buildInfo.ApplyTxId = InvalidTxId;
                 buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
                 buildInfo.ApplyTxDone = false;
 
@@ -1377,6 +1591,18 @@ public:
             SendNotificationsIfFinished(buildInfo);
             // stay calm keep status/issues
             break;
+        case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
+            if (buildInfo.DropColumnsTxId == InvalidTxId) {
+                AllocateTxId(BuildId);
+            } else if (buildInfo.DropColumnsTxStatus == NKikimrScheme::StatusSuccess) {
+                Send(Self->SelfId(), DropColumnsPropose(Self, buildInfo), 0, ui64(BuildId));
+            } else if (!buildInfo.DropColumnsTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.DropColumnsTxId)));
+            } else {
+                ChangeState(BuildId, TIndexBuildInfo::EState::Cancellation_Applying);
+                Progress(BuildId);
+            }
+            break;
         case TIndexBuildInfo::EState::Cancellation_Applying:
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
@@ -1404,6 +1630,18 @@ public:
         case TIndexBuildInfo::EState::Cancelled:
             SendNotificationsIfFinished(buildInfo);
             // stay calm keep status/issues
+            break;
+        case TIndexBuildInfo::EState::Rejection_DroppingColumns:
+            if (buildInfo.DropColumnsTxId == InvalidTxId) {
+                AllocateTxId(BuildId);
+            } else if (buildInfo.DropColumnsTxStatus == NKikimrScheme::StatusSuccess) {
+                Send(Self->SelfId(), DropColumnsPropose(Self, buildInfo), 0, ui64(BuildId));
+            } else if (!buildInfo.DropColumnsTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.DropColumnsTxId)));
+            } else {
+                ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
+                Progress(BuildId);
+            }
             break;
         case TIndexBuildInfo::EState::Rejection_Applying:
             if (buildInfo.ApplyTxId == InvalidTxId) {
@@ -1457,7 +1695,14 @@ public:
             return;
         }
 
-        buildInfo->State = TIndexBuildInfo::EState::Rejection_Applying;
+        if (buildInfo->IsBuildIndex()) {
+            buildInfo->State = TIndexBuildInfo::EState::Rejection_Applying;
+        } else if (buildInfo->IsBuildColumns()) {
+            buildInfo->State = TIndexBuildInfo::EState::Rejection_DroppingColumns;
+        } else {
+            Y_ENSURE(false, "TTxBuildProgress: OnUnhandledException: unknown build type");
+        }
+
         Self->PersistBuildIndexState(db, *buildInfo);
         Self->Execute(Self->CreateTxProgress(buildInfo->Id), ctx);
     }
@@ -1468,7 +1713,7 @@ public:
         return TSerializedTableRange(TSerializedCellVec::Serialize(cells), "", true, false);
     }
 
-    static TSerializedTableRange ParentRange(NTableIndex::TClusterId parent) {
+    static TSerializedTableRange ParentRange(NTableIndex::NKMeans::TClusterId parent) {
         if (parent == 0) {
             return {};  // empty
         }
@@ -1486,7 +1731,10 @@ public:
         Y_ENSURE(buildInfo.DoneShards.empty());
 
         TTableInfo::TPtr table;
-        if (buildInfo.KMeans.Level == 1) {
+        if (buildInfo.IsValidatingUniqueIndex()) {
+            auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
+            table = Self->Tables.at(path->PathId);
+        } else if (buildInfo.KMeans.Level == 1) {
             table = Self->Tables.at(buildInfo.TablePathId);
         } else {
             auto path = GetBuildPath(Self, buildInfo, buildInfo.KMeans.ReadFrom());
@@ -1500,21 +1748,27 @@ public:
             Y_ENSURE(path.LockedBy() == buildInfo.LockTxId);
         }
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
-        TSerializedTableRange shardRange = InfiniteRange(tableColumns.Keys.size());
+        // In case of unique index validation the real range will arrive after index validation for each shard:
+        // it will describe the first and the last index keys for further validation.
+        TSerializedTableRange shardRange = buildInfo.IsValidatingUniqueIndex() ? TSerializedTableRange{} : InfiniteRange(tableColumns.Keys.size());
         static constexpr std::string_view LogPrefix = "";
 
         buildInfo.Cluster2Shards.clear();
         for (const auto& x: table->GetPartitions()) {
             Y_ENSURE(Self->ShardInfos.contains(x.ShardIdx));
             TSerializedCellVec bound{x.EndOfRange};
-            shardRange.To = bound;
+            if (!buildInfo.IsValidatingUniqueIndex()) {
+                shardRange.To = bound;
+            }
             if (buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex) {
                 LOG_D("shard " << x.ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
                 buildInfo.AddParent(shardRange, x.ShardIdx);
             }
             auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), ""});
             Y_ENSURE(emplaced);
-            shardRange.From = std::move(bound);
+            if (!buildInfo.IsValidatingUniqueIndex()) {
+                shardRange.From = std::move(bound);
+            }
 
             Self->PersistBuildIndexShardStatusInitiate(db, BuildId, x.ShardIdx, it->second);
         }
@@ -1598,7 +1852,14 @@ public:
             return;
         }
 
-        buildInfo->State = TIndexBuildInfo::EState::Rejection_Applying;
+        if (buildInfo->IsBuildIndex()) {
+            buildInfo->State = TIndexBuildInfo::EState::Rejection_Applying;
+        } else if (buildInfo->IsBuildColumns()) {
+            buildInfo->State = TIndexBuildInfo::EState::Rejection_DroppingColumns;
+        } else {
+            Y_ENSURE(false, "TTxReply : OnUnhandledException: unknown build type");
+        }
+
         Self->PersistBuildIndexState(db, *buildInfo);
         Self->Execute(Self->CreateTxProgress(buildInfo->Id), ctx);
     }
@@ -1770,7 +2031,15 @@ public:
                 << ", shardIdx: " << shardIdx);
             Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
             Self->IndexBuildPipes.Close(BuildId, shardId, ctx);
-            ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+
+            if (buildInfo.IsBuildIndex()) {
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+            } else if (buildInfo.IsBuildColumns()) {
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_DroppingColumns);
+            } else {
+                Y_ENSURE(false, "TTxShardReply : DoExecute: unknown build type");
+            }
+
             Progress(BuildId);
             return true;
         }
@@ -1877,6 +2146,13 @@ struct TSchemeShard::TIndexBuilder::TTxReplyLocalKMeans: public TTxShardReply<TE
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
     {
     }
+
+    void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
+        if (Response->Get()->Record.GetIsEmpty()) {
+            buildInfo.KMeans.IsEmpty = true;
+            Self->PersistBuildIndexKMeansState(db, buildInfo);
+        }
+    }
 };
 
 struct TSchemeShard::TIndexBuilder::TTxReplyReshuffleKMeans: public TTxShardReply<TEvDataShard::TEvReshuffleKMeansResponse> {
@@ -1944,11 +2220,42 @@ public:
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetIssues(), issues);
             Self->PersistBuildIndexAddIssue(db, buildInfo, issues.ToString());
-            ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+
+            if (buildInfo.IsBuildIndex()) {
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+            } else if (buildInfo.IsBuildColumns()) {
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_DroppingColumns);
+            } else {
+                Y_ENSURE(false, "TTxReplyUploadSample : DoExecute: unknown build type");
+            }
+
             Progress(BuildId);
         }
 
         return true;
+    }
+};
+
+struct TSchemeShard::TIndexBuilder::TTxReplyValidateUniqueIndex: public TTxShardReply<TEvDataShard::TEvValidateUniqueIndexResponse> {
+    TTxReplyValidateUniqueIndex(TSelf* self, TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& response)
+        : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
+    {
+    }
+
+    void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) override {
+        const auto& record = Response->Get()->Record;
+        TTabletId shardId = TTabletId(record.GetTabletId());
+        TShardIdx shardIdx = Self->GetShardIdx(shardId);
+        TIndexBuildInfo::TShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+
+        if (const TString& key = record.GetFirstIndexKey()) {
+            shardStatus.Range.From = TSerializedCellVec(key);
+        }
+        if (const TString& key = record.GetLastIndexKey()) {
+            shardStatus.Range.To = TSerializedCellVec(key);
+        }
+
+        Self->PersistBuildIndexShardRange(db, BuildId, shardIdx, shardStatus);
     }
 };
 
@@ -2055,6 +2362,15 @@ public:
 
             buildInfo.InitiateTxDone = true;
             Self->PersistBuildIndexInitiateTxDone(db, buildInfo);
+            break;
+        }
+        case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
+        case TIndexBuildInfo::EState::Rejection_DroppingColumns:
+        {
+            Y_ENSURE(txId == buildInfo.DropColumnsTxId);
+
+            buildInfo.DropColumnsTxDone = true;
+            Self->PersistBuildIndexDropColumnsTxDone(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::DropBuild:
@@ -2243,6 +2559,17 @@ public:
             ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
             break;
         }
+        case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
+        case TIndexBuildInfo::EState::Rejection_DroppingColumns:
+        {
+            Y_ENSURE(txId == buildInfo.DropColumnsTxId);
+
+            buildInfo.DropColumnsTxStatus = record.GetStatus();
+            Self->PersistBuildIndexDropColumnsTxStatus(db, buildInfo);
+
+            ifErrorMoveTo(TIndexBuildInfo::EState::Cancellation_Applying);
+            break;
+        }
         case TIndexBuildInfo::EState::Cancellation_Applying:
         {
             Y_ENSURE(txId == buildInfo.ApplyTxId);
@@ -2349,6 +2676,13 @@ public:
                 Self->PersistBuildIndexApplyTxId(db, buildInfo);
             }
             break;
+        case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
+        case TIndexBuildInfo::EState::Rejection_DroppingColumns:
+            if (!buildInfo.DropColumnsTxId) {
+                buildInfo.DropColumnsTxId = txId;
+                Self->PersistBuildIndexDropColumnsTxId(db, buildInfo);
+            }
+            break;
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Rejection_Unlocking:
@@ -2410,6 +2744,10 @@ ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse:
 
 ITransaction* TSchemeShard::CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload) {
     return new TIndexBuilder::TTxReplyUploadSample(this, upload);
+}
+
+ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& response) {
+    return new TIndexBuilder::TTxReplyValidateUniqueIndex(this, response);
 }
 
 ITransaction* TSchemeShard::CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId) {

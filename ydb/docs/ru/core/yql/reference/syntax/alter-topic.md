@@ -1,6 +1,6 @@
 # ALTER TOPIC
 
-С помощью оператора `ALTER TOPIC` можно изменить настройки [топика](../../../../concepts/topic), а также добавить, изменить или удалить [читателя](../../../../concepts/topic#consumer).
+С помощью оператора `ALTER TOPIC` можно изменить настройки [топика](../../../../concepts/datamodel/topic), а также добавить, изменить или удалить [читателя](../../../../concepts/datamodel/topic#consumer).
 
 Общий вид команды:
 
@@ -27,20 +27,20 @@ ALTER TOPIC topic_path SET (option = value[, ...]);
 Параметры топика:
 
 * `metering_mode` — способ метеринга ресурсов (`RESERVED_CAPACITY` - по выделенным ресурсам или `REQUEST_UNITS` - по фактическому использованию). Актуально для топиков в serverless базах данных. Тип значения - `String`.
-* `min_active_partitions` — минимальное количество активных партиций топика. [Автопартиционирование](../../../../concepts/topic#autopartitioning) не будет уменьшать количество активных партиций ниже этого значения. Тип — `integer`, значение по умолчанию — `1`.
-* `max_active_partitions` — максимальное количество активных партиций топика. [Автопартиционирование](../../../../concepts/topic#autopartitioning) не будет увеличивать количество активных партиций выше этого значения. Тип — `integer`, по умолчанию равно `min_active_partitions`.
+* `min_active_partitions` — минимальное количество активных партиций топика. [Автопартиционирование](../../../../concepts/datamodel/topic#autopartitioning) не будет уменьшать количество активных партиций ниже этого значения. Тип — `integer`, значение по умолчанию — `1`.
+* `max_active_partitions` — максимальное количество активных партиций топика. [Автопартиционирование](../../../../concepts/datamodel/topic#autopartitioning) не будет увеличивать количество активных партиций выше этого значения. Тип — `integer`, по умолчанию равно `min_active_partitions`.
 * `retention_period` — время хранения данных в топике. Тип значения — `Interval`, значение по умолчанию — `18h`.
 * `retention_storage_mb` — ограничение на максимальное место на диске, занимаемое данными топика. При превышении этого значения старые данные будут удаляться, как по retention. Тип значения — `integer`, значение по умолчанию — `0` (не ограничено).
 * `partition_write_burst_bytes` — размер запаса квоты на запись в партицию на случай всплесков записи. При выставлении в `0` фактическое значение write_burst принимается равным значению квоты (что позволяет всплески записи длительностью до 1 секунды). Тип значения — `integer`, значение по умолчанию: `0`.
 * `partition_write_speed_bytes_per_second` — максимальная разрешенная скорость записи в 1 партицию. Если поток записи в партицию превысит это значение, запись будет квотироваться. Тип значения — `integer`, значение по умолчанию — `2097152` (2 МБ).
-* `auto_partitioning_strategy` — [режим автопартиционирования](../../../../concepts/topic#autopartitioning_modes).
+* `auto_partitioning_strategy` — [режим автопартиционирования](../../../../concepts/datamodel/topic#autopartitioning_modes).
 Допустимые значения: `paused`, `scale_up`, значение по умолчанию — `disabled`.
 * `auto_partitioning_up_utilization_percent` — определяет порог загрузки партиции в процентах от максимальной скорости записи, при достижении которого будет инициировано автоматическое **увеличение** числа партиций. Тип значения — `integer`, значение по умолчанию — `80`.
 * `auto_partitioning_stabilization_window` — определяет временной интервал, в течение которого уровень нагрузки должен оставаться выше установленного порога (`auto_partitioning_up_utilization_percent`), прежде чем будет выполнено автоматическое увеличение количества партиций. Тип значения — `Interval`, значение по умолчанию — `5m`.
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs` — список [кодеков](../../../../concepts/topic#message-codec), поддерживаемых топиком. Тип значения — `String`.
+* `supported_codecs` — список [кодеков](../../../../concepts/datamodel/topic#message-codec), поддерживаемых топиком. Тип значения — `String`.
 
 {% endif %}
 
@@ -55,7 +55,7 @@ ALTER TOPIC `my_topic` SET (
 
 ### Включение и приостановка автопартиционирования {#autopartitioning}
 
-Следующая команда включает [автопартиционирование](../../../../concepts/topic#autopartitioning):
+Следующая команда включает [автопартиционирование](../../../../concepts/datamodel/topic#autopartitioning):
 
 ```yql
 ALTER TOPIC `my_topic` SET (
@@ -65,7 +65,7 @@ ALTER TOPIC `my_topic` SET (
 );
 ```
 
-Следующая команда ставит [автопартиционирование](../../../../concepts/topic#autopartitioning) на паузу:
+Следующая команда ставит [автопартиционирование](../../../../concepts/datamodel/topic#autopartitioning) на паузу:
 
 ```yql
 ALTER TOPIC `my_topic` SET (
@@ -73,7 +73,7 @@ ALTER TOPIC `my_topic` SET (
 );
 ```
 
-Следующая команда снимает [автопартиционирование](../../../../concepts/topic#autopartitioning) с паузы:
+Следующая команда снимает [автопартиционирование](../../../../concepts/datamodel/topic#autopartitioning) с паузы:
 
 ```yql
 ALTER TOPIC `my_topic` SET (
@@ -110,7 +110,7 @@ ALTER TOPIC `my_topic` RESET (
 
 ### Добавить читателя {#add-consumer}
 
-`ADD CONSUMER` — действие добавляет [читателей](../../../../concepts/topic#consumer) для топика.
+`ADD CONSUMER` — действие добавляет [читателей](../../../../concepts/datamodel/topic#consumer) для топика.
 
 Общий вид команды:
 
@@ -125,7 +125,7 @@ ALTER TOPIC topic_path ADD CONSUMER consumer_name [WITH (option = value[, ...])]
 * `important`— определяет важного читателя. Никакие данные из топика не будут удалены, пока все важные читатели их не прочитали. Тип значения — `boolean`, значение по умолчанию: `false`.
 * `read_from`— определяет момент времени записи сообщений, начиная с которого читатель будет получать данные. Данные, записанные ранее этого момента, прочитаны не будут. Тип значения: `Datetime` ИЛИ `Timestamp` или `integer` (unix-timestamp в виде числа). Значение по умолчанию — `0` (чтение с самого раннего доступного в топике времени).
 {% if feature_topic_codecs %}
-* `supported_codecs` — список [кодеков](../../../../concepts/topic#message-codec), поддерживаемых читателем.
+* `supported_codecs` — список [кодеков](../../../../concepts/datamodel/topic#message-codec), поддерживаемых читателем.
 {% endif %}
 
 Следующая команда добавит к топику читателя с настройками по умолчанию:

@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include "yql/essentials/core/type_ann/type_ann_impl.h"
@@ -514,11 +514,14 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
                 return TStatus::Error;
             }
 
-            if (!EnsureTupleTypeSize(node->Pos(), lookupType, 2, ctx)) {
+            auto tupleType = lookupType->Cast<TTupleExprType>();
+            if (tupleType->GetSize() < 2 || tupleType->GetSize() > 3) {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Table stream lookup has unexpected input tuple, expected tuple size 2 or 3, but found %s"
+                        << tupleType->GetSize()));
                 return TStatus::Error;
             }
 
-            auto tupleType = lookupType->Cast<TTupleExprType>();
             if (!EnsureOptionalType(node->Pos(), *tupleType->GetItems()[0], ctx)) {
                 return TStatus::Error;
             }
@@ -538,6 +541,7 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
             TVector<const TTypeAnnotationNode*> outputTypes;
             outputTypes.push_back(leftRowType);
             outputTypes.push_back(ctx.MakeType<TOptionalExprType>(rowType));
+            outputTypes.push_back(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64));
 
             rowType = ctx.MakeType<TTupleExprType>(outputTypes);
         } else {
@@ -1870,11 +1874,14 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
             return TStatus::Error;
         }
 
-        if (!EnsureTupleTypeSize(node->Pos(), inputItemType, 2, ctx)) {
+        auto inputTupleType = inputItemType->Cast<TTupleExprType>();
+        if (inputTupleType->GetSize() < 2 || inputTupleType->GetSize() > 3) {
+            ctx.AddError(
+                TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Table stream lookup has unexpected input tuple, expected tuple size 2 or 3, but found %s"
+                    << inputTupleType->GetSize()));
             return TStatus::Error;
         }
 
-        auto inputTupleType = inputItemType->Cast<TTupleExprType>();
         if (!EnsureOptionalType(node->Pos(), *inputTupleType->GetItems()[0], ctx)) {
             return TStatus::Error;
         }
@@ -1905,6 +1912,7 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
         TVector<const TTypeAnnotationNode*> outputTypes;
         outputTypes.push_back(leftRowType);
         outputTypes.push_back(ctx.MakeType<TOptionalExprType>(rightRowType));
+        outputTypes.push_back(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
 
         auto outputItemType = ctx.MakeType<TTupleExprType>(outputTypes);
         node->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputItemType));
@@ -1921,7 +1929,7 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
 TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData) {
 
-    if (!EnsureArgsCount(*node, 4, ctx)) {
+    if (!EnsureArgsCount(*node, 5, ctx)) {
         return TStatus::Error;
     }
 
@@ -2008,7 +2016,7 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
     TSet<TString> outputColSet;
 
     // First cluster ID
-    rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+    rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NKMeans::ParentColumn, ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
 
     // Then primary key columns
     for (const auto& keyColumn : tableDesc->Metadata->KeyColumnNames) {
@@ -2023,19 +2031,23 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
         outputColSet.insert(keyColumn);
     }
 
-    // Then index data columns which are not also part of the PK
-    for (const auto& dataColumn : indexDesc->DataColumns) {
-        if (!inputColSet.contains(dataColumn) || outputColSet.contains(dataColumn)) {
-            continue;
-        }
-        auto type = tableDesc->GetColumnType(dataColumn);
-        YQL_ENSURE(type, "No data column: " << dataColumn);
+    if (node->Child(TKqpCnVectorResolve::idx_WithData)->Content() == "true") {
+        // Then index data columns which are not also part of the PK
+        for (const auto& dataColumn : indexDesc->DataColumns) {
+            YQL_ENSURE(inputColSet.contains(dataColumn), "No data column in input: " << dataColumn);
+            if (outputColSet.contains(dataColumn)) {
+                continue;
+            }
+            auto type = tableDesc->GetColumnType(dataColumn);
+            YQL_ENSURE(type, "No data column: " << dataColumn);
 
-        auto itemType = ctx.MakeType<TItemExprType>(dataColumn, type);
-        if (!itemType->Validate(node->Pos(), ctx)) {
-            return TStatus::Error;
+            auto itemType = ctx.MakeType<TItemExprType>(dataColumn, type);
+            if (!itemType->Validate(node->Pos(), ctx)) {
+                return TStatus::Error;
+            }
+            rowItems.push_back(itemType);
+            outputColSet.insert(dataColumn);
         }
-        rowItems.push_back(itemType);
     }
 
     auto rowType = ctx.MakeType<TStructExprType>(rowItems);
@@ -2065,7 +2077,7 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    if (!EnsureTupleTypeSize(node->Pos(), inputItemType, 2, ctx)) {
+    if (!EnsureTupleTypeSize(node->Pos(), inputItemType, 3, ctx)) {
         return TStatus::Error;
     }
 

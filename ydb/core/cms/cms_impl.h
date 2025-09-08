@@ -23,6 +23,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/queue.h>
 #include <util/generic/stack.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 namespace NKikimr::NCms {
 
@@ -264,6 +265,7 @@ private:
             FFunc(TEvCms::EvGetClusterInfoRequest, EnqueueRequest);
             HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
+            HFunc(NKikimr::TEvNodeWardenStorageConfig, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
@@ -435,6 +437,7 @@ private:
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
+    void Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
 

@@ -33,6 +33,8 @@
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ticket_parser_settings.h>
+#include <ydb/core/security/token_manager/token_manager.h>
+#include <ydb/core/security/token_manager/token_manager_settings.h>
 #include <ydb/core/base/grpc_service_factory.h>
 #include <ydb/core/persqueue/actor_persqueue_client_iface.h>
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
@@ -181,8 +183,10 @@ namespace Tests {
         bool UseSectorMap = false;
         TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
         bool EnableStorage = true;
+        bool EnableStorageProxy = false;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
+        std::function<IActor*(const TTokenManagerSettings&)> CreateTokenManager = NKikimr::CreateTokenManager;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
 
@@ -288,6 +292,7 @@ namespace Tests {
             ProxyDSMocks = proxyDSMocks;
             return *this;
         }
+        TServerSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; }
 
         TServerSettings& SetEnableStorage(bool enable) {
             EnableStorage = enable;

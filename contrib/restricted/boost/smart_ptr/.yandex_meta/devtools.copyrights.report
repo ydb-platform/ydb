@@ -275,6 +275,17 @@ BELONGS ya.make
         include/boost/smart_ptr/detail/spinlock_sync.hpp [11:11]
         include/boost/smart_ptr/detail/spinlock_w32.hpp [11:11]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 407994d3cfe2b5aa6ba4766d5f79d583
+BELONGS ya.make
+    License text:
+        //  Copyright 2025 Mathias Stearn
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/smart_ptr/detail/sp_cxx20_constexpr.hpp [12:12]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 48a99b78ca07d64eafb7dfabd3abb686
 BELONGS ya.make
     License text:

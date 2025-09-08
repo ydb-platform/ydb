@@ -1,4 +1,4 @@
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
@@ -95,8 +95,8 @@ TVector<TStringBuf> BuildVectorIndexPostingColumns(const TKikimrTableDescription
     TVector<TStringBuf> indexTableColumns;
     THashSet<TStringBuf> indexTableColumnSet;
 
-    indexTableColumns.emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
-    indexTableColumnSet.insert(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
+    indexTableColumns.emplace_back(NTableIndex::NKMeans::ParentColumn);
+    indexTableColumnSet.insert(NTableIndex::NKMeans::ParentColumn);
 
     for (const auto& column : table.Metadata->KeyColumnNames) {
         if (indexTableColumnSet.insert(column).second) {
@@ -213,8 +213,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             }
 
             for (const auto& column : indexDesc->DataColumns) {
-                if (inputColumnsSet.contains(column)) {
-                    YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+                if (inputColumnsSet.contains(column) && indexTableColumnsSet.emplace(column).second) {
                     indexTableColumns.emplace_back(column);
                 }
             }
@@ -223,7 +222,8 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 insert.Pos(), ctx, true);
 
             if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns, upsertIndexRows, insert.Pos(), ctx);
+                upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns,
+                    upsertIndexRows, true, insert.Pos(), ctx);
                 indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
             }
 

@@ -23,6 +23,8 @@ struct TSerializableAccessControlEntry
     std::optional<TBooleanFormula> SubjectTagFilter;
     std::optional<std::vector<std::string>> Columns;
     std::optional<bool> Vital;
+    std::optional<std::string> Expression;
+    std::optional<EInapplicableExpressionMode> InapplicableExpressionMode;
 
     TSerializableAccessControlEntry(
         ESecurityAction action,
@@ -37,11 +39,17 @@ struct TSerializableAccessControlEntry
     void Persist(const TStreamPersistenceContext& context);
 
     bool operator==(const TSerializableAccessControlEntry& other) const = default;
+
+    static constexpr TStringBuf ExpressionKey = "expression";
+    static constexpr TStringBuf InapplicableExpressionModeKey = "inapplicable_expression_mode";
 };
 
 void Serialize(const TSerializableAccessControlEntry& ace, NYson::IYsonConsumer* consumer);
 void Deserialize(TSerializableAccessControlEntry& ace, NYTree::INodePtr node);
 void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCursor* cursor);
+
+template <class TAce>
+[[nodiscard]] TError CheckAceCorrect(const TAce& ace);
 
 struct TSerializableAccessControlList
 {
@@ -56,6 +64,20 @@ void Serialize(const TSerializableAccessControlList& acl, NYson::IYsonConsumer* 
 void Deserialize(TSerializableAccessControlList& acl, NYTree::INodePtr node);
 void Deserialize(TSerializableAccessControlList& acl, NYson::TYsonPullParserCursor* cursor);
 
+//! A small container to allow reader to selectively apply expressions based on
+//! their InapplicableExpressionMode.
+//! NB: You may encounter occurences of an "RL ACE" term.
+//! It stands for Row-Level Access Control Entry.
+struct TRowLevelAccessControlEntry
+{
+    std::string Expression;
+    EInapplicableExpressionMode InapplicableExpressionMode;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NSecurityClient
+
+#define ACL_H
+#include "acl-inl.h"
+#undef ACL_H

@@ -1278,6 +1278,14 @@ public:
             SendAttempts = 0;
         }
 
+        ui32 GetOverloadSeqNo() const {
+            return OverloadSeqNo;
+        }
+
+        void IncOverloadSeqNo() {
+            ++OverloadSeqNo;
+        }
+
         bool HasRead() const {
             return HasReadInBatch;
         }
@@ -1293,6 +1301,7 @@ public:
         bool& Closed;
 
         ui32 SendAttempts = 0;
+        ui64 OverloadSeqNo = 1;
         size_t BatchesInFlight = 0;
     };
 
@@ -1583,6 +1592,7 @@ public:
         meta.OperationsCount = shardInfo.GetBatchesInFlight();
         meta.IsFinal = shardInfo.IsClosed() && shardInfo.Size() == shardInfo.GetBatchesInFlight();
         meta.SendAttempts = shardInfo.GetSendAttempts();
+        meta.NextOverloadSeqNo = shardInfo.GetOverloadSeqNo();
 
         return meta;
     }
@@ -1631,10 +1641,9 @@ public:
 
     void OnMessageSent(ui64 shardId, ui64 cookie) override {
         auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty() || shardInfo.GetCookie() != cookie) {
-            return;
-        }
+        AFL_ENSURE(!shardInfo.IsEmpty() && shardInfo.GetCookie() == cookie);
         shardInfo.IncSendAttempts();
+        shardInfo.IncOverloadSeqNo();
     }
 
     void ResetRetries(ui64 shardId, ui64 cookie) override {

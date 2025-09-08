@@ -123,7 +123,7 @@ class TestTransferMixedClusterFixture(MixedClusterFixture):
     @pytest.mark.parametrize("store, local", [
         ("row", False),
         # ("column", False) TODO uncomment after OLAP will be enabled
-        # ("row", True), TODO uncomment after local topic will be merged
+        ("row", True),
     ])
     def test_transfer(self, store, local):
         utils = Workload(self.driver, self.endpoint)
@@ -162,7 +162,7 @@ class TestTransferRestartToAnotherVersion(RestartToAnotherVersionFixture):
     @pytest.mark.parametrize("store, local", [
         ("row", False),
         # ("column", False) TODO uncomment after OLAP will be enabled
-        # ("row", True), TODO uncomment after local topic will be merged
+        ("row", True),
     ])
     def test_transfer(self, store, local):
         utils = Workload(self.driver, self.endpoint)
@@ -203,7 +203,7 @@ class TestTransferRollingUpdate(RollingUpgradeAndDowngradeFixture):
     @pytest.mark.parametrize("store, local", [
         ("row", False),
         # ("column", False) TODO uncomment after OLAP will be enabled
-        # ("row", True), TODO uncomment after local topic will be merged
+        ("row", True),
     ])
     def test_transfer(self, store, local):
         utils = Workload(self.driver, self.endpoint)

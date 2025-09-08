@@ -1144,7 +1144,8 @@ namespace NKikimr::NBsController {
                     }
                 }
             }
-            if (const auto it = StaticVSlots.find(vslotId); it != StaticVSlots.end() && it->second.VDiskId == vdiskId) {
+            if (const auto it = StaticVSlots.find(vslotId); it != StaticVSlots.end() &&
+                    vdiskId.SameExceptGeneration(it->second.VDiskId)) {
                 auto& vslot = it->second;
                 vslot.VDiskStatus = m.GetStatus();
                 if (vslot.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::READY) {

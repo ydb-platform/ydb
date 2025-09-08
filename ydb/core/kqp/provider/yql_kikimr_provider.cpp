@@ -2,7 +2,7 @@
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
@@ -227,16 +227,16 @@ bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStrin
     auto mainTableImpl = GetMainTableIfTableIsImplTableOfIndex(cluster, path);
     if (mainTableImpl) {
         for (const auto& index: mainTableImpl->Metadata->Indexes) {
-            if (index.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                continue;
-            }
-            if (index.KeyColumns.size() > 1) {
-                // prefixed index update is not supported yet
-                return true;
-            }
-            auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::LevelTable;
-            if (path == levelTablePath) {
-                return true;
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                if (index.KeyColumns.size() > 1) {
+                    // prefixed index update is not supported yet
+                    return true;
+                }
+                const auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::LevelTable;
+                const auto postingTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::PostingTable;
+                if (path == levelTablePath || path == postingTablePath) {
+                    return true;
+                }
             }
         }
     }
@@ -840,11 +840,12 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             protoValue.set_uint64_value(FromString<ui64>(value));
             break;
         case EDataSlot::String:
-        case EDataSlot::DyNumber:
             protoValue.set_bytes_value(value.data(), value.size());
             break;
         case EDataSlot::Utf8:
         case EDataSlot::Json:
+        case EDataSlot::DyNumber:
+        case EDataSlot::JsonDocument:
             protoValue.set_text_value(ToString(value));
             break;
         case EDataSlot::Double:

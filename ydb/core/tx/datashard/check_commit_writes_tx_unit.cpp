@@ -66,7 +66,7 @@ public:
                     << " expected " << tableInfo.GetTableSchemaVersion()
                     << " at shard " << DataShard.TabletID(),
                 NKikimrTxDataShard::TEvProposeTransactionResult::ERROR,
-                NKikimrTxDataShard::TError::SCHEME_ERROR);
+                NKikimrTxDataShard::TError::SCHEME_CHANGED);
         }
 
         if (!commitTx.HasWriteTxId() || commitTx.GetWriteTxId() == 0) {

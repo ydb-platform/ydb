@@ -52,7 +52,7 @@ def post_install(self):
 boost_thread = NixSourceProject(
     nixattr="boost_thread",
     arcdir=boost.make_arcdir("thread"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
         "src/",

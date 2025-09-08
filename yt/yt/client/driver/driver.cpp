@@ -408,20 +408,22 @@ public:
         REGISTER    (TWriteShuffleDataCommand,             "write_shuffle_data",              Tabular,    Structured, false,  true, ApiVersion4);
 
         REGISTER    (TStartDistributedWriteSessionCommand, "start_distributed_write_session", Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TPingDistributedWriteSessionCommand,  "ping_distributed_write_session",  Null,       Null,       true,  false, ApiVersion4);
         REGISTER    (TFinishDistributedWriteSessionCommand, "finish_distributed_write_session", Null,     Null,       true,  false, ApiVersion4);
         REGISTER    (TWriteTableFragmentCommand,           "write_table_fragment",            Tabular,    Structured, true,   true, ApiVersion4);
 
         if (Config_->EnableInternalCommands) {
-            REGISTER_ALL(TReadHunksCommand,                "read_hunks",                      Null,       Structured, false, true );
-            REGISTER_ALL(TWriteHunksCommand,               "write_hunks",                     Null,       Structured, true,  true );
-            REGISTER_ALL(TLockHunkStoreCommand,            "lock_hunk_store",                 Null,       Structured, true,  true );
-            REGISTER_ALL(TUnlockHunkStoreCommand,          "unlock_hunk_store",               Null,       Structured, true,  true );
-            REGISTER_ALL(TGetConnectionConfigCommand,      "get_connection_config",           Null,       Structured, false, false);
-            REGISTER_ALL(TIssueLeaseCommand,               "issue_lease",                     Null,       Structured, true,  false);
-            REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, true,  false);
-            REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, true,  false);
-            REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, true,  false);
-            REGISTER_ALL(TForsakeChaosCoordinator,         "forsake_chaos_coordinator",       Null,       Null,       true,  true);
+            REGISTER_ALL(TReadHunksCommand,                 "read_hunks",                             Null,       Structured, false, true );
+            REGISTER_ALL(TWriteHunksCommand,                "write_hunks",                            Null,       Structured, true,  true );
+            REGISTER_ALL(TLockHunkStoreCommand,             "lock_hunk_store",                        Null,       Structured, true,  true );
+            REGISTER_ALL(TUnlockHunkStoreCommand,           "unlock_hunk_store",                      Null,       Structured, true,  true );
+            REGISTER_ALL(TGetConnectionConfigCommand,       "get_connection_config",                  Null,       Structured, false, false);
+            REGISTER_ALL(TIssueLeaseCommand,                "issue_lease",                            Null,       Structured, true,  false);
+            REGISTER_ALL(TRevokeLeaseCommand,               "revoke_lease",                           Null,       Structured, true,  false);
+            REGISTER_ALL(TReferenceLeaseCommand,            "reference_lease",                        Null,       Structured, true,  false);
+            REGISTER_ALL(TUnreferenceLeaseCommand,          "unreference_lease",                      Null,       Structured, true,  false);
+            REGISTER_ALL(TForsakeChaosCoordinator,          "forsake_chaos_coordinator",              Null,       Null,       true,  true );
+            REGISTER_ALL(TGetOrderedTabletSafeTrimRowCount, "get_ordered_tablet_safe_trim_row_count", Null,       Structured, false, false);
         }
 
 #undef REGISTER

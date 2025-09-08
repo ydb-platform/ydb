@@ -594,6 +594,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.FeatureFlags.SetEnableTableDatetime64(true);
     app.FeatureFlags.SetEnableVectorIndex(true);
+    app.FeatureFlags.SetEnableAddUniqueIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);
     app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
@@ -656,7 +657,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         app.AddSystemBackupSID(sid);
     }
 
-    AddDomain(runtime, app, TTestTxConfig::DomainUid, hive, schemeRoot);
+    AddDomain(runtime, app, TTestTxConfig::DomainUid, hive, schemeRoot, opts.NStoragePools_);
 
     SetupLogging(runtime);
     SetupChannelProfiles(app, ChannelsCount);
@@ -803,7 +804,7 @@ void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) 
     }
 }
 
-void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAppPrepare &app, ui32 domainUid, ui64 hive, ui64 schemeRoot) {
+void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAppPrepare &app, ui32 domainUid, ui64 hive, ui64 schemeRoot, ui32 storagePoolCount) {
     app.ClearDomainsAndHive();
     ui32 planResolution = 50;
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
@@ -812,7 +813,7 @@ void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAp
                 TVector<ui64>{TTestTxConfig::Coordinator},
                 TVector<ui64>{},
                 TVector<ui64>{TTestTxConfig::TxAllocator},
-                DefaultPoolKinds(2));
+                DefaultPoolKinds(storagePoolCount));
 
     TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();
     ids.insert(ids.end(), domain->TxAllocators.begin(), domain->TxAllocators.end());

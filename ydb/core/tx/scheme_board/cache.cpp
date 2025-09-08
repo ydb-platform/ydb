@@ -242,6 +242,7 @@ namespace {
             entry.FileStoreInfo.Drop();
             entry.BackupCollectionInfo.Drop();
             entry.SysViewInfo.Drop();
+            entry.SecretInfo.Drop();
         }
 
         static void SetErrorAndClear(TResolveContext* context, TResolve::TEntry& entry, const bool isDescribeDenied) {
@@ -762,6 +763,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             ResourcePoolInfo.Drop();
             BackupCollectionInfo.Drop();
             SysViewInfo.Drop();
+            SecretInfo.Drop();
+            StreamingQueryInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -1299,6 +1302,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(ResourcePoolInfo);
             DESCRIPTION_PART(BackupCollectionInfo);
             DESCRIPTION_PART(SysViewInfo);
+            DESCRIPTION_PART(SecretInfo);
+            DESCRIPTION_PART(StreamingQueryInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1647,6 +1652,14 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
                 FillInfo(Kind, SysViewInfo, std::move(*pathDesc.MutableSysViewDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeSecret:
+                Kind = TNavigate::KindSecret;
+                FillInfo(Kind, SecretInfo, std::move(*pathDesc.MutableSecretDescription()));
+                break;
+            case NKikimrSchemeOp::EPathTypeStreamingQuery:
+                Kind = TNavigate::KindStreamingQuery;
+                FillInfo(Kind, StreamingQueryInfo, std::move(*pathDesc.MutableStreamingQueryDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_DEBUG_ABORT("Invalid path type");
                 break;
@@ -1728,6 +1741,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeSysView:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindSysView);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeSecret:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindSecret);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeStreamingQuery:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindStreamingQuery);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -1960,7 +1979,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.ResourcePoolInfo = ResourcePoolInfo;
             entry.BackupCollectionInfo = BackupCollectionInfo;
             entry.SysViewInfo = SysViewInfo;
+            entry.SecretInfo = SecretInfo;
             entry.TableKind = TableKind;
+            entry.StreamingQueryInfo = StreamingQueryInfo;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -2266,6 +2287,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // SysView specific
         TIntrusivePtr<TNavigate::TSysViewInfo> SysViewInfo;
+
+        // Secret specific
+        TIntrusivePtr<TNavigate::TSecretInfo> SecretInfo;
+
+        // StreamingQuery specific
+        TIntrusivePtr<TNavigate::TStreamingQueryInfo> StreamingQueryInfo;
 
     }; // TCacheItem
 

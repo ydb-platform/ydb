@@ -26,7 +26,7 @@ message TTableServiceConfig {
         optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
         optional uint64 ChannelChunkSizeLimit = 30 [default = 50331648];        //  48 MB
         reserved 3;
-        optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 1048576];   // 1 MiB
+        optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 1048576];    // 1 MiB
         optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280];   // 30 MB
         optional uint64 QueryMemoryLimit = 6 [default = 32212254720];           // 30 GB
         optional uint32 PublishStatisticsIntervalSec = 7 [default = 2];
@@ -415,4 +415,13 @@ message TTableServiceConfig {
     optional bool EnableTempTablesForUser = 95 [default = false];
 
     optional bool EnableSimpleProgramsSinglePartitionOptimization = 96 [default = true];
+
+    optional bool EnableKqpScanQueryUseLlvm = 97 [default = true];
+
+    optional bool EnableOlapPushdownAggregate = 98  [ default = false ];
+
+    optional bool EnableOrderOptimizaionFSM = 99 [ default = false ];
+
+    optional bool EnableTopSortSelectIndex = 100 [ default = true ];
+    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = true ];
 };

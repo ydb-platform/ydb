@@ -1,5 +1,7 @@
 # DELETE FROM
 
+{% include [column-and-row-tables-in-read-only-tx](../../../_includes/limitation-column-row-in-read-only-tx-warn.md) %}
+
 Deletes rows that match the `WHERE` clause, from the table.{% if feature_mapreduce %}  The table is searched by name in the database specified by the [USE](use.md) operator.{% endif %}
 
 ## Example

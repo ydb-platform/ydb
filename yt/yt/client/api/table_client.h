@@ -33,10 +33,12 @@ struct TTableReaderOptions
 {
     bool Unordered = false;
     bool OmitInaccessibleColumns = false;
+    bool OmitInaccessibleRows = false;
     bool EnableTableIndex = false;
     bool EnableRowIndex = false;
     bool EnableRangeIndex = false;
     bool EnableTabletIndex = false;
+    bool EnableAnyUnpacking = true;
     NTableClient::TTableReaderConfigPtr Config;
 };
 

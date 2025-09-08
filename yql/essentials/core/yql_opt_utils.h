@@ -223,6 +223,6 @@ TExprNode::TPtr ReplaceUnessentials(TExprNode::TPtr predicate, TExprNode::TPtr r
 bool IsDependsOnUsage(const TExprNode& node, const TParentsMap& parentsMap);
 bool IsNormalizedDependsOn(const TExprNode& node);
 
-bool CanFuseLambdas(const TExprNode& outerLambda, const TExprNode& innerLambda);
+bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types);
 
 }

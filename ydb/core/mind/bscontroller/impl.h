@@ -81,6 +81,7 @@ public:
     class TTxUpdateShred;
     class TTxCheckUnsynced;
     class TTxUpdateBridgeGroupInfo;
+    class TTxUpdateBridgeSyncState;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -89,6 +90,7 @@ public:
     class TGroupSelector;
     class TGroupFitter;
     class TSelfHealActor;
+    struct TStaticGroupInfo;
 
     using TVSlotReadyTimestampQ = std::list<std::pair<TMonotonic, TVSlotInfo*>>;
 
@@ -887,24 +889,7 @@ public:
             }
         }
 
-        TGroupStatus GetStatus(const TGroupFinder& finder) const {
-            if (BridgeGroupInfo) {
-                std::optional<TGroupStatus> res;
-                for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
-                    const TGroupInfo *group = finder(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
-                    if (group) {
-                        if (const TGroupStatus& s = group->GetStatus(finder); res) {
-                            res->MakeWorst(s.OperatingStatus, s.ExpectedStatus);
-                        } else {
-                            res.emplace(s);
-                        }
-                    }
-                }
-                return res.value_or(TGroupStatus());
-            } else {
-                return Status;
-            }
-        }
+        TGroupStatus GetStatus(const TGroupFinder& finder, const TBridgeInfo *bridgeInfo) const;
 
         void OnCommit();
     };
@@ -1618,6 +1603,7 @@ private:
     void CommitStoragePoolStatUpdates(TConfigState& state);
     void CommitSysViewUpdates(TConfigState& state);
     void CommitShredUpdates(TConfigState& state);
+    void CommitSyncerUpdates(TConfigState& state, TTransactionContext& txc);
 
     void InitializeSelfHealState();
     void FillInSelfHealGroups(TEvControllerUpdateSelfHealInfo& msg, TConfigState *state);
@@ -1790,6 +1776,7 @@ private:
     void RenderHeader(IOutputStream& out);
     void RenderFooter(IOutputStream& out);
     void RenderMonPage(IOutputStream& out);
+    void RenderBridge(IOutputStream& out);
     void RenderInternalTables(IOutputStream& out, const TString& table);
     void RenderVirtualGroups(IOutputStream& out);
     void RenderGroupDetail(IOutputStream &out, TGroupId groupId);
@@ -2006,23 +1993,63 @@ private:
 
     static constexpr TDuration DisconnectedSyncerReactionTime = TDuration::Seconds(10);
 
-    std::set<std::tuple<TGroupId, TNodeId, TGroupId>> SyncersTargetNodeSource;
-    std::set<std::tuple<TNodeId, TGroupId, TGroupId>> SyncersNodeTargetSource;
-    THashSet<TGroupId> TargetGroupsInCommit;
+    struct TSyncerProgress {
+        ui64 BytesDone = 0;
+        ui64 BytesTotal = 0;
+        ui64 BytesError = 0;
+        ui64 BlobsDone = 0;
+        ui64 BlobsTotal = 0;
+        ui64 BlobsError = 0;
+    };
+
+    struct TSyncersRequiringAction;
+
+    struct TSyncerState
+        : TIntrusiveListItem<TSyncerState, TSyncersRequiringAction>
+    {
+        struct TPerNodeInfo {
+            TGroupId SourceGroupId;
+            TSyncerProgress Progress;
+        };
+        const TGroupId BridgeProxyGroupId;
+        const TGroupId TargetGroupId;
+        THashMap<TNodeId, TPerNodeInfo> NodeIds;
+        bool InCommit = false;
+
+        TSyncerState(TGroupId bridgeProxyGroupId, TGroupId targetGroupId)
+            : BridgeProxyGroupId(bridgeProxyGroupId)
+            , TargetGroupId(targetGroupId)
+        {}
+    };
+
+    THashMap<TGroupId, TSyncerState> TargetGroupToSyncerState;
+    std::set<std::tuple<TNodeId, TSyncerState*>> NodeToSyncerState;
+    TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
 
     void CheckUnsyncedBridgePiles();
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
-        TSet<ui32>& groupIdsToRead);
+        TSet<ui32>& groupIdsToRead, bool comprehensive);
 
     void CheckSyncerDisconnectedNodes();
 
-    void StartRequiredSyncers();
+    bool ProcessSyncers(TNodeId nodeId = 0);
 
     void SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
         TSet<ui32>& groupIdsToRead);
 
     void Handle(TEvBlobStorage::TEvControllerUpdateSyncerState::TPtr ev);
+
+    void ApplyStaticGroupUpdateForSyncers(std::map<TGroupId, TStaticGroupInfo>& prevStaticGroups);
+
+    struct TBridgeSyncState {
+        NKikimrBridge::TGroupState::EStage Stage;
+        TString LastError;
+        TInstant LastErrorTimestamp;
+        TInstant FirstErrorTimestamp;
+        ui32 ErrorCount = 0;
+    };
+    THashMap<TGroupId, TBridgeSyncState> BridgeSyncState;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Node warden interoperation
@@ -2410,7 +2437,7 @@ public:
         void UpdateStatus(TMonotonic mono, TBlobStorageController *controller);
         void UpdateLayoutCorrect(TBlobStorageController *controller);
 
-        TGroupInfo::TGroupStatus GetStatus(const TStaticGroupFinder& finder) const;
+        TGroupInfo::TGroupStatus GetStatus(const TStaticGroupFinder& finder, const TBridgeInfo *bridgeInfo) const;
         bool IsLayoutCorrect(const TStaticGroupFinder& finder) const;
     };
 
@@ -2528,7 +2555,7 @@ public:
     static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotId& vslotId);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TVSlot *pb, const TVSlotInfo &vslot, const TVSlotFinder& finder);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group,
-        const TGroupInfo::TGroupFinder& finder);
+        const TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo);
     static void SerializeDonors(NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk *vdisk, const TVSlotInfo& vslot,
         const TGroupInfo& group, const TVSlotFinder& finder);
     static void SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,

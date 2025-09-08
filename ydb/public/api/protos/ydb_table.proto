@@ -273,6 +273,7 @@ message TableIndexDescription {
        GlobalAsyncIndex global_async_index = 5;
        GlobalUniqueIndex global_unique_index = 8;
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 9;
+       GlobalFulltextIndex global_fulltext_index = 10;
     }
     Status status = 4;
     // list of columns content to be copied in to index table

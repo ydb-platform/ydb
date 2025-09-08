@@ -33,15 +33,11 @@
 
 ## Decimal { #decimal }
 
-{% note info %}
-
 `Decimal` — параметризованный тип {{ ydb-short-name }}} (подробнее см. [документацию](../../../../core/yql/reference/types/primitive.md#numeric)). `Precision` — общее количество значащих цифр, `Scale` — количество цифр после десятичной точки.
 
 Чтобы передать значение с заданной точностью и масштабом (отличными от значений по умолчанию), укажите `Precision` и `Scale` у параметра YdbParameter. По умолчанию используется `Decimal(22, 9)`.
 
 Например для `Decimal(5, 3)`, нужно передать параметр `new YdbParameter { Value = 1.5m, Precision = 5, Scale = 3 }`.
-
-{% endnote %}
 
 ## Таблица сопоставления типов на запись
 

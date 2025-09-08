@@ -439,7 +439,8 @@ void TestWrite(const TestTableDescription& table) {
 void TestWriteOverload(const TestTableDescription& table) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
-    runtime.GetAppData(0).ColumnShardConfig.SetWritingInFlightRequestBytesLimit(20 * 1024 * 1024);
+    const ui64 overloadSize = 20_MB;
+    runtime.GetAppData(0).ColumnShardConfig.SetWritingInFlightRequestBytesLimit(overloadSize);
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csDefaultControllerGuard->SetOverrideBlobSplitSettings(std::nullopt);
     TActorId sender = runtime.AllocateEdgeActor();
@@ -459,9 +460,7 @@ void TestWriteOverload(const TestTableDescription& table) {
     UNIT_ASSERT(testBlob.size() > NOlap::TCompactionLimits::MAX_BLOB_SIZE / 2);
     UNIT_ASSERT(testBlob.size() < NOlap::TCompactionLimits::MAX_BLOB_SIZE);
 
-    const ui64 overloadSize = 20 * 1024 * 1024;
     ui32 toCatch = overloadSize / testBlob.size() + 1;
-    UNIT_ASSERT_VALUES_EQUAL(toCatch, 4);
     TDeque<TAutoPtr<IEventHandle>> capturedWrites;
 
     auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {

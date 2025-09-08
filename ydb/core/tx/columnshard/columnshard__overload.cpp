@@ -28,7 +28,7 @@ ui64 TColumnShard::GetShardWritesInFlyLimit() const {
 ui64 TColumnShard::GetShardWritesSizeInFlyLimit() const {
     if (DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.load() == 0) {
         ui64 oldValue = 0;
-        const ui64 newValue = NKqp::TStagePredictor::GetUsableThreads() * 20 * 1024 * 1024;
+        const ui64 newValue = NKqp::TStagePredictor::GetUsableThreads() * 20_MB;
         DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
     return HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestBytesLimit() : DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.load();

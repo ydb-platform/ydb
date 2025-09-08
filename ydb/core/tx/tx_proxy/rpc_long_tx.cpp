@@ -18,11 +18,8 @@ namespace NKikimr {
 
 namespace {
 
-ui64 GetMemoryInFlightLimit(bool isColumnTable) {
+ui64 GetMemoryInFlightLimit() {
     static std::atomic_uint64_t DEFAULT_MEMORY_IN_FLIGHT_LIMIT{0};
-    if (!isColumnTable) {
-        return NTxProxy::TLimits::MemoryInFlightWriting;
-    }
 
     if (HasAppData() && AppDataVerified().ColumnShardConfig.GetProxyMemoryInFlightLimit()) {
         return AppDataVerified().ColumnShardConfig.GetProxyMemoryInFlightLimit();
@@ -30,7 +27,7 @@ ui64 GetMemoryInFlightLimit(bool isColumnTable) {
 
     if (DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load() == 0) {
         ui64 oldValue = 0;
-        const ui64 newValue = NKqp::TStagePredictor::GetUsableThreads() * 10 * 1024 * 1024;
+        const ui64 newValue = NKqp::TStagePredictor::GetUsableThreads() * 10_MB;
         DEFAULT_MEMORY_IN_FLIGHT_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
     return DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load();
@@ -54,13 +51,12 @@ protected:
     using TThis = typename TBase::TThis;
 
 public:
-    TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token, const TLongTxId& longTxId, const TString& dedupId, bool isColumnTable)
+    TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token, const TLongTxId& longTxId, const TString& dedupId)
         : DatabaseName(databaseName)
         , Path(path)
         , DedupId(dedupId)
         , LongTxId(longTxId)
-        , ActorSpan(0, NWilson::TTraceId::NewTraceId(0, Max<ui32>()), "TLongTxWriteBase")
-        , IsColumnTable(isColumnTable) {
+        , ActorSpan(0, NWilson::TTraceId::NewTraceId(0, Max<ui32>()), "TLongTxWriteBase") {
         if (token) {
             UserToken.emplace(token);
         }
@@ -94,7 +90,7 @@ protected:
         AFL_VERIFY(!InFlightSize);
         InFlightSize = accessor->GetSize();
         const i64 sizeInFlight = MemoryInFlight.Add(InFlightSize);
-        if (GetMemoryInFlightLimit(IsColumnTable) < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {
+        if (GetMemoryInFlightLimit() < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {
             return ReplyError(Ydb::StatusIds::OVERLOADED, "a lot of memory in flight");
         }
         if (NCSIndex::TServiceOperator::IsEnabled()) {
@@ -303,8 +299,8 @@ private:
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
     const TString& dedupId, const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-    std::shared_ptr<NYql::TIssues> issues, bool isColumnTable) {
-    return ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues, isColumnTable));
+    std::shared_ptr<NYql::TIssues> issues) {
+    return ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues));
 }
 
 //

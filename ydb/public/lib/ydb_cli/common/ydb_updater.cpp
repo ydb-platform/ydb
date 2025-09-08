@@ -86,7 +86,7 @@ int TYdbUpdater::Update(bool forceUpdate) {
     const TString downloadUrl = TStringBuilder() << StorageUrl << '/' << LatestVersion << '/' << osVersion
         << '/' << osArch << '/' << binaryName;
     Cout << "Downloading binary from url " << downloadUrl << Endl;
-    TShellCommand curlCmd(TStringBuilder() << "curl --max-time 60 " << downloadUrl << " -o " << tmpPathToBinary.GetPath());
+    TShellCommand curlCmd(TStringBuilder() << "curl --connect-timeout 60 " << downloadUrl << " -o " << tmpPathToBinary.GetPath());
     curlCmd.Run().Wait();
     if (curlCmd.GetExitCode() != 0) {
         Cerr << "Failed to download from url \"" << downloadUrl << "\". " << curlCmd.GetError() << Endl;

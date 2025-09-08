@@ -90,6 +90,18 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
+NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+
+NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
@@ -131,7 +143,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         return false;
     }
 
-    if (!IsCompatibleIndex(indexDesc.GetType(), baseTableColumns, indexKeys, error)) {
+    if (!IsCompatibleIndex(GetIndexType(indexDesc), baseTableColumns, indexKeys, error)) {
         status = NKikimrScheme::EStatus::StatusInvalidParameter;
         return false;
     }
@@ -142,29 +154,63 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         return false;
     }
 
-    implTableColumns = CalcTableImplDescription(indexDesc.GetType(), baseTableColumns, indexKeys);
+    implTableColumns = CalcTableImplDescription(GetIndexType(indexDesc), baseTableColumns, indexKeys);
 
-    if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        //We have already checked this in IsCompatibleIndex
-        Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
-
-        if (indexKeys.KeyColumns.size() > 1 && !IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
-            status = NKikimrScheme::EStatus::StatusInvalidParameter;
-            return false;
+    switch (GetIndexType(indexDesc)) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            if (!IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                return false;
+            }
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            //We have already checked this in IsCompatibleIndex
+            Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
+    
+            if (indexKeys.KeyColumns.size() > 1 && !IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                return false;
+            }
+    
+            const TString& indexColumnName = indexKeys.KeyColumns.back();
+            Y_ABORT_UNLESS(baseColumnTypes.contains(indexColumnName));
+            auto typeInfo = baseColumnTypes.at(indexColumnName);
+    
+            if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
+                return false;
+            }
+            break;
         }
-
-        const TString& indexColumnName = indexKeys.KeyColumns.back();
-        Y_ABORT_UNLESS(baseColumnTypes.contains(indexColumnName));
-        auto typeInfo = baseColumnTypes.at(indexColumnName);
-
-        if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
-            status = NKikimrScheme::EStatus::StatusInvalidParameter;
-            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
-            return false;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+            //We have already checked this in IsCompatibleIndex
+            Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
+    
+            if (indexKeys.KeyColumns.size() > 1) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                error = TStringBuilder() << "fulltext index can only have a single key text column";
+                return false;
+            }
+    
+            const TString& indexColumnName = indexKeys.KeyColumns.back();
+            Y_ABORT_UNLESS(baseColumnTypes.contains(indexColumnName));
+            auto typeInfo = baseColumnTypes.at(indexColumnName);
+    
+            // TODO: support utf-8 in fulltext index
+            if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
+                return false;
+            }
+            break;
         }
-    } else if (!IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
-        status = NKikimrScheme::EStatus::StatusInvalidParameter;
-        return false;
+        default:
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            error = InvalidIndexType(indexDesc.GetType());
+            return false;
     }
 
     if (implTableColumns.Keys.size() > schemeLimits.MaxTableKeyColumns) {

@@ -919,6 +919,24 @@ TCheckFunc KMeansTreeDescription(Ydb::Table::VectorIndexSettings_Metric metric,
     };
 }
 
+TCheckFunc SpecializedIndexDescription(const TString& proto) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        TString actual;
+        switch (record.GetPathDescription().GetTableIndex().GetSpecializedIndexDescriptionCase()) {
+        case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription:
+            actual = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings().ShortDebugString();
+            break;
+        case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription:
+            actual = record.GetPathDescription().GetTableIndex().GetFulltextIndexDescription().GetSettings().ShortDebugString();
+            break;
+        case NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
+            actual = "SPECIALIZEDINDEXDESCRIPTION_NOT_SET";
+            break;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(actual, proto);
+    };
+}
 
 TCheckFunc SequenceName(const TString& name) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {

@@ -8,7 +8,7 @@ ALTER TABLE old_table_name RENAME TO new_table_name;
 
 {% note info %}
 
-When choosing a name for the table, please consider the common [schema objects naming rules](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules)
+When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
 
 {% endnote %}
 

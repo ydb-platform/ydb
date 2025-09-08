@@ -23,7 +23,7 @@ AS <query>
 
 {% note info %}
 
-When choosing a name for the view, please consider the common [schema objects naming rules](../../../concepts/datamodel/cluster-namespace.md#object-naming-rules)
+When choosing a name for the view, consider the common [schema object naming rules](../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
 
 {% endnote %}
 

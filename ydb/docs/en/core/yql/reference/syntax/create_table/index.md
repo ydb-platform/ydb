@@ -69,7 +69,7 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
 
 {% note info %}
 
-When choosing a name for the table, please consider the common [schema objects naming rules](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules)
+When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
 
 {% endnote %}
 

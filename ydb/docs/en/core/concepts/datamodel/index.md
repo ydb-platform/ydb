@@ -14,9 +14,9 @@
 * [External tables](external_table.md)
 * [External data sources](external_data_source.md)
 
-Schema objects are placed within the [cluster namespace](cluster-namespace.md) and are named according to the common [naming rules](cluster-namespace.md) applied to all schema objects.
+Schema objects are placed within the [cluster namespace](cluster-namespace.md) and are named according to the common [naming rules](cluster-namespace.md) that apply to all schema objects.
 
-## See also {#see-also}
+## See Also {#see-also}
 
 - [{#T}](../index.md)
 - [{#T}](../topology.md)

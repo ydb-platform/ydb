@@ -320,7 +320,7 @@ private:
     bool CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx);
     bool IsQuotingEnabled() const;
     bool WaitingForPreviousBlobQuota() const;
-    bool WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 withSize = 0) const;
+    bool WaitingForSubDomainQuota(const ui64 withSize = 0) const;
     size_t GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request);
     std::pair<TInstant, TInstant> GetTime(const TUserInfo& userInfo, ui64 offset) const;
     ui32 NextChannel(bool isHead, ui32 blobSize);
@@ -522,7 +522,7 @@ public:
     void Bootstrap(const TActorContext& ctx);
 
     ui64 Size() const {
-        return CompactionBlobEncoder.GetSize();
+        return CompactionBlobEncoder.GetSize() + BlobEncoder.GetSize();
     }
 
     // The size of the data realy was persisted in the storage by the partition

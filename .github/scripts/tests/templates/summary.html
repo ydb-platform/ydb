@@ -678,6 +678,7 @@
         const buildPreset = "{{ build_preset }}";
         const branch = "{{ branch }}";
         const commitSha = "{{ commit_sha }}";
+        const testRunCommand = getTestRunCommand(full_name);
         const ownerAreaLabel = getOwnerAreaLabel(owner);
         
         const title = "Mute test " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
@@ -691,6 +692,7 @@
         body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
         body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
         
+        body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
         body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
         
         // Include logs if available

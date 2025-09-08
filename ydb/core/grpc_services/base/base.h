@@ -494,7 +494,8 @@ public:
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) = 0;
 };
 
-class IInternalRequestOpCtx : public IRequestOpCtx {
+// A marker class to distinguish requests that are sent inside the system (not initialized by the user)
+class IInternalRequestCtx {
 };
 
 class IRequestNoOpCtx : public IRequestCtx {

@@ -276,9 +276,10 @@ namespace NKikimr::NGRpcProxy::V1 {
         TPQGrpcSchemaBase(NGRpcService::IRequestOpCtx *request, const TString& topicPath)
             : TBase(request)
             , TActorBase(topicPath, this->Request_->GetDatabaseName().GetOrElse(""))
-            , InternalRequest(!!dynamic_cast<NGRpcService::IInternalRequestOpCtx*>(request))
+            , InternalRequest(!!dynamic_cast<NGRpcService::IInternalRequestCtx*>(request))
         {
         }
+
         TPQGrpcSchemaBase(NGRpcService::IRequestOpCtx* request)
             : TBase(request)
             , TActorBase(TBase::GetProtoRequest()->path(), this->Request_->GetDatabaseName().GetOrElse(""))

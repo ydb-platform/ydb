@@ -269,11 +269,13 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
                     .Index(indexName.Cast())
                     .Done();
             } else {
+                TKqpStreamLookupSettings settings;
+                settings.Strategy = EStreamLookupStrategyType::LookupRows;
                 readInput = Build<TKqlStreamLookupTable>(ctx, read.Pos())
                     .Table(read.Table())
                     .LookupKeys(lookupKeys)
                     .Columns(read.Columns())
-                    .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+                    .Settings(settings.BuildNode(ctx, read.Pos()))
                     .Done();
             }
         } else {

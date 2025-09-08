@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common_helper.h"
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/datashard/buffer_data.h>

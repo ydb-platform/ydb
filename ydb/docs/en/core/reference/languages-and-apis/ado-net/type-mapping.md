@@ -33,7 +33,7 @@ These are the return types when using `YdbCommand.ExecuteScalarAsync()`, `YdbDat
 
 ## Decimal { #decimal }
 
-Decimal is a parameterized {{ ydb-short-name }} type (see the [documentation for details](../../../../core/yql/reference/types/primitive.md#numeric)). `Precision` is the total number of significant digits; `Scale` is the number of digits after the decimal point.
+Decimal is a parameterized {{ ydb-short-name }} type (see the [documentation for details](../../../yql/reference/types/primitive.md#numeric)). `Precision` is the total number of significant digits; `Scale` is the number of digits after the decimal point.
 
 To pass a value with specific `Precision` and `Scale` (different from the default), set Precision and Scale on the YdbParameter. By default, `Decimal(22, 9)` is used.
 

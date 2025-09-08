@@ -71,6 +71,13 @@ struct TColumnShardHashV1Params {
     }
 };
 
+struct TShardKeyRanges;
+
+struct TShardRangesWithShardId {
+    TMaybe<ui64> ShardId;
+    const TShardKeyRanges* Ranges;
+};
+
 struct TShardKeyRanges {
     // ordered ranges and points
     TVector<TSerializedPointOrRange> Ranges;
@@ -230,6 +237,11 @@ struct TGraphMeta {
     NKikimrConfig::TTableServiceConfig::EChannelTransportVersion ChannelTransportVersion;
     TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
     bool CreateSuspended = false;
+    bool CheckDuplicateRows = false;
+    bool EnableParallelPointReadConsolidation = false;
+    bool ShardsResolved = false;
+    THashMap<NYql::NDq::TStageId, THashMap<ui64, TShardInfo>> SourceScanStageIdToParititions;
+    TMaybe<ui64> MaxBatchSize;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;
@@ -375,6 +387,7 @@ public:
     void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, const TMap<ui64, ui64>& shardIdToNodeId);
     void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot,
         ui32 scheduledTaskCount, const std::map<TString, TString>& secureParams);
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, const TMap<ui64, ui64>& shardIdToNodeId);
 
     void FillKqpTasksGraphStages(const TVector<IKqpGateway::TPhysicalTxData>& txs);
     void BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
@@ -416,7 +429,7 @@ private:
     ui32 GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 nodeId, bool enableShuffleElimination = false) const;
 
 private:
-    const ui32 NodeId;
+    const ui32 NodeId; // executer node id
     NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     THolder<TPartitionPruner> PartitionPruner;

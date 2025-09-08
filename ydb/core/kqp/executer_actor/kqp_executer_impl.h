@@ -79,13 +79,6 @@ inline bool IsDebugLogEnabled() {
            TlsActivationContext->LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::KQP_EXECUTER);
 }
 
-struct TShardRangesWithShardId {
-    TMaybe<ui64> ShardId;
-    const TShardKeyRanges* Ranges;
-};
-
-
-
 struct TStageScheduleInfo {
     double StageCost = 0.0;
     ui32 TaskCount = 0;
@@ -185,13 +178,15 @@ public:
         TasksGraph.GetMeta().Database = Database;
         TasksGraph.GetMeta().ChannelTransportVersion = executerConfig.TableServiceConfig.GetChannelTransportVersion();
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
+        TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
+        TasksGraph.GetMeta().EnableParallelPointReadConsolidation = executerConfig.MutableConfig->EnableParallelPointReadConsolidation.load();
+        if (BatchOperationSettings) {
+            TasksGraph.GetMeta().MaxBatchSize = BatchOperationSettings->MaxBatchSize;
+        }
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
-
-        CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
-        EnableParallelPointReadConsolidation = executerConfig.MutableConfig->EnableParallelPointReadConsolidation.load();
 
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
@@ -258,7 +253,7 @@ protected:
         auto& reply = *ev->Get();
 
         KqpShardsResolverId = {};
-        ShardsResolved = true;
+        TasksGraph.GetMeta().ShardsResolved = true;
 
         // TODO: count resolve time in CpuTime
 
@@ -986,7 +981,11 @@ protected:
                 if (buildFromSourceTasks) {
                     switch (stage.GetSources(0).GetTypeCase()) {
                         case NKqpProto::TKqpSource::kReadRangesSource: {
-                            if (auto partitionsCount = BuildScanTasksFromSource(stageInfo, limitTasksPerNode)) {
+                            if (EnableReadsMerge) {
+                                limitTasksPerNode = true;
+                                // TODO: intros.push_back("Using tasks count limit because of enabled reads merge");
+                            }
+                            if (auto partitionsCount = TasksGraph.BuildScanTasksFromSource(stageInfo, limitTasksPerNode, ShardIdToNodeId)) {
                                 sourceScanPartitionsCount += *partitionsCount;
                             } else {
                                 UnknownAffectedShardCount = true;
@@ -1141,315 +1140,6 @@ protected:
         } else {
             task.Meta.NodeId = resourceSnapshot[nodeOffset % resourceSnapshot.size()].GetNodeId();
             task.Meta.Type = TTaskMeta::TTaskType::Scan;
-        }
-    }
-
-    TVector<TVector<TShardRangesWithShardId>> DistributeShardsToTasks(TVector<TShardRangesWithShardId> shardsRanges, const size_t tasksCount, const TVector<NScheme::TTypeInfo>& keyTypes) {
-        if (IsDebugLogEnabled()) {
-            TStringBuilder sb;
-            sb << "Distrubiting shards to tasks: [";
-            for(size_t i = 0; i < shardsRanges.size(); i++) {
-                sb << "# " << i << ": " << shardsRanges[i].Ranges->ToString(keyTypes, *AppData()->TypeRegistry);
-            }
-
-            sb << " ].";
-            LOG_D(sb);
-        }
-
-        std::sort(std::begin(shardsRanges), std::end(shardsRanges), [&](const TShardRangesWithShardId& lhs, const TShardRangesWithShardId& rhs) {
-                return CompareBorders<true, true>(
-                    lhs.Ranges->GetRightBorder().first->GetCells(),
-                    rhs.Ranges->GetRightBorder().first->GetCells(),
-                    lhs.Ranges->GetRightBorder().second,
-                    rhs.Ranges->GetRightBorder().second,
-                    keyTypes) < 0;
-            });
-
-        // One shard (ranges set) can be assigned only to one task. Otherwise, we can break some optimizations like removing unnecessary shuffle.
-        TVector<TVector<TShardRangesWithShardId>> result(tasksCount);
-        size_t shardIndex = 0;
-        for (size_t taskIndex = 0; taskIndex < tasksCount; ++taskIndex) {
-            const size_t tasksLeft = tasksCount - taskIndex;
-            const size_t shardsLeft = shardsRanges.size() - shardIndex;
-            const size_t shardsPerCurrentTask = (shardsLeft + tasksLeft - 1) / tasksLeft;
-
-            for (size_t currentShardIndex = 0; currentShardIndex < shardsPerCurrentTask; ++currentShardIndex, ++shardIndex) {
-                result[taskIndex].push_back(shardsRanges[shardIndex]);
-            }
-        }
-        return result;
-    }
-
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode) {
-        auto& intros = stageInfo.Introspections;
-
-        if (EnableReadsMerge) {
-            limitTasksPerNode = true;
-            intros.push_back("Using tasks count limit because of enabled reads merge");
-        }
-
-        THashMap<ui64, std::vector<ui64>> nodeTasks;
-        THashMap<ui64, ui64> assignedShardsCount;
-
-        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-
-        bool singlePartitionedStage = stage.GetIsSinglePartition();
-
-        YQL_ENSURE(stage.GetSources(0).HasReadRangesSource());
-        YQL_ENSURE(stage.GetSources(0).GetInputIndex() == 0 && stage.SourcesSize() == 1);
-        for (auto& input : stage.inputs()) {
-            YQL_ENSURE(input.HasBroadcast());
-        }
-
-        auto& source = stage.GetSources(0).GetReadRangesSource();
-
-        const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-        const auto& keyTypes = tableInfo->KeyColumnTypes;
-
-        YQL_ENSURE(tableInfo->TableKind != NKikimr::NKqp::ETableKind::Olap);
-
-        auto columns = BuildKqpColumns(source, tableInfo);
-
-        const auto& snapshot = GetSnapshot();
-
-        TVector<ui64> createdTasksIds;
-        auto createNewTask = [&](
-                TMaybe<ui64> nodeId,
-                ui64 taskLocation,
-                TMaybe<ui64> shardId,
-                TMaybe<ui64> maxInFlightShards) -> TTask& {
-            auto& task = TasksGraph.AddTask(stageInfo);
-            task.Meta.Type = TTaskMeta::TTaskType::Scan;
-            if (nodeId) {
-                task.Meta.NodeId = *nodeId;
-            }
-
-            if (!nodeId || !ShardsResolved) {
-                YQL_ENSURE(!ShardsResolved);
-                task.Meta.ShardId = taskLocation;
-            }
-
-            const auto& stageSource = stage.GetSources(0);
-            auto& input = task.Inputs[stageSource.GetInputIndex()];
-            input.SourceType = NYql::KqpReadRangesSourceName;
-            input.ConnectionInfo = NYql::NDq::TSourceInput{};
-
-            // allocating source settings
-
-            input.Meta.SourceSettings = TasksGraph.GetMeta().Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
-            NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings = input.Meta.SourceSettings;
-            FillTableMeta(stageInfo, settings->MutableTable());
-
-            settings->SetIsTableImmutable(source.GetIsTableImmutable());
-
-            for (auto& keyColumn : keyTypes) {
-                auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn, "");
-                *settings->AddKeyColumnTypeInfos() = columnType.TypeInfo ?
-                    *columnType.TypeInfo :
-                    NKikimrProto::TTypeInfo();
-                settings->AddKeyColumnTypes(static_cast<ui32>(keyColumn.GetTypeId()));
-            }
-
-            for (auto& column : columns) {
-                auto* protoColumn = settings->AddColumns();
-                protoColumn->SetId(column.Id);
-                auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                protoColumn->SetType(columnType.TypeId);
-                protoColumn->SetNotNull(column.NotNull);
-                protoColumn->SetIsPrimary(column.IsPrimary);
-                if (columnType.TypeInfo) {
-                    *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
-                }
-                protoColumn->SetName(column.Name);
-            }
-
-            if (CheckDuplicateRows) {
-                for (auto& colName : tableInfo->KeyColumns) {
-                    const auto& tableColumn = tableInfo->Columns.at(colName);
-                    auto* protoColumn = settings->AddDuplicateCheckColumns();
-                    protoColumn->SetId(tableColumn.Id);
-                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(tableColumn.Type, tableColumn.TypeMod);
-                    protoColumn->SetType(columnType.TypeId);
-                    if (columnType.TypeInfo) {
-                        *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
-                    }
-                    protoColumn->SetName(colName);
-                }
-            }
-
-            if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) {
-                settings->SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
-            } else {
-                settings->SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
-            }
-
-            if (snapshot.IsValid()) {
-                settings->MutableSnapshot()->SetStep(snapshot.Step);
-                settings->MutableSnapshot()->SetTxId(snapshot.TxId);
-            }
-
-
-            if (Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED) {
-                settings->SetAllowInconsistentReads(true);
-            }
-
-            settings->SetReverse(source.GetReverse());
-            settings->SetSorted(source.GetSorted());
-
-            if (maxInFlightShards) {
-                settings->SetMaxInFlightShards(*maxInFlightShards);
-            }
-
-            if (shardId) {
-                settings->SetShardIdHint(*shardId);
-            }
-
-            if (!BatchOperationSettings.Empty()) {
-                settings->SetItemsLimit(BatchOperationSettings->MaxBatchSize);
-                settings->SetIsBatch(true);
-            } else {
-                ui64 itemsLimit = ExtractItemsLimit(stageInfo, source.GetItemsLimit(), Request.TxAlloc->HolderFactory,
-                Request.TxAlloc->TypeEnv);
-                settings->SetItemsLimit(itemsLimit);
-            }
-
-            auto self = static_cast<TDerived*>(this)->SelfId();
-            auto& lockTxId = TasksGraph.GetMeta().LockTxId;
-            if (lockTxId) {
-                settings->SetLockTxId(*lockTxId);
-                settings->SetLockNodeId(self.NodeId());
-            }
-
-            if (TasksGraph.GetMeta().LockMode) {
-                settings->SetLockMode(*TasksGraph.GetMeta().LockMode);
-            }
-
-            createdTasksIds.push_back(task.Id);
-            return task;
-        };
-
-        THashMap<ui64, TVector<ui64>> nodeIdToTasks;
-        THashMap<ui64, TVector<TShardRangesWithShardId>> nodeIdToShardKeyRanges;
-        Y_DEFER {
-            intros.push_back("Built scan tasks from source and shards to read for node");
-            for (const auto& [nodeId, tasks] : nodeIdToTasks) {
-                intros.push_back(ToString(nodeId) + " - " + ToString(tasks.size()) + ", " + ToString(nodeIdToShardKeyRanges.at(nodeId).size()));
-            }
-            intros.push_back("Total built scan tasks from source - " + ToString(createdTasksIds.size()));
-        };
-
-        auto addPartition = [&](
-            ui64 taskLocation,
-            TMaybe<ui64> nodeId,
-            TMaybe<ui64> shardId,
-            const TShardInfo& shardInfo,
-            TMaybe<ui64> maxInFlightShards = Nothing())
-        {
-            YQL_ENSURE(!shardInfo.KeyWriteRanges);
-
-            if (!nodeId) {
-                const auto nodeIdPtr = ShardIdToNodeId.FindPtr(taskLocation);
-                nodeId = nodeIdPtr ? TMaybe<ui64>{*nodeIdPtr} : Nothing();
-            }
-
-            YQL_ENSURE(!ShardsResolved || nodeId);
-            YQL_ENSURE(Stats);
-
-            if (shardId) {
-                Stats->AffectedShards.insert(*shardId);
-            }
-
-            if (limitTasksPerNode && ShardsResolved) {
-                const auto maxScanTasksPerNode = GetScanTasksPerNode(stageInfo, /* isOlapScan */ false, *nodeId);
-                auto& nodeTasks = nodeIdToTasks[*nodeId];
-                if (nodeTasks.size() < maxScanTasksPerNode) {
-                    const auto& task = createNewTask(nodeId, taskLocation, {}, maxInFlightShards);
-                    nodeTasks.push_back(task.Id);
-                }
-
-                nodeIdToShardKeyRanges[*nodeId].push_back(TShardRangesWithShardId{shardId, &*shardInfo.KeyReadRanges});
-            } else {
-                auto& task = createNewTask(nodeId, taskLocation, shardId, maxInFlightShards);
-                const auto& stageSource = stage.GetSources(0);
-                auto& input = task.Inputs[stageSource.GetInputIndex()];
-                NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings = input.Meta.SourceSettings;
-
-                shardInfo.KeyReadRanges->SerializeTo(settings);
-            }
-        };
-
-        auto fillRangesForTasks = [&]() {
-            for (const auto& [nodeId, shardsRanges] : nodeIdToShardKeyRanges) {
-                const auto& tasks = nodeIdToTasks.at(nodeId);
-
-                const auto rangesDistribution = DistributeShardsToTasks(shardsRanges, tasks.size(), keyTypes);
-                YQL_ENSURE(rangesDistribution.size() == tasks.size());
-
-                for (size_t taskIndex = 0; taskIndex < tasks.size(); ++taskIndex) {
-                    const auto taskId = tasks[taskIndex];
-                    auto& task = TasksGraph.GetTask(taskId);
-                    const auto& stageSource = stage.GetSources(0);
-                    auto& input = task.Inputs[stageSource.GetInputIndex()];
-                    NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings = input.Meta.SourceSettings;
-
-                    const auto& shardsRangesForTask = rangesDistribution[taskIndex];
-
-                    if (shardsRangesForTask.size() == 1 && shardsRangesForTask[0].ShardId) {
-                        settings->SetShardIdHint(*shardsRangesForTask[0].ShardId);
-                    }
-
-                    bool hasRanges = false;
-                    for (const auto& shardRanges : shardsRangesForTask) {
-                        hasRanges |= shardRanges.Ranges->HasRanges();
-                    }
-
-                    for (const auto& shardRanges : shardsRangesForTask) {
-                        shardRanges.Ranges->SerializeTo(settings, !hasRanges);
-                    }
-                }
-            }
-        };
-
-        bool isFullScan = false;
-        const THashMap<ui64, TShardInfo> partitions = SourceScanStageIdToParititions.empty()
-            ? PartitionPruner.Prune(source, stageInfo, isFullScan)
-            : SourceScanStageIdToParititions.at(stageInfo.Id);
-
-        if (isFullScan && !source.HasItemsLimit()) {
-            Counters->Counters->FullScansExecuted->Inc();
-        }
-
-        bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
-        bool isParallelPointRead = EnableParallelPointReadConsolidation && !isSequentialInFlight && !source.GetSorted() && IsParallelPointReadPossible(partitions);
-
-        if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead || singlePartitionedStage)) {
-            auto [startShard, shardInfo] = PartitionPruner.MakeVirtualTablePartition(source, stageInfo);
-
-            YQL_ENSURE(Stats);
-
-            for (auto& [shardId, _] : partitions) {
-                Stats->AffectedShards.insert(shardId);
-            }
-
-            TMaybe<ui64> inFlightShards = Nothing();
-            if (isSequentialInFlight) {
-                inFlightShards = source.GetSequentialInFlightShards();
-            }
-
-            if (shardInfo.KeyReadRanges) {
-                const TMaybe<ui64> nodeId = (isParallelPointRead || singlePartitionedStage) ? TMaybe<ui64>{SelfId().NodeId()} : Nothing();
-                addPartition(startShard, nodeId, {}, shardInfo, inFlightShards);
-                fillRangesForTasks();
-                return (isParallelPointRead || singlePartitionedStage) ? TMaybe<size_t>(partitions.size()) : Nothing();
-            } else {
-                return 0;
-            }
-        } else {
-            for (auto& [shardId, shardInfo] : partitions) {
-                addPartition(shardId, {}, shardId, shardInfo, {});
-            }
-            fillRangesForTasks();
-            return partitions.size();
         }
     }
 
@@ -2036,8 +1726,6 @@ protected:
     ui64 TxId = 0;
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
 
-    bool ShardsResolved = false;
-
     TActorId KqpTableResolverId;
     TActorId KqpShardsResolverId;
 
@@ -2076,9 +1764,6 @@ protected:
     bool UnknownAffectedShardCount = false;
 
     THashMap<ui64, TActorId> ResultChannelToComputeActor;
-    THashMap<NYql::NDq::TStageId, THashMap<ui64, TShardInfo>> SourceScanStageIdToParititions;
-
-    bool CheckDuplicateRows = false;
 
     ui32 StatementResultIndex;
 
@@ -2097,8 +1782,6 @@ protected:
     ui64 StatFinishInflightBytes = 0;
 
     TMaybe<NBatchOperations::TSettings> BatchOperationSettings;
-
-    bool EnableParallelPointReadConsolidation = false;
 
     bool AccountDefaultPoolInScheduler = false;
 

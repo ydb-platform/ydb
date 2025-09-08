@@ -63,6 +63,8 @@ namespace NKafka {
             KAFKA_LOG_D("Bootstrapping actor for transactional producer. Sending init table request to KQP.");
             if (Context->DatabasePath == AppData(ctx)->TenantName) {
                 Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
+            } else {
+                Kqp->SendCreateSessionRequest(ctx);
             }
             Become(&TKafkaInitProducerIdActor::StateWork);
         } else {

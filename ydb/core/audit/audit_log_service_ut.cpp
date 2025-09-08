@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
 
         auto waitAndCheckLog = [&]() {
             const TString log = test.WaitAuditLog();
-            UNIT_ASSERT_STRING_CONTAINS(log, "component=audit, subject=metadata@system, operation=HEARTBEAT");
+            UNIT_ASSERT_STRING_CONTAINS(log, "component=audit, subject=metadata@system, sanitized_token={none}, operation=HEARTBEAT, status=SUCCESS");
         };
 
         waitAndCheckLog();

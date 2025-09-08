@@ -27,7 +27,9 @@ public:
         AUDIT_LOG(
             AUDIT_PART("component", "audit")
             AUDIT_PART("subject", "metadata@system")
+            AUDIT_PART("sanitized_token", "{none}")
             AUDIT_PART("operation", "HEARTBEAT")
+            AUDIT_PART("status", "SUCCESS")
         );
     }
 

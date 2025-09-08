@@ -1940,10 +1940,9 @@ THashSet<ui64> TKqpTasksGraph::BuildDatashardTasks(TStageInfo& stageInfo) {
                 auto partitions = PartitionPruner->Prune(op, stageInfo, isFullScan);
                 auto readSettings = ExtractReadSettings(op, stageInfo, TxAlloc->HolderFactory, TxAlloc->TypeEnv);
 
-                // TODO:
-                // if (!readSettings.ItemsLimit && isFullScan) {
-                //     Counters->Counters->FullScansExecuted->Inc();
-                // }
+                if (!readSettings.ItemsLimit && isFullScan) {
+                    Counters->Counters->FullScansExecuted->Inc();
+                }
 
                 for (auto& [shardId, shardInfo] : partitions) {
                     YQL_ENSURE(!shardInfo.KeyWriteRanges);
@@ -2126,10 +2125,9 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
         const bool isOlapScan = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange);
         auto readSettings = ExtractReadSettings(op, stageInfo, TxAlloc->HolderFactory, TxAlloc->TypeEnv);
 
-        // TODO:
-        // if (isFullScan && readSettings.ItemsLimit) {
-        //     Counters->Counters->FullScansExecuted->Inc();
-        // }
+        if (isFullScan && readSettings.ItemsLimit) {
+            Counters->Counters->FullScansExecuted->Inc();
+        }
 
         if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) {
             stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(),
@@ -2673,10 +2671,9 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         ? PartitionPruner->Prune(source, stageInfo, isFullScan)
         : GetMeta().SourceScanStageIdToParititions.at(stageInfo.Id);
 
-    // TODO:
-    // if (isFullScan && !source.HasItemsLimit()) {
-    //     Counters->Counters->FullScansExecuted->Inc();
-    // }
+    if (isFullScan && !source.HasItemsLimit()) {
+        Counters->Counters->FullScansExecuted->Inc();
+    }
 
     bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
     bool isParallelPointRead = GetMeta().EnableParallelPointReadConsolidation && !isSequentialInFlight && !source.GetSorted() && IsParallelPointReadPossible(partitions);
@@ -2712,11 +2709,13 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
     }
 }
 
-TKqpTasksGraph::TKqpTasksGraph(ui32 nodeId, const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings)
+TKqpTasksGraph::TKqpTasksGraph(ui32 nodeId, const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
+    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings, const TKqpRequestCounters::TPtr& counters)
     : NodeId(nodeId)
     , TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
     , PartitionPruner(MakeHolder<TPartitionPruner>(txAlloc->HolderFactory, txAlloc->TypeEnv))
+    , Counters(counters)
 {}
 
 TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const

@@ -379,7 +379,8 @@ using TTask = NYql::NDq::TTask<TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskO
 class TKqpTasksGraph : public NYql::NDq::TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskOutputMeta> {
 public:
     explicit TKqpTasksGraph(ui32 nodeId, const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
-        const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings);
+        const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
+        const TKqpRequestCounters::TPtr& counters);
 
     void BuildSysViewScanTasks(TStageInfo& stageInfo);
     bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
@@ -433,6 +434,7 @@ private:
     NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     THolder<TPartitionPruner> PartitionPruner;
+    TKqpRequestCounters::TPtr Counters;
 };
 
 void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta);

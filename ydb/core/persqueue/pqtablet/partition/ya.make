@@ -27,6 +27,7 @@ SRCS(
 PEERDIR(
     contrib/libs/fmt
     ydb/library/actors/core
+    ydb/core/backup/impl
     ydb/core/base
     ydb/core/engine/minikql
     ydb/core/persqueue/events

@@ -6,27 +6,6 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/fmt
-    ydb/library/actors/core
-    library/cpp/html/pcdata
-    library/cpp/json
-    ydb/core/backup/impl
-    ydb/core/base
-    ydb/core/engine/minikql
-    ydb/core/keyvalue
-    ydb/core/kqp/common
-    ydb/core/metering
-    ydb/core/persqueue/config
-    ydb/core/persqueue/events
-    #ydb/core/protos
-    #ydb/library/logger
-    #ydb/library/persqueue/counter_time_keeper
-    #ydb/library/persqueue/topic_parser
-    #ydb/library/protobuf_printer
-    #ydb/public/lib/base
-    #ydb/public/sdk/cpp/src/client/persqueue_public
-    #ydb/library/dbgtrace
-
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/fetcher
     ydb/core/persqueue/public/list_topics
@@ -34,7 +13,6 @@ PEERDIR(
     ydb/core/persqueue/pqrb
     ydb/core/persqueue/pqtablet
     ydb/core/persqueue/writer
-
 )
 
 END()

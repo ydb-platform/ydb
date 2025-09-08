@@ -4,6 +4,7 @@
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/util/address_classifier.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <util/generic/is_in.h>
@@ -96,7 +97,10 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
         return;
     }
 
-    auto remoteAddress = ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
+    TString remoteAddress = ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
+    if (remoteAddress.empty()) {
+        remoteAddress = NKikimr::NAddressClassifier::ExtractAddress(request->Address->ToString());
+    }
 
     AddAuditLogPart("component", MONITORING_COMPONENT_NAME);
     AddAuditLogPart("remote_address", remoteAddress);

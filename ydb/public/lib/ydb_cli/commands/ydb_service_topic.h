@@ -258,7 +258,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui64> BatchSize_;
         TMaybe<ui64> BatchMessagesCount_;
         TMaybe<TString> MessageGroupId_;
-        TMaybe<ui32> MessagesWaitTimeoutSeconds_;
+        TMaybe<TDuration> MessagesWaitTimeout_;
 
         ui64 MessageSizeLimit_ = 0;
         void ParseMessageSizeLimit();
@@ -266,6 +266,5 @@ namespace NYdb::NConsoleClient {
 
     private:
         NTopic::TWriteSessionSettings PrepareWriteSessionSettings();
-        TMaybe<TDuration> GetMessagesWaitTimeout() const;
     };
 } // namespace NYdb::NConsoleClient

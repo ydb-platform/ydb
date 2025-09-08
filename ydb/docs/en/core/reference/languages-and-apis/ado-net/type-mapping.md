@@ -8,28 +8,28 @@ The following shows the mappings used when reading values.
 
 These are the return types when using `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()`, and similar methods.
 
-| {{ ydb-short-name }} type     | .NET type                                |
-|-------------------------------|------------------------------------------|
-| `Bool`                        | `bool`                                   |
-| `Text` (synonym of `Utf8`)    | `string`                                 |
-| `Bytes` (synonym of `String`) | `byte[]`                                 |
-| `Uint8`                       | `byte`                                   |
-| `Uint16`                      | `ushort`                                 |
-| `Uint32`                      | `uint`                                   |
-| `Uint64`                      | `ulong`                                  |
-| `Int8`                        | `sbyte`                                  |
-| `Int16`                       | `short`                                  |
-| `Int32`                       | `int`                                    |
-| `Int64`                       | `long`                                   |
-| `Float`                       | `float`                                  |
-| `Double`                      | `double`                                 |
-| `Date`                        | `DateTime`                               |
-| `Datetime`                    | `DateTime`                               |
-| `Timestamp`                   | `DateTime`                               |
-| `Decimal`                     | [cм. раздел](./type-mapping.md/#decimal) |
-| `Json`                        | `string`                                 |
-| `JsonDocument`                | `string`                                 |
-| `Yson`                        | `byte[]`                                 |
+| {{ ydb-short-name }} type     | .NET type                                             |
+|-------------------------------|-------------------------------------------------------|
+| `Bool`                        | `bool`                                                |
+| `Text` (synonym of `Utf8`)    | `string`                                              |
+| `Bytes` (synonym of `String`) | `byte[]`                                              |
+| `Uint8`                       | `byte`                                                |
+| `Uint16`                      | `ushort`                                              |
+| `Uint32`                      | `uint`                                                |
+| `Uint64`                      | `ulong`                                               |
+| `Int8`                        | `sbyte`                                               |
+| `Int16`                       | `short`                                               |
+| `Int32`                       | `int`                                                 |
+| `Int64`                       | `long`                                                |
+| `Float`                       | `float`                                               |
+| `Double`                      | `double`                                              |
+| `Date`                        | `DateTime`                                            |
+| `Datetime`                    | `DateTime`                                            |
+| `Timestamp`                   | `DateTime`                                            |
+| `Decimal`                     | [see the Decimal section](./type-mapping.md/#decimal) |
+| `Json`                        | `string`                                              |
+| `JsonDocument`                | `string`                                              |
+| `Yson`                        | `byte[]`                                              |
 
 ## Decimal { #decimal }
 

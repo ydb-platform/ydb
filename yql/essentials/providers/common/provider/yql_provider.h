@@ -178,23 +178,6 @@ struct TPgObjectSettings
         , IfExists(std::move(ifExists)) {}
 };
 
-struct TWriteSecretSettings {
-    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
-    NNodes::TMaybeNode<NNodes::TCoAtom> Value;
-    NNodes::TMaybeNode<NNodes::TCoAtom> InheritPermissions;
-
-    TWriteSecretSettings(
-        NNodes::TMaybeNode<NNodes::TCoAtom>&& mode,
-        NNodes::TMaybeNode<NNodes::TCoAtom>&& value,
-        NNodes::TMaybeNode<NNodes::TCoAtom>&& inheritPermissions
-    )
-        : Mode(std::move(mode))
-        , Value(std::move(value))
-        , InheritPermissions(std::move(inheritPermissions))
-    {
-    }
-};
-
 const TStructExprType* BuildCommonTableListType(TExprContext& ctx);
 
 TExprNode::TPtr BuildTypeExpr(TPositionHandle pos, const TTypeAnnotationNode& ann, TExprContext& ctx);
@@ -220,8 +203,6 @@ TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx);
 TPgObjectSettings ParsePgObjectSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TWriteSequenceSettings ParseSequenceSettings(NNodes::TExprList node, TExprContext& ctx);
-
-TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TString FullTableName(const TStringBuf& cluster, const TStringBuf& table);
 

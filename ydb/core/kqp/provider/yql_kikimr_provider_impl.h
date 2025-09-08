@@ -271,6 +271,23 @@ struct TWriteBackupCollectionSettings {
     {}
 };
 
+struct TWriteSecretSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TCoAtom> Value;
+    NNodes::TMaybeNode<NNodes::TCoAtom> InheritPermissions;
+
+    TWriteSecretSettings(
+        NNodes::TMaybeNode<NNodes::TCoAtom>&& mode,
+        NNodes::TMaybeNode<NNodes::TCoAtom>&& value,
+        NNodes::TMaybeNode<NNodes::TCoAtom>&& inheritPermissions
+    )
+        : Mode(std::move(mode))
+        , Value(std::move(value))
+        , InheritPermissions(std::move(inheritPermissions))
+    {
+    }
+};
+
 TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
@@ -348,5 +365,7 @@ TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ct
 TString FillAuthProperties(THashMap<TString, TString>& properties, const TExternalSource& externalSource);
 
 TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(NNodes::TExprList node, TExprContext& ctx);
+
+TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& ctx);
 
 } // namespace NYql

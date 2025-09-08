@@ -451,33 +451,6 @@ TWriteSequenceSettings ParseSequenceSettings(NNodes::TExprList node, TExprContex
     return ret;
 }
 
-TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-    TMaybeNode<TCoAtom> mode;
-    TMaybeNode<TCoAtom> value;
-    TMaybeNode<TCoAtom> inheritPermissions;
-
-    for (auto child : node) {
-        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
-            auto tuple = maybeTuple.Cast();
-            auto name = tuple.Name().Value();
-            if (name == "mode") {
-                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
-                mode = tuple.Value().Cast<TCoAtom>();
-            } else if (name == "value") {
-                // TODO(yurikiselev): support parsing from declare
-                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
-                value = tuple.Value().Cast<TCoAtom>();
-            } else if (name == "inherit_permissions") {
-                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
-                inheritPermissions = tuple.Value().Cast<TCoAtom>();
-            }
-        }
-    }
-
-    return TWriteSecretSettings(std::move(mode), std::move(value), std::move(inheritPermissions));
-}
-
 TWriteTopicSettings ParseWriteTopicSettings(TExprList node, TExprContext& ctx) {
     Y_UNUSED(ctx);
     TMaybeNode<TCoAtom> mode;

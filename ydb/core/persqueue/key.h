@@ -1,6 +1,6 @@
 #pragma once
 
-#include "partition_id.h"
+#include <ydb/core/persqueue/common/partition_id.h>
 
 #include <ydb/core/persqueue/public/key.h>
 

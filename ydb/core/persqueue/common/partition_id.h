@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/write_id.h>
-#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
+#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h> // TODO remove include - wrong dependency
 
 #include <util/generic/maybe.h>
 #include <util/stream/output.h>

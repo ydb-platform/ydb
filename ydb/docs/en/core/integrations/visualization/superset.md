@@ -1,40 +1,40 @@
 # Apache Superset
 
-[Apache Superset](https://superset.apache.org/) is a modern data exploration and data visualization platform. This article will explain how to build visualizations on top of the data stored in YDB.
+[Apache Superset](https://superset.apache.org/) is a modern data exploration and visualization platform. This article explains how to create visualizations using data stored in {{ ydb-short-name }}.
 
 ## Installation of dependencies {#prerequisites}
 
-To work with {{ ydb-short-name }} via Superset, you need to install the [ydb-sqlalchemy](https://pypi.org/project/ydb-sqlalchemy) driver.
+To connect to {{ ydb-short-name }} from Superset, install the [ydb-sqlalchemy](https://pypi.org/project/ydb-sqlalchemy) driver.
 
-The installation method depends on how Superset is set up. For detailed guidance, refer to the [official documentation](https://superset.apache.org/docs/configuration/databases/#installing-drivers-in-docker-images).
+The installation method depends on your Superset setup. For detailed instructions, see the [official documentation](https://superset.apache.org/docs/configuration/databases/#installing-drivers-in-docker-images).
 
 ## Adding a database connection to {{ ydb-short-name }} {#add-database-connection}
 
 There are two ways to connect to {{ ydb-short-name }}:
 
-1. Native connection using sqlalchemy driver (starting from version 5.0.0)
+1. Native connection using the SQLAlchemy driver (starting from version 5.0.0)
 1. Connect using the PostgreSQL wire protocol
 
 It is recommended to use a native connection whenever possible.
 
-### Native connection using sqlalchemy driver
+### Native connection using SQLAlchemy driver
 
 To connect to {{ ydb-short-name }} from Apache Superset **version 5.0.0 and higher**, follow these steps:
 
 1. In the Apache Superset toolbar, hover over **Settings** and select **Database Connections**.
 1. Click the **+ DATABASE** button.
 
-     The **Connect a database** wizard will appear.
+    The **Connect a database** wizard will appear.
 
-1. In **Step 1** of the wizard, choose **YDB** from **Supported databases** list. If the **YDB** option is not available, make sure that all the steps from [prerequisites](#prerequisites) are completed.
+1. In **Step 1** of the wizard, choose **YDB** from the **Supported databases** list. If the **YDB** option is not available, make sure that all the steps from [prerequisites](#prerequisites) are completed.
 1. In **Step 2** of the wizard, enter the {{ ydb-short-name }} credentials in the corresponding fields:
 
     * **Display Name**. The {{ ydb-short-name }} connection name in Apache Superset.
-    * **SQLAlchemy URI**. The string like `ydb://{host}:{port}/{database_name}`, where **host** and **port** are parts of [endpoint](https://ydb.tech/docs/en/concepts/connect#endpoint) of the {{ ydb-short-name }} cluster to which the connection will be made, and **database_name** - the path to the [database](../../concepts/glossary.md#database).
+    * **SQLAlchemy URI**. A string in the format `ydb://{host}:{port}/{database_name}`, where **host** and **port** are parts of the [endpoint](../../concepts/connect.md#endpoint) of the {{ ydb-short-name }} cluster to which the connection will be made, and **database_name** is the path to the [database](../../concepts/glossary.md#database).
 
     ![](_assets/superset-ydb-connection-details.png =400x)
 
-1. Indeed, to provide additional security, you can specify credentials parameters in the `Secure Extra` field at `Advanced / Security` tab.
+1. To enhance security, you can specify credentials parameters in the **Secure Extra** field under the **Advanced / Security** tab.
 
     Define the parameters as follows:
 
@@ -100,7 +100,7 @@ To connect to {{ ydb-short-name }} from Apache Superset using the PostgreSQL wir
 1. In **Step 1** of the wizard, click the **PostgreSQL** button.
 1. In **Step 2** of the wizard, enter the {{ ydb-short-name }} credentials in the corresponding fields:
 
-    * **HOST**. The [endpoint](https://ydb.tech/docs/en/concepts/connect#endpoint) of the {{ ydb-short-name }} cluster to which the connection will be made.
+    * **HOST**. The [endpoint](../../concepts/connect.md#endpoint) of the {{ ydb-short-name }} cluster to connect to.
     * **PORT**. The port of the {{ ydb-short-name }} endpoint.
     * **DATABASE NAME**. The path to the [database](../../concepts/glossary.md#database) in the {{ ydb-short-name }} cluster where queries will be executed.
     * **USERNAME**. The login for connecting to the {{ ydb-short-name }} database.

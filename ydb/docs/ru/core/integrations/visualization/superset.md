@@ -1,23 +1,23 @@
 # Apache Superset
 
-[Apache Superset](https://superset.apache.org/) — это современная платформа для анализа и визуализации данных. В данной статье будет рассказано, как строить визуализации поверх данных, хранящихся в YDB.
+[Apache Superset](https://superset.apache.org/) — современная платформа для анализа и визуализации данных. В этой статье описано, как создавать визуализации на основе данных, хранящихся в {{ ydb-short-name }}.
 
 ## Установка необходимых зависимостей {#prerequisites}
 
 Для работы с {{ ydb-short-name }} необходимо установить драйвер [ydb-sqlalchemy](https://pypi.org/project/ydb-sqlalchemy).
 
-В зависимости от инсталляции Superset сделать это можно разными способами, обратитесь к [официальной документации](https://superset.apache.org/docs/configuration/databases/#installing-drivers-in-docker-images) за дополнительной информацией.
+Способ установки зависит от способа развёртывания Superset. Дополнительную информацию см. в [официальной документации Superset](https://superset.apache.org/docs/configuration/databases/#installing-drivers-in-docker-images).
 
 ## Создание подключения к {{ ydb-short-name }} {#add-database-connection}
 
 Подключение к {{ ydb-short-name }} доступно в двух вариантах:
 
-1. Нативное подключение с помощью sqlalchemy драйвера (начиная с версии 5.0.0)
-1. Подключение с использованием сетевого протокола PostgreSQL
+1. Нативное подключение с помощью SQLAlchemy-драйвера (начиная с версии 5.0.0);
+1. Подключение с использованием сетевого протокола PostgreSQL.
 
 Рекомендуется использовать нативное подключение, когда это возможно.
 
-### Нативное подключение с помощью sqlalchemy драйвера
+### Нативное подключение с помощью SQLAlchemy-драйвера
 
 Чтобы создать подключение к {{ ydb-short-name }} из Apache Superset **версии 5.0.0 и выше**, выполните следующие шаги:
 
@@ -26,15 +26,15 @@
 
     Откроется окно мастера **Connect a database**.
 
-1. На первом шаге мастера выберите **YDB** из списка **Supported databases**. Если опция **YDB** недоступна, проверьте, что  [установлены всё необходимое](#prerequisites).
+1. На первом шаге мастера выберите **YDB** из списка **Supported databases**. Если опция **YDB** недоступна, убедитесь, что [установлены все необходимые компоненты](#prerequisites).
 1. На втором шаге мастера введите данные для подключения к {{ ydb-short-name }} в следующие поля:
 
-    * **Display Name** — наименование соединения с {{ ydb-short-name }} в Apache Superset.
-    * **SQLAlchemy URI** — строка вида `ydb://{host}:{port}/{database_name}`, где **host** и **port** это соответствующие значения **host** и **port** из [эндпоинта](../../concepts/connect.md#endpoint) кластера {{ ydb-short-name }}, к которому осуществляется подключение, **database_name** - путь к [базе данных](../../concepts/glossary.md#database)
+    * **Display Name** — наименование соединения с {{ ydb-short-name }} в Apache Superset;
+    * **SQLAlchemy URI** — строка вида `ydb://{host}:{port}/{database_name}`, где **host** и **port** — соответствующие значения из [эндпоинта](../../concepts/connect.md#endpoint) кластера {{ ydb-short-name }}, **database_name** — путь к [базе данных](../../concepts/glossary.md#database).
 
     ![](_assets/superset-ydb-connection-details.png =400x)
 
-1. Опцонально, с помощью поля `Secure Extra` во вкладке `Advanced / Security` возможно указать параметры аутентификации.
+1. Опционально, с помощью поля `Secure Extra` на вкладке `Advanced / Security` можно указать параметры аутентификации.
 
     Определите параметры следующим образом:
 

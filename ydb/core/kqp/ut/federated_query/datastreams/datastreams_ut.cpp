@@ -668,6 +668,70 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CancelScriptExecution(scriptExecutionOperation);
     }
 
+    Y_UNIT_TEST_F(ReadTopicWithColumnOrder, TStreamingTestFixture) {
+        constexpr char topicName[] = "readTopicWithColumnOrder";
+        CreateTopic(topicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        const auto op = ExecScript(fmt::format(R"(
+            PRAGMA OrderedColumns;
+            SELECT * FROM `{source}`.`{topic}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    key String NOT NULL,
+                    value String NOT NULL
+                )
+            ) LIMIT 1;
+
+            SELECT * FROM `{source}`.`{topic}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    value String NOT NULL,
+                    key String NOT NULL
+                )
+            ) LIMIT 1;
+            )",
+            "source"_a=pqSourceName,
+            "topic"_a=topicName
+        ));
+
+        WriteTopicMessage(topicName, R"({"key":"key1", "value": "value1"})");
+
+        CheckScriptResult(op, 2, 1, [](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
+        }, 0);
+
+        CheckScriptResult(op, 2, 1, [](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "value1");
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "key1");
+        }, 1);
+    }
+
+    Y_UNIT_TEST_F(ReadTopicWithDefaultSchema, TStreamingTestFixture) {
+        constexpr char topicName[] = "readTopicWithDefaultSchema";
+        CreateTopic(topicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        const auto op = ExecScript(fmt::format(R"(
+            PRAGMA OrderedColumns;
+            SELECT * FROM `{source}`.`{topic}` LIMIT 1;
+            )",
+            "source"_a=pqSourceName,
+            "topic"_a=topicName
+        ));
+
+        WriteTopicMessage(topicName, R"({"key":"key1", "value": "value1"})");
+
+        CheckScriptResult(op, 1, 1, [](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), R"({"key":"key1", "value": "value1"})");
+        });
+    }
+
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphBasic, TStreamingTestFixture) {
         constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph";
         CreateBucket(writeBucket);

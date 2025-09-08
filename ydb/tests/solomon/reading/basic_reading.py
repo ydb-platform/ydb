@@ -1,3 +1,4 @@
+from datetime import timezone
 import logging
 
 from .base import SolomonReadingTestBase
@@ -11,7 +12,7 @@ class TestBasicReading(SolomonReadingTestBase):
         if error is not None:
             return False, error
 
-        timestamps = [int(row["ts"].timestamp()) for row in result[0].rows]
+        timestamps = [int(row["ts"].replace(tzinfo=timezone.utc).timestamp()) for row in result[0].rows]
         values = [int(row["value"]) for row in result[0].rows]
 
         downsampled_timestamps = [ts for ts in self.basic_reading_timestamps if ts % 15 == 0]

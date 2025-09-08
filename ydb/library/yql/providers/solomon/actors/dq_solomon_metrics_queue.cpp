@@ -245,13 +245,7 @@ private:
         for (const auto& metric : response.Result.Metrics) {
             NSo::MetricQueue::TMetric protoMetric;
             protoMetric.SetType(metric.Type);
-            auto& protoSelectors = *protoMetric.MutableSelectors()->MutableSelectors();
-            for (const auto& [key, selector] : metric.Selectors) {
-                NYql::NSo::MetricQueue::TSelector protoSelector;
-                protoSelector.SetOperator(selector.Op);
-                protoSelector.SetValue(selector.Value);
-                protoSelectors.emplace(key, std::move(protoSelector));
-            }
+            NSo::SelectorsToProto(metric.Selectors, *protoMetric.MutableSelectors());
             Metrics.emplace_back(std::move(protoMetric));
         }
         return true;

@@ -57,6 +57,11 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
     auto& replicationConfig = *desc.MutableReplicationConfig();
     replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
     replicationConfig.SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
+
+    // Set incremental backup config so DataShard can distinguish between async replica and incremental backup
+    auto& incrementalBackupConfig = *desc.MutableIncrementalBackupConfig();
+    incrementalBackupConfig.SetMode(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP);
+    incrementalBackupConfig.SetConsistency(NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_WEAK);
     
     for (auto& column : *desc.MutableColumns()) {
         column.SetNotNull(false);

@@ -4,10 +4,9 @@
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/persqueue/blob.h>
-#include <ydb/core/persqueue/blob_refcounter.h>
+#include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/key.h>
-#include <ydb/core/persqueue/metering_sink.h>
+#include <ydb/core/persqueue/common/metering.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/percentile_counter.h>
 #include <ydb/core/persqueue/sourceid_info.h>

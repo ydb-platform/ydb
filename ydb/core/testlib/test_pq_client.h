@@ -3,7 +3,7 @@
 
 #include <ydb/core/client/flat_ut_client.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>

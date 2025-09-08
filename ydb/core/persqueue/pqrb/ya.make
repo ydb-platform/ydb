@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/engine/minikql
     ydb/core/persqueue/events
+    ydb/core/persqueue/common
     ydb/core/persqueue/partition_key_range
     ydb/library/logger
 )
@@ -26,8 +27,4 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
-#    ut
-#    dread_cache_service/ut
-#    ut/slow
-#    ut/ut_with_sdk
 )

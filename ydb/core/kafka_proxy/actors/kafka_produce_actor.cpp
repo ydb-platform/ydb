@@ -4,7 +4,7 @@
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 #include <util/string/join.h>

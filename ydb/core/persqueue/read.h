@@ -1,6 +1,6 @@
 #pragma once
 
-#include "partition.h"
+#include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include "pq_l2_service.h"
 #include "cache_eviction.h"
 

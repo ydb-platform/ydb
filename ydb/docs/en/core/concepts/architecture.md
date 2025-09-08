@@ -2,7 +2,7 @@
 
 ## Introduction
 
-{{ ydb-short-name }} is a horizontally scalable, distributed, and fault-tolerant database system designed for high performance and handling data volumes up to hundreds of petabytes. It supports both single-datacenter and geographically distributed (cross-datacenter) deployments across clusters of thousands of servers. A typical cluster node can process tens of thousands of queries per second.
+{{ ydb-short-name }} is a horizontally scalable, distributed, and fault-tolerant database system designed as a versatile platform for high performance — for example, a typical cluster node can process tens of thousands of queries per second. The system supports both single-datacenter and geographically distributed (cross-datacenter) configurations, ranging from small clusters with a few nodes to large-scale deployments of thousands of servers capable of efficiently handling hundreds of petabytes of data.
 
 ### Key Features and Capabilities of {{ ydb-short-name }}
 
@@ -29,7 +29,7 @@
 
 {{ ydb-short-name }} is a versatile platform suitable for a wide range of scenarios requiring scalability, reliability, and flexibility. It can serve as a standalone database or as part of a distributed architecture. Typical use cases include:
 
-- Replacing NoSQL systems when **strong consistency or multi-row/multi-table transactions** are required. {{ ydb-short-name }} combines the scalability of NoSQL with the consistency and integrity guarantees of relational databases.
+- In distributed systems requiring **strong consistency or support for multi-row/multi-table transactions**. {{ ydb-short-name }} combines NoSQL-like scalability with the consistency and integrity guarantees of relational databases.
 - Systems that store and process **very large datasets** and require nearly unlimited horizontal scaling (production clusters with thousands of nodes, handling millions of RPS and petabytes of data).
 - High-load systems relying on **manual sharding** of relational databases. {{ ydb-short-name }} simplifies architecture by eliminating complex sharding logic and manual orchestration.
 - Systems with **low or unpredictable workloads** — use the **serverless mode** with on-demand scaling, including scaling down to zero.

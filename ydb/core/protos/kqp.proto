@@ -649,6 +649,7 @@ message TEvStartKqpTasksRequest {
     optional NKikimrDataEvents.ELockMode LockMode = 19;
     optional string UserToken = 20;
     optional bool SupportShuttingDown = 21 [default = true];
+    
     reserved 15;
     reserved 16;
     reserved 18;

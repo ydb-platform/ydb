@@ -191,6 +191,7 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
     }
 
     requestData.RetryNumber++;
+
     TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(target, ExecuterId, ev.release(),
         requestData.Flag, requestId,  nullptr, ExecuterSpan.GetTraceId()));
     return true;

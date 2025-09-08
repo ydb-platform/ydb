@@ -52,7 +52,6 @@ struct TKqpEvents {
         EvProxyPingResponse,
         EvListCompileCacheQueriesRequest,
         EvListCompileCacheQueriesResponse,
-        EvNodeShutdowned,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);

@@ -163,7 +163,21 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         }
     }
 
-    void TimestampReadImpl(bool topicsAreFirstClassCitizen, bool enableSkipMessagesWithObsoleteTimestamp) {
+    struct TTimestampReadOptions {
+        ui32 MessageSize;
+        ui32 MessageCount = 20;
+        ui32 TailMessageSize = 40_KB;
+        ui32 TailMessageCount = 10;
+        TDuration Interval = TDuration::MilliSeconds(200);
+    };
+
+    enum class ETimestampFnKind {
+        Exact,
+        Offset,
+        Middle,
+    };
+
+    void TimestampReadImpl(const bool topicsAreFirstClassCitizen, const bool enableSkipMessagesWithObsoleteTimestamp, const TTimestampReadOptions options, const std::span<const ETimestampFnKind> timestampKinds) {
         auto createSetup = [=]() {
             NKikimrConfig::TFeatureFlags ff;
             ff.SetEnableTopicSplitMerge(true);
@@ -222,11 +236,11 @@ Y_UNIT_TEST_SUITE(WithSDK) {
                 SleepUntil(cur);
             }
 
-            session->Close(TDuration::Seconds(5));
+            UNIT_ASSERT(session->Close(TDuration::Seconds(20)));
         };
 
-        write(TDuration::MilliSeconds(200), 20, 1_MB);
-        write(TDuration::MilliSeconds(200), 10, 40_KB);
+        write(options.Interval, options.MessageCount, options.MessageSize);
+        write(options.Interval, options.TailMessageCount, options.TailMessageSize);
 
         Sleep(TDuration::Seconds(5));
         auto readFromTimestamp = [&setup, &lastMessage, &topicName](std::optional<TInstant> startTimestamp, TStringBuf sessionId) {
@@ -235,11 +249,11 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             settings.WithoutConsumer();
             settings.AppendTopics(TTopicReadSettings().Path(topicName).ReadFromTimestamp(startTimestamp).AppendPartitionIds(0));
             auto session = client.CreateReadSession(settings);
-            TInstant endTime = TInstant::Now() + TDuration::Seconds(5);
+            TInstant endTime = TInstant::Now() + TDuration::Seconds(10);
 
             TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
             while (true) {
-                session->WaitEvent().Wait(TDuration::Seconds(5));
+                session->WaitEvent().Wait(TDuration::Seconds(10));
 
                 auto e = session->GetEvent();
                 UNIT_ASSERT(e.has_value());
@@ -278,13 +292,18 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             }
             ssLog << "]\n";
             Cerr << ssLog.Str() << Endl;
-            return messages;
+            return std::make_tuple(messages, early);
         };
 
-        const auto messages = readFromTimestamp(std::nullopt, "all");
+        const auto [messages, _] = readFromTimestamp(std::nullopt, "all");
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), createTimestamps.size());
 
-        auto getTimestampFor = [&](size_t sessionId) {
+        auto getOffsetTimestampFor = [&](TDuration offset ,size_t sessionId) {
+            TInstant writeTimestamp = messages.at(sessionId).GetWriteTime();
+            TInstant prevWriteTimestamp = sessionId > 0 ?  messages.at(sessionId - 1).GetWriteTime() : writeTimestamp - TDuration::Seconds(1);
+            return Max(writeTimestamp - offset, prevWriteTimestamp + TDuration::MilliSeconds(1));
+        };
+        auto getMiddleTimestampFor = [&](size_t sessionId) {
             TInstant writeTimestamp = messages.at(sessionId).GetWriteTime();
             TInstant createTimestamp = createTimestamps.at(sessionId);
             TInstant prevWriteTimestamp = sessionId > 0 ?  messages.at(sessionId - 1).GetWriteTime() : writeTimestamp - TDuration::Seconds(1);
@@ -292,29 +311,90 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             TInstant mid = writeTimestamp - (writeTimestamp - createTimestamp) / 2;
             return Max(mid, threshold);
         };
-
-        THashMap<size_t, size_t> resultSize;
-        for (size_t sessionId = 0; sessionId < messages.size(); ++sessionId) {
-            TInstant startTimestamp = getTimestampFor(sessionId);
-            const auto tail = readFromTimestamp(startTimestamp, ToString(sessionId));
-            resultSize[sessionId] = tail.size();
+        struct TTimestampFn {
+            std::function<TInstant(size_t)> Fn;
+            TString Name;
+            ETimestampFnKind Kind;
+        };
+        const TTimestampFn timestampCases[]{
+            {std::bind_front(getOffsetTimestampFor, TDuration::MilliSeconds(0)), "exact", ETimestampFnKind::Exact},
+            {std::bind_front(getOffsetTimestampFor, TDuration::MilliSeconds(1)), "offset 1ms", ETimestampFnKind::Offset},
+            {std::bind_front(getOffsetTimestampFor, TDuration::MilliSeconds(50)), "offset 50ms", ETimestampFnKind::Offset},
+            {std::bind_front(getOffsetTimestampFor, TDuration::MilliSeconds(6)), "offset 6ms", ETimestampFnKind::Offset},
+            {getMiddleTimestampFor, "middle", ETimestampFnKind::Middle},
+        };
+        struct TStatistics {
+            size_t Size;
+            size_t Early;
+        };
+        struct TCase {
+            TString TimestampFn;
+            size_t SessionId;
+            auto operator<=>(const TCase& v) const {
+                const TCase& u = *this;
+                return std::tie(u.TimestampFn, u.SessionId) <=> std::tie(v.TimestampFn, v.SessionId);
+            }
+        };
+        TMap<TCase, TStatistics> result;
+        for (const auto& [tsFn, tsName, tsKind] : timestampCases) {
+            if (!FindPtr(timestampKinds, tsKind)) {
+                continue;
+            }
+            for (size_t sessionId = 0; sessionId < messages.size(); ++sessionId) {
+                TInstant startTimestamp = tsFn(sessionId);
+                const auto [tail, early] = readFromTimestamp(startTimestamp, TStringBuilder() << LabeledOutput(tsName, sessionId));
+                result[TCase{.TimestampFn = tsName, .SessionId = sessionId,}] = TStatistics{.Size = tail.size(), .Early = early,};
+            }
         }
-        for (size_t sessionId = 0; sessionId < messages.size(); ++sessionId) {
-            UNIT_ASSERT_VALUES_EQUAL_C(resultSize.at(sessionId), messages.size() - sessionId, LabeledOutput(sessionId));
+        for (const auto& [testCase, stats] : result) {
+            Cerr << (TStringBuilder()
+                << "CASE " << testCase.TimestampFn << " " << testCase.SessionId << ": " << stats.Size << " messages; " << stats.Early << " early messages" << "\n") << Flush;
+        }
+        for (const auto& [testCase, stats] : result) {
+            const auto [timestampFn, sessionId] = testCase;
+            UNIT_ASSERT_GE_C(stats.Size, messages.size() - sessionId, LabeledOutput(timestampFn, sessionId, stats.Size, messages.size() - sessionId));
+        }
+        for (const auto& [testCase, stats] : result) {
+            const auto [timestampFn, sessionId] = testCase;
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.Early, 0, LabeledOutput(timestampFn, sessionId));
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.Size, messages.size() - sessionId, LabeledOutput(timestampFn, sessionId));
         }
     }
 
-    Y_UNIT_TEST(TimestampReadLegacyTopic) {
-        TimestampReadImpl(true, false);
-    }
+    struct TTestRegistration {
+        TTestRegistration() {
+            const std::tuple<TString, TTimestampReadOptions> options[]{
+                {"1MB", TTimestampReadOptions{.MessageSize = 1_MB,}},
+                {"6MB", TTimestampReadOptions{.MessageSize = 6_MB,}},
+                {"40MB", TTimestampReadOptions{.MessageSize = 40_MB, .MessageCount = 2,}},
+            };
 
-    Y_UNIT_TEST(TimestampReadTopic) {
-        TimestampReadImpl(true, true);
-    }
+            const std::tuple<TString, bool, bool> flags[]{
+                {"LegacyTopic", true, false},
+                {"Topic", true, true},
+                {"LB", false, true},
+            };
 
-    Y_UNIT_TEST(TimestampReadLB) {
-        TimestampReadImpl(false, true);
-    }
+            const std::tuple<TString, std::vector<ETimestampFnKind>> readTimestampKinds[]{
+                {"exact", {ETimestampFnKind::Exact,}},
+                {"offset+middle", {ETimestampFnKind::Offset, ETimestampFnKind::Middle,}},
+            };
+
+            for (const auto& [optName, opt]: options) {
+                for (const auto& [flagsName, topicsAreFirstClassCitizen, enableSkipMessagesWithObsoleteTimestamp] : flags) {
+                    for (const auto& [tsName, tsKinds]: readTimestampKinds) {
+                        Names.push_back(TStringBuilder() << "TimestampRead_" << optName << "_" << flagsName << "_" << tsName);
+                        TCurrentTest::AddTest(Names.back().c_str(), [=](NUnitTest::TTestContext&) {
+                            TimestampReadImpl(topicsAreFirstClassCitizen, enableSkipMessagesWithObsoleteTimestamp, opt, tsKinds);
+                        }, false);
+                    }
+                }
+            }
+        }
+
+        TDeque<TString> Names;
+    };
+    static const TTestRegistration TestRegistration;
 }
 
 } // namespace NKikimr

@@ -105,6 +105,7 @@ public:
     const NJson::TJsonValue* StatsNode = nullptr;
     const ui32 PlanNodeId;
     TStringBuilder Builder;
+    bool Blocks = false;
 };
 
 class TOperatorInput {
@@ -135,6 +136,7 @@ public:
     TOperatorInput Input2;
     std::shared_ptr<TSingleMetric> InputThroughput;
     TString Estimations;
+    bool Blocks = false;
 };
 
 class TPlan;
@@ -222,6 +224,7 @@ struct TColorPalette {
     TString SpillingTimeDark;
     TString SpillingTimeMedium;
     TString SpillingTimeLight;
+    TString BlockMedium;
 };
 
 struct TPlanViewConfig {

@@ -1,22 +1,24 @@
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/protos/datashard_backup.pb.h>
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <library/cpp/protobuf/json/proto2json.h>
 #include <ydb/public/lib/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
@@ -159,10 +161,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         auto& dcKey = *dc.MutableKey();
         dcKey.AddTags(1);
         dcKey.SetData(TSerializedCellVec::Serialize({keyCell}));
-        auto& newImage = *dc.MutableNewImage();
-        newImage.AddTags(2);
-        newImage.SetData(TSerializedCellVec::Serialize({valueCell}));
-        dc.MutableUpsert();
+        
+        auto& upsert = *dc.MutableUpsert();
+        upsert.AddTags(2);
+        upsert.SetData(TSerializedCellVec::Serialize({valueCell}));
 
         return proto;
     }
@@ -744,23 +746,24 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}});
+                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false},
+                    {"__ydb_incrBackupImpl_columnStates", "String", false, false}});
 
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000002Z_incremental", "Table", opts);
 
             ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                  (2, 200, NULL)
-                , (1, NULL, true)
+                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted, __ydb_incrBackupImpl_columnStates) VALUES
+                  (2, 200, NULL, NULL)
+                , (1, NULL, true, NULL)
                 ;
             )");
 
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000003Z_incremental", "Table", opts);
 
             ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                  (2, 2000, NULL)
-                , (5, NULL, true)
+                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted, __ydb_incrBackupImpl_columnStates) VALUES
+                  (2, 2000, NULL, NULL)
+                , (5, NULL, true, NULL)
                 ;
             )");
         }

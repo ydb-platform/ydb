@@ -1,8 +1,11 @@
+#include "mvp_test_runtime.h"
+
+#include "appdata.h"
+#include "mvp_log.h"
+
 #include <ydb/library/actors/core/mailbox.h>
 #include <ydb/library/actors/core/executor_thread.h>
-#include "mvp_log.h"
-#include "appdata.h"
-#include "mvp_test_runtime.h"
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 const TString& GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");
@@ -42,7 +45,9 @@ void TMvpTestRuntime::InitNodeImpl(TNodeDataBase* node, size_t nodeIndex) {
     node->LogSettings->SetLevel(NActors::NLog::PRI_DEBUG, NMVP::EService::GRPC, explanation);
     node->LogSettings->SetLevel(NActors::NLog::PRI_INFO, NMVP::EService::QUERY, explanation);
 
-    node->AppData0.reset(new TMVPAppData());
+    auto mvpAppData = new TMVPAppData();
+    mvpAppData->GRpcClientLow = std::make_shared<NYdbGrpc::TGRpcClientLow>();
+    node->AppData0.reset(mvpAppData);
 
     if (!UseRealThreads) {
         node->SchedulerPool.Reset(CreateExecutorPoolStub(this, nodeIndex, node, 0));

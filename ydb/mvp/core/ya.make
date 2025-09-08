@@ -5,6 +5,7 @@ RECURSE_FOR_TESTS(
 LIBRARY()
 
 SRCS(
+    appdata.cpp
     appdata.h
     filter.cpp
     filter.h

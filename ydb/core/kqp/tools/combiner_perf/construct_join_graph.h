@@ -12,8 +12,8 @@ enum class ETestedJoinAlgo{
 };
 
 struct JoinSourceData{
-    TType* ItemType;
-    TArrayRef<const ui32> KeyColumns;
+    TArrayRef<TType* const> ColumnTypes;
+    TArrayRef<const ui32> KeyColumnIndexes;
     NYql::NUdf::TUnboxedValue Values;
     // TArrayRef<const ui32> Renames;//??
 };
@@ -23,9 +23,9 @@ struct InnerJoinDescription{
     JoinSourceData RightSource;
     // TType* ReturnType;
     TDqSetup<false>* Setup; 
-    EAnyJoinSettings AnyJoinSettings;
+    // EAnyJoinSettings AnyJoinSettings;
 };
 
 NYql::NUdf::TUnboxedValue ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, InnerJoinDescription descr);
-
+i32 ResultColumnCount(ETestedJoinAlgo algo, InnerJoinDescription descr);
 }

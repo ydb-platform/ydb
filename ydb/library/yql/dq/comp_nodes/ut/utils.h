@@ -2,12 +2,25 @@
 #include "dq_setup.h"
 
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
-
+#include <yql/essentials/minikql/mkql_node_cast.h>
 namespace NKikimr {
 namespace NMiniKQL {
 
 // TODO (mfilitov): think how can we reuse the code
 // Code from https://github.com/ydb-platform/ydb/blob/main/yql/essentials/minikql/comp_nodes/ut/mkql_block_map_join_ut_utils.h
+
+// List<Tuple<T1, ..., Tn, Tlast>> -> List<Struct<"0": Block<T1>, ..., "n": Block<Tn>, "_yql_block_length": Scalar<Tlast>>>
+TRuntimeNode ToBlockList(TProgramBuilder& pgmBuilder, TRuntimeNode list);
+
+NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
+    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values);
+
+TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool scalar);
+TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
+    TType* leftStreamType, const TVector<ui32>& leftKeyDrops,
+    TType* rightListType, const TVector<ui32>& rightKeyDrops
+);
+
 
 // List<Tuple<...>> -> Stream<Multi<...>>
 TRuntimeNode ToWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode list);
@@ -24,7 +37,7 @@ TRuntimeNode FromWideFlow(TProgramBuilder& pgmBuilder, TRuntimeNode wideFlow);
 TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list); 
 
 void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected, const NUdf::TUnboxedValue& got);
-
+namespace detail{
 template<typename Type>
 const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
     const TVector<Type>& vector
@@ -71,18 +84,29 @@ const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
     }
     return lists;
 }
-
+}
 template<typename... TVectors>
 const std::pair<TType*, NUdf::TUnboxedValue> ConvertVectorsToTuples(
     TDqSetup<false>& setup, TVectors... vectors
 ) {
     TProgramBuilder& pb = *setup.PgmBuilder;
-    const auto lists = BuildListNodes(pb, std::forward<TVectors>(vectors)...);
+    const auto lists = detail::BuildListNodes(pb, std::forward<TVectors>(vectors)...);
     const auto tuplesNode = pb.Zip(lists);
     const auto tuplesNodeType = tuplesNode.GetStaticType();
     const auto tuples = setup.BuildGraph(tuplesNode)->GetValue();
     return std::make_pair(tuplesNodeType, tuples);
 }
+
+
+template<typename... TVectors>
+std::pair<TArrayRef<TType* const>, NUdf::TUnboxedValue> ConvertVectorsToRuntimeTypesAndValue(
+    TDqSetup<false>& setup, TVectors... vectors
+) {
+    auto p = ConvertVectorsToTuples(setup, vectors...);
+    return std::make_pair(AS_TYPE(TTupleType, AS_TYPE(TListType, p.first)->GetItemType())->GetElements(), p.second);
+}
+
+
 
 }
 }

@@ -564,6 +564,7 @@
         // Get build preset and other contextual information
         const buildPreset = "{{ build_preset }}";
         const branch = "{{ branch }}";
+        const commitSha = "{{ commit_sha }}";
         const reportUrl = window.location.href;
         const testRunCommand = getTestRunCommand(full_name);
         const ownerAreaLabel = getOwnerAreaLabel(owner);
@@ -575,7 +576,10 @@
             let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
             body += "**Sanitizer Error Detected**%0A%0A";
             body += "**Build Information:**%0A";
-            body += "- Version/Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
+            if (commitSha && commitSha !== "") {
+                body += "- Version: " + encodeURIComponent(commitSha) + "%0A";
+            }
+            body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
             body += "- Branch: " + encodeURIComponent(branch) + "%0A";
             body += "- Report Link: " + encodeURIComponent(reportUrl) + "%0A%0A";
             
@@ -622,7 +626,10 @@
             let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
             body += "**Test Failure**%0A%0A";
             body += "**Build Information:**%0A";
-            body += "- Version/Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
+            if (commitSha && commitSha !== "") {
+                body += "- Version: " + encodeURIComponent(commitSha) + "%0A";
+            }
+            body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
             body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
             
             body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
@@ -670,6 +677,7 @@
         // Get build preset and other contextual information
         const buildPreset = "{{ build_preset }}";
         const branch = "{{ branch }}";
+        const commitSha = "{{ commit_sha }}";
         const ownerAreaLabel = getOwnerAreaLabel(owner);
         
         const title = "Mute test " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
@@ -677,7 +685,10 @@
         let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
         body += "**Test mute request**%0A%0A";
         body += "**Build Information:**%0A";
-        body += "- Version/Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
+        if (commitSha && commitSha !== "") {
+            body += "- Version: " + encodeURIComponent(commitSha) + "%0A";
+        }
+        body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
         body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
         
         body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";

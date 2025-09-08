@@ -351,6 +351,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     # Get GitHub server URL and repository from environment
     github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     github_repository = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
+    github_sha = os.environ.get("GITHUB_SHA", "")
     
     # Construct PR and workflow URLs if the information is available
     pr_url = None
@@ -377,7 +378,8 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         pr_url=pr_url,
         workflow_run_id=workflow_run_id,
         workflow_url=workflow_url,
-        owner_area_mapping=owner_area_mapping
+        owner_area_mapping=owner_area_mapping,
+        commit_sha=github_sha
     )
 
     with open(fn, "w") as fp:

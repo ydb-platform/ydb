@@ -8,34 +8,38 @@
 
 Возвращаемый тип при использовании `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()` и подобных методов.
 
-| {{ ydb-short-name }} тип   | .NET тип   |
-|----------------------------|------------|
-| `Bool`                     | `bool`     |
-| `Text` (синоним `Utf8`)    | `string`   |
-| `Bytes` (синоним `String`) | `byte[]`   |
-| `Uint8`                    | `byte`     |
-| `Uint16`                   | `ushort`   |
-| `Uint32`                   | `uint`     |
-| `Uint64`                   | `ulong`    |
-| `Int8`                     | `sbyte`    |
-| `Int16`                    | `short`    |
-| `Int32`                    | `int`      |
-| `Int64`                    | `long`     |
-| `Float`                    | `float`    |
-| `Double`                   | `double`   |
-| `Date`                     | `DateTime` |
-| `Datetime`                 | `DateTime` |
-| `Timestamp`                | `DateTime` |
-| `Decimal($p, $s)`          | `Decimal`  |
-| `Json`                     | `string`   |
-| `JsonDocument`             | `string`   |
-| `Yson`                     | `byte[]`   |
+| {{ ydb-short-name }} тип   | .NET тип                                 |
+|----------------------------|------------------------------------------|
+| `Bool`                     | `bool`                                   |
+| `Text` (синоним `Utf8`)    | `string`                                 |
+| `Bytes` (синоним `String`) | `byte[]`                                 |
+| `Uint8`                    | `byte`                                   |
+| `Uint16`                   | `ushort`                                 |
+| `Uint32`                   | `uint`                                   |
+| `Uint64`                   | `ulong`                                  |
+| `Int8`                     | `sbyte`                                  |
+| `Int16`                    | `short`                                  |
+| `Int32`                    | `int`                                    |
+| `Int64`                    | `long`                                   |
+| `Float`                    | `float`                                  |
+| `Double`                   | `double`                                 |
+| `Date`                     | `DateTime`                               |
+| `Datetime`                 | `DateTime`                               |
+| `Timestamp`                | `DateTime`                               |
+| `Decimal`                  | [cм. раздел](./type-mapping.md/#decimal) |
+| `Json`                     | `string`                                 |
+| `JsonDocument`             | `string`                                 |
+| `Yson`                     | `byte[]`                                 |
+
+## Decimal { #decimal }
 
 {% note info %}
 
-Чтобы передать произвольное значение `decimal`, задайте `Precision` и `Scale` в `YdbParameter`. По умолчанию используется значение `Decimal(22, 9)`.
+`Decimal` — параметризованный тип {{ ydb-short-name }}} (подробнее см. [документацию](../../../../core/yql/reference/types/primitive.md#numeric)). `Precision` — общее количество значащих цифр, `Scale` — количество цифр после десятичной точки.
 
-Например для Decimal(5, 3), нужно передать параметр `new YdbParameter { Value = 1.5m, Precision = 5, Scale = 3 }`.
+Чтобы передать значение с заданной точностью и масштабом (отличными от значений по умолчанию), укажите `Precision` и `Scale` у параметра YdbParameter. По умолчанию используется `Decimal(22, 9)`.
+
+Например для `Decimal(5, 3)`, нужно передать параметр `new YdbParameter { Value = 1.5m, Precision = 5, Scale = 3 }`.
 
 {% endnote %}
 
@@ -59,7 +63,7 @@
 | `Date`                     | `Date`                                                                                    | `DateTime`                   |
 | `Datetime`                 | `DateTime`                                                                                | `DateTime`                   |
 | `Timestamp`                | `DateTime2` (для .NET типа `DateTime`), `DateTimeOffset` (для .NET типа `DateTimeOffset`) | `DateTime`, `DateTimeOffset` |
-| `Decimal($p, $s)`          | `Decimal`, `Currency`                                                                     | `decimal`                    |
+| `Decimal`                  | `Decimal`, `Currency`                                                                     | `decimal`                    |
 
 {% note info %}
 

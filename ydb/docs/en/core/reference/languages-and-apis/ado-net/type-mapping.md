@@ -8,36 +8,36 @@ The following shows the mappings used when reading values.
 
 These are the return types when using `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()`, and similar methods.
 
-| {{ ydb-short-name }} type     | .NET type  |
-|-------------------------------|------------|
-| `Bool`                        | `bool`     |
-| `Text` (synonym of `Utf8`)    | `string`   |
-| `Bytes` (synonym of `String`) | `byte[]`   |
-| `Uint8`                       | `byte`     |
-| `Uint16`                      | `ushort`   |
-| `Uint32`                      | `uint`     |
-| `Uint64`                      | `ulong`    |
-| `Int8`                        | `sbyte`    |
-| `Int16`                       | `short`    |
-| `Int32`                       | `int`      |
-| `Int64`                       | `long`     |
-| `Float`                       | `float`    |
-| `Double`                      | `double`   |
-| `Date`                        | `DateTime` |
-| `Datetime`                    | `DateTime` |
-| `Timestamp`                   | `DateTime` |
-| `Decimal($p, $s)`             | `Decimal`  |
-| `Json`                        | `string`   |
-| `JsonDocument`                | `string`   |
-| `Yson`                        | `byte[]`   |
+| {{ ydb-short-name }} type     | .NET type                                |
+|-------------------------------|------------------------------------------|
+| `Bool`                        | `bool`                                   |
+| `Text` (synonym of `Utf8`)    | `string`                                 |
+| `Bytes` (synonym of `String`) | `byte[]`                                 |
+| `Uint8`                       | `byte`                                   |
+| `Uint16`                      | `ushort`                                 |
+| `Uint32`                      | `uint`                                   |
+| `Uint64`                      | `ulong`                                  |
+| `Int8`                        | `sbyte`                                  |
+| `Int16`                       | `short`                                  |
+| `Int32`                       | `int`                                    |
+| `Int64`                       | `long`                                   |
+| `Float`                       | `float`                                  |
+| `Double`                      | `double`                                 |
+| `Date`                        | `DateTime`                               |
+| `Datetime`                    | `DateTime`                               |
+| `Timestamp`                   | `DateTime`                               |
+| `Decimal`                     | [cм. раздел](./type-mapping.md/#decimal) |
+| `Json`                        | `string`                                 |
+| `JsonDocument`                | `string`                                 |
+| `Yson`                        | `byte[]`                                 |
 
-{% note info %}
+## Decimal { #decimal }
 
-To pass an arbitrary `decimal`, set the Precision and Scale on the YdbParameter. By default, use `Decimal(22, 9)`.
+Decimal is a parameterized {{ ydb-short-name }} type (see the [documentation for details](../../../../core/yql/reference/types/primitive.md#numeric)). `Precision` is the total number of significant digits; `Scale` is the number of digits after the decimal point.
 
-For example, for Decimal(5, 3), you need to pass the parameter `new YdbParameter { Value = 1.5m, Precision = 5, Scale = 3 }`.
+To pass a value with specific `Precision` and `Scale` (different from the default), set Precision and Scale on the YdbParameter. By default, `Decimal(22, 9)` is used.
 
-{% endnote %}
+Example: for `Decimal(5, 3)`, pass `new YdbParameter { Value = 1.5m, Precision = 5, Scale = 3 }`.
 
 ## Type Mapping Table for Writing
 

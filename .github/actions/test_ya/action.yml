@@ -491,6 +491,9 @@ runs:
               PR_ARG="--pr_number ${{ github.event.number }}"
             fi
             
+            # Set the correct commit SHA - use original head for accurate version tracking
+            export GITHUB_HEAD_SHA="$ORIGINAL_HEAD"
+            
             GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
               --summary_links "$SUMMARY_LINKS" \
               --public_dir "$PUBLIC_DIR" \

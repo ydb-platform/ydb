@@ -351,7 +351,13 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     # Get GitHub server URL and repository from environment
     github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     github_repository = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
-    github_sha = os.environ.get("GITHUB_SHA", "")
+    
+    # For commit SHA, prioritize the actual head commit over merge commit
+    # In PR context, GITHUB_HEAD_SHA contains the actual commit being tested
+    github_sha = os.environ.get("GITHUB_HEAD_SHA", "")
+    if not github_sha:
+        # Fallback to GITHUB_SHA if GITHUB_HEAD_SHA is not available
+        github_sha = os.environ.get("GITHUB_SHA", "")
     
     # Construct PR and workflow URLs if the information is available
     pr_url = None

@@ -580,26 +580,36 @@
                 body += "- Version: " + encodeURIComponent(commitSha) + "%0A";
             }
             body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
-            body += "- Branch: " + encodeURIComponent(branch) + "%0A";
-            body += "- Report Link: " + encodeURIComponent(reportUrl) + "%0A%0A";
-            
-            if (errorText && errorText.trim() !== "") {
-                body += "**Error Details:**%0A```%0A" + encodeURIComponent(errorText.trim()) + "%0A```%0A%0A";
-            }
+            body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
             
             body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
             body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
             
-            // Include logs if available
+            // Include only first few logs to avoid URL length issues
             if (logUrls && Object.keys(logUrls).length > 0) {
                 body += "**Logs:**%0A";
-                for (const [logName, logUrl] of Object.entries(logUrls)) {
+                const logEntries = Object.entries(logUrls).slice(0, 3); // Limit to first 3 logs
+                for (const [logName, logUrl] of logEntries) {
                     body += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
+                }
+                if (Object.keys(logUrls).length > 3) {
+                    body += "- (and " + (Object.keys(logUrls).length - 3) + " more logs in report)%0A";
                 }
                 body += "%0A";
             }
             
             body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(full_name) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+            
+            // Add error details as a shorter summary instead of full text
+            if (errorText && errorText.trim() !== "") {
+                const shortError = errorText.trim().substring(0, 200); // Limit to 200 chars
+                body += "**Error Summary:** " + encodeURIComponent(shortError);
+                if (errorText.trim().length > 200) {
+                    body += "... (see full error in test report)";
+                }
+                body += "%0A%0A";
+            }
+            
             body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)";
             
             // Determine sanitizer-specific label based on build preset
@@ -635,11 +645,15 @@
             body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
             body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
             
-            // Include logs if available
+            // Include only first few logs to avoid URL length issues
             if (logUrls && Object.keys(logUrls).length > 0) {
                 body += "**Logs:**%0A";
-                for (const [logName, logUrl] of Object.entries(logUrls)) {
+                const logEntries = Object.entries(logUrls).slice(0, 3); // Limit to first 3 logs
+                for (const [logName, logUrl] of logEntries) {
                     body += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
+                }
+                if (Object.keys(logUrls).length > 3) {
+                    body += "- (and " + (Object.keys(logUrls).length - 3) + " more logs in report)%0A";
                 }
                 body += "%0A";
             }
@@ -695,11 +709,15 @@
         body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
         body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
         
-        // Include logs if available
+        // Include only first few logs to avoid URL length issues
         if (logUrls && Object.keys(logUrls).length > 0) {
             body += "**Logs:**%0A";
-            for (const [logName, logUrl] of Object.entries(logUrls)) {
+            const logEntries = Object.entries(logUrls).slice(0, 3); // Limit to first 3 logs
+            for (const [logName, logUrl] of logEntries) {
                 body += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
+            }
+            if (Object.keys(logUrls).length > 3) {
+                body += "- (and " + (Object.keys(logUrls).length - 3) + " more logs in report)%0A";
             }
             body += "%0A";
         }

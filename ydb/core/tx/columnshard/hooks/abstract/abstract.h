@@ -406,7 +406,6 @@ private:
     std::atomic<ICSController::TPtr*> CSControllerPtr{nullptr};
     IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
     
-    // Инициализация при первом обращении
     void EnsureCSController() {
         ICSController::TPtr* expected = nullptr;
         if (CSControllerPtr.compare_exchange_strong(expected, nullptr)) {
@@ -414,8 +413,7 @@ private:
             CSControllerPtr.store(newPtr);
         }
     }
-    
-    // CAS операция для безопасной замены контроллера
+
     void ReplaceCSController(const ICSController::TPtr& newController) {
         ICSController::TPtr* expected = CSControllerPtr.load();
         while (expected) {

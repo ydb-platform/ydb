@@ -18,13 +18,27 @@ public:
     bool Do(const TString& path, NJson::TJsonValue* parent, NJson::TJsonValue& value) {
         Y_UNUSED(path, parent);
 
+        TString maybePath = "";
         if (value.Has("Path")) {
-            ReadsOverTable.emplace(value["Path"].GetStringSafe());
+            maybePath = value["Path"].GetStringSafe();
+            if (!maybePath.StartsWith("/Root")) {
+                maybePath = TString("/Root/") + maybePath;
+            }
+
+            ReadsOverTable.emplace(maybePath);
         }
 
-        if (value.IsMap() && value.Has("ReadLimit") && value.Has("Path")) {
-            TString path = value["Path"].GetStringSafe();
-            LimitsPerTable[path] = value["ReadLimit"].GetStringSafe();
+        if (value.Has("Table")) {
+             maybePath = value["Table"].GetStringSafe();
+             if (!maybePath.StartsWith("/Root")) {
+                maybePath = TString("/Root/") + maybePath;
+             }
+
+             ReadsOverTable.emplace(maybePath);
+        }
+
+        if (value.IsMap() && value.Has("ReadLimit") && !maybePath.empty()) {
+            LimitsPerTable[maybePath] = value["ReadLimit"].GetStringSafe();
         }
 
         return true;

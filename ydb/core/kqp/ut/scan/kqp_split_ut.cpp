@@ -1028,8 +1028,8 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         s.Runtime->Send(shim->Captured[0]->Sender, s.Sender, undelivery.Release());
 
         Cerr << "resume evread -----------------------------------------------------------" << Endl;
-        shim->SkipAll();
         shim->AllowResults();
+        shim->SkipAll();
 
         s.AssertSuccess();
         UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, SortOrder::Ascending)), ",1,2,0,3,4,5,6");

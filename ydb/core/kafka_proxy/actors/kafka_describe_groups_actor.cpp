@@ -26,7 +26,7 @@ NActors::IActor* CreateKafkaDescribeGroupsActor(const TContext::TPtr context, co
 
 void TKafkaDescribeGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
     if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
-        Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
+        Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
         Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
         Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
         Become(&TKafkaDescribeGroupsActor::StateWork);
@@ -191,13 +191,13 @@ TString TKafkaDescribeGroupsActor::GetYqlWithTableNames(const TString& templateS
     TString templateWithCorrectTableNames = std::regex_replace(
         templateStr.c_str(),
         std::regex("<consumer_members_table_name>"),
-        NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str()
+        NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
     );
 
     templateWithCorrectTableNames = std::regex_replace(
         templateWithCorrectTableNames.c_str(),
         std::regex("<consumer_groups_table_name>"),
-        NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()
+        NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
     );
 
     return templateWithCorrectTableNames;

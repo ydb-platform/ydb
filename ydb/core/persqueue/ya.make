@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     dread_cache_service/caching_service.cpp
+    pq.cpp
 )
 
 PEERDIR(

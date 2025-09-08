@@ -1,5 +1,4 @@
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
-#include "mirrorer.h"
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include "partition_util.h"
 #include "partition_common.h"

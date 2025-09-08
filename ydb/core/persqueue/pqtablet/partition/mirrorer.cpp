@@ -730,14 +730,14 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
     ConsumerInitInterval = CONSUMER_INIT_INTERVAL_START;
 }
 
-NActors::IActor* CreateMirrorerActor(const NActors::TActorId& tabletActor,
-                                     const NActors::TActorId& partitionActor,
-                                     const NPersQueue::TTopicConverterPtr& topicConverter,
-                                     const ui32 partition,
-                                     const bool localDC,
-                                     const ui64 endOffset,
-                                     const NKikimrPQ::TMirrorPartitionConfig& config,
-                                     const TTabletCountersBase& counters) {
+NActors::IActor* CreateMirrorer(const NActors::TActorId& tabletActor,
+                                const NActors::TActorId& partitionActor,
+                                const NPersQueue::TTopicConverterPtr& topicConverter,
+                                const ui32 partition,
+                                const bool localDC,
+                                const ui64 endOffset,
+                                const NKikimrPQ::TMirrorPartitionConfig& config,
+                                const TTabletCountersBase& counters) {
     return new TMirrorer(tabletActor, partitionActor, topicConverter, partition, localDC, endOffset, config, counters);
 }
 

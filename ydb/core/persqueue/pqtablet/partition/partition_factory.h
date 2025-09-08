@@ -8,20 +8,22 @@ class TPQTabletConfig;
 }
 
 namespace NPersQueue {
-class TTopicConverterPtr;
+class TTopicNameConverter;
+using TTopicConverterPtr = std::shared_ptr<TTopicNameConverter>;
 }
 
 namespace NKikimr {
 
 class TTabletCountersBase;
 
-namespace NPQ {
-
-class TPartitionId;
-
 namespace NJaegerTracing {
 class TSamplingThrottlingControl;
 }
+
+
+namespace NPQ {
+
+class TPartitionId;
 
 NActors::IActor* CreatePartitionActor(ui64 tabletId,
                                       const TPartitionId& partition,

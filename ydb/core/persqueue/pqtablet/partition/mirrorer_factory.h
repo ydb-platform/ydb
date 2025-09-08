@@ -8,7 +8,8 @@ class TMirrorPartitionConfig;
 }
 
 namespace NPersQueue {
-class TTopicConverterPtr;
+class TTopicNameConverter;
+using TTopicConverterPtr = std::shared_ptr<TTopicNameConverter>;
 }
 
 namespace NKikimr {
@@ -19,14 +20,14 @@ namespace NPQ {
 
 class TPartitionId;
 
-NActors::IActor* CreateMirrorerActor(const NActors::TActorId& tabletActor,
-                                     const NActors::TActorId& partitionActor,
-                                     const NPersQueue::TTopicConverterPtr& topicConverter,
-                                     const ui32 partition,
-                                     const bool localDC,
-                                     const ui64 endOffset,
-                                     const NKikimrPQ::TMirrorPartitionConfig& config,
-                                     const TTabletCountersBase& counters);
+NActors::IActor* CreateMirrorer(const NActors::TActorId& tabletActor,
+                                const NActors::TActorId& partitionActor,
+                                const NPersQueue::TTopicConverterPtr& topicConverter,
+                                const ui32 partition,
+                                const bool localDC,
+                                const ui64 endOffset,
+                                const NKikimrPQ::TMirrorPartitionConfig& config,
+                                const TTabletCountersBase& counters);
 
 } // namespace NPQ
 } // namespace NKikimr

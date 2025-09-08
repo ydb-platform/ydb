@@ -3,12 +3,16 @@
 #include <ydb/core/persqueue/partition_id.h>
 
 #include <ydb/library/actors/core/defs.h>
-#include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/actors/core/actorid.h>
+
+#include <ydb/core/base/events.h>
 
 #include <atomic>
 
 namespace NKikimr {
 namespace NPQ {
+
+using namespace NActors;
 
 inline TActorId MakePersQueueL2CacheID() {
     static_assert(TActorId::MaxServiceIDLength == 12, "Unexpected actor id length");

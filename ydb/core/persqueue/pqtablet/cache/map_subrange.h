@@ -1,3 +1,7 @@
+#pragma once
+
+#include <util/generic/fwd.h>
+
 namespace NKikimr::NPQ {
 
 template<class M, class I = typename M::const_iterator>

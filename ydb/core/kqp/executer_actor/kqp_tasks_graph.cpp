@@ -7,6 +7,7 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/program/resolver.h>
@@ -1695,8 +1696,7 @@ void TKqpTasksGraph::BuildSysViewScanTasks(TStageInfo& stageInfo) {
         task.Meta.ReadInfo.SetSorting(readSettings.GetSorting());
         task.Meta.Type = TTaskMeta::TTaskType::Compute;
 
-        // TODO: restore logs
-        // LOG_D("Stage " << stageInfo.Id << " create sysview scan task: " << task.Id);
+        // TODO: LOG_D("Stage " << stageInfo.Id << " create sysview scan task: " << task.Id);
     }
 }
 
@@ -1917,14 +1917,14 @@ void MergeReadInfoToTaskMeta(TTaskMeta& meta, ui64 shardId, TMaybe<TShardKeyRang
     meta.Reads->emplace_back(std::move(readInfo));
 }
 
-THashSet<ui64> TKqpTasksGraph::BuildDatashardTasks(TStageInfo& stageInfo) {
+THashSet<ui64> TKqpTasksGraph::BuildDatashardTasks(TStageInfo& stageInfo, const IKqpTransactionManagerPtr& txManager) {
     THashSet<ui64> shardsWithEffects;
 
     THashMap<ui64, ui64> shardTasks; // shardId -> taskId
     auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
     auto getShardTask = [&](ui64 shardId) -> TTask& {
-        // TODO: YQL_ENSURE(!TxManager);
+        YQL_ENSURE(!txManager);
         auto it  = shardTasks.find(shardId);
         if (it != shardTasks.end()) {
             return GetTask(it->second);
@@ -2080,7 +2080,9 @@ ui32 TKqpTasksGraph::GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOla
     return result;
 }
 
-void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, const TMap<ui64, ui64>& shardIdToNodeId) {
+void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, const TMap<ui64, ui64>& shardIdToNodeId,
+    TQueryExecutionStats* stats)
+{
     THashMap<ui64, std::vector<ui64>> nodeTasks;
     THashMap<ui64, std::vector<TShardInfoWithId>> nodeShards;
     THashMap<ui64, ui64> assignedShardsCount;
@@ -2099,8 +2101,6 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
             columnShardHashV1Params.SourceTableKeyColumnTypes->push_back(columnType);
         }
     }
-
-    // TODO: YQL_ENSURE(Stats);
 
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
     const auto& keyTypes = tableInfo->KeyColumnTypes;
@@ -2129,12 +2129,11 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
             nodeShards[nodeId].emplace_back(TShardInfoWithId(i.first, std::move(i.second)));
         }
 
-        // TODO:
-        // if (CollectProfileStats(Request.StatsMode)) {
-        //     for (auto&& i : nodeShards) {
-        //         Stats->AddNodeShardsCount(stageInfo.Id.StageId, i.first, i.second.size());
-        //     }
-        // }
+        if (stats) {
+            for (auto&& i : nodeShards) {
+                stats->AddNodeShardsCount(stageInfo.Id.StageId, i.first, i.second.size());
+            }
+        }
 
         if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead() && !shuffleEliminated || (!isOlapScan && readSettings.IsSorted())) {
             THashMap<ui64 /* nodeId */, ui64 /* tasks count */> olapAndSortedTasksCount;
@@ -2399,7 +2398,7 @@ TVector<TVector<TShardRangesWithShardId>> DistributeShardsToTasks(TVector<TShard
     // TODO:
     // if (IsDebugLogEnabled()) {
     //     TStringBuilder sb;
-    //     sb << "Distrubiting shards to tasks: [";
+    //     sb << "Distributing shards to tasks: [";
     //     for(size_t i = 0; i < shardsRanges.size(); i++) {
     //         sb << "# " << i << ": " << shardsRanges[i].Ranges->ToString(keyTypes, *AppData()->TypeRegistry);
     //     }
@@ -2432,7 +2431,9 @@ TVector<TVector<TShardRangesWithShardId>> DistributeShardsToTasks(TVector<TShard
     return result;
 }
 
-TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, const TMap<ui64, ui64>& shardIdToNodeId) {
+TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode,
+    const TMap<ui64, ui64>& shardIdToNodeId, TQueryExecutionStats* stats)
+{
     auto& intros = stageInfo.Introspections;
     THashMap<ui64, std::vector<ui64>> nodeTasks;
     THashMap<ui64, ui64> assignedShardsCount;
@@ -2597,11 +2598,10 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
 
         YQL_ENSURE(!GetMeta().ShardsResolved || nodeId);
 
-        // TODO:
-        // YQL_ENSURE(Stats);
-        // if (shardId) {
-        //     Stats->AffectedShards.insert(*shardId);
-        // }
+        YQL_ENSURE(stats);
+        if (shardId) {
+            stats->AffectedShards.insert(*shardId);
+        }
 
         if (limitTasksPerNode && GetMeta().ShardsResolved) {
             const auto maxScanTasksPerNode = GetScanTasksPerNode(stageInfo, /* isOlapScan */ false, *nodeId);
@@ -2669,11 +2669,10 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
     if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead || singlePartitionedStage)) {
         auto [startShard, shardInfo] = PartitionPruner->MakeVirtualTablePartition(source, stageInfo);
 
-        // TODO:
-        // YQL_ENSURE(Stats);
-        // for (auto& [shardId, _] : partitions) {
-        //     Stats->AffectedShards.insert(shardId);
-        // }
+        YQL_ENSURE(stats);
+        for (auto& [shardId, _] : partitions) {
+            stats->AffectedShards.insert(shardId);
+        }
 
         TMaybe<ui64> inFlightShards = Nothing();
         if (isSequentialInFlight) {

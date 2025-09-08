@@ -163,6 +163,12 @@ public:
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
         , TasksGraph(SelfId().NodeId(), Request.TxAlloc, AggregationSettings, Counters)
     {
+        {
+            TStringStream ss;
+            ss << "SelfId.NodeId: " << SelfId().NodeId() << Endl;
+            Cerr << ss.Str();
+        }
+
         if (executerConfig.TableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         }
@@ -1017,9 +1023,9 @@ protected:
                         case NKqpProto::TKqpSource::kReadRangesSource: {
                             if (EnableReadsMerge) {
                                 limitTasksPerNode = true;
-                                // TODO: intros.push_back("Using tasks count limit because of enabled reads merge");
+                                stageInfo.Introspections.push_back("Using tasks count limit because of enabled reads merge");
                             }
-                            if (auto partitionsCount = TasksGraph.BuildScanTasksFromSource(stageInfo, limitTasksPerNode, ShardIdToNodeId)) {
+                            if (auto partitionsCount = TasksGraph.BuildScanTasksFromSource(stageInfo, limitTasksPerNode, ShardIdToNodeId, Stats.get())) {
                                 sourceScanPartitionsCount += *partitionsCount;
                             } else {
                                 UnknownAffectedShardCount = true;
@@ -1043,10 +1049,11 @@ protected:
                     UnknownAffectedShardCount |= TasksGraph.BuildComputeTasks(stageInfo, nodesCount);
                 } else if (buildScanTasks) {
                     HasOlapTable = true;
-                    TasksGraph.BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination(), ShardIdToNodeId);
+                    TasksGraph.BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination(), ShardIdToNodeId,
+                        CollectProfileStats(Request.StatsMode) ? Stats.get() : nullptr);
                 } else {
                     if constexpr (!isScan) {
-                        auto shardsWithEffects = TasksGraph.BuildDatashardTasks(stageInfo);
+                        auto shardsWithEffects = TasksGraph.BuildDatashardTasks(stageInfo, TxManager);
                         ShardsWithEffects.insert(shardsWithEffects.begin(), shardsWithEffects.end());
                     } else {
                         YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);

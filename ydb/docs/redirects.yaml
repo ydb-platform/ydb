@@ -525,4 +525,6 @@ ru:
 en:
   - from: /reference/ydbops/rolling-restart-scenario.md
     to: /reference/ydbops/scenarios.md
+  - from: /maintenance/manual/blobdepot(.*)$
+    to: /maintenance/manual/index.md
 

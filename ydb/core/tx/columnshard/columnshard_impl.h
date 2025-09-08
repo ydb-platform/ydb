@@ -37,8 +37,8 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
-#include <ydb/core/tx/columnshard/overload_manager/service.h>
-#include <ydb/core/tx/columnshard/overload_manager/events.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>

@@ -4,7 +4,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/events.h>
 
-#include <ydb/core/tx/columnshard/overload_manager/events.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_subscribers.h>
 
 namespace NKikimr::NColumnShard::NOverload {

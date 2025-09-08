@@ -1,10 +1,9 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/accessor/positive_integer.h>
 
 #include <atomic>
-
-#include "events.h"
 
 namespace NKikimr::NColumnShard::NOverload {
 
@@ -24,6 +23,8 @@ public:
 
     static ui64 GetShardWritesInFlyLimit();
     static ui64 GetShardWritesSizeInFlyLimit();
+
+    static void NotifyIfResourcesAvailable();
 
     static bool RequestResources(ui64 writesCount, ui64 writesSize);
     static void ReleaseResources(ui64 writesCount, ui64 writesSize);

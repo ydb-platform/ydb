@@ -1,7 +1,7 @@
 #include "writes_monitor.h"
 
 #include <ydb/library/actors/core/log.h>
-#include <ydb/core/tx/columnshard/overload_manager/service.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 
 namespace NKikimr::NColumnShard {
 

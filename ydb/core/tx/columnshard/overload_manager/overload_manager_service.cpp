@@ -1,7 +1,7 @@
-#include "service.h"
+#include "overload_manager_service.h"
 
-#include "actor.h"
-#include "events.h"
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_actor.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 
 namespace NKikimr::NColumnShard::NOverload {
 
@@ -22,6 +22,17 @@ ui64 TOverloadManagerServiceOperator::GetShardWritesInFlyLimit() {
 
 ui64 TOverloadManagerServiceOperator::GetShardWritesSizeInFlyLimit() {
     return HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestBytesLimit() : DEFAULT_WRITES_SIZE_IN_FLY_LIMIT;
+}
+
+void TOverloadManagerServiceOperator::NotifyIfResourcesAvailable() {
+    if (LimitReached &&
+        WritesInFlight.Val() <= GetShardWritesInFlyLimit() * WritesInFlightSoftLimitCoefficient &&
+        WritesSizeInFlight.Val() <= GetShardWritesSizeInFlyLimit() * WritesInFlightSizeSoftLimitCoefficient) {
+        if (LimitReached.exchange(false)) {
+            auto& context = NActors::TActorContext::AsActorContext();
+            context.Send(MakeServiceId(), new NOverload::TEvOverloadResourcesReleased());
+        }
+    }
 }
 
 NActors::TActorId TOverloadManagerServiceOperator::MakeServiceId() {
@@ -47,17 +58,10 @@ bool TOverloadManagerServiceOperator::RequestResources(ui64 writesCount, ui64 wr
 }
 
 void TOverloadManagerServiceOperator::ReleaseResources(ui64 writesCount, ui64 writesSize) {
-    auto resWritesInFlight = WritesInFlight.Sub(writesCount);
-    auto resWriteSizeInFlight = WritesSizeInFlight.Sub(writesSize);
+    WritesInFlight.Sub(writesCount);
+    WritesSizeInFlight.Sub(writesSize);
 
-    if (LimitReached &&
-        resWritesInFlight < GetShardWritesInFlyLimit() * WritesInFlightSoftLimitCoefficient &&
-        resWriteSizeInFlight < GetShardWritesSizeInFlyLimit() * WritesInFlightSizeSoftLimitCoefficient) {
-        if (LimitReached.exchange(false)) {
-            auto& context = NActors::TActorContext::AsActorContext();
-            context.Send(MakeServiceId(), new NOverload::TEvOverloadResourcesReleased());
-        }
-    }
+    NotifyIfResourcesAvailable();
 }
 
 } // namespace NKikimr::NColumnShard::NOverload

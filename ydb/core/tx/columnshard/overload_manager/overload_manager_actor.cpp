@@ -1,4 +1,6 @@
-#include "actor.h"
+#include "overload_manager_actor.h"
+
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 
 namespace NKikimr::NColumnShard::NOverload {
 
@@ -9,6 +11,7 @@ TOverloadManager::TOverloadManager()
 void TOverloadManager::Handle(const NOverload::TEvOverloadSubscribe::TPtr& ev) {
     auto record = ev->Get();
     OverloadSubscribers.AddOverloadSubscriber(record->GetColumnShardInfo(), record->GetPipeServerInfo(), record->GetOverloadSubscriberInfo());
+    TOverloadManagerServiceOperator::NotifyIfResourcesAvailable();
 }
 
 void TOverloadManager::Handle(const NOverload::TEvOverloadUnsubscribe::TPtr& ev) {

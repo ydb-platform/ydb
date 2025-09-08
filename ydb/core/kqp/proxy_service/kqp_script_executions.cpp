@@ -2046,7 +2046,7 @@ public:
         : TQueryBase(__func__, {.Database = database, .ExecutionId = executionId})
         , Database(database)
         , StartActorTime(TInstant::Now())
-        , Info({.ExecutionId = executionId})
+        , Response(std::make_unique<TEvGetScriptExecutionOperationQueryResponse>(executionId))
     {}
 
     void OnRunQuery() override {
@@ -2093,7 +2093,7 @@ public:
                 .Utf8(Database)
                 .Build()
             .AddParam("$execution_id")
-                .Utf8(Info.ExecutionId)
+                .Utf8(Response->ExecutionId)
                 .Build();
 
         RunDataQuery(sql, &params);
@@ -2117,25 +2117,25 @@ public:
             }
 
             if (const auto finalizationStatus = result.ColumnParser("finalization_status").GetOptionalInt32()) {
-                Info.FinalizationStatus = static_cast<EFinalizationStatus>(*finalizationStatus);
+                Response->FinalizationStatus = static_cast<EFinalizationStatus>(*finalizationStatus);
             }
 
-            Info.Metadata.set_execution_id(Info.ExecutionId);
+            Response->Metadata.set_execution_id(Response->ExecutionId);
 
             if (const auto executionStatus = result.ColumnParser("execution_status").GetOptionalInt32()) {
-                Info.Metadata.set_exec_status(static_cast<Ydb::Query::ExecStatus>(*executionStatus));
+                Response->Metadata.set_exec_status(static_cast<Ydb::Query::ExecStatus>(*executionStatus));
             }
 
             if (const auto sql = result.ColumnParser("query_text").GetOptionalUtf8()) {
-                Info.Metadata.mutable_script_content()->set_text(*sql);
+                Response->Metadata.mutable_script_content()->set_text(*sql);
             }
 
             if (const auto syntax = result.ColumnParser("syntax").GetOptionalInt32()) {
-                Info.Metadata.mutable_script_content()->set_syntax(static_cast<Ydb::Query::Syntax>(*syntax));
+                Response->Metadata.mutable_script_content()->set_syntax(static_cast<Ydb::Query::Syntax>(*syntax));
             }
 
             if (const auto executionMode = result.ColumnParser("execution_mode").GetOptionalInt32()) {
-                Info.Metadata.set_exec_mode(static_cast<Ydb::Query::ExecMode>(*executionMode));
+                Response->Metadata.set_exec_mode(static_cast<Ydb::Query::ExecMode>(*executionMode));
             }
 
             if (const auto serializedStats = result.ColumnParser("stats").GetOptionalJsonDocument()) {
@@ -2145,24 +2145,24 @@ public:
                     return;
                 }
 
-                NProtobufJson::Json2Proto(statsJson, *Info.Metadata.mutable_exec_stats(), NProtobufJson::TJson2ProtoConfig());
+                NProtobufJson::Json2Proto(statsJson, *Response->Metadata.mutable_exec_stats(), NProtobufJson::TJson2ProtoConfig());
             }
 
             if (const auto& plan = result.ColumnParser("plan").GetOptionalJsonDocument()) {
-                Info.Metadata.mutable_exec_stats()->set_query_plan(*plan);
+                Response->Metadata.mutable_exec_stats()->set_query_plan(*plan);
             } else if (const auto& plan = ParseCompressedColumn("plan", result)) {
-                Info.Metadata.mutable_exec_stats()->set_query_plan(*plan);
+                Response->Metadata.mutable_exec_stats()->set_query_plan(*plan);
             } else {
-                Info.Metadata.mutable_exec_stats()->set_query_plan("{}");
+                Response->Metadata.mutable_exec_stats()->set_query_plan("{}");
             }
 
             if (const auto& ast = result.ColumnParser("ast").GetOptionalUtf8()) {
-                Info.Metadata.mutable_exec_stats()->set_query_ast(*ast);
+                Response->Metadata.mutable_exec_stats()->set_query_ast(*ast);
             } else if (const auto& ast = ParseCompressedColumn("ast", result)) {
-                Info.Metadata.mutable_exec_stats()->set_query_ast(*ast);
+                Response->Metadata.mutable_exec_stats()->set_query_ast(*ast);
             }
 
-            Issues = ParseScriptExecutionIssues(result);
+            Response->Issues = ParseScriptExecutionIssues(result);
 
             if (const auto serializedMetas = result.ColumnParser("result_set_metas").GetOptionalJsonDocument()) {
                 NJson::TJsonValue value;
@@ -2176,15 +2176,15 @@ public:
                     value.GetValuePointer(i, &metaValue);
                     Y_ENSURE(metaValue);
 
-                    NProtobufJson::Json2Proto(*metaValue, *Info.Metadata.add_result_sets_meta());
+                    NProtobufJson::Json2Proto(*metaValue, *Response->Metadata.add_result_sets_meta());
                 }
             }
 
             if (const auto runScriptActorIdString = result.ColumnParser("run_script_actor_id").GetOptionalUtf8()) {
-                ScriptExecutionRunnerActorIdFromString(*runScriptActorIdString, Info.RunScriptActorId);
+                ScriptExecutionRunnerActorIdFromString(*runScriptActorIdString, Response->RunScriptActorId);
             }
 
-            Info.StateSaved = result.ColumnParser("has_graph").GetBool();
+            Response->StateSaved = result.ColumnParser("has_graph").GetBool();
         }
 
         {   // Lease info
@@ -2202,15 +2202,15 @@ public:
                     return;
                 }
 
-                Info.LeaseGeneration = *leaseGenerationInDatabase;
+                Response->LeaseGeneration = *leaseGenerationInDatabase;
                 LeaseStatus = static_cast<ELeaseState>(result.ColumnParser("lease_state").GetOptionalInt32().value_or(static_cast<i32>(ELeaseState::ScriptRunning)));
 
                 if (*leaseDeadline < StartActorTime) {
-                    Info.LeaseExpired = true;
+                    Response->LeaseExpired = true;
                     if (*LeaseStatus == ELeaseState::WaitRetry) {
-                        Info.RetryRequired = true;
+                        Response->RetryRequired = true;
                     } else {
-                        Info.FinalizationStatus = EFinalizationStatus::FS_ROLLBACK;
+                        Response->FinalizationStatus = EFinalizationStatus::FS_ROLLBACK;
                     }
                 }
             } else if (!OperationStatus) {
@@ -2225,14 +2225,14 @@ public:
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         KQP_PROXY_LOG_D("Finish"
             << ", OperationStatus: " << (OperationStatus ? Ydb::StatusIds::StatusCode_Name(*OperationStatus) : "null")
-            << ", FinalizationStatus: " << (Info.FinalizationStatus ? static_cast<i64>(*Info.FinalizationStatus) : -1)
+            << ", FinalizationStatus: " << (Response->FinalizationStatus ? static_cast<i64>(*Response->FinalizationStatus) : -1)
             << ", LeaseStatus: " << (LeaseStatus ? static_cast<i64>(*LeaseStatus) : -1));
 
-        Info.Ready = !!OperationStatus;
-        if (Info.FinalizationStatus || LeaseStatus && *LeaseStatus == ELeaseState::WaitRetry) {
-            Info.Ready = false;
+        Response->Ready = !!OperationStatus;
+        if (Response->FinalizationStatus || LeaseStatus && *LeaseStatus == ELeaseState::WaitRetry) {
+            Response->Ready = false;
             if (OperationStatus) {
-                Issues.AddIssue(TStringBuilder() << "Execution finished with status " << *OperationStatus << " and wait " << (Info.FinalizationStatus ? "finalization" : "retry"));
+                Response->Issues.AddIssue(TStringBuilder() << "Execution finished with status " << *OperationStatus << " and wait " << (Response->FinalizationStatus ? "finalization" : "retry"));
                 OperationStatus = std::nullopt;
             }
         }
@@ -2243,20 +2243,20 @@ public:
 
         if (issues) {
             auto newIssues = AddRootIssue("Get script execution operation info", issues);
-            newIssues.AddIssues(AddRootIssue("Script execution issues", Issues));
-            std::swap(Issues, newIssues);
+            newIssues.AddIssues(AddRootIssue("Script execution issues", Response->Issues));
+            std::swap(Response->Issues, newIssues);
         }
 
-        Send(Owner, new TEvGetScriptExecutionOperationQueryResponse(*OperationStatus, std::move(Info), std::move(Issues)));
+        Response->Status = *OperationStatus;
+        Send(Owner, std::move(Response));
     }
 
 private:
     const TString Database;
     const TInstant StartActorTime;
-    TEvGetScriptExecutionOperationQueryResponse::TInfo Info;
+    std::unique_ptr<TEvGetScriptExecutionOperationQueryResponse> Response;
     std::optional<Ydb::StatusIds::StatusCode> OperationStatus;
     std::optional<ELeaseState> LeaseStatus;
-    NYql::TIssues Issues;
 };
 
 class TGetScriptExecutionOperationActor : public TCheckLeaseStatusActorBase {
@@ -2294,12 +2294,10 @@ public:
 
         // Otherwise final status and issues are unknown, the operation must be repeated
         if (!alreadyFinalized && !waitRetry) {
+            Response->Get()->Ready = true;
             Response->Get()->Status = GetOperationStatus();
             Response->Get()->Issues = GetIssues();
-
-            auto& info = Response->Get()->Info;
-            info.Ready = true;
-            info.Metadata.set_exec_status(GetExecStatus());
+            Response->Get()->Metadata.set_exec_status(GetExecStatus());
         }
 
         Reply();
@@ -2311,11 +2309,9 @@ public:
             return;
         }
 
+        Response->Get()->Ready = false;
         Response->Get()->Status = Ydb::StatusIds::SUCCESS;
-
-        auto& info = Response->Get()->Info;
-        info.Ready = false;
-        info.Metadata.set_exec_status(Ydb::Query::ExecStatus::EXEC_STATUS_STARTING);
+        Response->Get()->Metadata.set_exec_status(Ydb::Query::ExecStatus::EXEC_STATUS_STARTING);
 
         Reply();
     }
@@ -2327,29 +2323,27 @@ private:
 
     void Handle(TEvGetScriptExecutionOperationQueryResponse::TPtr& ev) {
         Response = std::move(ev);
-        const auto& event = *Response->Get();
-        const auto& info = event.Info;
         KQP_PROXY_LOG_D("Extracted script execution operation " << Response->Sender
-            << ", Status: " << event.Status
-            << ", Issues: " << event.Issues.ToOneLineString()
-            << ", Ready: " << info.Ready
-            << ", LeaseExpired: " << info.LeaseExpired
-            << ", RetryRequired: " << info.RetryRequired
-            << (info.FinalizationStatus ? (TStringBuilder() << ", FinalizationStatus: " << static_cast<ui64>(*info.FinalizationStatus)) : TStringBuilder())
-            << ", RunScriptActorId: " << info.RunScriptActorId
-            << ", LeaseGeneration: " << info.LeaseGeneration
-            << ", StateSaved: " << info.StateSaved);
+            << ", Status: " << Response->Get()->Status
+            << ", Issues: " << Response->Get()->Issues.ToOneLineString()
+            << ", Ready: " << Response->Get()->Ready
+            << ", LeaseExpired: " << Response->Get()->LeaseExpired
+            << ", RetryRequired: " << Response->Get()->RetryRequired
+            << (Response->Get()->FinalizationStatus ? (TStringBuilder() << ", FinalizationStatus: " << static_cast<ui64>(*Response->Get()->FinalizationStatus)) : TStringBuilder())
+            << ", RunScriptActorId: " << Response->Get()->RunScriptActorId
+            << ", LeaseGeneration: " << Response->Get()->LeaseGeneration);
 
-        if (info.RetryRequired) {
-            RestartScriptExecution(info.LeaseGeneration);
-        } else if (info.LeaseExpired) {
-            StartLeaseChecking(info.RunScriptActorId, info.LeaseGeneration);
-        } else if (const auto finalizationStatus = info.FinalizationStatus) {
+        const auto& event = *Response->Get();
+        if (event.RetryRequired) {
+            RestartScriptExecution(event.LeaseGeneration);
+        } else if (event.LeaseExpired) {
+            StartLeaseChecking(event.RunScriptActorId, event.LeaseGeneration);
+        } else if (const auto finalizationStatus = event.FinalizationStatus) {
             TMaybe<Ydb::Query::ExecStatus> execStatus;
-            if (info.Ready) {
-                execStatus = info.Metadata.exec_status();
+            if (Response->Get()->Ready) {
+                execStatus = Response->Get()->Metadata.exec_status();
             }
-            StartScriptFinalization(*finalizationStatus, event.Status, execStatus, event.Issues, info.LeaseGeneration);
+            StartScriptFinalization(*Response->Get()->FinalizationStatus, Response->Get()->Status, execStatus, Response->Get()->Issues, event.LeaseGeneration);
         } else {
             Reply();
         }
@@ -2359,14 +2353,13 @@ private:
         KQP_PROXY_LOG_D("Reply success");
 
         const auto& event = *Response->Get();
-        const auto& info = event.Info;
         TMaybe<google::protobuf::Any> metadata;
-        metadata.ConstructInPlace().PackFrom(info.Metadata);
+        metadata.ConstructInPlace().PackFrom(event.Metadata);
 
         Send(Request->Sender, new TEvGetScriptExecutionOperationResponse(event.Status, {
             .Metadata = std::move(metadata),
-            .Ready = info.Ready,
-            .StateSaved = info.StateSaved,
+            .Ready = event.Ready,
+            .StateSaved = event.StateSaved,
         }, event.Issues));
         PassAway();
     }

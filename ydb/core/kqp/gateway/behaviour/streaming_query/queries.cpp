@@ -1654,7 +1654,7 @@ public:
     }
 
     void HandleStartQuery(TEvGetScriptExecutionOperationResponse::TPtr& ev) {
-        const auto& info = ev->Get()->Info;
+        const auto& info = *ev->Get();
         LOG_D("Got script execution info, StateSaved: " << info.StateSaved << ", Ready: " << info.Ready);
 
         if (info.Ready && ev->Get()->Status != Ydb::StatusIds::SUCCESS) {

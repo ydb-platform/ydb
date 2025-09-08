@@ -74,27 +74,21 @@ struct TEvGetScriptExecutionOperation : public TEventWithDatabaseId<TEvGetScript
 };
 
 struct TEvGetScriptExecutionOperationQueryResponse : public TEventLocal<TEvGetScriptExecutionOperationQueryResponse, TKqpScriptExecutionEvents::EvGetScriptExecutionOperationQueryResponse> {
-    struct TInfo {
-        TString ExecutionId;
-        TActorId RunScriptActorId;
-        std::optional<EFinalizationStatus> FinalizationStatus;
-        Ydb::Query::ExecuteScriptMetadata Metadata;
-        i64 LeaseGeneration = 0;
-        bool Ready = false;
-        bool LeaseExpired = false;
-        bool RetryRequired = false;
-        bool StateSaved = false;
-    };
-
-    TEvGetScriptExecutionOperationQueryResponse(Ydb::StatusIds::StatusCode status, TInfo&& info, NYql::TIssues issues)
-        : Status(status)
-        , Info(std::move(info))
-        , Issues(std::move(issues))
+    explicit TEvGetScriptExecutionOperationQueryResponse(const TString& executionId)
+        : ExecutionId(executionId)
     {}
 
     Ydb::StatusIds::StatusCode Status;
-    TInfo Info;
     NYql::TIssues Issues;
+    const TString ExecutionId;
+    TActorId RunScriptActorId;
+    std::optional<EFinalizationStatus> FinalizationStatus;
+    Ydb::Query::ExecuteScriptMetadata Metadata;
+    i64 LeaseGeneration = 0;
+    bool Ready = false;
+    bool LeaseExpired = false;
+    bool RetryRequired = false;
+    bool StateSaved = false;
 };
 
 struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvGetScriptExecutionOperationResponse> {
@@ -106,7 +100,9 @@ struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptE
 
     TEvGetScriptExecutionOperationResponse(Ydb::StatusIds::StatusCode status, TInfo&& info, NYql::TIssues issues)
         : Status(status)
-        , Info(std::move(info))
+        , Metadata(std::move(info.Metadata))
+        , Ready(info.Ready)
+        , StateSaved(info.StateSaved)
         , Issues(std::move(issues))
     {}
 
@@ -116,7 +112,9 @@ struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptE
     {}
 
     Ydb::StatusIds::StatusCode Status;
-    TInfo Info;
+    TMaybe<google::protobuf::Any> Metadata;
+    bool Ready = false;
+    bool StateSaved = false;
     NYql::TIssues Issues;
 };
 

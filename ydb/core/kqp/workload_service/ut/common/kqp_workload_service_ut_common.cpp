@@ -581,7 +581,7 @@ public:
 
     TTenantInfo GetSharedTenantInfo() const override {
         return {
-            .PathId = DedicatedTenantPathId,
+            .PathId = SharedTenantPathId,
             .GrpcPort = Server_->GetTenantGRpcServer(Settings_.GetSharedTenantName()).GetPort(),
             .NodeIdx = Tenants_->List(Settings_.GetSharedTenantName())[0]
         };

@@ -723,10 +723,10 @@ TRequestResult TYdbSetup::YqlScriptRequest(const TRequestOptions& query, TQueryM
 TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& database, const TString& operation, TExecutionMeta& meta) const {
     auto scriptExecutionOperation = Impl_->GetScriptExecutionOperationRequest(database, operation);
 
-    const auto& info = scriptExecutionOperation->Get()->Info;
-    meta.Ready = info.Ready;
+    meta.Ready = scriptExecutionOperation->Get()->Ready;
 
-    if (const auto& serializedMeta = info.Metadata) {
+    auto serializedMeta = scriptExecutionOperation->Get()->Metadata;
+    if (serializedMeta) {
         Ydb::Query::ExecuteScriptMetadata deserializedMeta;
         serializedMeta->UnpackTo(&deserializedMeta);
 

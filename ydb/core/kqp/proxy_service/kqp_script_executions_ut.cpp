@@ -339,18 +339,17 @@ struct TScriptExecutionsYdbSetup {
         while (true) {
             const auto getOperation = GetScriptExecutionOperation(executionId);
             const auto& ev = *getOperation->Get();
-            const auto& info = ev.Info;
 
             UNIT_ASSERT_VALUES_EQUAL_C(ev.Status, Ydb::StatusIds::SUCCESS, ev.Issues.ToString());
-            UNIT_ASSERT_C(info.Metadata, "Expected not empty metadata for success get operation");
+            UNIT_ASSERT_C(ev.Metadata, "Expected not empty metadata for success get operation");
 
             Ydb::Query::ExecuteScriptMetadata deserializedMeta;
-            info.Metadata->UnpackTo(&deserializedMeta);
+            ev.Metadata->UnpackTo(&deserializedMeta);
             UNIT_ASSERT_VALUES_EQUAL(deserializedMeta.execution_id(), executionId);
             UNIT_ASSERT_C(deserializedMeta.exec_mode() == Ydb::Query::EXEC_MODE_EXECUTE, Ydb::Query::ExecMode_Name(deserializedMeta.exec_mode()));
 
             const auto execStatus = deserializedMeta.exec_status();
-            if (info.Ready) {
+            if (ev.Ready) {
                 UNIT_ASSERT_C(execStatus == Ydb::Query::EXEC_STATUS_COMPLETED, Ydb::Query::ExecStatus_Name(execStatus));
                 break;
             }
@@ -519,14 +518,13 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         while (true) {
             const auto getOperation = ydb.GetScriptExecutionOperation(executionId);
             const auto& ev = *getOperation->Get();
-            const auto& info = ev.Info;
 
             UNIT_ASSERT_VALUES_EQUAL_C(ev.Status, Ydb::StatusIds::SUCCESS, ev.Issues.ToString());
-            UNIT_ASSERT_C(!info.Ready, "Operation unexpectedly finished");
-            UNIT_ASSERT_C(info.Metadata, "Expected not empty metadata for success get operation");
+            UNIT_ASSERT_C(!ev.Ready, "Operation unexpectedly finished");
+            UNIT_ASSERT_C(ev.Metadata, "Expected not empty metadata for success get operation");
 
             Ydb::Query::ExecuteScriptMetadata deserializedMeta;
-            info.Metadata->UnpackTo(&deserializedMeta);
+            ev.Metadata->UnpackTo(&deserializedMeta);
             UNIT_ASSERT_VALUES_EQUAL(deserializedMeta.execution_id(), executionId);
             UNIT_ASSERT_C(deserializedMeta.exec_mode() == Ydb::Query::EXEC_MODE_EXECUTE, Ydb::Query::ExecMode_Name(deserializedMeta.exec_mode()));
 

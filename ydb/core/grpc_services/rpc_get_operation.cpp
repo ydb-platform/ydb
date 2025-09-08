@@ -264,16 +264,15 @@ private:
         if (ev->Get()->Status != Ydb::StatusIds::NOT_FOUND) {
             deferred->set_id(GetProtoRequest()->id());
         }
-        auto& info = ev->Get()->Info;
-        deferred->set_ready(info.Ready);
+        deferred->set_ready(ev->Get()->Ready);
         deferred->set_status(ev->Get()->Status);
         if (ev->Get()->Issues) {
             for (const NYql::TIssue& issue : ev->Get()->Issues) {
                 NYql::IssueToMessage(issue, deferred->add_issues());
             }
         }
-        if (info.Metadata) {
-            deferred->mutable_metadata()->Swap(info.Metadata.Get());
+        if (ev->Get()->Metadata) {
+            deferred->mutable_metadata()->Swap(ev->Get()->Metadata.Get());
         }
         Reply(resp, ctx);
     }

@@ -1,0 +1,5 @@
+/* custom error: Condition violated */
+pragma warning("disable","4510");
+
+$t = Yql::WithSideEffectsMode(Ensure(true,false), AsAtom('General'));
+select $t == $t;

@@ -133,7 +133,7 @@ void bitset_container_free(bitset_container_t *bitset) {
 }
 
 /* duplicate container. */
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 bitset_container_t *bitset_container_clone(const bitset_container_t *src) {
     bitset_container_t *bitset =
         (bitset_container_t *)roaring_malloc(sizeof(bitset_container_t));
@@ -928,7 +928,7 @@ CROARING_BITSET_CONTAINER_FN(andnot, &~, _mm256_andnot_si256, vbicq_u64)
 // clang-format On
 
 
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 int bitset_container_to_uint32_array(
     uint32_t *out,
     const bitset_container_t *bc,
@@ -1091,7 +1091,7 @@ bool bitset_container_iterate64(const bitset_container_t *cont, uint32_t base, r
 #if CROARING_IS_X64
 #if CROARING_COMPILER_SUPPORTS_AVX512
 CROARING_TARGET_AVX512
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 static inline bool _avx512_bitset_container_equals(const bitset_container_t *container1, const bitset_container_t *container2) {
   const __m512i *ptr1 = (const __m512i*)container1->words;
   const __m512i *ptr2 = (const __m512i*)container2->words;
@@ -1108,7 +1108,7 @@ static inline bool _avx512_bitset_container_equals(const bitset_container_t *con
 CROARING_UNTARGET_AVX512
 #endif // CROARING_COMPILER_SUPPORTS_AVX512
 CROARING_TARGET_AVX2
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 static inline bool _avx2_bitset_container_equals(const bitset_container_t *container1, const bitset_container_t *container2) {
     const __m256i *ptr1 = (const __m256i*)container1->words;
     const __m256i *ptr2 = (const __m256i*)container2->words;
@@ -1125,7 +1125,7 @@ static inline bool _avx2_bitset_container_equals(const bitset_container_t *conta
 CROARING_UNTARGET_AVX2
 #endif // CROARING_IS_X64
 
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 bool bitset_container_equals(const bitset_container_t *container1, const bitset_container_t *container2) {
   if((container1->cardinality != BITSET_UNKNOWN_CARDINALITY) && (container2->cardinality != BITSET_UNKNOWN_CARDINALITY)) {
     if(container1->cardinality != container2->cardinality) {

@@ -193,7 +193,7 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
             break;
         }
 
-        if (WaitingForSubDomainQuota(ctx, currentSize)) {
+        if (WaitingForSubDomainQuota(currentSize)) {
             PQ_LOG_D("Reserve processing: SubDomainOutOfSpace. Partition: " << Partition);
             break;
         }
@@ -486,7 +486,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
 
 void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx)
 {
-    PQ_LOG_T("TPartition::Handle TEvHandleWriteResponse.");
+    PQ_LOG_D("Received TPartition::Handle TEvHandleWriteResponse.");
     OnHandleWriteResponse(ctx);
 }
 
@@ -657,7 +657,7 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::TEvWrite");
+    PQ_LOG_D("Received TPartition::TEvWrite");
 
     if (!CanEnqueue()) {
         ReplyError(ctx, ev->Get()->Cookie, InactivePartitionErrorCode,
@@ -771,7 +771,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
             ++*offset;
         }
     }
-    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) {
+    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota()) {
         SetDeadlinesForWrites(ctx);
     }
     WriteInflightSize += size;
@@ -1021,19 +1021,20 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     if (!CanWrite()) {
-        WriteInflightSize -=  p.Msg.Data.size();
+        WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
                            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
 
     if (DiskIsFull) {
-        WriteInflightSize -=  p.Msg.Data.size();
+        WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false,
                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
                            "Disk is full");
         return EProcessResult::ContinueDrop;
     }
+
     if (TxAffectedSourcesIds.contains(p.Msg.SourceId)) {
         return EProcessResult::Blocked;
     }
@@ -1639,7 +1640,7 @@ bool TPartition::RequestBlobQuota()
 
 void TPartition::HandlePendingRequests(const TActorContext& ctx)
 {
-    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx) || NeedDeletePartition) {
+    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota() || NeedDeletePartition) {
         return;
     }
     if (RequestBlobQuota()) {
@@ -1810,7 +1811,7 @@ bool TPartition::WaitingForPreviousBlobQuota() const {
     return TopicQuotaRequestCookie != 0;
 }
 
-bool TPartition::WaitingForSubDomainQuota(const TActorContext& /*ctx*/, const ui64 withSize) const {
+bool TPartition::WaitingForSubDomainQuota(const ui64 withSize) const {
     if (!SubDomainOutOfSpace || !AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota()) {
         return false;
     }

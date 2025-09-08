@@ -2173,11 +2173,11 @@ private:
                     if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                         const auto& source = stage.GetSources(0).GetReadRangesSource();
                         bool isFullScan;
-                        SourceScanStageIdToParititions[stageInfo.Id] = PartitionPruner.Prune(source, stageInfo, isFullScan);
+                        GetMeta().SourceScanStageIdToParititions[stageInfo.Id] = PartitionPruner.Prune(source, stageInfo, isFullScan);
                         if (isFullScan && !source.HasItemsLimit()) {
                             Counters->Counters->FullScansExecuted->Inc();
                         }
-                        for (const auto& [shardId, _] : SourceScanStageIdToParititions.at(stageId)) {
+                        for (const auto& [shardId, _] : GetMeta().SourceScanStageIdToParititions.at(stageId)) {
                             shardIds.insert(shardId);
                         }
                     }

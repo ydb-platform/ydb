@@ -391,6 +391,127 @@ common:
   - from: /dev/troubleshooting/performance/infrastructure/dc-outage.md
     to: /troubleshooting/performance/infrastructure/dc-outage.md
 
+  ###### Redirects from v25.1
+  - from: /devops/configuration-management/configuration-[^/]+/static-config.md
+    to: /reference/configuration/index.md
+  - from: /devops/configuration-management/configuration-[^/]+/config-settings.md
+    to: /reference/configuration/index.md
+  - from: /devops/configuration-management/configuration-[^/]+/config-settings.md
+    to: /reference/configuration/index.md
+  - from: /devops/configuration-management/configuration-[^/]+/static-group-move.md
+    to: /devops/manual/static-group-move.md
+  - from: /devops/configuration-management/configuration-[^/]+/update-config.md
+    to: /devops/ansible/update-config.md
+  - from: /devops/configuration-management/configuration-[^/]+/node-authorization.md
+    to: /devops/index.md
+  - from: /devops/configuration-management/configuration-[^/]+/state-storage-move.md
+    to: /devops/manual/state-storage-move.md
+
+  - from: /devops/configuration-management/configuration-[^/]+/replacing-nodes.md
+    to: /maintenance/manual/replacing_nodes.md
+  - from: /devops/configuration-management/configuration-[^/]+/cluster-expansion.md
+    to: /maintenance/manual/cluster_expansion.md
+  - from: /devops/configuration-management/configuration-[^/]+/([^/]+)$
+    to: /maintenance/manual/$1
+  - from: /devops/configuration-management/index.md
+    to: /reference/configuration/index.md
+
+  - from: /devops/backup-and-recovery.md
+    to: /devops/manual/backup-and-recovery.md
+
+  - from: /devops/configuration-management/migration/(.*)$
+    to: /devops/index.md
+
+  - from: /devops/deployment-options/ansible/observability/logging.md
+    to: /devops/ansible/observability/logging.md
+  - from: /devops/deployment-options/ansible/observability/index.md
+    to: /devops/ansible/observability/index.md
+  - from: /devops/deployment-options/ansible/([^/]+)$
+    to: /devops/ansible/$1
+
+  - from: /devops/deployment-options/kubernetes/([^/]+)$
+    to: /devops/kubernetes/$1
+
+
+  - from: /devops/observability/system-views.md
+    to: /devops/manual/system-views.md
+  - from: /devops/observability/monitoring.md
+    to: /devops/manual/monitoring.md
+  - from: /devops/observability/index.md
+    to: /devops/manual/monitoring.md
+  - from: /devops/observability/logging.md
+    to: /devops/manual/logging.md
+
+  
+  - from: /devops/deployment-options/index.md
+    to: /devops/index.md
+  - from: /devops/deployment-options/manual/update-config.md
+    to: /maintenance/manual/cms.md
+  - from: /devops/deployment-options/manual/node-authorization.md
+    to: /devops/index.md
+  - from: /devops/deployment-options/manual/update-executable.md
+    to: /devops/manual/upgrade.md
+  - from: /devops/deployment-options/manual/maintenance.md
+    to: /devops/manual/maintenance-without-downtime.md
+  - from: /devops/deployment-options/manual/federated-queries/([^/]+)$
+    to: /devops/manual/federated-queries/$1
+  - from: /devops/deployment-options/manual/([^/]+)$
+    to: /devops/manual/$1
+
+  - from: /devops/configuration-management/check-config-version.md
+    to: /devops/index.md
+  - from: /devops/configuration-management/compare-configs.md
+    to: /devops/index.md
+
+
+  - from: /devops/concepts/maintenance-without-downtime.md
+    to: /devops/manual/maintenance-without-downtime.md
+  - from: /devops/concepts/system-requirements.md
+    to: /devops/system-requirements.md
+  - from: /devops/concepts/versioning.md
+    to: /devops/index.md
+  - from: /devops/concepts/index.md
+    to: /devops/index.md
+
+  - from: /reference/ydb-cli/commands/configuration/index.md
+    to: /reference/ydb-cli/configs.md
+  - from: /reference/ydb-cli/commands/configuration/cluster/([^/]+)$
+    to: /reference/ydb-cli/configs.md
+  - from: /reference/ydb-cli/commands/configuration/node/([^/]+)$
+    to: /reference/ydb-cli/configs.md
+
+  - from: /recipes/vector-search/([^/]+)$
+    to: /recipes/index.md
+  - from: /recipes/ydb-sdk/vector-search.md
+    to: /recipes/ydb-sdk/index.md
+
+  - from: /reference/configuration/client_certificate_authorization.md
+    to: /reference/configuration/index.md
+
+  - from: /integrations/ingestion/spark.md
+    to: /integrations/ingestion/index.md
+  - from: /integrations/vectorsearch/([^/]+)$
+    to: /integrations/index.md
+
+  - from: /concepts/vector_search.md
+    to: /concepts/index.md
+
+  - from: /dev/vector-indexes.md
+    to: /dev/index.md
+
+  - from: /yql/reference/syntax/batch-update.md
+    to: /yql/reference/syntax/index.md
+
+  - from: /yql/reference/syntax/batch-delete.md
+    to: /yql/reference/syntax/index.md
+  - from: /yql/reference/syntax/create_table/vector_index.md
+    to: /yql/reference/syntax/create_table/index.md
+  - from: /yql/reference/syntax/alter_table/indexes.md
+    to: /yql/reference/syntax/alter_table/index.md
+  - from: /yql/reference/syntax/select/vector_index.md
+    to: /yql/reference/syntax/select/index.md
+
+
 ru:
   - from: /postgresql/index.md
     to: /postgresql/intro.md
@@ -398,3 +519,12 @@ ru:
     to: /dev/terraform.md
   - from: /postgresql/docker-connect.md
     to: /postgresql/connect.md
+  - from: /contributor/configuration-v2.md
+    to: /contributor/index.md
+
+en:
+  - from: /reference/ydbops/rolling-restart-scenario.md
+    to: /reference/ydbops/scenarios.md
+  - from: /maintenance/manual/blobdepot(.*)$
+    to: /maintenance/manual/index.md
+

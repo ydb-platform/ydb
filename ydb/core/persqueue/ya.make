@@ -1,11 +1,8 @@
 LIBRARY()
 
 SRCS(
-    heartbeat.cpp
     dread_cache_service/caching_service.cpp
 )
-
-GENERATE_ENUM_SERIALIZATION(sourceid_info.h)
 
 PEERDIR(
     contrib/libs/fmt

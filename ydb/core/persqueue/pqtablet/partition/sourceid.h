@@ -1,8 +1,7 @@
 #pragma once
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
-#include <ydb/core/persqueue/heartbeat.h>
-#include <ydb/core/persqueue/sourceid_info.h>
+#include <ydb/core/persqueue/common/sourceid_info.h>
 #include <ydb/core/persqueue/common/key.h>
 #include "ownerinfo.h"
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>

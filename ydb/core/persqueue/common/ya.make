@@ -6,7 +6,7 @@ SRCS(
     microseconds_sliding_window.cpp
 )
 
-
+GENERATE_ENUM_SERIALIZATION(sourceid_info.h)
 
 PEERDIR(
     library/cpp/monlib/service/pages

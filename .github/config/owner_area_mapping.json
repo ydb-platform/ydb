@@ -1,5 +1,4 @@
 {
-  "_comment": "Mapping from test owners to GitHub area labels for automatic issue categorization",
   "qp": "area/queryprocessor",
   "Topics": "area/topics",
   "topics": "area/topics", 

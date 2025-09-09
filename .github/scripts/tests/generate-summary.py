@@ -19,7 +19,8 @@ def load_owner_area_mapping():
     """Load owner to area label mapping from JSON config file."""
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        mapping_file = os.path.join(script_dir, 'owner_area_mapping.json')
+        config_dir = os.path.join(script_dir, '..', '..', 'config')
+        mapping_file = os.path.join(config_dir, 'owner_area_mapping.json')
         with open(mapping_file, 'r') as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError) as e:

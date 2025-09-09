@@ -138,18 +138,16 @@ class WorkloadMangerBase(LoadSuiteBase):
                 threads=self.threads,
                 users=self.get_users(),
             )
+            for query, result in results.items():
+                try:
+                    with allure.step(query):
+                        self.process_query_result(result, query, True)
+                except BaseException:
+                    pass
             self.after_workload()
-        except BaseException:
-            raise
         finally:
             self.stop_checking.set()
             check_thread.join()
-        for query, result in results.items():
-            try:
-                with allure.step(query):
-                    self.process_query_result(result, query, True)
-            except BaseException:
-                pass
         overall_result = YdbCliHelper.WorkloadRunResult()
         overall_result.merge(*results.values())
         overall_result.iterations.clear()

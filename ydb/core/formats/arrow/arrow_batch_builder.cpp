@@ -262,7 +262,7 @@ void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) {
 }
 
 void TArrowBatchBuilder::AppendValue(const NUdf::TUnboxedValue& value, ui32 colNum) {
-    // NumBytes += value.Size();
+    NumBytes += sizeof(NUdf::TUnboxedValue); // TODO: strings or containers sizes?
     auto yqlType = YqlSchema[colNum].second;
     auto status = NKikimr::NArrow::AppendValue(*BatchBuilder, value, colNum, yqlType);
     Y_ABORT_UNLESS(status.ok(), "Failed to append cell: %s", status.ToString().c_str());

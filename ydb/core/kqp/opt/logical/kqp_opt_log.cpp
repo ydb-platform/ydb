@@ -33,6 +33,8 @@ public:
     {
 #define HNDL(name) "KqpLogical-"#name, Hndl(&TKqpLogicalOptTransformer::name)
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushPredicateToReadTable));
+        AddHandler(0, &TCoTop::Match, HNDL(TopSortSelectIndex));
+        AddHandler(0, &TCoTopSort::Match, HNDL(TopSortSelectIndex));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushExtractedPredicateToReadTable));
         AddHandler(0, &TCoAggregate::Match, HNDL(RewriteAggregate));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
@@ -110,6 +112,12 @@ protected:
         }
         TExprBase output = KqpPushPredicateToReadTable(node, ctx, KqpCtx);
         DumpAppliedRule("PushPredicateToReadTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> TopSortSelectIndex(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpTopSortSelectIndex(node, ctx, KqpCtx);
+        DumpAppliedRule("KqpTopSortSelectIndex", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

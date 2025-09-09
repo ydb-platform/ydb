@@ -58,6 +58,8 @@ struct TKqpReadTableSettings {
     static constexpr TStringBuf SequentialSettingName = "Sequential";
     static constexpr TStringBuf ForcePrimaryName = "ForcePrimary";
     static constexpr TStringBuf GroupByFieldNames = "GroupByFieldNames";
+    static constexpr TStringBuf PointPrefixLenSettingName = "PointPrefixLen";
+    static constexpr TStringBuf IndexSelectionDebugInfoSettingName = "IndexSelectionDebugInfo";
 
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;
@@ -65,6 +67,8 @@ struct TKqpReadTableSettings {
     bool Sorted = false;
     TMaybe<ui64> SequentialInFlight;
     bool ForcePrimary = false;
+    ui64 PointPrefixLen = 0;
+    THashMap<TString, TString> IndexSelectionInfo;
 
     void AddSkipNullKey(const TString& key);
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }
@@ -104,10 +108,12 @@ struct TKqpReadTableExplainPrompt {
     static constexpr TStringBuf UsedKeyColumnsName = "UsedKeyColumns";
     static constexpr TStringBuf ExpectedMaxRangesName = "ExpectedMaxRanges";
     static constexpr TStringBuf PointPrefixLenName = "PointPrefixLen";
+    static constexpr TStringBuf IndexSelectionDebugInfoSettingName = "IndexSelectionDebugInfo";
 
     TVector<TString> UsedKeyColumns;
     TMaybe<ui64> ExpectedMaxRanges;
     ui64 PointPrefixLen = 0;
+    THashMap<TString, TString> IndexSelectionInfo;
 
     void SetUsedKeyColumns(TVector<TString> columns) {
         UsedKeyColumns = columns;

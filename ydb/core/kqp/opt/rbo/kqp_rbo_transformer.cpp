@@ -164,6 +164,10 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
     
     TVector<TExprNode::TPtr> resultElements;
 
+    // In pg syntax duplicate attributes are allowed in the results, but we need to rename them
+    // We use the counters for this purpose
+    THashMap<TString, int> resultElementCounters;
+
     TExprNode::TPtr joinExpr;
     TExprNode::TPtr filterExpr;
     TExprNode::TPtr lastAlias;
@@ -187,6 +191,8 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
             if (TKqpOpRoot::Match(childExpr.Get())) {
                 auto opRoot = TKqpOpRoot(childExpr);
 
+                TVector<TExprNode::TPtr> subqueryElements;
+
                 // We need to rename all the IUs in the subquery to reflect the new alias
                 auto subqueryType = childExpr->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
                 for (auto item : subqueryType->GetItems()) {
@@ -195,10 +201,10 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
                     auto renamedUnit = TInfoUnit(TString(alias->Content()), unit.ColumnName);
 
                     // clang-format off
-                    resultElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
+                    subqueryElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
                         .Input(opRoot.Input())
-                        .Variable().Value(unit.GetFullName()).Build()
-                        .From().Value(renamedUnit.GetFullName()).Build()
+                        .Variable().Value(renamedUnit.GetFullName()).Build()
+                        .From().Value(unit.GetFullName()).Build()
                     .Done().Ptr());
                     // clang-format on
                 }
@@ -206,7 +212,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
                 // clang-format off
                 fromExpr = Build<TKqpOpMap>(ctx, node->Pos())
                     .Input(opRoot.Input())
-                    .MapElements().Add(resultElements).Build()
+                    .MapElements().Add(subqueryElements).Build()
                     .Project().Value("true").Build()
                 .Done().Ptr();
                 // clang-format on
@@ -349,8 +355,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
 
     for (auto resultItem : result->Child(1)->Children()) {
         auto column = resultItem->Child(0);
-        auto columnName = column->Content();
-        auto variable = Build<TCoAtom>(ctx, node->Pos()).Value(columnName).Done();
+        TString columnName = TString(column->Content());
 
         const auto expectedTypeNode = finalType->FindItemType(columnName);
         Y_ENSURE(expectedTypeNode);
@@ -395,6 +400,16 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
             .Done();
             // clang-format on
         }
+
+        if (resultElementCounters.contains(columnName)) {
+            resultElementCounters[columnName] += 1;
+            columnName = columnName + "_generated_" + std::to_string(resultElementCounters.at(columnName));
+        }
+        else {
+            resultElementCounters[columnName] = 1;
+        }
+
+        auto variable = Build<TCoAtom>(ctx, node->Pos()).Value(columnName).Done();
 
         // clang-format off
         resultElements.push_back(Build<TKqpOpMapElementLambda>(ctx, node->Pos())

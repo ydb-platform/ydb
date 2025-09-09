@@ -388,11 +388,11 @@ namespace NKikimr
             .MapElements()
                 .Add(newMapElements)
             .Build()
-            .Project<TCoAtom>(ctx, node->Pos()).Value("true").Build()
+            .Project().Value("true").Build()
         .Done().Ptr();
                 // clang-format on
             }
-            return std::make_shared<TOpMap>(node);
+            return std::make_shared<TOpMap>(result);
         }
 
         TOpProject::TOpProject(TExprNode::TPtr node) : IUnaryOperator(EOperator::Project, node)

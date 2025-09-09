@@ -2245,13 +2245,18 @@ TStatus AnnotateOpMapElementLambda(const TExprNode::TPtr& input, TExprContext& c
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    input->SetTypeAnn(lambdaType);
+    auto variable = input->ChildRef(TKqpOpMapElementLambda::idx_Variable);
+    auto res = ctx.MakeType<TItemExprType>(variable->Content(), lambdaType);
+
+    input->SetTypeAnn(res);
     return TStatus::Ok;
 }
 
 TStatus AnnotateOpMapElementRename(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
     const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMapElementLambda::idx_Input)->GetTypeAnn();
-    const TTypeAnnotationNode* itemType = inputType->Cast<TListExprType>()->GetItemType();
+    auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto typeItems = structType->GetItems();
 
     auto from = input->ChildRef(TKqpOpMapElementRename::idx_From);
@@ -2259,26 +2264,37 @@ TStatus AnnotateOpMapElementRename(const TExprNode::TPtr& input, TExprContext& c
         return from->Content() == t->GetName();
     });
 
+    if (typeIt==typeItems.end()) {
+        YQL_CLOG(TRACE, CoreDq) << "Trying to find " << from->Content() << " in " << *(TTypeAnnotationNode*)structType;
+    }
+
     Y_ENSURE(typeIt!=typeItems.end());
-    input->SetTypeAnn(*typeIt);
+
+    auto variable = input->ChildRef(TKqpOpMapElementRename::idx_Variable);
+    auto res = ctx.MakeType<TItemExprType>(variable->Content(), (*typeIt)->GetItemType());
+
+    input->SetTypeAnn(res);
     return TStatus::Ok;
 }
 
 TStatus AnnotateOpMap(const TExprNode::TPtr& input, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     Y_UNUSED(typesCtx);
-    
-    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMap::idx_Input)->GetTypeAnn();
-    //YQL_CLOG(TRACE, CoreDq) << "Annotating OpMap, input type:" << *inputType;
-
-    const TTypeAnnotationNode* itemType = inputType->Cast<TListExprType>()->GetItemType();
-    //YQL_CLOG(TRACE, CoreDq) << "item type:" << *itemType;
 
     TVector<const TItemExprType*> structItemTypes;
+
+    if (input->ChildrenSize() <= TKqpOpMap::idx_Project) {
+        const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMap::idx_Input)->GetTypeAnn();
+        auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+        for (auto t : structType->GetItems()) {
+            structItemTypes.push_back(t);
+        }
+    }
 
     for (size_t idx = 0; idx < input->ChildPtr(TKqpOpMap::idx_MapElements)->ChildrenSize(); idx++) {
         auto& element = input->ChildPtr(TKqpOpMap::idx_MapElements)->ChildRef(idx);
         auto type = element->GetTypeAnn();
-        structItemTypes.push_back(ctx.MakeType<TItemExprType>(variable->Content(), type));
+        structItemTypes.push_back((TItemExprType*)type);
     }
 
     auto resultItemType = ctx.MakeType<TStructExprType>(structItemTypes);
@@ -2297,7 +2313,7 @@ TStatus AnnotateOpProject(const TExprNode::TPtr& input, TExprContext& ctx) {
     TVector<const TItemExprType*> structItemTypes;
     auto typeItems = structType->GetItems();
 
-    for (size_t i=0; i<input->ChildPtr(TKqpOpProject::idx_ProjectList).ChildrenSize(); i++) {
+    for (size_t i=0; i<input->ChildPtr(TKqpOpProject::idx_ProjectList)->ChildrenSize(); i++) {
         auto proj = input->ChildPtr(TKqpOpProject::idx_ProjectList)->ChildRef(i);
         auto typeItemIt = std::find_if(typeItems.begin(), typeItems.end(), [&proj](const TItemExprType* t){
             return proj->Content() == t->GetName();
@@ -2570,16 +2586,20 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateOpEmptySource(input, ctx);
             }
 
-            if (TKqpOpMapElement::Match(input.Get())) {
-                return AnnotateOpMapElement(input, ctx);
+            if (TKqpOpMapElementLambda::Match(input.Get())) {
+                return AnnotateOpMapElementLambda(input, ctx);
+            }
+
+            if (TKqpOpMapElementRename::Match(input.Get())) {
+                return AnnotateOpMapElementRename(input, ctx);
             }
 
             if (TKqpOpMap::Match(input.Get())) {
                 return AnnotateOpMap(input, ctx, typesCtx);
             }
 
-            if (TKqpOpRename::Match(input.Get())) {
-                return AnnotateOpRename(input, ctx);
+            if (TKqpOpProject::Match(input.Get())) {
+                return AnnotateOpProject(input, ctx);
             }
             
             if (TKqpOpFilter::Match(input.Get())) {

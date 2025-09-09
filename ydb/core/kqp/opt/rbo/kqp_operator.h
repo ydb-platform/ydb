@@ -15,6 +15,7 @@ enum EOperator : ui32 {
     EmptySource,
     Source,
     Map,
+    Project,
     Filter,
     Join,
     Limit,

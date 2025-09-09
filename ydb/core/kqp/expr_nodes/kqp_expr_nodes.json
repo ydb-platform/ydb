@@ -778,7 +778,7 @@
         {
             "Name": "TKqpOpMapElementBase",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KqpOpMapElementBase"},
+            "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Variable", "Type": "TCoAtom"}

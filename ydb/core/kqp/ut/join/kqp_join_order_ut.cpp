@@ -1,6 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-// Trigger CI run for issue creation testing - commit SHA fix
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 

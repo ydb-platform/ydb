@@ -1,7 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
-// Test modification to trigger CI with refactored issue creation system
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -21,7 +20,7 @@
 #include <util/string/printf.h>
 #include <util/generic/scope.h>
 
-// Minor change to trigger CI test run for issue creation report verification
+
 namespace NKikimr::NKqp {
 
 using namespace NYdb;

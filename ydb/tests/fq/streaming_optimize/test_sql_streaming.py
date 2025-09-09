@@ -2,8 +2,6 @@ import os
 import pytest
 import yatest.common
 
-# Trigger CI run for issue creation report verification
-
 from test_utils import pytest_generate_tests_for_run, get_case_file
 from ydb.tests.fq.tools.fqrun import FqRun
 from yql_utils import yql_binary_path

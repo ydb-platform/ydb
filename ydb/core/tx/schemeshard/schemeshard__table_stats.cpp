@@ -482,7 +482,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         collectKeySample = true;
     } else {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Do not want to split tablet " << datashardId);
+            "Do not want to split tablet " << datashardId << " " << reason);
         return true;
     }
 

@@ -119,9 +119,10 @@ struct TSerializerCtx {
     TMap<TString, ui32> StageGuidToId;
     THashMap<ui32, TVector<std::pair<ui32, ui32>>> ParamBindings;
     THashSet<ui32> PrecomputePhases;
+    TMap<TString, const TExprNode*> OptimizedStages;
     ui32 PlanNodeId = 0;
 
-    const TExprContext& ExprCtx;
+    TExprContext& ExprCtx;
     const TString Database;
     const TString& Cluster;
     const TIntrusivePtr<NYql::TKikimrTablesData> TablesData;
@@ -491,6 +492,16 @@ private:
 
         planNode.Type = EPlanNodeType::Connection;
 
+        auto isBlockConnection = IsWideSequenceBlockType(*connection.Output().Stage().Program().Body().Ref().GetTypeAnn());
+        if (!isBlockConnection) {
+            if (auto it = SerializerCtx.OptimizedStages.find(settings.Id); it != SerializerCtx.OptimizedStages.end()) {
+                isBlockConnection = IsWideSequenceBlockType(*TMaybeNode<TDqPhyStage>(it->second).Cast().Program().Body().Ref().GetTypeAnn());
+            }
+        }
+        if (isBlockConnection) {
+            planNode.NodeInfo["Blocks"] = "True";
+        }
+
         if (connection.Maybe<TDqCnUnionAll>()) {
             planNode.TypeName = "UnionAll";
         } else if (connection.Maybe<TDqCnBroadcast>()) {
@@ -617,6 +628,7 @@ private:
         TString RangesDesc;
 
         bool IncludePointPrefixLen = false;
+        THashMap<TString, TString> IndexSelectionInfo;
     };
 
     template<typename TColumnsIterator>
@@ -691,6 +703,22 @@ private:
             op.Properties["ReadRangesPointPrefixLen"] = ToString(params.ExplainPrompt.PointPrefixLen);
         }
 
+        if (!params.ExplainPrompt.IndexSelectionInfo.empty()) {
+            TStringBuilder fullInfo;
+            bool isFirst = true;
+            for(const auto& [name, info] : params.IndexSelectionInfo) {
+                if (isFirst) {
+                    isFirst = false;
+                } else {
+                    fullInfo << ", ";
+                }
+
+                fullInfo << name << ": " << info;
+            }
+
+            op.Properties["IndexSelectionInfo"] = TString(fullInfo);
+        }
+
         // Add remaining columns from columnsIter (avoiding duplicates)
         for (const auto& col : columnsIter) {
             TString colName = TString(col.Value());
@@ -721,7 +749,8 @@ private:
             .TablePath = tablePath,
             .ExplainPrompt = explainPrompt,
             .RangesDesc = rangesDesc,
-            .IncludePointPrefixLen = true
+            .IncludePointPrefixLen = true,
+            .IndexSelectionInfo = TKqpReadTableSettings::Parse(sourceSettings.Settings()).IndexSelectionInfo
         };
 
         ProcessReadRangesCommon(params, readInfo, op, planNode, sourceSettings.Columns());
@@ -1071,6 +1100,7 @@ private:
         } else if (maybeCallable && (maybeCallable.Cast().CallableName() == "BlockMergeFinalizeHashed" || maybeCallable.Cast().CallableName() == "BlockMergeManyFinalizeHashed")) {
             TOperator op;
             op.Properties["Name"] = "Aggregate";
+            op.Properties["Blocks"] = "True";
             op.Properties["Phase"] = "Final";
             operatorId = AddOperator(planNode, "Aggregate", std::move(op));
         } else if (auto maybeCombiner = TMaybeNode<TCoWideCombiner>(node)) {
@@ -1144,6 +1174,7 @@ private:
                     op.Properties["Name"] = "Aggregate";
                     op.Properties["Phase"] = "Intermediate";
                     op.Properties["Pushdown"] = "True";
+                    op.Properties["Blocks"] = "True";
 
                     AddOptimizerEstimates(op, kqpOlapAggregation);
                     currentOperatorId = AddOperator(planNode, "Aggregate", std::move(op));
@@ -1161,6 +1192,7 @@ private:
                     op.Properties["Name"] = "Filter";
                     op.Properties["Predicate"] = OlapFilterStr(kqpOlapFilter);
                     op.Properties["Pushdown"] = "True";
+                    op.Properties["Blocks"] = "True";
 
                     AddOptimizerEstimates(op, kqpOlapFilter);
                     auto filterOperatorId = AddOperator(planNode, "Filter", std::move(op));
@@ -1360,6 +1392,7 @@ private:
 
         TOperator op;
         op.Properties["Name"] = "Aggregate";
+        op.Properties["Blocks"] = "True";
         op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(blockCombine.Keys());
 
         if (blockCombine.Aggregations().Ref().IsList()) {
@@ -1817,7 +1850,8 @@ private:
             .TablePath = tablePath,
             .ExplainPrompt = explainPrompt,
             .RangesDesc = rangesDesc,
-            .IncludePointPrefixLen = false
+            .IncludePointPrefixLen = false,
+            .IndexSelectionInfo = TKqpReadTableSettings::Parse(read.Settings()).IndexSelectionInfo,
         };
 
         ProcessReadRangesCommon(params, readInfo, op, planNode, read.Columns());
@@ -2735,6 +2769,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
 // TODO(sk): check prepared statements params in read ranges
 // TODO(sk): check params from correlated subqueries // lookup join
 void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQuery& query,
+    const NYql::NNodes::TKqpPhysicalQuery& peepHoleOptimizedQuery,
     TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& database,
     const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
     TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
@@ -2777,7 +2812,19 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
 
     id = 0;
     for (ui32 txId = 0; txId < query.Transactions().Size(); ++txId) {
+        if (txId < peepHoleOptimizedQuery.Transactions().Size()) {
+            VisitExpr(peepHoleOptimizedQuery.Transactions().Item(txId).Ref(),
+                [&serializerCtx](const TExprNode& node) {
+                    if (auto maybeStage = TMaybeNode<TDqPhyStage>(&node)) {
+                        auto stageGuid = NDq::TDqStageSettings::Parse(maybeStage.Cast()).Id;
+                        serializerCtx.OptimizedStages[stageGuid] = maybeStage.Raw();
+                    }
+                    return true;
+                }
+            );
+        }
         setPlan(id++, query.Transactions().Item(txId), (*queryProto.MutableTransactions())[txId]);
+        serializerCtx.OptimizedStages.clear();
     }
 
     TVector<const TString> txPlans;
@@ -3262,7 +3309,6 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const 
             txPlans.push_back(txPlan);
         }
     }
-
     NJsonWriter::TBuf writer;
     writer.BeginObject();
 

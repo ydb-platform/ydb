@@ -12,6 +12,7 @@ constexpr ui32 INTERNAL_HEIGHT = 14;
 constexpr ui32 INTERNAL_WIDTH = 16;
 constexpr ui32 INTERNAL_TEXT_HEIGHT = 8;
 constexpr ui32 TIME_SERIES_RANGES = 32;
+constexpr ui32 CONN_ARROW = 4;
 
 TString FormatDurationMs(ui64 durationMs) {
     TStringBuilder builder;
@@ -184,6 +185,17 @@ TString GetEstimation(const NJson::TJsonValue& node) {
         }
     }
     return ebuilder;
+}
+
+TString DivP1(ui32 divisible, ui32 divisor) {
+    TStringBuilder result;
+    ui32 p0 = divisible / divisor;
+    result << p0;
+    ui32 p1 = divisible * 10 / divisor - p0 * 10;
+    if (p1) {
+        result << '.' << p1;
+    }
+    return result;
 }
 
 bool TAggregation::Load(const NJson::TJsonValue& node) {
@@ -632,14 +644,19 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         auto operatorsArray = operators->GetArray();
         for (const auto& subNode : operatorsArray) {
             if (auto* nameNode = subNode.GetValueByPath("Name")) {
-                auto name = nameNode->GetStringSafe();
+                TString name = nameNode->GetStringSafe();
                 TString info;
+                bool blocks = false;
                 TString operatorType = "";
                 TString operatorId = "0";
                 auto externalOperator = false;
 
                 if (name == "Iterator" || name == "Member" || name == "ToFlow") {
                     continue;
+                }
+
+                if (auto* blocksNode = subNode.GetValueByPath("Blocks")) {
+                    blocks = blocksNode->GetStringSafe() == "True";
                 }
 
                 if (name == "Filter" && prevFilter) {
@@ -900,11 +917,13 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     externalOperators.back().Estimations = GetEstimation(subNode);
                     externalOperators.back().Input1 = input1;
                     externalOperators.back().Input2 = input2;
+                    externalOperators.back().Blocks = blocks;
                 } else {
                     stage->Operators.emplace_back(name, info);
                     stage->Operators.back().Estimations = GetEstimation(subNode);
                     stage->Operators.back().Input1 = input1;
                     stage->Operators.back().Input2 = input2;
+                    stage->Operators.back().Blocks = blocks;
                 }
 
                 if (stage->StatsNode) {
@@ -957,6 +976,11 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                             if (auto* ingressTopNode = stage->StatsNode->GetValueByPath("Ingress")) {
                                 // only 1 ingress node is possible (???)
                                 auto& ingress0 = (*ingressTopNode)[0];
+                                if (auto* nameNode = ingress0.GetValueByPath("Name")) {
+                                    if (nameNode->GetStringSafe() == "CS") {
+                                        externalOperators.back().Blocks = true;
+                                    }
+                                }
                                 if (auto* ingressNode = ingress0.GetValueByPath("Ingress")) {
                                     if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
                                         stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes,
@@ -986,6 +1010,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
 
     if (!externalOperators.empty() && !stage->External) {
         auto connection = std::make_shared<TConnection>(*stage, "External", 0);
+        connection->Blocks = true;
         stage->Connections.push_back(connection);
         Stages.push_back(std::make_shared<TStage>(this, "External"));
         StageToExternalConnection[Stages.back().get()] = connection.get();
@@ -999,6 +1024,10 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
     if (stage->Operators.empty()) {
         stage->Operators.emplace_back(stage->NodeType, "");
         // add inputs + outputs from connections
+    }
+
+    if (outputConnection) {
+        stage->Operators.front().Blocks |= outputConnection->Blocks;
     }
 
     const NJson::TJsonValue* inputNode = nullptr;
@@ -1153,6 +1182,9 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                             }
                         }
                         auto connection = std::make_shared<TConnection>(*stage, subNodeType, connectionPlanNodeId);
+                        if (auto* blocksNode = plan.GetValueByPath("Blocks")) {
+                            connection->Blocks = blocksNode->GetStringSafe() == "True";
+                        }
                         NodeToConnection[connectionPlanNodeId] = connection.get();
                         stage->Connections.push_back(connection);
                         if (keyColumnsNode) {
@@ -1235,6 +1267,9 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 } else if (auto* cteNameNode = plan.GetValueByPath("CTE Name")) {
                     auto cteName = "CTE " + cteNameNode->GetStringSafe();
                     auto connection = std::make_shared<TConnection>(*stage, subNodeType, connectionPlanNodeId);
+                    if (auto* blocksNode = plan.GetValueByPath("Blocks")) {
+                        connection->Blocks = blocksNode->GetStringSafe() == "True";
+                    }
                     NodeToConnection[connectionPlanNodeId] = connection.get();
                     connection->CteConnection = true;
                     stage->Connections.push_back(connection);
@@ -1680,25 +1715,26 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             << SvgRect(Config.HeaderLeft + s->IndentX, y + offsetY, INDENT_X, s->IndentY - y, stageClass);
         }
 
-        if (!s->External) {
-            s->Builder
-            << SvgStageId(Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH / 2, s->OffsetY + s->Height / 2 + offsetY, ToString(s->PhysicalStageId));
-        }
-
         {
             ui32 y0 = s->OffsetY + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 + offsetY;
-            bool first = true;
+            ui32 index = 0;
             for (auto op : s->Operators) {
-                if (first) {
-                    first = false;
-                } else {
+                if (index > 0) {
                     s->Builder << SvgLine(Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH + 2, y0, Config.HeaderLeft + Config.HeaderWidth, y0, "opdiv");
                 }
                 s->Builder
-                    << "<g><title>" << op.Name << ": " << op.Info << "</title>"
+                    << "<g><title>" << op.Name << ": " << op.Info << (op.Blocks ? " Blocks: True" : "") << "</title>";
+                if (op.Blocks) {
+                    auto h = INTERNAL_TEXT_HEIGHT * 2 + INTERNAL_GAP_Y;
+                    if (index == s->Operators.size() - 1) {
+                        h = s->OffsetY + s->Height + offsetY - y0;
+                    }
+                    s->Builder
+                    << SvgRect(Config.HeaderLeft + s->IndentX, y0, INTERNAL_WIDTH + INDENT_X, h, "blocks");
+                }
+                s->Builder
                     << SvgText(Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH + 2, y0 + INTERNAL_TEXT_HEIGHT, "texts clipped", op.Name)
-                    << SvgText(Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH + 2 + 4, y0 + INTERNAL_TEXT_HEIGHT * 2 + INTERNAL_GAP_Y, "texts clipped", op.Info);
-
+                    << SvgText(Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH + 2 + 8, y0 + INTERNAL_TEXT_HEIGHT * 2 + INTERNAL_GAP_Y, "texts clipped", op.Info);
                 if (op.OutputRows) {
                     TStringBuilder tooltip;
                     auto textSum = FormatTooltip(tooltip, "Output Rows", op.OutputRows.get(), FormatInteger);
@@ -1741,7 +1777,13 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 }
 
                 y0 += (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y) * 2;
+                index++;
             }
+        }
+
+        if (!s->External) {
+            s->Builder
+            << SvgStageId(Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH / 2, s->OffsetY + s->Height / 2 + offsetY, ToString(s->PhysicalStageId));
         }
 
         ui32 y0 = s->OffsetY + offsetY + INTERNAL_GAP_Y;
@@ -2083,20 +2125,39 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             else                                  mark = "?";
 
             c->Builder
-                << "  <polygon points='" << Config.HeaderLeft + x + INTERNAL_WIDTH << "," << y + INTERNAL_HEIGHT << " "
-                << Config.HeaderLeft + x << "," << y + INTERNAL_HEIGHT << " ";
-            if (s->Connections.size() >= 2) {
-            c->Builder
-                << Config.HeaderLeft + x - INTERNAL_GAP_X * 2 << "," << y + INTERNAL_HEIGHT / 2 << " ";
-            }
-            c->Builder
-                << Config.HeaderLeft + x << "," << y << " ";
+                << "  <path d='M" << Config.HeaderLeft + x + INTERNAL_WIDTH << ',' << y + INTERNAL_HEIGHT << "l-" << INTERNAL_WIDTH << ",0";
             if (s->Connections.size() == 1) {
-            c->Builder
-                << Config.HeaderLeft + x + INTERNAL_WIDTH / 2 << "," << y - INTERNAL_GAP_Y * 2 << " ";
+                c->Builder
+                << "l0,-" << INTERNAL_HEIGHT << "l" << INTERNAL_WIDTH / 2 << ",-" << CONN_ARROW << 'l' << INTERNAL_WIDTH / 2 << ',' << CONN_ARROW;
+            } else {
+                c->Builder
+                << "l-" << CONN_ARROW << ",-" << INTERNAL_HEIGHT / 2 << 'l' << CONN_ARROW << ",-" << INTERNAL_HEIGHT / 2 << 'l' << INTERNAL_WIDTH << ",0";
             }
             c->Builder
-                << Config.HeaderLeft + x + INTERNAL_WIDTH << "," << y << "' class='conn' />" << Endl
+                << "z' class='" << (c->Blocks ? "conn blocks": "conn") << "' />" << Endl;
+/*
+            if (c->Blocks) {
+                if (s->Connections.size() == 1) {
+                    c->Builder
+                    << "  <path d='M" << Config.HeaderLeft + x + INTERNAL_WIDTH - (INTERNAL_WIDTH - INTERNAL_TEXT_HEIGHT) / 2
+                    << ',' << y + INTERNAL_HEIGHT
+                    << "l-" << INTERNAL_TEXT_HEIGHT << ",0l0,-" << INTERNAL_HEIGHT + 4 * INTERNAL_TEXT_HEIGHT / INTERNAL_WIDTH
+                    << 'l' << INTERNAL_TEXT_HEIGHT / 2 << ",-" << CONN_ARROW * (INTERNAL_WIDTH - INTERNAL_TEXT_HEIGHT) / INTERNAL_WIDTH
+                    << 'l' << INTERNAL_TEXT_HEIGHT / 2 << ',' << CONN_ARROW * (INTERNAL_WIDTH - INTERNAL_TEXT_HEIGHT) / INTERNAL_WIDTH
+                    << "z' class='blocks' />" << Endl;
+                } else {
+                    c->Builder
+                    << "  <path d='M" << Config.HeaderLeft + x + INTERNAL_WIDTH
+                    << ',' << y + INTERNAL_HEIGHT - (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
+                    << "l-" << INTERNAL_WIDTH + CONN_ARROW * INTERNAL_TEXT_HEIGHT / INTERNAL_HEIGHT
+                    << ",0l-" << DivP1(CONN_ARROW * (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT), INTERNAL_HEIGHT) << ",-" << INTERNAL_TEXT_HEIGHT / 2
+                    << "l" << DivP1(CONN_ARROW * (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT), INTERNAL_HEIGHT) << ",-" << INTERNAL_TEXT_HEIGHT / 2
+                    << 'l' << INTERNAL_WIDTH + CONN_ARROW * INTERNAL_TEXT_HEIGHT / INTERNAL_HEIGHT << ",0"
+                    << "z' class='blocks' />" << Endl;
+                }
+            }
+*/
+            c->Builder
                 << SvgText(Config.HeaderLeft + x + INTERNAL_WIDTH / 2, y + INTERNAL_TEXT_HEIGHT  + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 - 1, "conn", mark);
 
             if (c->InputBytes) {
@@ -2229,6 +2290,9 @@ void TPlan::PrintSvg(TStringBuilder& builder) {
                     builder << s;
                 }
             }
+            if (c->Blocks) {
+                builder << " Blocks: True";
+            }
             builder
                 << "</title>" << Endl
                 << s
@@ -2238,6 +2302,9 @@ void TPlan::PrintSvg(TStringBuilder& builder) {
 
     for (const auto& [_, c] : StageToExternalConnection) {
         TString s = c->Builder;
+        if (c->Blocks) {
+            builder << " Blocks: True";
+        }
         if (s) {
             builder
                 << "<g class='selectable'><title>Connection: " << c->NodeType << "</title>" << Endl
@@ -2287,6 +2354,8 @@ TColorPalette::TColorPalette() {
     SpillingTimeDark    = "var(--spill-dark, #CC9700)";
     SpillingTimeMedium  = "var(--spill-medium, #FFC522)";
     SpillingTimeLight   = "var(--spill-light, #FFD766)";
+
+    BlockMedium = "var(--block-medium, #EACB68)";
 }
 
 TPlanViewConfig::TPlanViewConfig() {
@@ -2522,6 +2591,7 @@ TString TPlanVisualizer::PrintSvg() {
     svg << "<style type='text/css'>" << Endl
         << "  rect.stage { stroke-width:0; fill:" << Config.Palette.StageMain << "; }" << Endl
         << "  rect.clone { stroke-width:0; fill:" << Config.Palette.StageClone << "; }" << Endl
+        << "  rect.blocks { stroke-width:0; fill:" << Config.Palette.BlockMedium << "; }" << Endl
         << "  .texts { text-anchor:start; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
         << "  .textm { text-anchor:middle; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
         << "  .texte { text-anchor:end; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
@@ -2529,13 +2599,17 @@ TString TPlanVisualizer::PrintSvg() {
         << "  line.opdiv { stroke-width:1; stroke:" << Config.Palette.StageGrid << "; stroke-dasharray:1,2; }" << Endl
         << "  text.clipped { clip-path:url(#clipTextPath); }" << Endl
         << "  polygon.conn { stroke-width:0; fill:" << Config.Palette.ConnectionFill << "; }" << Endl
+        << "  path.conn { stroke-width:1; stroke:" << Config.Palette.ConnectionFill << "; fill:" << Config.Palette.ConnectionFill << "; }" << Endl
+        << "  path.conn.blocks { stroke-width:1; stroke:" << Config.Palette.ConnectionFill << "; fill:" << Config.Palette.BlockMedium << "; }" << Endl
         << "  text.conn { text-anchor:middle; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT - 2 << "px; fill:" << Config.Palette.ConnectionText << "; }" << Endl
         << "  rect.background { stroke-width:0; fill:#33FFFF; opacity:0; }" << Endl
         << "  g.selected circle.stage { fill:#33FFFF; }" << Endl
         << "  g.selected polygon.conn { fill:#33FFFF; }" << Endl
+        << "  g.selected path.conn { stroke:#33FFFF; fill:#33FFFF; }" << Endl
         << "  g.selected rect.stage { fill:#33FFFF; }" << Endl
         << "  g.selected rect.clone { fill:#33FFFF; }" << Endl
         << "  g.selected rect.background { opacity:1; }" << Endl
+        << "  g.selected path.blocks { stroke:#33FFFF; }" << Endl
         << "</style>" << Endl;
     svg << R"(
 <script type="text/ecmascript">

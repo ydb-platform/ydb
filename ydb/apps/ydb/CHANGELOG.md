@@ -1,4 +1,5 @@
 * Added query compilation time statistics to the `ydb workload * run` command.
+* **_(Requires server v25.4+)_** Added the `--replace-sys-acl` option to the `tools restore` command, which specifies whether to replace ACL for system objects.
 
 ## 2.25.0 ##
 
@@ -10,7 +11,7 @@
 * Fixed a bug with the progress bar display in the `ydb workload clickbench import files` command — incorrect percentage value and excessive line breaks causing duplicated progress lines.
 * Fixed a bug where the `ydb workload topic write` command could crash with an `Unknown AckedMessageId` error due to an internal race condition.
 * Fixed decimal type comparison in `ydb workload * run` commands.
-* Changed the default logging level from `EMERGENCY` to `ERROR` for commands that support multiple verbosity levels.
+* Changed the default logging level from `EMERGENCY` to `WARN` for commands that support multiple verbosity levels.
 * Added the `--start-offset` option to the `ydb topic read` command, which specifies a starting position for reading from the selected partition.
 * Added a new paths approach in the `ydb export s3` and `ydb import s3` commands with the new `--include` option instead of the `--item` option.
 * Added support for encryption features in the `ydb export s3` and `ydb import s3` commands.

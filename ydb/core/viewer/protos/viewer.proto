@@ -45,6 +45,8 @@ enum EObjectType {
     View = 26;
     ResourcePool = 27;
     SysView = 28;
+    Secret = 29;
+    StreamingQuery = 30;
 }
 
 message TBrowseInfo {

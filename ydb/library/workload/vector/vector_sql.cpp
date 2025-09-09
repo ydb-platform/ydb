@@ -36,6 +36,24 @@ std::tuple<std::string, bool> GetMetricInfo(NYdb::NTable::TVectorIndexSettings::
 }
 
 
+std::string MakeKeyExpression(const TVectorWorkloadParams& params, const std::string& tableAlias) {
+    TStringBuilder ret;
+    if (params.KeyColumns.size() == 1) {
+        ret << "UNWRAP(CAST(" << tableAlias << params.KeyColumns[0] << " AS string))";
+        return ret;
+    }
+    ret << "UNWRAP(\"\\\"\" || ";
+    for (size_t i = 0; i < params.KeyColumns.size(); i++) {
+        if (i > 0) {
+            ret << " || \"\\\",\\\"\" || ";
+        }
+        ret << "String::EscapeC(CAST(" << tableAlias << params.KeyColumns[i] << " AS string))";
+    }
+    ret << " || \"\\\"\")";
+    return ret;
+}
+
+
 // Utility function to create select query
 std::string MakeSelect(const TVectorWorkloadParams& params, const TString& indexName) {
     auto [functionName, isAscending] = GetMetricInfo(params.Metric);
@@ -46,7 +64,7 @@ std::string MakeSelect(const TVectorWorkloadParams& params, const TString& index
     if (params.PrefixColumn)
         ret << "DECLARE $PrefixValue as " << params.PrefixType << ";" << "\n";
     ret << "pragma ydb.KMeansTreeSearchTopSize=\"" << params.KmeansTreeSearchClusters << "\";" << "\n";
-    ret << "SELECT UNWRAP(CAST(" << params.KeyColumn << " AS string)) AS id FROM " << params.TableName << "\n";
+    ret << "SELECT " << MakeKeyExpression(params, "") << " AS id FROM " << params.TableName << "\n";
     if (!indexName.empty())
         ret << "VIEW " << indexName << "\n";
     if (params.PrefixColumn)

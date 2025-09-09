@@ -95,4 +95,10 @@ bool IsBackwardCompatibleFeatureAvailable(TLangVersion currentVer, TLangVersion 
     }
 }
 
+void EnumerateLangVersions(const std::function<void(TLangVersion)>& callback) {
+    for (size_t i = 0; i < Y_ARRAY_SIZE(Versions); ++i) {
+        callback(MakeLangVersion(Versions[i].first, Versions[i].second));
+    }
+}
+
 }

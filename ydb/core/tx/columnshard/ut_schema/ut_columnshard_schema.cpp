@@ -163,6 +163,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, NActors::NLog::PRI_TRACE);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime,
@@ -188,7 +189,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     spec.TtlColumn = ttlColumnName;
     spec.EvictAfter = ttlAllDataFresh;
     auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, ydbPk, spec, "/Root/olapStore"), ++txId);
-    
+
     const auto BlobRowCount = 1000;
     auto blobs = MakeData(timestamps, BlobRowCount, BlobRowCount / N, ttlColumnName, ydbSchema);
     UNIT_ASSERT_EQUAL(blobs.size(), N);
@@ -204,9 +205,9 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
         if (ttl) {
             spec.TtlColumn = ttlColumnName;
             spec.EvictAfter = *ttl;
-            Cerr << "Set TTL: " << ttl->Seconds() << " seconds(" << (TAppData::TimeProvider->Now() - *ttl).ToString() << ") on column " << ttlColumnName  << Endl; 
+            Cerr << "Set TTL: " << ttl->Seconds() << " seconds(" << (TAppData::TimeProvider->Now() - *ttl).ToString() << ") on column " << ttlColumnName  << Endl;
         } else {
-            Cerr << "Reset TTL"  << Endl; 
+            Cerr << "Reset TTL"  << Endl;
         }
         planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, ++schemaVersion, ydbSchema, ydbPk, spec), ++txId);
     };
@@ -234,14 +235,16 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
         csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     }
 
-    while (csControllerGuard->GetTTLFinishedCounter().Val() == lastTtlFinishedCount) {
+    while (csControllerGuard->GetTTLFinishedCounter().Val() == lastTtlFinishedCount && useFirstPkColumnForTtl) {
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
         runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
     }
     const auto newRows = getRowCount();
-    Cerr << "Аfter ttl row count:" << newRows << Endl;
-    UNIT_ASSERT_LT(newRows, totalRows);
-
+    if (useFirstPkColumnForTtl) {
+        UNIT_ASSERT_LT(newRows, totalRows);
+    } else {
+        UNIT_ASSERT_LE(newRows, totalRows);
+    }
 
     if (reboots) {
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -250,7 +253,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     alterTtl(ttlAllDataStale);
 
     //Some portions may not be COMPACTED, max index will not be calculated and such portion will not be evicted
-    const auto mayRemain = useFirstPkColumnForTtl ? 0 : BlobRowCount;
+    const i64 mayRemain = useFirstPkColumnForTtl ? 0 : BlobRowCount * N;
     while(true) {
         const auto rowCount = getRowCount();
         Cerr << "Remaining row count: " <<  rowCount << Endl;

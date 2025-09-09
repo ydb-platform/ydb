@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-T6464Samples MakeKeyed6464Samples(const ui64 seed, const size_t numSamples, const unsigned int maxKey) {
+T6464Samples MakeKeyed6464Samples(const ui64 seed, const size_t numSamples, const unsigned int maxKey, size_t keyOffset) {
     std::default_random_engine eng;
     std::uniform_int_distribution<uint64_t> unif(0, 100000.0);
 
@@ -22,7 +22,8 @@ T6464Samples MakeKeyed6464Samples(const ui64 seed, const size_t numSamples, cons
             if (currKey > maxKey) {
                 currKey = 0;
             }
-            return std::make_pair<ui64, ui64>(currKey++, unif(eng));
+            ui64 key = (currKey++) + keyOffset;
+            return std::make_pair<ui64, ui64>(std::move(key), unif(eng));
         }
     );
 
@@ -31,7 +32,7 @@ T6464Samples MakeKeyed6464Samples(const ui64 seed, const size_t numSamples, cons
     return samples;
 }
 
-TString64Samples MakeKeyedString64Samples(const ui64 seed, const size_t numSamples, const unsigned int maxKey, const bool longStrings) {
+TString64Samples MakeKeyedString64Samples(const ui64 seed, const size_t numSamples, const unsigned int maxKey, const bool longStrings, size_t keyOffset) {
     std::default_random_engine eng;
     std::uniform_int_distribution<uint64_t> unif(0, 100000.0);
 
@@ -42,7 +43,7 @@ TString64Samples MakeKeyedString64Samples(const ui64 seed, const size_t numSampl
     eng.seed(seed);
     std::generate(samples.begin(), samples.end(),
         [&]() -> auto {
-            auto key = (currKey++);
+            auto key = (currKey++) + keyOffset;
             if (currKey > maxKey) {
                 currKey = 0;
             }
@@ -61,17 +62,6 @@ TString64Samples MakeKeyedString64Samples(const ui64 seed, const size_t numSampl
     return samples;
 }
 
-template<typename K, typename V, typename R, typename Next>
-THolder<R> DispatchByMap(EHashMapImpl implType, Next&& next)
-{
-    if (implType == EHashMapImpl::Absl) {
-        return next(TAbslMapImpl<K, V>());
-    } else if (implType == EHashMapImpl::YqlRobinHood) {
-        return next(TRobinHoodMapImpl<K, V>());
-    } else {
-        return next(TUnorderedMapImpl<K, V>());
-    }
-}
 
 THolder<IDataSampler> CreateWideSamplerFromParams(const TRunParams& params)
 {
@@ -171,18 +161,6 @@ struct TUpdateMapFromBlocks<TMapImpl, std::string>
         }
     }
 };
-
-template<typename T>
-TType* GetVerySimpleDataType(const TTypeEnvironment& env)
-{
-    return TDataType::Create(NUdf::TDataType<T>::Id, env);
-}
-
-template<>
-TType* GetVerySimpleDataType<std::string>(const TTypeEnvironment& env)
-{
-    return TDataType::Create(NUdf::TDataType<char*>::Id, env);
-}
 
 template<typename K, typename V, typename TMapImpl>
 class TBlockSampler : public IBlockSampler

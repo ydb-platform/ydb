@@ -1,12 +1,12 @@
 #pragma once
 
-#include "util/datetime/base.h"
+#include <util/datetime/base.h>
+#include <util/generic/maybe.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 struct TWatermark {
-    TInstant WatermarkIn;
+    TMaybe<TInstant> WatermarkIn;
 };
 
-}}
+} // namespace NKikimr::NMiniKQL

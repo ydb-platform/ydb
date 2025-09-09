@@ -298,6 +298,13 @@ public:
         if (!clusterState.ReadSession) {
             clusterState.ReadSession = GetTopicClient(clusterState).CreateReadSession(GetReadSessionSettings(clusterState));
             SRC_LOG_I("SessionId: " << GetSessionId(clusterState.Index) << " CreateReadSession");
+            if (WatermarkTracker) {
+                TPartitionKey partitionKey { .Cluster = TString(clusterState.Info.Name) };
+                for (const auto partitionId : GetPartitionsToRead(clusterState)) { // XXX duplicated, but rare
+                    partitionKey.PartitionId = partitionId;
+                    WatermarkTracker->RegisterPartition(partitionKey);
+                }
+            }
         }
         return *clusterState.ReadSession;
     }
@@ -389,8 +396,8 @@ private:
             return;
         }
 
-        if (!NextIdlenesCheckAt.Defined() || nextIdleCheckAt != *NextIdlenesCheckAt) {
-            NextIdlenesCheckAt = *nextIdleCheckAt;
+        if (!NextIdlenessCheckAt.Defined() || nextIdleCheckAt != *NextIdlenessCheckAt) {
+            NextIdlenessCheckAt = *nextIdleCheckAt;
             SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
             Schedule(*nextIdleCheckAt, new TEvPrivate::TEvSourceDataReady());
         }
@@ -618,10 +625,10 @@ private:
 
         WatermarkTracker.ConstructInPlace(
             TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
-            StartingMessageTimestamp,
             SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
             TDuration::MicroSeconds(SourceParams.GetWatermarks().GetLateArrivalDelayUs()),
-            TInstant::Now());
+            TInstant::Now()
+        );
     }
 
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(TClusterState& clusterState) const {
@@ -640,7 +647,7 @@ private:
         .AppendTopics(topicReadSettings)
         .MaxMemoryUsageBytes(BufferSize)
         .ReadFromTimestamp(StartingMessageTimestamp);
-        
+
         if (!WithoutConsumer) {
             settings.ConsumerName(SourceParams.GetConsumerName());
         } else {
@@ -751,18 +758,38 @@ private:
                 }
 
                 auto [item, size] = CreateItem(message);
+                const auto partitionTime = message.GetWriteTime();
 
-                auto& curBatch = GetActiveBatch(partitionKey, message.GetWriteTime());
-                curBatch.Data.emplace_back(std::move(item));
-                curBatch.UsedSpace += size;
+                if (Self.ReadyBuffer.empty() || Self.ReadyBuffer.back().Watermark.Defined()) {
+                    Self.ReadyBuffer.emplace(Nothing(), BatchCapacity);
+                }
+                TReadyBatch& activeBatch = Self.ReadyBuffer.back();
 
-                auto& [cluster, offsets] = curBatch.OffsetRanges[message.GetPartitionSession()];
+                activeBatch.Data.emplace_back(std::move(item));
+                activeBatch.UsedSpace += size;
+
+                auto& [cluster, offsets] = activeBatch.OffsetRanges[message.GetPartitionSession()];
                 cluster = Cluster;
+
                 if (!offsets.empty() && offsets.back().second == message.GetOffset()) {
                     offsets.back().second = message.GetOffset() + 1;
                 } else {
                     offsets.emplace_back(message.GetOffset(), message.GetOffset() + 1);
                 }
+
+                if (!Self.WatermarkTracker) {
+                    continue;
+                }
+                const auto maybeNewWatermark = Self.WatermarkTracker->NotifyNewPartitionTime(
+                    partitionKey,
+                    partitionTime,
+                    TInstant::Now()
+                );
+                if (!maybeNewWatermark) {
+                    continue;
+                }
+                activeBatch.Watermark = *maybeNewWatermark;
+                SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " New watermark " << *maybeNewWatermark << " was generated");
             }
         }
 
@@ -809,31 +836,6 @@ private:
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " PartitionSessionClosedEvent received");
-        }
-
-        TReadyBatch& GetActiveBatch(const TPartitionKey& partitionKey, TInstant time) {
-            if (Y_UNLIKELY(Self.ReadyBuffer.empty() || Self.ReadyBuffer.back().Watermark.Defined())) {
-                Self.ReadyBuffer.emplace(Nothing(), BatchCapacity);
-            }
-
-            TReadyBatch& activeBatch = Self.ReadyBuffer.back();
-
-            if (!Self.WatermarkTracker) {
-                // Watermark tracker disabled => there is no way more than one batch will be used
-                return activeBatch;
-            }
-
-            const auto maybeNewWatermark = Self.WatermarkTracker->NotifyNewPartitionTime(
-                partitionKey,
-                time,
-                TInstant::Now());
-            if (!maybeNewWatermark) {
-                // Watermark wasn't moved => use current active batch
-                return activeBatch;
-            }
-
-            Self.PushWatermarkToReady(*maybeNewWatermark);
-            return Self.ReadyBuffer.emplace(Nothing(), BatchCapacity); // And open new batch
         }
 
         std::pair<NUdf::TUnboxedValuePod, i64> CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
@@ -883,7 +885,7 @@ private:
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
-    TMaybe<TInstant> NextIdlenesCheckAt;
+    TMaybe<TInstant> NextIdlenessCheckAt;
     IPqGateway::TPtr PqGateway;
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
     ui32 TopicPartitionsCount = 0;

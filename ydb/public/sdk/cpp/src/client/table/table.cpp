@@ -153,6 +153,17 @@ std::optional<EColumnFamilyCompression> TColumnFamilyDescription::GetCompression
     }
 }
 
+std::optional<EColumnFamilyCacheMode> TColumnFamilyDescription::GetCacheMode() const {
+    switch (GetProto().cache_mode()) {
+        case Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR:
+            return EColumnFamilyCacheMode::Regular;
+        case Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY:
+            return EColumnFamilyCacheMode::InMemory;
+        default:
+            return { };
+    }
+}
+
 std::optional<bool> TColumnFamilyDescription::GetKeepInMemory() const {
     switch (GetProto().keep_in_memory()) {
         case Ydb::FeatureFlag::ENABLED:
@@ -1083,6 +1094,18 @@ TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompress
             break;
         case EColumnFamilyCompression::LZ4:
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+            break;
+    }
+    return *this;
+}
+
+TColumnFamilyBuilder& TColumnFamilyBuilder::SetCacheMode(EColumnFamilyCacheMode cacheMode) {
+    switch (cacheMode) {
+        case EColumnFamilyCacheMode::Regular:
+            Impl_->Proto.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR);
+            break;
+        case EColumnFamilyCacheMode::InMemory:
+            Impl_->Proto.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY);
             break;
     }
     return *this;

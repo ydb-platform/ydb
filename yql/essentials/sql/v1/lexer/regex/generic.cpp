@@ -139,7 +139,11 @@ namespace NSQLTranslationV1 {
         }));
 
         Sort(patterns, [](const TRegexPattern& lhs, const TRegexPattern& rhs) {
-            return lhs.Body.length() > rhs.Body.length();
+            const auto lhs_length = lhs.Body.length();
+            const auto rhs_length = rhs.Body.length();
+
+            // Note: do not compare After and Before here as they are equal.
+            return std::tie(lhs_length, lhs.Body) > std::tie(rhs_length, rhs.Body);
         });
 
         TStringBuilder body;

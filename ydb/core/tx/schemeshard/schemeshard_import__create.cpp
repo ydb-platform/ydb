@@ -214,6 +214,8 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         Y_ABORT_UNLESS(importInfo != nullptr);
 
+        importInfo->SanitizedToken = request.GetSanitizedToken();
+
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistCreateImport(db, *importInfo);
 
@@ -598,7 +600,7 @@ private:
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
-        auto propose = CreateChangefeedPropose(Self, txId, item, error);
+        auto propose = CreateChangefeedPropose(Self, txId, importInfo, item, error);
         if (!propose) {
             return false;
         }
@@ -619,7 +621,7 @@ private:
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
-        Send(Self->SelfId(), CreateConsumersPropose(Self, txId, item));
+        Send(Self->SelfId(), CreateConsumersPropose(Self, txId, importInfo, item));
     }
 
     void AllocateTxId(TImportInfo& importInfo, ui32 itemIdx) {

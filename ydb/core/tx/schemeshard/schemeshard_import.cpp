@@ -120,7 +120,9 @@ void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo& i
         NIceDb::TUpdate<Schema::Imports::Settings>(importInfo.Settings.SerializeAsString()),
         NIceDb::TUpdate<Schema::Imports::DomainPathOwnerId>(importInfo.DomainPathId.OwnerId),
         NIceDb::TUpdate<Schema::Imports::DomainPathLocalId>(importInfo.DomainPathId.LocalPathId),
-        NIceDb::TUpdate<Schema::Imports::Items>(importInfo.Items.size())
+        NIceDb::TUpdate<Schema::Imports::Items>(importInfo.Items.size()),
+        NIceDb::TUpdate<Schema::Imports::PeerName>(importInfo.PeerName),
+        NIceDb::TUpdate<Schema::Imports::SanitizedToken>(importInfo.SanitizedToken)
     );
 
     if (importInfo.UserSID) {

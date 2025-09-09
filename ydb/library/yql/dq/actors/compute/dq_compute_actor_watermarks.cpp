@@ -21,9 +21,7 @@ namespace NYql::NDq {
 
 using namespace NActors;
 
-TDqComputeActorWatermarks::TDqComputeActorWatermarks(
-    const TString& logPrefix
-)
+TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TString& logPrefix)
     : LogPrefix(logPrefix) {
 }
 
@@ -56,6 +54,10 @@ bool TDqComputeActorWatermarks::NotifyAsyncInputWatermarkReceived(ui64 inputId, 
 
     LOG_T("Async input " << inputId << " notified about watermark " << watermark);
 
+    if (MaxWatermark < watermark) {
+        MaxWatermark = watermark;
+    }
+
     auto& asyncInputWatermark = it->second;
     if (UpdateAndRecalcPendingWatermark(asyncInputWatermark, watermark)) {
         LOG_T("Async input " << inputId << " watermark was updated to " << watermark);
@@ -73,6 +75,10 @@ bool TDqComputeActorWatermarks::NotifyInChannelWatermarkReceived(ui64 inputId, T
     }
 
     LOG_T("Input channel " << inputId << " notified about watermark " << watermark);
+
+    if (MaxWatermark < watermark) {
+        MaxWatermark = watermark;
+    }
 
     auto& inputChannelWatermark = it->second;
     if (UpdateAndRecalcPendingWatermark(inputChannelWatermark, watermark)) {
@@ -128,6 +134,10 @@ bool TDqComputeActorWatermarks::HasPendingWatermark() const {
 
 TMaybe<TInstant> TDqComputeActorWatermarks::GetPendingWatermark() const {
     return PendingWatermark;
+}
+
+TDuration TDqComputeActorWatermarks::GetWatermarkDiscrepancy() const {
+    return *MaxWatermark - *PendingWatermark;
 }
 
 void TDqComputeActorWatermarks::RecalcPendingWatermark() {

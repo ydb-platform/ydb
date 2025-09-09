@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from jwt import InvalidKeyError
 from oauthlib.oauth1.rfc5849.signature import (
     base_string_uri, collect_parameters, normalize_parameters,
     sign_hmac_sha1_with_client, sign_hmac_sha256_with_client,
@@ -82,12 +83,13 @@ class SignatureTests(TestCase):
 
     # ==== Example test vector =======================================
 
-    eg_signature_base_string =\
-        'POST&http%3A%2F%2Fexample.com%2Frequest&a2%3Dr%2520b%26a3%3D2%2520q' \
-        '%26a3%3Da%26b5%3D%253D%25253D%26c%2540%3D%26c2%3D%26oauth_consumer_' \
-        'key%3D9djdj82h48djs9d2%26oauth_nonce%3D7d8f3e4a%26oauth_signature_m' \
-        'ethod%3DHMAC-SHA1%26oauth_timestamp%3D137131201%26oauth_token%3Dkkk' \
+    eg_signature_base_string = (
+        'POST&http%3A%2F%2Fexample.com%2Frequest&a2%3Dr%2520b%26a3%3D2%2520q'
+        '%26a3%3Da%26b5%3D%253D%25253D%26c%2540%3D%26c2%3D%26oauth_consumer_'
+        'key%3D9djdj82h48djs9d2%26oauth_nonce%3D7d8f3e4a%26oauth_signature_m'
+        'ethod%3DHMAC-SHA1%26oauth_timestamp%3D137131201%26oauth_token%3Dkkk'
         '9d7dh3k39sjv7'
+    )
 
     # The _signature base string_ above is copied from the end of
     # RFC 5849 section 3.4.1.1.
@@ -101,11 +103,11 @@ class SignatureTests(TestCase):
 
     eg_base_string_uri = 'http://example.com/request'
 
-    eg_normalized_parameters =\
-        'a2=r%20b&a3=2%20q&a3=a&b5=%3D%253D&c%40=&c2=&oauth_consumer_key=9dj' \
-        'dj82h48djs9d2&oauth_nonce=7d8f3e4a&oauth_signature_method=HMAC-SHA1' \
+    eg_normalized_parameters = (
+        'a2=r%20b&a3=2%20q&a3=a&b5=%3D%253D&c%40=&c2=&oauth_consumer_key=9dj'
+        'dj82h48djs9d2&oauth_nonce=7d8f3e4a&oauth_signature_method=HMAC-SHA1'
         '&oauth_timestamp=137131201&oauth_token=kkk9d7dh3k39sjv7'
-
+    )
     # The above _normalized parameters_ corresponds to the parameters below.
     #
     # The parameters below is copied from the table at the end of
@@ -133,12 +135,12 @@ class SignatureTests(TestCase):
 
     eg_body = 'c2&a3=2+q'
 
-    eg_authorization_header =\
-        'OAuth realm="Example", oauth_consumer_key="9djdj82h48djs9d2",' \
-        ' oauth_token="kkk9d7dh3k39sjv7", oauth_signature_method="HMAC-SHA1",' \
-        ' oauth_timestamp="137131201", oauth_nonce="7d8f3e4a",' \
+    eg_authorization_header = (
+        'OAuth realm="Example", oauth_consumer_key="9djdj82h48djs9d2",'
+        ' oauth_token="kkk9d7dh3k39sjv7", oauth_signature_method="HMAC-SHA1",'
+        ' oauth_timestamp="137131201", oauth_nonce="7d8f3e4a",'
         ' oauth_signature="djosJKDKJSD8743243%2Fjdk33klY%3D"'
-
+    )
     # ==== Signature base string calculating function tests ==========
 
     def test_signature_base_string(self):
@@ -465,10 +467,10 @@ class SignatureTests(TestCase):
     expected_signature_hmac_sha256 = \
         'wdfdHUKXHbOnOGZP8WFAWMSAmWzN3EVBWWgXGlC/Eo4='
 
-    expected_signature_hmac_sha512 = \
-        'u/vlyZFDxOWOZ9UUXwRBJHvq8/T4jCA74ocRmn2ECnjUBTAeJiZIRU8hDTjS88Tz' \
+    expected_signature_hmac_sha512 = (
+        'u/vlyZFDxOWOZ9UUXwRBJHvq8/T4jCA74ocRmn2ECnjUBTAeJiZIRU8hDTjS88Tz'
         '1fGONffMpdZxUkUTW3k1kg=='
-
+    )
     def test_sign_hmac_sha1_with_client(self):
         """
         Test sign and verify with HMAC-SHA1.
@@ -632,21 +634,21 @@ GLYT3Jw1Lfb1bbuck9Y0JsRJO7uydWUbxXyZ+8YaDfE2NMw7sh2vAgMBAAE=
     # Note: the "echo -n" is needed to remove the last newline character, which
     # most text editors will add.
 
-    expected_signature_rsa_sha1 = \
-        'mFY2KOEnlYWsTvUA+5kxuBIcvBYXu+ljw9ttVJQxKduMueGSVPCB1tK1PlqVLK738' \
-        'HK0t19ecBJfb6rMxUwrriw+MlBO+jpojkZIWccw1J4cAb4qu4M81DbpUAq4j/1w/Q' \
+    expected_signature_rsa_sha1 = (
+        'mFY2KOEnlYWsTvUA+5kxuBIcvBYXu+ljw9ttVJQxKduMueGSVPCB1tK1PlqVLK738'
+        'HK0t19ecBJfb6rMxUwrriw+MlBO+jpojkZIWccw1J4cAb4qu4M81DbpUAq4j/1w/Q'
         'yTR4TWCODlEfN7Zfgy8+pf+TjiXfIwRC1jEWbuL1E='
-
-    expected_signature_rsa_sha256 = \
-        'jqKl6m0WS69tiVJV8ZQ6aQEfJqISoZkiPBXRv6Al2+iFSaDpfeXjYm+Hbx6m1azR' \
-        'drZ/35PM3cvuid3LwW/siAkzb0xQcGnTyAPH8YcGWzmnKGY7LsB7fkqThchNxvRK' \
+    )
+    expected_signature_rsa_sha256 = (
+        'jqKl6m0WS69tiVJV8ZQ6aQEfJqISoZkiPBXRv6Al2+iFSaDpfeXjYm+Hbx6m1azR'
+        'drZ/35PM3cvuid3LwW/siAkzb0xQcGnTyAPH8YcGWzmnKGY7LsB7fkqThchNxvRK'
         '/N7s9M1WMnfZZ+1dQbbwtTs1TG1+iexUcV7r3M7Heec='
-
-    expected_signature_rsa_sha512 = \
-        'jL1CnjlsNd25qoZVHZ2oJft47IRYTjpF5CvCUjL3LY0NTnbEeVhE4amWXUFBe9GL' \
-        'DWdUh/79ZWNOrCirBFIP26cHLApjYdt4ZG7EVK0/GubS2v8wT1QPRsog8zyiMZkm' \
+    )
+    expected_signature_rsa_sha512 = (
+        'jL1CnjlsNd25qoZVHZ2oJft47IRYTjpF5CvCUjL3LY0NTnbEeVhE4amWXUFBe9GL'
+        'DWdUh/79ZWNOrCirBFIP26cHLApjYdt4ZG7EVK0/GubS2v8wT1QPRsog8zyiMZkm'
         'g4JXdWCGXG8YRvRJTg+QKhXuXwS6TcMNakrgzgFIVhA='
-
+    )
     def test_sign_rsa_sha1_with_client(self):
         """
         Test sign and verify with RSA-SHA1.
@@ -764,11 +766,16 @@ MmgDHR2tt8KeYTSgfU+BAkBcaVF91EQ7VXhvyABNYjeYP7lU7orOgdWMa/zbLXSU
 
         # Signing needs a private key
 
-        for bad_value in [None, '', 'foobar']:
+        for bad_value in [None, '']:
             self.assertRaises(ValueError,
                               sign_rsa_sha1_with_client,
                               self.eg_signature_base_string,
                               MockClient(rsa_key=bad_value))
+
+        self.assertRaises((InvalidKeyError, ValueError),
+                            sign_rsa_sha1_with_client,
+                            self.eg_signature_base_string,
+                            MockClient(rsa_key='foobar'))
 
         self.assertRaises(AttributeError,
                           sign_rsa_sha1_with_client,

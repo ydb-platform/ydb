@@ -19,6 +19,7 @@ namespace NInterconnect {
         TDuration Duration;                 // test duration
         bool UseProtobufWithPayload;        // store payload separately
     };
-    NActors::IActor* CreateLoadActor(const TLoadParams& params);
+    using TFinishCallback = std::function<void(const NActors::TActorContext& ctx, TString&& html)>;
+    NActors::IActor* CreateLoadActor(const TLoadParams& params, const TFinishCallback& finishCallback = {});
 
 }

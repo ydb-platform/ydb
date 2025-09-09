@@ -75,6 +75,7 @@ static bool has_sendzc;
 static bool has_sendmsg;
 static bool hit_enomem;
 static bool try_hugepages = 1;
+static bool no_send_vec;
 
 static int probe_zc_support(void)
 {
@@ -113,18 +114,34 @@ static bool check_cq_empty(struct io_uring *ring)
 	return ret == -EAGAIN;
 }
 
-static int test_basic_send(struct io_uring *ring, int sock_tx, int sock_rx)
+static int test_basic_send(struct io_uring *ring, int sock_tx, int sock_rx,
+			   int vec)
 {
 	struct io_uring_sqe *sqe;
 	struct io_uring_cqe *cqe;
+	struct iovec vecs[2];
 	int msg_flags = 0;
 	unsigned zc_flags = 0;
 	int payload_size = 100;
 	int ret;
 
+	if (vec && no_send_vec)
+		return 0;
+
 	sqe = io_uring_get_sqe(ring);
-	io_uring_prep_send_zc(sqe, sock_tx, tx_buffer, payload_size,
-			      msg_flags, zc_flags);
+	if (vec) {
+		size_t split = payload_size / 2;
+
+		vecs[0].iov_base = tx_buffer;
+		vecs[0].iov_len = split;
+		vecs[1].iov_base = tx_buffer + split;
+		vecs[1].iov_len = split;
+		io_uring_prep_send_zc(sqe, sock_tx, vecs, 2, msg_flags, zc_flags);
+		sqe->ioprio |= (1U << 5);
+	} else {
+		io_uring_prep_send_zc(sqe, sock_tx, tx_buffer, payload_size,
+				      msg_flags, zc_flags);
+	}
 	sqe->user_data = 1;
 
 	ret = io_uring_submit(ring);
@@ -133,6 +150,21 @@ static int test_basic_send(struct io_uring *ring, int sock_tx, int sock_rx)
 	ret = io_uring_wait_cqe(ring, &cqe);
 	assert(!ret && cqe->user_data == 1);
 	if (cqe->res != payload_size) {
+		if (cqe->res == -EINVAL && vec) {
+			int has_more = cqe->flags & IORING_CQE_F_MORE;
+
+			no_send_vec = 1;
+			io_uring_cqe_seen(ring, cqe);
+			if (has_more) {
+				ret = io_uring_peek_cqe(ring, &cqe);
+				if (ret) {
+					fprintf(stderr, "peek failed\n");
+					return T_EXIT_FAIL;
+				}
+				io_uring_cqe_seen(ring, cqe);
+			}
+			return T_EXIT_PASS;
+		}
 		fprintf(stderr, "send failed %i\n", cqe->res);
 		return T_EXIT_FAIL;
 	}
@@ -774,9 +806,15 @@ static int run_basic_tests(void)
 			return -1;
 		}
 
-		ret = test_basic_send(&ring, sp[0], sp[1]);
+		ret = test_basic_send(&ring, sp[0], sp[1], 0);
 		if (ret) {
-			fprintf(stderr, "test_basic_send() failed\n");
+			fprintf(stderr, "test_basic_send() nonvec failed\n");
+			return -1;
+		}
+
+		ret = test_basic_send(&ring, sp[0], sp[1], 1);
+		if (ret) {
+			fprintf(stderr, "test_basic_send() vec failed\n");
 			return -1;
 		}
 

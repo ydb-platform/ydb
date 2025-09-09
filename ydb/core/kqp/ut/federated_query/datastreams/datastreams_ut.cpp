@@ -67,6 +67,12 @@ public:
 
     std::shared_ptr<TKikimrRunner> GetKikimrRunner() {
         if (!Kikimr) {
+            if (!AppConfig) {
+                AppConfig.emplace();
+            }
+
+            AppConfig->MutableQueryServiceConfig()->SetProgressStatsPeriodMs(1000);
+
             Kikimr = MakeKikimrRunner(true, nullptr, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
                 .PqGateway = PqGateway
             });
@@ -288,10 +294,21 @@ public:
         return operation.Id();
     }
 
+    TScriptExecutionOperation GetScriptExecutionOperation(const TOperation::TOperationId& operationId, bool checkStatus = true) {
+        const auto operation = GetOperationClient()->Get<NYdb::NQuery::TScriptExecutionOperation>(operationId).GetValueSync();
+
+        if (checkStatus) {
+            const auto& status = operation.Status();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToOneLineString());
+        }
+
+        return operation;
+    }
+
     void WaitScriptExecution(const TOperation::TOperationId& operationId, EExecStatus finalStatus = EExecStatus::Completed, bool waitRetry = false) {
         std::optional<TScriptExecutionOperation> operation;
-        WaitFor(TEST_OPERATION_TIMEOUT, TStringBuilder() << "script execution status" << finalStatus, [&, client = GetOperationClient()](TString& error) {
-            operation = client->Get<NYdb::NQuery::TScriptExecutionOperation>(operationId).GetValueSync();
+        WaitFor(TEST_OPERATION_TIMEOUT, TStringBuilder() << "script execution status" << finalStatus, [&](TString& error) {
+            operation = GetScriptExecutionOperation(operationId, /* checkStatus */ false);
 
             const auto execStatus = operation->Metadata().ExecStatus;
             if (execStatus == finalStatus) {
@@ -635,7 +652,84 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         WriteTopicMessage(inputTopicName, R"({"key":"key1", "value": "value1"})");
         ReadTopicMessages(outputTopicName, {"key1value1"});
+
+        WaitFor(TDuration::Seconds(5), "operation AST", [&](TString& error) {
+            const auto& operation = GetScriptExecutionOperation(scriptExecutionOperation);
+            const auto& metadata = operation.Metadata();
+            if (const auto& ast = metadata.ExecStats.GetAst()) {
+                UNIT_ASSERT_STRING_CONTAINS(*ast, sourceName);
+                return true;
+            }
+
+            error = TStringBuilder() << "AST is not available, status: " << metadata.ExecStatus;
+            return false;
+        });
+
         CancelScriptExecution(scriptExecutionOperation);
+    }
+
+    Y_UNIT_TEST_F(ReadTopicWithColumnOrder, TStreamingTestFixture) {
+        constexpr char topicName[] = "readTopicWithColumnOrder";
+        CreateTopic(topicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        const auto op = ExecScript(fmt::format(R"(
+            PRAGMA OrderedColumns;
+            SELECT * FROM `{source}`.`{topic}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    key String NOT NULL,
+                    value String NOT NULL
+                )
+            ) LIMIT 1;
+
+            SELECT * FROM `{source}`.`{topic}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    value String NOT NULL,
+                    key String NOT NULL
+                )
+            ) LIMIT 1;
+            )",
+            "source"_a=pqSourceName,
+            "topic"_a=topicName
+        ));
+
+        WriteTopicMessage(topicName, R"({"key":"key1", "value": "value1"})");
+
+        CheckScriptResult(op, 2, 1, [](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
+        }, 0);
+
+        CheckScriptResult(op, 2, 1, [](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "value1");
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "key1");
+        }, 1);
+    }
+
+    Y_UNIT_TEST_F(ReadTopicWithDefaultSchema, TStreamingTestFixture) {
+        constexpr char topicName[] = "readTopicWithDefaultSchema";
+        CreateTopic(topicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        const auto op = ExecScript(fmt::format(R"(
+            PRAGMA OrderedColumns;
+            SELECT * FROM `{source}`.`{topic}` LIMIT 1;
+            )",
+            "source"_a=pqSourceName,
+            "topic"_a=topicName
+        ));
+
+        WriteTopicMessage(topicName, R"({"key":"key1", "value": "value1"})");
+
+        CheckScriptResult(op, 1, 1, [](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), R"({"key":"key1", "value": "value1"})");
+        });
     }
 
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphBasic, TStreamingTestFixture) {

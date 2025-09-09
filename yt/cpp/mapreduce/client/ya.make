@@ -43,6 +43,7 @@ PEERDIR(
     yt/cpp/mapreduce/http_client
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/io
+    yt/cpp/mapreduce/rpc_client
 )
 
 PEERDIR(

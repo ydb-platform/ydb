@@ -191,15 +191,16 @@ namespace NKikimr::NStorage {
                         } else {
                             switch (clusterState.GetPerPileState(pileId.GetPileIndex())) {
                                 case NKikimrBridge::TClusterState::DISCONNECTED:
+                                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
                                     state = T::DISCONNECTED;
                                     break;
 
-                                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
                                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
                                     state = T::NOT_SYNCHRONIZED;
                                     break;
 
                                 case NKikimrBridge::TClusterState::SYNCHRONIZED:
+                                case NKikimrBridge::TClusterState::SUSPENDED:
                                     state = T::SYNCHRONIZED;
                                     break;
 

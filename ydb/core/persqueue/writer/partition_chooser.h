@@ -2,7 +2,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/events.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/pipe_utils.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>

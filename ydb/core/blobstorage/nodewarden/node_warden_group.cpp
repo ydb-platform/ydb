@@ -190,6 +190,10 @@ namespace NKikimr::NStorage {
             // for group/proxy and ask BSC for group info
             group.Info.Reset();
             group.NodeLayoutInfo.Reset();
+            if (group.GroupResolver) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
+                group.GroupResolver = {};
+            }
             RequestGroupConfig(groupId, group);
             if (group.ProxyId) {
                 Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(nullptr, nullptr));
@@ -389,61 +393,60 @@ namespace NKikimr::NStorage {
         ++(syncer.ErrorReason ? syncer.NumFinishError : syncer.NumFinishOK);
 
         auto notify = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
-        FillInWorkingSyncers(&notify->Record, true);
+        FillInWorkingSyncer(&notify->Record, syncer, true);
         SendToController(std::move(notify));
     }
 
-    void TNodeWarden::FillInWorkingSyncers(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update, bool forceProgress) {
-        for (const TWorkingSyncer& syncer : WorkingSyncers) {
-            auto *item = update->AddSyncers();
-            syncer.BridgeProxyGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetBridgeProxyGroupId);
-            item->SetBridgeProxyGroupGeneration(syncer.BridgeProxyGroupGeneration);
-            syncer.SourceGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetSourceGroupId);
-            syncer.TargetGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetTargetGroupId);
-            if (syncer.Finished) {
-                item->SetFinished(true);
-            }
-            if (syncer.ErrorReason) {
-                item->SetErrorReason(*syncer.ErrorReason);
-            }
+    bool TNodeWarden::FillInWorkingSyncer(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update,
+            TWorkingSyncer& syncer, bool forceProgress) {
+        auto res = false;
 
-            // report syncer progress
-            auto& stats = *syncer.SyncerDataStats;
+        auto *item = update->AddSyncers();
+        syncer.BridgeProxyGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetBridgeProxyGroupId);
+        item->SetBridgeProxyGroupGeneration(syncer.BridgeProxyGroupGeneration);
+        syncer.SourceGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetSourceGroupId);
+        syncer.TargetGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetTargetGroupId);
+        if (syncer.Finished) {
+            item->SetFinished(true);
+        }
+        if (syncer.ErrorReason) {
+            item->SetErrorReason(*syncer.ErrorReason);
+        }
+
+        // report syncer progress
+        auto& stats = *syncer.SyncerDataStats;
 
 #define ISSUE_METRIC(NAME) \
-            const ui64 current##NAME = stats.NAME; \
-            if (forceProgress || syncer.Reported##NAME != current##NAME) { \
-                item->Set##NAME(current##NAME); \
-                const_cast<TWorkingSyncer&>(syncer).Reported##NAME = current##NAME; \
-            }
+        const ui64 current##NAME = stats.NAME; \
+        if (forceProgress || syncer.Reported##NAME != current##NAME) { \
+            item->Set##NAME(current##NAME); \
+            const_cast<TWorkingSyncer&>(syncer).Reported##NAME = current##NAME; \
+            res = true; \
+        }
 
-            ISSUE_METRIC(BytesDone)
-            ISSUE_METRIC(BytesTotal)
-            ISSUE_METRIC(BytesError)
-            ISSUE_METRIC(BlobsDone)
-            ISSUE_METRIC(BlobsTotal)
-            ISSUE_METRIC(BlobsError)
+        ISSUE_METRIC(BytesDone)
+        ISSUE_METRIC(BytesTotal)
+        ISSUE_METRIC(BytesError)
+        ISSUE_METRIC(BlobsDone)
+        ISSUE_METRIC(BlobsTotal)
+        ISSUE_METRIC(BlobsError)
 
 #undef ISSUE_METRIC
-        }
+
+        return res;
     }
 
     void TNodeWarden::NotifySyncersProgress() {
         auto notify = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
-        FillInWorkingSyncers(&notify->Record, false);
-        auto *items = notify->Record.MutableSyncers();
-        for (int i = 0; i < items->size(); ++i) {
-            const auto& item = items->Get(i);
-            if (item.HasBytesDone() || item.HasBytesTotal() || item.HasBytesError() ||
-                    item.HasBlobsDone() || item.HasBlobsTotal() || item.HasBlobsError()) {
-                continue;
+        bool doSend = false;
+        for (const TWorkingSyncer& syncer : WorkingSyncers) {
+            if (FillInWorkingSyncer(&notify->Record, const_cast<TWorkingSyncer&>(syncer), false)) {
+                doSend = true;
+            } else {
+                notify->Record.MutableSyncers()->RemoveLast();
             }
-            if (i + 1 != items->size()) {
-                items->SwapElements(i, items->size() - 1);
-            }
-            items->RemoveLast();
         }
-        if (!items->empty()) {
+        if (doSend) {
             SendToController(std::move(notify));
         }
     }

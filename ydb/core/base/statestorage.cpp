@@ -230,7 +230,7 @@ void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, u
 }
 
 bool TStateStorageInfo::TRingGroup::SameConfiguration(const TStateStorageInfo::TRingGroup& rg) {
-    return NToSelect == rg.NToSelect && Rings == rg.Rings && State == rg.State;
+    return NToSelect == rg.NToSelect && Rings == rg.Rings;
 }
 
 bool operator==(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs) {

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class TestTabletsMovement(object):
-    test_name = "order_by"
+    test_name = "tablets_movement"
 
     @classmethod
     def setup_class(cls):
@@ -94,7 +94,7 @@ class TestTabletsMovement(object):
     def test(self, store):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/table"
-
+        self.ydb_client.query(f"DROP TABLE IF EXISTS `{table_path}`")
         self.ydb_client.query(
             f"""
             CREATE TABLE `{table_path}` (

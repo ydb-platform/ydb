@@ -79,7 +79,7 @@ struct TBackupProgress {
 
     TBackupProgress() = default;
 
-    TBackupProgress(const TSchemeBoardMonEvents::TEvBackupProgress& ev)
+    explicit TBackupProgress(const TSchemeBoardMonEvents::TEvBackupProgress& ev)
         : TotalPaths(ev.TotalPaths)
         , CompletedPaths(ev.CompletedPaths)
         , Progress(TotalPaths > 0 ? (100. * CompletedPaths / TotalPaths) : 0.)

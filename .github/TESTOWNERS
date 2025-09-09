@@ -38,7 +38,7 @@
 /ydb/core/tx/scheme_board @ydb-platform/system-infra
 /ydb/core/tx/scheme_cache @ydb-platform/system-infra
 /ydb/core/audit @ydb-platform/system-infra
-/ydb/core/security @ydb-platform/system-infra
+
 /ydb/core/health_check @ydb-platform/system-infra
 /ydb/library/aclib @ydb-platform/system-infra
 /ydb/mvp/oidc_proxy @ydb-platform/system-infra
@@ -47,6 +47,10 @@
 /ydb/tests/functional/scheme_shard @ydb-platform/system-infra
 /ydb/tests/functional/tenants @ydb-platform/system-infra
 /ydb/services/ydb/table_split_ut @ydb-platform/system-infra
+
+#Security Team @azevaykin TEAM:@ydb-platform/security
+/ydb/core/security @ydb-platform/security
+/ydb/core/tx/tx_proxy/ut_schemereq @ydb-platform/security
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp

@@ -1350,7 +1350,9 @@ private:
 
     void ReplyIfDone(const NActors::TActorContext& ctx) {
         if (!ShardRepliesLeft.empty()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: waiting for " << ShardRepliesLeft.size() << " shards replies");
+            LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST,
+                "Upload rows: waiting for " << ShardRepliesLeft.size() << " shards replies: "
+                << JoinRange(",", ShardRepliesLeft.begin(), ShardRepliesLeft.end()));
             return;
         }
 

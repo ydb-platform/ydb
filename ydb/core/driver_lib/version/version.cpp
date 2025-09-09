@@ -27,7 +27,7 @@ TCompatibilityInfo::TCompatibilityInfo() {
 
     auto current = MakeCurrent();
 
-    // bool success = CompleteFromTag(current);
+    bool success = CompleteFromTag(current);
     // Y_ABORT_UNLESS(success);
 
     CurrentCompatibilityInfo.CopyFrom(current);

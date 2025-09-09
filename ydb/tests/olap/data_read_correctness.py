@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 import yatest.common
@@ -91,7 +92,7 @@ class TestDataReadCorrectness(object):
         assert values == [i * 10 for i in range(self.rows_count)], values
 
 class TestDataReadPerformanceNoIntersections(object):
-    test_name = "data_read_correctness"
+    test_name = "data_read_performance_no_intersections"
     rows_count = 10000
 
     @classmethod
@@ -144,15 +145,18 @@ class TestDataReadPerformanceNoIntersections(object):
 
         self.write_data(table_path)
 
+        t = datetime.datetime.now()
         for _ in range(100):
             result_sets = self.ydb_client.query(
                 f"""
                 select count(*) as `count` from `{table_path}`
                 """
             )
-            
+
             assert len(result_sets) == 1, f"Expected 1 result set, got {len(result_sets)}"
             assert len(result_sets[0].rows) == 1, f"Expected 1 row in result set, got {len(result_sets[0].rows)}"
-            
+
             count_value = result_sets[0].rows[0]['count']
             assert count_value == self.rows_count, f"Expected COUNT(*) to return {self.rows_count}, but got {count_value}"
+
+            assert datetime.datetime.now() - t < datetime.timedelta(seconds=180)

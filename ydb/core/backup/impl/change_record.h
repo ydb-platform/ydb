@@ -71,19 +71,25 @@ private:
         auto& upsert = *record.MutableUpsert();
 
         switch (ProtoBody.GetCdcDataChange().GetRowOperationCase()) {
-        case NKikimrChangeExchange::TDataChange::kUpsert: {
+        case NKikimrChangeExchange::TDataChange::kUpsert: 
+        case NKikimrChangeExchange::TDataChange::kReset: {
             TVector<NTable::TTag> tags;
             TVector<TCell> cells;
             NKikimrBackup::TColumnStateMap columnStateMap;
 
-            const auto& upsertData = ProtoBody.GetCdcDataChange().GetUpsert();
-            TSerializedCellVec originalCells;
-            Y_ABORT_UNLESS(TSerializedCellVec::TryParse(upsertData.GetData(), originalCells));
+            // Handle both Upsert and Reset operations
+            const bool isResetOperation = ProtoBody.GetCdcDataChange().GetRowOperationCase() == NKikimrChangeExchange::TDataChange::kReset;
+            const auto& operationData = isResetOperation 
+                ? ProtoBody.GetCdcDataChange().GetReset()
+                : ProtoBody.GetCdcDataChange().GetUpsert();
             
-            tags.assign(upsertData.GetTags().begin(), upsertData.GetTags().end());
+            TSerializedCellVec originalCells;
+            Y_ABORT_UNLESS(TSerializedCellVec::TryParse(operationData.GetData(), originalCells));
+            
+            tags.assign(operationData.GetTags().begin(), operationData.GetTags().end());
             cells.assign(originalCells.GetCells().begin(), originalCells.GetCells().end());
             
-            THashSet<NTable::TTag> presentTags(upsertData.GetTags().begin(), upsertData.GetTags().end());
+            THashSet<NTable::TTag> presentTags(operationData.GetTags().begin(), operationData.GetTags().end());
             for (const auto& [name, columnInfo] : Schema->ValueColumns) {
                 if (name == "__ydb_incrBackupImpl_deleted" || name == "__ydb_incrBackupImpl_columnStates") {
                     continue;
@@ -93,9 +99,9 @@ private:
                 columnState->SetTag(columnInfo.Tag);
                 
                 if (presentTags.contains(columnInfo.Tag)) {
-                    auto it = std::find(upsertData.GetTags().begin(), upsertData.GetTags().end(), columnInfo.Tag);
-                    if (it != upsertData.GetTags().end()) {
-                        size_t idx = std::distance(upsertData.GetTags().begin(), it);
+                    auto it = std::find(operationData.GetTags().begin(), operationData.GetTags().end(), columnInfo.Tag);
+                    if (it != operationData.GetTags().end()) {
+                        size_t idx = std::distance(operationData.GetTags().begin(), it);
                         if (idx < originalCells.GetCells().size()) {
                             columnState->SetIsNull(originalCells.GetCells()[idx].IsNull());
                         } else {
@@ -106,8 +112,13 @@ private:
                     }
                     columnState->SetIsChanged(true);
                 } else {
-                    columnState->SetIsNull(false);
-                    columnState->SetIsChanged(false);
+                    if (isResetOperation) {
+                        columnState->SetIsNull(true);
+                        columnState->SetIsChanged(true);
+                    } else {
+                        columnState->SetIsNull(false);
+                        columnState->SetIsChanged(false);
+                    }
                 }
             }
 
@@ -168,7 +179,6 @@ private:
             upsert.SetData(TSerializedCellVec::Serialize(cells));
             break;
         }
-        case NKikimrChangeExchange::TDataChange::kReset: [[fallthrough]];
         default:
             Y_FAIL_S("Unexpected row operation: " << static_cast<int>(ProtoBody.GetCdcDataChange().GetRowOperationCase()));
         }
@@ -182,27 +192,29 @@ private:
         record.SetKey(ProtoBody.GetCdcDataChange().GetKey().GetData());
 
         switch (ProtoBody.GetCdcDataChange().GetRowOperationCase()) {
-        case NKikimrChangeExchange::TDataChange::kUpsert: {
+        case NKikimrChangeExchange::TDataChange::kUpsert:
+        case NKikimrChangeExchange::TDataChange::kReset: {
             auto& upsert = *record.MutableUpsert();
-            // Check if NewImage is available, otherwise fall back to Upsert
+            // Check if NewImage is available, otherwise fall back to Upsert/Reset
             if (ProtoBody.GetCdcDataChange().has_newimage()) {
                 *upsert.MutableTags() = {
                     ProtoBody.GetCdcDataChange().GetNewImage().GetTags().begin(),
                     ProtoBody.GetCdcDataChange().GetNewImage().GetTags().end()};
                 upsert.SetData(ProtoBody.GetCdcDataChange().GetNewImage().GetData());
-            } else {
+            } else if (ProtoBody.GetCdcDataChange().GetRowOperationCase() == NKikimrChangeExchange::TDataChange::kUpsert) {
                 // Fallback to Upsert field if NewImage is not available
                 *upsert.MutableTags() = {
                     ProtoBody.GetCdcDataChange().GetUpsert().GetTags().begin(),
                     ProtoBody.GetCdcDataChange().GetUpsert().GetTags().end()};
                 upsert.SetData(ProtoBody.GetCdcDataChange().GetUpsert().GetData());
+            } else if (ProtoBody.GetCdcDataChange().GetRowOperationCase() == NKikimrChangeExchange::TDataChange::kReset) {
+                Y_ABORT("Reset operation is not supported, all operations must be converted to Upsert");
             }
             break;
         }
         case NKikimrChangeExchange::TDataChange::kErase:
             record.MutableErase();
             break;
-        case NKikimrChangeExchange::TDataChange::kReset: [[fallthrough]];
         default:
             Y_FAIL_S("Unexpected row operation: " << static_cast<int>(ProtoBody.GetCdcDataChange().GetRowOperationCase()));
         }

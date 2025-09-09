@@ -8,11 +8,11 @@
 #include "atomics.pml"
 
 typedef Slot {
-    unsigned generation:3;
+    bool isOvertaken;
     bool isEmpty;
 }
 
-#define EQ_SLOT(slot1, slot2) ((slot1.generation == slot2.generation) && (slot1.isEmpty == slot2.isEmpty))
+#define EQ_SLOT(slot1, slot2) ((slot1.isOvertaken == slot2.isOvertaken) && (slot1.isEmpty == slot2.isEmpty))
 
 typedef Queue {
     unsigned tail:4;
@@ -31,30 +31,33 @@ inline increment_queue_tail(currentTail) {
     blind_atomic_compare_exchange(queue.tail, currentTail, currentTail + 1)
 }
 
-inline invalidate_slot(counter, current_generation) {
+inline clear_slot(counter) {
     atomic {
-        QUEUE_SLOT(counter).generation = current_generation + 1;
+        QUEUE_SLOT(counter).isOvertaken = false;
         QUEUE_SLOT(counter).isEmpty = true;
     }
 }
 
-inline save_slot_value(counter, saved_generation) {
+
+inline overtake_slot(counter) {
     atomic {
-        QUEUE_SLOT(counter).isEmpty = false;
-        QUEUE_SLOT(counter).generation = saved_generation;
+        QUEUE_SLOT(counter).isOvertaken = true;
+        QUEUE_SLOT(counter).isEmpty = true;
     }
 }
 
-inline store_slot(counter, new_generation, new_is_empty) {
+
+inline save_slot_value(counter) {
     atomic {
-        QUEUE_SLOT(counter).generation = new_generation;
-        QUEUE_SLOT(counter).isEmpty = new_is_empty;
+        QUEUE_SLOT(counter).isEmpty = false;
+        QUEUE_SLOT(counter).isOvertaken = false;
     }
 }
+
 
 inline copy_slot(source, destination) {
     atomic {
-        destination.generation = source.generation;
+        destination.isOvertaken = source.isOvertaken;
         destination.isEmpty = source.isEmpty;
     }
 }
@@ -65,7 +68,7 @@ inline read_slot(counter, destination) {
     }
 }
 
-inline compare_exchange_slot(counter, expectedSlot, new_generation, new_is_empty, success) {
+inline try_to_save_slot(counter, expectedSlot, success) {
     atomic {
         if
         :: !EQ_SLOT(expectedSlot, QUEUE_SLOT(counter)) ->
@@ -73,7 +76,33 @@ inline compare_exchange_slot(counter, expectedSlot, new_generation, new_is_empty
             success = false;
         :: else ->
             success = true;
-            store_slot(counter, new_generation, new_is_empty);
+            save_slot_value(counter);
+        fi
+    }
+}
+
+inline try_to_overtake_slot(counter, expectedSlot, success) {
+    atomic {
+        if
+        :: !EQ_SLOT(expectedSlot, QUEUE_SLOT(counter)) ->
+            read_slot(counter, expectedSlot);
+            success = false;
+        :: else ->
+            success = true;
+            overtake_slot(counter);
+        fi
+    }
+}
+
+inline try_to_clear_slot(counter, expectedSlot, success) {
+    atomic {
+        if
+        :: !EQ_SLOT(expectedSlot, QUEUE_SLOT(counter)) ->
+            read_slot(counter, expectedSlot);
+            success = false;
+        :: else ->
+            success = true;
+            clear_slot(counter);
         fi
     }
 }
@@ -94,7 +123,7 @@ inline init_queue() {
         int i = 0;
         do
         :: i < QUEUE_SIZE ->
-            invalidate_slot(i, -1);
+            clear_slot(i);
             i++
         :: i >= QUEUE_SIZE -> break
         od

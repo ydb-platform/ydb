@@ -2,8 +2,16 @@
 
 #include "defs.h"
 #include "mpmc_ring_queue.h"
+#include "mpmc_ring_queue_v1.h"
 #include "mpmc_ring_queue_v2.h"
 #include "mpmc_ring_queue_v3.h"
+#include "mpmc_ring_queue_v4.h"
+#include "mpmc_ring_queue_v5.h"
+#include "mpmc_ring_queue_v6.h"
+#include "mpmc_ring_queue_v7.h"
+#include "mpmc_ring_queue_v8.h"
+#include "mpmc_ring_queue_v9.h"
+#include "mpmc_ring_queue_vnext_v1.h"
 #include "mpmc_ring_queue_blocking.h"
 #include <atomic>
 
@@ -19,8 +27,8 @@ class TRingActivationQueue {
     const bool IsMPSC = false;
 
 public:
-    TRingActivationQueue(bool isMPSC)
-        : IsMPSC(isMPSC)
+    TRingActivationQueue(ui32 readersCount)
+        : IsMPSC(readersCount == 1)
     {}
 
     void Push(ui32 activation, ui64 revolvingCounter) {
@@ -59,14 +67,15 @@ public:
 
 };
 
-class TRingActivationQueueV3 {
+class TRingActivationQueueV6 {
     NThreading::TPadded<std::atomic_bool> IsNeedToWriteToOldQueue = false;
-    NThreading::TPadded<TMPMCRingQueueV3<20>> ActivationQueue;
+    NThreading::TPadded<TMPMCRingQueueV6<20>> ActivationQueue;
     NThreading::TPadded<TUnorderedCache<ui32, 512, 4>> OldActivationQueue;
     NThreading::TPadded<std::atomic_uint64_t> RevolvingCounter = 0;
 
 public:
-    TRingActivationQueueV3(bool)
+    TRingActivationQueueV6(ui32 readersCount)
+        : ActivationQueue(readersCount)
     {}
 
     void Push(ui32 activation, ui64 revolvingCounter) {
@@ -99,7 +108,7 @@ class TBlockingActivationQueue {
     NThreading::TPadded<TMPMCBlockingRingQueue<20>> ActivationQueue;
 
 public:
-    TBlockingActivationQueue(bool)
+    TBlockingActivationQueue(ui32)
     {}
 
 

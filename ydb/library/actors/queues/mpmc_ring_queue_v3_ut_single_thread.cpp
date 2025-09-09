@@ -107,6 +107,7 @@ namespace { // Tests
             TMPMCRingQueueV3WithStats<SizeBits> realQueue;
 
             ui64 emptyValue = (ui64(1) << 63);
+            //ui64 overtakenValue = (ui64(1) << 62);
 
             UNIT_ASSERT(realQueue.TryPush(0));
             UNIT_ASSERT(realQueue.TryPush(1));

@@ -57,7 +57,7 @@ namespace NActors {
         const bool UseRingQueueValue;
         alignas(64) TIntrusivePtr<TAffinity> ThreadsAffinity;
         alignas(64) TAtomic Semaphore = 0;
-        alignas(64) std::variant<TUnorderedCacheActivationQueue, TRingActivationQueueV3> Activations;
+        alignas(64) std::variant<TUnorderedCacheActivationQueue, TRingActivationQueueV6> Activations;
         TAtomic ActivationsRevolvingCounter = 0;
         std::atomic_bool StopFlag = false;
     public:

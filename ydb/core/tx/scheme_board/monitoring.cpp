@@ -138,7 +138,7 @@ public:
     }
 
     void Bootstrap() {
-        Send(NKikimr::MakeStateStorageProxyID(), new TEvStateStorage::TEvResolveSchemeBoard(Path));
+        Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvResolveSchemeBoard(Path));
         Become(&TBackupProxyActor::StateResolve, DefaultTimeout, new TEvents::TEvWakeup());
     }
 
@@ -1713,7 +1713,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
     public:
         explicit TReplicaEnumerator(const TActorId& replyTo)
-            : TBase(NKikimr::MakeStateStorageProxyID(), replyTo)
+            : TBase(MakeStateStorageProxyID(), replyTo)
         {
         }
 
@@ -1869,7 +1869,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             return (void)Register(new TReplicaEnumerator(ev->Sender));
 
         case ERequestType::Resolve:
-            if (RunFormAction<TReplicaResolver>(NKikimr::MakeStateStorageProxyID(), ev->Sender, params)) {
+            if (RunFormAction<TReplicaResolver>(MakeStateStorageProxyID(), ev->Sender, params)) {
                 return;
             }
             break;
@@ -2009,8 +2009,7 @@ public:
         if (auto* mon = AppData()->Mon) {
             auto* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, ROOT, "Scheme Board",
-                false, TlsActivationContext->ActorSystem(), SelfId()
-            );
+                false, TlsActivationContext->ActorSystem(), SelfId());
         }
 
         Become(&TThis::StateWork);

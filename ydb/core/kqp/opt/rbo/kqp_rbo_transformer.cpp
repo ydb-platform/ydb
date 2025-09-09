@@ -176,18 +176,56 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
 
     if (from) {
         for (auto fromItem : from->Child(1)->Children()) {
-            auto readExpr = TKqlReadTableRanges(fromItem->Child(0));
-            auto alias = fromItem->Child(1);
+            // From item can be a table read with an alias or a subquery with an alias
+            // In case of a subquery, we have already translated PgSelect of the nested subquery
+            // so we just need to remove TKqpOpRoot and plug in the translated subquery
 
-            // clang-format off
-            auto opRead = Build<TKqpOpRead>(ctx, node->Pos())
-                .Table(readExpr.Table())
-                .Alias(alias)
-                .Columns(readExpr.Columns())
-            .Done().Ptr();
-            // clang-format on
-            aliasToInputMap.insert({TString(alias->Content()), opRead});
-            inputsInOrder.push_back(opRead);
+            auto childExpr = fromItem->ChildPtr(0);
+            auto alias = fromItem->Child(1);
+            TExprNode::TPtr fromExpr;
+
+            if (TKqpOpRoot::Match(childExpr.Get())) {
+                auto opRoot = TKqpOpRoot(childExpr);
+
+                // We need to rename all the IUs in the subquery to reflect the new alias
+                auto subqueryType = childExpr->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                for (auto item : subqueryType->GetItems()) {
+                    auto orig = TString(item->GetName());
+                    auto unit = TInfoUnit(orig);
+                    auto renamedUnit = TInfoUnit(TString(alias->Content()), unit.ColumnName);
+
+                    // clang-format off
+                    resultElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
+                        .Input(opRoot.Input())
+                        .Variable().Value(unit.GetFullName()).Build()
+                        .From().Value(renamedUnit.GetFullName()).Build()
+                    .Done().Ptr());
+                    // clang-format on
+                }
+
+                // clang-format off
+                fromExpr = Build<TKqpOpMap>(ctx, node->Pos())
+                    .Input(opRoot.Input())
+                    .MapElements().Add(resultElements).Build()
+                    .Project().Value("true").Build()
+                .Done().Ptr();
+                // clang-format on
+            }
+
+            else {
+                auto readExpr = TKqlReadTableRanges(childExpr);
+
+                // clang-format off
+                fromExpr = Build<TKqpOpRead>(ctx, node->Pos())
+                    .Table(readExpr.Table())
+                    .Alias(alias)
+                    .Columns(readExpr.Columns())
+                .Done().Ptr();
+                // clang-format on
+            }
+
+            aliasToInputMap.insert({TString(alias->Content()), fromExpr});
+            inputsInOrder.push_back(fromExpr);
             lastAlias = alias;
         }
     }
@@ -359,7 +397,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
         }
 
         // clang-format off
-        resultElements.push_back(Build<TKqpOpMapElement>(ctx, node->Pos())
+        resultElements.push_back(Build<TKqpOpMapElementLambda>(ctx, node->Pos())
             .Input(resultExpr)
             .Variable(variable)
             .Lambda(lambda)
@@ -372,8 +410,9 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
         .Input<TKqpOpMap>()
             .Input(resultExpr)
                 .MapElements()
-                .Add(resultElements)
-            .Build()
+                    .Add(resultElements)
+                .Build()
+                .Project().Value("true").Build()
         .Build()
     .Done().Ptr();
     // clang-format on

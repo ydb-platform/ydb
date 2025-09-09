@@ -236,6 +236,17 @@ class TOpMap : public IUnaryOperator {
     TOpMap(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
 
+    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> MapElements;
+    bool Project = true;
+};
+
+class TOpProject : public IUnaryOperator {
+    public:
+    TOpProject(TExprNode::TPtr node);
+    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+
+    TVector<TInfoUnit> GetProjectList() const;
+    TVector<TInfoUnit> ProjectList;
 };
 
 class TOpFilter : public IUnaryOperator {

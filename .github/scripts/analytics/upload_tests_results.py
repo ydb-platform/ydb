@@ -96,56 +96,18 @@ def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, bra
             status = "passed"
             if testcase.find("properties/property/[@name='mute']") is not None:
                 status = "mute"
-                mute_message = testcase.find(
+                status_description = testcase.find(
                     "properties/property/[@name='mute']"
                 ).get("value")
-                
-                # Get original error message from muted test (preserved in skipped element by mute_utils.py)
-                original_error = ""
-                muted_error_element = testcase.find("skipped")
-                if muted_error_element is not None:
-                    # Extract error message similar to how failure processing works
-                    if muted_error_element.get('message'):
-                        original_error = muted_error_element.get('message')
-                    # If there's also text content, append it
-                    if muted_error_element.text:
-                        if original_error:
-                            original_error += "\n" + muted_error_element.text.strip()
-                        else:
-                            original_error = muted_error_element.text.strip()
-                
-                # Combine mute message with original error
-                if original_error:
-                    status_description = f"{mute_message}\n{original_error}"
-                else:
-                    status_description = mute_message
             elif testcase.find("failure") is not None:
                 status = "failure"
-                failure_element = testcase.find("failure")
-                failure_text = []
-                if failure_element.get('message'):
-                    failure_text.append(failure_element.get('message'))
-                if failure_element.text:
-                    failure_text.append(failure_element.text.strip())
-                status_description = '\n'.join(failure_text) if failure_text else ""
+                status_description = testcase.find("failure").text
             elif testcase.find("error") is not None:
                 status = "error"
-                error_element = testcase.find("error")
-                error_text = []
-                if error_element.get('message'):
-                    error_text.append(error_element.get('message'))
-                if error_element.text:
-                    error_text.append(error_element.text.strip())
-                status_description = '\n'.join(error_text) if error_text else ""
+                status_description = testcase.find("error").text
             elif testcase.find("skipped") is not None:
                 status = "skipped"
-                skipped_element = testcase.find("skipped")
-                skipped_text = []
-                if skipped_element.get('message'):
-                    skipped_text.append(skipped_element.get('message'))
-                if skipped_element.text:
-                    skipped_text.append(skipped_element.text.strip())
-                status_description = '\n'.join(skipped_text) if skipped_text else ""
+                status_description = testcase.find("skipped").text
 
             results.append(
                 {

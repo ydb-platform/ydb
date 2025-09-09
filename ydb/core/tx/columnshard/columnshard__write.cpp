@@ -400,9 +400,10 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                     NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
             } else {
                 for (const auto& op : lockInfo->GetWriteOperations()) {
-                    if (!TablesManager.ResolveInternalPathId(op->GetPathId().GetSchemeShardLocalPathId(), false)) {
+                    const auto& opPathId = op->GetPathId();
+                    if (!TablesManager.ResolveInternalPathId(opPathId.GetSchemeShardLocalPathId(), false)) {
                         //Table renamed or dropped
-                        sendError("unknown table path id: " + ::ToString(op->GetPathId().GetSchemeShardLocalPathId()),
+                        sendError("unknown table: " + ::ToString(opPathId.GetSchemeShardLocalPathId()),
                             NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED);
                         return;
                     }

@@ -53,79 +53,6 @@ void CreateTableWithGlobalIndex(TTestEnv& env, const TString& databaseName, cons
     FillTable(env, databaseName, tableName, rowCount);
 }
 
-void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId, size_t expectedRowCount) {
-    auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(nodeIndex));
-    ui64 rowCount = 0;
-    while (rowCount == 0) {
-        NStat::TRequest req;
-        req.PathId = pathId;
-
-        auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
-        evGet->StatType = NStat::EStatType::SIMPLE;
-        evGet->StatRequests.push_back(req);
-
-        auto sender = runtime.AllocateEdgeActor(nodeIndex);
-        runtime.Send(statServiceId, sender, evGet.release(), nodeIndex, true);
-        auto evResult = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
-
-        UNIT_ASSERT(evResult);
-        UNIT_ASSERT(evResult->Get());
-        UNIT_ASSERT(evResult->Get()->StatResponses.size() == 1);
-
-        auto rsp = evResult->Get()->StatResponses[0];
-        auto stat = rsp.Simple;
-
-        rowCount = stat.RowCount;
-
-        if (rowCount != 0) {
-            UNIT_ASSERT(stat.RowCount == expectedRowCount);
-            break;
-        }
-
-        runtime.SimulateSleep(TDuration::Seconds(1));
-    }
-}
-
-ui64 GetRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId) {
-    auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(nodeIndex));
-    NStat::TRequest req;
-    req.PathId = pathId;
-
-    auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
-    evGet->StatType = NStat::EStatType::SIMPLE;
-    evGet->StatRequests.push_back(req);
-
-    auto sender = runtime.AllocateEdgeActor(nodeIndex);
-    runtime.Send(statServiceId, sender, evGet.release(), nodeIndex, true);
-    auto evResult = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
-
-    UNIT_ASSERT(evResult);
-    UNIT_ASSERT(evResult->Get());
-    UNIT_ASSERT(evResult->Get()->StatResponses.size() == 1);
-
-    auto rsp = evResult->Get()->StatResponses[0];
-    auto stat = rsp.Simple;
-
-    return stat.RowCount;
-}
-
-void waitForRowCount(
-        TTestActorRuntime& runtime, ui32 nodeIndex,
-        TPathId pathId, size_t expectedRowCount, size_t timeoutSec = 130) {
-    ui64 lastRowCount = 0;
-    for (size_t i = 0; i <= timeoutSec; ++i) {
-        lastRowCount = GetRowCount(runtime, nodeIndex, pathId);
-        if (i % 5 == 0) {
-            Cerr << "row count: " << lastRowCount << " (expected: " << expectedRowCount << ")\n";
-        }
-        if (lastRowCount == expectedRowCount) {
-            return;
-        }
-        runtime.SimulateSleep(TDuration::Seconds(1));
-    }
-    UNIT_ASSERT_C(false, "timed out, last row count: " << lastRowCount);
-}
-
 } // namespace
 
 Y_UNIT_TEST_SUITE(BasicStatistics) {
@@ -401,7 +328,7 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
 
         // After everything is healed, stats should get updated.
         blockSSUpdates.Stop();
-        waitForRowCount(runtime, otherNodeIdx, pathId, rowCount2);
+        WaitForRowCount(runtime, otherNodeIdx, pathId, rowCount2);
     }
 }
 

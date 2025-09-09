@@ -133,6 +133,7 @@ namespace NActors {
         friend class TBasicExecutorPoolSanitizer;
         friend class TSharedExecutorPool;
 
+        NThreading::TPadded<std::atomic<ui64>> CheckToSleepWorkers = 0;
         NThreading::TPadded<std::atomic_bool> AllThreadsSleep = true;
         const ui64 DefaultSpinThresholdCycles;
         std::atomic<ui64> SpinThresholdCycles;
@@ -293,6 +294,6 @@ namespace NActors {
 
         void WakeUpLoop(i16 currentThreadCount);
         bool WakeUpLoopShared();
-        
+
     };
 }

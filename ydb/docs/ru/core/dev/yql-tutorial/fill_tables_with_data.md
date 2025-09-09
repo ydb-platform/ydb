@@ -114,3 +114,16 @@ VALUES
     (2, 5, 7, "Initial Coin Offering", CAST(Date("2018-05-06") AS Uint64)),
     (2, 5, 8, "Fifty-One Percent", CAST(Date("2018-05-13") AS Uint64));
 ```
+
+## Вставка данных с возвратом сгенерированного ключа
+
+Если в таблице есть столбец с типом `Serial`, то его значение будет генерироваться автоматически на стороне БД.  
+Чтобы получить это значение в момент вставки, можно использовать конструкцию `RETURNING`.
+
+Пример:
+
+```yql
+INSERT INTO games (datetime_start, datetime_end)
+VALUES (CurrentUtcTimestamp(), NULL)
+RETURNING id;
+```

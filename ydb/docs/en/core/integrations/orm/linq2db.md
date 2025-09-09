@@ -93,7 +93,6 @@ Use the provider like any other Linq To DB provider: map your entity classes to 
 > * You can set exact `Precision`/`Scale` with attributes:  
     >   `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]`  
     >   or globally via `YdbOptions(UseParametrizedDecimal: true)`.
-
 > Time zone types (`TzDate`/`TzDatetime`/`TzTimestamp`) are **not used as column types**. When creating tables they will be reduced to `Date`/`Datetime`/`Timestamp`. They are allowed in expressions/literals.
 
 ---

@@ -403,35 +403,13 @@ public:
 
 class TControllers {
 private:
-    std::atomic<ICSController::TPtr*> CSControllerPtr{nullptr};
+    std::atomic<ICSController::TPtr*> CSControllerPtr{new ICSController::TPtr(std::make_shared<ICSController>())};
     IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
     
-    void EnsureCSController() {
-        ICSController::TPtr* expected = nullptr;
-        if (CSControllerPtr.compare_exchange_strong(expected, nullptr)) {
-            auto* newPtr = new ICSController::TPtr(std::make_shared<ICSController>());
-            CSControllerPtr.store(newPtr);
-        }
-
-        auto* newPtr = new ICSController::TPtr(std::make_shared<ICSController>());
-        expected = nullptr;
-        if (!CSControllerPtr.compare_exchange_strong(expected, newPtr)) {
-            delete newPtr;
-        }
-    }
-    
     void ReplaceCSController(const ICSController::TPtr& newController) {
-        ICSController::TPtr* expected = CSControllerPtr.load();        
-        if (expected && (*expected).get() == newController.get()) {
-            return;
-        }
-
         auto* newPtr = new ICSController::TPtr(newController);
-        if (CSControllerPtr.compare_exchange_strong(expected, newPtr)) {
-            delete expected;
-        } else {
-            delete newPtr;
-        }
+        auto* oldPtr = CSControllerPtr.exchange(newPtr);
+        delete oldPtr;
     }
 
 public:
@@ -476,13 +454,7 @@ public:
 
     static ICSController::TPtr GetColumnShardController() {
         auto* controllers = Singleton<TControllers>();
-        controllers->EnsureCSController();
-        auto* ptr = controllers->CSControllerPtr.load();
-        if (ptr) {
-            return *ptr;
-        }
-
-        return std::make_shared<ICSController>();
+        return *controllers->CSControllerPtr.load();
     }
 
     template <class T>

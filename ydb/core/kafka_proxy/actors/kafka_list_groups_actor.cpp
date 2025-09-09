@@ -26,7 +26,7 @@ NActors::IActor* CreateKafkaListGroupsActor(const TContext::TPtr context, const 
 void TKafkaListGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
     Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
     if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
-        if (NKikimr::CanonizePath(Context->ResourceDatabasePath) == NKikimr::CanonizePath(AppData(ctx)->TenantName)) {
+        if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
             Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
         } else {
             StartKqpSession(ctx);

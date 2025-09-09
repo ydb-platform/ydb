@@ -24,6 +24,7 @@
 #include <util/generic/yexception.h>
 #include <util/stream/mem.h>
 
+#include <atomic>
 #include <utility>
 #include <variant>
 
@@ -2984,7 +2985,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::OnDataDecompressed(i64 source
     if (auto session = CbContext->LockShared()) {
         // TODO (ildar-khisam@): distribute total ServerBytesSize in proportion of source size
         // Use CompressedDataSize, sourceSize, ServerBytesSize
-        session->OnDataDecompressed(sourceSize, estimatedDecompressedSize, decompressedSize, messagesCount, std::exchange(ServerBytesSize, 0));
+        session->OnDataDecompressed(sourceSize, estimatedDecompressedSize, decompressedSize, messagesCount, ServerBytesSize.exchange(0));
     }
 }
 

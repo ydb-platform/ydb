@@ -2378,7 +2378,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT(keysFound == keysWritten);
         UNIT_ASSERT_VALUES_EQUAL(keysFound.size(), 3 + totalWriteCycles); //4 + 15
         UNIT_ASSERT(totalMessages < totalWritten);
-        }
+    }
 
     Y_UNIT_TEST(TopicsWithCleanupPolicyScenario) {
         // TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true,

@@ -780,7 +780,7 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
         };
         TExprNodeList newChildren;
         bool changed = false;
-        for (auto& group : groups) {
+        for (const auto& group : groups) {
             YQL_ENSURE(!group.empty());
             if (group.size() == 1) {
                 newChildren.push_back(children[group.front()]);
@@ -818,14 +818,13 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
                     auto childAnd = children[idx];
                     TExprNodeList preds = childAnd->ChildrenList();
                     EraseIf(preds, [&](const TExprNode::TPtr& p) { return commonSet.contains(IsNoPush(*p) ? p->Child(0) : p.Get()); });
-                    if (!preds.empty()) {
-                        newGroup.emplace_back(ctx.ChangeChildren(*childAnd, std::move(preds)));
+                    if (preds.empty()) {
+                        preds.emplace_back(MakeBool<true>(childAnd->Pos(), ctx));
                     }
+                    newGroup.emplace_back(ctx.ChangeChildren(*childAnd, std::move(preds)));
                 }
-                if (!newGroup.empty()) {
-                    auto restPreds = ctx.NewCallable(node->Pos(), "Or", std::move(newGroup));
-                    commonPreds.push_back(restPreds);
-                }
+                auto restPreds = ctx.NewCallable(node->Pos(), "Or", std::move(newGroup));
+                commonPreds.push_back(restPreds);
                 newChildren.push_back(ctx.NewCallable(node->Pos(), "And", std::move(commonPreds)));
             } else {
                 for (auto& idx : group) {

@@ -120,6 +120,7 @@ class WorkloadMangerBase(LoadSuiteBase):
         check_thread = Thread(target=self.check_signals_thread)
         self.stop_checking.clear()
         check_thread.start()
+        start_time = time.time()
         try:
             qparams = self._get_query_settings()
             self.save_nodes_state()
@@ -151,6 +152,7 @@ class WorkloadMangerBase(LoadSuiteBase):
         overall_result = YdbCliHelper.WorkloadRunResult()
         overall_result.merge(*results.values())
         overall_result.iterations.clear()
+        overall_result.start_time = start_time
         self.process_query_result(overall_result, 'test', True)
         if len(self.signal_errors) > 0:
             errors = '\n'.join([f'{d}: {e}' for d, e in self.signal_errors])

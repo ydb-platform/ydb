@@ -208,11 +208,7 @@ private:
                     ProtoBody.GetCdcDataChange().GetUpsert().GetTags().end()};
                 upsert.SetData(ProtoBody.GetCdcDataChange().GetUpsert().GetData());
             } else if (ProtoBody.GetCdcDataChange().GetRowOperationCase() == NKikimrChangeExchange::TDataChange::kReset) {
-                // Handle Reset operation
-                *upsert.MutableTags() = {
-                    ProtoBody.GetCdcDataChange().GetReset().GetTags().begin(),
-                    ProtoBody.GetCdcDataChange().GetReset().GetTags().end()};
-                upsert.SetData(ProtoBody.GetCdcDataChange().GetReset().GetData());
+                Y_ABORT("Reset operation is not supported, all operations must be converted to Upsert");
             }
             break;
         }

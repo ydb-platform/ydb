@@ -654,41 +654,41 @@ namespace {
         }
 
         void TestTopic(bool enablePermissions = false, ui64 topicsCount = 1, ui64 consumersCount = 0) {
-          EnvOptions().EnablePermissionsExport(enablePermissions);
-          Env();
-          ui64 txId = 100;
-          
-          TVector<TString> requestItems;
-          TVector<NDescUT::TSimpleTopic> expected;
-          
-          for (ui64 i = 0; i < topicsCount; ++i) {
-            auto topic = NDescUT::TSimpleTopic(i, (topicsCount == 1 || i > 0) ? consumersCount : 0);
-            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetPrivateProto().DebugString());
-            Env().TestWaitNotification(Runtime(), txId);
-            requestItems.push_back(topic.GetExportRequestItem());
-            expected.push_back(topic);
-          }
-
-          auto exportRequest = NDescUT::TExportRequest(S3Port(), requestItems);
-    
-          auto schemeshardId = TTestTxConfig::SchemeShard;
-          TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", exportRequest.GetRequest(), "", "", Ydb::StatusIds::SUCCESS);
-          Env().TestWaitNotification(Runtime(), txId, schemeshardId);
-
-          TestGetExport(Runtime(), schemeshardId, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-
-          for (ui64 i = 0; i < topicsCount; ++i) {
-            const auto& topicExpected = expected.at(i);
-            const auto& topicPath = topicExpected.GetPath();
-            UNIT_ASSERT(HasS3File(topicPath));
-            UNIT_ASSERT(topicExpected.CompareWithString(GetS3FileContent(topicPath)));
-
-            if (enablePermissions) {
-              auto permissionsPath = topicExpected.GetPermissions().GetPath();
-              UNIT_ASSERT(HasS3File(permissionsPath));
-              UNIT_ASSERT(topicExpected.GetPermissions().CompareWithString(GetS3FileContent(permissionsPath)));
+            EnvOptions().EnablePermissionsExport(enablePermissions);
+            Env();
+            ui64 txId = 100;
+            
+            TVector<TString> requestItems;
+            TVector<NDescUT::TSimpleTopic> expected;
+            
+            for (ui64 i = 0; i < topicsCount; ++i) {
+                auto topic = NDescUT::TSimpleTopic(i, (topicsCount == 1 || i > 0) ? consumersCount : 0);
+                TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetPrivateProto().DebugString());
+                Env().TestWaitNotification(Runtime(), txId);
+                requestItems.push_back(topic.GetExportRequestItem());
+                expected.push_back(topic);
             }
-          }
+
+            auto exportRequest = NDescUT::TExportRequest(S3Port(), requestItems);
+      
+            auto schemeshardId = TTestTxConfig::SchemeShard;
+            TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", exportRequest.GetRequest(), "", "", Ydb::StatusIds::SUCCESS);
+            Env().TestWaitNotification(Runtime(), txId, schemeshardId);
+
+            TestGetExport(Runtime(), schemeshardId, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            for (ui64 i = 0; i < topicsCount; ++i) {
+                const auto& topicExpected = expected.at(i);
+                const auto& topicPath = topicExpected.GetPath();
+                UNIT_ASSERT(HasS3File(topicPath));
+                UNIT_ASSERT(topicExpected.CompareWithString(GetS3FileContent(topicPath)));
+
+                if (enablePermissions) {
+                    auto permissionsPath = topicExpected.GetPermissions().GetPath();
+                    UNIT_ASSERT(HasS3File(permissionsPath));
+                    UNIT_ASSERT(topicExpected.GetPermissions().CompareWithString(GetS3FileContent(permissionsPath)));
+                }
+            }
         }
 
     protected:

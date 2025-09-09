@@ -1,4 +1,4 @@
-#include "quota_tracker.h"
+#include <ydb/core/persqueue/pqtablet/partition/quota_tracker.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

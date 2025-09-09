@@ -5,7 +5,7 @@
 #include "partition_scale_manager_graph_cmp.h"
 
 #include <ydb/core/base/path.h>
-#include "ydb/core/persqueue/utils.h"
+#include "ydb/core/persqueue/public/utils.h"
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>

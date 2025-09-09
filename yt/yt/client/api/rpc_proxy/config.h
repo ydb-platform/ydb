@@ -84,6 +84,9 @@ struct TConnectionConfig
     //! If |true| select query will be added to tracing tags of SelectRows span.
     bool EnableSelectQueryTracingTag;
 
+    // Old heuristic cause pure locks to be dropped. Option is introduced to roll fix back in case of problems.
+    bool DoNotDropPureExclusiveLocks;
+
     REGISTER_YSON_STRUCT(TConnectionConfig);
 
     static void Register(TRegistrar registrar);

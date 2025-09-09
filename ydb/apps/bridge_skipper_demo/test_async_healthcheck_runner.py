@@ -1,12 +1,12 @@
 #! /usr/bin/python3
 
+import health as health_mod
+
 import logging
 import unittest
 
 from unittest.mock import patch
 from concurrent.futures import Future
-
-import health as health_mod
 
 
 # Add custom TRACE log level (lower than DEBUG)

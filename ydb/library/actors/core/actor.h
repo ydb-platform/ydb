@@ -596,6 +596,8 @@ namespace NActors {
         /// @sa services.proto NKikimrServices::TActivity::EType
         using EActorActivity = EInternalActorType;
         using EActivityType = EActorActivity;
+
+    private:
         TActorActivityType ActivityType;
 
     protected:
@@ -690,17 +692,15 @@ namespace NActors {
         virtual void PassAway();
 
     protected:
-        void SetActivityType(TActorActivityType activityType) {
-            ActivityType = activityType;
-        }
+        void SetActivityType(TActorActivityType activityType);
 
         template <typename EEnum>
         void SetActivityType(EEnum activityType) requires (std::is_enum_v<EEnum>) {
-            ActivityType = TActorActivityType::FromEnum(activityType);
+            SetActivityType(TActorActivityType::FromEnum(activityType));
         }
 
         void SetActivityType(TStringBuf activityName) {
-            ActivityType = TActorActivityType::FromName(activityName);
+            SetActivityType(TActorActivityType::FromName(activityName));
         }
 
     public:

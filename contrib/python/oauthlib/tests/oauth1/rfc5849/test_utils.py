@@ -53,11 +53,11 @@ class UtilsTests(TestCase):
         # The following is an isolated test function used to test the filter_params decorator.
         @filter_params
         def special_test_function(params, realm=None):
-            """ I am a special test function """
+            """I am a special test function"""
             return 'OAuth ' + ','.join(['='.join([k, v]) for k, v in params])
 
         # check that the docstring got through
-        self.assertEqual(special_test_function.__doc__, " I am a special test function ")
+        self.assertEqual(special_test_function.__doc__, "I am a special test function")
 
         # Check that the decorator filtering works as per design.
         #   Any param that does not start with 'oauth'

@@ -36,7 +36,7 @@
 #include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/core/security/token_manager/token_manager_settings.h>
 #include <ydb/core/base/grpc_service_factory.h>
-#include <ydb/core/persqueue/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 #include <ydb/core/http_proxy/auth_factory.h>
 #include <ydb/library/accessor/accessor.h>
@@ -115,6 +115,7 @@ namespace Tests {
 
         ui16 Port;
         ui16 GrpcPort = 0;
+        TString GrpcHost;
         int GrpcMaxMessageSize = 0;  // 0 - default (4_MB), -1 - no limit
         ui16 MonitoringPortOffset = 0;
         bool MonitoringTypeAsync = false;
@@ -191,6 +192,7 @@ namespace Tests {
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
 
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
+        TServerSettings& SetGrpcHost(TString value) { GrpcHost = value; return *this; }
         TServerSettings& SetGrpcMaxMessageSize(int value) { GrpcMaxMessageSize = value; return *this; }
         TServerSettings& SetMonitoringPortOffset(ui16 value, bool monitoringTypeAsync = false) { MonitoringPortOffset = value; MonitoringTypeAsync = monitoringTypeAsync; return *this; }
         TServerSettings& SetNeedStatsCollectors(bool value) { NeedStatsCollectors = value; return *this; }

@@ -301,7 +301,7 @@ private:
         Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
 
         if (Settings_.GrpcEnabled) {
-            Server_->EnableGRpc(domainGrpcPort);
+            Server_->EnableGRpc(GetGrpcSettings(domainGrpcPort, 0));
         }
 
         Client_ = MakeHolder<NKikimr::Tests::TClient>(serverSettings);
@@ -346,7 +346,7 @@ private:
             if (Settings_.GrpcEnabled) {
                 if (node > 0) {
                     // Port for first static node also used in cluster initialization
-                    Server_->EnableGRpc(grpcPortGen.GetPort(), node, absolutePath);
+                    Server_->EnableGRpc(GetGrpcSettings(grpcPortGen.GetPort(), node), node, absolutePath);
                 }
             } else if (Settings_.MonitoringEnabled) {
                 NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
@@ -395,8 +395,13 @@ public:
 
         if (Settings_.MonitoringEnabled && Settings_.VerbosityLevel >= EVerbosity::Info) {
             for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount; ++nodeIndex) {
-                Cout << CoutColors_.Cyan() << "Monitoring port" << (Server_->StaticNodes() + Server_->DynamicNodes() > 1 ? TStringBuilder() << " for static node " << nodeIndex + 1 : TString()) << ": " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(nodeIndex) << Endl;
+                const auto port = Server_->GetRuntime()->GetMonPort(nodeIndex);
+                Cout << CoutColors_.Cyan() << "Monitoring port"
+                    << (Server_->StaticNodes() + Server_->DynamicNodes() > 1 ? TStringBuilder() << " for static node " << nodeIndex + 1 : TString())
+                    << ": " << CoutColors_.Default()
+                    << (nodeIndex == 0 ? FormatMonitoringLink(port, "monitoring/cluster/tenants") : ToString(port)) << Endl;
             }
+
             const auto printTenantNodes = [this](const std::pair<TString, TStorageMeta::TTenant>& tenantInfo) {
                 if (tenantInfo.second.GetType() == TStorageMeta::TTenant::SERVERLESS) {
                     return;
@@ -410,7 +415,7 @@ public:
         }
 
         if (Settings_.GrpcEnabled && Settings_.VerbosityLevel >= EVerbosity::Info) {
-            Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << Server_->GetGRpcServer().GetPort() << Endl;
+            Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << FormatGrpcLink(Server_->GetGRpcServer().GetPort()) << Endl;
             for (const auto& [tenantPath, tenantInfo] : Settings_.Tenants) {
                 if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
                     Cout << CoutColors_.Cyan() << "Tenant [" << tenantPath << "] gRPC port: " << CoutColors_.Default() << Server_->GetTenantGRpcServer(GetTenantPath(tenantPath)).GetPort() << Endl;
@@ -533,7 +538,7 @@ public:
     }
 
 private:
-    NActors::TTestActorRuntime* GetRuntime() const {
+    NActors::TTestActorRuntime* GetRuntime() const override {
         return Server_->GetRuntime();
     }
 

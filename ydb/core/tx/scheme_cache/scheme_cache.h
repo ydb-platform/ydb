@@ -4,7 +4,7 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -127,6 +127,10 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
 
     inline bool IsServerless() const {
         return DomainKey != ResourcesDomainKey;
+    }
+
+    inline TPathId GetResourcesDomainKey() {
+        return ResourcesDomainKey;
     }
 
     TPathId DomainKey;

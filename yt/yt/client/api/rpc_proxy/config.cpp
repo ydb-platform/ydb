@@ -130,6 +130,9 @@ void TConnectionConfig::Register(TRegistrar registrar)
     registrar.Parameter("enable_select_query_tracing_tag", &TThis::EnableSelectQueryTracingTag)
         .Default(false);
 
+    registrar.Parameter("do_not_drop_pure_exclusive_locks", &TThis::DoNotDropPureExclusiveLocks)
+        .Default(true);
+
     registrar.Postprocessor([] (TThis* config) {
         if (!config->ClusterName && config->ClusterUrl) {
             config->ClusterName = InferYTClusterFromClusterUrl(*config->ClusterUrl);

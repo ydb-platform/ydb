@@ -213,7 +213,7 @@ TStreamingFeedback TAttachmentsInputStream::GetFeedback() const
 std::vector<TErrorAttribute> TAttachmentsInputStream::GetErrorAttributes() const
 {
     return {
-        TErrorAttribute{"request_id", RequestId_},
+        TErrorAttribute("request_id", RequestId_),
     };
 }
 
@@ -524,7 +524,7 @@ bool TAttachmentsOutputStream::CanPullMore(bool first) const
 std::vector<TErrorAttribute> TAttachmentsOutputStream::GetErrorAttributes() const
 {
     return {
-        TErrorAttribute{"request_id", RequestId_},
+        TErrorAttribute("request_id", RequestId_),
     };
 }
 

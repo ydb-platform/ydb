@@ -63,6 +63,19 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TTpcBaseWorkloadGenerator::GetSu
     return {TWorkloadType(0, "bench", "Perform benchmark", TWorkloadType::EKind::Benchmark)};
 }
 
+TString TTpcBaseWorkloadGenerator::GetExpectedResult(const TString& name, const TString& resourcePrefix) const {
+    const auto key = resourcePrefix + "s" + ToString(Params.GetScale()) + "_canonical/q" + name + ".result";
+    if (NResource::Has(key)) {
+        return NResource::Find(key);
+    }
+    if (NResource::Has(key + ".gz")) {
+        const auto data = NResource::Find(key + ".gz");
+        auto input = OpenOwnedMaybeCompressedInput(MakeHolder<TStringInput>(data));
+        return input->ReadAll();
+    }
+    return {};
+}
+
 TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
     TQueryInfoList result;
     if (type) {
@@ -92,13 +105,11 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
         result.emplace_back();
         result.back().Query = query;
         if (Params.GetCheckCanonical()) {
-            const auto key = resourcePrefix + "s" + ToString(Params.GetScale()) + "_canonical/q" + ToString(&query - queries.data()) + ".result";
-            if (NResource::Has(key)) {
-                result.back().ExpectedResult = NResource::Find(key);
-            } else if (NResource::Has(key + ".gz")) {
-                const auto data = NResource::Find(key + ".gz");
-                auto input = OpenOwnedMaybeCompressedInput(MakeHolder<TStringInput>(data));
-                result.back().ExpectedResult = input->ReadAll();
+            for (const auto& name: {ToString(&query - queries.data()), ToString(&query - queries.data()) + "." + ToString(FloatMode)}) {
+                result.back().ExpectedResult = GetExpectedResult(name, resourcePrefix);
+                if (!result.back().ExpectedResult.empty()) {
+                    break;
+                }
             }
         }
     }

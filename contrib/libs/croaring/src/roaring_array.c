@@ -651,7 +651,7 @@ size_t ra_portable_deserialize_size(const char *buf, const size_t maxbytes) {
     }
     bytestotal += size * 2 * sizeof(uint16_t);
     if (bytestotal > maxbytes) return 0;
-    uint16_t *keyscards = (uint16_t *)buf;
+    const char *keyscards = buf;
     buf += size * 2 * sizeof(uint16_t);
     if ((!hasrun) || (size >= NO_OFFSET_THRESHOLD)) {
         // skipping the offsets
@@ -662,7 +662,7 @@ size_t ra_portable_deserialize_size(const char *buf, const size_t maxbytes) {
     // Reading the containers
     for (int32_t k = 0; k < size; ++k) {
         uint16_t tmp;
-        memcpy(&tmp, keyscards + 2 * k + 1, sizeof(tmp));
+        memcpy(&tmp, keyscards + 4 * k + 2, sizeof(tmp));
         uint32_t thiscard = tmp + 1;
         bool isbitmap = (thiscard > DEFAULT_MAX_SIZE);
         bool isrun = false;
@@ -753,7 +753,7 @@ bool ra_portable_deserialize(roaring_array_t *answer, const char *buf,
         bitmapOfRunContainers = buf;
         buf += s;
     }
-    uint16_t *keyscards = (uint16_t *)buf;
+    const char *keyscards = buf;
 
     *readbytes += size * 2 * sizeof(uint16_t);
     if (*readbytes > maxbytes) {
@@ -770,7 +770,7 @@ bool ra_portable_deserialize(roaring_array_t *answer, const char *buf,
 
     for (int32_t k = 0; k < size; ++k) {
         uint16_t tmp;
-        memcpy(&tmp, keyscards + 2 * k, sizeof(tmp));
+        memcpy(&tmp, keyscards + 4 * k, sizeof(tmp));
         answer->keys[k] = tmp;
     }
     if ((!hasrun) || (size >= NO_OFFSET_THRESHOLD)) {
@@ -788,7 +788,7 @@ bool ra_portable_deserialize(roaring_array_t *answer, const char *buf,
     // Reading the containers
     for (int32_t k = 0; k < size; ++k) {
         uint16_t tmp;
-        memcpy(&tmp, keyscards + 2 * k + 1, sizeof(tmp));
+        memcpy(&tmp, keyscards + 4 * k + 2, sizeof(tmp));
         uint32_t thiscard = tmp + 1;
         bool isbitmap = (thiscard > DEFAULT_MAX_SIZE);
         bool isrun = false;

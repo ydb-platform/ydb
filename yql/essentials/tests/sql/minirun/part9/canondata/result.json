@@ -412,20 +412,6 @@
             "uri": "https://{canondata_backend}/1917492/b593de516ed40422ea60a2e9802be856ec60a7a0/resource.tar.gz#test.test_csee-same_closure_l2-default.txt-Results_/results.txt"
         }
     ],
-    "test.test[csee-semilattice_rt_side_effects-default.txt-Debug]": [
-        {
-            "checksum": "4bed5659c9d0fbad77a047537bc1d79d",
-            "size": 359,
-            "uri": "https://{canondata_backend}/1936997/65ea6418aa0e2025d12946f38481f705ac1d3632/resource.tar.gz#test.test_csee-semilattice_rt_side_effects-default.txt-Debug_/opt.yql"
-        }
-    ],
-    "test.test[csee-semilattice_rt_side_effects-default.txt-Results]": [
-        {
-            "checksum": "c1a2349a70d54af225bd022f9a58d961",
-            "size": 695,
-            "uri": "https://{canondata_backend}/1936997/65ea6418aa0e2025d12946f38481f705ac1d3632/resource.tar.gz#test.test_csee-semilattice_rt_side_effects-default.txt-Results_/results.txt"
-        }
-    ],
     "test.test[datetime-date_in-default.txt-Debug]": [
         {
             "checksum": "3e6ba7312997f15d807aa25613e84db6",
@@ -833,6 +819,20 @@
             "checksum": "b5fae5a6253aedc595c8dcbc9c51f8b3",
             "size": 697,
             "uri": "https://{canondata_backend}/1942173/f37f53f2bdf2e81f0ffdb8cf146faecaff60e7af/resource.tar.gz#test.test_in-large_in_YQL-19183--Results_/results.txt"
+        }
+    ],
+    "test.test[intersect-intersect_2025_02--Debug]": [
+        {
+            "checksum": "744113535d4c07decf5894305dec1519",
+            "size": 1006,
+            "uri": "https://{canondata_backend}/1937429/e59ffc7ba88d98ec79522a0f6f6b41d9dfd777bf/resource.tar.gz#test.test_intersect-intersect_2025_02--Debug_/opt.yql"
+        }
+    ],
+    "test.test[intersect-intersect_2025_02--Results]": [
+        {
+            "checksum": "45b95dc7a4e700727031007ba7e2dfec",
+            "size": 691,
+            "uri": "https://{canondata_backend}/1937429/e59ffc7ba88d98ec79522a0f6f6b41d9dfd777bf/resource.tar.gz#test.test_intersect-intersect_2025_02--Results_/results.txt"
         }
     ],
     "test.test[join-eq_over_join_same_keys-default.txt-Debug]": [

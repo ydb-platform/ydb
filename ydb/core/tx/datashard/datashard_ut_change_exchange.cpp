@@ -4,9 +4,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>

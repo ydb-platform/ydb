@@ -70,7 +70,7 @@ void array_container_free(array_container_t *array);
 array_container_t *array_container_clone(const array_container_t *src);
 
 /* Get the cardinality of `array'. */
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 static inline int array_container_cardinality(const array_container_t *array) {
     return array->cardinality;
 }
@@ -208,7 +208,7 @@ int32_t array_container_read(int32_t cardinality, array_container_t *container,
  * that the cardinality of the container is already known.
  *
  */
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 static inline int32_t array_container_size_in_bytes(
     const array_container_t *container) {
     return container->cardinality * sizeof(uint16_t);
@@ -217,7 +217,7 @@ static inline int32_t array_container_size_in_bytes(
 /**
  * Return true if the two arrays have the same content.
  */
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 static inline bool array_container_equals(const array_container_t *container1,
                                           const array_container_t *container2) {
     if (container1->cardinality != container2->cardinality) {

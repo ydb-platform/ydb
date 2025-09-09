@@ -134,7 +134,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsSecret()
-                .NotUnderOperation();
+                .NotUnderOperation()
+                .IsCommonSensePath();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

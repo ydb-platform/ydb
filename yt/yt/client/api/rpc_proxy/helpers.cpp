@@ -699,6 +699,9 @@ void FromProto(
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
 
+#undef DESERIALIZE_I64_AND_MAYBE_FALLBACK
+#undef DESERIALIZE_DURATION_AND_MAYBE_FALLBACK
+
 void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operation)
 {
     protoOperation->Clear();
@@ -1396,6 +1399,9 @@ void ToProto(
     if (query.OtherAttributes) {
         ToProto(protoQuery->mutable_other_attributes(), *query.OtherAttributes);
     }
+    if (query.Secrets) {
+        protoQuery->set_secrets(ToProto(*query.Secrets));
+    }
 }
 
 void FromProto(
@@ -1434,6 +1440,11 @@ void FromProto(
         query->OtherAttributes = NYTree::FromProto(protoQuery.other_attributes());
     } else if (query->OtherAttributes) {
         query->OtherAttributes->Clear();
+    }
+    if (protoQuery.has_secrets()) {
+        query->Secrets = TYsonString(protoQuery.secrets());
+    } else if (query->Secrets) {
+        query->Secrets = TYsonString{};
     }
 }
 

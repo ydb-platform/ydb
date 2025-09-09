@@ -58,12 +58,25 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
     replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
     replicationConfig.SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
 
-    // TODO: remove NotNull from all columns for correct deletion writing
+    // Set incremental backup config so DataShard can distinguish between async replica and incremental backup
+    auto& incrementalBackupConfig = *desc.MutableIncrementalBackupConfig();
+    incrementalBackupConfig.SetMode(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP);
+    incrementalBackupConfig.SetConsistency(NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_WEAK);
+    
+    for (auto& column : *desc.MutableColumns()) {
+        column.SetNotNull(false);
+    }
+    
+    auto* columnStatesCol = desc.AddColumns();
+    columnStatesCol->SetName("__ydb_incrBackupImpl_columnStates");
+    columnStatesCol->SetType("String");
+    columnStatesCol->SetNotNull(false);
     // TODO: cleanup all sequences
 
     auto* col = desc.AddColumns();
     col->SetName("__ydb_incrBackupImpl_deleted");
     col->SetType("Bool");
+    col->SetNotNull(false);
 
     result.push_back(CreateNewTable(NextPartId(opId, result), outTx));
 }
@@ -160,7 +173,7 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
         createCdcStreamOp.SetTableName(tableName);
         auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
         streamDescription.SetName(newStreamName);
-        streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeNewImage);
+        streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
         streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
         rotateCdcStreamOp.MutableNewStream()->CopyFrom(createCdcStreamOp);

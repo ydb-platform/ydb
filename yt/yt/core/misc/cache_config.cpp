@@ -73,6 +73,8 @@ void TAsyncExpiringCacheConfig::Register(TRegistrar registrar)
     registrar.Parameter("refresh_time", &TThis::RefreshTime)
         .Alias("success_probation_time")
         .Default(TDuration::Seconds(10));
+    registrar.Parameter("expiration_period", &TThis::ExpirationPeriod)
+        .Default(TDuration::Seconds(10));
     registrar.Parameter("batch_update", &TThis::BatchUpdate)
         .Default(false);
 
@@ -88,13 +90,24 @@ void TAsyncExpiringCacheConfig::Register(TRegistrar registrar)
 void TAsyncExpiringCacheConfig::ApplyDynamicInplace(
     const TAsyncExpiringCacheDynamicConfigPtr& dynamicConfig)
 {
-    ExpireAfterAccessTime = dynamicConfig->ExpireAfterAccessTime.value_or(ExpireAfterAccessTime);
-    ExpireAfterSuccessfulUpdateTime = dynamicConfig->ExpireAfterSuccessfulUpdateTime.value_or(ExpireAfterSuccessfulUpdateTime);
-    ExpireAfterFailedUpdateTime = dynamicConfig->ExpireAfterFailedUpdateTime.value_or(ExpireAfterFailedUpdateTime);
-    RefreshTime = dynamicConfig->RefreshTime.has_value()
-        ? dynamicConfig->RefreshTime
-        : RefreshTime;
-    BatchUpdate = dynamicConfig->BatchUpdate.value_or(BatchUpdate);
+    if (dynamicConfig->ExpireAfterAccessTime) {
+        ExpireAfterAccessTime = *dynamicConfig->ExpireAfterAccessTime;
+    }
+    if (dynamicConfig->ExpireAfterSuccessfulUpdateTime) {
+        ExpireAfterSuccessfulUpdateTime = *dynamicConfig->ExpireAfterSuccessfulUpdateTime;
+    }
+    if (dynamicConfig->ExpireAfterFailedUpdateTime) {
+        ExpireAfterFailedUpdateTime = *dynamicConfig->ExpireAfterFailedUpdateTime;
+    }
+    if (dynamicConfig->RefreshTime) {
+        RefreshTime = *dynamicConfig->RefreshTime;
+    }
+    if (dynamicConfig->ExpirationPeriod) {
+        ExpirationPeriod = *dynamicConfig->ExpirationPeriod;
+    }
+    if (dynamicConfig->BatchUpdate) {
+        BatchUpdate = *dynamicConfig->BatchUpdate;
+    }
 }
 
 TAsyncExpiringCacheConfigPtr TAsyncExpiringCacheConfig::ApplyDynamic(

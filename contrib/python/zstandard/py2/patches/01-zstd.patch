@@ -10,6 +10,15 @@
  	PyModule_AddIntConstant(mod, "MINMATCH_MIN", ZSTD_MINMATCH_MIN);
 --- contrib/python/zstandard/py2/zstd.c	(index)
 +++ contrib/python/zstandard/py2/zstd.c	(working tree)
-@@ -213,1 +213,1 @@ void zstd_module_init(PyObject* m) {
+@@ -210,11 +210,6 @@ void zstd_module_init(PyObject* m) {
+ 	   We detect this mismatch here and refuse to load the module if this
+ 	   scenario is detected.
+ 	*/
 -	if (ZSTD_VERSION_NUMBER != 10405 || ZSTD_versionNumber() != 10405) {
-+	if (ZSTD_VERSION_NUMBER != 10507 || ZSTD_versionNumber() != 10507) {
+-		PyErr_SetString(PyExc_ImportError, "zstd C API mismatch; Python bindings not compiled against expected zstd version");
+-		return;
+-	}
+-
+ 	bufferutil_module_init(m);
+ 	compressionparams_module_init(m);
+ 	compressiondict_module_init(m);

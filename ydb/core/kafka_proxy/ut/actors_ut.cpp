@@ -62,7 +62,7 @@ public:
     }
     void Handle(TAutoPtr<NActors::IEventHandle>& ev) {
         Cerr << "Fake discovery cache: handle request\n";
-        Send(ev->Sender, new TEvDiscovery::TEvDiscoveryData(CachedMessage), 0, ev->Cookie);
+        Send(ev->Sender, CachedMessage->ToEvent(true), 0, ev->Cookie);
     }
 };
 
@@ -117,13 +117,13 @@ namespace NKafka::NTests {
             } else {
                 discoveryCacheActorID = runtime->Register(CreateDiscoveryCache());
             }
-            auto discoverer = runtime->Register(CreateDiscoverer(&MakeEndpointsBoardPath, "/Root", edge, discoveryCacheActorID));
+            auto discoverer = runtime->Register(CreateDiscoverer(&MakeEndpointsBoardPath, "/Root", true, edge, discoveryCacheActorID));
             Y_UNUSED(discoverer);
             TAutoPtr<IEventHandle> handle;
             auto* ev = runtime->GrabEdgeEvent<TEvDiscovery::TEvDiscoveryData>(handle);
             UNIT_ASSERT(ev);
-            auto discoveryData = UnpackDiscoveryData(ev->CachedMessageData->CachedMessage);
-            auto discoverySslData = UnpackDiscoveryData(ev->CachedMessageData->CachedMessageSsl);
+            auto discoveryData = UnpackDiscoveryData(ev->CachedMessage);
+            auto discoverySslData = UnpackDiscoveryData(ev->CachedMessageSsl);
 
             auto checkEnpoints = [&] (ui32 port, ui32 sslPort) {
                 if (port) {
@@ -209,6 +209,7 @@ namespace NKafka::NTests {
             auto context = std::make_shared<TContext>(kafkaConfig);
             context->ConnectionId = edge;
             context->DatabasePath = "/Root";
+            context->ResourceDatabasePath = "/Root";
             context->UserToken = new NACLib::TUserToken("root@builtin", {});
 
             TActorId actorId;

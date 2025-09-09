@@ -166,16 +166,14 @@ private:
         bool Finished = false;
 
         struct TInFlightMessage {
-            TInFlightMessage(ui64 seqNo, i64 freeSpace)
-                : SeqNo(seqNo)
-                , FreeSpace(freeSpace) {}
+            TInFlightMessage() = default;
+            explicit TInFlightMessage(i64 freeSpace)
+                : FreeSpace(freeSpace) {}
 
-            const ui64 SeqNo;
-            const i64 FreeSpace;
+            i64 FreeSpace;
 
             friend IOutputStream& operator << (IOutputStream& out, const TInFlightMessage& x) {
                 out << " InFlightMessage {"
-                    << " SeqNo: " << x.SeqNo
                     << " FreeSpace: " << x.FreeSpace
                     << " }";
                 return out;
@@ -246,12 +244,10 @@ private:
         bool EarlyFinish = false;
 
         struct TInFlightMessage {
-            TInFlightMessage(ui64 seqNo, TChannelDataOOB&& data, bool finished)
-                : SeqNo(seqNo)
-                , Data(std::move(data))
+            TInFlightMessage(TChannelDataOOB&& data, bool finished)
+                : Data(std::move(data))
                 , Finished(finished) {}
 
-            const ui64 SeqNo;
             const TChannelDataOOB Data;
             const bool Finished;
         };

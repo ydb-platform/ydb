@@ -419,10 +419,24 @@ ui64 TPartition::GetUsedStorage(const TInstant& now) {
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 
-ui64 TPartition::ImportantClientsMinOffset() const {
-    ui64 minOffset = GetEndOffset();
-    for (const auto& consumer : Config.GetConsumers()) {
-        if (!consumer.GetImportant()) {
+static TDuration GetAvailabilityPeriod(const NKikimrPQ::TPQTabletConfig_TConsumer& consumer)  {
+    if (consumer.GetImportant()) {
+        return TDuration::Max();
+    }
+    if (consumer.GetAvailabilityPeriodMs() > 0) {
+        return consumer.GetAvailabilityPeriodMs() <= TDuration::Max().MilliSeconds()
+            ? TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs())
+            : TDuration::Max();
+    }
+    return TDuration::Zero();
+}
+
+TImportantConsumerOffsetTracker TPartition::ImportantClientsMinOffset() const {
+    std::vector<TImportantConsumerOffsetTracker::TConsumerOffset> consumersToCheck;
+    for (size_t consumerIdx = 0; consumerIdx < Config.ConsumersSize(); ++consumerIdx) {
+        const auto& consumer = Config.GetConsumers(consumerIdx);
+        const TDuration availabilityPeriod = GetAvailabilityPeriod(consumer);
+        if (availabilityPeriod == TDuration::Zero()) {
             continue;
         }
 
@@ -430,11 +444,18 @@ ui64 TPartition::ImportantClientsMinOffset() const {
         ui64 curOffset = GetStartOffset();
         if (userInfo && userInfo->Offset >= 0) //-1 means no offset
             curOffset = userInfo->Offset;
-        minOffset = Min<ui64>(minOffset, curOffset);
-    }
 
-    return minOffset;
+        if (consumersToCheck.empty()) {
+            consumersToCheck.reserve(Config.ConsumersSize() - consumerIdx);
+        }
+        consumersToCheck.push_back(TImportantConsumerOffsetTracker::TConsumerOffset{
+            .AvailabilityPeriod = availabilityPeriod,
+            .Offset = curOffset,
+        });
+    }
+    return TImportantConsumerOffsetTracker(std::move(consumersToCheck));
 }
+
 
 TInstant TPartition::GetEndWriteTimestamp() const {
     return EndWriteTimestamp;
@@ -550,22 +571,16 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
 
     const bool hasStorageLimit = partConfig.HasStorageLimitBytes();
     const auto now = ctx.Now();
-    const ui64 importantConsumerMinOffset = ImportantClientsMinOffset();
+    const auto importantConsumerOffsetTracker = ImportantClientsMinOffset();
 
     bool hasDrop = false;
     while (CompactionBlobEncoder.DataKeysBody.size() > 1) {
-        auto& nextKey = CompactionBlobEncoder.DataKeysBody[1].Key;
-        if (importantConsumerMinOffset < nextKey.GetOffset()) {
-            // The first message in the next blob was not read by an important consumer.
-            // We also save the current blob, since not all messages from it could be read.
-            break;
-        }
-        if (importantConsumerMinOffset == nextKey.GetOffset() && nextKey.GetPartNo() != 0) {
-            // We save all the blobs that contain parts of the last message read by an important consumer.
+        const auto& nextKey = CompactionBlobEncoder.DataKeysBody[1];
+        const auto& firstKey = CompactionBlobEncoder.DataKeysBody.front();
+        if (importantConsumerOffsetTracker.ShouldKeepCurrentKey(firstKey, nextKey, now)) {
             break;
         }
 
-        const auto& firstKey = CompactionBlobEncoder.DataKeysBody.front();
         if (hasStorageLimit) {
             const auto bodySize = CompactionBlobEncoder.BodySize - firstKey.Size;
             if (bodySize < partConfig.GetStorageLimitBytes()) {
@@ -580,7 +595,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         CompactionBlobEncoder.BodySize -= firstKey.Size;
         CompactionBlobEncoder.DataKeysBody.pop_front();
 
-        if (!GapOffsets.empty() && nextKey.GetOffset() == GapOffsets.front().second) {
+        if (!GapOffsets.empty() && nextKey.Key.GetOffset() == GapOffsets.front().second) {
             GapSize -= GapOffsets.front().second - GapOffsets.front().first;
             GapOffsets.pop_front();
         }

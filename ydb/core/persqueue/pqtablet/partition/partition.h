@@ -1,5 +1,6 @@
 #pragma once
 
+#include "consumer_offset_tracker.h"
 #include "partition_blob_encoder.h"
 #include "partition_compactification.h"
 #include "partition_init.h"
@@ -532,8 +533,8 @@ public:
     // The size of the storage that usud by the partition. That included combination of the reserver and realy persisted data.
     ui64 StorageSize(const TActorContext& ctx) const;
     ui64 UsedReserveSize(const TActorContext& ctx) const;
-    // Minimal offset, the data from which cannot be deleted, because it is required by an important consumer
-    ui64 ImportantClientsMinOffset() const;
+    // Minimal offsets, the data from which cannot be deleted, because it is required by an important consumers
+    TImportantConsumerOffsetTracker ImportantClientsMinOffset() const;
 
     TInstant GetEndWriteTimestamp() const; // For tests only
 

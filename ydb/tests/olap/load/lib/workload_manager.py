@@ -147,7 +147,7 @@ class WorkloadMangerBase(LoadSuiteBase):
         for query, result in results.items():
             try:
                 with allure.step(query):
-                    self.process_query_result(result, query, False)
+                    self.process_query_result(result, query, True)
             except BaseException:
                 pass
         overall_result = YdbCliHelper.WorkloadRunResult()

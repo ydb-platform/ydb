@@ -1,9 +1,9 @@
 #include "account_read_quoter.h"
-#include <ydb/core/persqueue/event_helpers.h>
+#include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 

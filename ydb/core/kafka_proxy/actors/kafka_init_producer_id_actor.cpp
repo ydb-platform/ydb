@@ -11,7 +11,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/fetch_request_actor.h>
+#include <ydb/core/persqueue/public/fetcher/fetch_request_actor.h>
 #include <ydb/core/protos/kafka.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -59,7 +59,7 @@ namespace NKafka {
                 Die(ctx);
                 return;
             }
-            Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
+            Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
             KAFKA_LOG_D("Bootstrapping actor for transactional producer. Sending init table request to KQP.");
             Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
             Become(&TKafkaInitProducerIdActor::StateWork);
@@ -362,7 +362,7 @@ namespace NKafka {
         return std::regex_replace(
             templateStr.c_str(),
             std::regex("<table_name>"),
-            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->GetStorageTablePath().c_str()
+            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
         );
     }
 

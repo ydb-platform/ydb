@@ -121,7 +121,7 @@ public:
             10
         );
 
-        UseMetricsQueue = !ReadParams.Source.HasProgram();
+        UseMetricsQueue = ReadParams.Source.HasSelectors();
 
         auto stringType = ProgramBuilder.NewDataType(NYql::NUdf::TDataType<char*>::Id);
         DictType = ProgramBuilder.NewDictType(stringType, stringType, false);
@@ -159,7 +159,7 @@ public:
         } else {
             Become(&TDqSolomonReadActor::LimitedModeState);
 
-            TMetricTimeRange metric {
+            NSo::TMetricTimeRange metric {
                 {},
                 ReadParams.Source.GetProgram(),
                 TInstant::Seconds(ReadParams.Source.GetFrom()),
@@ -208,8 +208,9 @@ public:
 
         SOURCE_LOG_D("HandleMetricsBatch batch of size " << listedMetrics.size());
         for (const auto& metric : listedMetrics) {
-            std::map<TString, TString> labels(metric.GetLabels().begin(), metric.GetLabels().end());
-            ListedMetrics.emplace_back(std::move(labels), metric.GetType());
+            NSo::TSelectors selectors;
+            NSo::ProtoToSelectors(metric.GetSelectors(), selectors);
+            ListedMetrics.emplace_back(std::move(selectors), metric.GetType());
         }
         ListedMetricsCount += listedMetrics.size();
 
@@ -333,11 +334,11 @@ public:
         TInstant to = TInstant::Seconds(ReadParams.Source.GetTo());
 
         for (const auto& data : MetricsData) {
-            auto& labels = data.Metric.Labels;
+            auto& labels = data.Metric.Selectors;
 
             auto dictValueBuilder = HolderFactory.NewDict(DictType, 0);
             for (auto& [key, value] : labels) {
-                dictValueBuilder->Add(NKikimr::NMiniKQL::MakeString(key), NKikimr::NMiniKQL::MakeString(value));
+                dictValueBuilder->Add(NKikimr::NMiniKQL::MakeString(key), NKikimr::NMiniKQL::MakeString(value.Value));
             }
             auto dictValue = dictValueBuilder->Build();
 
@@ -375,7 +376,7 @@ public:
                     auto& v = items[Index[c]];
                     auto it = labels.find(AliasIndex[c]);
                     if (it != labels.end()) {
-                        v = NKikimr::NMiniKQL::MakeString(it->second);
+                        v = NKikimr::NMiniKQL::MakeString(it->second.Value);
                     } else {
                         // empty string
                         v = NKikimr::NMiniKQL::MakeString("");
@@ -454,7 +455,7 @@ private:
         NSo::TMetric requestMetric = ListedMetrics.back();
         ListedMetrics.pop_back();
 
-        auto getPointsCountFuture = SolomonClient->GetPointsCount(requestMetric.Labels, TrueRangeFrom, TrueRangeTo);
+        auto getPointsCountFuture = SolomonClient->GetPointsCount(requestMetric.Selectors, TrueRangeFrom, TrueRangeTo);
 
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         getPointsCountFuture.Subscribe([actorSystem, metric = std::move(requestMetric), selfId = SelfId()](
@@ -512,7 +513,7 @@ private:
         auto ranges = SplitTimeIntervalIntoRanges(pointsCount);
 
         for (const auto& [fromRange, toRange] : ranges) {
-            MetricsWithTimeRange.emplace_back(metric.Labels, "", fromRange, toRange);
+            MetricsWithTimeRange.emplace_back(metric.Selectors, "", fromRange, toRange);
         }
         ListedTimeRanges += ranges.size();
     }
@@ -594,9 +595,9 @@ private:
     bool IsMetricsQueueEmpty = false;
     bool IsConfirmedMetricsQueueFinish = false;
 
-    std::map<TMetricTimeRange, IRetryPolicy<NSo::TGetDataResponse>::IRetryState::TPtr> PendingDataRequests_;
+    std::map<NSo::TMetricTimeRange, IRetryPolicy<NSo::TGetDataResponse>::IRetryState::TPtr> PendingDataRequests_;
     std::deque<NSo::TMetric> ListedMetrics;
-    std::deque<TMetricTimeRange> MetricsWithTimeRange;
+    std::deque<NSo::TMetricTimeRange> MetricsWithTimeRange;
     std::deque<NSo::TTimeseries> MetricsData;
     ui64 ListedMetricsCount = 0;
     ui64 CompletedMetricsCount = 0;

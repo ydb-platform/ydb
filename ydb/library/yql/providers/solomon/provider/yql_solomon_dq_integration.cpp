@@ -304,11 +304,11 @@ public:
 
         auto selectors = settings.Selectors().StringValue();
         if (!selectors.empty()) {
-            std::map<TString, TString> selectorValues;
+            NSo::TSelectors selectorValues;
             if (auto error = NSo::BuildSelectorValues(source, selectors, selectorValues)) {
                 throw yexception() << *error;
             }
-            source.MutableSelectors()->insert(selectorValues.begin(), selectorValues.end());
+            NSo::SelectorsToProto(selectorValues, *source.MutableSelectors());
         }
 
         auto program = settings.Program().StringValue();

@@ -3,7 +3,7 @@
 #include <ydb/core/backup/impl/local_partition_reader.h>
 #include <ydb/core/backup/impl/table_writer.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/replication/service/table_writer.h>

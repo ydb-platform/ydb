@@ -1,15 +1,15 @@
 #pragma once
 
 #include "actors.h"
-#include "../kafka_consumer_groups_metadata_initializers.h"
-#include "../kafka_consumer_members_metadata_initializers.h"
-#include "../kqp_helper.h"
+#include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.h>
+#include <ydb/core/kafka_proxy/kqp_helper.h>
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/fetch_request_actor.h>
+#include <ydb/core/persqueue/public/fetcher/fetch_request_actor.h>
 #include <ydb/core/protos/kafka.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -134,6 +134,7 @@ public:
         , LeaveGroupRequestData(
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
+        , ResourceDatabasePath(context->ResourceDatabasePath)
     {
         RequestType = JOIN_GROUP;
         CurrentStep = STEP_NONE;
@@ -173,6 +174,7 @@ public:
         , LeaveGroupRequestData(
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
+        , ResourceDatabasePath(context->ResourceDatabasePath ? context->ResourceDatabasePath : context->DatabasePath)
     {
         RequestType = SYNC_GROUP;
         CurrentStep = STEP_NONE;
@@ -197,6 +199,7 @@ public:
         , LeaveGroupRequestData(
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
+        , ResourceDatabasePath(context->ResourceDatabasePath ? context->ResourceDatabasePath : context->DatabasePath)
     {
         RequestType = HEARTBEAT;
         CurrentStep = STEP_NONE;
@@ -221,6 +224,7 @@ public:
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
         , LeaveGroupRequestData(message)
+        , ResourceDatabasePath(context->ResourceDatabasePath ? context->ResourceDatabasePath : context->DatabasePath)
     {
         RequestType = LEAVE_GROUP;
         CurrentStep = STEP_NONE;
@@ -384,6 +388,7 @@ private:
     TMessagePtr<THeartbeatRequestData> HeartbeatGroupRequestData;
     TMessagePtr<TLeaveGroupRequestData> LeaveGroupRequestData;
 
+    TString ResourceDatabasePath;
 };
 
 } // namespace NKafka

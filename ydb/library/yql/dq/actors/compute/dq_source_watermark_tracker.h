@@ -23,12 +23,26 @@ public:
         TInstant partitionTime,
         TInstant systemTime
     ) {
-        auto [iter, _] = Data_.try_emplace(partitionKey);
-        if (UpdatePartitionTime(iter->second, partitionTime, systemTime)) {
-            return RecalcWatermark();
+        auto [iter, inserted] = Data_.try_emplace(partitionKey);
+        bool pendingPartitionsBecameEmpty = false;
+        if (inserted) {
+            auto removed = PendingPartitions_.erase(partitionKey);
+            Y_DEBUG_ABORT_UNLESS(removed);
+            pendingPartitionsBecameEmpty = PendingPartitions_.empty();
+        }
+        if ((UpdatePartitionTime(iter->second, partitionTime, systemTime) && PendingPartitions_.empty()) || pendingPartitionsBecameEmpty) {
+            return RecalcWatermark(systemTime);
         }
 
         return Nothing();
+    }
+
+    bool RegisterPartition(const TPartitionKey& partitionKey) {
+        if (Data_.find(partitionKey) != Data_.end()) {
+            return false;
+        }
+        auto [_, inserted] = PendingPartitions_.insert(partitionKey);
+        return inserted;
     }
 
     [[nodiscard]] TMaybe<TInstant> HandleIdleness(TInstant systemTime) {
@@ -44,7 +58,7 @@ public:
             return TryProduceFakeWatermark(systemTime);
         }
 
-        return RecalcWatermark();
+        return RecalcWatermark(systemTime);
     }
 
     [[nodiscard]] TMaybe<TInstant> GetNextIdlenessCheckAt(TInstant systemTime) {
@@ -79,38 +93,37 @@ private:
         return true;
     }
 
-    TMaybe<TInstant> RecalcWatermark() {
-        const auto maxPartitionSeenTimeIter = MaxElementBy(
+    TMaybe<TInstant> RecalcWatermark(TInstant systemTime) {
+        const auto minPartitionSeenTimeIter = MinElementBy(
             Data_.begin(),
             Data_.end(),
-            [](const auto iter){ return iter.second.Time; });
+            [](const auto iter){ return iter.second.Watermark; });
 
-        if (maxPartitionSeenTimeIter == Data_.end()) {
+        if (minPartitionSeenTimeIter == Data_.end()) {
             return Nothing();
         }
 
-        const auto newWatermark = ToDiscreteTime(maxPartitionSeenTimeIter->second.Time - LateArrivalDelay_);
+        const auto newWatermark = minPartitionSeenTimeIter->second.Watermark;
 
         if (!Watermark_) {
-            return Watermark_ = newWatermark;
+            Watermark_ = newWatermark;
+        } else if (newWatermark > *Watermark_) {
+            Watermark_ = newWatermark;
+        } else {
+            return Nothing();
         }
-
-        if (newWatermark > *Watermark_) {
-            return Watermark_ = newWatermark;
-        }
-
-        return Nothing();
+        LastTimeNotifiedAt_ = systemTime;
+        return Watermark_;
     }
 
     bool UpdatePartitionTime(TPartitionState& state, TInstant partitionTime, TInstant systemTime) {
         state.Time = partitionTime;
         state.TimeNotifiedAt = systemTime;
-        LastTimeNotifiedAt_ = systemTime;
 
-        const auto watermark = ToDiscreteTime(partitionTime);
-        if (watermark >= state.Watermark) {
-            state.Watermark = watermark;
-            return true;
+        const auto watermark = ToDiscreteTime(partitionTime - LateArrivalDelay_);
+        if (state.Watermark < watermark) {
+            auto oldWatermark = std::exchange(state.Watermark, watermark);
+            return !Watermark_ || *Watermark_ == oldWatermark;
         }
 
         return false;
@@ -131,6 +144,7 @@ private:
     const TDuration LateArrivalDelay_;
 
     THashMap<TPartitionKey, TPartitionState> Data_;
+    THashSet<TPartitionKey> PendingPartitions_;
     TMaybe<TInstant> Watermark_;
     TInstant LastTimeNotifiedAt_; // last system time when tracker received notification for any partition
     TMaybe<TInstant> NextIdlenessCheckAt_;

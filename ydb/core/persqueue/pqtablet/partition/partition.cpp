@@ -1,5 +1,5 @@
-#include <ydb/core/persqueue/event_helpers.h>
-#include "mirrorer.h"
+#include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
+#include "mirrorer_factory.h"
 #include "offload_actor.h"
 #include "partition_util.h"
 #include "partition_common.h"
@@ -3996,7 +3996,7 @@ size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request) {
 
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
-        Register(new TMirrorer(Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, BlobEncoder.EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
+        Register(CreateMirrorer(Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, BlobEncoder.EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
         TabletCounters
     );
 }

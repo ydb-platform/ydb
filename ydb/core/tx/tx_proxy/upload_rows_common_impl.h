@@ -199,6 +199,8 @@ protected:
 
     NWilson::TSpan Span;
 
+    ui64 WrittenBytes = 0;
+
     NSchemeCache::TSchemeCacheNavigate::EKind GetTableKind() const {
         return TableKind;
     }
@@ -349,7 +351,7 @@ private:
         return ok;
     }
 
-    TConclusionStatus CheckRequiredColumns(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, 
+    TConclusionStatus CheckRequiredColumns(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
                                          const TVector<std::pair<TString, Ydb::Type>>& reqColumns) {
         THashSet<TString> allColumnsLeft;
         for (auto&& [_, colInfo] : entry.Columns) {
@@ -364,7 +366,7 @@ private:
         if (!allColumnsLeft.empty()) {
             return TConclusionStatus::Fail(Sprintf("All columns are required during BulkUpsert for column table. Missing columns: %s", JoinSeq(", ", allColumnsLeft).c_str()));
         }
-        
+
         return TConclusionStatus::Success();
     }
 
@@ -763,7 +765,8 @@ private:
         }
 
         if (Batch) {
-            UploadCounters.OnRequest(Batch->num_rows());
+            WrittenBytes = NArrow::GetBatchDataSize(Batch);
+            UploadCounters.OnRequest(Batch->num_rows(), WrittenBytes);
         }
 
         if (TableKind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
@@ -1374,7 +1377,7 @@ private:
     }
 
     void ReplyWithResult(const TUploadStatus& status, const TActorContext& ctx) {
-        UploadCountersGuard.OnReply(status);
+        UploadCountersGuard.OnReply(status, WrittenBytes);
         SendResult(ctx, status.GetCode());
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, TStringBuilder() << "completed with status " << status.GetCode());

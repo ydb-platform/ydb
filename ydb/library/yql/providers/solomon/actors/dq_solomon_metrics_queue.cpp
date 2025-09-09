@@ -245,7 +245,7 @@ private:
         for (const auto& metric : response.Result.Metrics) {
             NSo::MetricQueue::TMetric protoMetric;
             protoMetric.SetType(metric.Type);
-            protoMetric.MutableLabels()->insert(metric.Labels.begin(), metric.Labels.end());
+            NSo::SelectorsToProto(metric.Selectors, *protoMetric.MutableSelectors());
             Metrics.emplace_back(std::move(protoMetric));
         }
         return true;
@@ -277,7 +277,8 @@ private:
 
     void Fetch() {
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
-        std::map<TString, TString> selectors(ReadParams.Source.GetSelectors().begin(), ReadParams.Source.GetSelectors().end());
+        NSo::TSelectors selectors;
+        NSo::ProtoToSelectors(ReadParams.Source.GetSelectors(), selectors);
         ListingFuture = 
             SolomonClient
                 ->ListMetrics(selectors, TrueRangeFrom, TrueRangeTo, PageSize, CurrentPage++)

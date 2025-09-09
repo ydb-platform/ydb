@@ -5,7 +5,7 @@
 #include <ydb/core/kafka_proxy/actors/kafka_create_topics_actor.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
-#include <ydb/core/persqueue/list_all_topics_actor.h>
+#include <ydb/core/persqueue/public/list_topics/list_all_topics_actor.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 
 namespace NKafka {
@@ -35,7 +35,7 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
         SendDiscoveryRequest();
 
         if (Message->Topics.size() == 0) {
-            ctx.Register(NKikimr::NPersQueue::MakeListAllTopicsActor(
+            ctx.Register(NKikimr::NPQ::MakeListAllTopicsActor(
                     SelfId(), Context->DatabasePath, GetUserSerializedToken(Context), true, {}, {}));
 
             PendingResponses++;
@@ -300,6 +300,7 @@ void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32
     ContextForTopicCreation->ConnectionId = ctx.SelfID;
     ContextForTopicCreation->UserToken = Context->UserToken;
     ContextForTopicCreation->DatabasePath = Context->DatabasePath;
+    ContextForTopicCreation->ResourceDatabasePath = Context->ResourceDatabasePath;
     TActorId actorId = ctx.Register(new TKafkaCreateTopicsActor(ContextForTopicCreation,
         1,
         TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message)

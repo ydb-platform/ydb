@@ -129,6 +129,10 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         return DomainKey != ResourcesDomainKey;
     }
 
+    inline TPathId GetResourcesDomainKey() {
+        return ResourcesDomainKey;
+    }
+
     TPathId DomainKey;
     TPathId ResourcesDomainKey;
     NKikimrSubDomains::TProcessingParams Params;

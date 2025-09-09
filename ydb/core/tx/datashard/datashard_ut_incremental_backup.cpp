@@ -1,22 +1,24 @@
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/constants.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
+#include <ydb/core/protos/datashard_backup.pb.h>
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <library/cpp/protobuf/json/proto2json.h>
 #include <ydb/public/lib/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
@@ -159,10 +161,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         auto& dcKey = *dc.MutableKey();
         dcKey.AddTags(1);
         dcKey.SetData(TSerializedCellVec::Serialize({keyCell}));
-        auto& newImage = *dc.MutableNewImage();
-        newImage.AddTags(2);
-        newImage.SetData(TSerializedCellVec::Serialize({valueCell}));
-        dc.MutableUpsert();
+        
+        auto& upsert = *dc.MutableUpsert();
+        upsert.AddTags(2);
+        upsert.SetData(TSerializedCellVec::Serialize({valueCell}));
 
         return proto;
     }
@@ -744,23 +746,24 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}});
+                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false},
+                    {"__ydb_incrBackupImpl_columnStates", "String", false, false}});
 
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000002Z_incremental", "Table", opts);
 
             ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                  (2, 200, NULL)
-                , (1, NULL, true)
+                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted, __ydb_incrBackupImpl_columnStates) VALUES
+                  (2, 200, NULL, NULL)
+                , (1, NULL, true, NULL)
                 ;
             )");
 
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000003Z_incremental", "Table", opts);
 
             ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                  (2, 2000, NULL)
-                , (5, NULL, true)
+                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted, __ydb_incrBackupImpl_columnStates) VALUES
+                  (2, 2000, NULL, NULL)
+                , (5, NULL, true, NULL)
                 ;
             )");
         }
@@ -1801,6 +1804,118 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         ExecSQL(server, edgeActor, R"(DROP BACKUP COLLECTION `NonExistentCollection`;)", 
                 false, Ydb::StatusIds::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(VerifyIncrementalBackupTableAttributes) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        // Insert some initial data
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+                (1, 10), (2, 20), (3, 30);
+        )");
+
+        // Create backup collection with incremental backup enabled
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `TestCollection`
+              ( TABLE `/Root/Table`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = 'true'
+              );
+            )", false);
+
+        // Create full backup first
+        ExecSQL(server, edgeActor, R"(BACKUP `TestCollection`;)", false);
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        // Modify some data
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (2, 200);
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )");
+
+        // Create incremental backup - this should create the incremental backup implementation tables
+        ExecSQL(server, edgeActor, R"(BACKUP `TestCollection` INCREMENTAL;)", false);
+        runtime.SimulateSleep(TDuration::Seconds(10)); // More time for incremental backup to complete
+
+        // Try to find the incremental backup table by iterating through possible timestamps
+        TString foundIncrementalBackupPath;
+        bool foundIncrementalBackupTable = false;
+        
+        // Common incremental backup paths to try (timestamp-based)
+        TVector<TString> possiblePaths = {
+            "/Root/.backups/collections/TestCollection/19700101000002Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000003Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000004Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000005Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000006Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000007Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000008Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000009Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000010Z_incremental/Table",
+        };
+
+        for (const auto& path : possiblePaths) {
+            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+            request->Record.MutableDescribePath()->SetPath(path);
+            request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
+            runtime.Send(new IEventHandle(MakeTxProxyID(), edgeActor, request.Release()));
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(edgeActor);
+            
+            if (reply->Get()->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
+                foundIncrementalBackupPath = path;
+                foundIncrementalBackupTable = true;
+                Cerr << "Found incremental backup table at: " << path << Endl;
+                break;
+            }
+        }
+
+        UNIT_ASSERT_C(foundIncrementalBackupTable, TStringBuilder() << "Could not find incremental backup table. Tried paths: " << JoinSeq(", ", possiblePaths));
+
+        // Now check the found incremental backup table attributes
+        auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        request->Record.MutableDescribePath()->SetPath(foundIncrementalBackupPath);
+        request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
+        runtime.Send(new IEventHandle(MakeTxProxyID(), edgeActor, request.Release()));
+        auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(edgeActor);
+
+        UNIT_ASSERT_EQUAL(reply->Get()->GetRecord().GetStatus(), NKikimrScheme::EStatus::StatusSuccess);
+        
+        const auto& pathDescription = reply->Get()->GetRecord().GetPathDescription();
+        UNIT_ASSERT(pathDescription.HasTable());
+        
+        // Verify that incremental backup table has __incremental_backup attribute
+        bool hasIncrementalBackupAttr = false;
+        bool hasAsyncReplicaAttr = false;
+        
+        for (const auto& attr : pathDescription.GetUserAttributes()) {
+            Cerr << "Found attribute: " << attr.GetKey() << " = " << attr.GetValue() << Endl;
+            if (attr.GetKey() == "__incremental_backup") {
+                hasIncrementalBackupAttr = true;
+            }
+            if (attr.GetKey() == "__async_replica") {
+                hasAsyncReplicaAttr = true;
+            }
+        }
+        
+        // Verify that we have __incremental_backup but NOT __async_replica
+        UNIT_ASSERT_C(hasIncrementalBackupAttr, TStringBuilder() << "Incremental backup table at " << foundIncrementalBackupPath << " must have __incremental_backup attribute");
+        UNIT_ASSERT_C(!hasAsyncReplicaAttr, TStringBuilder() << "Incremental backup table at " << foundIncrementalBackupPath << " must NOT have __async_replica attribute");
     }
 
 } // Y_UNIT_TEST_SUITE(IncrementalBackup)

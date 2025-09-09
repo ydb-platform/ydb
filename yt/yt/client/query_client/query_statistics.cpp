@@ -222,6 +222,9 @@ void FromProto(TQueryStatistics* original, const NProto::TQueryStatistics& seria
     FromProto(&original->InnerStatistics, serialized.inner_statistics());
 }
 
+#undef DESERIALIZE_I64_AND_MAYBE_FALLBACK
+#undef DESERIALIZE_DURATION_AND_MAYBE_FALLBACK
+
 void FormatValue(TStringBuilderBase* builder, const TQueryStatistics& stats, TStringBuf /*spec*/)
 {
     Format(

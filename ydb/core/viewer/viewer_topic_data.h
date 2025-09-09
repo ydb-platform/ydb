@@ -3,7 +3,7 @@
 #include "viewer.h"
 #include <ydb/core/viewer/yaml/yaml.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 
 namespace NKikimr::NViewer {
 

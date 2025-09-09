@@ -1,4 +1,2 @@
 /* custom error: Condition violated */
-pragma warning("disable","4510");
-
-select ListHasItems([Yql::WithSideEffectsMode(Ensure(1,false),AsAtom('General'))])
+select ListHasItems([WithSideEffects(Ensure(1,false))])

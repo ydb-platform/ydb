@@ -62,6 +62,8 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, I
     // Y_ABORT_UNLESS(descr.ReturnType->IsMulti(), "DqBlockHash works only with Multi row type");
     // TType* ReturnType = 
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
+    TProgramBuilder& pb = static_cast<TProgramBuilder&>(dqPb);
+
     TVector<TType*const > resultTypesArr;
     TVector<const ui32> leftRenames, rightRenames;
     for(ui32 idx = 0; idx < std::ssize(descr.LeftSource.ColumnTypes); ++idx){
@@ -107,7 +109,7 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, I
         // flow{Left, Right} are Flow<Multi<...>>
         // returnType is Flow<Multi<...>>
         auto asMultiListArg = [&dqPb](TArrayRef<TType*const > columns){
-            return dqPb.Arg(dqPb.NewListType(dqPb.NewMultiType(columns)));
+            return dqPb.Arg(dqPb.NewListType(dqPb.NewTupleType(columns)));
         };
         TRuntimeNode leftListArg = asMultiListArg(descr.LeftSource.ColumnTypes);
         TRuntimeNode rightListArg = asMultiListArg(descr.RightSource.ColumnTypes);
@@ -116,8 +118,8 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, I
 
         
         auto wideStream =dqPb.FromFlow(dqPb.GraceJoin(
-            dqPb.ToFlow(leftListArg),
-           dqPb.ToFlow(rightListArg),
+            ToWideFlow(pb, leftListArg),
+           ToWideFlow(pb, rightListArg),
             kInnerJoin, descr.LeftSource.KeyColumnIndexes,
             descr.RightSource.KeyColumnIndexes, leftRenames,rightRenames,
             dqPb.NewFlowType( multiResultType)));
@@ -132,7 +134,6 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, I
     }
     case ETestedJoinAlgo::kBlockMap: {
         // auto v = MakeHashJoinNode();
-        TProgramBuilder& pb = static_cast<TProgramBuilder&>(dqPb);
         TVector<ui32> kEmptyColumnDrops;
         TVector<ui32> kRightDroppedColumns;
         std::copy(descr.RightSource.KeyColumnIndexes.begin(),descr.RightSource.KeyColumnIndexes.end(), std::back_inserter(kRightDroppedColumns));

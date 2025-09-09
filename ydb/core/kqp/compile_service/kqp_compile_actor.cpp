@@ -639,6 +639,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
     kqpConfig.EnablePerStatementQueryExecution = serviceConfig.GetEnablePerStatementQueryExecution();
     kqpConfig.EnableCreateTableAs = serviceConfig.GetEnableCreateTableAs();
+    kqpConfig.EnableDataShardCreateTableAs = serviceConfig.GetEnableDataShardCreateTableAs();
     kqpConfig.AllowOlapDataQuery = serviceConfig.GetAllowOlapDataQuery();
     kqpConfig.EnableOlapSink = serviceConfig.GetEnableOlapSink();
     kqpConfig.EnableOltpSink = serviceConfig.GetEnableOltpSink();

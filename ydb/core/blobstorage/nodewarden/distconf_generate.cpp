@@ -116,7 +116,14 @@ namespace NKikimr::NStorage {
             config->MutableStateStorageConfig()->CopyFrom(ss);
             config->MutableStateStorageBoardConfig()->CopyFrom(ss);
             config->MutableSchemeBoardConfig()->CopyFrom(ss);
-        } else if (!Cfg->DomainsConfig->StateStorageSize()) { // no StateStorage config, generate a new one
+        } else if (Cfg->DomainsConfig->HasExplicitStateStorageConfig() && Cfg->DomainsConfig->HasExplicitStateStorageBoardConfig() && Cfg->DomainsConfig->HasExplicitSchemeBoardConfig()) {
+            config->MutableStateStorageConfig()->CopyFrom(Cfg->DomainsConfig->GetExplicitStateStorageConfig());
+            config->MutableStateStorageBoardConfig()->CopyFrom(Cfg->DomainsConfig->GetExplicitStateStorageBoardConfig());
+            config->MutableSchemeBoardConfig()->CopyFrom(Cfg->DomainsConfig->GetExplicitSchemeBoardConfig());
+        } else if (!Cfg->DomainsConfig->StateStorageSize()
+                    && !(Cfg->DomainsConfig->HasExplicitStateStorageConfig()
+                        && Cfg->DomainsConfig->HasExplicitStateStorageBoardConfig()
+                        && Cfg->DomainsConfig->HasExplicitSchemeBoardConfig())) { // no StateStorage config, generate a new one
             std::unordered_set<ui32> usedNodes;
             GenerateStateStorageConfig(config->MutableStateStorageConfig(), *config, usedNodes);
             GenerateStateStorageConfig(config->MutableStateStorageBoardConfig(), *config, usedNodes);

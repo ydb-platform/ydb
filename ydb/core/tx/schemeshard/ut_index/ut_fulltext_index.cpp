@@ -18,23 +18,38 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+        TString fulltextSettings = R"(
+            layout: FLAT
+            columns: {
+                column: "text"
+                analyzers: {
+                    tokenizer: STANDARD
+                    use_filter_ngram: true
+                    filter_ngram_max_length: 42
+                }
+            }
+        )";
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
-              Name: "texts"
-              Columns { Name: "id" Type: "Uint64" }
-              Columns { Name: "text" Type: "String" }
-              Columns { Name: "covered" Type: "String" }
-              Columns { Name: "another" Type: "Uint64" }
-              KeyColumnNames: ["id"]
+                Name: "texts"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "text" Type: "String" }
+                Columns { Name: "covered" Type: "String" }
+                Columns { Name: "another" Type: "Uint64" }
+                KeyColumnNames: ["id"]
             }
             IndexDescription {
-              Name: "idx_fulltext"
-              KeyColumnNames: ["text"]
-              DataColumnNames: ["covered"]
-              Type: EIndexTypeGlobalFulltext
-              FulltextIndexDescription: { Settings: { layout: FLAT, tokenizer: STANDARD, use_filter_ngram: true, filter_ngram_max_length: 42 } }
+                Name: "idx_fulltext"
+                KeyColumnNames: ["text"]
+                DataColumnNames: ["covered"]
+                Type: EIndexTypeGlobalFulltext
+                FulltextIndexDescription: { 
+                    Settings: { 
+                        %s
+                    }
+                }
             }
-        )");
+        )", fulltextSettings.c_str()));
         env.TestWaitNotification(runtime, txId);
 
         NKikimrSchemeOp::TDescribeOptions opts;
@@ -49,7 +64,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                 NLs::IndexKeys({"text"}),
                 NLs::IndexDataColumns({"covered"}),
-                NLs::SpecializedIndexDescription("layout: FLAT tokenizer: STANDARD use_filter_ngram: true filter_ngram_max_length: 42"),
+                NLs::SpecializedIndexDescription(fulltextSettings),
                 NLs::ChildrenCount(1),
             });
 
@@ -70,23 +85,91 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+        TString fulltextSettings = R"(
+            layout: FLAT
+            columns: {
+                column: "text"
+                analyzers: {
+                    tokenizer: STANDARD
+                    use_filter_ngram: true
+                    filter_ngram_max_length: 42
+                }
+            }
+        )";
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
-              Name: "texts"
-              Columns { Name: "id" Type: "Uint64" }
-              Columns { Name: "text" Type: "String" }
-              Columns { Name: "covered" Type: "String" }
-              Columns { Name: "another" Type: "Uint64" }
-              KeyColumnNames: [ "id"]
+                Name: "texts"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "text" Type: "String" }
+                Columns { Name: "covered" Type: "String" }
+                Columns { Name: "another" Type: "Uint64" }
+                KeyColumnNames: ["id"]
             }
             IndexDescription {
-              Name: "idx_fulltext"
-              KeyColumnNames: [ "another", "text"]
-              DataColumnNames: ["covered"]
-              Type: EIndexTypeGlobalFulltext
-              FulltextIndexDescription: { Settings: { layout: FLAT, tokenizer: STANDARD, use_filter_ngram: true, filter_ngram_max_length: 42 } }
+                Name: "idx_fulltext"
+                KeyColumnNames: [ "another", "text"]
+                DataColumnNames: ["covered"]
+                Type: EIndexTypeGlobalFulltext
+                FulltextIndexDescription: { 
+                    Settings: { 
+                        %s
+                    }
+                }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", fulltextSettings.c_str()), {NKikimrScheme::StatusInvalidParameter});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"),{ 
+            NLs::PathNotExist,
+        });
+    }
+
+    Y_UNIT_TEST(CreateTableMultipleColumns) { // not supported for now, maybe later
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TString fulltextSettings = R"(
+            layout: FLAT
+            columns: {
+                column: "text1"
+                analyzers: {
+                    tokenizer: STANDARD
+                    use_filter_ngram: true
+                    filter_ngram_max_length: 42
+                }
+            }
+            columns: {
+                column: "text2"
+                analyzers: {
+                    tokenizer: STANDARD
+                    use_filter_ngram: true
+                    filter_ngram_max_length: 42
+                }
+            }
+        )";
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "text1" Type: "String" }
+                Columns { Name: "text2" Type: "String" }
+                Columns { Name: "covered" Type: "String" }
+                Columns { Name: "another" Type: "Uint64" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx_fulltext"
+                KeyColumnNames: ["text1", "text2"]
+                DataColumnNames: ["covered"]
+                Type: EIndexTypeGlobalFulltext
+                FulltextIndexDescription: { 
+                    Settings: { 
+                        %s
+                    }
+                }
+            }
+        )", fulltextSettings.c_str()), {NKikimrScheme::StatusInvalidParameter});
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"),{ 
@@ -99,23 +182,118 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+        TString fulltextSettings = R"(
+            layout: FLAT
+            columns: {
+                column: "text"
+                analyzers: {
+                    tokenizer: STANDARD
+                    use_filter_ngram: true
+                    filter_ngram_max_length: 42
+                }
+            }
+        )";
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
-              Name: "texts"
-              Columns { Name: "id" Type: "Uint64" }
-              Columns { Name: "text" Type: "Uint64" }
-              Columns { Name: "covered" Type: "String" }
-              Columns { Name: "another" Type: "Uint64" }
-              KeyColumnNames: ["id"]
+                Name: "texts"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "text" Type: "Uint64" }
+                Columns { Name: "covered" Type: "String" }
+                Columns { Name: "another" Type: "Uint64" }
+                KeyColumnNames: ["id"]
             }
             IndexDescription {
-              Name: "idx_fulltext"
-              KeyColumnNames: ["text"]
-              DataColumnNames: ["covered"]
-              Type: EIndexTypeGlobalFulltext
-              FulltextIndexDescription: { Settings: { layout: FLAT, tokenizer: STANDARD, use_filter_ngram: true, filter_ngram_max_length: 42 } }
+                Name: "idx_fulltext"
+                KeyColumnNames: ["text"]
+                DataColumnNames: ["covered"]
+                Type: EIndexTypeGlobalFulltext
+                FulltextIndexDescription: { 
+                    Settings: { 
+                        %s
+                    }
+                }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", fulltextSettings.c_str()), {NKikimrScheme::StatusInvalidParameter});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"),{ 
+            NLs::PathNotExist,
+        });
+    }
+
+    Y_UNIT_TEST(CreateTableColumnsMismatch) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TString fulltextSettings = R"(
+            layout: FLAT
+            columns: {
+                column: "text_wrong"
+                analyzers: {
+                    tokenizer: STANDARD
+                    use_filter_ngram: true
+                    filter_ngram_max_length: 42
+                }
+            }
+        )";
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "text" Type: "String" }
+                Columns { Name: "covered" Type: "String" }
+                Columns { Name: "another" Type: "Uint64" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx_fulltext"
+                KeyColumnNames: ["text"]
+                DataColumnNames: ["covered"]
+                Type: EIndexTypeGlobalFulltext
+                FulltextIndexDescription: { 
+                    Settings: { 
+                        %s
+                    }
+                }
+            }
+        )", fulltextSettings.c_str()), {NKikimrScheme::StatusInvalidParameter});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"),{ 
+            NLs::PathNotExist,
+        });
+    }
+
+    Y_UNIT_TEST(CreateTableNoColumnsSettings) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TString fulltextSettings = R"(
+            layout: FLAT
+        )";
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "text" Type: "String" }
+                Columns { Name: "covered" Type: "String" }
+                Columns { Name: "another" Type: "Uint64" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx_fulltext"
+                KeyColumnNames: ["text"]
+                DataColumnNames: ["covered"]
+                Type: EIndexTypeGlobalFulltext
+                FulltextIndexDescription: { 
+                    Settings: { 
+                        %s
+                    }
+                }
+            }
+        )", fulltextSettings.c_str()), {NKikimrScheme::StatusInvalidParameter});
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"),{ 

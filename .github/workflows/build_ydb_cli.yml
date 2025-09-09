@@ -59,9 +59,7 @@ jobs:
           fetch-depth: 0
 
       - name: Configure git
-        run: |
-          git config --global user.email ydbot@ydb.tech
-          git config --global user.name YDBot
+        uses: ./.github/actions/configure_git
 
       - name: Read current version
         id: read-version
@@ -102,7 +100,7 @@ jobs:
           git checkout main
           git reset --hard origin/main
 
-          BRANCH_NAME="release/cli-${{ steps.update-version.outputs.new-version }}"
+          BRANCH_NAME="cli-release/${{ steps.update-version.outputs.new-version }}"
           git checkout -b "$BRANCH_NAME"
           echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
           echo "Created branch: $BRANCH_NAME"
@@ -316,30 +314,81 @@ jobs:
           fetch-depth: 0
 
       - name: Configure git
-        run: |
-          git config --global user.email ydbot@ydb.tech
-          git config --global user.name YDBot
+        uses: ./.github/actions/configure_git
 
-      - name: Merge release branch to main
+      - name: Create and auto-merge PR
+        env:
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
-          # Fetch latest changes from main and release branch
-          git fetch origin main
+          # Create PR from release branch to main
+          PR_TITLE="YDB CLI release ${{ needs.prepare-release.outputs.new-version }}"
+          printf -v PR_BODY '%s\n' \
+            '### Changelog entry' \
+            '' \
+            '### Changelog category' \
+            '' \
+            '* Not for changelog (changelog entry is not required)' \
+            '' \
+            '### Description for reviewers' \
+            "Automated release PR for CLI version ${{ needs.prepare-release.outputs.new-version }}"
+
+          PR_NUMBER=$(gh pr create \
+            --title "$PR_TITLE" \
+            --body "$PR_BODY" \
+            --head "${{ needs.prepare-release.outputs.branch-name }}" \
+            --base main \
+            --label "automated-release" \
+            --repo ${{ github.repository }})
+
+          echo "Created PR #$PR_NUMBER"
+
+          # Enable auto-merge
+          gh pr merge "$PR_NUMBER" --merge --auto
+          echo "Enabled auto-merge for PR #$PR_NUMBER"
+
+      - name: Wait for PR merge and create tag
+        env:
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+        run: |
+          echo "Waiting for PR to be merged..."
+
+          # Wait up to 2 hours, checking every 5 minutes  
+          for i in {1..24}; do  # 24 * 5 minutes = 2 hours
+            # Check if PR is merged via GitHub API
+            PR_STATE=$(gh pr view "$PR_NUMBER" --json state,merged --jq '.state + ":" + (.merged | tostring)')
+            
+            if [[ "$PR_STATE" == "MERGED:true" ]]; then
+              echo "PR merged successfully"
+              break
+            elif [[ "$PR_STATE" == "CLOSED:false" ]]; then
+              echo "PR was closed without merging - this shouldn't happen with auto-merge"
+              exit 1
+            else
+              echo "PR still pending (attempt $i/24), state: $PR_STATE, waiting 5 minutes..."
+              sleep 300  # 5 minutes
+            fi
+
+            # Log progress every 30 minutes
+            if [ $((i % 6)) -eq 0 ]; then
+              echo "Still waiting after $((i * 5)) minutes..."
+            fi
+          done
+
+          # Check if we timed out
+          PR_STATE=$(gh pr view "$PR_NUMBER" --json state,merged --jq '.state + ":" + (.merged | tostring)')
+          if [[ "$PR_STATE" != "MERGED:true" ]]; then
+            echo "ERROR: PR was not merged after 2 hours. Current state: $PR_STATE"
+            echo "PR URL: $(gh pr view "$PR_NUMBER" --json url --jq '.url')"
+            exit 1
+          fi
+
+          # Create tag on release branch (exact state that CLI was built in)
           git fetch origin "${{ needs.prepare-release.outputs.branch-name }}"
-          git checkout main
-          git reset --hard origin/main
-
-          # Merge release branch
-          git merge "origin/${{ needs.prepare-release.outputs.branch-name }}" --no-ff -m "Merge CLI release ${{ needs.prepare-release.outputs.new-version }}"
-          git push origin main
-
-      - name: Create release tag
-        run: |
+          git checkout "${{ needs.prepare-release.outputs.branch-name }}"
           git tag "CLI_${{ needs.prepare-release.outputs.new-version }}"
           git push origin "CLI_${{ needs.prepare-release.outputs.new-version }}"
+          echo "Created and pushed tag CLI_${{ needs.prepare-release.outputs.new-version }} on release branch"
 
-      - name: Delete release branch
-        run: |
-          git push origin --delete "${{ needs.prepare-release.outputs.branch-name }}"
 
   cleanup-on-failure:
     name: Cleanup release branch on failure
@@ -354,9 +403,7 @@ jobs:
           fetch-depth: 0
 
       - name: Configure git
-        run: |
-          git config --global user.email ydbot@ydb.tech
-          git config --global user.name YDBot
+        uses: ./.github/actions/configure_git
 
       - name: Delete release branch
         run: |

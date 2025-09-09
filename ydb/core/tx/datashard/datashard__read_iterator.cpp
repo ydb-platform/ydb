@@ -1232,6 +1232,7 @@ public:
     }
 
     EExecutionStatus Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        std::cerr << "TReadOperation::Execute\n";
         auto readIt = Self->ReadIterators.find(ReadId);
         if (readIt == Self->ReadIterators.end()) {
             // iterator has been aborted

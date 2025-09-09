@@ -60,7 +60,9 @@ bool TExecuteKqpDataTxUnit::IsReadyToExecute(TOperation::TPtr op) const {
 EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactionContext& txc,
     const TActorContext& ctx)
 {
+    std::cerr << "TExecuteKqpDataTxUnit::Execute\n";
     if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
+        std::cerr << "!(op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx))\n";
         return EExecutionStatus::Executed;
     }
 
@@ -84,6 +86,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 break;
 
             case ERestoreDataStatus::Restart:
+                std::cerr << "EExecutionStatus::Restart\n";
                 return EExecutionStatus::Restart;
 
             case ERestoreDataStatus::Error:
@@ -94,6 +97,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                     op->SetAbortedFlag();
                     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
                     op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
+                    std::cerr << "op->IsImmediate()\n";
                     return EExecutionStatus::Executed;
                 }
 
@@ -114,6 +118,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         op->SetAbortedFlag();
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
         op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
+        std::cerr << "(op->IsImmediate() && !dataTx->ReValidateKeys(txc.DB.GetScheme()))\n";
         return EExecutionStatus::Executed;
     }
 
@@ -123,7 +128,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             ->AddError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Tx was cancelled");
 
         DataShard.IncCounter(op->IsImmediate() ? COUNTER_IMMEDIATE_TX_CANCELLED : COUNTER_PLANNED_TX_CANCELLED);
-
+        std::cerr << "dataTx->CheckCancelled(DataShard.TabletID())\n";
         return EExecutionStatus::Executed;
     }
 
@@ -143,6 +148,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 << " requested " << txc.GetRequestedMemory() << " more memory");
 
             DataShard.IncCounter(COUNTER_TX_WAIT_RESOURCE);
+            std::cerr << "MaybeRequestMoreTxMemory(consumedMemory, txc)\n";
             return EExecutionStatus::Restart;
         }
 
@@ -153,6 +159,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
                 op->SetAbortedFlag();
                 BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+                std::cerr << "abortLock\n";
                 return EExecutionStatus::Executed;
             };
 
@@ -167,6 +174,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                     // transactions we need to abort, since we may otherwise
                     // perform writes that are not attached to any lock.
                     if (!op->IsReadOnly()) {
+                        std::cerr << "EEnsureCurrentLock::Broken: && !op->IsReadOnly()\n";
                         return abortLock();
                     }
                     break;
@@ -176,12 +184,14 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                     // for read-only transactions, for non-readonly we need to
                     // abort;
                     if (!op->IsReadOnly()) {
+                        std::cerr << "EEnsureCurrentLock::TooMany && !op->IsReadOnly()\n";
                         return abortLock();
                     }
                     break;
 
                 case EEnsureCurrentLock::Abort:
                     // Lock cannot be created and we must abort
+                    std::cerr << "EEnsureCurrentLock::Abort\n";
                     return abortLock();
             }
         }
@@ -203,6 +213,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             : KqpValidateLocks(tabletId, sysLocks, kqpLocks, useGenericReadSets, inReadSets);
 
         if (!validated) {
+            std::cerr << "!validated\n";
             tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
                 NKikimrTxDataShard::TX_KIND_DATA,
                 tabletId,

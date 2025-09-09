@@ -603,12 +603,13 @@ TString TChangeRecord::GetPartitionKey() const {
     }
 
     Y_ABORT_UNLESS(Kind == EKind::CdcDataChange);
-    Y_ABORT_UNLESS(Schema);
+    std::cerr << "AAAAAAAAAAAA\n";
+    Y_ABORT_UNLESS(GetSchema());
 
     const auto body = TJsonSerializer::ParseBody(Body);
 
     NJson::TJsonValue key;
-    TJsonSerializer::SerializeJsonKey(Schema, key, body.GetKey());
+    TJsonSerializer::SerializeJsonKey(GetSchema(), key, body.GetKey());
 
     PartitionKey.ConstructInPlace(MD5::Calc(WriteJson(key, false)));
     return *PartitionKey;

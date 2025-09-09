@@ -93,7 +93,10 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
         if (schemaVersion) {
             const auto snapshotKey = TSchemaSnapshotKey(tableId, schemaVersion);
             if (const auto* snapshot = Self->GetSchemaSnapshotManager().FindSnapshot(snapshotKey)) {
+                std::cerr << "aaa there is snapshot\n";
                 schema = snapshot->Schema;
+            }  else {
+                std::cerr << "bbb there is NO snapshot\n";
             }
         }
 

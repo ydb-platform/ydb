@@ -26,8 +26,11 @@ TPipeline::TPipeline(TDataShard * self)
     , LastCleanupTime(0)
     , SchemaTx(nullptr)
 {
-    for (ui32 i = 0; i < static_cast<ui32>(EExecutionUnitKind::Count); ++i)
+    for (ui32 i = 0; i < static_cast<ui32>(EExecutionUnitKind::Count); ++i) {
+        std::cerr << "i " << i << " CreateExecutionUnit\n";
         ExecutionUnits[i] = CreateExecutionUnit(static_cast<EExecutionUnitKind>(i), *Self, *this);
+    }
+    std::cerr << "Done CreateExecutionUnit\n";
 }
 
 TPipeline::~TPipeline()
@@ -136,6 +139,7 @@ bool TPipeline::OutOfOrderLimits() const
 
 bool TPipeline::CanRunAnotherOp()
 {
+    std::cerr << "CanRunAnotherOp\n";
     if (GetNextActiveOp(true))
         return true;
     return false;
@@ -299,11 +303,13 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
 
     // First look through candidate operations in
     // StepOrder order.
+    std::cerr << "CandidateOps size is " << CandidateOps.size() << "\n";
     while (!CandidateOps.empty()) {
         auto op = CandidateOps.begin()->second;
         CandidateOps.erase(CandidateOps.begin());
 
         if (IsReadyOp(op)) {
+            std::cerr << "OPERATION TYPE       " << (ui32) op->GetKind() << "\n";
             LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
                         "Found ready candidate operation " << *op << " at "
                         << Self->TabletID() << " for " << op->GetCurrentUnit());
@@ -919,6 +925,7 @@ void TPipeline::RemoveInReadSets(TOperation::TPtr op,
 }
 
 void TPipeline::RemoveTx(TStepOrder stepTxId) {
+    std::cerr << "Start TPipeline::RemoveTx " << stepTxId.TxId << "\n";
     // Optimization: faster Alter. Do not wait if no TxInFly.
     // Can't persist KeepSchemaStep here. TxInFly must be restored on init.
     if (Self->TransQueue.TxInFly() == 0) {
@@ -926,10 +933,12 @@ void TPipeline::RemoveTx(TStepOrder stepTxId) {
     }
 
     if (SchemaTx && SchemaTx->TxId == stepTxId.TxId) {
+        std::cerr << "TPipeline::RemoveTx\n";
         SchemaTx->Done = true;
         SchemaTx = nullptr;
     }
 
+    std::cerr << "ForgetTx\n";
     ForgetTx(stepTxId.TxId);
 }
 
@@ -938,6 +947,7 @@ const TSchemaOperation* TPipeline::FindSchemaTx(ui64 txId) const {
 }
 
 void TPipeline::CompleteSchemaTx(NIceDb::TNiceDb& db, ui64 txId) {
+    std::cerr << "CompleteSchemaTx " << txId << "\n";
     Y_ABORT_UNLESS(txId);
     TSchemaOperation * op = Self->TransQueue.FindSchemaTx(txId);
     if (!op)
@@ -1161,11 +1171,19 @@ bool TPipeline::AssignPlanInterval(TOperation::TPtr op)
     // TODO: it's possible to plan them until Alter minStep
     // TODO: it's possible to plan them if both old and new schemas allow tx
     // TODO: use propose blockers and DF_BLOCK_PROPOSE to block shard with scheme tx
-    if (HasSchemaOperation() && !SchemaTx->IsReadOnly())
+    if (HasSchemaOperation() && !SchemaTx->IsReadOnly()) {
+        std::cerr << "AssignPlanInterval :: HasSchemaOperation() && !SchemaTx->IsReadOnly() \n";
         return false;
+    } else {
+        std::cerr << "AssignPlanInterval :: ! HasSchemaOperation() && !SchemaTx->IsReadOnly() \n";
+    }
 
-    if (HasWaitingSchemeOps())
+    if (HasWaitingSchemeOps()) {
+        std::cerr << "AssignPlanInterval :: HasWaitingSchemeOps() \n";
         return false;
+    } else {
+        std::cerr << "AssignPlanInterval ::!  HasWaitingSchemeOps() \n";
+    }
 
     op->SetMinStep(AllowedDataStep());
     op->SetMaxStep(op->GetMinStep() + Self->DefaultTxStepDeadline());
@@ -1800,6 +1818,7 @@ void TPipeline::RegisterDistributedWrites(const TOperation::TPtr& op, NTable::TD
 
 EExecutionStatus TPipeline::RunExecutionUnit(TOperation::TPtr op, TTransactionContext &txc, const TActorContext &ctx)
 {
+    std::cerr << "RunExecutionUnit\n";
     Y_ABORT_UNLESS(!op->IsExecutionPlanFinished());
     auto &unit = GetExecutionUnit(op->GetCurrentUnit());
 
@@ -1815,7 +1834,9 @@ EExecutionStatus TPipeline::RunExecutionUnit(TOperation::TPtr op, TTransactionCo
     }
 
     NCpuTime::TCpuTimer timer;
+    std::cerr << "start unit.Execute\n";
     auto status = unit.Execute(op, txc, ctx);
+    std::cerr << "finish unit.Execute\n";
     op->AddExecutionTime(timer.GetTime());
 
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,

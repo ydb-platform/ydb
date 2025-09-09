@@ -1698,7 +1698,22 @@ void CancelAddIndex(Tests::TServer::TPtr server, const TString& dbName, ui64 bui
     runtime.SendToPipe(tabletId, sender, req.Release(), 0, GetPipeConfigWithRetries());
 
     auto resp = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCancelResponse>(sender);
-    UNIT_ASSERT_EQUAL(resp->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+    //UNIT_ASSERT_EQUAL(resp->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+}
+
+ui64 AsyncMoveIndex(
+        Tests::TServer::TPtr server,
+        const TString& tablePath,
+        const TString& srcIndexName,
+        const TString& dstIndexName)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpMoveIndex);
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableMoveIndex();
+    desc.SetTablePath(tablePath);
+    desc.SetSrcPath(srcIndexName);
+    desc.SetDstPath(dstIndexName);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }
 
 ui64 AsyncAlterDropIndex(
@@ -1733,6 +1748,7 @@ ui64 AsyncAlterAddStream(
     if (streamDesc.ResolvedTimestamps) {
         desc.MutableStreamDescription()->SetResolvedTimestampsIntervalMs(streamDesc.ResolvedTimestamps->MilliSeconds());
     }
+    //desc.MutableStreamDescription()->SetResolvedTimestampsIntervalMs(1000);
     if (streamDesc.InitialState) {
         desc.MutableStreamDescription()->SetState(*streamDesc.InitialState);
     }

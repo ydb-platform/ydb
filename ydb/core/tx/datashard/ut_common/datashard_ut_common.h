@@ -423,7 +423,8 @@ struct TShardedTableOptions {
     static TVector<TColumn> DefaultColumns() {
         return {
             {"key",   "Uint32", true,  false}, 
-            {"value", "Uint32", false, false}
+            {"value", "Uint32", false, false},
+            {"value2", "Uint32", false, false}
         };
     }
 
@@ -659,6 +660,12 @@ void CancelAddIndex(
         Tests::TServer::TPtr server,
         const TString& dbName,
         ui64 buildIndexId);
+
+ui64 AsyncMoveIndex(
+        Tests::TServer::TPtr server,
+        const TString& tablePath,
+        const TString& srcIndexName,
+        const TString& dstIndexName);
 
 ui64 AsyncAlterDropIndex(
         Tests::TServer::TPtr server,

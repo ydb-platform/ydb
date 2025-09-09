@@ -11,6 +11,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REMOVE_SCHEMA_SNAPSHOTS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        std::cerr << "TTxRemoveSchemaSnapshots::Execute\n";
         while (!Self->PendingSchemaSnapshotsToGc.empty()) {
             const auto key = Self->PendingSchemaSnapshotsToGc.back();
             const auto* snapshot = Self->GetSchemaSnapshotManager().FindSnapshot(key);
@@ -40,6 +41,7 @@ public:
             Self->PendingSchemaSnapshotsToGc.pop_back();
         }
 
+        std::cerr << "RETURN\n";
         return true;
     }
 

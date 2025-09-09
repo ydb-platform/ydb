@@ -70,6 +70,7 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
                                              TTransactionContext &txc,
                                              const TActorContext &ctx)
 {
+    std::cerr << "TCheckSchemeTxUnit::Execute\n";
     Y_ABORT_UNLESS(op->IsSchemeTx());
     Y_ABORT_UNLESS(!op->IsAborted());
 
@@ -217,6 +218,8 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
                 << DataShard.TabletID());
 
     BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
+
+    std::cerr << "RESULT\n";
 
     return EExecutionStatus::ExecutedNoMoreRestarts;
 }

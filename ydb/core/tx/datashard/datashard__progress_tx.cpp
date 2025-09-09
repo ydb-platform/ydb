@@ -12,6 +12,7 @@ TDataShard::TTxProgressTransaction::TTxProgressTransaction(TDataShard *self, TOp
 {}
 
 bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const TActorContext &ctx) {
+    std::cerr << "Start TTxProgressTransaction::Execute\n";
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProgressTransaction::Execute at " << Self->TabletID());
 
@@ -22,6 +23,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
                 "Progress tx at non-ready tablet " << Self->TabletID() << " state " << Self->State);
             Y_ABORT_UNLESS(!ActiveOp, "Unexpected ActiveOp at inactive shard %" PRIu64, Self->TabletID());
             Self->PlanQueue.Reset(ctx);
+            std::cerr << "Stop TTxProgressTransaction::Execute\n";
             return true;
         }
 
@@ -49,6 +51,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
                 Self->IncCounter(COUNTER_TX_PROGRESS_IDLE);
                 LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
                            "No tx to execute at " << Self->TabletID() << " TxInFly " << Self->TxInFly());
+                 std::cerr << "Stop TTxProgressTransaction::Execute\n";
                 return true;
             }
 
@@ -79,6 +82,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
             case EExecutionStatus::Restart:
                 // Restart even if current CompleteList is not empty
                 // It will be extended in subsequent iterations
+                 std::cerr << "Stop TTxProgressTransaction::Execute\n";
                 return false;
 
             case EExecutionStatus::Reschedule:
@@ -114,6 +118,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
         }
 
         // Commit all side effects
+        std::cerr << "Stop TTxProgressTransaction::Execute\n";
         return true;
     } catch (...) {
         Y_ABORT("there must be no leaked exceptions");
@@ -125,6 +130,7 @@ void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
                 "TTxProgressTransaction::Complete at " << Self->TabletID());
 
     if (ActiveOp) {
+        std::cerr << "TTxProgressTransaction::ActiveOp\n";
         Y_ABORT_UNLESS(!ActiveOp->GetExecutionPlan().empty());
         if (!CompleteList.empty()) {
             auto commitTime = AppData()->TimeProvider->Now() - CommitStart;
@@ -152,6 +158,7 @@ void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
 
     Self->CheckSplitCanStart(ctx);
     Self->CheckMvccStateChangeCanStart(ctx);
+    std::cerr << "Stop TTxProgressTransaction::Complete\n";
 }
 
 }}

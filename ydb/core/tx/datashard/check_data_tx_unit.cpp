@@ -295,6 +295,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
 
     if (!op->IsImmediate()) {
         if (!Pipeline.AssignPlanInterval(op)) {
+            std::cerr << "ZZZZZZZZZ\n";
             TString err = TStringBuilder()
                 << "Can't propose tx " << op->GetTxId() << " at blocked shard "
                 << DataShard.TabletID();

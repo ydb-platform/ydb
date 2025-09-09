@@ -525,7 +525,9 @@ public:
     template <typename T>
     TLockLocker(const T * self)
         : Self(new TLocksDataShardAdapter<T>(self))
-    {}
+    {
+        std::cerr << "NEW TLockLocker " << (ui64) &Locks << " datashard " << self->TabletID() << "\n";
+    }
 
     ~TLockLocker() {
         for (auto& t : Tables)
@@ -794,7 +796,9 @@ public:
     TSysLocks(const T * self)
         : Self(new TLocksDataShardAdapter<T>(self))
         , Locker(self)
-    {}
+    {
+        std::cerr << "NEW TSysLocks " << (ui64) &Locker << " datashard " << self->TabletID() << "\n";
+    }
 
     void SetupUpdate(TLocksUpdate* update, ILocksDb* db = nullptr) noexcept {
         Y_ABORT_UNLESS(!Update, "Cannot setup a recursive update");

@@ -615,6 +615,7 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
         TUserTable::TCPtr tableInfo,
         TUploadLimits limits)
 {
+    std::cerr << "CreateBuildIndexScan\n";
     return new TBuildIndexScan(
         buildIndexId, target, seqNo, dataShardId, datashardActorId, schemeshardActorId, range, targetIndexColumns, targetDataColumns, std::move(columnsToBuild), tableInfo, limits);
 }

@@ -440,6 +440,11 @@ class TLocalTableWriter
 
         for (auto& record : ev->Get()->Records) {
             records.emplace_back(record.Offset, this->PathId, record.Data.size());
+            if (Schema) {
+                std::cerr << "aaa there is Schema\n";
+            } else {
+                std::cerr << "bbb there is NO Schema\n";
+            }
             auto res = PendingRecords.emplace(record.Offset, TChangeRecordBuilderTrait<TChangeRecord>()
                 .WithSourceId(ev->Get()->Source)
                 .WithOrder(record.Offset)

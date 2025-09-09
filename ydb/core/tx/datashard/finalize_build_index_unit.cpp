@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -18,6 +19,7 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
+        std::cerr << "TFinalizeBuildIndexUnit::Execute\n";
         Y_ABORT_UNLESS(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
@@ -25,6 +27,7 @@ public:
 
         auto& schemeTx = tx->GetSchemeTx();
         if (!schemeTx.HasFinalizeBuildIndex()) {
+            std::cerr << "RETURN\n";
             return EExecutionStatus::Executed;
         }
 
@@ -52,13 +55,18 @@ public:
 
             tableInfo = DataShard.AlterTableDropIndex(ctx, txc, pathId, version, indexPathId);
         } else {
+            std::cerr << "DataShard.AlterTableSchemaVersion\n";
             tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);
         }
 
         Y_ABORT_UNLESS(tableInfo);
+        std::cerr << "DataShard.AddUserTable\n";
         DataShard.AddUserTable(pathId, tableInfo);
+        //TDataShardLocksDb locksDb(DataShard, txc);
+        //DataShard.AddUserTable(pathId, tableInfo, &locksDb);
 
         if (tableInfo->NeedSchemaSnapshots()) {
+            std::cerr << "DataShard.AddSchemaSnapshot)\n";
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
         }
 
@@ -73,15 +81,18 @@ public:
         }
 
         const TSnapshotKey key(pathId, step, txId);
+        std::cerr << "DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);\n";
         DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
+        std::cerr << "RESULT\n";
 
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
     void Complete(TOperation::TPtr, const TActorContext& ctx) override {
+        std::cerr << "TFinalizeBuildIndexUnit::Complete\n";
         if (RemoveSender) {
             ctx.Send(DataShard.GetChangeSender(), RemoveSender.Release());
         }

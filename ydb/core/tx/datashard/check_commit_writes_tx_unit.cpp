@@ -74,6 +74,7 @@ public:
         }
 
         if (!Pipeline.AssignPlanInterval(op)) {
+            std::cerr << "YYYYYYYY\n";
             const TString err = TStringBuilder()
                 << "Can't propose tx " << op->GetTxId()
                 << " at blocked shard " << DataShard.TabletID();

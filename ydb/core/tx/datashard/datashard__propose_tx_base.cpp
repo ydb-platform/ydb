@@ -45,8 +45,10 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
             NKikimrTxDataShard::TError::EKind status = NKikimrTxDataShard::TError::OK;
             TString errMessage;
 
-            if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage))
+            if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage)){
+                std::cerr << "RESULT TTxProposeTransactionBase::Execute\n";
                 return false;
+            }
 
             if (status != NKikimrTxDataShard::TError::OK) {
                 LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
@@ -61,6 +63,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 
                 DatashardTransactionSpan.EndOk();
                 ctx.Send(target, result.Release(), 0, cookie);
+                std::cerr << "RESULT TTxProposeTransactionBase::Execute\n";
 
                 return true;
             }
@@ -82,6 +85,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                 Y_ABORT_UNLESS(op->Result());
                 op->OperationSpan.EndError("Unsuccessful operation parse");
                 ctx.Send(op->GetTarget(), op->Result().Release());
+                std::cerr << "RESULT TTxProposeTransactionBase::Execute\n";
                 return true;
             }
 
@@ -98,12 +102,14 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 
         Y_ABORT_UNLESS(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
+        std::cerr << "RunExecutionPlan\n";
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
 
         switch (status) {
             case EExecutionStatus::Restart:
                 // Restart even if current CompleteList is not empty
                 // It will be extended in subsequent iterations
+                std::cerr << "RESULT TTxProposeTransactionBase::Execute\n";
                 return false;
 
             case EExecutionStatus::Reschedule:
@@ -143,6 +149,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
     } catch (const TNotReadyTabletException &) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
             "TX [" << 0 << " : " << TxId << "] can't prepare (tablet's not ready) at tablet " << Self->TabletID());
+        std::cerr << "RESULT TTxProposeTransactionBase::Execute\n";
         return false;
     } catch (const TSchemeErrorTabletException &ex) {
         Y_UNUSED(ex);
@@ -154,6 +161,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
     } catch (...) {
         Y_ABORT("there must be no leaked exceptions");
     }
+    std::cerr << "RESULT TTxProposeTransactionBase::Execute\n";
 }
 
 void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {

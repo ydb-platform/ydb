@@ -87,6 +87,15 @@ struct TBackupProgress {
     {
     }
 
+    TBackupProgress(const TSchemeBoardMonEvents::TEvBackupResult& ev)
+        : TotalPaths(0)
+        , CompletedPaths(0)
+        , Progress(0.)
+        , Status(ev.Error ? EStatus::Error : EStatus::Completed)
+        , ErrorMessage(ev.Error.GetOrElse(""))
+    {
+    }
+
     bool IsRunning() const {
         return Status == EStatus::Starting || Status == EStatus::Running;
     }
@@ -362,6 +371,15 @@ struct TRestoreProgress {
         , ProcessedPaths(ev.ProcessedPaths)
         , Progress(TotalPaths > 0 ? (100. * ProcessedPaths / TotalPaths) : 0.)
         , Status(EStatus::Running)
+    {
+    }
+
+    TRestoreProgress(const TSchemeBoardMonEvents::TEvRestoreResult& ev)
+        : TotalPaths(0)
+        , ProcessedPaths(0)
+        , Progress(0.)
+        , Status(ev.Error ? EStatus::Error : EStatus::Completed)
+        , ErrorMessage(ev.Error.GetOrElse(""))
     {
     }
 
@@ -1961,38 +1979,26 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
     void Handle(TSchemeBoardMonEvents::TEvBackupProgress::TPtr& ev) {
         const auto& msg = *ev->Get();
-        SBB_LOG_D("Handle " << ev->Get()->ToString());
+        SBB_LOG_D("Handle " << msg.ToString());
         BackupProgress = TBackupProgress(msg);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvBackupResult::TPtr& ev) {
         const auto& msg = *ev->Get();
-        SBB_LOG_I("Handle " << ev->Get()->ToString());
-        BackupProgress = TBackupProgress();
-        if (msg.Error) {
-            BackupProgress.Status = TBackupProgress::EStatus::Error;
-            BackupProgress.ErrorMessage = *msg.Error;
-        } else {
-            BackupProgress.Status = TBackupProgress::EStatus::Completed;
-        }
+        SBB_LOG_I("Handle " << msg.ToString());
+        BackupProgress = TBackupProgress(msg);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvRestoreProgress::TPtr& ev) {
         const auto& msg = *ev->Get();
-        SBB_LOG_D("Handle " << ev->Get()->ToString());
+        SBB_LOG_D("Handle " << msg.ToString());
         RestoreProgress = TRestoreProgress(msg);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvRestoreResult::TPtr& ev) {
         const auto& msg = *ev->Get();
-        SBB_LOG_D("Handle " << ev->Get()->ToString());
-        RestoreProgress = TRestoreProgress();
-        if (msg.Error) {
-            RestoreProgress.Status = TRestoreProgress::EStatus::Error;
-            RestoreProgress.ErrorMessage = *msg.Error;
-        } else {
-            RestoreProgress.Status = TRestoreProgress::EStatus::Completed;
-        }
+        SBB_LOG_D("Handle " << msg.ToString());
+        RestoreProgress = TRestoreProgress(msg);
     }
 
 public:

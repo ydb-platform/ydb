@@ -83,8 +83,8 @@ struct TSchemeBoardMonEvents {
     };
 
     struct TEvRestoreProgress : public TEventLocal<TEvRestoreProgress, EvRestoreProgress> {
-        ui32 TotalPaths;
-        ui32 ProcessedPaths;
+        ui32 TotalPaths = 0;
+        ui32 ProcessedPaths = 0;
 
         TEvRestoreProgress(ui32 total, ui32 processed)
             : TotalPaths(total)

@@ -25,6 +25,7 @@
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/public/udf/udf_string_ref.h>
@@ -64,6 +65,36 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
             return NUdf::TUnboxedValuePod(static_cast<float>(value) / 1234);
         case NUdf::EDataSlot::Double:
             return NUdf::TUnboxedValuePod(static_cast<double>(value) / 12345);
+        case NUdf::EDataSlot::TzDate: {
+            auto ret = NUdf::TUnboxedValuePod(static_cast<ui16>(value % NUdf::MAX_DATE));
+            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId("Europe/Moscow"));
+            return ret;
+        }
+        case NUdf::EDataSlot::TzDatetime: {
+            auto ret = NUdf::TUnboxedValuePod(static_cast<ui32>(value % NUdf::MAX_DATETIME));
+            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId("Asia/Omsk"));
+            return ret;
+        }
+        case NUdf::EDataSlot::TzTimestamp: {
+            auto ret = NUdf::TUnboxedValuePod(static_cast<ui64>(value % NUdf::MAX_TIMESTAMP));
+            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId("Europe/Tallinn"));
+            return ret;
+        }
+        case NUdf::EDataSlot::TzDate32: {
+            auto ret = NUdf::TUnboxedValuePod(static_cast<i32>(value % NUdf::MAX_DATE32));
+            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId("US/Eastern"));
+            return ret;
+        }
+        case NUdf::EDataSlot::TzDatetime64: {
+            auto ret = NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_DATETIME64));
+            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId("America/Nuuk"));
+            return ret;
+        }
+        case NUdf::EDataSlot::TzTimestamp64: {
+            auto ret = NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_TIMESTAMP64));
+            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId("Atlantic/Faroe"));
+            return ret;
+        }
         default:
             Y_ABORT("Not implemented creation value for such type");
     }
@@ -111,7 +142,13 @@ struct TTestContext {
         TDataType::Create(NUdf::TDataType<i64>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<float>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<double>::Id, TypeEnv)
+        TDataType::Create(NUdf::TDataType<double>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TTzDate>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TTzDatetime>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TTzTimestamp>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TTzDate32>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TTzDatetime64>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TTzTimestamp64>::Id, TypeEnv)
     };
 
     TTestContext()
@@ -524,7 +561,7 @@ struct TTestContext {
         for (ui64 index = 0; index < variantSize; ++index) {
             TVector<TType*> selectedTypes;
             for (ui32 i = 0; i < BasicTypes.size(); ++i) {
-                if ((index >> i) % 2 == 1) {
+                if ((index ^ i) % 5 >= 2) {
                     selectedTypes.push_back(BasicTypes[i]);
                 }
             }
@@ -541,7 +578,7 @@ struct TTestContext {
             auto typeIndex = index % VariantSize;
             TUnboxedValueVector tupleItems;
             for (ui64 i = 0; i < BasicTypes.size(); ++i) {
-                if ((typeIndex >> i) % 2 == 1) {
+                if ((typeIndex ^ i) % 5 >= 2) {
                     tupleItems.push_back(GetValueOfBasicType(BasicTypes[i], i));
                 }
             }
@@ -820,51 +857,6 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
             auto uIntValue = value.GetElement(2).Get<ui8>();
             auto uIntArrow = uint8Array->Value(index);
             UNIT_ASSERT(uIntValue == uIntArrow);
-            ++index;
-        }
-    }
-
-    Y_UNIT_TEST(DictUtf8ToInterval) {
-        TTestContext context;
-
-        auto dictType = context.GetDictUtf8ToIntervalType();
-        UNIT_ASSERT(NArrow::IsArrowCompatible(dictType));
-
-        auto values = context.CreateDictUtf8ToInterval(100);
-        auto array = NArrow::MakeArray(values, dictType);
-        UNIT_ASSERT(array->ValidateFull().ok());
-
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto wrapArray = static_pointer_cast<arrow::StructArray>(array);
-        UNIT_ASSERT_VALUES_EQUAL(wrapArray->num_fields(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(wrapArray->length()), values.size());
-
-        UNIT_ASSERT(wrapArray->field(0)->type_id() == arrow::Type::MAP);
-        auto mapArray = static_pointer_cast<arrow::MapArray>(wrapArray->field(0));
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(mapArray->length()), values.size());
-
-        UNIT_ASSERT(wrapArray->field(1)->type_id() == arrow::Type::UINT64);
-        auto customArray = static_pointer_cast<arrow::UInt64Array>(wrapArray->field(1));
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(customArray->length()), values.size());
-
-        UNIT_ASSERT_VALUES_EQUAL(mapArray->num_fields(), 1);
-
-        UNIT_ASSERT(mapArray->keys()->type_id() == arrow::Type::STRING);
-        auto utf8Array = static_pointer_cast<arrow::StringArray>(mapArray->keys());
-
-        UNIT_ASSERT(mapArray->items()->type_id() == arrow::Type::INT64);
-        auto intervalArray = static_pointer_cast<arrow::Int64Array>(mapArray->items());
-
-        ui64 index = 0;
-        for (const auto& value: values) {
-            UNIT_ASSERT_VALUES_EQUAL(value.GetDictLength(), static_cast<ui64>(mapArray->value_length(index)));
-            for (auto subindex = mapArray->value_offset(index); subindex < mapArray->value_offset(index + 1); ++subindex) {
-                auto keyArrow = utf8Array->GetView(subindex);
-                NUdf::TUnboxedValue key = MakeString(NUdf::TStringRef(keyArrow.data(), keyArrow.size()));
-                UNIT_ASSERT(value.Contains(key));
-                NUdf::TUnboxedValue payloadValue = value.Lookup(key);
-                UNIT_ASSERT_VALUES_EQUAL(intervalArray->Value(subindex), payloadValue.Get<i64>());
-            }
             ++index;
         }
     }
@@ -1336,6 +1328,51 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
 }
 
 Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
+    Y_UNIT_TEST(DictUtf8ToInterval) {
+        TTestContext context;
+
+        auto dictType = context.GetDictUtf8ToIntervalType();
+        UNIT_ASSERT(!NArrow::IsArrowCompatible(dictType));
+
+        auto values = context.CreateDictUtf8ToInterval(100);
+        auto array = NArrow::MakeArray(values, dictType);
+        UNIT_ASSERT(array->ValidateFull().ok());
+
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        auto wrapArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT_VALUES_EQUAL(wrapArray->num_fields(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(wrapArray->length()), values.size());
+
+        UNIT_ASSERT(wrapArray->field(0)->type_id() == arrow::Type::MAP);
+        auto mapArray = static_pointer_cast<arrow::MapArray>(wrapArray->field(0));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(mapArray->length()), values.size());
+
+        UNIT_ASSERT(wrapArray->field(1)->type_id() == arrow::Type::UINT64);
+        auto customArray = static_pointer_cast<arrow::UInt64Array>(wrapArray->field(1));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(customArray->length()), values.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(mapArray->num_fields(), 1);
+
+        UNIT_ASSERT(mapArray->keys()->type_id() == arrow::Type::STRING);
+        auto utf8Array = static_pointer_cast<arrow::StringArray>(mapArray->keys());
+
+        UNIT_ASSERT(mapArray->items()->type_id() == arrow::Type::INT64);
+        auto intervalArray = static_pointer_cast<arrow::Int64Array>(mapArray->items());
+
+        ui64 index = 0;
+        for (const auto& value: values) {
+            UNIT_ASSERT_VALUES_EQUAL(value.GetDictLength(), static_cast<ui64>(mapArray->value_length(index)));
+            for (auto subindex = mapArray->value_offset(index); subindex < mapArray->value_offset(index + 1); ++subindex) {
+                auto keyArrow = utf8Array->GetView(subindex);
+                NUdf::TUnboxedValue key = MakeString(NUdf::TStringRef(keyArrow.data(), keyArrow.size()));
+                UNIT_ASSERT(value.Contains(key));
+                NUdf::TUnboxedValue payloadValue = value.Lookup(key);
+                UNIT_ASSERT_VALUES_EQUAL(intervalArray->Value(subindex), payloadValue.Get<i64>());
+            }
+            ++index;
+        }
+    }
+
     Y_UNIT_TEST(DictOptionalToTuple) {
         TTestContext context;
 
@@ -1503,7 +1540,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto dictType = context.GetDictUtf8ToIntervalType();
-        UNIT_ASSERT(NArrow::IsArrowCompatible(dictType));
+        UNIT_ASSERT(!NArrow::IsArrowCompatible(dictType));
 
         auto values = context.CreateDictUtf8ToInterval(100);
         auto array = NArrow::MakeArray(values, dictType);

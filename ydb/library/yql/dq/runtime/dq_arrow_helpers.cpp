@@ -1,6 +1,8 @@
 #include "dq_arrow_helpers.h"
 
 #include <cstddef>
+
+#include <yql/essentials/public/udf/arrow/block_type_helper.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -99,7 +101,7 @@ bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot type, TFunc&& callback) {
         case NUdf::EDataSlot::TzDate32:
         case NUdf::EDataSlot::TzDatetime64:
         case NUdf::EDataSlot::TzTimestamp64:
-            return false;
+            return callback(TTypeWrapper<arrow::StructType>());
     }
 }
 
@@ -134,7 +136,52 @@ NUdf::TUnboxedValue GetUnboxedValue(std::shared_ptr<arrow::Array> column, ui32 r
     return NUdf::TUnboxedValuePod(static_cast<typename TArrowType::c_type>(array->Value(row)));
 }
 
-// The following 4 specialization are for darwin build (because of difference in long long)
+template <>
+NUdf::TUnboxedValue GetUnboxedValue<arrow::StructType>(std::shared_ptr<arrow::Array> column, ui32 row) {
+    auto array = std::static_pointer_cast<arrow::StructArray>(column);
+    Y_DEBUG_ABORT_UNLESS(array->num_fields() == 2, "StructArray of some TzDate type should have 2 fields");
+
+    auto datetimeArray = array->field(0);
+    auto timezoneArray = std::static_pointer_cast<arrow::UInt16Array>(array->field(1));
+
+    NUdf::TUnboxedValuePod value;
+
+    switch (datetimeArray->type()->id()) {
+        // NUdf::EDataSlot::TzDate
+        case arrow::Type::UINT16: {
+            value = NUdf::TUnboxedValuePod(static_cast<ui16>(std::static_pointer_cast<arrow::UInt16Array>(datetimeArray)->Value(row)));
+            break;
+        }
+        // NUdf::EDataSlot::TzDatetime
+        case arrow::Type::UINT32: {
+            value = NUdf::TUnboxedValuePod(static_cast<ui32>(std::static_pointer_cast<arrow::UInt32Array>(datetimeArray)->Value(row)));
+            break;
+        }
+        // NUdf::EDataSlot::TzTimestamp
+        case arrow::Type::UINT64: {
+            value = NUdf::TUnboxedValuePod(static_cast<ui64>(std::static_pointer_cast<arrow::UInt64Array>(datetimeArray)->Value(row)));
+            break;
+        }
+        // NUdf::EDataSlot::TzDate32
+        case arrow::Type::INT32: {
+            value = NUdf::TUnboxedValuePod(static_cast<i32>(std::static_pointer_cast<arrow::Int32Array>(datetimeArray)->Value(row)));
+            break;
+        }
+        // NUdf::EDataSlot::TzDatetime64, NUdf::EDataSlot::TzTimestamp64
+        case arrow::Type::INT64: {
+            value = NUdf::TUnboxedValuePod(static_cast<i64>(std::static_pointer_cast<arrow::Int64Array>(datetimeArray)->Value(row)));
+            break;
+        }
+        default:
+            Y_DEBUG_ABORT_UNLESS(false, "Unexpected timezone datetime slot");
+            return NUdf::TUnboxedValuePod();
+    }
+
+    value.SetTimezoneId(timezoneArray->Value(row));
+    return value;
+}
+
+// The following specializations are for darwin build (because of difference in long long)
 
 template <> // For darwin build
 NUdf::TUnboxedValue GetUnboxedValue<arrow::UInt64Type>(std::shared_ptr<arrow::Array> column, ui32 row) {
@@ -170,20 +217,56 @@ NUdf::TUnboxedValue GetUnboxedValue<arrow::FixedSizeBinaryType>(std::shared_ptr<
 }
 
 template <typename TType>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl(NUdf::EDataSlot slot) {
+    Y_UNUSED(slot);
     return std::make_shared<TType>();
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>() {
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>(NUdf::EDataSlot slot) {
+    Y_UNUSED(slot);
     return arrow::fixed_size_binary(NScheme::FSB_SIZE);
+}
+
+template <>
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::StructType>(NUdf::EDataSlot slot) {
+    std::shared_ptr<arrow::DataType> type;
+    switch (slot) {
+        case NUdf::EDataSlot::TzDate:
+            type = NYql::NUdf::MakeTzLayoutArrowType<NUdf::EDataSlot::TzDate>();
+            break;
+        case NUdf::EDataSlot::TzDatetime:
+            type = NYql::NUdf::MakeTzLayoutArrowType<NUdf::EDataSlot::TzDatetime>();
+            break;
+        case NUdf::EDataSlot::TzTimestamp:
+            type = NYql::NUdf::MakeTzLayoutArrowType<NUdf::EDataSlot::TzTimestamp>();
+            break;
+        case NUdf::EDataSlot::TzDate32:
+            type = NYql::NUdf::MakeTzLayoutArrowType<NUdf::EDataSlot::TzDate32>();
+            break;
+        case NUdf::EDataSlot::TzDatetime64:
+            type = NYql::NUdf::MakeTzLayoutArrowType<NUdf::EDataSlot::TzDatetime64>();
+            break;
+        case NUdf::EDataSlot::TzTimestamp64:
+            type = NYql::NUdf::MakeTzLayoutArrowType<NUdf::EDataSlot::TzTimestamp64>();
+            break;
+        default:
+            Y_DEBUG_ABORT_UNLESS(false, "Unexpected timezone datetime slot");
+            return std::make_shared<arrow::NullType>();
+    }
+
+    std::vector<std::shared_ptr<arrow::Field>> fields {
+        std::make_shared<arrow::Field>("datetime", type, false),
+        std::make_shared<arrow::Field>("timezoneId", arrow::uint16(), false),
+    };
+    return arrow::struct_(fields);
 }
 
 std::shared_ptr<arrow::DataType> GetArrowType(const TDataType* dataType) {
     std::shared_ptr<arrow::DataType> result;
     bool success = SwitchMiniKQLDataTypeToArrowType(*dataType->GetDataSlot().Get(), [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
         Y_UNUSED(typeHolder);
-        result = CreateEmptyArrowImpl<TType>();
+        result = CreateEmptyArrowImpl<TType>(*dataType->GetDataSlot().Get());
         return true;
     });
     if (success) {
@@ -381,6 +464,64 @@ void AppendDataValue<arrow::BinaryType>(arrow::ArrayBuilder* builder, NUdf::TUnb
     Y_VERIFY_S(status.ok(), status.ToString());
 }
 
+template <>
+void AppendDataValue<arrow::StructType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
+    Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::STRUCT);
+    auto typedBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
+    Y_DEBUG_ABORT_UNLESS(typedBuilder->num_fields() == 2, "StructBuilder of timezone datetime types should have 2 fields");
+
+    if (!value.HasValue()) {
+        auto status = typedBuilder->AppendNull();
+        Y_VERIFY_S(status.ok(), status.ToString());
+        return;
+    }
+
+    auto status = typedBuilder->Append();
+    Y_VERIFY_S(status.ok(), status.ToString());
+
+    auto datetimeArray = typedBuilder->field_builder(0);
+    auto timezoneArray = reinterpret_cast<arrow::UInt16Builder*>(typedBuilder->field_builder(1));
+
+    switch (datetimeArray->type()->id()) {
+        // NUdf::EDataSlot::TzDate
+        case arrow::Type::UINT16: {
+            status = reinterpret_cast<arrow::UInt16Builder*>(datetimeArray)->Append(value.Get<ui16>());
+            Y_VERIFY_S(status.ok(), status.ToString());
+            break;
+        }
+        // NUdf::EDataSlot::TzDatetime
+        case arrow::Type::UINT32: {
+            status = reinterpret_cast<arrow::UInt32Builder*>(datetimeArray)->Append(value.Get<ui32>());
+            Y_VERIFY_S(status.ok(), status.ToString());
+            break;
+        }
+        // NUdf::EDataSlot::TzTimestamp
+        case arrow::Type::UINT64: {
+            status = reinterpret_cast<arrow::UInt64Builder*>(datetimeArray)->Append(value.Get<ui64>());
+            Y_VERIFY_S(status.ok(), status.ToString());
+            break;
+        }
+        // NUdf::EDataSlot::TzDate32
+        case arrow::Type::INT32: {
+            status = reinterpret_cast<arrow::Int32Builder*>(datetimeArray)->Append(value.Get<i32>());
+            Y_VERIFY_S(status.ok(), status.ToString());
+            break;
+        }
+        // NUdf::EDataSlot::TzDatetime64, NUdf::EDataSlot::TzTimestamp64
+        case arrow::Type::INT64: {
+            status = reinterpret_cast<arrow::Int64Builder*>(datetimeArray)->Append(value.Get<i64>());
+            Y_VERIFY_S(status.ok(), status.ToString());
+            break;
+        }
+        default:
+            Y_DEBUG_ABORT_UNLESS(false, "Unexpected timezone datetime slot");
+            return;
+    }
+
+    status = timezoneArray->Append(value.GetTimezoneId());
+    Y_VERIFY_S(status.ok(), status.ToString());
+}
+
 template <typename TArrowType>
 void AppendFixedSizeDataValue(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value, NUdf::EDataSlot dataSlot) {
     static_assert(std::is_same_v<TArrowType, arrow::FixedSizeBinaryType>, "This function is only for FixedSizeBinaryType");
@@ -489,15 +630,6 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
             auto itemType = listType->GetItemType();
             return IsArrowCompatible(itemType);
         }
-        case TType::EKind::Dict: {
-            auto dictType = static_cast<const TDictType*>(type);
-            auto keyType = dictType->GetKeyType();
-            auto payloadType = dictType->GetPayloadType();
-            if (keyType->GetKind() == TType::EKind::Optional) {
-                return false;
-            }
-            return IsArrowCompatible(keyType) && IsArrowCompatible(payloadType);
-        }
         case TType::EKind::Variant: {
             auto variantType = static_cast<const TVariantType*>(type);
             if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
@@ -507,6 +639,7 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
             Y_VERIFY_S(innerType->IsTuple() || innerType->IsStruct(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
             return IsArrowCompatible(innerType);
         }
+        case TType::EKind::Dict:
         case TType::EKind::Block:
         case TType::EKind::Type:
         case TType::EKind::Stream:
@@ -778,7 +911,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
         case TType::EKind::EmptyList:
         case TType::EKind::EmptyDict:
             break;
-        case TType::EKind::Data: { // TODO TzDate need special care
+        case TType::EKind::Data: {
             auto dataType = static_cast<const TDataType*>(itemType);
             NUdf::TUnboxedValue result;
             bool success = SwitchMiniKQLDataTypeToArrowType(*dataType->GetDataSlot().Get(), [&]<typename TType>(TTypeWrapper<TType> typeHolder) {

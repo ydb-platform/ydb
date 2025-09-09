@@ -44,7 +44,7 @@ void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
 
     DatabasePath = CanonizePath(ClientAuthData.Database);
 
-    RequestState = ENavigateRequestState::RETRIEVING_DATABASE_PATH;
+    RequestState = ENavigateRequestState::DESCRIBING_DATABASE;
     SendDescribeRequest(ctx);
 }
 
@@ -216,7 +216,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
         }
         return;
     }
-    if (RequestState == ENavigateRequestState::RETRIEVING_DATABASE_PATH) {
+    if (RequestState == ENavigateRequestState::DESCRIBING_DATABASE) {
         Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
         IsServerless = navigate->ResultSet.front().DomainInfo->IsServerless();
 

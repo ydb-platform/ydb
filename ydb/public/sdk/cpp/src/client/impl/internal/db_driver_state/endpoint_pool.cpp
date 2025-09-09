@@ -6,7 +6,7 @@ namespace NYdb::inline Dev {
 TEndpointPool::TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client)
     : Provider_(provider)
     , LastUpdateTime_(TInstant::Zero().MicroSeconds())
-    , BalancingSettings_(client->GetBalancingSettings())
+    , BalancingPolicy_(client->GetBalancingSettings())
 {}
 
 TEndpointPool::~TEndpointPool() {
@@ -158,8 +158,8 @@ void TEndpointPool::ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb
     return Elector_.ForEachEndpoint(cb, GetLocalityShift(), std::numeric_limits<std::int32_t>::max() - 1, tag);
 }
 
-EBalancingPolicy TEndpointPool::GetBalancingPolicy() const {
-    return BalancingSettings_.Policy;
+TBalancingPolicy::TImpl::EPolicyType TEndpointPool::GetBalancingPolicyType() const {
+    return BalancingPolicy_.PolicyType;
 }
 
 void TEndpointPool::SetStatCollector(NSdkStats::TStatCollector& statCollector) {
@@ -175,35 +175,39 @@ constexpr std::int32_t TEndpointPool::GetLocalityShift() {
 
 bool TEndpointPool::IsLocalEndpoint(const Ydb::Discovery::EndpointInfo& endpoint,
                                     const std::unordered_map<std::string, Ydb::Bridge::PileState>& pileStates) const {
-    switch (BalancingSettings_.Policy) {
-        case EBalancingPolicy::UseAllNodes:
+    switch (BalancingPolicy_.PolicyType) {
+        case TBalancingPolicy::TImpl::EPolicyType::UseAllNodes:
             return true;
-        case EBalancingPolicy::UsePreferableLocation:
-            return endpoint.location() == BalancingSettings_.PolicyParams;
-        case EBalancingPolicy::UsePreferablePile: {
+        case TBalancingPolicy::TImpl::EPolicyType::UsePreferableLocation:
+            return endpoint.location() == BalancingPolicy_.Location;
+        case TBalancingPolicy::TImpl::EPolicyType::UsePreferablePile:
             if (auto it = pileStates.find(endpoint.bridge_pile_name()); it != pileStates.end()) {
-                return it->second.state() == GetPileState(BalancingSettings_.PolicyParams);
+                return GetPileState(it->second.state()) == BalancingPolicy_.PileState;
             }
             return true;
-        }
     }
+    return true;
 }
 
-Ydb::Bridge::PileState::State TEndpointPool::GetPileState(const std::string& pileState) const {
-    if (pileState.empty() || pileState == "PRIMARY") {
-        return Ydb::Bridge::PileState::PRIMARY;
-    } else if (pileState == "PROMOTED") {
-        return Ydb::Bridge::PileState::PROMOTED;
-    } else if (pileState == "SYNCHRONIZED") {
-        return Ydb::Bridge::PileState::SYNCHRONIZED;
-    } else if (pileState == "NOT_SYNCHRONIZED") {
-        return Ydb::Bridge::PileState::NOT_SYNCHRONIZED;
-    } else if (pileState == "SUSPENDED") {
-        return Ydb::Bridge::PileState::SUSPENDED;
-    } else if (pileState == "DISCONNECTED") {
-        return Ydb::Bridge::PileState::DISCONNECTED;
+EPileState TEndpointPool::GetPileState(const Ydb::Bridge::PileState::State& state) const {
+    switch (state) {
+        case Ydb::Bridge::PileState::PRIMARY:
+            return EPileState::PRIMARY;
+        case Ydb::Bridge::PileState::PROMOTED:
+            return EPileState::PROMOTED;
+        case Ydb::Bridge::PileState::SYNCHRONIZED:
+            return EPileState::SYNCHRONIZED;
+        case Ydb::Bridge::PileState::NOT_SYNCHRONIZED:
+            return EPileState::NOT_SYNCHRONIZED;
+        case Ydb::Bridge::PileState::SUSPENDED:
+            return EPileState::SUSPENDED;
+        case Ydb::Bridge::PileState::DISCONNECTED:
+            return EPileState::DISCONNECTED;
+        case Ydb::Bridge::PileState::UNSPECIFIED:
+        case Ydb::Bridge::PileState_State_PileState_State_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case Ydb::Bridge::PileState_State_PileState_State_INT_MAX_SENTINEL_DO_NOT_USE_:
+            return EPileState::UNSPECIFIED;
     }
-    return Ydb::Bridge::PileState::UNSPECIFIED;
 }
 
 } // namespace NYdb

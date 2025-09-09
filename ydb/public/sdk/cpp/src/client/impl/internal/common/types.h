@@ -16,9 +16,4 @@ namespace NYdb::inline Dev {
 using TSimpleCb = std::function<void()>;
 using TErrorCb = std::function<void(NYdbGrpc::TGrpcStatus&)>;
 
-struct TBalancingSettings {
-    EBalancingPolicy Policy;
-    std::string PolicyParams;
-};
-
 } // namespace NYdb

@@ -75,8 +75,8 @@ void TDbDriverState::ForEachForeignEndpoint(const TEndpointElectorSafe::THandleC
     EndpointPool.ForEachForeignEndpoint(cb, tag);
 }
 
-EBalancingPolicy TDbDriverState::GetBalancingPolicy() const {
-    return EndpointPool.GetBalancingPolicy();
+TBalancingPolicy::TImpl::EPolicyType TDbDriverState::GetBalancingPolicyType() const {
+    return EndpointPool.GetBalancingPolicyType();
 }
 
 std::string TDbDriverState::GetEndpoint() const {

@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/internal_header.h>
 
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/common/balancing_policies.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/internal_client/client.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>
 #include <ydb/public/sdk/cpp/src/client/impl/endpoints/endpoints.h>
@@ -39,7 +40,7 @@ public:
     void ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     void ForEachLocalEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     void ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
-    EBalancingPolicy GetBalancingPolicy() const;
+    TBalancingPolicy::TImpl::EPolicyType GetBalancingPolicyType() const;
     // TODO: Remove this mess
     void SetStatCollector(NSdkStats::TStatCollector& statCollector);
     static constexpr std::int32_t GetLocalityShift();
@@ -47,7 +48,7 @@ public:
 private:
     bool IsLocalEndpoint(const Ydb::Discovery::EndpointInfo& endpoint,
                          const std::unordered_map<std::string, Ydb::Bridge::PileState>& pileStates) const;
-    Ydb::Bridge::PileState::State GetPileState(const std::string& pileState) const;
+    EPileState GetPileState(const Ydb::Bridge::PileState::State& state) const;
 
 private:
     TListEndpointsResultProvider Provider_;
@@ -55,7 +56,7 @@ private:
     TEndpointElectorSafe Elector_;
     NThreading::TPromise<TEndpointUpdateResult> DiscoveryPromise_;
     std::atomic_uint64_t LastUpdateTime_;
-    const TBalancingSettings BalancingSettings_;
+    const TBalancingPolicy::TImpl BalancingPolicy_;
 
     NSdkStats::TStatCollector* StatCollector_ = nullptr;
 

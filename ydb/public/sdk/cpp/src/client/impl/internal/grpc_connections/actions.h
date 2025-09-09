@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/internal_header.h>
 
 #include <ydb/public/api/protos/ydb_operation.pb.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/common/balancing_policies.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/common/types.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/db_driver_state/state.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>

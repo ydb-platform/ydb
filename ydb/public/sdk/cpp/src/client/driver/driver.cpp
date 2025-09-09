@@ -41,7 +41,7 @@ public:
     size_t GetMaxQueuedRequests() const override { return MaxQueuedRequests; }
     TTcpKeepAliveSettings GetTcpKeepAliveSettings() const override { return TcpKeepAliveSettings; }
     bool GetDrinOnDtors() const override { return DrainOnDtors; }
-    TBalancingSettings GetBalancingSettings() const override { return BalancingSettings; }
+    TBalancingPolicy::TImpl GetBalancingSettings() const override { return BalancingSettings; }
     TDuration GetGRpcKeepAliveTimeout() const override { return GRpcKeepAliveTimeout; }
     bool GetGRpcKeepAlivePermitWithoutCalls() const override { return GRpcKeepAlivePermitWithoutCalls; }
     TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; }
@@ -69,7 +69,7 @@ public:
             TCP_KEEPALIVE_INTERVAL
         };
     bool DrainOnDtors = true;
-    TBalancingSettings BalancingSettings = TBalancingSettings{EBalancingPolicy::UsePreferableLocation, std::string()};
+    TBalancingPolicy::TImpl BalancingSettings = TBalancingPolicy::TImpl("");
     TDuration GRpcKeepAliveTimeout = TDuration::Seconds(10);
     bool GRpcKeepAlivePermitWithoutCalls = true;
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
@@ -170,9 +170,13 @@ TDriverConfig& TDriverConfig::SetDrainOnDtors(bool allowed) {
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetBalancingPolicy(EBalancingPolicy policy, const std::string& params) {
-    Impl_->BalancingSettings = TBalancingSettings{policy, params};
+TDriverConfig& TDriverConfig::SetBalancingPolicy(TBalancingPolicy&& policy) {
+    Impl_->BalancingSettings = std::move(*policy.Impl_);
     return *this;
+}
+
+TDriverConfig& TDriverConfig::SetBalancingPolicy(EBalancingPolicy policy, const std::string& params) {
+    return SetBalancingPolicy(TBalancingPolicy(policy, params));
 }
 
 TDriverConfig& TDriverConfig::SetGRpcKeepAliveTimeout(TDuration timeout) {
@@ -253,7 +257,7 @@ TDriverConfig TDriver::GetConfig() const {
         Impl_->TcpKeepAliveSettings_.Interval
     );
     config.SetDrainOnDtors(Impl_->DrainOnDtors_);
-    config.SetBalancingPolicy(Impl_->BalancingSettings_.Policy, Impl_->BalancingSettings_.PolicyParams);
+    config.SetBalancingPolicy(std::make_unique<TBalancingPolicy::TImpl>(Impl_->BalancingSettings_));
     config.SetGRpcKeepAliveTimeout(Impl_->GRpcKeepAliveTimeout_);
     config.SetGRpcKeepAlivePermitWithoutCalls(Impl_->GRpcKeepAlivePermitWithoutCalls_);
     config.SetSocketIdleTimeout(Impl_->SocketIdleTimeout_);

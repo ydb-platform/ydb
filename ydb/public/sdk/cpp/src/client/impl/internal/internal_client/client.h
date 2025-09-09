@@ -26,7 +26,7 @@ public:
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     virtual void DeleteChannels(const std::vector<std::string>& endpoints) = 0;
 #endif
-    virtual TBalancingSettings GetBalancingSettings() const = 0;
+    virtual TBalancingPolicy::TImpl GetBalancingSettings() const = 0;
     virtual bool StartStatCollecting(::NMonitoring::IMetricRegistry* sensorsRegistry) = 0;
     virtual ::NMonitoring::TMetricRegistry* GetMetricRegistry() = 0;
     virtual const TLog& GetLog() const = 0;

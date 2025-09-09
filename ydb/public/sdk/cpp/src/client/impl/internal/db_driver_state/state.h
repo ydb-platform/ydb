@@ -45,7 +45,7 @@ public:
     void ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     void ForEachLocalEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     void ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
-    EBalancingPolicy GetBalancingPolicy() const;
+    TBalancingPolicy::TImpl::EPolicyType GetBalancingPolicyType() const;
     std::string GetEndpoint() const;
     void SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider);
 

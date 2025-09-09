@@ -382,7 +382,7 @@ bool TGRpcConnectionsImpl::GetDrainOnDtors() const {
     return DrainOnDtors_;
 }
 
-TBalancingSettings TGRpcConnectionsImpl::GetBalancingSettings() const {
+TBalancingPolicy::TImpl TGRpcConnectionsImpl::GetBalancingSettings() const {
     return BalancingSettings_;
 }
 

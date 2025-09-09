@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    balancing_policies.cpp
     parser.cpp
     getenv.cpp
     client_pid.cpp

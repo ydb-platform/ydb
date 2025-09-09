@@ -3,6 +3,7 @@
 #include <library/cpp/logger/log.h>
 
 #include <ydb/public/sdk/cpp/src/client/impl/internal/internal_header.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/common/balancing_policies.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/common/types.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
@@ -24,7 +25,7 @@ public:
     virtual size_t GetMaxQueuedRequests() const = 0;
     virtual NYdbGrpc::TTcpKeepAliveSettings GetTcpKeepAliveSettings() const = 0;
     virtual bool GetDrinOnDtors() const = 0;
-    virtual TBalancingSettings GetBalancingSettings() const = 0;
+    virtual TBalancingPolicy::TImpl GetBalancingSettings() const = 0;
     virtual TDuration GetGRpcKeepAliveTimeout() const = 0;
     virtual bool GetGRpcKeepAlivePermitWithoutCalls() const = 0;
     virtual TDuration GetSocketIdleTimeout() const = 0;

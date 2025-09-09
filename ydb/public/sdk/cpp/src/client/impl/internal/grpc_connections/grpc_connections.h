@@ -645,7 +645,7 @@ public:
 #endif
 
     bool GetDrainOnDtors() const;
-    TBalancingSettings GetBalancingSettings() const override;
+    TBalancingPolicy::TImpl GetBalancingSettings() const override;
     bool StartStatCollecting(::NMonitoring::IMetricRegistry* sensorsRegistry) override;
     ::NMonitoring::TMetricRegistry* GetMetricRegistry() override;
     void RegisterExtension(IExtension* extension);
@@ -762,7 +762,7 @@ private:
     const i64 MaxQueuedRequests_;
     const i64 MaxQueuedResponses_;
     const bool DrainOnDtors_;
-    const TBalancingSettings BalancingSettings_;
+    const TBalancingPolicy::TImpl BalancingSettings_;
     const TDuration GRpcKeepAliveTimeout_;
     const bool GRpcKeepAlivePermitWithoutCalls_;
     const ui64 MemoryQuota_;

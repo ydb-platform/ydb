@@ -1,4 +1,2 @@
 /* custom error: Condition violated */
-pragma warning("disable","4510");
-
-select ListExtend([1],Yql::WithSideEffectsMode(Ensure(ListTake([2],0),false),AsAtom('General')))
+select ListExtend([1],WithSideEffects(Ensure(ListTake([2],0),false)))

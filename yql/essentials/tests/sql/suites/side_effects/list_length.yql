@@ -1,4 +1,2 @@
 /* custom error: Condition violated */
-pragma warning("disable","4510");
-
-select ListLength([Yql::WithSideEffectsMode(Ensure(1,false),AsAtom('General'))])
+select ListLength([WithSideEffects(Ensure(1,false))])

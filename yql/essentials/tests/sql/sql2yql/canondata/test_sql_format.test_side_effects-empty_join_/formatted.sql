@@ -1,8 +1,6 @@
 /* custom error: Condition violated */
-PRAGMA warning('disable', '4510');
-
 $input1 = ListTake([<|x: 1|>], 0);
-$input2 = Yql::WithSideEffectsMode(Ensure([<|y: 1|>], FALSE), AsAtom('General'));
+$input2 = WithSideEffects(Ensure([<|y: 1|>], FALSE));
 
 SELECT
     *

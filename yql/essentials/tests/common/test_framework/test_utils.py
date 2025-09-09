@@ -179,7 +179,7 @@ def get_config(suite, case, cfg, data_path):
     result = []
     try:
         default_cfg = get_cfg_file('default.txt', case)
-        inherit = ['canonize_peephole', 'canonize_lineage', 'peephole_use_blocks']
+        inherit = ['canonize_peephole', 'canonize_lineage', 'peephole_use_blocks', 'langver']
         with open(os.path.join(data_path, suite, default_cfg)) as cfg_file_content:
             result = [line.strip().split() for line in cfg_file_content.readlines() if line.strip() and line.strip().split()[0]]
         validate_cfg(result)

@@ -1,3 +1,2 @@
-pragma warning("disable","4510");
-select Yql::WithSideEffectsMode((not Yql::WithSideEffectsMode(x, AsAtom('General'))),AsAtom('None'))
+select WithSideEffectsMode((not WithSideEffects(x)),'None')
     and false from (select Ensure(false, false) as x)

@@ -1687,6 +1687,22 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, input[2]), expected);
     }
 
+    Y_UNIT_TEST(ColumnFromIndirectNamedNode) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString query = R"sql(
+            $x = (SELECT 1 AS a);
+            $y = $x;
+            SELECT # FROM $y;
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {ColumnName, "a"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+
     Y_UNIT_TEST(ColumnQuoted) {
         auto engine = MakeSqlCompletionEngineUT();
 
@@ -1776,6 +1792,24 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, queries[0]), expected);
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, queries[1]), expected);
+    }
+
+    Y_UNIT_TEST(ColumnAtWhereInSubquery) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString query = R"sql(
+            SELECT * FROM (
+                SELECT a AS b
+                FROM (SELECT 1 AS a) AS x
+                WHERE x.#
+            );
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {ColumnName, "a"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
     }
 
     Y_UNIT_TEST(NoBindingAtQuoted) {

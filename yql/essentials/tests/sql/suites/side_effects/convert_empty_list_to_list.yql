@@ -1,3 +1,2 @@
 /* custom error: Condition violated */
-pragma warning('disable', '4510');
-select if(true, Yql::WithSideEffectsMode(ensure([], false),AsAtom('General')), [1,2,3]);
+select if(true, WithSideEffects(ensure([], false)), [1,2,3]);

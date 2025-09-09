@@ -2344,6 +2344,65 @@ TEST(TYsonStructTest, TestComplexSerialization)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TTestOmittingConfig
+    : public TYsonStruct
+{
+    TTestSubconfigPtr RequiredSubconfig;
+    TTestSubconfigPtr OptionalSubconfig;
+
+    REGISTER_YSON_STRUCT(TTestOmittingConfig);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("required_subconfig", &TThis::RequiredSubconfig);
+        registrar.Parameter("optional_subconfig", &TThis::OptionalSubconfig)
+            .Default();
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TYsonStructTest, TestOmitting)
+{
+    TBufferStream stream;
+
+    {
+        auto config = New<TTestOmittingConfig>();
+        config->RequiredSubconfig = New<TTestSubconfig>();
+        config->OptionalSubconfig = New<TTestSubconfig>();
+
+        ::Save(&stream, config);
+        ::Load(&stream, config);
+
+        EXPECT_TRUE(config->RequiredSubconfig);
+        EXPECT_TRUE(config->OptionalSubconfig);
+
+        auto node = ConvertToNode(config)->AsMap();
+        auto description = Format("Actual node: %v", ConvertToYsonString(node, EYsonFormat::Pretty).ToString());
+        EXPECT_TRUE(node->FindChild("required_subconfig")) << description;
+        EXPECT_TRUE(node->FindChild("optional_subconfig")) << description;
+    }
+
+    {
+        auto config = New<TTestOmittingConfig>();
+        config->RequiredSubconfig = New<TTestSubconfig>();
+        config->OptionalSubconfig = nullptr;
+
+        ::Save(&stream, config);
+        ::Load(&stream, config);
+
+        EXPECT_TRUE(config->RequiredSubconfig);
+        EXPECT_FALSE(config->OptionalSubconfig);
+
+        auto node = ConvertToNode(config)->AsMap();
+        auto description = Format("Actual node: %v", ConvertToYsonString(node, EYsonFormat::Pretty).ToString());
+        EXPECT_TRUE(node->FindChild("required_subconfig")) << description;
+        EXPECT_FALSE(node->FindChild("optional_subconfig")) << description;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TTestOptionalNoInit
     : public NYT::NYTree::TYsonStructLite
 {

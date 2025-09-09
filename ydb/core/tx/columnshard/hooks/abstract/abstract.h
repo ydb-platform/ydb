@@ -413,6 +413,11 @@ private:
     }
 
 public:
+    ~TControllers() {
+        auto* ptr = CSControllerPtr.load();
+        delete ptr;
+    }
+
     template <class TController>
     class TGuard: TMoveOnly {
     private:

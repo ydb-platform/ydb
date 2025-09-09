@@ -6,8 +6,9 @@ import allure
 import time
 import traceback
 
-from .clickbench import ClickbenchParallelBase
+from .clickbench import LoadSuiteBase, ClickbenchParallelBase
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from threading import Thread, Event
 from datetime import datetime
 from matplotlib import pyplot
@@ -50,9 +51,10 @@ class ResourcePool:
         return result
 
 
-class WorkloadMangerClickbenchBase(ClickbenchParallelBase):
+class WorkloadMangerBase(LoadSuiteBase):
     stop_checking = Event()
     signal_errors: list[tuple[datetime, str]] = []
+    threads: int = 1
 
     @classmethod
     def check_signals_thread(cls) -> None:
@@ -106,20 +108,68 @@ class WorkloadMangerClickbenchBase(ClickbenchParallelBase):
             sessions_pool.execute_with_retries(pool.get_create_users_sql())
             sessions_pool.execute_with_retries(pool.get_create_sql())
 
-        time.sleep(30)
-        check_thread = Thread(target=cls.check_signals_thread)
-        cls.stop_checking.clear()
+    @classmethod
+    def before_workload(cls):
+        pass
+
+    @classmethod
+    def after_workload(cls):
+        pass
+
+    def test(self):
+        check_thread = Thread(target=self.check_signals_thread)
+        self.stop_checking.clear()
         check_thread.start()
         try:
-            super().do_setup_class()
+            qparams = self._get_query_settings()
+            self.save_nodes_state()
+            self.before_workload()
+            results = YdbCliHelper.workload_run(
+                path=self.get_path(),
+                query_names=self.get_query_list(),
+                iterations=qparams.iterations,
+                workload_type=self.workload_type,
+                timeout=qparams.timeout,
+                check_canonical=self.check_canonical,
+                query_syntax=self.query_syntax,
+                scale=self.scale,
+                query_prefix=qparams.query_prefix,
+                external_path=self.get_external_path(),
+                threads=self.threads,
+                users=self.get_users(),
+            )
+            self.after_workload()
         except BaseException:
             raise
         finally:
-            cls.stop_checking.set()
+            self.stop_checking.set()
             check_thread.join()
-        if len(cls.signal_errors) > 0:
-            errors = '\n'.join([f'{d}: {e}' for d, e in cls.signal_errors])
+        for query, result in results.items():
+            try:
+                with allure.step(query):
+                    self.process_query_result(result, query, False)
+            except BaseException:
+                pass
+        overall_result = YdbCliHelper.WorkloadRunResult()
+        overall_result.merge(*results.values())
+        overall_result.iterations.clear()
+        self.process_query_result(overall_result, 'test', True)
+        if len(self.signal_errors) > 0:
+            errors = '\n'.join([f'{d}: {e}' for d, e in self.signal_errors])
             pytest.fail(f'Errors while execute: {errors}')
+
+
+class WorkloadMangerClickbenchBase(WorkloadMangerBase):
+    workload_type = ClickbenchParallelBase.workload_type
+    iterations: int = ClickbenchParallelBase.iterations
+
+    @classmethod
+    def get_query_list(cls) -> list[str]:
+        return ClickbenchParallelBase.get_query_list()
+
+    @classmethod
+    def get_path(cls) -> str:
+        return ClickbenchParallelBase.get_path()
 
 
 class TestWorkloadMangerClickbenchConcurentQueryLimit(WorkloadMangerClickbenchBase):
@@ -186,8 +236,12 @@ class TestWorkloadMangerClickbenchComputeSheduler(WorkloadMangerClickbenchBase):
                 else:
                     record[k] = v
             norm_metrics.append(record)
-            report += (f'<tr><th style="padding-left: 10; padding-right: 10">{datetime.fromtimestamp(cur_t)}</th>' +
-                       ''.join([f'<td style="padding-left: 10; padding-right: 10">{record.get(k):.1f}</td>' for k in keys]) + '</tr>\n')
+            report += f'<tr><th style="padding-left: 10; padding-right: 10">{datetime.fromtimestamp(cur_t)}</th>'
+            for k in keys:
+                v = record.get(k)
+                v = f'{record.get(k):.1f}' if v is not None else ''
+                report += f'<td style="padding-left: 10; padding-right: 10">{v}</td>'
+            report += '</tr>\n'
         report += '</table></body></html>'
         allure.attach(report, 'metrics', allure.attachment_type.HTML)
         times = [t for t, _ in cls.metrics]

@@ -818,21 +818,12 @@ class LoadSuiteParallel(LoadSuiteBase):
     def get_path(cls) -> str:
         return ''
 
-    @classmethod
-    def before_workload(cls):
-        pass
-
-    @classmethod
-    def after_workload(cls):
-        pass
-
     __results: dict[str, YdbCliHelper.WorkloadRunResult] = {}
 
     @classmethod
     def do_setup_class(cls):
         qparams = cls._get_query_settings()
         cls.save_nodes_state()
-        cls.before_workload()
         cls.__results = YdbCliHelper.workload_run(
             path=cls.get_path(),
             query_names=cls.get_query_list(),
@@ -847,7 +838,6 @@ class LoadSuiteParallel(LoadSuiteBase):
             threads=cls.threads,
             users=cls.get_users(),
         )
-        cls.after_workload()
 
     def test(self, query_name):
         self.process_query_result(result=self.__results[query_name], query_name=query_name, upload=True)

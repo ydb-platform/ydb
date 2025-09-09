@@ -1,4 +1,2 @@
 /* custom error: Condition violated */
-pragma warning("disable","4510");
-
-select (1,Yql::WithSideEffectsMode(Ensure(2,false),AsAtom('General'))).0
+select (1,WithSideEffects(Ensure(2,false))).0

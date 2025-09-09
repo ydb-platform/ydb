@@ -1508,6 +1508,14 @@
     "kind": "Normal"
   },
   {
+    "name": "WithSideEffects",
+    "kind": "Normal"
+  },
+  {
+    "name": "WithSideEffectsMode",
+    "kind": "Normal"
+  },
+  {
     "name": "WorldCode",
     "kind": "Normal"
   }

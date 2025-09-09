@@ -151,16 +151,16 @@ void zstd_module_init(PyObject *m) {
     */
     PyObject *features = NULL;
     PyObject *feature = NULL;
-    unsigned zstd_ver_no = ZSTD_versionNumber();
-    unsigned our_hardcoded_version = 10507;
-    if (ZSTD_VERSION_NUMBER != our_hardcoded_version ||
-        zstd_ver_no != our_hardcoded_version) {
+    unsigned zstd_version_min = 10507;
+    // if either compile-time or runtime version of libzstd is lower than expected, abort initialization
+    if (ZSTD_VERSION_NUMBER < zstd_version_min ||
+        ZSTD_versionNumber() < zstd_version_min) {
         PyErr_Format(
             PyExc_ImportError,
             "zstd C API versions mismatch; Python bindings were not "
             "compiled/linked against expected zstd version (%u returned by the "
             "lib, %u hardcoded in zstd headers, %u hardcoded in the cext)",
-            zstd_ver_no, ZSTD_VERSION_NUMBER, our_hardcoded_version);
+            ZSTD_versionNumber(), ZSTD_VERSION_NUMBER, zstd_version_min);
         return;
     }
 

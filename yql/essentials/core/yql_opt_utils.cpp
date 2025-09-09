@@ -2678,6 +2678,14 @@ TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprConte
     }
 }
 
+TExprNode::TPtr KeepSideEffects(TExprNode::TPtr node, TExprNode::TPtr src, TExprContext& ctx) {
+    if (!src->HasSideEffects()) {
+        return node;
+    }
+
+    return ctx.NewCallable(src->Pos(), "Seq", { src, node });
+}
+
 TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root) {
     auto pRoot = &root;
 

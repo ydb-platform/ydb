@@ -102,5 +102,16 @@ tasks.withType<Copy>() {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
+{%- if hasResources %}
+
+tasks.processResources.configure {
+    dependsOn("compileJava")
+}
+
+tasks.processTestResources.configure {
+    dependsOn("compileTestJava")
+}
+{%- endif %}
+
 tasks.getByName("sourcesJar").dependsOn(tasks.compileJava)
 tasks.getByName("sourcesJar").mustRunAfter(tasks.compileTestJava)

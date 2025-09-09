@@ -476,14 +476,11 @@ public:
     static ICSController::TPtr GetColumnShardController() {
         auto* controllers = Singleton<TControllers>();
         controllers->EnsureCSController();
-        
-        // Безопасное чтение с проверкой
         auto* ptr = controllers->CSControllerPtr.load();
         if (ptr) {
-            return *ptr;  // Возвращаем копию shared_ptr
+            return *ptr;
         }
-        
-        // Fallback - создаем новый (не должно происходить)
+
         return std::make_shared<ICSController>();
     }
 

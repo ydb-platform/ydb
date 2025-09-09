@@ -407,15 +407,16 @@ private:
     IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
     
     void EnsureCSController() {
-        ICSController::TPtr* expected = CSControllerPtr.load();
-        if (expected) {
-            return;
-        }
-
-        expected = nullptr;
+        ICSController::TPtr* expected = nullptr;
         if (CSControllerPtr.compare_exchange_strong(expected, nullptr)) {
             auto* newPtr = new ICSController::TPtr(std::make_shared<ICSController>());
             CSControllerPtr.store(newPtr);
+        }
+
+        auto* newPtr = new ICSController::TPtr(std::make_shared<ICSController>());
+        expected = nullptr;
+        if (!CSControllerPtr.compare_exchange_strong(expected, newPtr)) {
+            delete newPtr;
         }
     }
     

@@ -401,9 +401,10 @@ ui64 TPartition::GetUsedStorage(const TInstant& now) {
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 
-ui64 TPartition::ImportantClientsMinOffset() const {
-    ui64 minOffset = BlobEncoder.EndOffset;
-    for (const auto& consumer : Config.GetConsumers()) {
+TImportantCunsumerOffsetTracker TPartition::ImportantClientsMinOffset() const {
+    std::vector<TImportantCunsumerOffsetTracker::TConsumerOffset> consumersToCheck;
+    for (size_t consumerIdx = 0; consumerIdx < Config.ConsumersSize(); ++consumerIdx) {
+        const auto& consumer = Config.GetConsumers(consumerIdx);
         if (!consumer.GetImportant()) {
             continue;
         }
@@ -412,11 +413,21 @@ ui64 TPartition::ImportantClientsMinOffset() const {
         ui64 curOffset = CompactionBlobEncoder.StartOffset;
         if (userInfo && userInfo->Offset >= 0) //-1 means no offset
             curOffset = userInfo->Offset;
-        minOffset = Min<ui64>(minOffset, curOffset);
-    }
 
-    return minOffset;
+        TDuration retentionPeriod = consumer.HasRetentionPeriodMs() && consumer.GetRetentionPeriodMs() < TDuration::Max().MilliSeconds()
+            ? TDuration::MilliSeconds(consumer.GetRetentionPeriodMs())
+            : TDuration::Max();
+        if (consumersToCheck.empty()) {
+            consumersToCheck.reserve(Config.ConsumersSize() - consumerIdx);
+        }
+        consumersToCheck.push_back(TImportantCunsumerOffsetTracker::TConsumerOffset{
+            .RetentionPeriod = retentionPeriod,
+            .Offset = curOffset,
+        });
+    }
+    return TImportantCunsumerOffsetTracker(std::move(consumersToCheck));
 }
+
 
 TInstant TPartition::GetEndWriteTimestamp() const {
     return EndWriteTimestamp;
@@ -530,22 +541,16 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
 
     const bool hasStorageLimit = partConfig.HasStorageLimitBytes();
     const auto now = ctx.Now();
-    const ui64 importantConsumerMinOffset = ImportantClientsMinOffset();
+    const auto importantConsumerOffsetTracker = ImportantClientsMinOffset();
 
     bool hasDrop = false;
     while (CompactionBlobEncoder.DataKeysBody.size() > 1) {
-        auto& nextKey = CompactionBlobEncoder.DataKeysBody[1].Key;
-        if (importantConsumerMinOffset < nextKey.GetOffset()) {
-            // The first message in the next blob was not read by an important consumer.
-            // We also save the current blob, since not all messages from it could be read.
-            break;
-        }
-        if (importantConsumerMinOffset == nextKey.GetOffset() && nextKey.GetPartNo() != 0) {
-            // We save all the blobs that contain parts of the last message read by an important consumer.
+        const auto& nextKey = CompactionBlobEncoder.DataKeysBody[1].Key;
+        const auto& firstKey = CompactionBlobEncoder.DataKeysBody.front();
+        if (importantConsumerOffsetTracker.ShouldKeepCurrentKey(firstKey, nextKey, now)) {
             break;
         }
 
-        const auto& firstKey = CompactionBlobEncoder.DataKeysBody.front();
         if (hasStorageLimit) {
             const auto bodySize = CompactionBlobEncoder.BodySize - firstKey.Size;
             if (bodySize < partConfig.GetStorageLimitBytes()) {
@@ -4268,7 +4273,7 @@ void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
 IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration,
     const TActorId& blobCache, const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace,
-               ui32 numChannels, const TActorId& writeQuoterActorId, 
+               ui32 numChannels, const TActorId& writeQuoterActorId,
                TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition) {
 
     return new TPartition(tabletId, partition, tablet, tabletGeneration, blobCache, topicConverter, dcId, isServerless,

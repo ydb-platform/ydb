@@ -70,7 +70,7 @@ TString MetricTypeToString(MetricType type) {
     }
 }
 
-TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& response, const std::map<TString, TString>& knownSelectors) {
+TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& response, const TSelectors& knownSelectors) {
     TGetLabelsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
@@ -101,7 +101,7 @@ TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& respon
             result.Labels.push_back(name.GetString());
         }
     }
-    for (const auto& [key, value] : knownSelectors) {
+    for (const auto& [key, selector] : knownSelectors) {
         result.Labels.push_back(key);
     }
 
@@ -145,12 +145,12 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
             return TListMetricsResponse("Invalid list metrics result from monitoring api");
         }
 
-        std::map<TString, TString> metricLabels;
+        TSelectors selectors;
         for (const auto& [key, value] : metricObj["labels"].GetMap()) {
-            metricLabels[key] = value.GetString();
+            selectors[key] = {"==", value.GetString()};
         }
 
-        result.Metrics.emplace_back(std::move(metricLabels), metricObj["type"].GetString());
+        result.Metrics.emplace_back(std::move(selectors), metricObj["type"].GetString());
     }
 
     return TListMetricsResponse(std::move(result));
@@ -216,16 +216,19 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
     for (const auto& queryResponse : responseValue.timeseries_vector().values()) {
         auto type = MetricTypeToString(queryResponse.type());
 
-        std::map<TString, TString> labels(queryResponse.labels().begin(), queryResponse.labels().end());
+        TSelectors selectors;
+        for (const auto& [key, value] : queryResponse.labels()) {
+            selectors[key] = {"==", value};
+        }
         std::vector<int64_t> timestamps(queryResponse.timestamp_values().values().begin(), queryResponse.timestamp_values().values().end());
         std::vector<double> values(queryResponse.double_values().values().begin(), queryResponse.double_values().values().end());
 
         if (TString name = queryResponse.name()) {
-            labels["name"] = name;
+            selectors["name"] = {"==", name};
         }
 
         TMetric metric {
-            .Labels = labels,
+            .Selectors = selectors,
             .Type = type,
         };
 
@@ -260,7 +263,7 @@ public:
     }
 
 public:
-    NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const override final {
+    NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TSelectors& selectors, TInstant from, TInstant to) const override final {
         auto requestUrl = BuildGetLabelsUrl(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TGetLabelsResponse>();
@@ -277,7 +280,7 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TListMetricsResponse> ListMetrics(const std::map<TString, TString>& selectors, TInstant from, TInstant to, int pageSize, int page) const override final {
+    NThreading::TFuture<TListMetricsResponse> ListMetrics(const TSelectors& selectors, TInstant from, TInstant to, int pageSize, int page) const override final {
         auto requestUrl = BuildListMetricsUrl(selectors, from, to, pageSize, page);
 
         auto resultPromise = NThreading::NewPromise<TListMetricsResponse>();
@@ -294,7 +297,7 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const override final {        
+    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const TSelectors& selectors, TInstant from, TInstant to) const override final {        
         auto resultPromise = NThreading::NewPromise<TGetPointsCountResponse>();
 
         TInstant sevenDaysAgo = TInstant::Now() - TDuration::Days(7); // points older then a week ago are automatically downsampled by solomon backend
@@ -332,21 +335,22 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TGetDataResponse> GetData(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const override final {
+    NThreading::TFuture<TGetDataResponse> GetData(const TSelectors& selectors, TInstant from, TInstant to) const override final {
         auto fullSelectors = AddRequiredLabels(selectors);
+        bool isMonitoring = Settings.GetClusterType() == NProto::CT_MONITORING;
 
-        if (Settings.GetClusterType() == NProto::CT_MONITORING) {
+        if (isMonitoring) {
             fullSelectors["folderId"] = fullSelectors["cluster"];
             fullSelectors.erase("cluster");
             fullSelectors.erase("project");
         }
 
-        TString program = BuildSelectorsProgram(fullSelectors, true);
+        TString program = BuildSelectorsProgram(fullSelectors, isMonitoring);
 
         return GetData(program, from, to);
     }
 
-    NThreading::TFuture<TGetDataResponse> GetData(TString program, TInstant from, TInstant to) const override final {
+    NThreading::TFuture<TGetDataResponse> GetData(const TString& program, TInstant from, TInstant to) const override final {
         const auto request = BuildGetDataRequest(program, from, to);
 
         NYdbGrpc::TCallMeta callMeta;
@@ -461,7 +465,7 @@ private:
         }
     }
 
-    TString BuildGetLabelsUrl(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const {
+    TString BuildGetLabelsUrl(const TSelectors& selectors, TInstant from, TInstant to) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -480,7 +484,7 @@ private:
         return builder.Build();
     }
 
-    TString BuildListMetricsUrl(const std::map<TString, TString>& selectors, TInstant from, TInstant to, int pageSize, int page) const {
+    TString BuildListMetricsUrl(const TSelectors& selectors, TInstant from, TInstant to, int pageSize, int page) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -566,30 +570,30 @@ private:
         return request;
     }
 
-    std::map<TString, TString> AddRequiredLabels(const std::map<TString, TString>& labels) const {
-        std::map<TString, TString> fullSelectors;
+    TSelectors AddRequiredLabels(const TSelectors& selectors) const {
+        TSelectors fullSelectors;
         for (const auto& labelName : Settings.GetRequiredLabelNames()) {
-            if (auto it = labels.find(labelName); it != labels.end()) {
+            if (auto it = selectors.find(labelName); it != selectors.end()) {
                 fullSelectors[labelName] = it->second;
             } else {
-                fullSelectors[labelName] = "-";
+                fullSelectors[labelName] = {"=", "-"};
             }
         }
-        return fullSelectors;
+        return selectors;
     }
 
-    TString BuildSelectorsProgram(const std::map<TString, TString>& labels, bool useNewFormat = false) const {
+    TString BuildSelectorsProgram(const TSelectors& selectors, bool useNewFormat = false) const {
         std::vector<TString> mappedValues;
-        for (const auto& [key, value] : labels) {
+        for (const auto& [key, selector] : selectors) {
             if (useNewFormat && key == "name"sv) {
                 continue;
             }
-            mappedValues.push_back(TStringBuilder() << key << "=\"" << value << "\"");
+            mappedValues.push_back(TStringBuilder() << key << selector.Op << "\"" << selector.Value << "\"");
         }
 
         TStringBuilder result;
-        if (auto it = labels.find("name"); useNewFormat && it != labels.end()) {
-            result << "\"" << it->second << "\"";
+        if (auto it = selectors.find("name"); useNewFormat && it !=selectors.end()) {
+            result << "\"" << it->second.Value << "\"";
         }
 
         return result << "{" << JoinSeq(",", mappedValues) << "}";

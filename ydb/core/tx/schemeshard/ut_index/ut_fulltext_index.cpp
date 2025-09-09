@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
             layout: FLAT
             columns: {
                 column: "text"
-                settings: {
+                analyzers: {
                     tokenizer: STANDARD
                     use_filter_ngram: true
                     filter_ngram_max_length: 42
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
             layout: FLAT
             columns: {
                 column: "text"
-                settings: {
+                analyzers: {
                     tokenizer: STANDARD
                     use_filter_ngram: true
                     filter_ngram_max_length: 42
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
             layout: FLAT
             columns: {
                 column: "text"
-                settings: {
+                analyzers: {
                     tokenizer: STANDARD
                     use_filter_ngram: true
                     filter_ngram_max_length: 42
@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
             layout: FLAT
             columns: {
                 column: "text_wrong"
-                settings: {
+                analyzers: {
                     tokenizer: STANDARD
                     use_filter_ngram: true
                     filter_ngram_max_length: 42

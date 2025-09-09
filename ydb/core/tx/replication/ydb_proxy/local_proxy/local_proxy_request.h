@@ -4,18 +4,17 @@
 
 namespace NKikimr::NReplication {
 
-class TLocalProxyRequest : public NKikimr::NGRpcService::IRequestOpCtx {
+class TLocalProxyRequest : public NKikimr::NGRpcService::IRequestOpCtx
+                         , public NKikimr::NGRpcService::IInternalRequestCtx {
 public:
     using TRequest = TLocalProxyRequest;
 
     TLocalProxyRequest(
-           // TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString path,
             TString databaseName,
             std::unique_ptr<google::protobuf::Message>&& request,
             const std::function<void(Ydb::StatusIds::StatusCode, const google::protobuf::Message*)> sendResultCallback)
-        : //UserToken(userToken)
-         Path(path)
+        : Path(path)
         , DatabaseName(databaseName)
         , Request(std::move(request))
         , SendResultCallback(sendResultCallback)

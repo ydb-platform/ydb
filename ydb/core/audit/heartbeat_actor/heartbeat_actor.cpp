@@ -1,5 +1,7 @@
 #include "heartbeat_actor.h"
 
+#include <ydb/core/audit/audit_config/audit_config.h>
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
@@ -13,14 +15,23 @@ namespace {
 
 class THeartbeatActor : public NActors::TActorBootstrapped<THeartbeatActor> {
 public:
-    explicit THeartbeatActor(TDuration heartbeatInterval)
-        : HeartbeatInterval(heartbeatInterval)
+    explicit THeartbeatActor(const TAuditConfig& auditConfig)
+        : HeartbeatInterval(GetInterval(auditConfig))
     {
+    }
+
+    static TDuration GetInterval(const TAuditConfig& auditConfig) {
+        if (auditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::AuditHeartbeat, NKikimrConfig::TAuditConfig::TLogClassConfig::Completed, NACLibProto::SUBJECT_TYPE_ANONYMOUS)) {
+            return TDuration::Seconds(auditConfig.GetHeartbeat().GetIntervalSeconds());
+        }
+        return TDuration::Zero();
     }
 
     void Bootstrap() {
         Become(&THeartbeatActor::StateFunc);
-        PerformHeartbeat();
+        if (HeartbeatInterval) {
+            PerformHeartbeat();
+        }
     }
 
     void HeartbeatLog() {
@@ -30,6 +41,7 @@ public:
             AUDIT_PART("sanitized_token", "{none}")
             AUDIT_PART("operation", "HEARTBEAT")
             AUDIT_PART("status", "SUCCESS")
+            AUDIT_PART("node_id", ToString(SelfId().NodeId()))
         );
     }
 
@@ -52,8 +64,8 @@ private:
 
 }
 
-std::unique_ptr<NActors::IActor> CreateHeartbeatActor(TDuration heartbeatInterval) {
-    return std::make_unique<THeartbeatActor>(heartbeatInterval);
+std::unique_ptr<NActors::IActor> CreateHeartbeatActor(const TAuditConfig& auditConfig) {
+    return std::make_unique<THeartbeatActor>(auditConfig);
 }
 
 } // namespace NKikimr::NAudit

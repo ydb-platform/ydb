@@ -1,7 +1,9 @@
 #include "audit_log_service.h"
 #include "audit_log.h"
 
+#include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/audit/heartbeat_actor/heartbeat_actor.h>
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
@@ -124,8 +126,8 @@ public:
         return LogQueue->Pop();
     }
 
-    void MakeHeartbeatActor(TDuration interval) {
-        auto actor = CreateHeartbeatActor(interval);
+    void MakeHeartbeatActor(const TAuditConfig& auditConfig) {
+        auto actor = CreateHeartbeatActor(auditConfig);
         Runtime.Register(actor.release());
     }
 
@@ -171,12 +173,18 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
 
 Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
     Y_UNIT_TEST(LoggingHeartbeat) {
+        NKikimrConfig::TAuditConfig protoCfg;
+        protoCfg.MutableHeartbeat()->SetIntervalSeconds(1);
+        auto* logClassSettings = protoCfg.AddLogClassConfig();
+        logClassSettings->SetLogClass(NKikimrConfig::TAuditConfig::TLogClassConfig::AuditHeartbeat);
+        logClassSettings->SetEnableLogging(true);
+        TAuditConfig cfg(protoCfg);
         TTestAuditLogService test(NKikimrConfig::TAuditConfig::TXT);
-        test.MakeHeartbeatActor(TDuration::MilliSeconds(100));
+        test.MakeHeartbeatActor(cfg);
 
         auto waitAndCheckLog = [&]() {
             const TString log = test.WaitAuditLog();
-            UNIT_ASSERT_STRING_CONTAINS(log, "component=audit, subject=metadata@system, sanitized_token={none}, operation=HEARTBEAT, status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(log, "component=audit, subject=metadata@system, sanitized_token={none}, operation=HEARTBEAT, status=SUCCESS, node_id=1");
         };
 
         waitAndCheckLog();

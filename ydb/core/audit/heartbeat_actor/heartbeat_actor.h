@@ -10,6 +10,8 @@ class IActor;
 
 namespace NKikimr::NAudit {
 
-std::unique_ptr<NActors::IActor> CreateHeartbeatActor(TDuration heartbeatInterval);
+class TAuditConfig;
+
+std::unique_ptr<NActors::IActor> CreateHeartbeatActor(const TAuditConfig& auditConfig);
 
 }   // namespace NKikimr::NAudit

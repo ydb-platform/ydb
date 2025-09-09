@@ -90,29 +90,6 @@ TExprBase MakeInsertIndexRows(const NYql::NNodes::TExprBase& inputRows, const TK
 
 } // namespace
 
-TVector<TStringBuf> BuildVectorIndexPostingColumns(const TKikimrTableDescription& table,
-    const TIndexDescription* indexDesc) {
-    TVector<TStringBuf> indexTableColumns;
-    THashSet<TStringBuf> indexTableColumnSet;
-
-    indexTableColumns.emplace_back(NTableIndex::NKMeans::ParentColumn);
-    indexTableColumnSet.insert(NTableIndex::NKMeans::ParentColumn);
-
-    for (const auto& column : table.Metadata->KeyColumnNames) {
-        if (indexTableColumnSet.insert(column).second) {
-            indexTableColumns.emplace_back(column);
-        }
-    }
-
-    for (const auto& column : indexDesc->DataColumns) {
-        if (indexTableColumnSet.insert(column).second) {
-            indexTableColumns.emplace_back(column);
-        }
-    }
-
-    return indexTableColumns;
-}
-
 TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlInsertRowsIndex>()) {
         return node;

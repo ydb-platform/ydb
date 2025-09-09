@@ -41,42 +41,6 @@ TDqPhyPrecompute PrecomputeDictKeys(const TCondenseInputResult& condenseResult, 
         .Done();
 }
 
-TDqStageBase ReadTableToStage(const TExprBase& expr, TExprContext& ctx) {
-    if (expr.Maybe<TDqStageBase>()) {
-        return expr.Cast<TDqStageBase>();
-    }
-    if (expr.Maybe<TDqCnUnionAll>()) {
-        return expr.Cast<TDqCnUnionAll>().Output().Stage();
-    }
-    auto pos = expr.Pos();
-    TVector<TExprNode::TPtr> inputs;
-    TVector<TExprNode::TPtr> args;
-    TNodeOnNodeOwnedMap replaces;
-    int i = 1;
-    VisitExpr(expr.Ptr(), [&](const TExprNode::TPtr& node) {
-        TExprBase expr(node);
-        if (auto cast = expr.Maybe<TDqCnUnionAll>()) {
-            auto newArg = ctx.NewArgument(pos, TStringBuilder() << "rows" << i);
-            inputs.emplace_back(node);
-            args.emplace_back(newArg);
-            replaces.emplace(expr.Raw(), newArg);
-            return false;
-        }
-        return true;
-    });
-    return Build<TDqStage>(ctx, pos)
-        .Inputs()
-            .Add(inputs)
-            .Build()
-        .Program()
-            .Args(args)
-            .Body(ctx.ReplaceNodes(expr.Ptr(), replaces))
-            .Build()
-        .Settings()
-            .Build()
-        .Done();
-}
-
 TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
     const TSecondaryIndexes& indexes, const TKqlDeleteRowsIndex& del,
     const TExprBase& lookupKeys, std::function<TExprBase(const TVector<TStringBuf>&)> project,
@@ -140,62 +104,6 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
 }
 
 } // namespace
-
-TExprBase BuildVectorIndexPostingRows(const TKikimrTableDescription& table,
-    const TKqpTable& tableNode,
-    const TString& indexName,
-    const TVector<TStringBuf>& indexTableColumns,
-    const TExprBase& inputRows,
-    bool withData,
-    TPositionHandle pos, TExprContext& ctx) {
-    // Generate input type for vector resolve
-    TVector<const TItemExprType*> rowItems;
-    for (const auto& column : indexTableColumns) {
-        auto type = table.GetColumnType(TString(column));
-        YQL_ENSURE(type, "No key column: " << column);
-        auto itemType = ctx.MakeType<TItemExprType>(column, type);
-        YQL_ENSURE(itemType->Validate(pos, ctx));
-        rowItems.push_back(itemType);
-    }
-    auto rowType = ctx.MakeType<TStructExprType>(rowItems);
-    YQL_ENSURE(rowType->Validate(pos, ctx));
-    const TTypeAnnotationNode* resolveInputType = ctx.MakeType<TListExprType>(rowType);
-
-    auto resolveInput = (inputRows.Maybe<TDqCnUnionAll>()
-        ? inputRows.Maybe<TDqCnUnionAll>().Cast().Output()
-        : Build<TDqOutput>(ctx, pos)
-            .Stage(ReadTableToStage(inputRows, ctx))
-            .Index().Build(0)
-            .Done());
-
-    auto resolveOutput = Build<TKqpCnVectorResolve>(ctx, pos)
-        .Output(resolveInput)
-        .Table(tableNode)
-        .InputType(ExpandType(pos, *resolveInputType, ctx))
-        .Index(ctx.NewAtom(pos, indexName))
-        .WithData(ctx.NewAtom(pos, withData ? "true" : "false"))
-        .Done();
-
-    auto resolveStage = Build<TDqStage>(ctx, pos)
-        .Inputs()
-            .Add(resolveOutput)
-            .Build()
-        .Program()
-            .Args({"rows"})
-            .Body<TCoToStream>()
-                .Input("rows")
-                .Build()
-            .Build()
-        .Settings().Build()
-        .Done();
-
-    return Build<TDqCnUnionAll>(ctx, pos)
-        .Output()
-            .Stage(resolveStage)
-            .Index().Build(0)
-            .Build()
-        .Done();
-}
 
 TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlDeleteRowsIndex>()) {

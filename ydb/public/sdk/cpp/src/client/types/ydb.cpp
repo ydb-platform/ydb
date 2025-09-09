@@ -26,8 +26,8 @@ TBalancingPolicy TBalancingPolicy::UseAllNodes() {
     return TBalancingPolicy(TImpl::UseAllNodes());
 }
 
-TBalancingPolicy TBalancingPolicy::UsePreferablePile(EPileState pileState) {
-    return TBalancingPolicy(TImpl::UsePreferablePile(pileState));
+TBalancingPolicy TBalancingPolicy::UsePreferablePileState(EPileState pileState) {
+    return TBalancingPolicy(TImpl::UsePreferablePileState(pileState));
 }
 
 TBalancingPolicy::TBalancingPolicy(std::unique_ptr<TImpl>&& impl)

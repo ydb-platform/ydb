@@ -58,7 +58,7 @@ public:
 
     //! EXPERIMENTAL
     //! Use pile with preferable state
-    static TBalancingPolicy UsePreferablePile(EPileState pileState = EPileState::PRIMARY);
+    static TBalancingPolicy UsePreferablePileState(EPileState pileState = EPileState::PRIMARY);
 
     class TImpl;
 private:

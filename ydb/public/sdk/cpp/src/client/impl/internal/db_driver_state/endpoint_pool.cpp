@@ -180,7 +180,7 @@ bool TEndpointPool::IsLocalEndpoint(const Ydb::Discovery::EndpointInfo& endpoint
             return true;
         case TBalancingPolicy::TImpl::EPolicyType::UsePreferableLocation:
             return endpoint.location() == BalancingPolicy_.Location;
-        case TBalancingPolicy::TImpl::EPolicyType::UsePreferablePile:
+        case TBalancingPolicy::TImpl::EPolicyType::UsePreferablePileState:
             if (auto it = pileStates.find(endpoint.bridge_pile_name()); it != pileStates.end()) {
                 return GetPileState(it->second.state()) == BalancingPolicy_.PileState;
             }

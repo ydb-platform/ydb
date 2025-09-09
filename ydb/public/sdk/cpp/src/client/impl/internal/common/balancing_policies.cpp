@@ -11,7 +11,7 @@ std::unique_ptr<TBalancingPolicy::TImpl> TBalancingPolicy::TImpl::UsePreferableL
     return std::make_unique<TImpl>(location);
 }
 
-std::unique_ptr<TBalancingPolicy::TImpl> TBalancingPolicy::TImpl::UsePreferablePile(EPileState pileState) {
+std::unique_ptr<TBalancingPolicy::TImpl> TBalancingPolicy::TImpl::UsePreferablePileState(EPileState pileState) {
     return std::make_unique<TImpl>(pileState);
 }
 

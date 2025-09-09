@@ -100,7 +100,8 @@ public:
     TDriverConfig& SetDrainOnDtors(bool allowed);
 
     //! Set policy for balancing
-    TDriverConfig& SetBalancingPolicy(TBalancingPolicy&& policy = TBalancingPolicy::UsePreferableLocation());
+    //! default: TBalancingPolicy::UsePreferableLocation()
+    TDriverConfig& SetBalancingPolicy(TBalancingPolicy&& policy);
 
     //! DEPRECATED
     //! Set policy for balancing

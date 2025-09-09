@@ -14,14 +14,14 @@ public:
     enum class EPolicyType {
         UseAllNodes,
         UsePreferableLocation,
-        UsePreferablePile
+        UsePreferablePileState
     };
 
     static std::unique_ptr<TImpl> UseAllNodes();
 
     static std::unique_ptr<TImpl> UsePreferableLocation(const std::string& location);
 
-    static std::unique_ptr<TImpl> UsePreferablePile(EPileState pileState);
+    static std::unique_ptr<TImpl> UsePreferablePileState(EPileState pileState);
 
     TImpl()
         : PolicyType(EPolicyType::UseAllNodes)
@@ -33,7 +33,7 @@ public:
     {}
 
     TImpl(EPileState pileState)
-        : PolicyType(EPolicyType::UsePreferablePile)
+        : PolicyType(EPolicyType::UsePreferablePileState)
         , PileState(pileState)
     {}
 
@@ -42,7 +42,7 @@ public:
     // UsePreferableLocation
     std::string Location;
 
-    // UsePreferablePile
+    // UsePreferablePileState
     EPileState PileState;
 };
 

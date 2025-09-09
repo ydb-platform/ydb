@@ -62,92 +62,6 @@ TString TRestoreProgress::ToJson() const {
     return WriteJson(json);
 }
 
-class TBackupProxyActor: public TActorBootstrapped<TBackupProxyActor> {
-public:
-    static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::SCHEME_BOARD_BACKUP_PROXY_ACTOR;
-    }
-
-    static constexpr TStringBuf LogPrefix() {
-        return "proxy"sv;
-    }
-
-    TBackupProxyActor(const TString& path, const TActorId& parent)
-        : Path(path)
-        , Parent(parent)
-    {
-    }
-
-    void Bootstrap() {
-        Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvResolveSchemeBoard(Path));
-        Become(&TBackupProxyActor::StateResolve, DefaultTimeout, new TEvents::TEvWakeup());
-    }
-
-private:
-    void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr& ev) {
-        const auto& msg = *ev->Get();
-        const auto& replicas = msg.GetPlainReplicas();
-        SBB_LOG_D("Handle " << ev->Get()->ToString());
-
-        if (replicas.empty()) {
-            return ReplyError();
-        }
-
-        Send(SelectReplica(replicas), new TSchemeBoardMonEvents::TEvDescribeRequest(Path));
-        Become(&TBackupProxyActor::StateDescribe, DefaultTimeout, new TEvents::TEvWakeup());
-    }
-
-    void ReplyError() {
-        Send(Parent, new TSchemeBoardMonEvents::TEvDescribeResponse());
-        PassAway();
-    }
-
-    static TActorId SelectReplica(const TVector<TActorId>& replicas) {
-        Y_ABORT_UNLESS(!replicas.empty());
-        return replicas[RandomNumber<size_t>(replicas.size())];
-    }
-
-    void Handle(TSchemeBoardMonEvents::TEvDescribeResponse::TPtr& ev) {
-        SBB_LOG_D("Handle " << ev->Get()->ToString());
-        Send(Parent, ev->Release().Release());
-        PassAway();
-    }
-
-    void Timeout() {
-        SBB_LOG_D("Timeout");
-        ReplyError();
-    }
-
-    void Unavailable() {
-        SBB_LOG_D("Unavailable");
-        ReplyError();
-    }
-
-    STATEFN(StateResolve) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
-            cFunc(TEvents::TEvWakeup::EventType, Timeout);
-            cFunc(TEvents::TEvUndelivered::EventType, Unavailable);
-            cFunc(TEvents::TEvPoison::EventType, PassAway);
-        }
-    }
-
-    STATEFN(StateDescribe) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TSchemeBoardMonEvents::TEvDescribeResponse, Handle);
-            cFunc(TEvents::TEvWakeup::EventType, Timeout);
-            cFunc(TEvents::TEvUndelivered::EventType, Unavailable);
-            cFunc(TEvents::TEvPoison::EventType, PassAway);
-        }
-    }
-
-private:
-    static constexpr TDuration DefaultTimeout = TDuration::Seconds(10);
-
-    const TString Path;
-    const TActorId Parent;
-};
-
 class TBackupActor: public TActorBootstrapped<TBackupActor> {
 public:
     static constexpr auto ActorActivityType() {
@@ -155,7 +69,7 @@ public:
     }
 
     static constexpr TStringBuf LogPrefix() {
-        return "main"sv;
+        return "backup"sv;
     }
 
     TBackupActor(const TString& filePath, ui32 inFlightLimit, const TActorId& parent)
@@ -194,13 +108,15 @@ private:
             const TString path = PendingPaths.front();
             PendingPaths.pop();
 
-            const TActorId proxyActor = Register(new TBackupProxyActor(path, SelfId()));
+            const ui64 cookie = PathByCookie.size();
+            PathByCookie.emplace_back(path);
             ++InProgressPaths;
-            ActorToPath[proxyActor] = path;
+
+            Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvResolveSchemeBoard(path), 0, cookie);
 
             SBB_LOG_D("ProcessPaths"
                 << ", path: " << path
-                << ", proxy actor: " << proxyActor
+                << ", cookie: " << cookie
                 << ", paths in progress: " << InProgressPaths
             );
         }
@@ -208,17 +124,45 @@ private:
         SendProgressUpdate();
     }
 
-    void Handle(TSchemeBoardMonEvents::TEvDescribeResponse::TPtr& ev) {
-        auto it = ActorToPath.find(ev->Sender);
-        if (it == ActorToPath.end()) {
+    void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr& ev) {
+        SBB_LOG_D("Handle " << ev->Get()->ToString()
+            << ", path by cookie size: " << PathByCookie.size()
+        );
+
+        const ui64 cookie = ev->Cookie;
+        if (PathByCookie.size() <= cookie) {
+            SBB_LOG_N("Unexpected cookie: " << cookie);
             return;
         }
+        const auto& path = PathByCookie[cookie];
 
-        const TString path = it->second;
+        const auto replicas = ev->Get()->GetPlainReplicas();
+        if (replicas.empty()) {
+            return MarkPathCompleted();
+        }
+
+        Send(SelectReplica(replicas), new TSchemeBoardMonEvents::TEvDescribeRequest(path), 0, cookie);
+    }
+
+    static TActorId SelectReplica(const TVector<TActorId>& replicas) {
+        Y_ABORT_UNLESS(!replicas.empty());
+        return replicas[RandomNumber<size_t>(replicas.size())];
+    }
+
+    void Handle(TSchemeBoardMonEvents::TEvDescribeResponse::TPtr& ev) {
+        SBB_LOG_D("Handle " << ev->Get()->ToString()
+            << ", path by cookie size: " << PathByCookie.size()
+        );
+
+        const ui64 cookie = ev->Cookie;
+        if (PathByCookie.size() <= cookie) {
+            SBB_LOG_N("Unexpected cookie: " << cookie);
+            return;
+        }
+        const auto& path = PathByCookie[cookie];
+        MarkPathCompleted();
+
         const TString& jsonDescription = ev->Get()->Record.GetJson();
-
-        --InProgressPaths;
-        ActorToPath.erase(it);
 
         if (!jsonDescription.empty()) {
             (*OutputFile) << jsonDescription << "\n";
@@ -252,6 +196,20 @@ private:
         }
     }
 
+    void MarkPathCompleted() {
+        --InProgressPaths;
+    }
+
+    void HandleTimeout() {
+        SBB_LOG_D("Timeout");
+        MarkPathCompleted();
+    }
+
+    void HandleUndelivered() {
+        SBB_LOG_D("Undelivered");
+        MarkPathCompleted();
+    }
+
     void SendProgressUpdate() {
         SBB_LOG_D("SendProgressUpdate"
             << ", paths in progress: " << InProgressPaths
@@ -274,17 +232,23 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeResponse, Handle);
+
+            cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+            cFunc(TEvents::TEvUndelivered::EventType, HandleUndelivered);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         }
     }
 
 private:
+    static constexpr TDuration DefaultTimeout = TDuration::Seconds(10);
+
     const TString FilePath;
     const ui32 InFlightLimit;
     const TActorId Parent;
     TQueue<TString> PendingPaths;
-    THashMap<TActorId, TString> ActorToPath;
+    TVector<TString> PathByCookie;
     TMaybe<TFileOutput> OutputFile;
     ui32 InProgressPaths = 0;
     ui32 CompletedPaths = 0;

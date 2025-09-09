@@ -73,7 +73,6 @@ struct TBackupProgress {
 
     ui32 TotalPaths = 0;
     ui32 CompletedPaths = 0;
-    double Progress = 0.;
     EStatus Status = EStatus::Idle;
     TString ErrorMessage;
 
@@ -82,7 +81,6 @@ struct TBackupProgress {
     explicit TBackupProgress(const TSchemeBoardMonEvents::TEvBackupProgress& ev)
         : TotalPaths(ev.TotalPaths)
         , CompletedPaths(ev.CompletedPaths)
-        , Progress(TotalPaths > 0 ? (100. * CompletedPaths / TotalPaths) : 0.)
         , Status(EStatus::Running)
     {
     }
@@ -90,7 +88,6 @@ struct TBackupProgress {
     explicit TBackupProgress(const TSchemeBoardMonEvents::TEvBackupResult& ev)
         : TotalPaths(0)
         , CompletedPaths(0)
-        , Progress(0.)
         , Status(ev.Error ? EStatus::Error : EStatus::Completed)
         , ErrorMessage(ev.Error.GetOrElse(""))
     {
@@ -98,6 +95,10 @@ struct TBackupProgress {
 
     bool IsRunning() const {
         return Status == EStatus::Starting || Status == EStatus::Running;
+    }
+
+    double GetProgress() const {
+        return TotalPaths > 0 ? (100. * CompletedPaths / TotalPaths) : 0.;
     }
 
     TString StatusToString() const {
@@ -114,7 +115,7 @@ struct TBackupProgress {
         TJsonValue json;
         json["completed"] = CompletedPaths;
         json["total"] = TotalPaths;
-        json["progress"] = Progress;
+        json["progress"] = GetProgress();
         json["status"] = StatusToString();
 
         return WriteJson(json);
@@ -360,7 +361,6 @@ struct TRestoreProgress {
 
     ui32 TotalPaths = 0;
     ui32 ProcessedPaths = 0;
-    double Progress = 0.;
     EStatus Status = EStatus::Idle;
     TString ErrorMessage;
 
@@ -369,7 +369,6 @@ struct TRestoreProgress {
     explicit TRestoreProgress(const TSchemeBoardMonEvents::TEvRestoreProgress& ev)
         : TotalPaths(ev.TotalPaths)
         , ProcessedPaths(ev.ProcessedPaths)
-        , Progress(TotalPaths > 0 ? (100. * ProcessedPaths / TotalPaths) : 0.)
         , Status(EStatus::Running)
     {
     }
@@ -377,7 +376,6 @@ struct TRestoreProgress {
     explicit TRestoreProgress(const TSchemeBoardMonEvents::TEvRestoreResult& ev)
         : TotalPaths(0)
         , ProcessedPaths(0)
-        , Progress(0.)
         , Status(ev.Error ? EStatus::Error : EStatus::Completed)
         , ErrorMessage(ev.Error.GetOrElse(""))
     {
@@ -385,6 +383,10 @@ struct TRestoreProgress {
 
     bool IsRunning() const {
         return Status == EStatus::Starting || Status == EStatus::Running;
+    }
+
+    double GetProgress() const {
+        return TotalPaths > 0 ? (100. * ProcessedPaths / TotalPaths) : 0.;
     }
 
     TString StatusToString() const {
@@ -401,7 +403,7 @@ struct TRestoreProgress {
         TJsonValue json;
         json["processed"] = ProcessedPaths;
         json["total"] = TotalPaths;
-        json["progress"] = Progress;
+        json["progress"] = GetProgress();
         json["status"] = StatusToString();
         return WriteJson(json);
     }

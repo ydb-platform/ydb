@@ -843,20 +843,22 @@ TString BuildCreateTransferQuery(
             break;
     }
 
-    options.push_back(BuildOption("CONSUMER", desc.GetConsumerName().c_str()));
+    options.push_back(BuildOption("CONSUMER", Quote(desc.GetConsumerName())));
 
     const auto& batchingSettings = desc.GetBatchingSettings();
     options.push_back(BuildOption("BATCH_SIZE_BYTES", ToString(batchingSettings.SizeBytes)));
-    options.push_back(BuildOption("FLUSH_INTERVAL", ToString(batchingSettings.FlushInterval)));
+    options.push_back(BuildOption("FLUSH_INTERVAL", Interval(batchingSettings.FlushInterval)));
 
     return std::format(
             "-- database: \"{}\"\n-- backup root: \"{}\"\n"
+            "{}\n\n"
             "CREATE TRANSFER `{}`\n"
-            "FROM `{}` TO `{}` USING `{}`\n"
+            "FROM `{}` TO `{}` USING $__ydb_transfer_lambda\n"
             "WITH (\n{}\n);",
             db.c_str(), backupRoot.c_str(),
+            desc.GetTransformationLambda().c_str(),
             name.c_str(), 
-            desc.GetSrcPath().c_str(), desc.GetDstPath().c_str(), desc.GetTransformationLambda().c_str(),
+            desc.GetSrcPath().c_str(), desc.GetDstPath().c_str(), 
             JoinSeq(",\n", options).c_str()
         );        
 }

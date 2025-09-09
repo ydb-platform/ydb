@@ -124,6 +124,59 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         });
     }
 
+    Y_UNIT_TEST(CreateTableMultipleColumns) { // not supported for now, maybe later
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TString fulltextSettings = R"(
+            layout: FLAT
+            columns: {
+                column: "text1"
+                analyzers: {
+                    tokenizer: STANDARD
+                    use_filter_ngram: true
+                    filter_ngram_max_length: 42
+                }
+            }
+            columns: {
+                column: "text2"
+                analyzers: {
+                    tokenizer: STANDARD
+                    use_filter_ngram: true
+                    filter_ngram_max_length: 42
+                }
+            }
+        )";
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "text1" Type: "String" }
+                Columns { Name: "text2" Type: "String" }
+                Columns { Name: "covered" Type: "String" }
+                Columns { Name: "another" Type: "Uint64" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx_fulltext"
+                KeyColumnNames: ["text1", "text2"]
+                DataColumnNames: ["covered"]
+                Type: EIndexTypeGlobalFulltext
+                FulltextIndexDescription: { 
+                    Settings: { 
+                        %s
+                    }
+                }
+            }
+        )", fulltextSettings.c_str()), {NKikimrScheme::StatusInvalidParameter});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"),{ 
+            NLs::PathNotExist,
+        });
+    }
+
     Y_UNIT_TEST(CreateTableNotText) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

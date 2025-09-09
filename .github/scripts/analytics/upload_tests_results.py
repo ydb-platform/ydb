@@ -102,17 +102,17 @@ def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, bra
                 
                 # Get original error message from muted test (preserved in skipped element by mute_utils.py)
                 original_error = ""
-                skipped_element = testcase.find("skipped")
-                if skipped_element is not None:
+                muted_error_element = testcase.find("skipped")
+                if muted_error_element is not None:
                     # Extract error message similar to how failure processing works
-                    if skipped_element.get('message'):
-                        original_error = skipped_element.get('message')
+                    if muted_error_element.get('message'):
+                        original_error = muted_error_element.get('message')
                     # If there's also text content, append it
-                    if skipped_element.text:
+                    if muted_error_element.text:
                         if original_error:
-                            original_error += "\n" + skipped_element.text.strip()
+                            original_error += "\n" + muted_error_element.text.strip()
                         else:
-                            original_error = skipped_element.text.strip()
+                            original_error = muted_error_element.text.strip()
                 
                 # Combine mute message with original error
                 if original_error:

@@ -15,7 +15,9 @@
 /ydb/core/tx/coordinator @ydb-platform/datashard
 /ydb/core/statistics @ydb-platform/datashard
 /ydb/tests/datashard @ydb-platform/datashard
+/ydb/tests/datashard/vector_index/large @ydb-platform/datashard
 /ydb/tests/stress/oltp_workload @ydb-platform/datashard
+
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
@@ -84,6 +86,7 @@
 /ydb/core/blob_depot @ydb-platform/blobstorage
 /ydb/core/erasure @ydb-platform/blobstorage
 /ydb/tests/functional/config @ydb-platform/blobstorage
+/ydb/tests/functional/bridge @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config/ut @ydb-platform/core

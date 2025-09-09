@@ -13123,7 +13123,7 @@ END DO)",
         CheckObjectNotFound(*ydb->GetRuntime(), queryName);
     }
 
-    Y_UNIT_TEST(CreateSecret) {
+    Y_UNIT_TEST_TWIN(CreateSecret, UseQueryService) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableSchemaSecrets(true);
         const auto settings = TKikimrSettings()
@@ -13132,20 +13132,31 @@ END DO)",
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
 
         // fail
         { // no value
             static const auto query = R"sql(
                 CREATE SECRET `/Root/secret-name` WITH (secret_value = "secret-value-1");
             )sql";
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = executeGeneric(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
         { // unknown parameter
             static const auto query = R"sql(
                 CREATE SECRET `/Root/secret-name` WITH (value = "value", secret_value = "secret-value-1");
             )sql";
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = executeGeneric(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
 
@@ -13154,7 +13165,7 @@ END DO)",
             const static auto query = R"sql(
                 CREATE SECRET `/Root/secret-name` WITH (value = "secret-value");
             )sql";
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = executeGeneric(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
             UNIT_ASSERT_STRINGS_EQUAL(describeResult->Record.GetPathDescription().GetSecretDescription().GetValue(), "secret-value");
@@ -13163,12 +13174,12 @@ END DO)",
             const static auto query = R"sql(
                 CREATE SECRET `/Root/secret-dir/secret-name` WITH (value = "", inherit_permissions = True);
             )sql";
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = executeGeneric(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 
-    Y_UNIT_TEST(AlterSecret) {
+    Y_UNIT_TEST_TWIN(AlterSecret, UseQueryService) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableSchemaSecrets(true);
         const auto settings = TKikimrSettings()
@@ -13177,6 +13188,17 @@ END DO)",
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
 
         static const auto query = R"sql(
             CREATE SECRET `/Root/secret-name` WITH (value = "secret-value-1");
@@ -13189,21 +13211,21 @@ END DO)",
             static const auto query = R"sql(
                 ALTER SECRET `/Root/secret-name` WITH (secret_value = "secret-value-2");
             )sql";
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = executeGeneric(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
         { // unknown parameter
             static const auto query = R"sql(
                 ALTER SECRET `/Root/secret-name` WITH (value = "secret-value-2", inherit_permissions = True);
             )sql";
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = executeGeneric(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
         { // unexisting secret
             static const auto query = R"sql(
                 ALTER SECRET `/Root/secret-name-another` WITH (value = "secret-value-2");
             )sql";
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = executeGeneric(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
 
@@ -13215,15 +13237,15 @@ END DO)",
             static const auto query = R"sql(
                 ALTER SECRET `/Root/secret-name` WITH (value = "secret-value-2");
             )sql";
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = executeGeneric(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
             UNIT_ASSERT_STRINGS_EQUAL(describeResult->Record.GetPathDescription().GetSecretDescription().GetValue(), "secret-value-2");
         }
     }
 
-    Y_UNIT_TEST(DropSecret) {
-       NKikimrConfig::TFeatureFlags featureFlags;
+    Y_UNIT_TEST_TWIN(DropSecret, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableSchemaSecrets(true);
         const auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
@@ -13231,11 +13253,22 @@ END DO)",
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
 
         static const auto query = R"sql(
             CREATE SECRET `/Root/secret-name` WITH (value = "secret-value");
         )sql";
-        const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        const auto result = executeGeneric(query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         // fail
@@ -13243,14 +13276,14 @@ END DO)",
             static const auto query = R"sql(
                 DROP SECRET `/Root/secret-name` WITH (value = "secret-value");
             )sql";
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = executeGeneric(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
         { // unexisting secret
             static const auto query = R"sql(
                 DROP SECRET `/Root/secret-name-another`;
             )sql";
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = executeGeneric(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
 
@@ -13265,7 +13298,7 @@ END DO)",
             static const auto query = R"sql(
                 DROP SECRET `/Root/secret-name`;
             )sql";
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = executeGeneric(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
             UNIT_ASSERT_C(!describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret somehow exists");

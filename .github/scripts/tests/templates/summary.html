@@ -494,8 +494,48 @@
     const LOG_ENTRY_ESTIMATE = 150; // Estimated characters per log entry
     const MIN_REMAINING_SPACE = 100; // Minimum space needed for log section
     const ERROR_BUFFER_SPACE = 50; // Buffer space when adding error details
+    const MAX_DUPLICATE_LINES = 3; // Maximum number of duplicate lines to show
 
     // Utility functions
+    function deduplicateErrorText(errorText) {
+        if (!errorText || errorText.trim() === "") {
+            return errorText;
+        }
+        
+        const lines = errorText.trim().split('\n');
+        const result = [];
+        const lineCount = {};
+        
+        // Count occurrences of each line
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine === "") continue;
+            lineCount[trimmedLine] = (lineCount[trimmedLine] || 0) + 1;
+        }
+        
+        // Add lines to result, limiting duplicates
+        const addedLines = {};
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine === "") continue;
+            
+            const count = lineCount[trimmedLine];
+            const alreadyAdded = addedLines[trimmedLine] || 0;
+            
+            if (count <= MAX_DUPLICATE_LINES || alreadyAdded < MAX_DUPLICATE_LINES) {
+                result.push(line);
+                addedLines[trimmedLine] = alreadyAdded + 1;
+            } else if (alreadyAdded === MAX_DUPLICATE_LINES) {
+                // Add a summary line for the remaining duplicates
+                const remaining = count - MAX_DUPLICATE_LINES;
+                result.push(`... (and ${remaining} more similar lines)`);
+                addedLines[trimmedLine] = alreadyAdded + 1;
+            }
+        }
+        
+        return result.join('\n');
+    }
+
     function parseTestName(full_name) {
         const trimmed = full_name.trim();
         let pieces;
@@ -643,10 +683,12 @@
         
         // Add error details if space allows
         if (errorText && errorText.trim() !== "" && availableSpace > ERROR_BUFFER_SPACE) {
-            const maxErrorLength = Math.min(errorText.trim().length, availableSpace - ERROR_BUFFER_SPACE);
-            const errorToShow = errorText.trim().substring(0, maxErrorLength);
+            // Clean up repetitive error text first
+            const cleanedErrorText = deduplicateErrorText(errorText);
+            const maxErrorLength = Math.min(cleanedErrorText.trim().length, availableSpace - ERROR_BUFFER_SPACE);
+            const errorToShow = cleanedErrorText.trim().substring(0, maxErrorLength);
             let errorSection = "**Error Summary:**%0A```%0A" + encodeURIComponent(errorToShow);
-            if (errorText.trim().length > maxErrorLength) {
+            if (cleanedErrorText.trim().length > maxErrorLength) {
                 errorSection += "... (see full error in test report)";
             }
             errorSection += "%0A```%0A%0A";
@@ -685,22 +727,31 @@
             title = "Test failure in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
         }
         
-        // Build body
-        const body = buildIssueBody(actualIssueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText);
-        
         // Build labels
         const labels = buildLabels(actualIssueType, buildPreset, ownerAreaLabel);
         
-        // Calculate base URL length
-        const baseUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
+        // Build base body without error text
+        const baseBody = buildIssueBody(actualIssueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText);
+        
+        // Calculate base URL length to determine available space
+        const baseUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + baseBody + "&labels=" + labels + "&type=Bug";
         const remainingSpace = MAX_URL_LENGTH - baseUrl.length;
         
         // Add optional content based on available space
-        const finalBody = addOptionalContent(body, logUrls, errorText, remainingSpace);
+        const finalBody = addOptionalContent(baseBody, logUrls, errorText, remainingSpace);
         
-        // Create final URL and open
+        // Create final URL and validate length
         const finalUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + finalBody + "&labels=" + labels + "&type=Bug";
-        window.open(finalUrl, '_blank');
+        
+        // Safety check: if URL is still too long, create a simplified version
+        if (finalUrl.length > MAX_URL_LENGTH) {
+            console.warn("URL length exceeds limit (" + finalUrl.length + " > " + MAX_URL_LENGTH + "), creating simplified issue");
+            const simplifiedBody = buildIssueBody(actualIssueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, {}, "");
+            const simplifiedUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + simplifiedBody + "&labels=" + labels + "&type=Bug";
+            window.open(simplifiedUrl, '_blank');
+        } else {
+            window.open(finalUrl, '_blank');
+        }
     }
 
     function createIssue(test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {

@@ -28,83 +28,36 @@ extern const TString SerializedNullRow;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Unversioned value with shared ownership of string value.
 class TUnversionedOwningValue
 {
 public:
-    TUnversionedOwningValue() = default;
+    TUnversionedOwningValue();
+    TUnversionedOwningValue(TUnversionedOwningValue&& other) noexcept;
+    TUnversionedOwningValue(const TUnversionedOwningValue& other) noexcept = default;
 
-    TUnversionedOwningValue(TUnversionedOwningValue&& other) noexcept
-    {
-        std::swap(Value_, other.Value_);
-    }
+    //! Makes owning copy of #other. Copies string value.
+    TUnversionedOwningValue(const TUnversionedValue& other);
 
-    TUnversionedOwningValue(const TUnversionedOwningValue& other)
-    {
-        Assign(other.Value_);
-    }
+    //! Makes owning copy of #other. Uses #stringHolder for shared ownership of string value.
+    TUnversionedOwningValue(const TUnversionedValue& other, TSharedRangeHolderPtr stringHolder);
 
-    TUnversionedOwningValue(const TUnversionedValue& other)
-    {
-        Assign(other);
-    }
+    ~TUnversionedOwningValue() = default;
 
-    ~TUnversionedOwningValue()
-    {
-        Clear();
-    }
+    TUnversionedOwningValue& operator=(TUnversionedOwningValue&& other) noexcept;
+    TUnversionedOwningValue& operator=(const TUnversionedOwningValue& other) noexcept = default;
 
-    operator TUnversionedValue() const
-    {
-        return Value_;
-    }
+    operator TUnversionedValue() const;
+    void Clear();
 
-    TUnversionedOwningValue& operator=(TUnversionedOwningValue other) noexcept
-    {
-        std::swap(Value_, other.Value_);
-        return *this;
-    }
+    EValueType Type() const;
 
-    void Clear()
-    {
-        if (IsStringLikeType(Value_.Type)) {
-            delete[] Value_.Data.String;
-        }
-        Value_.Type = EValueType::TheBottom;
-        Value_.Length = 0;
-    }
-
-    //! Provides mutable access to the string data.
-    char* GetMutableString()
-    {
-        YT_VERIFY(IsStringLikeType(Value_.Type));
-        // NB: It is correct to use `const_cast` here to modify the stored string
-        // because initially it's allocated as a non-const `char*`.
-        return const_cast<char*>(Value_.Data.String);
-    }
-
-    EValueType Type() const
-    {
-        return Value_.Type;
-    }
+    //! Returns string value. Call is valid only if value is string-like type.
+    TSharedRef GetStringRef() const;
 
 private:
-    TUnversionedValue Value_{
-        .Id = 0,
-        .Type = EValueType::TheBottom,
-        .Flags = {},
-        .Length = 0,
-        .Data = {},
-    };
-
-    void Assign(const TUnversionedValue& other)
-    {
-        Value_ = other;
-        if (IsStringLikeType(Value_.Type)) {
-            auto newString = new char[Value_.Length];
-            ::memcpy(newString, Value_.Data.String, Value_.Length);
-            Value_.Data.String = newString;
-        }
-    }
+    TUnversionedValue Value_;
+    TSharedRangeHolderPtr StringHolder_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

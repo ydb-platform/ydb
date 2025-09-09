@@ -117,6 +117,7 @@ public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::SCHEME_BOARD_BACKUP_PROXY_ACTOR;
     }
+
     static constexpr TStringBuf LogPrefix() {
         return "proxy"sv;
     }
@@ -192,8 +193,8 @@ private:
 
 private:
     static constexpr TDuration DefaultTimeout = TDuration::Seconds(10);
-    TString Path;
-    TActorId Parent;
+    const TString Path;
+    const TActorId Parent;
 };
 
 class TBackupActor: public TActorBootstrapped<TBackupActor> {
@@ -201,6 +202,7 @@ public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::SCHEME_BOARD_BACKUP_ACTOR;
     }
+
     static constexpr TStringBuf LogPrefix() {
         return "main"sv;
     }
@@ -238,10 +240,10 @@ private:
 
     void ProcessPaths() {
         while (!PendingPaths.empty() && InProgressPaths < InFlightLimit) {
-            TString path = PendingPaths.front();
+            const TString path = PendingPaths.front();
             PendingPaths.pop();
 
-            TActorId proxyActor = Register(new TBackupProxyActor(path, SelfId()));
+            const TActorId proxyActor = Register(new TBackupProxyActor(path, SelfId()));
             ++InProgressPaths;
             ActorToPath[proxyActor] = path;
 
@@ -387,7 +389,7 @@ struct TRestoreProgress {
     }
 };
 
-class TRestoreActor : public TActorBootstrapped<TRestoreActor> {
+class TRestoreActor: public TActorBootstrapped<TRestoreActor> {
 public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::SCHEME_BOARD_RESTORE_ACTOR;
@@ -503,10 +505,10 @@ private:
 private:
     static constexpr TDuration ProgressPollingInterval = TDuration::Seconds(1);
 
-    TString FilePath;
-    ui64 SchemeShardId;
-    ui64 Generation;
-    TActorId Parent;
+    const TString FilePath;
+    const ui64 SchemeShardId;
+    const ui64 Generation;
+    const TActorId Parent;
     TMaybe<TFileInput> InputFile;
     TActorId Populator;
     ui32 TotalPaths = 0;

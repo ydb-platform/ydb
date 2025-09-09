@@ -4,6 +4,7 @@
 #include <ydb/library/accessor/positive_integer.h>
 
 #include <atomic>
+#include <mutex>
 
 namespace NKikimr::NColumnShard::NOverload {
 
@@ -11,11 +12,15 @@ class TOverloadManagerServiceOperator {
 private:
     using TSelf = TOverloadManagerServiceOperator;
 
-    static TPositiveControlInteger WritesInFlight;
-    static TPositiveControlInteger WritesSizeInFlight;
-    static std::atomic_bool LimitReached;
+    // static TPositiveControlInteger WritesInFlight;
+    // static TPositiveControlInteger WritesSizeInFlight;
+    // static std::atomic_bool LimitReached;
+    static ui64 WritesInFlight;
+    static ui64 WritesSizeInFlight;
+    static bool LimitReached;
     static inline const double WritesInFlightSoftLimitCoefficient = 0.9;
     static inline const double WritesInFlightSizeSoftLimitCoefficient = 0.9;
+    static std::mutex Mutex;
 
 public:
     static NActors::TActorId MakeServiceId();
@@ -24,7 +29,7 @@ public:
     static ui64 GetShardWritesInFlyLimit();
     static ui64 GetShardWritesSizeInFlyLimit();
 
-    static void NotifyIfResourcesAvailable();
+    static void NotifyIfResourcesAvailable(bool force);
 
     static bool RequestResources(ui64 writesCount, ui64 writesSize);
     static void ReleaseResources(ui64 writesCount, ui64 writesSize);

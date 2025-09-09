@@ -218,7 +218,7 @@ message TFeatureFlags {
     optional bool EnableCSSchemasCollapsing = 192 [default = true];
     optional bool EnableMoveColumnTable = 193 [default = false];
     optional bool EnableArrowResultSetFormat = 194 [default = false];
-    optional bool EnableCSOverloadsSubscriptionRetries = 195 [default = false];
+    optional bool EnableCsOverloadsSubscriptionRetries = 195 [default = false];
     optional bool EnableTopicCompactificationByKey = 196 [default = false];
     optional bool EnableCompactionOverloadDetection = 197 [default = true];
     reserved 198; // DisableColumnShardBulkUpsertRequireAllColumns

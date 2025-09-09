@@ -52,8 +52,7 @@ namespace NKikimr::NEvWrite {
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , ActorSpan(parentSpan.BuildChildrenSpan("ShardWriter"))
         , Timeout(timeout)
-        , RetryBySubscription(AppData()->FeatureFlags.GetEnableCSOverloadsSubscriptionRetries())
-    {
+        , RetryBySubscription(AppData()->FeatureFlags.GetEnableCsOverloadsSubscriptionRetries()) {
     }
 
     void TShardWriter::SendWriteRequest() {

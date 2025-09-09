@@ -19,7 +19,6 @@ class TOverloadManager: public NActors::TActor<TOverloadManager> {
             hFunc(NOverload::TEvOverloadPipeServerDisconnected, Handle);
             hFunc(NOverload::TEvOverloadResourcesReleased, Handle);
             hFunc(NOverload::TEvOverloadColumnShardDied, Handle);
-            hFunc(NActors::TEvents::TEvPoison, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
@@ -30,7 +29,6 @@ class TOverloadManager: public NActors::TActor<TOverloadManager> {
     void Handle(const NOverload::TEvOverloadPipeServerDisconnected::TPtr& ev);
     void Handle(const NOverload::TEvOverloadResourcesReleased::TPtr& ev);
     void Handle(const NOverload::TEvOverloadColumnShardDied::TPtr& ev);
-    void Handle(const NActors::TEvents::TEvPoison::TPtr& ev);
 
 public:
     TOverloadManager();

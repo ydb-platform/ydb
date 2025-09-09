@@ -407,19 +407,24 @@ private:
     IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
     
     void EnsureCSController() {
-        ICSController::TPtr* expected = nullptr;
+        ICSController::TPtr* expected = CSControllerPtr.load();
+        if (expected) {
+            return;
+        }
+
+        expected = nullptr;
         if (CSControllerPtr.compare_exchange_strong(expected, nullptr)) {
             auto* newPtr = new ICSController::TPtr(std::make_shared<ICSController>());
             CSControllerPtr.store(newPtr);
         }
     }
-
+    
     void ReplaceCSController(const ICSController::TPtr& newController) {
-        ICSController::TPtr* expected = CSControllerPtr.load();
+        ICSController::TPtr* expected = CSControllerPtr.load();        
         if (expected && (*expected).get() == newController.get()) {
             return;
         }
-        
+
         auto* newPtr = new ICSController::TPtr(newController);
         if (CSControllerPtr.compare_exchange_strong(expected, newPtr)) {
             delete expected;
@@ -471,8 +476,15 @@ public:
     static ICSController::TPtr GetColumnShardController() {
         auto* controllers = Singleton<TControllers>();
         controllers->EnsureCSController();
+        
+        // Безопасное чтение с проверкой
         auto* ptr = controllers->CSControllerPtr.load();
-        return *ptr;
+        if (ptr) {
+            return *ptr;  // Возвращаем копию shared_ptr
+        }
+        
+        // Fallback - создаем новый (не должно происходить)
+        return std::make_shared<ICSController>();
     }
 
     template <class T>

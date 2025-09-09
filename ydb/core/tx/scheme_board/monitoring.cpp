@@ -203,6 +203,7 @@ private:
 
 private:
     static constexpr TDuration DefaultTimeout = TDuration::Seconds(10);
+
     const TString Path;
     const TActorId Parent;
 };
@@ -339,9 +340,9 @@ private:
     }
 
 private:
-    TString FilePath;
-    ui32 InFlightLimit;
-    TActorId Parent;
+    const TString FilePath;
+    const ui32 InFlightLimit;
+    const TActorId Parent;
     TQueue<TString> PendingPaths;
     THashMap<TActorId, TString> ActorToPath;
     TMaybe<TFileOutput> OutputFile;
@@ -414,6 +415,7 @@ public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::SCHEME_BOARD_RESTORE_ACTOR;
     }
+
     static constexpr TStringBuf LogPrefix() {
         return "restore"sv;
     }
@@ -539,6 +541,7 @@ private:
 class TMonitoring: public TActorBootstrapped<TMonitoring> {
     static constexpr char ROOT[] = "scheme_board";
     static constexpr TBackupLimits BackupLimits = TBackupLimits();
+
     static constexpr TStringBuf LogPrefix() {
         return "monitoring"sv;
     }

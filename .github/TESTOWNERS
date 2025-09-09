@@ -23,6 +23,8 @@
 /ydb/tests/stress/olap_workload  @ydb-platform/cs
 /ydb/core/kqp/ut/olap @ydb-platform/cs
 /ydb/tests/stress/olap_workload @ydb-platform/cs
+/ydb/tests/functional/tpc @ydb-platform/cs
+/ydb/tests/compatibility/olap @ydb-platform/cs
 
 #Distributed System Infrastructure Team @ijon TEAM:@ydb-platform/system-infra
 /ydb/core/mind/hive @ydb-platform/system-infra
@@ -101,6 +103,7 @@
 /ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/tx/schemeshard/ut_pq_reboots @ydb-platform/Topics
 /ydb/core/transfer @ydb-platform/Topics
+/ydb/tests/stress/kafka @ydb-platform/Topics
 
 #YDB Analytics TEAM:???
 

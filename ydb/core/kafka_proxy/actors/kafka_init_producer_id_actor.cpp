@@ -61,7 +61,7 @@ namespace NKafka {
             }
             Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
             KAFKA_LOG_D("Bootstrapping actor for transactional producer. Sending init table request to KQP.");
-            if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
+            if (NKikimr::CanonizePath(Context->ResourceDatabasePath) == NKikimr::CanonizePath(AppData(ctx)->TenantName)) {
                 Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
             } else {
                 Kqp->SendCreateSessionRequest(ctx);

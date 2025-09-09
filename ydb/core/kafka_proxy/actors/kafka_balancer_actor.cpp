@@ -21,7 +21,7 @@ void TKafkaBalancerActor::Bootstrap(const NActors::TActorContext& ctx) {
         SendResponseFail(ctx, EKafkaErrors::MEMBER_ID_REQUIRED, TStringBuilder() << "Empty MemberId.");
         return;
     }
-    if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
+    if (NKikimr::CanonizePath(Context->ResourceDatabasePath) == NKikimr::CanonizePath(AppData(ctx)->TenantName)) {
         Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
         Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
     } else {

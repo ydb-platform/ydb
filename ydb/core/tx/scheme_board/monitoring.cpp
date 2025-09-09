@@ -87,7 +87,7 @@ struct TBackupProgress {
     {
     }
 
-    TBackupProgress(const TSchemeBoardMonEvents::TEvBackupResult& ev)
+    explicit TBackupProgress(const TSchemeBoardMonEvents::TEvBackupResult& ev)
         : TotalPaths(0)
         , CompletedPaths(0)
         , Progress(0.)
@@ -355,7 +355,7 @@ struct TRestoreProgress {
         Starting,
         Running,
         Completed,
-        Error
+        Error,
     };
 
     ui32 TotalPaths = 0;
@@ -366,7 +366,7 @@ struct TRestoreProgress {
 
     TRestoreProgress() = default;
 
-    TRestoreProgress(const TSchemeBoardMonEvents::TEvRestoreProgress& ev)
+    explicit TRestoreProgress(const TSchemeBoardMonEvents::TEvRestoreProgress& ev)
         : TotalPaths(ev.TotalPaths)
         , ProcessedPaths(ev.ProcessedPaths)
         , Progress(TotalPaths > 0 ? (100. * ProcessedPaths / TotalPaths) : 0.)
@@ -374,7 +374,7 @@ struct TRestoreProgress {
     {
     }
 
-    TRestoreProgress(const TSchemeBoardMonEvents::TEvRestoreResult& ev)
+    explicit TRestoreProgress(const TSchemeBoardMonEvents::TEvRestoreResult& ev)
         : TotalPaths(0)
         , ProcessedPaths(0)
         , Progress(0.)

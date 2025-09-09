@@ -68,7 +68,7 @@ struct TBackupProgress {
         Starting,
         Running,
         Completed,
-        Error
+        Error,
     };
 
     ui32 TotalPaths = 0;

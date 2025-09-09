@@ -108,6 +108,23 @@ ui64 GetRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId) {
     return stat.RowCount;
 }
 
+void waitForRowCount(
+        TTestActorRuntime& runtime, ui32 nodeIndex,
+        TPathId pathId, size_t expectedRowCount, size_t timeoutSec = 130) {
+    ui64 lastRowCount = 0;
+    for (size_t i = 0; i <= timeoutSec; ++i) {
+        lastRowCount = GetRowCount(runtime, nodeIndex, pathId);
+        if (i % 5 == 0) {
+            Cerr << "row count: " << lastRowCount << " (expected: " << expectedRowCount << ")\n";
+        }
+        if (lastRowCount == expectedRowCount) {
+            return;
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
+    UNIT_ASSERT_C(false, "timed out, last row count: " << lastRowCount);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(BasicStatistics) {
@@ -374,6 +391,101 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         runtime.SimulateSleep(TDuration::Seconds(20));
         UNIT_ASSERT_VALUES_EQUAL(sendCount, 2); // events from 2 serverless schemeshards
         UNIT_ASSERT_VALUES_EQUAL(propagateCount, 2); // SA -> node1 and node1 -> node2
+    }
+
+    Y_UNIT_TEST(PersistenceWithStorageFailuresAndReboots) {
+        TTestEnv env(1, 2);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        const size_t rowCount1 = 5;
+
+        CreateDatabase(env, "Database", 2);
+        CreateTable(env, "Database", "Table", rowCount1);
+
+        ui64 saTabletId = 0;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+        ui64 ssTabletId = pathId.OwnerId;
+
+        const ui32 nodeIdx = 1;
+        const ui32 otherNodeIdx = 2;
+
+        // Block propagate events that go to node with otherNodeIdx. We will use this
+        // node later as a clean slate.
+        TBlockEvents<TEvStatistics::TEvPropagateStatistics> blockPropagate(runtime,
+            [&](const TEvStatistics::TEvPropagateStatistics::TPtr& ev) {
+                return ev->Recipient.NodeId() == runtime.GetNodeId(otherNodeIdx);
+            });
+
+        // Wait until correct statistics gets reported
+        ValidateRowCount(runtime, nodeIdx, pathId, rowCount1);
+
+        // Block persisting new updates from schemeshards on the aggregator.
+        // This should result in old statistics being reported, even after new
+        // updates arrive.
+        TBlockEvents<TEvBlobStorage::TEvPut> blockPersistStats(runtime,
+            [&](const TEvBlobStorage::TEvPut::TPtr& ev) {
+                return ev->Get()->Id.TabletID() == saTabletId;
+            });
+
+        // Upsert some more data
+        const size_t rowCount2 = 7;
+        FillTable(env, "Database", "Table", rowCount2);
+
+        {
+            // Wait for an update from SchemeShard with new row count.
+
+            bool statsUpdateSent = false;
+            auto sendObserver = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev){
+                NKikimrStat::TSchemeShardStats statRecord;
+                UNIT_ASSERT(statRecord.ParseFromString(ev->Get()->Record.GetStats()));
+                for (const auto& entry : statRecord.GetEntries()) {
+                    if (TPathId::FromProto(entry.GetPathId()) == pathId
+                        && entry.GetAreStatsFull()
+                        && entry.GetRowCount() == rowCount2) {
+                        statsUpdateSent = true;
+                    }
+                }
+            });
+            runtime.WaitFor("TEvSchemeShardStats", [&]{ return statsUpdateSent; });
+
+            bool propagateSent = false;
+            auto propagateObserver = runtime.AddObserver<TEvStatistics::TEvPropagateStatistics>([&](auto& ev){
+                if (ev->Recipient.NodeId() == runtime.GetNodeId(nodeIdx)) {
+                    propagateSent = true;
+                }
+            });
+            runtime.WaitFor("TEvPropagateStatistics", [&]{ return propagateSent; });
+        }
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId), rowCount1);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, ssTabletId, sender);
+
+        // Simulate storage failure, StatisticsAggregator will reboot.
+
+        TBlockEvents<TEvStatistics::TEvSchemeShardStats> blockSSUpdates(runtime);
+        UNIT_ASSERT_GT(blockPersistStats.size(), 0);
+        blockPersistStats.Stop();
+        for (auto& ev : blockPersistStats) {
+            auto proxy = ev->Recipient;
+            ui32 groupId = GroupIDFromBlobStorageProxyID(proxy);
+            auto res = ev->Get()->MakeErrorResponse(
+                NKikimrProto::ERROR, "Something went wrong", TGroupId::FromValue(groupId));
+            ui32 nodeIdx = ev->Sender.NodeId() - runtime.GetFirstNodeId();
+            runtime.Send(new IEventHandle(ev->Sender, proxy, res.release()), nodeIdx, true);
+        }
+        TDispatchOptions rebootOptions;
+        rebootOptions.FinalEvents.emplace_back(TEvTablet::EvBoot);
+        runtime.DispatchEvents(rebootOptions);
+
+        // Check that after reboot the old value is still persisted by the Aggregator
+        // and returned to the Service.
+        blockPropagate.Stop();
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, otherNodeIdx, pathId), rowCount1);
+
+        // After everything is healed, stats should get updated.
+        blockSSUpdates.Stop();
+        waitForRowCount(runtime, otherNodeIdx, pathId, rowCount2);
     }
 }
 

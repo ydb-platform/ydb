@@ -5,6 +5,7 @@
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_log.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+#include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/core/util/bits.h>
 #include <util/generic/set.h>
 #include <util/ysaveload.h>
@@ -99,6 +100,7 @@ namespace NKikimr {
             const TString VDiskLogPrefix;
             ui32 SlotsInChunk;
             TMask ConstMask; // mask of 'all slots are free'
+            TControlWrapper ChunksSoftLocking;
             TFreeSpace FreeSpace;
             TFreeSpace LockedChunks;
             ui32 AllocatedSlots = 0;
@@ -107,10 +109,11 @@ namespace NKikimr {
             static TMask BuildConstMask(const TString &prefix, ui32 slotsInChunk);
 
         public:
-            TChain(const TString &vdiskLogPrefix, const ui32 slotsInChunk)
+            TChain(const TString &vdiskLogPrefix, const ui32 slotsInChunk, TControlWrapper chunksSoftLocking)
                 : VDiskLogPrefix(vdiskLogPrefix)
                 , SlotsInChunk(slotsInChunk)
                 , ConstMask(BuildConstMask(vdiskLogPrefix, slotsInChunk))
+                , ChunksSoftLocking(chunksSoftLocking)
             {}
 
             // returns true if allocated, false -- if no free slots
@@ -151,7 +154,8 @@ namespace NKikimr {
                 ui32 valBlocks,
                 ui32 shiftBlocks,
                 ui32 chunkSize,
-                ui32 appendBlockSize);
+                ui32 appendBlockSize,
+                TControlWrapper chunksSoftLocking);
             TChainDelegator(TChainDelegator &&) = default;
             TChainDelegator &operator =(TChainDelegator &&) = default;
             TChainDelegator(const TChainDelegator &) = delete;
@@ -183,7 +187,8 @@ namespace NKikimr {
                 ui32 oldMinHugeBlobSizeInBytes,
                 ui32 milestoneBlobInBytes,
                 ui32 maxBlobInBytes,
-                ui32 overhead);
+                ui32 overhead,
+                TControlWrapper chunksSoftLocking);
             // return a pointer to corresponding chain delegator by object byte size
             TChainDelegator *GetChain(ui32 size);
             const TChainDelegator *GetChain(ui32 size) const;
@@ -230,6 +235,7 @@ namespace NKikimr {
             const ui32 MilestoneBlobInBytes;
             const ui32 MaxBlobInBytes;
             const ui32 Overhead;
+            TControlWrapper ChunksSoftLocking;
             EStartMode StartMode = EStartMode::Empty;
             TSearchTable SearchTable;
         };
@@ -263,7 +269,8 @@ namespace NKikimr {
                 ui32 maxBlobInBytes,
                 // difference between buckets is 1/overhead
                 ui32 overhead,
-                ui32 freeChunksReservation);
+                ui32 freeChunksReservation,
+                TControlWrapper chunksSoftLocking);
 
 
             ui32 SlotNumberOfThisSize(ui32 size) const {

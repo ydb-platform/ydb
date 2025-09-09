@@ -43,7 +43,7 @@ struct TAuthData {
 };
 
 enum ENavigateRequestState : ui32 {
-    RETRIEVING_DATABASE_PATH = 0,
+    DESCRIBING_DATABASE = 0,
     RESOLVING_DOMAIN_KEY = 1
 };
 

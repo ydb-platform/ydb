@@ -42,6 +42,8 @@ ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.Restore
 ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeFile
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithThinFile
+ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.TestReadLargeParquetFile
+ydb/core/kqp/ut/federated_query/s3 unittest.sole chunk
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
 ydb/core/kqp/ut/olap KqpOlapOptimizer.OptimizationAfterDeletion
@@ -274,6 +276,7 @@ ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-25-
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2_and_stable-25-1-4-column]
+ydb/tests/compatibility test_system_views.py.TestSystemViewsRegistry.test_domain_sys_dir[restart_main_to_prestable-25-3]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityMixed.test_schema_changes_in_mixed_cluster[mixed_prestable-25-3_and_stable-25-1-2]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityMixed.test_table_operations_in_mixed_cluster[mixed_prestable-25-3_and_stable-25-1-2]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRestart.test_create_alter_drop_columns_on_one_version_continue_on_another[restart_prestable-25-3_to_stable-25-1-2]
@@ -305,6 +308,7 @@ ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer
 ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-25-1-2_to_prestable-25-3-row-True]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_current_to_current]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_current_to_stable-25-2-1]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_main_to_prestable-25-3]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_prestable-25-3_to_prestable-25-3]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-25-1-4_to_stable-25-2-1]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-25-2-1_to_current]
@@ -325,6 +329,7 @@ ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.t
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_all_scheme_objects[mixed_current]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_all_scheme_objects[mixed_current_and_stable-25-2-1]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_all_scheme_objects[mixed_main]
+ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_all_scheme_objects[mixed_main_and_prestable-25-3]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_all_scheme_objects[mixed_prestable-25-3]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_all_scheme_objects[mixed_prestable-25-3_and_stable-25-1-2]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_all_scheme_objects[mixed_prestable-25-3_and_stable-25-2-1]
@@ -335,6 +340,7 @@ ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.t
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_tables[mixed_current]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_tables[mixed_current_and_stable-25-2-1]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_tables[mixed_main]
+ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_tables[mixed_main_and_prestable-25-3]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_tables[mixed_prestable-25-3]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_tables[mixed_prestable-25-3_and_stable-25-1-2]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_tables[mixed_prestable-25-3_and_stable-25-2-1]
@@ -346,6 +352,7 @@ ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.t
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_topics[mixed_prestable-25-3]
 ydb/tests/datashard/vector_index/large test_vector_index.py.TestVectorIndex.test_vector_index
 ydb/tests/datashard/vector_index/large test_vector_index_large_levels_and_clusters.py.TestVectorIndexLargeLevelsAndClusters.test_vecot_index_large_levels_and_clusters
+ydb/tests/fq/mem_alloc test_alloc_default.py.TestAlloc.test_alloc_and_free[kikimr0]
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.LoadCorruptedState
 ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestSaveLoadPqRead

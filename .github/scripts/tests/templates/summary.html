@@ -611,46 +611,64 @@
         return body;
     }
 
-    function addOptionalContent(baseBody, logUrls, errorText, remainingSpace) {
+    function buildBodyWithLengthLimit(baseBody, logUrls, errorText, title, labels, maxUrlLength) {
         let body = baseBody;
-        let availableSpace = remainingSpace;
         
-        // Add logs if space allows
-        if (logUrls && Object.keys(logUrls).length > 0 && availableSpace > MIN_REMAINING_SPACE) {
+        // Add logs first
+        if (logUrls && Object.keys(logUrls).length > 0) {
             let logsSection = "**Logs:**%0A";
-            let logCount = 0;
-            const maxLogs = Math.min(Object.keys(logUrls).length, Math.floor(availableSpace / LOG_ENTRY_ESTIMATE));
-            
             for (const [logName, logUrl] of Object.entries(logUrls)) {
-                if (logCount >= maxLogs) break;
-                const logEntry = "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
-                if (logsSection.length + logEntry.length < availableSpace - ERROR_BUFFER_SPACE) {
-                    logsSection += logEntry;
-                    logCount++;
-                } else {
-                    break;
-                }
-            }
-            
-            if (Object.keys(logUrls).length > logCount) {
-                logsSection += "- (and " + (Object.keys(logUrls).length - logCount) + " more logs in report)%0A";
+                logsSection += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
             }
             logsSection += "%0A";
-            
             body += logsSection;
-            availableSpace -= logsSection.length;
         }
         
-        // Add error details if space allows
-        if (errorText && errorText.trim() !== "" && availableSpace > ERROR_BUFFER_SPACE) {
-            const maxErrorLength = Math.min(errorText.trim().length, availableSpace - ERROR_BUFFER_SPACE);
-            const errorToShow = errorText.trim().substring(0, maxErrorLength);
-            let errorSection = "**Error Summary:**%0A```%0A" + encodeURIComponent(errorToShow);
-            if (errorText.trim().length > maxErrorLength) {
-                errorSection += "... (see full error in test report)";
+        // Try to add error text, checking actual URL length
+        if (errorText && errorText.trim() !== "") {
+            const errorPrefix = "**Error Summary:**%0A```%0A";
+            const errorSuffix = "%0A```%0A%0A";
+            const truncationMsg = "... (see full error in test report)";
+            
+            // Start with full error text and try to fit it
+            const fullErrorText = errorText.trim();
+            let testErrorSection = errorPrefix + encodeURIComponent(fullErrorText) + errorSuffix;
+            let testBody = body + testErrorSection;
+            let testUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + testBody + "&labels=" + labels + "&type=Bug";
+            
+            if (testUrl.length <= maxUrlLength) {
+                // Full error fits, use it
+                body += testErrorSection;
+            } else {
+                // Need to truncate - binary search for maximum length that fits (max 4 iterations)
+                let left = 0;
+                let right = fullErrorText.length;
+                let bestLength = 0;
+                let iterations = 0;
+                const maxIterations = 4;
+                
+                while (left <= right && iterations < maxIterations) {
+                    const mid = Math.floor((left + right) / 2);
+                    const errorToTest = fullErrorText.substring(0, mid);
+                    testErrorSection = errorPrefix + encodeURIComponent(errorToTest) + truncationMsg + errorSuffix;
+                    testBody = body + testErrorSection;
+                    testUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + testBody + "&labels=" + labels + "&type=Bug";
+                    
+                    if (testUrl.length <= maxUrlLength) {
+                        bestLength = mid;
+                        left = mid + 1;
+                    } else {
+                        right = mid - 1;
+                    }
+                    iterations++;
+                }
+                
+                if (bestLength > 0) {
+                    const errorToShow = fullErrorText.substring(0, bestLength);
+                    const errorSection = errorPrefix + encodeURIComponent(errorToShow) + truncationMsg + errorSuffix;
+                    body += errorSection;
+                }
             }
-            errorSection += "%0A```%0A%0A";
-            body += errorSection;
         }
         
         return body;
@@ -691,12 +709,8 @@
         // Build labels
         const labels = buildLabels(actualIssueType, buildPreset, ownerAreaLabel);
         
-        // Calculate base URL length
-        const baseUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
-        const remainingSpace = MAX_URL_LENGTH - baseUrl.length;
-        
-        // Add optional content based on available space
-        const finalBody = addOptionalContent(body, logUrls, errorText, remainingSpace);
+        // Build body with exact length limit checking
+        const finalBody = buildBodyWithLengthLimit(body, logUrls, errorText, title, labels, MAX_URL_LENGTH);
         
         // Create final URL and open
         const finalUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + finalBody + "&labels=" + labels + "&type=Bug";

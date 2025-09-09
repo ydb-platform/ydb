@@ -535,13 +535,15 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
     }
 
     auto compare = [](const TString& lhs, const TString& rhs) {
-        if ((lhs.back() != TKey::ESuffix::FastWrite) && (rhs.back() == TKey::ESuffix::FastWrite)) {
-            return true;
+        auto getKeySuffix = [](const TString& v) {
+            return (v.back() == TKey::ESuffix::FastWrite) ? TKey::ESuffix::FastWrite : TKey::ESuffix::Head;
+        };
+
+        if (getKeySuffix(lhs) == getKeySuffix(rhs)) {
+            return lhs < rhs;
         }
-        if ((lhs.back() == TKey::ESuffix::FastWrite) && (rhs.back() != TKey::ESuffix::FastWrite)) {
-            return false;
-        }
-        return lhs < rhs;
+
+        return getKeySuffix(lhs) == TKey::ESuffix::Head;
     };
     std::sort(keys.begin(), keys.end(), compare);
 

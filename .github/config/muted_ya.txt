@@ -37,7 +37,6 @@ ydb/core/kqp/ut/query KqpStats.CreateTableAsStats+IsOlap
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
-ydb/core/kqp/ut/tx KqpSinkMvcc.OlapNamedStatement
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltpNoSink

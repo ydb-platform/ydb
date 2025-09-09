@@ -147,6 +147,11 @@ std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, con
 class TKey : public TKeyPrefix
 {
 public:
+    enum ESuffix : char {
+        FastWrite = '?',
+        Head = '|'
+    };
+
     static TKey ForBody(EType type,
                         const TPartitionId& partition,
                         const ui64 offset,

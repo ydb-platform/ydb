@@ -531,17 +531,32 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         const auto& pair = range.GetPair(i);
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
-        PQ_LOG_D("key[" << i << "]: " << pair.GetKey());
         keys.push_back(pair.GetKey());
     }
 
-    std::sort(keys.begin(), keys.end());
+    auto compare = [](const TString& lhs, const TString& rhs) {
+        auto getKeySuffix = [](const TString& v) {
+            return (v.back() == TKey::ESuffix::FastWrite) ? TKey::ESuffix::FastWrite : TKey::ESuffix::Head;
+        };
+
+        if (getKeySuffix(lhs) == getKeySuffix(rhs)) {
+            return lhs < rhs;
+        }
+
+        return getKeySuffix(lhs) == TKey::ESuffix::Head;
+    };
+    std::sort(keys.begin(), keys.end(), compare);
+
+    for (size_t i = 0; i < keys.size(); ++i) {
+        PQ_LOG_D("key[" << i << "]: " << keys[i]);
+    }
 
     TVector<TString> filtered;
     TKey lastKey;
 
     for (auto& k : keys) {
         if (filtered.empty()) {
+            PQ_LOG_D("add key " << k);
             filtered.push_back(std::move(k));
             lastKey = TKey::FromString(filtered.back(), partitionId);
         } else {
@@ -554,28 +569,28 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
                                    "lastKey=%s, candidate=%s",
                                    lastKey.ToString().data(), candidate.ToString().data());
                     if (lastKey.GetCount() < candidate.GetCount()) {
+                        PQ_LOG_D("replace key " << filtered.back() << " to " << k);
                         filtered.back() = std::move(k);
                         lastKey = candidate;
                     }
+                } else if (lastKey.GetPartNo() > candidate.GetPartNo()) {
+                    PQ_LOG_D("ignore key " << k);
                 } else {
                     // candidate после lastKey
                     //Y_ABORT_UNLESS(lastKey.GetPartNo() + lastKey.GetInternalPartsCount() == candidate.GetPartNo(),
                     //               "lastKey=%s, candidate=%s",
                     //               lastKey.ToString().data(), candidate.ToString().data());
+                    PQ_LOG_D("add key " << k);
                     filtered.push_back(std::move(k));
                     lastKey = candidate;
                 }
             } else {
-                // выше мы отсортировали ключи. поэтому здесь
-                Y_ABORT_UNLESS(lastKey.GetOffset() < candidate.GetOffset(),
-                               "lastKey=%s, candidate=%s",
-                               lastKey.ToString().data(), candidate.ToString().data());
-
                 if (const ui64 nextOffset = lastKey.GetOffset() + lastKey.GetCount(); nextOffset > candidate.GetOffset()) {
                     // lastKey содержит candidate
-                    ;
+                    PQ_LOG_D("ignore key " << k);
                 } else {
                     // candidate после lastKey или пропуск между lastKey и candidate
+                    PQ_LOG_D("add key " << k);
                     filtered.push_back(std::move(k));
                     lastKey = candidate;
                 }
@@ -604,8 +619,10 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         const auto& pair = range.GetPair(i);
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
-        auto k = TKey::FromString(pair.GetKey(), PartitionId());
+        PQ_LOG_D("check key " << pair.GetKey());
+        const auto k = TKey::FromString(pair.GetKey(), PartitionId());
         if (!actualKeys.contains(pair.GetKey())) {
+            PQ_LOG_D("unknown key " << pair.GetKey() << " will be deleted");
             Partition()->DeletedKeys->emplace_back(k.ToString());
             continue;
         }
@@ -616,7 +633,9 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
             }
             head.PartNo = 0;
         } else {
-            Y_ABORT_UNLESS(endOffset <= k.GetOffset(), "%" PRIu64 " <= %" PRIu64 " %s", endOffset, k.GetOffset(), pair.GetKey().c_str());
+            Y_ABORT_UNLESS(endOffset <= k.GetOffset(),
+                           "endOffset=%" PRIu64 ", key=%s",
+                           endOffset, pair.GetKey().data());
             if (endOffset < k.GetOffset()) {
                 gapOffsets.push_back(std::make_pair(endOffset, k.GetOffset()));
                 gapSize += k.GetOffset() - endOffset;
@@ -626,8 +645,9 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
         Y_ABORT_UNLESS(k.GetOffset() >= endOffset);
         endOffset = k.GetOffset() + k.GetCount();
         //at this point EndOffset > StartOffset
-        if (!k.HasSuffix() || !k.IsHead()) //head.Size will be filled after read or head blobs
+        if (!k.HasSuffix() || !k.IsHead()) { //head.Size will be filled after read or head blobs
             bodySize += pair.GetValueSize();
+        }
 
         PQ_LOG_D("Got data offset " << k.GetOffset() << " count " << k.GetCount() << " size " << pair.GetValueSize()
                 << " so " << startOffset << " eo " << endOffset << " " << pair.GetKey()

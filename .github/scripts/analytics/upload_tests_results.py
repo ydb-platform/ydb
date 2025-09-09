@@ -96,9 +96,29 @@ def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, bra
             status = "passed"
             if testcase.find("properties/property/[@name='mute']") is not None:
                 status = "mute"
-                status_description = testcase.find(
+                mute_message = testcase.find(
                     "properties/property/[@name='mute']"
                 ).get("value")
+                
+                # Get original error message from skipped element
+                original_error = ""
+                skipped_element = testcase.find("skipped")
+                if skipped_element is not None:
+                    # Get message from skipped element's message attribute
+                    if skipped_element.get('message'):
+                        original_error = skipped_element.get('message')
+                    # If there's also text content, append it
+                    if skipped_element.text:
+                        if original_error:
+                            original_error += "\n" + skipped_element.text.strip()
+                        else:
+                            original_error = skipped_element.text.strip()
+                
+                # Combine mute message with original error
+                if original_error:
+                    status_description = f"{mute_message}\n{original_error}"
+                else:
+                    status_description = mute_message
             elif testcase.find("failure") is not None:
                 status = "failure"
                 status_description = testcase.find("failure").text

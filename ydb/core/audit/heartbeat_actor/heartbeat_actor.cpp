@@ -31,6 +31,8 @@ public:
         Become(&THeartbeatActor::StateFunc);
         if (HeartbeatInterval) {
             PerformHeartbeat();
+        } else {
+            PassAway();
         }
     }
 

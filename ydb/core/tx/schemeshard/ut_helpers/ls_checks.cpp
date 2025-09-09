@@ -1,5 +1,6 @@
 #include "ls_checks.h"
 
+#include <google/protobuf/text_format.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
@@ -921,20 +922,37 @@ TCheckFunc KMeansTreeDescription(Ydb::Table::VectorIndexSettings_Metric metric,
 
 TCheckFunc SpecializedIndexDescription(const TString& proto) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        TString actual;
         switch (record.GetPathDescription().GetTableIndex().GetSpecializedIndexDescriptionCase()) {
-        case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription:
-            actual = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings().ShortDebugString();
-            break;
-        case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription:
-            actual = record.GetPathDescription().GetTableIndex().GetFulltextIndexDescription().GetSettings().ShortDebugString();
-            break;
-        case NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
-            actual = "SPECIALIZEDINDEXDESCRIPTION_NOT_SET";
-            break;
+            case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription: {
+                auto actual = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
+                Ydb::Table::KMeansTreeSettings expected;
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(proto, &expected));
+                UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
+                    TStringBuilder() << "Expected"
+                        << expected.ShortDebugString()
+                        << " but got "
+                        << actual.ShortDebugString());
+                break;
+            }
+            case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription: {
+                auto actual = record.GetPathDescription().GetTableIndex().GetFulltextIndexDescription().GetSettings();
+                Ydb::Table::FulltextIndexSettings expected;
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(proto, &expected));
+                UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
+                    TStringBuilder() << "Expected"
+                        << expected.ShortDebugString()
+                        << " but got "
+                        << actual.ShortDebugString());
+                break;
+            }
+            case NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET: {
+                UNIT_ASSERT_C(proto == "SPECIALIZEDINDEXDESCRIPTION_NOT_SET",
+                    TStringBuilder() << "Expected"
+                        << proto
+                        << " but got SPECIALIZEDINDEXDESCRIPTION_NOT_SET");
+                break;
+            }
         }
-
-        UNIT_ASSERT_VALUES_EQUAL(actual, proto);
     };
 }
 

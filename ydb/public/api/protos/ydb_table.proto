@@ -139,6 +139,7 @@ message FulltextIndexSettings {
         //     │ "The"        │ 1  │
         //     │ "The"        │ 2  │
         //     └──────────────┴────┘
+        // Supports a single column only
         FLAT = 1;
     }
 
@@ -168,67 +169,84 @@ message FulltextIndexSettings {
         KEYWORD = 3;
     }
 
+    // Represents text analyzers settings
+    message Analyzers {
+        // See Tokenizer enum
+        Tokenizer tokenizer = 1;
+    
+        // Language used for language-sensitive operations like stopword filtering
+        // Example: language = "english"
+        // By default is not specified and no language-specific logic is applied
+        string language = 2;
+    
+        // Whether to convert tokens to lowercase
+        // Example:
+        //   Token: "Quick"
+        //   Output: "quick"
+        bool use_filter_lowercase = 100;
+    
+        // Whether to remove common stopwords like "the", "a", "is"
+        // Example: language = "english"
+        //   Tokens: ["the", "quick", "brown"]
+        //   Output: ["quick", "brown"]
+        bool use_filter_stopwords = 110;
+    
+        // Whether to apply character n-gram indexing to each token
+        // Must be used with filter_ngram_min_length and filter_ngram_max_length
+        // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
+        //   Token: "search"
+        //   Output: ["sea", "ear", "arc", "rch", "sear", "earc", "arch"]
+        bool use_filter_ngram = 120;
+    
+        // Whether to apply edge n-gram indexing (prefix-based) to each token
+        // Used with filter_ngram_min_length and filter_ngram_max_length
+        // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
+        //   Token: "search"
+        //   Output: ["sea", "sear"]
+        bool use_filter_edge_ngram = 121;
+    
+        // Minimum length of n-grams to generate (inclusive)
+        // Must be used with use_filter_ngram or use_filter_edge_ngram
+        // Default value is 3
+        int32 filter_ngram_min_length = 122 [(Ydb.value) = ">= 0"];
+    
+        // Maximum length of n-grams to generate (inclusive)
+        // Must be used with use_filter_ngram or use_filter_edge_ngram
+        // Default value is 4
+        int32 filter_ngram_max_length = 123 [(Ydb.value) = ">= 0"];
+    
+        // Whether to filter tokens by their length
+        // Must be used with filter_length_min or filter_length_max
+        // Example: filter_length_min = 4, filter_length_max = 6
+        //   Tokens: ["foo", "fooba", "foobar", "foobarbaz"]
+        //   Output: ["fooba", "foobar"]
+        bool use_filter_length = 130;
+    
+        // Minimum token length to keep (inclusive)
+        // Must be used with use_filter_length
+        int32 filter_length_min = 131 [(Ydb.value) = ">= 0"];
+    
+        // Maximum token length to keep (inclusive)
+        // Must be used with use_filter_length
+        int32 filter_length_max = 132 [(Ydb.value) = ">= 0"];
+    }
+
+    // Represents text analyzers settings for a specific column
+    message ColumnAnalyzers {
+        // Name of the column to be indexed
+        string column = 1;
+
+        // Analyzer settings specific to this column
+        Analyzers analyzers = 2;
+    }
+
     // See Layout enum
     Layout layout = 1;
 
-    // See Tokenizer enum
-    Tokenizer tokenizer = 2;
-
-    // Language used for language-sensitive operations like stopword filtering
-    // Example: language = "english"
-    // By default is not specified and no language-specific logic is applied
-    string language = 3;
-
-    // Whether to convert tokens to lowercase
-    // Example:
-    //   Token: "Quick"
-    //   Output: "quick"
-    bool use_filter_lowercase = 100;
-
-    // Whether to remove common stopwords like "the", "a", "is"
-    // Example: language = "english"
-    //   Tokens: ["the", "quick", "brown"]
-    //   Output: ["quick", "brown"]
-    bool use_filter_stopwords = 110;
-
-    // Whether to apply character n-gram indexing to each token
-    // Must be used with filter_ngram_min_length and filter_ngram_max_length
-    // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
-    //   Token: "search"
-    //   Output: ["sea", "ear", "arc", "rch", "sear", "earc", "arch"]
-    bool use_filter_ngram = 120;
-
-    // Whether to apply edge n-gram indexing (prefix-based) to each token
-    // Used with filter_ngram_min_length and filter_ngram_max_length
-    // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
-    //   Token: "search"
-    //   Output: ["sea", "sear"]
-    bool use_filter_edge_ngram = 121;
-
-    // Minimum length of n-grams to generate (inclusive)
-    // Must be used with use_filter_ngram or use_filter_edge_ngram
-    // Default value is 3
-    int32 filter_ngram_min_length = 122 [(Ydb.value) = ">= 0"];
-
-    // Maximum length of n-grams to generate (inclusive)
-    // Must be used with use_filter_ngram or use_filter_edge_ngram
-    // Default value is 4
-    int32 filter_ngram_max_length = 123 [(Ydb.value) = ">= 0"];
-
-    // Whether to filter tokens by their length
-    // Must be used with filter_length_min or filter_length_max
-    // Example: filter_length_min = 4, filter_length_max = 6
-    //   Tokens: ["foo", "fooba", "foobar", "foobarbaz"]
-    //   Output: ["fooba", "foobar"]
-    bool use_filter_length = 130;
-
-    // Minimum token length to keep (inclusive)
-    // Must be used with use_filter_length
-    int32 filter_length_min = 131 [(Ydb.value) = ">= 0"];
-
-    // Maximum token length to keep (inclusive)
-    // Must be used with use_filter_length
-    int32 filter_length_max = 132 [(Ydb.value) = ">= 0"];
+    // List of columns and their fulltext settings
+    // Currently, this list should contain a single entry
+    // And provided column should be the only one in the TableIndex.index_columns list
+    repeated ColumnAnalyzers columns = 2;
 }
 
 message GlobalFulltextIndex {

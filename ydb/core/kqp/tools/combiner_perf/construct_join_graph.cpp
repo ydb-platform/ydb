@@ -55,7 +55,7 @@ void SetEntryPointValues(IComputationGraph& g, NYql::NUdf::TUnboxedValue left, N
 }
     
 }    
-NYql::NUdf::TUnboxedValue ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, InnerJoinDescription descr){
+THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, InnerJoinDescription descr){
     Y_ABORT_IF(algo == ETestedJoinAlgo::kBlockHash || algo == ETestedJoinAlgo::kScalarHash,"{Block,Scalar}HashJoin bench is not implemented");
 
     const EJoinKind kInnerJoin = EJoinKind::Inner;
@@ -64,19 +64,6 @@ NYql::NUdf::TUnboxedValue ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, In
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
     TVector<TType*const > resultTypesArr;
     TVector<const ui32> leftRenames, rightRenames;
-    // auto applyForLeftAndRight = [&descr](auto callable){
-    //     callable(descr.LeftSource);
-    //     callable(descr.RightSource);
-    // };
-    // applyForLeftAndRight([](const auto& source){
-    //     Y_ABORT_UNLESS(source.ItemType->IsMulti(),  "please use Multi as ItemType");
-    // });
-    // Y_ABORT_UNLESS(descr.LeftSource.ItemType->IsMulti(), "please use Multi as ItemType");
-    // Y_ABORT_UNLESS(descr.RightSource.ItemType->IsMulti(), "please use Multi as ItemType");
-    // applyForLeftAndRight([](auto& source){
-    //     source
-    // })
-    // TMultiType* leftColumns = AS_TYPE(TMultiType, descr.LeftSource.ItemType);
     for(ui32 idx = 0; idx < std::ssize(descr.LeftSource.ColumnTypes); ++idx){
         resultTypesArr.push_back(descr.LeftSource.ColumnTypes[idx]);
         leftRenames.push_back(idx);
@@ -116,37 +103,40 @@ NYql::NUdf::TUnboxedValue ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, In
     // dqPb.NewMultiType()
     switch (algo) {
 
-    case ETestedJoinAlgo::kScalarGrace:{
+    case ETestedJoinAlgo::kScalarGrace: {
         // flow{Left, Right} are Flow<Multi<...>>
         // returnType is Flow<Multi<...>>
-        auto asMultiFlowArg = [&dqPb](TArrayRef<TType*const > columns){
-            return dqPb.Arg(dqPb.NewFlowType(dqPb.NewMultiType(columns)));
+        auto asMultiListArg = [&dqPb](TArrayRef<TType*const > columns){
+            return dqPb.Arg(dqPb.NewListType(dqPb.NewMultiType(columns)));
         };
-        TRuntimeNode leftFlowArg = asMultiFlowArg(descr.LeftSource.ColumnTypes);
-        TRuntimeNode rightFlowArg = asMultiFlowArg(descr.RightSource.ColumnTypes);
+        TRuntimeNode leftListArg = asMultiListArg(descr.LeftSource.ColumnTypes);
+        TRuntimeNode rightListArg = asMultiListArg(descr.RightSource.ColumnTypes);
         
         // TRuntimeNode rightFlowArg = dqPb.Arg(dqPb.NewFlowType(descr.RightSource.ItemType));
 
         
-        auto wideStream = dqPb.GraceJoin(
-            leftFlowArg, 
-           rightFlowArg,
+        auto wideStream =dqPb.FromFlow(dqPb.GraceJoin(
+            dqPb.ToFlow(leftListArg),
+           dqPb.ToFlow(rightListArg),
             kInnerJoin, descr.LeftSource.KeyColumnIndexes,
             descr.RightSource.KeyColumnIndexes, leftRenames,rightRenames,
-            dqPb.NewFlowType( multiResultType));
+            dqPb.NewFlowType( multiResultType)));
         std::vector<TNode*> entrypoints;
-        entrypoints.push_back(leftFlowArg.GetNode());
-        entrypoints.push_back(rightFlowArg.GetNode());
-        THolder<IComputationGraph> graph = descr.Setup->BuildGraph(/*graph return type is Stream<Multi<...>>*/dqPb.FromFlow(wideStream),entrypoints);
-        TComputationContext& ctx = graph->GetContext();
-        graph->GetEntryPoint(0, false)->SetValue(ctx, std::move(descr.LeftSource.Values));
-        graph->GetEntryPoint(1, false)->SetValue(ctx, std::move(descr.RightSource.Values));
-        return graph->GetValue();
+        entrypoints.push_back(leftListArg.GetNode());
+        entrypoints.push_back(rightListArg.GetNode());
+        MKQL_ENSURE(leftListArg.GetStaticType()->IsList(), TStringBuilder() << "left entrypint node should be of list type, type is " << leftListArg.GetStaticType()->GetKindAsStr() << " instead");
+        MKQL_ENSURE(rightListArg.GetStaticType()->IsList(), TStringBuilder() << "right entrypint node should be of list type, type is " << rightListArg.GetStaticType()->GetKindAsStr() << " instead");
+        THolder<IComputationGraph> graph = descr.Setup->BuildGraph(/*graph return type is Stream<Multi<...>>*/wideStream,entrypoints);
+        SetEntryPointValues(*graph, descr.LeftSource.ValuesList, descr.RightSource.ValuesList);
+        return graph;
     }
     case ETestedJoinAlgo::kBlockMap: {
         // auto v = MakeHashJoinNode();
         TProgramBuilder& pb = static_cast<TProgramBuilder&>(dqPb);
         TVector<ui32> kEmptyColumnDrops;
+        TVector<ui32> kRightDroppedColumns;
+        std::copy(descr.RightSource.KeyColumnIndexes.begin(),descr.RightSource.KeyColumnIndexes.end(), std::back_inserter(kRightDroppedColumns));
+        
         auto asBlockTupleListArg = [&pb](TArrayRef<TType*const > columns){
             return pb.Arg(pb.NewListType(MakeBlockTupleType(pb, pb.NewTupleType(columns),kNotScalar)));
         };
@@ -154,7 +144,7 @@ NYql::NUdf::TUnboxedValue ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, In
         TRuntimeNode rightArg = asBlockTupleListArg(descr.RightSource.ColumnTypes);
         TRuntimeNode wideStream = BuildBlockJoin(pb, kInnerJoin,
             leftArg, descr.LeftSource.KeyColumnIndexes, kEmptyColumnDrops,
-            rightArg, descr.RightSource.KeyColumnIndexes, kEmptyColumnDrops,
+            rightArg, descr.RightSource.KeyColumnIndexes, kRightDroppedColumns,
             false
         );
         std::vector<TNode*> entrypints;
@@ -165,8 +155,8 @@ NYql::NUdf::TUnboxedValue ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, In
         THolder<IComputationGraph> graph = descr.Setup->BuildGraph(wideStream, entrypints);
         TComputationContext& ctx = graph->GetContext();
         const int kBlockSize = 128;
-        SetEntryPointValues(*graph,ToBlocks(ctx,kBlockSize,descr.LeftSource.ColumnTypes,descr.LeftSource.Values), ToBlocks(ctx,kBlockSize,descr.RightSource.ColumnTypes,descr.RightSource.Values));
-        return graph->GetValue();
+        SetEntryPointValues(*graph,ToBlocks(ctx,kBlockSize,descr.LeftSource.ColumnTypes,descr.LeftSource.ValuesList), ToBlocks(ctx,kBlockSize,descr.RightSource.ColumnTypes,descr.RightSource.ValuesList));
+        return graph;
     }
     case ETestedJoinAlgo::kBlockHash:
     // {

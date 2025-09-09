@@ -23,12 +23,12 @@ NKikimr::NMiniKQL::InnerJoinDescription PrepareCommonDescription(NKikimr::NMiniK
     const int size = 1<<12;
 
 
-    std::tie(descr.LeftSource.ColumnTypes, descr.LeftSource.Values) =
+    std::tie(descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList) =
     ConvertVectorsToRuntimeTypesAndValue(*setup, GenerateKeyColumn(size, 123),
         TVector<ui64>(size, 111), TVector<TString>(size, "meow")
     );
     // descr.LeftSource.ColumnTypes = AS_TYPE(NKikimr::NMiniKQL::TListType, descr.LeftSource.ColumnTypes)->GetItemType();
-    std::tie(descr.RightSource.ColumnTypes, descr.RightSource.Values) = 
+    std::tie(descr.RightSource.ColumnTypes, descr.RightSource.ValuesList) = 
     ConvertVectorsToRuntimeTypesAndValue(*setup, GenerateKeyColumn(size, 111),
         TVector<TString>(size, "woo")
     );
@@ -46,26 +46,25 @@ TTestResult DoRunJoinsBench(const NKikimr::NMiniKQL::TRunParams &params){
     TRunResult finalResult;
     NKikimr::NMiniKQL::TDqSetup<false> setup{NKikimr::NMiniKQL::GetPerfTestFactory()};
 
-    NYKQL::InnerJoinDescription descr = PrepareCommonDescription(&setup);
-    TVector<const ui32> keyColumns;
-    keyColumns.push_back(0);
-    descr.LeftSource.KeyColumnIndexes = keyColumns;
-    descr.RightSource.KeyColumnIndexes = keyColumns;
+    const TVector<const ui32> keyColumns{0};
 
     struct JoinTestResult{
         i64 LineCount;
         TDuration BenchDuration;
     };
     TMap<NYKQL::ETestedJoinAlgo, JoinTestResult> results;
+    TVector<std::pair<NYKQL::ETestedJoinAlgo, std::string_view>> cases = {{NYKQL::ETestedJoinAlgo::kScalarGrace, "ScalarGrace"}, {NYKQL::ETestedJoinAlgo::kBlockMap, "BlockMap"}};
 
-    for(NYKQL::ETestedJoinAlgo algo: {NYKQL::ETestedJoinAlgo::kScalarGrace, NYKQL::ETestedJoinAlgo::kBlockMap, }){
-        NYql::NUdf::TUnboxedValue wideStream = ConstructInnerJoinGraphStream(algo, descr);
+    for(auto [algo, name]: cases){
+        NYKQL::InnerJoinDescription descr = PrepareCommonDescription(&setup);
+        descr.LeftSource.KeyColumnIndexes = keyColumns;
+        descr.RightSource.KeyColumnIndexes = keyColumns;
+        THolder<NKikimr::NMiniKQL::IComputationGraph> wideStreamGraph = ConstructInnerJoinGraphStream(algo, descr);
+        NYql::NUdf::TUnboxedValue wideStream = wideStreamGraph->GetValue();
         std::vector<NYql::NUdf::TUnboxedValue> fetchBuff;
-        i32 cols = 
-        // 6;
-        NKikimr::NMiniKQL::ResultColumnCount(algo,descr);
+        i32 cols = NKikimr::NMiniKQL::ResultColumnCount(algo,descr);
         fetchBuff.resize(cols);
-        Cerr << "Compute graph result" << Endl; 
+        Cerr << "Compute graph result for algorithm '" << name << "'" << Endl; 
 
         NYql::NUdf::EFetchStatus fetchStatus;
         JoinTestResult thisResults{};

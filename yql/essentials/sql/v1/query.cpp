@@ -859,6 +859,20 @@ public:
                 ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
                 return false;
             }
+
+            if ("watermark" == hintName) {
+                TNodePtr option = Y(BuildQuotedAtom(Pos, hintName));
+                auto anyColumnSrc = BuildAnyColumnSource(Pos);
+                for (auto& x : hint.second) {
+                    if (!x->Init(ctx, anyColumnSrc.Get())) {
+                        return false;
+                    }
+                    option = L(option, x);
+                }
+                Nodes.push_back(Q(option));
+                continue;
+            }
+
             TNodePtr option = Y(BuildQuotedAtom(Pos, hintName));
             for (auto& x : hint.second) {
                 if (!x->Init(ctx, src)) {

@@ -748,16 +748,11 @@ private:
             Send(ExecuterId, ev.Release(), NActors::IEventHandle::FlagTrackDelivery);
         }
 
-        if (DeferredInjectCheckpointEvent) {
-            ForwardToCheckpoints(std::move(DeferredInjectCheckpointEvent));
+        for (auto& ev: DeferredEvents) {
+            Receive(ev);
         }
-        if (DeferredRestoreFromCheckpointEvent) {
-            ForwardToCheckpoints(std::move(DeferredRestoreFromCheckpointEvent));
-        }
-        if (DeferredRunEvent) {
-            HandleExecuteBase(DeferredRunEvent);
-            DeferredRunEvent.Reset();
-        }
+        DeferredEvents.clear();
+        DeferredEvents.shrink_to_fit();
 
         ContinueExecute(EResumeSource::CATaskRunnerCreated);
     }
@@ -1097,8 +1092,7 @@ private:
         if (TypeEnv) {
             ForwardToCheckpoints(std::move(ev));
         } else {
-            Y_ABORT_UNLESS(!DeferredInjectCheckpointEvent);
-            DeferredInjectCheckpointEvent = std::move(ev);
+            DeferredEvents.emplace_back(ev.Release());
         }
     }
 
@@ -1106,8 +1100,7 @@ private:
         if (TypeEnv) {
             ForwardToCheckpoints(std::move(ev));
         } else {
-            Y_ABORT_UNLESS(!DeferredRestoreFromCheckpointEvent);
-            DeferredRestoreFromCheckpointEvent = std::move(ev);
+            DeferredEvents.emplace_back(ev.Release());
         }
     }
 
@@ -1115,8 +1108,7 @@ private:
         if (TypeEnv) {
             HandleExecuteBase(ev);
         } else {
-            Y_ABORT_UNLESS(!DeferredRunEvent);
-            DeferredRunEvent = std::move(ev);
+            DeferredEvents.emplace_back(ev.Release());
         }
     }
 
@@ -1159,7 +1151,7 @@ private:
         if (auto watermarkRequest = WatermarksTracker.GetPendingWatermark()) {
             Y_ENSURE(*watermarkRequest >= ContinueRunEvent->WatermarkRequest);
             ContinueRunEvent->WatermarkRequest = *watermarkRequest;
-            MetricsReporter.ReportInjectedToTaskRunnerWatermark(*watermarkRequest);
+            MetricsReporter.ReportInjectedToTaskRunnerWatermark(*watermarkRequest, WatermarksTracker.GetWatermarkDiscrepancy());
         }
 
         if (!UseCpuQuota()) {
@@ -1213,9 +1205,6 @@ private:
     NTaskRunnerActor::ITaskRunnerActor* TaskRunnerActor = nullptr;
     NActors::TActorId TaskRunnerActorId;
     NTaskRunnerActor::ITaskRunnerActorFactory::TPtr TaskRunnerActorFactory;
-    TEvDqCompute::TEvInjectCheckpoint::TPtr DeferredInjectCheckpointEvent;
-    TEvDqCompute::TEvRestoreFromCheckpoint::TPtr DeferredRestoreFromCheckpointEvent;
-    TEvDqCompute::TEvRun::TPtr DeferredRunEvent;
 
     THashSet<ui64> FinishedOutputChannels;
     THashSet<ui64> FinishedSinks;
@@ -1252,6 +1241,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
     NDqProto::TEvComputeActorState ComputeActorState;
     TMaybe<EResumeSource> LastPollResult;
+    TVector<TAutoPtr<IEventHandle>> DeferredEvents;
 };
 
 

@@ -2152,17 +2152,12 @@ private:
     TNodePtr Node;
 };
 
-THoppingWindow::THoppingWindow(TPosition pos, const TVector<TNodePtr>& args)
+THoppingWindow::THoppingWindow(TPosition pos, TVector<TNodePtr> args)
     : INode(pos)
-    , Args(args)
-    , FakeSource(BuildFakeSource(pos))
-    , Valid(false)
+    , Args_(std::move(args))
+    , FakeSource_(BuildFakeSource(pos))
+    , Valid_(false)
 {}
-
-void THoppingWindow::MarkValid() {
-    YQL_ENSURE(!HasState(ENodeState::Initialized));
-    Valid = true;
-}
 
 TNodePtr THoppingWindow::BuildTraits(const TString& label) const {
     YQL_ENSURE(HasState(ENodeState::Initialized));
@@ -2170,12 +2165,22 @@ TNodePtr THoppingWindow::BuildTraits(const TString& label) const {
     return Y(
         "HoppingTraits",
         Y("ListItemType", Y("TypeOf", label)),
-        BuildLambda(Pos, Y("row"), Y("Just", Y("SystemMetadata", Y("String", Q("write_time")), Y("DependsOn", "row")))),
-        Hop,
-        Interval,
-        Interval,
-        Q("true"),
-        Q("v2"));
+        BuildLambda(Pos, Y("row"), TimeExtractor_),
+        Hop_,
+        Interval_,
+        Delay_,
+        Q(DataWatermarks_),
+        Q("v2")
+    );
+}
+
+TNodePtr THoppingWindow::GetInterval() const {
+    return Interval_;
+}
+
+void THoppingWindow::MarkValid() {
+    YQL_ENSURE(!HasState(ENodeState::Initialized));
+    Valid_ = true;
 }
 
 bool THoppingWindow::DoInit(TContext& ctx, ISource* src) {
@@ -2184,24 +2189,29 @@ bool THoppingWindow::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    if (!(Args.size() == 2)) {
-        ctx.Error(Pos) << "HoppingWindow requires two arguments";
+    if (Args_.size() != 3) {
+        ctx.Error(Pos) << "HoppingWindow requires three arguments";
         return false;
     }
 
-    if (!Valid) {
+    if (!Valid_) {
         ctx.Error(Pos) << "HoppingWindow can only be used as a top-level GROUP BY expression";
         return false;
     }
 
-    auto hopExpr = Args[0];
-    auto intervalExpr = Args[1];
-    if (!(hopExpr->Init(ctx, FakeSource.Get()) && intervalExpr->Init(ctx, FakeSource.Get()))) {
+    auto timeExtractor = Args_[0];
+    auto hopExpr = Args_[1];
+    auto intervalExpr = Args_[2];
+
+    if (!timeExtractor->Init(ctx, src) ||
+        !hopExpr->Init(ctx, FakeSource_.Get()) ||
+        !intervalExpr->Init(ctx, FakeSource_.Get())) {
         return false;
     }
 
-    Hop = ProcessIntervalParam(hopExpr);
-    Interval = ProcessIntervalParam(intervalExpr);
+    TimeExtractor_ = timeExtractor;
+    Hop_ = ProcessIntervalParam(hopExpr);
+    Interval_ = ProcessIntervalParam(intervalExpr);
 
     return true;
 }
@@ -2216,7 +2226,7 @@ void THoppingWindow::DoUpdateState() const {
 }
 
 TNodePtr THoppingWindow::DoClone() const {
-    return new THoppingWindow(Pos, CloneContainer(Args));
+    return new THoppingWindow(Pos, CloneContainer(Args_));
 }
 
 TString THoppingWindow::GetOpName() const {
@@ -2607,54 +2617,71 @@ private:
     TString Mode;
 };
 
-template <bool IsStart>
-class THoppingTime final: public TAstListNode {
+template<bool IsStart>
+class THoppingTime final : public TAstListNode {
 public:
-    THoppingTime(TPosition pos, const TVector<TNodePtr>& args = {})
+    THoppingTime(TPosition pos, TVector<TNodePtr> args)
         : TAstListNode(pos)
-    {
-        Y_UNUSED(args);
-    }
+        , Args_(std::move(args))
+    {}
 
 private:
-    TNodePtr DoClone() const override {
-        return new THoppingTime(GetPos());
-    }
-
     bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(ctx);
+        if (!src || src->IsFake()) {
+            ctx.Error(Pos) << GetOpName() << " requires data source";
+            return false;
+        }
+
+        if (Args_.size() > 0) {
+            ctx.Error(Pos) << GetOpName() << " requires exactly 0 arguments";
+            return false;
+        }
 
         auto legacySpec = src->GetLegacyHoppingWindowSpec();
         auto spec = src->GetHoppingWindowSpec();
         if (!legacySpec && !spec) {
-            ctx.Error(Pos) << "No hopping window parameters in aggregation";
+            if (src->HasAggregations()) {
+                ctx.Error(Pos) << GetOpName() << " can not be used here: HoppingWindow specification is missing in GROUP BY";
+            } else {
+                ctx.Error(Pos) << GetOpName() << " can not be used without aggregation by HoppingWindow";
+            }
             return false;
         }
-
-        Nodes.clear();
 
         const auto fieldName = legacySpec
             ? "_yql_time"
             : spec->GetLabel();
 
-        const auto interval = legacySpec
+        if constexpr (IsStart) {
+            const auto interval = legacySpec
             ? legacySpec->Interval
-            : dynamic_cast<THoppingWindow*>(spec.Get())->Interval;
+            : dynamic_cast<THoppingWindow*>(spec.Get())->GetInterval();
 
-        if (!IsStart) {
+            Add("Sub",
+                Y("Member", "row", Q(fieldName)),
+                interval
+            );
+        } else {
             Add("Member", "row", Q(fieldName));
-            return true;
         }
 
-        Add("Sub",
-            Y("Member", "row", Q(fieldName)),
-            interval);
         return true;
     }
 
     void DoUpdateState() const override {
         State.Set(ENodeState::Aggregated, true);
     }
+
+    TNodePtr DoClone() const override {
+        return new THoppingTime<IsStart>(Pos, CloneContainer(Args_));
+    }
+
+    TString GetOpName() const override {
+        return IsStart ? "HopStart" : "HopEnd";
+    }
+
+private:
+    TVector<TNodePtr> Args_;
 };
 
 class TInvalidBuiltin final: public INode {

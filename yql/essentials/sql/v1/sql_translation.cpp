@@ -3369,6 +3369,7 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
     //      an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
     //    | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
     //    | SCHEMA EQUALS? LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
+    //    | WATERMARK AS LPAREN expr RPAREN
     switch (rule.Alt_case()) {
     case TRule_table_hint::kAltTableHint1: {
         const auto& alt = rule.GetAlt_table_hint1();
@@ -3479,6 +3480,18 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
             hints["user_" + to_lower(alt.GetToken1().GetValue())] = { structType };
             break;
         }
+    }
+
+    case TRule_table_hint::kAltTableHint4: {
+        const auto& alt = rule.GetAlt_table_hint4();
+        const auto pos = Ctx.TokenPosition(alt.GetToken1());
+        TColumnRefScope scope(Ctx, EColumnRefState::Allow);
+        auto expr = TSqlExpression(Ctx, Mode).Build(alt.GetRule_expr4());
+        if (!expr) {
+            return false;
+        }
+        hints["watermark"] = { BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), std::move(expr)) };
+        break;
     }
 
     case TRule_table_hint::ALT_NOT_SET:
@@ -4402,7 +4415,7 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
             break;
         }
         case TRule_window_frame_bound::ALT_NOT_SET:
-            Y_ABORT("FrameClause: frame bound not corresond to grammar changes");
+            Y_ABORT("FrameClause: frame bound not correspond to grammar changes");
     }
     return true;
 }

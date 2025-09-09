@@ -139,7 +139,7 @@ message FulltextIndexSettings {
         //     │ "The"        │ 1  │
         //     │ "The"        │ 2  │
         //     └──────────────┴────┘
-        // Supports single column only
+        // Supports a single column only
         FLAT = 1;
     }
 

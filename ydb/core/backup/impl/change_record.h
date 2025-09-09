@@ -78,9 +78,10 @@ private:
             NKikimrBackup::TColumnStateMap columnStateMap;
 
             // Handle both Upsert and Reset operations
-            const auto& operationData = ProtoBody.GetCdcDataChange().GetRowOperationCase() == NKikimrChangeExchange::TDataChange::kUpsert 
-                ? ProtoBody.GetCdcDataChange().GetUpsert()
-                : ProtoBody.GetCdcDataChange().GetReset();
+            const bool isResetOperation = ProtoBody.GetCdcDataChange().GetRowOperationCase() == NKikimrChangeExchange::TDataChange::kReset;
+            const auto& operationData = isResetOperation 
+                ? ProtoBody.GetCdcDataChange().GetReset()
+                : ProtoBody.GetCdcDataChange().GetUpsert();
             
             TSerializedCellVec originalCells;
             Y_ABORT_UNLESS(TSerializedCellVec::TryParse(operationData.GetData(), originalCells));
@@ -111,8 +112,13 @@ private:
                     }
                     columnState->SetIsChanged(true);
                 } else {
-                    columnState->SetIsNull(false);
-                    columnState->SetIsChanged(false);
+                    if (isResetOperation) {
+                        columnState->SetIsNull(true);
+                        columnState->SetIsChanged(true);
+                    } else {
+                        columnState->SetIsNull(false);
+                        columnState->SetIsChanged(false);
+                    }
                 }
             }
 

@@ -39,6 +39,21 @@ using namespace NYdb::NTopic;
 using namespace NYdb::NReplication;
 using namespace fmt::literals;
 
+namespace {
+
+template<bool UseQueryService>
+TStatus ExecuteGeneric(NYdb::NQuery::TQueryClient& queryClient, TSession& session, const TString& query) {
+    if constexpr (UseQueryService) {
+        Y_UNUSED(session);
+        return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    } else {
+        Y_UNUSED(queryClient);
+        return session.ExecuteSchemeQuery(query).ExtractValueSync();
+    }
+}
+
+}
+
 Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(UseUnauthorizedTable) {
         TKikimrRunner kikimr("test_user@builtin");
@@ -2140,16 +2155,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
 
-        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
-
         TString tableName = "/Root/TableWithFamiliesRegular";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2165,7 +2170,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ),
                 FAMILY Family2 ()
             );)";
-        auto result = executeGeneric(query);
+        auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
@@ -2277,16 +2282,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
 
-        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
-
         TString tableName = "/Root/TableWithWithCacheMode";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2300,7 +2295,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                      CACHE_MODE = "in_memory"
                 ),
             );)";
-        auto result = executeGeneric(query);
+        auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Setting cache_mode is not allowed", result.GetIssues().ToString());
     }
@@ -2311,16 +2306,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
 
-        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
-
         TString tableName = "/Root/TableWithWithCacheMode";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2333,13 +2318,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                      DATA = "test"
                 ),
             );)";
-        auto result = executeGeneric(query);
+        auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto queryAlter = TStringBuilder() << R"(
             --!syntax_v1
             ALTER TABLE `)" << tableName << R"(` ALTER FAMILY Family1 SET CACHE_MODE "in_memory";)";
-        auto resultAlter = executeGeneric(queryAlter);
+        auto resultAlter = ExecuteGeneric<UseQueryService>(queryClient, session, queryAlter);
         UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::GENERIC_ERROR, resultAlter.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Setting cache_mode is not allowed", resultAlter.GetIssues().ToString());
     }
@@ -2350,16 +2335,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
 
-        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
-
         TString tableName = "/Root/TableWithWithCacheMode";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2372,7 +2347,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                      DATA = "test"
                 ),
             );)";
-        auto result = executeGeneric(query);
+        auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto queryAlter = TStringBuilder() << R"(
@@ -2382,7 +2357,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                      DATA = "test",
                      CACHE_MODE = "in_memory"
                 );)";
-        auto resultAlter = executeGeneric(queryAlter);
+        auto resultAlter = ExecuteGeneric<UseQueryService>(queryClient, session, queryAlter);
         UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::GENERIC_ERROR, resultAlter.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Setting cache_mode is not allowed", resultAlter.GetIssues().ToString());
     }
@@ -2393,16 +2368,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
-
-        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
 
         TString tableName = "/Root/TableWithDefaultFamily";
         auto query = TStringBuilder() << R"(
@@ -2423,7 +2388,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                      CACHE_MODE = "regular"
                 )
             );)";
-        auto result = executeGeneric(query);
+        auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         {
@@ -2459,7 +2424,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER COLUMN Value1 SET FAMILY Family2,
                 ALTER FAMILY Family1 SET COMPRESSION "LZ4",
                 ALTER FAMILY Family1 SET CACHE_MODE "in_memory";)";
-        auto resultAlter1 = executeGeneric(queryAlter1);
+        auto resultAlter1 = ExecuteGeneric<UseQueryService>(queryClient, session, queryAlter1);
         UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
 
         {
@@ -2993,19 +2958,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
 
-        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
-
         constexpr int minPartitionsCount = 10;
         {
-            const auto result = executeGeneric(Sprintf(R"(
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
                         ALTER TABLE `/Root/SecondaryKeys` ALTER INDEX Index SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT %d;
                     )", minPartitionsCount
                 )
@@ -3021,7 +2976,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         constexpr int partitionSizeMb = 555;
         {
-            const auto result = executeGeneric(Sprintf(R"(
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
                         ALTER TABLE `/Root/SecondaryKeys` ALTER INDEX Index SET AUTO_PARTITIONING_PARTITION_SIZE_MB %d;
                     )", partitionSizeMb
                 )
@@ -3039,7 +2994,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         constexpr auto readReplicasMode = NYdb::NTable::TReadReplicasSettings::EMode::PerAz;
         constexpr ui64 readReplicasCount = 1;
         {
-            const auto result = executeGeneric(Sprintf(R"(
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
                         ALTER TABLE `/Root/SecondaryKeys` ALTER INDEX Index SET READ_REPLICAS_SETTINGS "%s:%)" PRIu64 R"(";
                     )", readReplicasModeAsString.data(), readReplicasCount
                 )
@@ -6462,16 +6417,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto executeQuery = [&queryClient, &session](const TString& query) {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
-
         {
             auto query = R"(
                 --!syntax_v1
@@ -6482,7 +6427,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )";
 
-            auto result = executeQuery(query);
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -6494,7 +6439,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )";
 
-            const auto result = executeQuery(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto describeResult = session.DescribeTable("/Root/table").ExtractValueSync();
@@ -6513,7 +6458,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )";
 
-            const auto result = executeQuery(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto describeResult = session.DescribeTable("/Root/table").ExtractValueSync();
@@ -8982,16 +8927,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto executeQuery = [&queryClient, &session](const TString& query) {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
-
         // invalid, non-secure mode
         {
             auto query = Sprintf(R"(
@@ -9006,7 +8941,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )", kikimr.GetEndpoint().c_str());
 
-            const auto result = executeQuery(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "CA_CERT has no effect in non-secure mode", result.GetIssues().ToOneLineString());
         }
@@ -9025,7 +8960,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )", kikimr.GetEndpoint().c_str());
 
-            const auto result = executeQuery(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
@@ -9036,16 +8971,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
-
-        auto executeQuery = [&queryClient, &session](const TString& query) {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
 
         // default
         {
@@ -9059,7 +8984,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )", kikimr.GetEndpoint().c_str());
 
-            const auto result = executeQuery(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto desc = repl.DescribeReplication("/Root/replication1").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(desc.GetReplicationDescription().GetConsistencyLevel(), TReplicationDescription::EConsistencyLevel::Global);
@@ -9079,7 +9004,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )", kikimr.GetEndpoint().c_str());
 
-            const auto result = executeQuery(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto desc = repl.DescribeReplication("/Root/replication2").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(desc.GetReplicationDescription().GetConsistencyLevel(), TReplicationDescription::EConsistencyLevel::Global);
@@ -13134,29 +13059,19 @@ END DO)",
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
 
-        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
-
         // fail
         { // no value
             static const auto query = R"sql(
                 CREATE SECRET `/Root/secret-name` WITH (secret_value = "secret-value-1");
             )sql";
-            const auto result = executeGeneric(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
         { // unknown parameter
             static const auto query = R"sql(
                 CREATE SECRET `/Root/secret-name` WITH (value = "value", secret_value = "secret-value-1");
             )sql";
-            const auto result = executeGeneric(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
 
@@ -13165,7 +13080,7 @@ END DO)",
             const static auto query = R"sql(
                 CREATE SECRET `/Root/secret-name` WITH (value = "secret-value");
             )sql";
-            const auto result = executeGeneric(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
             UNIT_ASSERT_STRINGS_EQUAL(describeResult->Record.GetPathDescription().GetSecretDescription().GetValue(), "secret-value");
@@ -13174,7 +13089,7 @@ END DO)",
             const static auto query = R"sql(
                 CREATE SECRET `/Root/secret-dir/secret-name` WITH (value = "", inherit_permissions = True);
             )sql";
-            const auto result = executeGeneric(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
@@ -13190,20 +13105,10 @@ END DO)",
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
 
-        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
-
         static const auto query = R"sql(
             CREATE SECRET `/Root/secret-name` WITH (value = "secret-value-1");
         )sql";
-        const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         // fail
@@ -13211,21 +13116,21 @@ END DO)",
             static const auto query = R"sql(
                 ALTER SECRET `/Root/secret-name` WITH (secret_value = "secret-value-2");
             )sql";
-            const auto result = executeGeneric(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
         { // unknown parameter
             static const auto query = R"sql(
                 ALTER SECRET `/Root/secret-name` WITH (value = "secret-value-2", inherit_permissions = True);
             )sql";
-            const auto result = executeGeneric(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
         { // unexisting secret
             static const auto query = R"sql(
                 ALTER SECRET `/Root/secret-name-another` WITH (value = "secret-value-2");
             )sql";
-            const auto result = executeGeneric(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
 
@@ -13237,7 +13142,7 @@ END DO)",
             static const auto query = R"sql(
                 ALTER SECRET `/Root/secret-name` WITH (value = "secret-value-2");
             )sql";
-            const auto result = executeGeneric(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
             UNIT_ASSERT_STRINGS_EQUAL(describeResult->Record.GetPathDescription().GetSecretDescription().GetValue(), "secret-value-2");
@@ -13255,20 +13160,10 @@ END DO)",
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
 
-        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
-
         static const auto query = R"sql(
             CREATE SECRET `/Root/secret-name` WITH (value = "secret-value");
         )sql";
-        const auto result = executeGeneric(query);
+        const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         // fail
@@ -13276,14 +13171,14 @@ END DO)",
             static const auto query = R"sql(
                 DROP SECRET `/Root/secret-name` WITH (value = "secret-value");
             )sql";
-            const auto result = executeGeneric(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
         { // unexisting secret
             static const auto query = R"sql(
                 DROP SECRET `/Root/secret-name-another`;
             )sql";
-            const auto result = executeGeneric(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
 
@@ -13298,7 +13193,7 @@ END DO)",
             static const auto query = R"sql(
                 DROP SECRET `/Root/secret-name`;
             )sql";
-            const auto result = executeGeneric(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
             UNIT_ASSERT_C(!describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret somehow exists");

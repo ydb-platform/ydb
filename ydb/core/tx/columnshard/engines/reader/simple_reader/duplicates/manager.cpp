@@ -202,10 +202,24 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
     auto constructor = std::make_shared<TFilterAccumulator>(ev);
-    NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(constructor->GetMemoryProcessId(),
-        constructor->GetMemoryScopeId(), constructor->GetMemoryGroupId(),
-        { std::make_shared<TPortionIntersectionsAllocation>(SelfId(), constructor,
-            TBuildFilterContext::GetApproximateDataSize(ExpectedIntersectionCount)) }, (ui64)TFilterAccumulator::EFetchingStage::INTERSECTIONS);
+    TPortionInfo::TConstPtr mainPortion = Portions->GetPortionVerified(constructor->GetRequest()->Get()->GetSourceId());
+    static constexpr ui64 LOW_INTERSECTIONS_LIMIT = 10;
+    ui64 intersectionsCount = 0;
+    Intervals.EachIntersection(TPortionIntervalTree::TRange(mainPortion->IndexKeyStart(), true, mainPortion->IndexKeyEnd(), true),
+        [&intersectionsCount](const TPortionIntervalTree::TRange& /*interval*/, const std::shared_ptr<TPortionInfo>& /*portion*/) {
+            ++intersectionsCount;
+            return intersectionsCount <= LOW_INTERSECTIONS_LIMIT;
+        });
+    ExpectedIntersectionCount = std::max(ExpectedIntersectionCount, intersectionsCount);
+    if (intersectionsCount <= LOW_INTERSECTIONS_LIMIT) {
+        Send(SelfId(), new NPrivate::TEvFilterRequestResourcesAllocated(constructor, nullptr));
+    } else {
+        NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(constructor->GetMemoryProcessId(),
+            constructor->GetMemoryScopeId(), constructor->GetMemoryGroupId(),
+            { std::make_shared<TPortionIntersectionsAllocation>(
+                SelfId(), constructor, TBuildFilterContext::GetApproximateDataSize(ExpectedIntersectionCount)) },
+            (ui64)TFilterAccumulator::EFetchingStage::INTERSECTIONS);
+    }
 }
 
 void TDuplicateManager::StartIntervalProcessing(const THashMap<ui64, TPortionInfo::TConstPtr>& intersectingPortions,
@@ -264,6 +278,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
         const auto collector = [&intersectingPortions](
                                    const TPortionIntervalTree::TRange& /*interval*/, const std::shared_ptr<TPortionInfo>& portion) {
             AFL_VERIFY(intersectingPortions.emplace(portion->GetPortionId(), portion).second);
+            return true;
         };
         Intervals.EachIntersection(
             TPortionIntervalTree::TRange(mainPortion->IndexKeyStart(), true, mainPortion->IndexKeyEnd(), true), collector);

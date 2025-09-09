@@ -462,18 +462,25 @@ private:
 
 private:
     template <class TCallback>
-    void DoEachRange(const TNode* t, TCallback&& callback) const {
+    bool DoEachRange(const TNode* t, TCallback&& callback) const {
         if (t->Left) {
-            DoEachRange(t->Left.Get(), callback);
+            if (!DoEachRange(t->Left.Get(), callback)) {
+                return false;
+            }
         }
-        { callback(t->ToRange(), t->Value); }
+        if (!callback(t->ToRange(), t->Value)) {
+            return false;
+        }
         if (t->Right) {
-            DoEachRange(t->Right.Get(), callback);
+            if (!DoEachRange(t->Right.Get(), callback)) {
+                return false;
+            }
         }
+        return true;
     }
 
     template <class TCallback>
-    void DoEachIntersection(
+    bool DoEachIntersection(
         const TNode* t, const TBorder& leftBorder, const TBorder& rightBorder, TCallback&& callback, bool wentLeft = false) const {
         int cmp;
 
@@ -481,31 +488,37 @@ private:
             int cmp = CompareBorders(t->MaxRightBorder(), leftBorder);
             if (cmp < 0) {
                 // There is no intersection with this whole subtree
-                return;
+                return true;
             }
         }
 
         if (t->Left) {
             // Descend into the left subtree
             // Note it will terminate on subtrees that have small MaxRightBorder
-            DoEachIntersection(t->Left.Get(), leftBorder, rightBorder, callback, true);
+            if (!DoEachIntersection(t->Left.Get(), leftBorder, rightBorder, callback, true)) {
+                return false;
+            }
         }
 
         cmp = CompareBorders(rightBorder, t->LeftBorder());
         if (cmp < 0) {
             // There is no intersection with this node or the right subtree
-            return;
+            return true;
         }
 
         // N.B. we avoid comparison with RightKey when it is equal to MaxRightKey.
         if ((wentLeft && t->MaxRightTrivial) || CompareBorders(leftBorder, t->RightBorder()) <= 0)
         {
-            callback(t->ToRange(), t->Value);
+            if (!callback(t->ToRange(), t->Value)) {
+                return false;
+            }
         }
 
         if (t->Right) {
             // Descend into the right subtree
-            DoEachIntersection(t->Right.Get(), leftBorder, rightBorder, callback);
+            if (!DoEachIntersection(t->Right.Get(), leftBorder, rightBorder, callback)) {
+                return false;
+            }
         }
     }
 

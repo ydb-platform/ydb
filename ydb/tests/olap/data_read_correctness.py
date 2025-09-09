@@ -137,7 +137,7 @@ class TestDataReadPerformanceNoIntersections(object):
             )
             WITH (
                 STORE = COLUMN,
-                PARTITION_COUNT = 1
+                PARTITION_COUNT = 10
             )
             """
         )

@@ -1362,7 +1362,6 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
 
     if (graceful) {
         auto committedOffset = partitionStream->GetMaxCommittedOffset();
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "XXXXX PushEvent 1422 TStopPartitionSessionEvent");
         pushRes = EventsQueue->PushEvent(
             partitionStream,
             // TODO(qyryq) Is it safe to use GetMaxCommittedOffset here instead of StopPartitionSessionRequest.commmitted_offset?
@@ -1375,7 +1374,6 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
         released.set_partition_session_id(partitionStream->GetAssignId());
         WriteToProcessorImpl(std::move(req));
         PartitionStreams.erase(partitionSessionId);
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "XXXXX PushEvent 1435 TPartitionSessionClosedEvent");
         pushRes = EventsQueue->PushEvent(
             partitionStream,
             TReadSessionEvent::TPartitionSessionClosedEvent(partitionStream, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),
@@ -3064,16 +3062,15 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                         data.set_data(TStringType{decompressed});
                     }
                 }
-
-                DecompressedSize += data.data().size();
             } catch (...) {
                 parent->PutDecompressionError(std::current_exception(), messages.Batch, i);
-                data.clear_data(); // Free memory, because we don't count it.
 
                 if (auto session = parent->CbContext->LockShared()) {
                     session->GetLog() << TLOG_INFO << "Error decompressing data: " << CurrentExceptionMessage();
                 }
             }
+
+            DecompressedSize += data.data().size();
         }
     }
 

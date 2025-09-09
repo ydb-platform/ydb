@@ -17,6 +17,20 @@ namespace NArrow {
  * The logic of this conversion is from YQL-15332:
  *
  * Void, Null => NullType
+ * Bool => Boolean for output, Uint8 for input
+ * Integral => Uint8..Uint64, Int8..Int64
+ * Floats => Float, Double
+ * Date => Uint16
+ * Datetime => Uint32
+ * Timestamp => Uint64
+ * Interval => Int64
+ * Date32 => Int32
+ * Interval64, Timestamp64, Datetime64 => Int64
+ * Utf8, Json => String
+ * String, Yson, JsonDocument => Binary
+ * Decimal, UUID => FixedSizeBinary(16)
+ * Timezone datetime type => StructArray<type, Uint16>
+ * DyNumber => BinaryArray (it is not added to YQL-15332)
  *
  * Struct, Tuple, EmptyList, EmptyDict => StructArray
  * Names of fields constructed from tuple are just empty strings.
@@ -47,9 +61,6 @@ namespace NArrow {
  * Dict<Optional<KeyType>, ValueType> => StructArray<ListArray<StructArray<KeyArray, ValueArray>, Uint64Array (on demand, default: 0)>
  * because keys of MapArray can not be nullable
  *
- * Timezone datetime types => StructArray<datetime, timezoneId>
- *
- * DyNumber => BinaryArray (it is not added to YQL-15332)
  *
  * @param type Yql type to parse
  * @return std::shared_ptr<arrow::DataType> arrow type of the same structure as type

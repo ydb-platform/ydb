@@ -1977,28 +1977,27 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         Send(ev->Sender, new NMon::TEvHttpInfoRes(NMonitoring::HTTPNOTFOUND, 0, EContentType::Custom));
     }
 
-    void Handle(TSchemeBoardMonEvents::TEvBackupProgress::TPtr& ev) {
+    template <typename TProgress, typename TEvent>
+    void Handle(TProgress& progress, TEvent::TPtr& ev) {
         const auto& msg = *ev->Get();
         SBB_LOG_D("Handle " << msg.ToString());
-        BackupProgress = TBackupProgress(msg);
+        progress = TProgress(msg);
+    }
+
+    void Handle(TSchemeBoardMonEvents::TEvBackupProgress::TPtr& ev) {
+        Handle<TBackupProgress, TSchemeBoardMonEvents::TEvBackupProgress>(BackupProgress, ev);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvBackupResult::TPtr& ev) {
-        const auto& msg = *ev->Get();
-        SBB_LOG_I("Handle " << msg.ToString());
-        BackupProgress = TBackupProgress(msg);
+        Handle<TBackupProgress, TSchemeBoardMonEvents::TEvBackupResult>(BackupProgress, ev);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvRestoreProgress::TPtr& ev) {
-        const auto& msg = *ev->Get();
-        SBB_LOG_D("Handle " << msg.ToString());
-        RestoreProgress = TRestoreProgress(msg);
+        Handle<TRestoreProgress, TSchemeBoardMonEvents::TEvRestoreProgress>(RestoreProgress, ev);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvRestoreResult::TPtr& ev) {
-        const auto& msg = *ev->Get();
-        SBB_LOG_D("Handle " << msg.ToString());
-        RestoreProgress = TRestoreProgress(msg);
+        Handle<TRestoreProgress, TSchemeBoardMonEvents::TEvRestoreResult>(RestoreProgress, ev);
     }
 
 public:

@@ -88,16 +88,11 @@ void ProbeBaseStatsTest(bool isServerless) {
     }
     CreateColumnStoreTable(env, "Database", "Table", 5);
     const TString path = "/Root/Database/Table";
+    const TPathId pathId = ResolvePathId(runtime, path);
     const ui32 nodeIdx = 1;
 
-    // Wait until all SchemeShards send out the stats to the StatisticsAggregator.
-    THashSet<ui64> schemeShardsSet;
-    auto statsObserver = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev) {
-        schemeShardsSet.insert(ev->Get()->Record.GetSchemeShardId());
-    });
-    runtime.WaitFor("TEvSchemeShardStats", [&] {
-        return schemeShardsSet.size() >= (isServerless ? 2 : 1);
-    });
+    // Wait until correct base statistics gets reported.
+    ValidateRowCount(runtime, nodeIdx, pathId, ColumnTableRowsNumber);
 
     // Issue the probe_base_stats request and verify that the result makes sense.
     const auto sender = runtime.AllocateEdgeActor(nodeIdx);

@@ -101,15 +101,15 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         std::vector<ui64> writeIds1;
         const auto lock1 = 1;
         {
-            const bool ok =
-                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds1, NEvWrite::EModificationType::Upsert, lock1);
+            const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true,
+                &writeIds1, NEvWrite::EModificationType::Upsert, lock1);
             UNIT_ASSERT(ok);
         }
         std::vector<ui64> writeIds2;
         const auto lock2 = 2;
         {
-            const bool ok =
-                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 100, 200 }, testTable.Schema), testTable.Schema, true, &writeIds2, NEvWrite::EModificationType::Upsert, lock2);
+            const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 100, 200 }, testTable.Schema), testTable.Schema,
+                true, &writeIds2, NEvWrite::EModificationType::Upsert, lock2);
             UNIT_ASSERT(ok);
         }
         const auto commitTxId1 = ++txId;

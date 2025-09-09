@@ -746,7 +746,7 @@ private:
     TMessageQueue PendingRequests;
     TMessageQueue QuotaWaitingRequests;
 
-    std::deque<TString> DeletedKeys;
+    std::shared_ptr<std::deque<TString>> DeletedKeys;
     std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
 
     THead Head;

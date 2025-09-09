@@ -7,7 +7,7 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 #include <ydb/core/mon/mon.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/util/address_classifier.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>

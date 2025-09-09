@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include "metering_sink.h"
 #include "transaction.h"
 

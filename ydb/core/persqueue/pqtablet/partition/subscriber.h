@@ -2,7 +2,7 @@
 
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
-#include <ydb/core/persqueue/partition_id.h>
+#include <ydb/core/persqueue/common/partition_id.h>
 #include <ydb/core/persqueue/public/utils.h>
 
 #include <ydb/core/tablet/tablet_counters.h>

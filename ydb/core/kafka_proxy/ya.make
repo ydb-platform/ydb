@@ -58,6 +58,8 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/protos
     ydb/core/base
+    ydb/core/persqueue/public/fetcher
+    ydb/core/persqueue/public/write_meta
     ydb/core/protos
     ydb/core/raw_socket
     ydb/services/persqueue_v1

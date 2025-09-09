@@ -14,9 +14,11 @@ namespace NArrow {
 /**
  * @brief Convert TType to the arrow::DataType object
  *
- * The logic of this conversion is the following:
+ * The logic of this conversion is from YQL-15332:
  *
- * Struct, tuple => StructArray
+ * Void, Null => NullType
+ *
+ * Struct, Tuple, EmptyList, EmptyDict => StructArray
  * Names of fields constructed from tuple are just empty strings.
  *
  * List => ListArray
@@ -26,19 +28,28 @@ namespace NArrow {
  * Variant => DenseUnionArray<DenseUnionArray>
  * TODO Implement convertion of data to DenseUnionArray<DenseUnionArray> and back
  *
- * Optional(Optional ..(type)..) => StructArray<ui64, type>
- * Here the integer value equals the number of calls of method GetOptionalValue().
- * If value is null at some depth, then the value in second field of Array is Null
- * (and the integer equals this depth). If value is present, then it is contained in the
- * second field (and the integer equals the number of Optional(...) levels).
- * This information is sufficient to restore an UnboxedValue knowing its type.
+ * Optional<T> => StructArray<T> if T is Variant
+ * Because DenseUnionArray does not have validity bitmap
+ * Optional<T> => T for other types
+ * By default, other types have a validity bitmap
  *
- * Dict<KeyType, ValueType> => MapArray<KeyArray, ValueArray>
+ * Optional<Optional<...<T>...>> => StructArray<StructArray<...StructArray<T>...>>
+ * For example:
+ * - Optional<Optional<Int32>> => StructArray<Int32>
+ *   Int32 has validity bitmap, so we wrap it in StructArray N - 1 times, where N is the number of Optional levels
+ * - Optional<Optional<Variant<Int32, Int64>>> => StructArray<StructArray<DenseUnionArray<Int32, Int64>>>
+ *   DenseUnionArray does not have validity bitmap, so we wrap it in StructArray N times, where N is the number of Optional levels
+ *
+ * Dict<KeyType, ValueType> => StructArray<MapArray<KeyArray, ValueArray>, Uint64Array (on demand, default: 0)>
  * We do not use arrow::DictArray because it must be used for encoding not for mapping keys to values.
  * (https://arrow.apache.org/docs/cpp/api/array.html#classarrow_1_1_dictionary_array)
  * If the type of dict key is optional then we map
- * Dict<Optional(KeyType), ValueType> => ListArray<StructArray<KeyArray, ValueArray>>
+ * Dict<Optional<KeyType>, ValueType> => StructArray<ListArray<StructArray<KeyArray, ValueArray>, Uint64Array (on demand, default: 0)>
  * because keys of MapArray can not be nullable
+ *
+ * Timezone datetime types => StructArray<datetime, timezoneId>
+ *
+ * DyNumber => BinaryArray (it is not added to YQL-15332)
  *
  * @param type Yql type to parse
  * @return std::shared_ptr<arrow::DataType> arrow type of the same structure as type

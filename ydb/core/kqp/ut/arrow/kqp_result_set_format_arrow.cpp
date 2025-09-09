@@ -978,17 +978,36 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
 
             UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
-            NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
-                std::make_pair("DateValue", TTypeInfo(NTypeIds::Date)),
-                std::make_pair("DatetimeValue", TTypeInfo(NTypeIds::Datetime)),
-                std::make_pair("TimestampValue", TTypeInfo(NTypeIds::Timestamp)),
-                std::make_pair("IntervalValue", TTypeInfo(NTypeIds::Interval))
-            }));
+            // TODO: TTableUpdatesBuilder is not mapping types from YQL-15332 correctly
+            //
+            // NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
+            //     std::make_pair("DateValue", TTypeInfo(NTypeIds::Date)),
+            //     std::make_pair("DatetimeValue", TTypeInfo(NTypeIds::Datetime)),
+            //     std::make_pair("TimestampValue", TTypeInfo(NTypeIds::Timestamp)),
+            //     std::make_pair("IntervalValue", TTypeInfo(NTypeIds::Interval))
+            // }));
 
-            builder.AddRow().Add<ui16>(11323).Add<ui32>(1012615322).Add<ui64>(1046660583000000).Add<i64>(604800000000);
+            // builder.AddRow().Add<ui16>(11323).Add<ui32>(1012615322).Add<ui64>(1046660583000000).Add<i64>(604800000000);
 
-            auto expected = builder.BuildArrow();
-            UNIT_ASSERT_VALUES_EQUAL(batches.front()->ToString(), expected->ToString());
+            // auto expected = builder.BuildArrow();
+            // UNIT_ASSERT_VALUES_EQUAL(batches.front()->ToString(), expected->ToString());
+
+            const TString expected =
+R"(DateValue:   [
+    11323
+  ]
+DatetimeValue:   [
+    1012615322
+  ]
+TimestampValue:   [
+    1046660583000000
+  ]
+IntervalValue:   [
+    604800000000
+  ]
+)";
+
+            UNIT_ASSERT_VALUES_EQUAL(batches.front()->ToString(), expected);
         }
     }
 

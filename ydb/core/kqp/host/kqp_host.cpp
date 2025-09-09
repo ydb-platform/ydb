@@ -1633,7 +1633,7 @@ private:
             return nullptr;
         }
 
-        if (!CheckRewrite(compileResult.QueryExpr, ctx)) {
+        if (!CheckRewrite(compileResult.QueryExpr, Config->EnableDataShardCreateTableAs, ctx)) {
             return nullptr;
         }
 

@@ -303,6 +303,7 @@ private:
         bool enableHtapTx = TableServiceConfig.GetEnableHtapTx();
         bool enableStreamWrite = TableServiceConfig.GetEnableStreamWrite();
         bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs();
+        bool enableDataShardCreateTableAs = TableServiceConfig.GetEnableDataShardCreateTableAs();
         auto blockChannelsMode = TableServiceConfig.GetBlockChannelsMode();
 
         bool enableAstCache = TableServiceConfig.GetEnableAstCache();
@@ -349,6 +350,7 @@ private:
             TableServiceConfig.GetEnableOltpSink() != enableOltpSink ||
             TableServiceConfig.GetEnableHtapTx() != enableHtapTx ||
             TableServiceConfig.GetEnableCreateTableAs() != enableCreateTableAs ||
+            TableServiceConfig.GetEnableDataShardCreateTableAs() != enableDataShardCreateTableAs ||
             TableServiceConfig.GetBlockChannelsMode() != blockChannelsMode ||
             TableServiceConfig.GetExtractPredicateRangesLimit() != rangesLimit ||
             TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() != mkqlHeavyLimit ||

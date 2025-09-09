@@ -100,11 +100,11 @@ def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, bra
                     "properties/property/[@name='mute']"
                 ).get("value")
                 
-                # Get original error message from skipped element
+                # Get original error message from muted test (preserved in skipped element by mute_utils.py)
                 original_error = ""
                 skipped_element = testcase.find("skipped")
                 if skipped_element is not None:
-                    # Get message from skipped element's message attribute
+                    # Extract error message similar to how failure processing works
                     if skipped_element.get('message'):
                         original_error = skipped_element.get('message')
                     # If there's also text content, append it
@@ -121,13 +121,31 @@ def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, bra
                     status_description = mute_message
             elif testcase.find("failure") is not None:
                 status = "failure"
-                status_description = testcase.find("failure").text
+                failure_element = testcase.find("failure")
+                failure_text = []
+                if failure_element.get('message'):
+                    failure_text.append(failure_element.get('message'))
+                if failure_element.text:
+                    failure_text.append(failure_element.text.strip())
+                status_description = '\n'.join(failure_text) if failure_text else ""
             elif testcase.find("error") is not None:
                 status = "error"
-                status_description = testcase.find("error").text
+                error_element = testcase.find("error")
+                error_text = []
+                if error_element.get('message'):
+                    error_text.append(error_element.get('message'))
+                if error_element.text:
+                    error_text.append(error_element.text.strip())
+                status_description = '\n'.join(error_text) if error_text else ""
             elif testcase.find("skipped") is not None:
                 status = "skipped"
-                status_description = testcase.find("skipped").text
+                skipped_element = testcase.find("skipped")
+                skipped_text = []
+                if skipped_element.get('message'):
+                    skipped_text.append(skipped_element.get('message'))
+                if skipped_element.text:
+                    skipped_text.append(skipped_element.text.strip())
+                status_description = '\n'.join(skipped_text) if skipped_text else ""
 
             results.append(
                 {

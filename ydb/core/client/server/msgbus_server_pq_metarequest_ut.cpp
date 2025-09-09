@@ -134,7 +134,7 @@ protected:
     TActorId StartBalancer(ui64 balancerTabletId) {
         TActorId id = CreateTestBootstrapper(*Runtime,
                                        CreateTestTabletInfo(balancerTabletId, TTabletTypes::PersQueueReadBalancer, TErasureType::ErasureNone),
-                                       &NPQ::CreatePersQueueReadBalancer);
+                                       &CreatePersQueueReadBalancer);
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));

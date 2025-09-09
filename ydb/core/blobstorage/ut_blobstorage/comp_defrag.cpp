@@ -53,6 +53,12 @@ struct TTetsEnvBase {
         Env.Sim(TDuration::Minutes(1));
     }
 
+    void SetIcbControl(const TString& control, ui64 value) {
+        for (ui32 i = 1; i <= Env.Settings.NodeCount; ++i) {
+            Env.SetIcbControl(i, control, value);
+        }
+    }
+
     template<class TEvent>
     void SendToDsProxy(TEvent* event) {
         Env.Runtime->WrapInActorContext(Sender, [&] {
@@ -114,7 +120,11 @@ struct TTetsEnvBase {
 
     std::function<bool(ui32, std::unique_ptr<IEventHandle>&)> SetFilterFunction(ui32 eventType, std::function<bool(ui32, std::unique_ptr<IEventHandle>&)> func) {
         std::function<bool(ui32, std::unique_ptr<IEventHandle>&)> oldFunc = Filters[eventType];
-        Filters[eventType] = std::move(func);
+        if (func == nullptr) {
+            Filters.erase(eventType);
+        } else {
+            Filters[eventType] = std::move(func);
+        }
         return oldFunc;
     }
 
@@ -400,11 +410,9 @@ struct TTestEnvCompDefragIndependent : TTetsEnvBase {
         DataSmall = FastGenDataForLZ4(32_KB, 0);
         DataLarge = FastGenDataForLZ4(1_MB, 0);
 
-        for (ui32 i = 1; i <= Env.Settings.NodeCount; ++i) {
-            Env.SetIcbControl(i, "VDiskControls.MaxChunksToDefragInflight", MAX_DEFRAG_INFLIGHT);
-            Env.SetIcbControl(i, "VDiskControls.DefaultHugeGarbagePerMille", 50);
-            Env.SetIcbControl(i, "VDiskControls.GarbageThresholdToRunFullCompactionPerMille", garbageThresholdToRunCompaction * 1000);
-        }
+        SetIcbControl("VDiskControls.MaxChunksToDefragInflight", MAX_DEFRAG_INFLIGHT);
+        SetIcbControl("VDiskControls.DefaultHugeGarbagePerMille", 50);
+        SetIcbControl("VDiskControls.GarbageThresholdToRunFullCompactionPerMille", garbageThresholdToRunCompaction * 1000);
         Env.Sim(TDuration::Minutes(1));
 
         Env.Runtime->FilterFunction = [this](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
@@ -709,6 +717,67 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         auto metrics = env.PrintMetrics();
         UNIT_ASSERT_LT(env.GetMetrics().HugeUsedChunks, totalHugeChunks);
         UNIT_ASSERT_VALUES_EQUAL(metrics.HugeChunksCanBeFreed, 0);
+    }
+
+    Y_UNIT_TEST(ChunksSoftLocking) {
+        TTestEnvCompDefragIndependent env(0.01);
+        ui32 N = 50000;
+        ui32 batchSize = 1000;
+
+        env.SetIcbControl("VDiskControls.MaxChunksToDefragInflight", 10);
+
+        env.WriteData(N, batchSize);
+        env.RunFullCompaction();
+
+        env.PrintMetrics();
+
+        // freeze defragmentation with locked chunks
+        TVector<IEventHandle*> lockChunksResponses;
+        auto oldFilter = env.SetFilterFunction(NKikimr::TEvHugeLockChunksResult::EventType, [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            auto msg = ev->Get<NKikimr::TEvHugeLockChunksResult>();
+            UNIT_ASSERT_GT(msg->LockedChunks.size(), 5);
+            lockChunksResponses.push_back(ev.release());
+            return false;
+        });
+
+        DeleteHugeBlobsOfTablet(env, N, 1);
+        env.RunFullCompaction();
+        env.Env.Sim(TDuration::Minutes(10));
+        UNIT_ASSERT_VALUES_EQUAL(lockChunksResponses.size(), env.Env.Settings.NodeCount);
+
+        ui64 hugeUsedChunksBeforeWrites = env.PrintMetrics().HugeUsedChunks;
+
+        // write more data
+        env.Sender = env.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        ui32 M = N / 2; // half of the data were deleted, so we write half of the data again and expect no new chunks to be created
+        for (ui32 i = 0; i < M / batchSize; ++i) {
+            for (ui32 j = 0; j < batchSize; ++j) {
+                auto ev = env.GetData(i * batchSize + j);
+                auto nextGenId = TLogoBlobID::Make(ev->Id.TabletID(), ev->Id.Generation() + 1, ev->Id.Step(), ev->Id.Channel(), ev->Id.BlobSize(), ev->Id.Cookie(), ev->Id.CrcMode());
+                auto nextGenEv = std::make_unique<TEvBlobStorage::TEvPut>(nextGenId, TRope(ev->Buffer).ConvertToString(), TInstant::Max());
+                env.SendToDsProxy(nextGenEv.release());
+            }
+            for (ui32 j = 0; j < batchSize; ++j) {
+                auto res = env.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(env.Sender, false);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            }
+        }
+        env.Env.Sim(TDuration::Minutes(10));
+
+        // check that no new chunks were created
+        UNIT_ASSERT_VALUES_EQUAL(env.PrintMetrics().HugeUsedChunks, hugeUsedChunksBeforeWrites);
+
+
+        // unfreeze defragmentation with locked chunks
+        env.SetFilterFunction(NKikimr::TEvHugeLockChunksResult::EventType, [&](ui32, std::unique_ptr<IEventHandle>&) {
+            return true;
+        });
+        for (auto& ev : lockChunksResponses) {
+            env.Env.Runtime->WrapInActorContext(ev->Sender, [&] {
+                TlsActivationContext->Send(ev);
+            });
+        }
+        env.Env.Sim(TDuration::Minutes(10));
     }
 
 }

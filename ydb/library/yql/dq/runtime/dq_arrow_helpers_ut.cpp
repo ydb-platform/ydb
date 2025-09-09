@@ -852,8 +852,8 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         UNIT_ASSERT(mapArray->keys()->type_id() == arrow::Type::STRING);
         auto utf8Array = static_pointer_cast<arrow::StringArray>(mapArray->keys());
 
-        UNIT_ASSERT(mapArray->items()->type_id() == arrow::Type::DURATION);
-        auto intervalArray = static_pointer_cast<arrow::NumericArray<arrow::DurationType>>(mapArray->items());
+        UNIT_ASSERT(mapArray->items()->type_id() == arrow::Type::INT64);
+        auto intervalArray = static_pointer_cast<arrow::Int64Array>(mapArray->items());
 
         ui64 index = 0;
         for (const auto& value: values) {

@@ -69,20 +69,18 @@ bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot type, TFunc&& callback) {
         case NUdf::EDataSlot::Uint32:
             return callback(TTypeWrapper<arrow::UInt32Type>());
         case NUdf::EDataSlot::Int64:
+        case NUdf::EDataSlot::Interval:
         case NUdf::EDataSlot::Datetime64:
         case NUdf::EDataSlot::Timestamp64:
         case NUdf::EDataSlot::Interval64:
             return callback(TTypeWrapper<arrow::Int64Type>());
         case NUdf::EDataSlot::Uint64:
+        case NUdf::EDataSlot::Timestamp:
             return callback(TTypeWrapper<arrow::UInt64Type>());
         case NUdf::EDataSlot::Float:
             return callback(TTypeWrapper<arrow::FloatType>());
         case NUdf::EDataSlot::Double:
             return callback(TTypeWrapper<arrow::DoubleType>());
-        case NUdf::EDataSlot::Timestamp:
-            return callback(TTypeWrapper<arrow::TimestampType>());
-        case NUdf::EDataSlot::Interval:
-            return callback(TTypeWrapper<arrow::DurationType>());
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
             return callback(TTypeWrapper<arrow::StringType>());
@@ -150,20 +148,6 @@ NUdf::TUnboxedValue GetUnboxedValue<arrow::Int64Type>(std::shared_ptr<arrow::Arr
     return NUdf::TUnboxedValuePod(static_cast<i64>(array->Value(row)));
 }
 
-template <> // For darwin build
-NUdf::TUnboxedValue GetUnboxedValue<arrow::TimestampType>(std::shared_ptr<arrow::Array> column, ui32 row) {
-    using TArrayType = typename arrow::TypeTraits<arrow::TimestampType>::ArrayType;
-    auto array = std::static_pointer_cast<TArrayType>(column);
-    return NUdf::TUnboxedValuePod(static_cast<ui64>(array->Value(row)));
-}
-
-template <> // For darwin build
-NUdf::TUnboxedValue GetUnboxedValue<arrow::DurationType>(std::shared_ptr<arrow::Array> column, ui32 row) {
-    using TArrayType = typename arrow::TypeTraits<arrow::DurationType>::ArrayType;
-    auto array = std::static_pointer_cast<TArrayType>(column);
-    return NUdf::TUnboxedValuePod(static_cast<ui64>(array->Value(row)));
-}
-
 template <>
 NUdf::TUnboxedValue GetUnboxedValue<arrow::BinaryType>(std::shared_ptr<arrow::Array> column, ui32 row) {
     auto array = std::static_pointer_cast<arrow::BinaryArray>(column);
@@ -193,16 +177,6 @@ std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
 template <>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>() {
     return arrow::fixed_size_binary(NScheme::FSB_SIZE);
-}
-
-template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>() {
-    return arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO);
-}
-
-template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>() {
-    return arrow::duration(arrow::TimeUnit::TimeUnit::MICRO);
 }
 
 std::shared_ptr<arrow::DataType> GetArrowType(const TDataType* dataType) {
@@ -375,32 +349,6 @@ void AppendDataValue<arrow::Int64Type>(arrow::ArrayBuilder* builder, NUdf::TUnbo
         status = typedBuilder->AppendNull();
     } else {
         status = typedBuilder->Append(value.Get<i64>());
-    }
-    Y_VERIFY_S(status.ok(), status.ToString());
-}
-
-template <>
-void AppendDataValue<arrow::TimestampType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
-    Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::TIMESTAMP);
-    auto typedBuilder = reinterpret_cast<arrow::TimestampBuilder*>(builder);
-    arrow::Status status;
-    if (!value.HasValue()) {
-        status = typedBuilder->AppendNull();
-    } else {
-        status = typedBuilder->Append(value.Get<ui64>());
-    }
-    Y_VERIFY_S(status.ok(), status.ToString());
-}
-
-template <>
-void AppendDataValue<arrow::DurationType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
-    Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::DURATION);
-    auto typedBuilder = reinterpret_cast<arrow::DurationBuilder*>(builder);
-    arrow::Status status;
-    if (!value.HasValue()) {
-        status = typedBuilder->AppendNull();
-    } else {
-        status = typedBuilder->Append(value.Get<ui64>());
     }
     Y_VERIFY_S(status.ok(), status.ToString());
 }

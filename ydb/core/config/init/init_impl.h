@@ -307,7 +307,6 @@ struct TCommonAppOptions {
     bool NodeBrokerUseTls = false;
     bool FixedNodeID = false;
     ui32 InterconnectPort = 0;
-    bool IgnoreCmsConfigs = false;
     bool TinyMode = false;
     TString NodeAddress;
     TString NodeHost;
@@ -349,7 +348,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
             .DefaultValue("unknown").OptionalArgument("STR")
             .Handler(new TWithDefaultOptHandler(&ClusterName));
-        opts.AddLongOption("force-start-with-local-config", "is set if you need to start a dynamic node in emergency no-console mode, using the configuration from --config-dir or --yaml-config")
+        opts.AddLongOption("force-start-with-local-config", "enables starting a dynamic node in emergency no-console mode using the configuration from --config-dir or --yaml-config")
             .NoArgument()
             .SetFlag(&ForceStartWithLocalConfig);
         opts.AddLongOption("log-level", "default logging level").OptionalArgument("1-7")
@@ -421,8 +420,6 @@ struct TCommonAppOptions {
             .RequiredArgument("NAME").StoreResult(&NodeKind);
         opts.AddLongOption("node-type", "Type of the node")
             .RequiredArgument("NAME").StoreResult(&NodeType);
-        opts.AddLongOption("ignore-cms-configs", "Don't load configs from CMS")
-            .NoArgument().SetFlag(&IgnoreCmsConfigs);
         opts.AddLongOption("cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);
         opts.AddLongOption("grpc-cert", "Path to client certificate file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&GrpcSslSettings.PathToGrpcCertFile);
         opts.AddLongOption("ic-cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);
@@ -1468,10 +1465,6 @@ public:
         if (!NodeName.empty()) {
             Labels["node_name"] = NodeName;
             AddLabelToAppConfig("node_name", Labels["node_name"]);
-        }
-
-        if (CommonAppOptions.IgnoreCmsConfigs) {
-            return;
         }
 
         if (CommonAppOptions.ForceStartWithLocalConfig) {

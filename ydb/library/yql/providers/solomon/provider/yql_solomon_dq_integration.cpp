@@ -229,7 +229,7 @@ public:
 
             if (downsamplingDisabled.has_value() && *downsamplingDisabled) {
                 if (downsamplingAggregation || downsamplingFill || downsamplingGridSec) {
-                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsamplig.grid_interval is specified"));
+                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified"));
                     return {};
                 }
             } else {
@@ -298,11 +298,11 @@ public:
         
         auto selectors = settings.Selectors().StringValue();
         if (!selectors.empty()) {
-            std::map<TString, TString> selectorValues;
+            NSo::TSelectors selectorValues;
             if (auto error = NSo::BuildSelectorValues(source, selectors, selectorValues)) {
                 throw yexception() << *error;
             }
-            source.MutableSelectors()->insert(selectorValues.begin(), selectorValues.end());
+            NSo::SelectorsToProto(selectorValues, *source.MutableSelectors());
         }
 
         auto program = settings.Program().StringValue();

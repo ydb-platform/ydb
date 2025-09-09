@@ -561,12 +561,11 @@ void TPlan::ResolveCteRefs() {
 
 void TPlan::ResolveOperatorInputs() {
     for (auto& s : Stages) {
-        for (auto& o : s->Operators) {
-            if (o.Input1.PlanNodeId && !NodeToSource.contains(o.Input1.PlanNodeId)) {
-                o.Input1.StageId = NodeToConnection.at(o.Input1.PlanNodeId)->FromStage->PhysicalStageId;
-            }
-            if (o.Input2.PlanNodeId && !NodeToSource.contains(o.Input2.PlanNodeId)) {
-                o.Input2.StageId = NodeToConnection.at(o.Input2.PlanNodeId)->FromStage->PhysicalStageId;
+        for (auto& op : s->Operators) {
+            for (auto& input : op.Inputs) {
+                if (input.PlanNodeId && !NodeToSource.contains(input.PlanNodeId)) {
+                    input.StageId = NodeToConnection.at(input.PlanNodeId)->FromStage->PhysicalStageId;
+                }
             }
         }
     }
@@ -651,7 +650,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 TString operatorId = "0";
                 auto externalOperator = false;
 
-                if (name == "Iterator" || name == "Member" || name == "ToFlow") {
+                if (/* name == "Iterator" || */ name == "Member" || name == "ToFlow") {
                     continue;
                 }
 
@@ -849,14 +848,14 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                 }
 
-                TOperatorInput input1;
-                TOperatorInput input2;
+                std::vector<TOperatorInput> inputs;
 
                 if (auto* inputsArrayNode = subNode.GetValueByPath("Inputs")) {
                     for (const auto& inputNode : inputsArrayNode->GetArray()) {
                         if (auto* internalOperatorIdNode = inputNode.GetValueByPath("InternalOperatorId")) {
                             auto internalOperatorId = internalOperatorIdNode->GetUIntegerSafe();
-                            if (internalOperatorId && input1.OperatorId != internalOperatorId && input2.OperatorId != internalOperatorId) {
+                            if (internalOperatorId && std::find_if(inputs.begin(), inputs.end(),
+                                    [=](const TOperatorInput& input) { return input.OperatorId == internalOperatorId; }) == inputs.end()) {
                                 if (internalOperatorId < operatorsArray.size()) {
                                     TString precomputeRef;
                                     auto* node = &operatorsArray[internalOperatorId];
@@ -885,44 +884,35 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                             }
                                         }
                                     }
-                                    if (!input1.IsAssigned()) {
-                                        input1.OperatorId = internalOperatorId;
-                                        input1.PrecomputeRef = precomputeRef;
-                                    } else {
-                                        input2.OperatorId = internalOperatorId;
-                                        input2.PrecomputeRef = precomputeRef;
-                                        break;
-                                    }
+                                    inputs.emplace_back();
+                                    inputs.back().OperatorId = internalOperatorId;
+                                    inputs.back().PrecomputeRef = precomputeRef;
                                 }
                             }
                         }
                         if (auto* externalPlanNodeIdNode = inputNode.GetValueByPath("ExternalPlanNodeId")) {
                             auto externalPlanNodeId = externalPlanNodeIdNode->GetIntegerSafe();
-                            if (externalPlanNodeId && input1.PlanNodeId != externalPlanNodeId && input2.PlanNodeId != externalPlanNodeId) {
-                                if (!input1.IsAssigned()) {
-                                    input1.PlanNodeId = externalPlanNodeId;
-                                } else {
-                                    input2.PlanNodeId = externalPlanNodeId;
-                                    break;
-                                }
+                            if (externalPlanNodeId && std::find_if(inputs.begin(), inputs.end(),
+                                    [=](const TOperatorInput& input) { return input.PlanNodeId == externalPlanNodeId; }) == inputs.end()) {
+                                inputs.emplace_back();
+                                inputs.back().PlanNodeId = externalPlanNodeId;
                             }
                         }
                     }
                 } else if (auto* precomputeRefNode = subNode.GetValueByPath("Input")) {
-                    input1.PrecomputeRef = precomputeRefNode->GetStringSafe();
+                    inputs.emplace_back();
+                    inputs.back().PrecomputeRef = precomputeRefNode->GetStringSafe();
                 }
 
                 if (externalOperator && !stage->External) {
                     externalOperators.emplace_back(name, info);
                     externalOperators.back().Estimations = GetEstimation(subNode);
-                    externalOperators.back().Input1 = input1;
-                    externalOperators.back().Input2 = input2;
+                    externalOperators.back().Inputs.swap(inputs);
                     externalOperators.back().Blocks = blocks;
                 } else {
                     stage->Operators.emplace_back(name, info);
                     stage->Operators.back().Estimations = GetEstimation(subNode);
-                    stage->Operators.back().Input1 = input1;
-                    stage->Operators.back().Input2 = input2;
+                    stage->Operators.back().Inputs.swap(inputs);
                     stage->Operators.back().Blocks = blocks;
                 }
 
@@ -1165,10 +1155,12 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     subNodeType = "Lookup";
                 } else if (subNodeType == "TableLookupJoin") {
                     subNodeType = "LookupJoin";
+                } else if (subNodeType == "DqCnParallelUnionAll") {
+                    subNodeType = "UnionAll";
                 }
 
-                auto* keyColumnsNode = plan.GetValueByPath("KeyColumns");
-                auto* sortColumnsNode = plan.GetValueByPath("SortColumns");
+                std::shared_ptr<TConnection> connection;
+
                 if (auto* subNode = plan.GetValueByPath("Plans")) {
                     for (auto& subPlan : subNode->GetArray()) {
                         TString nodeType;
@@ -1181,22 +1173,12 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 ythrow yexception() << "Unexpected plan node type [" << planNodeType << "]";
                             }
                         }
-                        auto connection = std::make_shared<TConnection>(*stage, subNodeType, connectionPlanNodeId);
+                        connection = std::make_shared<TConnection>(*stage, subNodeType, connectionPlanNodeId);
                         if (auto* blocksNode = plan.GetValueByPath("Blocks")) {
                             connection->Blocks = blocksNode->GetStringSafe() == "True";
                         }
                         NodeToConnection[connectionPlanNodeId] = connection.get();
                         stage->Connections.push_back(connection);
-                        if (keyColumnsNode) {
-                            for (auto& keyColumn : keyColumnsNode->GetArray()) {
-                                stage->Connections.back()->KeyColumns.push_back(keyColumn.GetStringSafe());
-                            }
-                        }
-                        if (sortColumnsNode) {
-                            for (auto& sortColumn : sortColumnsNode->GetArray()) {
-                                stage->Connections.back()->SortColumns.push_back(sortColumn.GetStringSafe());
-                            }
-                        }
 
                         if (auto* planNodeIdNode = subPlan.GetValueByPath("PlanNodeId")) {
                             auto planNodeId = planNodeIdNode->GetStringRobust();
@@ -1221,10 +1203,10 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                                 if (auto* rowsNode = pushNode->GetValueByPath("Rows")) {
                                                     connection->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
                                                     for (auto& op : stage->Operators) {
-                                                        if (op.Input1.PlanNodeId == connectionPlanNodeId) {
-                                                            op.Input1.Rows = std::make_shared<TSingleMetric>(OperatorInputRows, *rowsNode);
-                                                        } else if (op.Input2.PlanNodeId == connectionPlanNodeId) {
-                                                            op.Input2.Rows = std::make_shared<TSingleMetric>(OperatorInputRows, *rowsNode);
+                                                        for(auto& input : op.Inputs) {
+                                                            if (input.PlanNodeId == connectionPlanNodeId) {
+                                                                input.Rows = std::make_shared<TSingleMetric>(OperatorInputRows, *rowsNode);
+                                                            }
                                                         }
                                                     }
                                                 } else {
@@ -1266,20 +1248,34 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                 } else if (auto* cteNameNode = plan.GetValueByPath("CTE Name")) {
                     auto cteName = "CTE " + cteNameNode->GetStringSafe();
-                    auto connection = std::make_shared<TConnection>(*stage, subNodeType, connectionPlanNodeId);
+                    connection = std::make_shared<TConnection>(*stage, subNodeType, connectionPlanNodeId);
                     if (auto* blocksNode = plan.GetValueByPath("Blocks")) {
                         connection->Blocks = blocksNode->GetStringSafe() == "True";
                     }
                     NodeToConnection[connectionPlanNodeId] = connection.get();
                     connection->CteConnection = true;
                     stage->Connections.push_back(connection);
-                    if (keyColumnsNode) {
+                    CteRefs.emplace_back(cteName, connection);
+                    connection->StatsNode = stage->StatsNode;
+                }
+
+                if (connection) {
+                    if (auto* keyColumnsNode = plan.GetValueByPath("KeyColumns")) {
                         for (auto& keyColumn : keyColumnsNode->GetArray()) {
-                            stage->Connections.back()->KeyColumns.push_back(keyColumn.GetStringSafe());
+                            connection->KeyColumns.push_back(keyColumn.GetStringSafe());
                         }
                     }
-                    CteRefs.emplace_back(cteName, stage->Connections.back());
-                    stage->Connections.back()->StatsNode = stage->StatsNode;
+                    if (auto* sortColumnsNode = plan.GetValueByPath("SortColumns")) {
+                        for (auto& sortColumn : sortColumnsNode->GetArray()) {
+                            connection->SortColumns.push_back(sortColumn.GetStringSafe());
+                        }
+                    }
+                    if (auto* hashFuncNode = plan.GetValueByPath("HashFunc")) {
+                        connection->HashFunc = hashFuncNode->GetStringSafe();
+                    }
+                    if (auto* parallelNode = plan.GetValueByPath("Parallel")) {
+                        connection->Parallel = parallelNode->GetStringSafe() == "True";
+                    }
                 }
             } else if (planNodeType == "") {
                 if (subNodeType == "Source") {
@@ -1747,32 +1743,25 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 s->Builder
                     << "</g>" << Endl;
 
-                if (op.Input1.StageId) {
-                    NodeToConnection.at(op.Input1.PlanNodeId)->Builder
-                        << "<g><title>Input from Stage " << *op.Input1.StageId << "</title>" << Endl
-                        << SvgStageId(Config.HeaderLeft + Config.HeaderWidth - INTERNAL_WIDTH * (1 + 2 * op.Input2.IsAssigned()) / 2, y0 + (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y), ToString(*op.Input1.StageId))
-                        << "</g>" << Endl;
-                } else if (op.Input1.PrecomputeRef) {
-                    auto it = Viz.CteSubPlans.find(op.Input1.PrecomputeRef);
-                    if (it != Viz.CteSubPlans.end()) {
-                        it->second->Builder
-                        << "<g><title>Data from precompute " << it->second->NodeType << "</title>" << Endl
-                        << SvgStageId(Config.HeaderLeft + Config.HeaderWidth - INTERNAL_WIDTH * (1 + 2 * op.Input2.IsAssigned()) / 2, y0 + (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y), "P")
-                        << "</g>" << Endl;
-                    }
-                }
-                if (op.Input2.StageId) {
-                    NodeToConnection.at(op.Input2.PlanNodeId)->Builder
-                        << "<g><title>Input from Stage " << *op.Input2.StageId << "</title>" << Endl
-                        << SvgStageId(Config.HeaderLeft + Config.HeaderWidth - INTERNAL_WIDTH / 2, y0 + (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y), ToString(*op.Input2.StageId))
-                        << "</g>" << Endl;
-                } else if (op.Input2.PrecomputeRef) {
-                    auto it = Viz.CteSubPlans.find(op.Input2.PrecomputeRef);
-                    if (it != Viz.CteSubPlans.end()) {
-                        it->second->Builder
-                        << "<g><title>Data from precompute " << it->second->NodeType << "</title>" << Endl
-                        << SvgStageId(Config.HeaderLeft + Config.HeaderWidth - INTERNAL_WIDTH / 2, y0 + (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y), "P")
-                        << "</g>" << Endl;
+                if (!op.Inputs.empty()) {
+                    auto opX = Config.HeaderLeft + Config.HeaderWidth - INTERNAL_WIDTH * (1 + 2 * (op.Inputs.size() - 1)) / 2;
+                    auto opY = y0 + (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y);
+                    for (auto& input : op.Inputs) {
+                        if (input.StageId) {
+                            NodeToConnection.at(input.PlanNodeId)->Builder
+                                << "<g><title>Input from Stage " << *input.StageId << "</title>" << Endl
+                                << SvgStageId(opX, opY, ToString(*input.StageId))
+                                << "</g>" << Endl;
+                        } else if (input.PrecomputeRef) {
+                            auto it = Viz.CteSubPlans.find(input.PrecomputeRef);
+                            if (it != Viz.CteSubPlans.end()) {
+                                it->second->Builder
+                                << "<g><title>Data from precompute " << it->second->NodeType << "</title>" << Endl
+                                << SvgStageId(opX, opY, "P")
+                                << "</g>" << Endl;
+                            }
+                        }
+                        opX += INTERNAL_WIDTH;
                     }
                 }
 
@@ -2292,6 +2281,12 @@ void TPlan::PrintSvg(TStringBuilder& builder) {
             }
             if (c->Blocks) {
                 builder << " Blocks: True";
+            }
+            if (c->HashFunc) {
+                builder << " HashFunc: " << c->HashFunc;
+            }
+            if (c->Parallel) {
+                builder << " Parallel: True";
             }
             builder
                 << "</title>" << Endl

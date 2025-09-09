@@ -31,7 +31,6 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -5036,9 +5035,15 @@ void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
 
 
 void TExecutor::StartBackup() {
+    if (!Owner->NeedBackup()) {
+        return;
+    }
+
     const auto& backupConfig = AppData()->SystemTabletBackupConfig;
-    if (Owner->IsClusterLevelTablet() && Owner->IsSystemTablet() && backupConfig.HasFilesystem()) {
-        BackupWriter = Register(CreateBackupWriter(), TMailboxType::HTSwap, AppData()->IOPoolId);
+    TTabletTypes::EType tabletType = Owner->TabletType();
+    ui64 tabletId = Owner->TabletID();
+    if (auto* writer = CreateBackupWriter(backupConfig, tabletType, tabletId, Generation0); writer != nullptr) {
+        BackupWriter = Register(writer, TMailboxType::HTSwap, AppData()->IOPoolId);
     }
 }
 

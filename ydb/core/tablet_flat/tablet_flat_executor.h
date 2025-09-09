@@ -496,8 +496,6 @@ namespace NFlatExecutorSetup {
         const TActorId& Tablet() const { return TabletActorID; }
         const TActorId& ExecutorID() const { return ExecutorActorID; }
         const TActorId& LauncherID() const { return LauncherActorID; }
-        bool IsSystemTablet() const;
-        bool IsClusterLevelTablet() const;
 
         virtual void SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext &ctx); // would be FAIL in default implementation
         virtual void CompletedLoansChanged(const TActorContext &ctx); // would be no-op in default implementation
@@ -523,6 +521,8 @@ namespace NFlatExecutorSetup {
 
         virtual void OnFollowerSchemaUpdated();
         virtual void OnFollowerDataUpdated();
+
+        bool NeedBackup() const;
 
         // create transaction?
     protected:

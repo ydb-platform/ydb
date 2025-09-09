@@ -83,14 +83,13 @@ namespace NFlatExecutorSetup {
         // nothing by default
     }
 
-    bool ITablet::IsSystemTablet() const {
+    bool ITablet::NeedBackup() const {
+        if (TabletInfo->TenantPathId != TPathId()) {
+            return false;
+        }
+
         switch (TabletInfo->TabletType) {
-            case NKikimrTabletBase::TTabletTypes_EType_OldSchemeShard:
-            case NKikimrTabletBase::TTabletTypes_EType_OldHive:
-            case NKikimrTabletBase::TTabletTypes_EType_OldCoordinator:
             case NKikimrTabletBase::TTabletTypes_EType_Mediator:
-            case NKikimrTabletBase::TTabletTypes_EType_OldTxProxy:
-            case NKikimrTabletBase::TTabletTypes_EType_OldBSController:
             case NKikimrTabletBase::TTabletTypes_EType_Coordinator:
             case NKikimrTabletBase::TTabletTypes_EType_Hive:
             case NKikimrTabletBase::TTabletTypes_EType_BSController:
@@ -98,47 +97,11 @@ namespace NFlatExecutorSetup {
             case NKikimrTabletBase::TTabletTypes_EType_Cms:
             case NKikimrTabletBase::TTabletTypes_EType_NodeBroker:
             case NKikimrTabletBase::TTabletTypes_EType_TxAllocator:
-            case NKikimrTabletBase::TTabletTypes_EType_TxProxy:
-            case NKikimrTabletBase::TTabletTypes_EType_TenantSlotBroker:
             case NKikimrTabletBase::TTabletTypes_EType_Console:
-            case NKikimrTabletBase::TTabletTypes_EType_StatisticsAggregator:
-            case NKikimrTabletBase::TTabletTypes_EType_SysViewProcessor:
                 return true;
-            case NKikimrTabletBase::TTabletTypes_EType_Unknown:
-            case NKikimrTabletBase::TTabletTypes_EType_OldDataShard:
-            case NKikimrTabletBase::TTabletTypes_EType_Dummy:
-            case NKikimrTabletBase::TTabletTypes_EType_RTMRPartition:
-            case NKikimrTabletBase::TTabletTypes_EType_OldKeyValue:
-            case NKikimrTabletBase::TTabletTypes_EType_KeyValue:
-            case NKikimrTabletBase::TTabletTypes_EType_DataShard:
-            case NKikimrTabletBase::TTabletTypes_EType_PersQueue:
-            case NKikimrTabletBase::TTabletTypes_EType_PersQueueReadBalancer:
-            case NKikimrTabletBase::TTabletTypes_EType_BlockStoreVolume:
-            case NKikimrTabletBase::TTabletTypes_EType_BlockStorePartition:
-            case NKikimrTabletBase::TTabletTypes_EType_Kesus:
-            case NKikimrTabletBase::TTabletTypes_EType_BlockStorePartition2:
-            case NKikimrTabletBase::TTabletTypes_EType_BlockStoreDiskRegistry:
-            case NKikimrTabletBase::TTabletTypes_EType_FileStore:
-            case NKikimrTabletBase::TTabletTypes_EType_ColumnShard:
-            case NKikimrTabletBase::TTabletTypes_EType_TestShard:
-            case NKikimrTabletBase::TTabletTypes_EType_SequenceShard:
-            case NKikimrTabletBase::TTabletTypes_EType_ReplicationController:
-            case NKikimrTabletBase::TTabletTypes_EType_BlobDepot:
-            case NKikimrTabletBase::TTabletTypes_EType_GraphShard:
-            case NKikimrTabletBase::TTabletTypes_EType_BackupController:
-            case NKikimrTabletBase::TTabletTypes_EType_Reserved43:
-            case NKikimrTabletBase::TTabletTypes_EType_Reserved44:
-            case NKikimrTabletBase::TTabletTypes_EType_Reserved45:
-            case NKikimrTabletBase::TTabletTypes_EType_Reserved46:
-            case NKikimrTabletBase::TTabletTypes_EType_UserTypeStart:
-            case NKikimrTabletBase::TTabletTypes_EType_TypeInvalid:
+            default:
                 return false;
         }
-        return false;
-    }
-
-    bool ITablet::IsClusterLevelTablet() const {
-        return TabletInfo->TenantPathId == TPathId();
     }
 }
 

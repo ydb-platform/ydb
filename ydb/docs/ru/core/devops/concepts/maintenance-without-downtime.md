@@ -80,7 +80,7 @@
 
 ## Режим Bridge {#bridge}
 
-Если кластер работает в [режиме brigde](../concepts/glossary.md#bridge), то для каждого [pile](../concepts/glossary.md#pile) независимо устанавливаются лимиты и выполняются проверки доступности.
+Если кластер работает в [режиме brigde](../../concepts/glossary.md#bridge), то для каждого [pile](../../concepts/glossary.md#pile) независимо устанавливаются лимиты и выполняются проверки доступности.
 
 ## Практика
 

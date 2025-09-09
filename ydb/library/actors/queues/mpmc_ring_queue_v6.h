@@ -13,7 +13,7 @@
 namespace NActors {
 
 template <ui32 MaxSizeBits, typename TObserver=void>
-struct TMPMCRingQueueV3 {
+struct TMPMCRingQueueV6 {
 
 #define HAS_OBSERVE_METHOD(ENTRY_POINT) \
     HasStaticMethodObserve ## ENTRY_POINT <TObserver>
@@ -59,6 +59,13 @@ struct TMPMCRingQueueV3 {
         }
     };
 
+    enum class EQueueMode {
+        Default,
+        Overtaken,
+        FullQueue,
+    };
+
+    NThreading::TPadded<std::atomic<EQueueMode>> QueueMode{EQueueMode::Default};
     NThreading::TPadded<std::atomic<ui64>> Tail{0};
     NThreading::TPadded<std::atomic<ui64>> Head{0};
     NThreading::TPadded<TArrayHolder<std::atomic<ui64>>> Buffer;
@@ -91,15 +98,16 @@ struct TMPMCRingQueueV3 {
         return (idx & ~0xff) | ((idx & 0xf) << 4) | ((idx >> 4) & 0xf);
     }
 
-    TMPMCRingQueueV3()
+    TMPMCRingQueueV6(ui64 readersCount)
         : Buffer(new std::atomic<ui64>[MaxSize])
     {
+        Y_UNUSED(readersCount);
         for (ui32 idx = 0; idx < MaxSize; ++idx) {
             Buffer[idx] = TSlot::MakeEmpty();
         }
     }
 
-    ~TMPMCRingQueueV3() {
+    ~TMPMCRingQueueV6() {
         for (ui32 idx = 0; idx < OvertakenSlots.load(std::memory_order_acquire); ++idx) {
             OvertakenQueue.Pop(idx);
         }
@@ -107,6 +115,28 @@ struct TMPMCRingQueueV3 {
 
     bool TryPush(ui32 val) {
         for (ui32 it = 0;; ++it) {
+            EQueueMode queueMode = QueueMode.load(std::memory_order_relaxed);
+
+            if (queueMode == EQueueMode::FullQueue) {
+                ui64 currentTail = Tail.load(std::memory_order_acquire);
+                ui64 slotIdx = ConvertIdx(currentTail);
+                std::atomic<ui64> &currentSlot = Buffer[slotIdx];
+                ui64 expected = currentSlot.load(std::memory_order_relaxed);
+                TSlot slot = TSlot::Recognise(expected);
+                if (!slot.IsEmpty) {
+                    return false;
+                }
+
+                ui64 currentHead = Head.load(std::memory_order_acquire);
+                if (currentHead + MaxSize <= currentTail + std::min<ui64>(64, MaxSize - 1)) {
+                    OBSERVE(FailedPush);
+                    return false;
+                }
+                if (currentHead + MaxSize/4*3 > currentTail) {
+                    QueueMode.store(EQueueMode::Default, std::memory_order_relaxed);
+                }
+            }
+
             OBSERVE_WITH_CONDITION(LongPush10It, it == 10);
             OBSERVE_WITH_CONDITION(LongPush100It, it == 100);
             OBSERVE_WITH_CONDITION(LongPush1000It, it == 1000);
@@ -119,12 +149,22 @@ struct TMPMCRingQueueV3 {
             ui64 expected = TSlot::MakeEmpty();
             TSlot slot = TSlot::Recognise(expected);
             while (slot.IsEmpty) {
-                if (currentSlot.compare_exchange_strong(expected, val, std::memory_order_acq_rel)) {
-                    OBSERVE(SuccessFastPush);
-                    if (slot.IsOvertaken) {
-                        AddOvertakenSlot(slotIdx);
+                if (!slot.IsOvertaken) {
+                    if (currentSlot.compare_exchange_strong(expected, val, std::memory_order_acq_rel)) {
+                        OBSERVE(SuccessFastPush);
+                        return true;
                     }
-                    return true;
+                } else {
+                    if (currentSlot.compare_exchange_strong(expected, TSlot::MakeEmpty(), std::memory_order_acq_rel)) {
+                        OBSERVE(SuccessFastPush);
+                        if (slot.IsOvertaken) {
+                            AddOvertakenSlot(val);
+                            if (queueMode != EQueueMode::Overtaken) {
+                                QueueMode.store(EQueueMode::Overtaken, std::memory_order_relaxed);
+                            }
+                        }
+                        return true;
+                    }
                 }
                 slot = TSlot::Recognise(expected);
             }
@@ -133,6 +173,9 @@ struct TMPMCRingQueueV3 {
                 ui64 currentHead = Head.load(std::memory_order_acquire);
                 if (currentHead + MaxSize <= currentTail + std::min<ui64>(64, MaxSize - 1)) {
                     OBSERVE(FailedPush);
+                    if (queueMode != EQueueMode::FullQueue) {
+                        QueueMode.store(EQueueMode::FullQueue, std::memory_order_relaxed);
+                    }
                     return false;
                 }
             }
@@ -144,25 +187,12 @@ struct TMPMCRingQueueV3 {
     struct TOverreadedSlot {};
     struct TFailedToGetSlot {};
 
-    std::variant<ui32, TOverreadedSlot, TFailedToGetSlot> TryPopFromOvertakenSlots() {
-        ui32 el = OvertakenQueue.Pop(ReadRevolvingCounter.fetch_add(1, std::memory_order_relaxed));
-        if (el) {
-            std::atomic<ui64> &currentSlot = Buffer[el - 1];
-            ui64 expected = currentSlot.load(std::memory_order_acquire);
-            TSlot slot = TSlot::Recognise(expected);
-            while (!slot.IsEmpty) {
-                if (currentSlot.compare_exchange_weak(expected, TSlot::MakeEmpty())) {
-                    return static_cast<ui32>(slot.Value);
-                }
-                slot = TSlot::Recognise(expected);
-            }
-            return TOverreadedSlot();
-        }
-        return TFailedToGetSlot();
+    ui32 TryPopFromOvertakenSlots() {
+        return OvertakenQueue.Pop(ReadRevolvingCounter.fetch_add(1, std::memory_order_relaxed));
     }
 
-    void AddOvertakenSlot(ui64 slotIdx) {
-        OvertakenQueue.Push(slotIdx + 1, WriteRevolvingCounter.fetch_add(1, std::memory_order_relaxed));
+    void AddOvertakenSlot(ui64 val) {
+        OvertakenQueue.Push(val, WriteRevolvingCounter.fetch_add(1, std::memory_order_relaxed));
         OvertakenSlots.fetch_add(1, std::memory_order_acq_rel);
     }
 
@@ -179,17 +209,31 @@ struct TMPMCRingQueueV3 {
             }
             if (success) {
                 for (;;) {
-                    auto var = TryPopFromOvertakenSlots();
-                    if (std::holds_alternative<ui32>(var)) {
-                        ui32 el = std::get<ui32>(var);
+                    if (auto el = TryPopFromOvertakenSlots()) {
                         OBSERVE(SuccessOvertakenPop);
                         return el;
                     }
-                    if (std::holds_alternative<TOverreadedSlot>(var)) {
-                        return std::nullopt;
-                    }
                     SpinLockPause();
                 }
+            }
+        }
+
+        EQueueMode queueMode = QueueMode.load(std::memory_order_relaxed);
+        if (queueMode == EQueueMode::Overtaken) {
+            ui64 currentHead = Head.load(std::memory_order_acquire);
+
+            ui64 slotIdx = ConvertIdx(currentHead);
+            std::atomic<ui64> &currentSlot = Buffer[slotIdx];
+            ui64 expected = currentSlot.load(std::memory_order_relaxed);
+            TSlot slot = TSlot::Recognise(expected);
+            if (slot.IsEmpty) {
+                OBSERVE(FailedFastPop);
+                return std::nullopt;
+            }
+
+            ui64 currentTail = Tail.load(std::memory_order_acquire);
+            if (currentHead + 10 < currentTail) {
+                QueueMode.store(EQueueMode::Default, std::memory_order_relaxed);
             }
         }
 

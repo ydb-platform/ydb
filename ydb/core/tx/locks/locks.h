@@ -526,7 +526,7 @@ public:
     TLockLocker(const T * self)
         : Self(new TLocksDataShardAdapter<T>(self))
     {
-        std::cerr << "NEW TLockLocker " << (ui64) &Locks << "\n";
+        std::cerr << "NEW TLockLocker " << (ui64) &Locks << " datashard " << self->TabletID() << "\n";
     }
 
     ~TLockLocker() {
@@ -797,7 +797,7 @@ public:
         : Self(new TLocksDataShardAdapter<T>(self))
         , Locker(self)
     {
-        std::cerr << "NEW TSysLocks\n";
+        std::cerr << "NEW TSysLocks " << (ui64) &Locker << " datashard " << self->TabletID() << "\n";
     }
 
     void SetupUpdate(TLocksUpdate* update, ILocksDb* db = nullptr) noexcept {

@@ -562,9 +562,13 @@ TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
         return nullptr;
     }
 
+    /*if (Self->TabletID() == 72075186224037891) {
+        return nullptr;
+    }*/
+
     TLockInfo::TPtr lock(new TLockInfo(this, lockId, lockNodeId));
     Y_ABORT_UNLESS(!lock->IsPersistent());
-    std::cerr << "Lock created " << lock->GetGeneration() << " " << (ui64) &Locks << "\n";
+    std::cerr << "Lock created " << lock->GetGeneration() << " " << (ui64) &Locks << " datashard " << Self->TabletID() << "\n";
     Locks[lockId] = lock;
     if (lockNodeId) {
         PendingSubscribeLocks.emplace_back(lockId, lockNodeId);
@@ -651,7 +655,9 @@ void TLockLocker::RemoveSchema(const TPathId& tableId, ILocksDb* db) {
     Tables.erase(tableId);
     Y_ABORT_UNLESS(Tables.empty());
     if (Locks.size()) {
-        std::cerr << "locks became empty " << (ui64) &Locks << "\n";
+        std::cerr << "locks became empty " << (ui64) &Locks << " datashard " << Self->TabletID() <<  "\n";
+    } else {
+        std::cerr << "locks were empty " << (ui64) &Locks << " datashard " << Self->TabletID() <<  "\n";
     }
     Locks.clear();
     ShardLocks.clear();

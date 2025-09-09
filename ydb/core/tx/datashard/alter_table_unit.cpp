@@ -151,10 +151,15 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
         Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
         tableId.LocalPathId = pathId.GetLocalId();
     }
+    std::cerr << "new table id " << tableId.ToString() << "\n";
 
+    std::cerr << "Start DataShard.AlterUserTable\n";
     TUserTable::TPtr info = DataShard.AlterUserTable(ctx, txc, alterTableTx);
+    std::cerr << "End DataShard.AlterUserTable\n";
+    std::cerr << "Start DataShard.AddUserTable\n";
     TDataShardLocksDb locksDb(DataShard, txc);
     DataShard.AddUserTable(tableId, info, &locksDb);
+    std::cerr << "End DataShard.AddUserTable\n";
 
     if (info->NeedSchemaSnapshots()) {
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);

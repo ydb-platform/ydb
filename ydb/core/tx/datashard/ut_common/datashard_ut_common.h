@@ -423,7 +423,8 @@ struct TShardedTableOptions {
     static TVector<TColumn> DefaultColumns() {
         return {
             {"key",   "Uint32", true,  false}, 
-            {"value", "Uint32", false, false}
+            {"value", "Uint32", false, false},
+            {"value2", "Uint32", false, false}
         };
     }
 

@@ -921,6 +921,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             .Columns({
                 {"key", "Uuid", true, false},
                 {"value", "Uint32", false, false},
+                {"value2", "Uint32", false, false},
             });
     }
 
@@ -3775,10 +3776,28 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 const TString &sql)
     {
         auto &runtime = *server->GetRuntime();
-        auto request = MakeSQLRequest(sql, false);
+        auto request = MakeSQLRequest(sql, true);
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
     }
+
+    void ExecSQLB(Tests::TServer::TPtr server,
+             TActorId sender,
+             const TString &sql,
+             bool dml,
+             Ydb::StatusIds::StatusCode code)
+{
+    auto &runtime = *server->GetRuntime();
+    auto request = MakeSQLRequest(sql, dml);
+    runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
+    auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
+    auto& response = ev->Get()->Record.GetRef();
+    auto& issues = response.GetResponse().GetQueryIssues();
+    UNIT_ASSERT_VALUES_EQUAL_C(response.GetYdbStatus(),
+                               code,
+                               issues.empty() ? response.DebugString() : issues.Get(0).DebugString()
+    );
+}
 
     template <typename TPrepareFunc, typename TTestFunc>
     void ShouldBreakLocksOnConcurrentSchemeTx(TPrepareFunc prepare, TTestFunc, Ydb::StatusIds::StatusCode finalCode = Ydb::StatusIds::ABORTED) {
@@ -3804,7 +3823,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         prepare(server, edgeActor);
 
         int i = 0;
-        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> blockRecords(runtime);
+        //TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> blockRecords(runtime);
 
         std::cerr << "\n--------------Try to start AddIndex--------------\n";
         auto a = AsyncAlterAddIndex(server, "/Root", "/Root/Table",
@@ -3859,13 +3878,13 @@ Y_UNIT_TEST_SUITE(Cdc) {
         // Start tx after TInitiateBuildIndexUnit and before TFinalizeBuildIndexUnit
         auto la = [&](const TEvDataShard::TEvSchemaChanged::TPtr&) {
             i++;
-            //std::cerr << "AAAAAAAAAAAAAAAAAA " << i << "\n";
+            std::cerr << "AAAAAAAAAAAAAAAAAA " << i << "\n";
             if (i == 1) {
                 std::cerr << "\n--------------UPSERT--------------\n";
-                ExecSQLA(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+                ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
 
                 std::cerr << "\n--------------Start tx with UPSERT--------------\n";
-                KqpSimpleBegin(runtime, sessionId, txId, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 11);");
+                KqpSimpleBegin(runtime, sessionId, txId, "UPDATE `/Root/Table` ON (key, value2) VALUES (1, 11);");
 
                 std::cerr << "\n--------------Continue tx with SELECT--------------\n";
                 auto fa = KqpSimpleContinue(runtime, sessionId, txId, "SELECT key, value FROM `/Root/Table`;");
@@ -3882,7 +3901,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
         std::cerr << "\n--------------Continue ADD INDEX--------------\n";
         runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvNotifyTxCompletionResult>(edgeActor);
 
+        //blockRecords.Unblock().Stop();
+
         Y_UNUSED(finalCode);
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+        });
         UNIT_ASSERT_VALUES_EQUAL(false, true);
     }
 
@@ -4074,7 +4098,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         std::cerr << "PREPARE\n";
         //TBlockEvents<TEvDataShard::TEvBuildIndexProgressResponse> blockProgress(runtime);
-        //TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> blockScanIndex(runtime);
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> blockScanIndex(runtime);
         TBlockEvents<TEvDataShard::TEvSchemaChangedResult> blockSchemaChanged(runtime);
 
         buildIndexId = AsyncAlterAddIndex(server, "/Root", "/Root/Table", TShardedTableOptions::TIndex{"Index", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobal});
@@ -4083,25 +4107,25 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         std::cerr << "UPSERT\n";
         ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
-        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> blockRecords(runtime);
 
         TString sessionId;
         TString txId;
         std::cerr << "BEGIN\n";
         KqpSimpleBegin(runtime, sessionId, txId, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 11);");
+        //TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> blockRecords(runtime);
+        //runtime.WaitFor("blockRecords", [&]{ return blockRecords.size(); });
 
-        /*UNIT_ASSERT_VALUES_EQUAL(
+        UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleContinue(runtime, sessionId, txId, "SELECT key, value FROM `/Root/Table`;"),
-            "{ items { uint32_value: 1 } items { uint32_value: 11 } }");*/
-        runtime.WaitFor("blockRecords", [&]{ return blockRecords.size(); });
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }");
 
         //blockProgress.Unblock().Stop();
-        //blockScanIndex.Unblock().Stop();
+        blockScanIndex.Unblock().Stop();
         blockSchemaChanged.Unblock();
 
         std::cerr << "TEST\n";
         test(server, edgeActor);
-        blockRecords.Unblock().Stop();
+        //blockRecords.Unblock().Stop();
 
         /*UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1;"),

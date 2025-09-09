@@ -127,7 +127,7 @@ public:
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         const TGUCSettings::TPtr GUCSettings,
-        TPartitionPruner::TConfig partitionPrunerConfig,
+        TPartitionPrunerConfig partitionPrunerConfig,
         const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TResultSetFormatSettings resultSetFormatSettings,
@@ -143,7 +143,6 @@ public:
         , AsyncIoFactory(std::move(asyncIoFactory))
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
-        , PartitionPruner(HolderFactory(), TypeEnv(), std::move(partitionPrunerConfig))
         , BufferActorId(bufferActorId)
         , TxManager(txManager)
         , Database(database)
@@ -161,7 +160,7 @@ public:
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
-        , TasksGraph(Request.TxAlloc, AggregationSettings, Counters)
+        , TasksGraph(Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters)
     {
         if (executerConfig.TableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
@@ -1712,7 +1711,6 @@ protected:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
-    TPartitionPruner PartitionPruner;
 
     TActorId BufferActorId;
     IKqpTransactionManagerPtr TxManager;
@@ -1808,7 +1806,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
+    TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation);
 

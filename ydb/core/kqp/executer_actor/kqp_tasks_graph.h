@@ -22,6 +22,7 @@ namespace NKikimrTxDataShard {
 namespace NKikimr::NKqp {
 
 class TPartitionPruner;
+struct TPartitionPrunerConfig;
 struct TQueryExecutionStats;
 
 struct TTransaction : private TMoveOnly {
@@ -381,6 +382,7 @@ using TTask = NYql::NDq::TTask<TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskO
 class TKqpTasksGraph : public NYql::NDq::TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskOutputMeta> {
 public:
     explicit TKqpTasksGraph(const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
+        const TPartitionPrunerConfig& partitionPrunerConfig,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
         const TKqpRequestCounters::TPtr& counters);
 
@@ -403,6 +405,8 @@ public:
     void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling) const;
     bool IsCrossShardChannel(const NYql::NDq::TChannel& channel) const;
+
+    THolder<TPartitionPruner> PartitionPruner; // TODO: temporary public
 
 private:
     void BuildTransformChannels(const NYql::NDq::TTransform& transform, const TTaskInputMeta& meta, const TString& name,
@@ -435,7 +439,6 @@ private:
 private:
     NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
-    THolder<TPartitionPruner> PartitionPruner;
     TKqpRequestCounters::TPtr Counters;
 };
 

@@ -81,7 +81,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const TExecuterConfig& executerConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
+    TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const std::optional<TLlvmSettings>& llvmSettings,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation)

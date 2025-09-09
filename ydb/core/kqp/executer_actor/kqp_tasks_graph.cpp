@@ -2710,10 +2710,12 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
 }
 
 TKqpTasksGraph::TKqpTasksGraph(const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
-    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings, const TKqpRequestCounters::TPtr& counters)
-    : TxAlloc(txAlloc)
+    const TPartitionPrunerConfig& partitionPrunerConfig,
+    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
+    const TKqpRequestCounters::TPtr& counters)
+    : PartitionPruner(MakeHolder<TPartitionPruner>(txAlloc->HolderFactory, txAlloc->TypeEnv, std::move(partitionPrunerConfig)))
+    , TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
-    , PartitionPruner(MakeHolder<TPartitionPruner>(txAlloc->HolderFactory, txAlloc->TypeEnv))
     , Counters(counters)
 {}
 

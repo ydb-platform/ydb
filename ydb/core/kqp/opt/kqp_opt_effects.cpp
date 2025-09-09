@@ -13,20 +13,6 @@ using TStatus = IGraphTransformer::TStatus;
 
 namespace {
 
-TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx)
-{
-    TVector<TExprBase> columns;
-    for (const auto& name : table.Metadata->KeyColumnNames) {
-        columns.emplace_back(Build<TCoAtom>(ctx, pos)
-            .Value(name)
-            .Done());
-    }
-
-    return Build<TCoAtomList>(ctx, pos)
-        .Add(columns)
-        .Done();
-}
-
 TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
         const bool allowInconsistentWrites, const bool enableStreamWrite, bool isBatch,
         const TStringBuf mode, const bool isIndexImplTable, const TVector<TCoNameValueTuple>& settings, const i64 order, TExprContext& ctx) {
@@ -223,8 +209,16 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
+            TExprBase inputRows = [&]() -> TExprBase {
+                if (useStreamWrite) {
+                    return node.Input();
+                } else {
+                    return BuildPrecomputeStage(node.Input(), ctx);
+                }
+            }();
+
             stageInput = RebuildPureStageWithSink(
-                node.Input(), node.Table(),
+                inputRows, node.Table(),
                 settings.AllowInconsistentWrites, useStreamWrite,
                 node.IsBatch() == "true", settings.Mode, isIndexImplTable, {}, priority, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
@@ -309,9 +303,19 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             // so we use union all + one sink. It's important for write optimizations support.
             // NOTE: OLTP large writes expected to fail anyway due to problems with locks/splits.
 
+            TExprBase inputRows = [&]() -> TExprBase {
+                if (useStreamWrite) {
+                    return dqUnion;
+                } else {
+                    return Build<TDqPhyPrecompute>(ctx, node.Pos())
+                        .Connection(dqUnion)
+                        .Done();
+                }
+            }();
+
             stageInput = Build<TDqStage>(ctx, node.Pos())
                 .Inputs()
-                    .Add(dqUnion)
+                    .Add(inputRows)
                     .Build()
                 .Program()
                     .Args({rowArgument})
@@ -369,9 +373,15 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
-            const auto keyColumns = BuildKeyColumnsList(table, node.Pos(), ctx);
+            TExprBase inputRows = [&]() -> TExprBase {
+                if (useStreamWrite) {
+                    return node.Input();
+                } else {
+                    return BuildPrecomputeStage(node.Input(), ctx);
+                }
+            }();
             stageInput = RebuildPureStageWithSink(
-                node.Input(), node.Table(),
+                inputRows, node.Table(),
                 false, useStreamWrite, node.IsBatch() == "true",
                 "delete", isIndexImplTable, {}, priority, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
@@ -447,9 +457,19 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                 .Settings().Build()
                 .Done();
         } else {
+            TExprBase inputRows = [&]() -> TExprBase {
+                if (useStreamWrite) {
+                    return dqUnion;
+                } else {
+                    return Build<TDqPhyPrecompute>(ctx, node.Pos())
+                        .Connection(dqUnion)
+                        .Done();
+                }
+            }();
+
             stageInput = Build<TDqStage>(ctx, node.Pos())
                 .Inputs()
-                    .Add(dqUnion)
+                    .Add(inputRows)
                     .Build()
                 .Program()
                     .Args({rowArgument})
@@ -535,7 +555,7 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
                 ++order;
             }
 
-            if (input) {
+            if (input && !sinkEffect) {
                 inputArgs.push_back(inputArg);
                 inputs.push_back(input.Cast());
             }

@@ -81,7 +81,7 @@ public:
                     to = TInstant::Now();
                 }
                 
-                std::map<TString, TString> selectors;
+                NSo::TSelectors selectors;
                 if (auto error = NSo::BuildSelectorValues(source, *maybeSelectors, selectors)) {
                     ctx.AddError(TIssue(ctx.GetPosition(n->Pos()), *error));
                     return TStatus::Error;

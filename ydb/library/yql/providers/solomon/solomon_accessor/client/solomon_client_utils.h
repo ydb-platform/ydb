@@ -2,6 +2,8 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <ydb/library/yql/providers/solomon/common/util.h>
+
 #include <map>
 #include <vector>
 
@@ -24,17 +26,6 @@ public:
     EStatus Status;
     TString Error;
     T Result;
-};
-
-struct TMetric {
-    std::map<TString, TString> Labels;
-    TString Type;
-};
-
-struct TTimeseries {
-    TMetric Metric;
-    std::vector<int64_t> Timestamps;
-    std::vector<double> Values;
 };
 
 struct TGetLabelsResult {

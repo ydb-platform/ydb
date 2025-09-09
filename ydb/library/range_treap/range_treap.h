@@ -520,6 +520,8 @@ private:
                 return false;
             }
         }
+
+        return true;
     }
 
 public:

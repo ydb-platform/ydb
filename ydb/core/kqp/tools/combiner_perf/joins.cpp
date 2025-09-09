@@ -8,7 +8,7 @@ TVector<ui64> GenerateKeyColumn(i32 size, i32 seed){
     std::uniform_int_distribution<uint64_t> unif(0, size/2);
     eng.seed(seed);
     TVector<ui64> keyCoumn;
-    std::generate(keyCoumn.begin(), keyCoumn.end(),
+    std::generate_n(std::back_inserter(keyCoumn), size,
         [&]() -> auto {
             return unif(eng);
         }
@@ -20,7 +20,7 @@ TVector<ui64> GenerateKeyColumn(i32 size, i32 seed){
 NKikimr::NMiniKQL::InnerJoinDescription PrepareCommonDescription(NKikimr::NMiniKQL::TDqSetup<false>* setup){
     NKikimr::NMiniKQL::InnerJoinDescription descr;
     descr.Setup = setup;
-    const int size = 1<<12;
+    const int size = 1<<14;
 
 
     std::tie(descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList) =
@@ -64,7 +64,7 @@ TTestResult DoRunJoinsBench(const NKikimr::NMiniKQL::TRunParams &params){
         std::vector<NYql::NUdf::TUnboxedValue> fetchBuff;
         i32 cols = NKikimr::NMiniKQL::ResultColumnCount(algo,descr);
         fetchBuff.resize(cols);
-        Cerr << "Compute graph result for algorithm '" << name << "'" << Endl; 
+        Cerr << "Compute graph result for algorithm '" << name << "'"; 
 
         NYql::NUdf::EFetchStatus fetchStatus;
         JoinTestResult thisResults{};
@@ -75,12 +75,14 @@ TTestResult DoRunJoinsBench(const NKikimr::NMiniKQL::TRunParams &params){
                 ++thisResults.LineCount;
             }
         }
-        Cout << fetchBuff[0];
         thisResults.BenchDuration = GetThreadCPUTimeDelta(graphTimeStart);
-        Cerr << ToString(thisResults.LineCount);
+        Cerr << ToString(thisResults.LineCount) << Endl;
         results.emplace(algo, thisResults);
-    }
 
+    }
+    finalResult.ResultTime = std::ranges::min_element(results, [](const auto& first, const auto& second){
+        return first.second.BenchDuration < second.second.BenchDuration;
+    })->second.BenchDuration;
     return {finalResult, "allJoins"};
 
 }

@@ -22,7 +22,7 @@ inline TStringBuf operator +=(TStringBuf& l, TStringBuf r) {
     return l = l + r;
 }
 
-static bool is_not_number(TStringBuf v) {
+inline bool is_not_number(TStringBuf v) {
     return v.empty() || std::find_if_not(v.begin(), v.end(), [](unsigned char c) { return std::isdigit(c); }) != v.end();
 }
 
@@ -495,6 +495,13 @@ void THttpOutgoingResponse::AddDataChunk(THttpOutgoingDataChunkPtr dataChunk) {
     }
 }
 
+THttpIncomingResponsePtr THttpOutgoingResponse::Reverse(THttpOutgoingRequestPtr request) {
+    THttpIncomingResponsePtr response = new THttpIncomingResponse(request);
+    response->Assign(Data(), Size());
+    response->Reparse();
+    return response;
+}
+
 THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data)
     : Response(std::move(response))
 {
@@ -590,6 +597,13 @@ THttpOutgoingRequestPtr THttpOutgoingRequest::CreateHttpRequest(TStringBuf metho
 
 THttpOutgoingRequestPtr THttpOutgoingRequest::Duplicate() {
     THttpOutgoingRequestPtr request = new THttpOutgoingRequest(*this);
+    request->Reparse();
+    return request;
+}
+
+THttpIncomingRequestPtr THttpOutgoingRequest::Reverse() {
+    THttpIncomingRequestPtr request = new THttpIncomingRequest();
+    request->Assign(Data(), Size());
     request->Reparse();
     return request;
 }

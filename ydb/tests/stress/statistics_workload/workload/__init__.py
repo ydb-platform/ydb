@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import argparse
 import ydb
 import logging
 import time
@@ -152,7 +151,7 @@ class Workload(object):
             self.add_data(table_path, trace_id)
             count = self.rows_count(table_name)
             logger.info(f"[{trace_id}] number of rows in table '{table_name}' {count}")
-            if count != self.batch_count*self.batch_size:
+            if count != self.batch_count * self.batch_size:
                 raise Exception(f"[{trace_id}] the number of rows in the '{table_name}' does not match the expected")
 
             logger.info(f"[{trace_id}] waiting to receive information about the table '{table_name}' from scheme shard")

@@ -487,7 +487,8 @@ class StabilityCluster:
 
         # На всякий случай убиваем все потенциальные процессы рабочих нагрузок
         node.ssh_command(
-            'pkill -f "SCREEN.*workload\\|simple_queue\\|olap_workload\\|oltp_workload\\|node_broker_workload\\|transfer_workload\\|s3_backups_workload\\|statistics_workload\\|kafka_workload\\|topic_kafka_workload\\|ctas_workload\\|topic_workload\\|"',
+            'pkill -f "SCREEN.*workload\\|simple_queue\\|olap_workload\\|oltp_workload\\|node_broker_workload\\|transfer_workload\\|s3_backups_workload\\|\
+                statistics_workload\\|kafka_workload\\|topic_kafka_workload\\|ctas_workload\\|topic_workload\\|"',
             raise_on_error=False
         )
 
@@ -1103,7 +1104,7 @@ handle_timeout() {{
     # Убиваем процессы statistics_workload
     pkill -9 -f "statistics_workload" || true
 
-  elif [[ "{base_command}" == *"topic_kafka_workload"* ]]; then
+  else [[ "{base_command}" == *"topic_kafka_workload"* ]]; then
     echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing topic_kafka_workload specific cleanup"
     # Убиваем процессы topic_kafka_workload
     pkill -9 -f "topic_kafka_workload" || true

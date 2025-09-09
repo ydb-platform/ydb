@@ -97,6 +97,8 @@ class TestExportImportS3(MixedClusterFixture):
                     self.settings = self.settings.with_source_and_destination(table_name, table_name)
 
     def _create_topics(self):
+        if not self._is_topic_export_avaliable():
+            return
         with ydb.SessionPool(self.driver, size=1) as pool:
             with pool.checkout() as session:
                 for num in range(1, 6):

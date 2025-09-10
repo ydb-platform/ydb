@@ -61,11 +61,11 @@ TUnversionedOwningValue ApproximateMaxValue(TUnversionedValue value)
         // String was larger than any possible approximation.
         return MakeSentinelValue<TUnversionedValue>(EValueType::Max);
     } else {
-        TUnversionedOwningValue result = MakeUnversionedStringValue(truncatedStringBuf);
-        char* mutableString = result.GetMutableString();
-        int lastIndex = truncatedStringBuf.size() - 1;
-        mutableString[lastIndex] = static_cast<unsigned char>(mutableString[lastIndex]) + 1;
-        return result;
+        auto string = TString{truncatedStringBuf};
+        int lastIndex = string.size() - 1;
+        string[lastIndex] = static_cast<unsigned char>(string[lastIndex]) + 1;
+        auto ref = TSharedRef::FromString(std::move(string));
+        return TUnversionedOwningValue(MakeUnversionedStringValue(ref.ToStringBuf()), ref.ReleaseHolder());
     }
 }
 

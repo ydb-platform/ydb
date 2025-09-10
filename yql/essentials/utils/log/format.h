@@ -12,6 +12,6 @@ namespace NYql::NLog {
 
     TString JsonFormat(const TLogRecord& rec);
 
-    TAutoPtr<TLogBackend> MakeFormattingLogBackend(TFormatter formatter, TAutoPtr<TLogBackend> child);
+    TAutoPtr<TLogBackend> MakeFormattingLogBackend(TFormatter formatter, bool isStrict, TAutoPtr<TLogBackend> child);
 
 } // namespace NYql::NLog

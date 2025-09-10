@@ -703,6 +703,34 @@ TExprNode::TPtr PropagateCoalesceWithConstIntoLogicalOps(const TExprNode::TPtr& 
     return node;
 }
 
+bool IsPullJustFromLogicalOpsEnabled(const TOptimizeContext& optCtx) {
+    static const char optName[] = "PullJustFromLogicalOps";
+    YQL_ENSURE(optCtx.Types);
+    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+}
+
+TExprNode::TPtr PullJustFromLogicalOps(const TExprNode::TPtr& node, TExprContext& ctx, const TOptimizeContext& optCtx) {
+    if (!IsPullJustFromLogicalOpsEnabled(optCtx)) {
+        return node;
+    }
+    if (AllOf(node->ChildrenList(), [](const auto& child) { return !child->IsCallable("Just"); })) {
+        return node;
+    }
+    bool haveOptional = false;
+    TExprNodeList newChildren;
+    newChildren.reserve(node->ChildrenSize());
+    node->ForEachChild([&](TExprNode& child) {
+        if (child.IsCallable("Just")) {
+            newChildren.push_back(child.HeadPtr());
+        } else {
+            haveOptional = haveOptional || child.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
+            newChildren.push_back(&child);
+        }
+    });
+    YQL_CLOG(DEBUG, Core) << node->Content() << " over Just";
+    return ctx.WrapByCallableIf(!haveOptional, "Just", ctx.ChangeChildren(*node, std::move(newChildren)));
+}
+
 template<bool AndOr>
 TExprNode::TPtr SimplifyLogical(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     const auto size = node->ChildrenSize();
@@ -755,7 +783,12 @@ TExprNode::TPtr SimplifyLogical(const TExprNode::TPtr& node, TExprContext& ctx, 
         return ctx.ChangeChildren(*node, std::move(children));
     }
 
+    if (auto opt = PullJustFromLogicalOps(node, ctx, optCtx); opt != node) {
+        return opt;
+    }
+
     if (justs && size == justs + bools) {
+        // TODO: remove after enabling PullJustFromLogicalOps
         YQL_CLOG(DEBUG, Core) << node->Content() <<  " over Just";
         TExprNode::TListType children;
         children.reserve(size);
@@ -839,7 +872,12 @@ TExprNode::TPtr SimplifyLogicalXor(const TExprNode::TPtr& node, TExprContext& ct
         return ctx.ChangeChildren(*node, std::move(children));
     }
 
+    if (auto opt = PullJustFromLogicalOps(node, ctx, optCtx); opt != node) {
+        return opt;
+    }
+
     if (justs && size == justs + bools) {
+        // TODO: remove after enabling PullJustFromLogicalOps
         YQL_CLOG(DEBUG, Core) << node->Content() <<  " over Just";
         TExprNode::TListType children;
         children.reserve(size);

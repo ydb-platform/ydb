@@ -821,6 +821,39 @@ void BackupReplication(
 
 namespace {
 
+TString ExtractTransformationLambdaName(const TString& lambdaCreateQuery) {
+    const TString lambdaNameStartPattern  = "$__ydb_transfer_lambda = ";
+    const TString lambdaNameEndPattern  = ";";
+    
+    size_t start_pos = lambdaCreateQuery.find(lambdaNameStartPattern);
+    if (start_pos == TString::npos) {
+        // TODO Exception
+        return "";
+    }
+
+    start_pos += lambdaNameStartPattern.length();
+
+    size_t end_pos = lambdaCreateQuery.find(lambdaNameEndPattern, start_pos);
+    if (end_pos == TString::npos) {
+        // TODO Exception
+        return "";
+    }
+    
+    return lambdaCreateQuery.substr(start_pos, end_pos - start_pos);
+}
+
+void CleanQuery(TString& query, const TString& patternToRemove) {    
+    if (patternToRemove.empty()) {
+        return;
+    }
+
+    size_t patternLength = patternToRemove.length();
+    size_t position;
+    while ((position = query.find(patternToRemove)) != TString::npos) {
+        query.erase(position, patternLength);
+    }    
+}
+
 TString BuildCreateTransferQuery(
         const TString& db,
         const TString& backupRoot,
@@ -849,16 +882,23 @@ TString BuildCreateTransferQuery(
     options.push_back(BuildOption("BATCH_SIZE_BYTES", ToString(batchingSettings.SizeBytes)));
     options.push_back(BuildOption("FLUSH_INTERVAL", Interval(batchingSettings.FlushInterval)));
 
+    const TString& lambdaCreateQuery = desc.GetTransformationLambda().c_str();
+    const TString& lambdaName = ExtractTransformationLambdaName(lambdaCreateQuery.c_str()).c_str();
+
+    TString cleanedLambdaCreateQuery = lambdaCreateQuery;
+    CleanQuery(cleanedLambdaCreateQuery, "PRAGMA OrderedColumns;");
+    CleanQuery(cleanedLambdaCreateQuery, "$__ydb_transfer_lambda = " + lambdaName + ";");
+
     return std::format(
             "-- database: \"{}\"\n-- backup root: \"{}\"\n"
             "{}\n\n"
             "CREATE TRANSFER `{}`\n"
-            "FROM `{}` TO `{}` USING $__ydb_transfer_lambda\n"
+            "FROM `{}` TO `{}` USING {}\n"
             "WITH (\n{}\n);",
             db.c_str(), backupRoot.c_str(),
-            desc.GetTransformationLambda().c_str(),
+            cleanedLambdaCreateQuery.c_str(),
             name.c_str(), 
-            desc.GetSrcPath().c_str(), desc.GetDstPath().c_str(), 
+            desc.GetSrcPath().c_str(), desc.GetDstPath().c_str(), lambdaName.c_str(),
             JoinSeq(",\n", options).c_str()
         );        
 }

@@ -2,6 +2,38 @@
 
 ## Version 25.1 {#25-1}
 
+### Version 25.1.4.7 {#25-1-4-7-rc}
+
+Release date: September , 2025.
+
+#### Functionality
+
+* [Added](https://github.com/ydb-platform/ydb/pull/21119) support for the Kafka frameworks like Kafka Connect, Kafka Streams, Confluent Schema Registry, Kafka Streams, Apache Flink, etc. Now [YDB Topics Kafka API](https://ydb.tech/docs/en/reference/kafka-api/) supports
+  * client-side consumer balancing – enabled by setting the `enable_kafka_native_balancing` flag in the [cluster configuration](./reference/configuration/index.md),
+  * compacted topics, and transactions – enabled via the enable_kafka_transactions flag.
+* [Added](https://github.com/ydb-platform/ydb/pull/20982) [new protocol to Node Broker](https://github.com/ydb-platform/ydb/issues/11064), eliminating the long startup of nodes on large clusters.
+
+#### YDB UI
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/17839) an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/18615) where not all tablets are shown for pers queue group on the tablets tab in diagnostics.
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18735) where the storage tab on the diagnostics page was displaying nodes of other types in addition to storage nodes.
+* Fixed an [serialization issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164) that caused an error to occur when opening query execution statistics.
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19676) make nodes less critical (to make cluster less critical).
+
+### Performance
+
+* Added the new mode of operating [actor system] (../concepts/glossary#actor-system), which allows for more efficient use of computing resources. It is enabled by setting the `use_shared_threads` flag in the [actor-system configuration](../devops/configuration-management/configuration-v1/change_actorsystem_configs).
+* [Optimized](https://github.com/ydb-platform/ydb/pull/20197 ) processing of empty inputs when performing JOIN operations.
+
+#### Bug fixes
+
+* [Support](https://github.com/ydb-platform/ydb/pull/21918) in asynchronous replication new kind of change record — `reset` record (in addition to `update` & `erase` records).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/21836) an [issue](https://github.com/ydb-platform/ydb/issues/21814) where a replication instance with an unspecified `COMMIT_INTERVAL` option caused the process to crash.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/21652) rare errors when reading from a topic during partition balancing.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/22455) an [issue](https://github.com/ydb-platform/ydb/issues/19842) where dedicated database deletion may leave database system tablets improperly cleaned.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/22203) an [issue](https://github.com/ydb-platform/ydb/issues/22030) that caused tablets to hang when nodes experienced critical memory shortage. Now tablets will automatically start as soon as any of the nodes frees up sufficient resources.
+
+
 ### Release candidate 25.1.2.7 {#25-1-2-7-rc}
 
 Release date: July 14, 2025.

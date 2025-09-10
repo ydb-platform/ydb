@@ -53,6 +53,7 @@
 /ydb/tests/functional/suite_tests @ydb-platform/qp
 /ydb/tests/functional/clickbench @ydb-platform/qp
 /ydb/tests/functional/postgresql @ydb-platform/qp
+/ydb/tests/functional/kqp @ydb-platform/qp
 
 #YDB Application Team @asmyasnikov TEAM:@ydb-platform/appteam
 /ydb/public/sdk @ydb-platform/appteam

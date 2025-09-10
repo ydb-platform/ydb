@@ -9,7 +9,7 @@ TVector<ui64> GenerateKeyColumn(i32 size, i32 seed){
     eng.seed(seed);
     TVector<ui64> keyCoumn;
     std::generate_n(std::back_inserter(keyCoumn), size,
-        [&]() -> auto {
+        [&]() {
             return unif(eng);
         }
     );

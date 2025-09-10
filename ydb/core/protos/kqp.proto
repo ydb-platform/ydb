@@ -926,6 +926,7 @@ message TScriptExecutionOperationMeta {
     optional google.protobuf.Duration ProgressStatsPeriod = 10;
     optional TRlPath RlPath = 11;
     optional bool SaveQueryPhysicalGraph = 12;
+    optional bool DisableDefaultTimeout = 13;
 }
 
 // stored in column "retry_state" of .metadata/script_executions table
@@ -966,4 +967,42 @@ message TQueryPhysicalGraph {
 message TEvRefreshPoolState {
     optional string PoolId = 1;
     optional string Database = 2;
+}
+
+/// Streaming queries
+
+// stored in column "state" of .metadata/streaming/queries table
+message TStreamingQueryState {
+    message TSchemeInfo {
+        optional uint64 AlterVersion = 1;
+        optional uint64 OwnerSchemeshardId = 2;
+        optional uint64 LocalPathId = 3;
+    }
+
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_CREATING = 10;
+        STATUS_CREATED = 20;
+        STATUS_STARTING = 30;
+        STATUS_RUNNING = 40;
+        STATUS_STOPPING = 50;
+        STATUS_STOPPED = 60;
+        STATUS_DELETING = 70;
+    }
+
+    // Script executions info
+    optional EStatus Status = 1;
+    optional string CurrentExecutionId = 2;
+    repeated string PreviousExecutionIds = 3;
+
+    // Inflight streaming query operation info
+    optional string OperationName = 4;
+    optional string OperationActorId = 5;
+    optional google.protobuf.Timestamp OperationStartedAt = 6;
+
+    // Streaming query properties stored in schemeshard
+    optional TSchemeInfo SchemeInfo = 7;
+    optional string QueryText = 8;
+    optional bool Run = 9;
+    optional string ResourcePool = 10;
 }

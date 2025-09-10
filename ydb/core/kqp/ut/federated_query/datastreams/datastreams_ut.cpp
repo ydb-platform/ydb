@@ -71,7 +71,11 @@ public:
                 AppConfig.emplace();
             }
 
-            AppConfig->MutableQueryServiceConfig()->SetProgressStatsPeriodMs(1000);
+            AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
+
+            auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
+            queryServiceConfig.SetEnableMatchRecognize(true);
+            queryServiceConfig.SetProgressStatsPeriodMs(1000);
 
             Kikimr = MakeKikimrRunner(true, nullptr, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
                 .PqGateway = PqGateway
@@ -95,7 +99,9 @@ public:
 
     std::shared_ptr<TQueryClient> GetQueryClient() {
         if (!QueryClient) {
-            QueryClient = std::make_shared<TQueryClient>(GetKikimrRunner()->GetQueryClient());
+            QueryClient = std::make_shared<TQueryClient>(
+                GetKikimrRunner()->GetQueryClient(TClientSettings().AuthToken(BUILTIN_ACL_ROOT))
+            );
         }
 
         return QueryClient;
@@ -168,6 +174,12 @@ public:
 
         writeSession->Write(NTopic::TWriteMessage(message));
         writeSession->Close();
+    }
+
+    void WriteTopicMessages(const TString& topicName, const std::vector<TString>& messages, ui64 partition = 0) {
+        for (const auto& message : messages) {
+            WriteTopicMessage(topicName, message, partition);
+        }
     }
 
     void ReadTopicMessages(const TString& topicName, const TVector<TString>& expectedMessages, TDuration disposition = TDuration::Seconds(100)) {
@@ -306,12 +318,14 @@ public:
     }
 
     void WaitScriptExecution(const TOperation::TOperationId& operationId, EExecStatus finalStatus = EExecStatus::Completed, bool waitRetry = false) {
+        const bool waitForFinalStatus = !waitRetry && IsIn({EExecStatus::Completed, EExecStatus::Failed}, finalStatus);
+
         std::optional<TScriptExecutionOperation> operation;
         WaitFor(TEST_OPERATION_TIMEOUT, TStringBuilder() << "script execution status" << finalStatus, [&](TString& error) {
             operation = GetScriptExecutionOperation(operationId, /* checkStatus */ false);
 
             const auto execStatus = operation->Metadata().ExecStatus;
-            if (execStatus == finalStatus) {
+            if (execStatus == finalStatus && (!waitForFinalStatus || operation->Ready())) {
                 return true;
             }
 
@@ -319,7 +333,7 @@ public:
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToOneLineString());
             UNIT_ASSERT_C(!operation->Ready(), "Operation unexpectedly ready in status " << execStatus << " (expected status " << finalStatus << ")");
 
-            error = TStringBuilder() << "operation status " << execStatus;
+            error = TStringBuilder() << "operation status: " << execStatus << ", ready: " << operation->Ready();
             return false;
         });
 
@@ -331,11 +345,7 @@ public:
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToOneLineString());
         }
 
-        if (!waitRetry) {
-            UNIT_ASSERT_VALUES_EQUAL(operation->Ready(), IsIn({EExecStatus::Completed, EExecStatus::Failed}, execStatus));
-        } else {
-            UNIT_ASSERT_C(!operation->Ready(), "Operation unexpectedly ready for waiting retry");
-        }
+        UNIT_ASSERT_VALUES_EQUAL(operation->Ready(), waitForFinalStatus);
     }
 
     void ExecAndWaitScript(const TString& query, EExecStatus finalStatus = EExecStatus::Completed, std::optional<TExecuteScriptSettings> settings = std::nullopt) {
@@ -436,6 +446,23 @@ public:
         UNIT_ASSERT_VALUES_EQUAL_C(graph->Get()->Status, Ydb::StatusIds::SUCCESS, graph->Get()->Issues.ToOneLineString());
 
         return graph->Get()->PhysicalGraph;
+    }
+
+    void CheckScriptExecutionsCount(ui64 expectedExecutionsCount, ui64 expectedLeasesCount) {
+        const auto& result = ExecQuery(R"(
+            SELECT COUNT(*) FROM `.metadata/script_executions`;
+            SELECT COUNT(*) FROM `.metadata/script_execution_leases`;
+            )");
+
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 2);
+
+        CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), expectedExecutionsCount);
+        });
+
+        CheckScriptResult(result[1], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), expectedLeasesCount);
+        });
     }
 
     // Utils
@@ -583,7 +610,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         ));
 
         for (ui32 i = 0; i < partitionCount; ++i) {
-            WriteTopicMessage(topicName, R"({"key":"key1", "value": "value1"})", i);
+            WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})", i);
         }
 
         CheckScriptResult(scriptExecutionOperation, 2, partitionCount, [](TResultSetParser& result) {
@@ -615,7 +642,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "topic"_a=topicName
         ));
 
-        WriteTopicMessage(topicName, R"({"key":"key1", "value": "value1"})");
+        WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
 
         CheckScriptResult(scriptExecutionOperation, 2, 1, [](TResultSetParser& result) {
             UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
@@ -640,7 +667,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     FORMAT="json_each_row",
                     SCHEMA=(
                         key String NOT NULL,
-                        value String  NOT NULL
+                        value String NOT NULL
                     ));
             INSERT INTO `{source}`.`{output_topic}`
                 SELECT key || value FROM $input;
@@ -650,7 +677,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "output_topic"_a=outputTopicName
         ));
 
-        WriteTopicMessage(inputTopicName, R"({"key":"key1", "value": "value1"})");
+        WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessages(outputTopicName, {"key1value1"});
 
         WaitFor(TDuration::Seconds(5), "operation AST", [&](TString& error) {
@@ -760,7 +787,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "topic"_a = topicName
             ), settings);
 
-            WriteTopicMessage(topicName, R"({"key":"key1", "value": "value1"})");
+            WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
             WaitScriptExecution(operationId);
 
             return executionId;
@@ -814,8 +841,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "source"_a = pqSourceName
             ), settings);
 
-            WriteTopicMessage(sourceTopicName, R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})");
-            WriteTopicMessage(sourceTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})");
+            WriteTopicMessages(sourceTopicName, {
+                R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
+                R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})"
+            });
 
             expectedMessages.emplace_back("A");
             ReadTopicMessages(sinkTopicName, expectedMessages);
@@ -858,7 +887,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 return NTopic::TSessionClosedEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
             }
 
-            return MakePqMessage(numberEvents, R"({"key":"key1", "value": "value1"})", meta);
+            return MakePqMessage(numberEvents, R"({"key": "key1", "value": "value1"})", meta);
         });
 
         const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
@@ -916,7 +945,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     FORMAT="json_each_row",
                     SCHEMA=(
                         key String NOT NULL,
-                        value String  NOT NULL
+                        value String NOT NULL
                     ));
                 INSERT INTO `{source}`.`{output_topic}`
                     SELECT key || value FROM $input;)",
@@ -930,14 +959,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         Sleep(TDuration::MilliSeconds(3000));
 
-        pqGateway->AddEvent(inputTopicName, MakePqMessage(1, R"({"key":"key1", "value": "value1"})", {.Session = CreatePartitionSession()}));
-        pqGateway->AddEvent(inputTopicName, MakePqMessage(2, R"({"key":"key2", "value": "value2"})", {.Session = CreatePartitionSession()}));
-        pqGateway->AddEvent(inputTopicName, MakePqMessage(3, R"({"key":"key3", "value": "value3"})", {.Session = CreatePartitionSession()}));
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(1, R"({"key": "key1", "value": "value1"})", {.Session = CreatePartitionSession()}));
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(2, R"({"key": "key2", "value": "value2"})", {.Session = CreatePartitionSession()}));
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(3, R"({"key": "key3", "value": "value3"})", {.Session = CreatePartitionSession()}));
         Sleep(TDuration::MilliSeconds(1000));
         pqGateway->AddEvent(inputTopicName, NTopic::TSessionClosedEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")}));
 
         Sleep(TDuration::MilliSeconds(10000));
-        pqGateway->AddEvent(inputTopicName, MakePqMessage(4, R"({"key":"key4", "value": "value4"})", {.Session = CreatePartitionSession()}));
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(4, R"({"key": "key4", "value": "value4"})", {.Session = CreatePartitionSession()}));
 
         bool success = false;
         while (true) {
@@ -954,6 +983,287 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             Sleep(TDuration::MilliSeconds(100));
         }
         CancelScriptExecution(operationId);
+    }
+}
+
+Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
+    Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
+        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE test_table1 (Key Int32 NOT NULL, PRIMARY KEY (Key));
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT key || value FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key String NOT NULL,
+                        value String NOT NULL
+                    )
+                )
+                WHERE value REGEXP ".*v.*a.*l.*"
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
+        ReadTopicMessages(outputTopicName, {"key1value1"});
+
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE test_table2 (Key Int32 NOT NULL, PRIMARY KEY (Key));
+            ALTER STREAMING QUERY `{query_name}` SET (
+                FORCE = TRUE
+            ) AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT value || key FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key String NOT NULL,
+                        value String NOT NULL
+                    )
+                )
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(2, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"key": "key2", "value": "value2"})");
+        ReadTopicMessages(outputTopicName, {"key1value1", "value2key2"});
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(2, 0);
+    }
+
+    Y_UNIT_TEST_F(CreateAndDropStreamingQuery, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "createAndDropStreamingQueryInputTopic";
+        constexpr char outputTopicName[] = "createAndDropStreamingQueryOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT key || value FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key String NOT NULL,
+                        value String NOT NULL
+                    )
+                )
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
+        ReadTopicMessages(outputTopicName, {"key1value1"});
+
+        ExecQuery(fmt::format(R"(
+            DROP STREAMING QUERY `{query_name}`;)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(0, 0);
+    }
+
+    Y_UNIT_TEST_F(MaxStreamingQueryExecutionsLimit, TStreamingTestFixture) {
+        constexpr ui64 executionsLimit = 5;
+        SetupAppConfig().MutableQueryServiceConfig()->MutableStreamingQueries()->SetMaxQueryExecutions(executionsLimit);
+
+        constexpr char inputTopicName[] = "maxStreamingQueryExecutionsLimitInputTopic";
+        constexpr char outputTopicName[] = "maxStreamingQueryExecutionsLimitOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT key || value FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key String NOT NULL,
+                        value String NOT NULL
+                    )
+                )
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
+        ReadTopicMessages(outputTopicName, {"key1value1"});
+
+        TVector<TString> messages = {"key1value1"};
+        messages.reserve(2 * executionsLimit + 1);
+        for (ui64 i = 0; i < 2 * executionsLimit; ++i) {
+            ExecQuery(fmt::format(R"(
+                ALTER STREAMING QUERY `{query_name}` SET (
+                    FORCE = TRUE
+                ) AS
+                DO BEGIN
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT value || key FROM `{pq_source}`.`{input_topic}` WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (
+                            key String NOT NULL,
+                            value String NOT NULL
+                        )
+                    )
+                END DO;)",
+                "query_name"_a = queryName,
+                "pq_source"_a = pqSourceName,
+                "input_topic"_a = inputTopicName,
+                "output_topic"_a = outputTopicName
+            ));
+
+            const ui64 id = i + 2;
+            CheckScriptExecutionsCount(std::min(id, executionsLimit + 1), 1);
+            Sleep(TDuration::Seconds(1));
+
+            WriteTopicMessage(inputTopicName, TStringBuilder() << "{\"key\":\"key" << id << "\", \"value\": \"value" << id << "\"}");
+
+            messages.emplace_back(TStringBuilder() << "value" << id << "key" << id);
+            ReadTopicMessages(outputTopicName, messages);
+        }
+    }
+
+    Y_UNIT_TEST_F(CreateStreamingQueryWithDefineAction, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
+        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                DEFINE ACTION $start_query($add) AS
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT key || value || $add FROM `{pq_source}`.`{input_topic}` WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (
+                            key String NOT NULL,
+                            value String NOT NULL
+                        )
+                    )
+                END DEFINE;
+
+                DO $start_query("Add1")
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
+        ReadTopicMessages(outputTopicName, {"key1value1Add1"});
+    }
+
+    Y_UNIT_TEST_F(CreateStreamingQueryMatchRecognize, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "createStreamingQueryMatchRecognizeInputTopic";
+        constexpr char outputTopicName[] = "createStreamingQueryMatchRecognizeOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
+                PRAGMA FeatureR010="prototype";
+
+                $matches = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key Uint64 NOT NULL,
+                        value String NOT NULL
+                    )
+                ) MATCH_RECOGNIZE(
+                    MEASURES
+                        LAST(V1.key) as v1,
+                        LAST(V4.key) as v4
+                    ONE ROW PER MATCH
+                    PATTERN (V1 V? V4)
+                    DEFINE 
+                        V1 as V1.value = "value1",
+                        V as True,
+                        V4 as V4.value = "value4" 
+                );
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT UNWRAP(CAST(v1 AS String) || "-" || CAST(v4 AS String)) FROM $matches;
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessages(inputTopicName, {
+            R"({"key": 1, "value": "value1"})",
+            R"({"key": 2, "value": "value2"})",
+            R"({"key": 4, "value": "value4"})",
+        });
+        ReadTopicMessages(outputTopicName, {"1-4"});
     }
 }
 

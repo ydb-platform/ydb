@@ -12,8 +12,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
 
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(
         const NYdb::TOperation::TOperationId& operationId,
-        const NYdb::TDriver& ydbDriver,
-        std::function<void()> onRunningCallback = nullptr);
+        const NYdb::TDriver& ydbDriver);
 
     void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount);
     void WaitResourcesPublish(const TKikimrRunner& kikimrRunner);

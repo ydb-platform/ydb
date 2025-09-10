@@ -245,8 +245,8 @@ private:
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeResponse, Handle);
 
-            hFunc(TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(TEvents::TEvWakeup, HandleTimeout);
+            hFunc(TEvents::TEvUndelivered, HandleUndelivered);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         }
     }

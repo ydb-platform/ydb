@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/library/yql/dq/comp_nodes/dq_program_builder.h>
-#include <ydb/library/yql/dq/comp_nodes/ut/dq_setup.h>
+#include <ydb/library/yql/dq/comp_nodes/ut/utils/dq_setup.h>
 
 namespace NKikimr::NMiniKQL{
 enum class ETestedJoinAlgo{

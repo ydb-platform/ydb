@@ -19,7 +19,7 @@ concurrency:
 jobs:
   check-running-allowed:
     if: ${{vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true}}
-    runs-on: [self-hosted, auto-provisioned, build-preset-analytic-node]
+    runs-on: [self-hosted, auto-provisioned, tiny-worker]
     timeout-minutes: 600
     outputs:
       result: ${{ steps.check-ownership-membership.outputs.result == 'true' && steps.check-is-mergeable.outputs.result == 'true' }}

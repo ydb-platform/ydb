@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>

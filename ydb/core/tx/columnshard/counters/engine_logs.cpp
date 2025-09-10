@@ -1,6 +1,7 @@
 #include "engine_logs.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/library/actors/core/log.h>
 

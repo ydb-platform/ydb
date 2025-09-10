@@ -4,7 +4,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TCompactionTaskData TZeroLevelPortions::DoGetOptimizationTask() const {
     AFL_VERIFY(Portions.size());
-    TCompactionTaskData result(NextLevel->GetLevelId(), CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::nullopt);
+    TCompactionTaskData result(NextLevel->GetLevelId(), CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
     for (auto&& i : Portions) {
         result.AddCurrentLevelPortion(
             i.GetPortion(), NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()), true);

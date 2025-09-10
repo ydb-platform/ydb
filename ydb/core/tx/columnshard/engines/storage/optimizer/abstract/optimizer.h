@@ -151,18 +151,37 @@ public:
         Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit ? *NodePortionsCountLimit : DynamicPortionsCountLimit.load());
     }
 
-    bool IsOverloaded() const {
+    bool IsOverloaded(const NMonitoring::TDynamicCounters::TCounterPtr& badPortions) const {
         if (!AppDataVerified().FeatureFlags.GetEnableCompactionOverloadDetection()) {
             return false;
         }
+
+        if (std::cmp_less_equal(GetBadPortionsLimit(), badPortions->Val())) {
+            return true;
+        }
+
+        if (std::cmp_less_equal(GetNodePortionsCountLimit(), NodePortionsCounter.Val())) {
+            return true;
+        }
+
+        return DoIsOverloaded();
+    }
+
+    ui64 GetBadPortionsLimit() const {
+        if (AppDataVerified().ColumnShardConfig.GetBadPortionsLimit()) {
+            return AppDataVerified().ColumnShardConfig.GetBadPortionsLimit();
+        }
+        return 2 * GetNodePortionsCountLimit();
+    }
+
+    ui64 GetNodePortionsCountLimit() const {
         if (NodePortionsCountLimit) {
+            return *NodePortionsCountLimit;
             if (std::cmp_less_equal(*NodePortionsCountLimit, NodePortionsCounter.Val())) {
                 return true;
             }
-        } else if (std::cmp_less_equal(DynamicPortionsCountLimit.load(), NodePortionsCounter.Val())) {
-            return true;
         }
-        return DoIsOverloaded();
+        return DynamicPortionsCountLimit.load();
     }
 
     bool IsHighPriority() const {

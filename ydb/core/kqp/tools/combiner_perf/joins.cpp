@@ -37,8 +37,8 @@ struct TTestResult{
     TRunResult Run;
     TString TestName;
 };
-
-TTestResult DoRunJoinsBench(const NKikimr::NMiniKQL::TRunParams &params){
+}
+void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams &params, TTestResultCollector &printout){
     Y_UNUSED(params);
     namespace NYKQL = NKikimr::NMiniKQL;
     TRunResult finalResult;
@@ -50,11 +50,11 @@ TTestResult DoRunJoinsBench(const NKikimr::NMiniKQL::TRunParams &params){
         i64 LineCount;
         TDuration BenchDuration;
     };
-    TMap<NYKQL::ETestedJoinAlgo, JoinTestResult> results;
     TVector<std::pair<NYKQL::ETestedJoinAlgo, std::string_view>> cases = {{NYKQL::ETestedJoinAlgo::kScalarGrace, "ScalarGrace"}, {NYKQL::ETestedJoinAlgo::kBlockMap, "BlockMap"}};
 
     for(auto [algo, name]: cases){
         NYKQL::InnerJoinDescription descr = PrepareCommonDescription(&setup);
+        TRunResult thisNodeResult;
         descr.LeftSource.KeyColumnIndexes = keyColumns;
         descr.RightSource.KeyColumnIndexes = keyColumns;
         THolder<NKikimr::NMiniKQL::IComputationGraph> wideStreamGraph = ConstructInnerJoinGraphStream(algo, descr);
@@ -65,26 +65,17 @@ TTestResult DoRunJoinsBench(const NKikimr::NMiniKQL::TRunParams &params){
         Cerr << "Compute graph result for algorithm '" << name << "'"; 
 
         NYql::NUdf::EFetchStatus fetchStatus;
-        JoinTestResult thisResults{};
+        i64 lineCount = 0;
         const auto graphTimeStart = GetThreadCPUTime();
 
         while ((fetchStatus = wideStream.WideFetch(fetchBuff.data(), cols)) != NYql::NUdf::EFetchStatus::Finish) {
             if (fetchStatus == NYql::NUdf::EFetchStatus::Ok) {
-                ++thisResults.LineCount;
+                ++lineCount;
             }
         }
-        thisResults.BenchDuration = GetThreadCPUTimeDelta(graphTimeStart);
-        Cerr << ". Output line count(block considered to be 1 line): " << thisResults.LineCount << Endl;
-        results.emplace(algo, thisResults);
-
+        thisNodeResult.ResultTime = GetThreadCPUTimeDelta(graphTimeStart);
+        Cerr << ". Output line count(block considered to be 1 line): " << lineCount << Endl;
+        printout.SubmitMetrics(params, thisNodeResult,name.data(), false, false);
     }
-    finalResult.ResultTime = std::ranges::min_element(results, {}, [](const auto& p){return p.second.BenchDuration;})->second.BenchDuration;
-    return {finalResult, "allJoins"};
 
-}
-}
-
-void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams &params, TTestResultCollector &printout){
-    auto res = DoRunJoinsBench(params);
-    printout.SubmitMetrics(params, res.Run,res.TestName.c_str(), false, false);
 }

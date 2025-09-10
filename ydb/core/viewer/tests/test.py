@@ -1433,6 +1433,35 @@ def test_security():
         'Cookie': 'ydb_session_id=' + database_session_id,
     })
 
+    result['storage_nodes_root'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+        'database': dedicated_db,
+        'type': 'storage',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + root_session_id,
+    })
+    result['storage_nodes_monitoring'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+        'database': dedicated_db,
+        'type': 'storage',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + monitoring_session_id,
+    })
+    result['storage_nodes_viewer'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+        'database': dedicated_db,
+        'type': 'storage',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + viewer_session_id,
+    })
+    result['storage_nodes_database'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+        'database': dedicated_db,
+        'type': 'storage',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + database_session_id,
+    })
+
     result['down_node_root'] = get_viewer("/tablets/app", params={
         'TabletID': '72057594037968897',
         'page': 'SetDown',

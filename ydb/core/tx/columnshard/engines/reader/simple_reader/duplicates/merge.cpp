@@ -85,6 +85,7 @@ THashMap<ui64, NArrow::TColumnFilter> TBuildDuplicateFilters::BuildFiltersOnInte
         filter.Add(true, recordsOnInterval);
         result.insert_or_assign(Context.GetContext()->GetRequest()->Get()->GetSourceId(), std::move(filter));
         Context.GetCounters()->OnRowsMerged(0, 0, recordsOnInterval);
+        return result;
     }
 
     merger.SkipToBound(*interval.GetBegin().GetKey(), !interval.GetBegin().GetIsLast());

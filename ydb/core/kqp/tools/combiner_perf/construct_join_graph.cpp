@@ -50,7 +50,7 @@ void SetEntryPointValues(IComputationGraph& g, NYql::NUdf::TUnboxedValue left, N
 }
     
 }    
-THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, InnerJoinDescription descr){
+THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, TInnerJoinDescription descr){
     Y_ABORT_IF(algo == ETestedJoinAlgo::kBlockHash || algo == ETestedJoinAlgo::kScalarHash,"{Block,Scalar}HashJoin bench is not implemented");
 
     const EJoinKind kInnerJoin = EJoinKind::Inner;
@@ -140,7 +140,7 @@ bool IsBlockJoin(ETestedJoinAlgo kind){
 }
 }
 
-i32 ResultColumnCount(ETestedJoinAlgo algo, InnerJoinDescription descr){
+i32 ResultColumnCount(ETestedJoinAlgo algo, TInnerJoinDescription descr){
     /*
     +1 in block case because yql/essentials/minikql/comp_nodes/mkql_block_map_join.cpp:TBlockJoinState::GetOutputWidth();
      */

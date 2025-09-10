@@ -229,7 +229,9 @@ public:
     }
 
     bool AllocationUpdated(const ui64 externalScopeId, const ui64 allocationId) {
-        if (GetAllocationScopeVerified(externalScopeId).AllocationUpdated(allocationId)) {
+        auto& scope = GetAllocationScopeVerified(externalScopeId);
+        if (scope.AllocationUpdated(allocationId)) {
+            UpdateWaitingScopes(&scope);
             RefreshMemoryUsage();
             return true;
         } else {
@@ -252,6 +254,7 @@ public:
         AFL_VERIFY(stage);
         auto& scope = GetAllocationScopeVerified(externalScopeId);
         scope.RegisterAllocation(IsPriorityProcess(), externalGroupId, task, stage);
+        UpdateWaitingScopes(&scope);
     }
 
     bool UnregisterAllocation(const ui64 externalScopeId, const ui64 allocationId) {
@@ -260,6 +263,7 @@ public:
                 RefreshMemoryUsage();
                 return true;
             }
+            UpdateWaitingScopes(scope);
         }
         return false;
     }
@@ -313,20 +317,23 @@ public:
     }
 
     bool TryAllocateWaiting(const ui32 allocationsCountLimit) {
-        bool allocated = false;
+        std::vector<NKikimr::NOlap::NGroupedMemoryManager::TProcessMemoryScope*> allocatedScopes;
         for (const auto& waitingScopeId : WaitingScopes) {
             auto it = AllocationScopes.find(waitingScopeId);
             AFL_VERIFY(it != AllocationScopes.end());
             auto* scope = it->second.get();
             if (scope->TryAllocateWaiting(IsPriorityProcess(), allocationsCountLimit)) {
-                allocated = true;
+                allocatedScopes.push_back(scope);
             }
-            UpdateWaitingScopes(scope);
+
         }
-        if (allocated) {
+        for (auto* allocatedScope : allocatedScopes) {
+            UpdateWaitingScopes(allocatedScope);
+        }
+        if (!allocatedScopes.empty()) {
             RefreshMemoryUsage();
         }
-        return allocated;
+        return !allocatedScopes.empty();
     }
 
     void Unregister() {

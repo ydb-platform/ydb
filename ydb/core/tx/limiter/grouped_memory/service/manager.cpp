@@ -62,7 +62,6 @@ void TManager::TryAllocateWaiting() {
         process.TryAllocateWaiting(0);
         UpdateWaitingProcesses(&process);
     }
-
     for (auto waitingIt = WaitingProcesses.begin(); waitingIt != WaitingProcesses.end();) {
         // Check root availability
         if (!DefaultStage->IsAllocatable(1, 0)) {

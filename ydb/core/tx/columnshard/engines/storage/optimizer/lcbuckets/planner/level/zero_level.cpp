@@ -23,6 +23,9 @@ TCompactionTaskData TZeroLevelPortions::DoGetOptimizationTask() const {
 }
 
 ui64 TZeroLevelPortions::DoGetWeight(bool highPriority) const {
+    if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Disable) {
+        return 0;
+    }
     if (!NextLevel || Portions.size() < PortionsCountAvailable || Portions.empty()) {
         return 0;
     }

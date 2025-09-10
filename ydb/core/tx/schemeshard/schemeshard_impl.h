@@ -1347,6 +1347,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxGetExport(TEvExport::TEvGetExportRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxCancelExport(TEvExport::TEvCancelExportRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxCancelExportAck(TEvSchemeShard::TEvCancelTxResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxCancelExportAck(ui64 exportId, TTxId txId);
     NTabletFlatExecutor::ITransaction* CreateTxForgetExport(TEvExport::TEvForgetExportRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxListExports(TEvExport::TEvListExportsRequest::TPtr& ev);
 

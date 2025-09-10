@@ -780,7 +780,7 @@ Y_UNIT_TEST(ProduceRequestData_Record_v0) {
     UNIT_ASSERT_EQUAL(r0.Crc, 0);
     UNIT_ASSERT_EQUAL(r0.Attributes, 0);
     UNIT_ASSERT_EQUAL(r0.LastOffsetDelta, 0);
-    UNIT_ASSERT_EQUAL(r0.BaseTimestamp, -1);
+    UNIT_ASSERT_EQUAL(r0.BaseTimestamp, 0);
     UNIT_ASSERT_EQUAL(r0.MaxTimestamp, -1);
     UNIT_ASSERT_EQUAL(r0.ProducerId, -1);
     UNIT_ASSERT_EQUAL(r0.ProducerEpoch, -1);
@@ -790,7 +790,9 @@ Y_UNIT_TEST(ProduceRequestData_Record_v0) {
 
     UNIT_ASSERT_EQUAL(r0.Records[0].Key, TKafkaRawBytes("key-1", 5));
     UNIT_ASSERT_EQUAL(r0.Records[0].Value, TKafkaRawBytes("test message", 12));
-    UNIT_ASSERT_EQUAL(r0.Records[0].Headers.size(), (size_t)0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[0].Headers.size(), (size_t)0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[0].OffsetDelta, 0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[0].TimestampDelta, 0);
 }
 
 //
@@ -830,7 +832,7 @@ Y_UNIT_TEST(ProduceRequestData_Record_v0_manyMessages) {
     UNIT_ASSERT_EQUAL(r0.Crc, 0);
     UNIT_ASSERT_EQUAL(r0.Attributes, 0);
     UNIT_ASSERT_EQUAL(r0.LastOffsetDelta, 0);
-    UNIT_ASSERT_EQUAL(r0.BaseTimestamp, -1);
+    UNIT_ASSERT_EQUAL(r0.BaseTimestamp, 0);
     UNIT_ASSERT_EQUAL(r0.MaxTimestamp, -1);
     UNIT_ASSERT_EQUAL(r0.ProducerId, -1);
     UNIT_ASSERT_EQUAL(r0.ProducerEpoch, -1);
@@ -841,18 +843,26 @@ Y_UNIT_TEST(ProduceRequestData_Record_v0_manyMessages) {
     //UNIT_ASSERT_EQUAL(r0.Records[0].Key, TKafkaRawBytes("", 0));
     UNIT_ASSERT_EQUAL(r0.Records[0].Value, TKafkaRawBytes("aaaaa", 5));
     UNIT_ASSERT_EQUAL(r0.Records[0].Headers.size(), (size_t)0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[0].OffsetDelta, 0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[0].TimestampDelta, 0);
 
     //UNIT_ASSERT_EQUAL(r0.Records[0].Key, TKafkaRawBytes("", 0));
     UNIT_ASSERT_EQUAL(r0.Records[1].Value, TKafkaRawBytes("bbbbb", 5));
     UNIT_ASSERT_EQUAL(r0.Records[1].Headers.size(), (size_t)0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[1].OffsetDelta, 1);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[1].TimestampDelta, 0);
 
     //UNIT_ASSERT_EQUAL(r0.Records[0].Key, TKafkaRawBytes("", 0));
     UNIT_ASSERT_EQUAL(r0.Records[2].Value, TKafkaRawBytes("ccccc", 5));
     UNIT_ASSERT_EQUAL(r0.Records[2].Headers.size(), (size_t)0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[2].OffsetDelta, 2);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[2].TimestampDelta, 0);
 
     //UNIT_ASSERT_EQUAL(r0.Records[0].Key, TKafkaRawBytes("", 0));
     UNIT_ASSERT_EQUAL(r0.Records[3].Value, TKafkaRawBytes("ddddd", 5));
     UNIT_ASSERT_EQUAL(r0.Records[3].Headers.size(), (size_t)0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[3].OffsetDelta, 3);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[3].TimestampDelta, 0);
 }
 
 void Print(std::string& sb) {

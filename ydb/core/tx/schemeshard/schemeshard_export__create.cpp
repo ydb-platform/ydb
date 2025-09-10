@@ -222,13 +222,18 @@ private:
     template <typename TSettings>
     bool FillItems(TExportInfo& exportInfo, const TSettings& settings, TString& explain) {
         TString commonSourcePath = GetCommonSourcePath(settings);
-        if (commonSourcePath && commonSourcePath.back() != '/') {
-            commonSourcePath.push_back('/');
+        if (commonSourcePath) {
+            commonSourcePath = CanonizePath(commonSourcePath);
         }
         exportInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const auto& item = settings.items(itemIdx);
-            const TString srcPath = commonSourcePath + item.source_path();
+            const TString canonizedItemPath = CanonizePath(item.source_path());
+            TStringBuilder srcPath;
+            if (!canonizedItemPath.StartsWith(commonSourcePath)) {
+                srcPath << commonSourcePath;
+            }
+            srcPath << canonizedItemPath;
             const TPath path = TPath::Resolve(srcPath, Self);
             {
                 TPath::TChecker checks = path.Check();

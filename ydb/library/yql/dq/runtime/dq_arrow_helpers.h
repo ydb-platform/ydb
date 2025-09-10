@@ -17,7 +17,7 @@ namespace NArrow {
  * The logic of this conversion is from YQL-15332:
  *
  * Void, Null => NullType
- * Bool => Boolean for output, Uint8 for input
+ * Bool => Uint8
  * Integral => Uint8..Uint64, Int8..Int64
  * Floats => Float, Double
  * Date => Uint16

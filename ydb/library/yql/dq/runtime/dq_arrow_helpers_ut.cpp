@@ -835,13 +835,13 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
         auto structArray = static_pointer_cast<arrow::StructArray>(array);
         UNIT_ASSERT(structArray->num_fields() == 3);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::BOOL);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::UINT8);
         UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT8);
         UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT8);
         UNIT_ASSERT(static_cast<ui64>(structArray->field(0)->length()) == values.size());
         UNIT_ASSERT(static_cast<ui64>(structArray->field(1)->length()) == values.size());
         UNIT_ASSERT(static_cast<ui64>(structArray->field(2)->length()) == values.size());
-        auto boolArray = static_pointer_cast<arrow::BooleanArray>(structArray->field(0));
+        auto boolArray = static_pointer_cast<arrow::UInt8Array>(structArray->field(0));
         auto int8Array = static_pointer_cast<arrow::Int8Array>(structArray->field(1));
         auto uint8Array = static_pointer_cast<arrow::UInt8Array>(structArray->field(2));
         auto index = 0;
@@ -1135,12 +1135,12 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
 
         UNIT_ASSERT(unionArray->num_fields() == 5);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BOOL);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::UINT8);
         UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::INT16);
         UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::UINT16);
         UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::INT32);
         UNIT_ASSERT(unionArray->field(4)->type_id() == arrow::Type::UINT32);
-        auto boolArray = static_pointer_cast<arrow::BooleanArray>(unionArray->field(0));
+        auto boolArray = static_pointer_cast<arrow::UInt8Array>(unionArray->field(0));
         auto i16Array = static_pointer_cast<arrow::Int16Array>(unionArray->field(1));
         auto ui16Array = static_pointer_cast<arrow::UInt16Array>(unionArray->field(2));
         auto i32Array = static_pointer_cast<arrow::Int32Array>(unionArray->field(3));
@@ -1197,12 +1197,12 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
 
         auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(structArray->field(0));
         UNIT_ASSERT(unionArray->num_fields() == 5);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BOOL);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::UINT8);
         UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::INT16);
         UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::UINT16);
         UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::INT32);
         UNIT_ASSERT(unionArray->field(4)->type_id() == arrow::Type::UINT32);
-        auto boolArray = static_pointer_cast<arrow::BooleanArray>(unionArray->field(0));
+        auto boolArray = static_pointer_cast<arrow::UInt8Array>(unionArray->field(0));
         auto i16Array = static_pointer_cast<arrow::Int16Array>(unionArray->field(1));
         auto ui16Array = static_pointer_cast<arrow::UInt16Array>(unionArray->field(2));
         auto i32Array = static_pointer_cast<arrow::Int32Array>(unionArray->field(3));
@@ -1271,12 +1271,12 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
 
         auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(secondStructArray->field(0));
         UNIT_ASSERT(unionArray->num_fields() == 5);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BOOL);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::UINT8);
         UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::INT16);
         UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::UINT16);
         UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::INT32);
         UNIT_ASSERT(unionArray->field(4)->type_id() == arrow::Type::UINT32);
-        auto boolArray = static_pointer_cast<arrow::BooleanArray>(unionArray->field(0));
+        auto boolArray = static_pointer_cast<arrow::UInt8Array>(unionArray->field(0));
         auto i16Array = static_pointer_cast<arrow::Int16Array>(unionArray->field(1));
         auto ui16Array = static_pointer_cast<arrow::UInt16Array>(unionArray->field(2));
         auto i32Array = static_pointer_cast<arrow::Int32Array>(unionArray->field(3));

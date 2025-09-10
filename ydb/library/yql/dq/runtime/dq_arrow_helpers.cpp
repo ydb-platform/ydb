@@ -53,11 +53,10 @@ struct TTypeWrapper
 template <typename TFunc>
 bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot type, TFunc&& callback) {
     switch (type) {
-        case NUdf::EDataSlot::Bool:
-            return callback(TTypeWrapper<arrow::BooleanType>());
         case NUdf::EDataSlot::Int8:
             return callback(TTypeWrapper<arrow::Int8Type>());
         case NUdf::EDataSlot::Uint8:
+        case NUdf::EDataSlot::Bool:
             return callback(TTypeWrapper<arrow::UInt8Type>());
         case NUdf::EDataSlot::Int16:
             return callback(TTypeWrapper<arrow::Int16Type>());

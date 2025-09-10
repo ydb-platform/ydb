@@ -800,7 +800,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
             NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
-                std::make_pair("BoolValue", TTypeInfo(NTypeIds::Bool)),
+                std::make_pair("BoolValue", TTypeInfo(NTypeIds::Uint8)),
                 std::make_pair("Int8Value", TTypeInfo(NTypeIds::Int8)),
                 std::make_pair("Uint8Value", TTypeInfo(NTypeIds::Uint8)),
                 std::make_pair("Int16Value", TTypeInfo(NTypeIds::Int16)),
@@ -815,8 +815,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             }));
 
             builder.AddRow().AddNull().Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0).Add(TDecimalValue("7.77", 22, 2));
-            builder.AddRow().Add<bool>(false).Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0).Add(TDecimalValue("7.77", 22, 2));
-            builder.AddRow().Add<bool>(true).Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0).Add(TDecimalValue("7.77", 22, 2));
+            builder.AddRow().Add<ui8>(false).Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0).Add(TDecimalValue("7.77", 22, 2));
+            builder.AddRow().Add<ui8>(true).Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0).Add(TDecimalValue("7.77", 22, 2));
 
             auto expected = builder.BuildArrow();
             UNIT_ASSERT_VALUES_EQUAL(batches.front()->ToString(), expected->ToString());
@@ -978,36 +978,17 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
 
             UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
-            // TODO: TTableUpdatesBuilder is not mapping types from YQL-15332 correctly
-            //
-            // NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
-            //     std::make_pair("DateValue", TTypeInfo(NTypeIds::Date)),
-            //     std::make_pair("DatetimeValue", TTypeInfo(NTypeIds::Datetime)),
-            //     std::make_pair("TimestampValue", TTypeInfo(NTypeIds::Timestamp)),
-            //     std::make_pair("IntervalValue", TTypeInfo(NTypeIds::Interval))
-            // }));
+            NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
+                std::make_pair("DateValue", TTypeInfo(NTypeIds::Uint16)),
+                std::make_pair("DatetimeValue", TTypeInfo(NTypeIds::Uint32)),
+                std::make_pair("TimestampValue", TTypeInfo(NTypeIds::Uint64)),
+                std::make_pair("IntervalValue", TTypeInfo(NTypeIds::Int64))
+            }));
 
-            // builder.AddRow().Add<ui16>(11323).Add<ui32>(1012615322).Add<ui64>(1046660583000000).Add<i64>(604800000000);
+            builder.AddRow().Add<ui16>(11323).Add<ui32>(1012615322).Add<ui64>(1046660583000000).Add<i64>(604800000000);
 
-            // auto expected = builder.BuildArrow();
-            // UNIT_ASSERT_VALUES_EQUAL(batches.front()->ToString(), expected->ToString());
-
-            const TString expected =
-R"(DateValue:   [
-    11323
-  ]
-DatetimeValue:   [
-    1012615322
-  ]
-TimestampValue:   [
-    1046660583000000
-  ]
-IntervalValue:   [
-    604800000000
-  ]
-)";
-
-            UNIT_ASSERT_VALUES_EQUAL(batches.front()->ToString(), expected);
+            auto expected = builder.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batches.front()->ToString(), expected->ToString());
         }
     }
 
@@ -1614,7 +1595,7 @@ column1:   -- is_valid: all not null
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
-  -- child 0 type: dense_union<bar: bool=0, foo: int32=1>
+  -- child 0 type: dense_union<bar: uint8=0, foo: int32=1>
     -- is_valid: all not null
     -- type_ids:       [
         1
@@ -1622,7 +1603,7 @@ R"(column0:   -- is_valid: all not null
     -- value_offsets:       [
         0
       ]
-    -- child 0 type: bool
+    -- child 0 type: uint8
       []
     -- child 1 type: int32
       [
@@ -1654,9 +1635,9 @@ R"(column0:   -- is_valid: all not null
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
-  -- child 0 type: struct<opt: dense_union<bar: bool=0, foo: int32=1, foobar: binary=2> not null>
+  -- child 0 type: struct<opt: dense_union<bar: uint8=0, foo: int32=1, foobar: binary=2> not null>
     -- is_valid: all not null
-    -- child 0 type: dense_union<bar: bool=0, foo: int32=1, foobar: binary=2>
+    -- child 0 type: dense_union<bar: uint8=0, foo: int32=1, foobar: binary=2>
       -- is_valid: all not null
       -- type_ids:         [
           1
@@ -1664,7 +1645,7 @@ R"(column0:   -- is_valid: all not null
       -- value_offsets:         [
           0
         ]
-      -- child 0 type: bool
+      -- child 0 type: uint8
         []
       -- child 1 type: int32
         [
@@ -2038,7 +2019,7 @@ R"(column0:   -- is_valid: all not null
   -- value_offsets:     [
       0
     ]
-  -- child 0 type: bool
+  -- child 0 type: uint8
     []
   -- child 1 type: int32
     [

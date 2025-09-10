@@ -221,20 +221,10 @@ private:
 
     template <typename TSettings>
     bool FillItems(TExportInfo& exportInfo, const TSettings& settings, TString& explain) {
-        TString commonSourcePath = GetCommonSourcePath(settings);
-        if (commonSourcePath) {
-            commonSourcePath = CanonizePath(commonSourcePath);
-        }
         exportInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const auto& item = settings.items(itemIdx);
-            const TString canonizedItemPath = CanonizePath(item.source_path());
-            TStringBuilder srcPath;
-            if (!canonizedItemPath.StartsWith(commonSourcePath)) {
-                srcPath << commonSourcePath;
-            }
-            srcPath << canonizedItemPath;
-            const TPath path = TPath::Resolve(srcPath, Self);
+            const TPath path = TPath::Resolve(item.source_path(), Self);
             {
                 TPath::TChecker checks = path.Check();
                 checks
@@ -250,7 +240,7 @@ private:
                 }
             }
 
-            exportInfo.Items.emplace_back(srcPath, path.Base()->PathId, path->PathType);
+            exportInfo.Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
             exportInfo.PendingItems.push_back(itemIdx);
         }
 

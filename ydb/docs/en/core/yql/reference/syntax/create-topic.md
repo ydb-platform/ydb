@@ -1,8 +1,8 @@
 # CREATE TOPIC
 
-The `CREATE TOPIC` call creates a [topic](../../../../concepts/datamodel/topic).
+The `CREATE TOPIC` call creates a [topic](../../../../concepts/datamodel/topic.md).
 
-When creating a topic, you can add topic [consumers](../../../../concepts/datamodel/topic#consumer) to it and topic settings.
+When creating a topic, you can add topic [consumers](../../../../concepts/datamodel/topic.md#consumer) to it and topic settings.
 
 ```yql
 CREATE TOPIC topic_path (

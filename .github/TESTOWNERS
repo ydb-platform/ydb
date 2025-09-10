@@ -14,12 +14,17 @@
 /ydb/core/mon_alloc @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard
 /ydb/core/statistics @ydb-platform/datashard
+/ydb/tests/datashard @ydb-platform/datashard
+/ydb/tests/stress/oltp_workload @ydb-platform/datashard
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
 /ydb/tests/olap @ydb-platform/cs
 /ydb/tests/stress/olap_workload  @ydb-platform/cs
 /ydb/core/kqp/ut/olap @ydb-platform/cs
+/ydb/tests/stress/olap_workload @ydb-platform/cs
+/ydb/tests/functional/tpc @ydb-platform/cs
+/ydb/tests/compatibility/olap @ydb-platform/cs
 
 #Distributed System Infrastructure Team @ijon TEAM:@ydb-platform/system-infra
 /ydb/core/mind/hive @ydb-platform/system-infra
@@ -98,6 +103,7 @@
 /ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/tx/schemeshard/ut_pq_reboots @ydb-platform/Topics
 /ydb/core/transfer @ydb-platform/Topics
+/ydb/tests/stress/kafka @ydb-platform/Topics
 
 #YDB Analytics TEAM:???
 

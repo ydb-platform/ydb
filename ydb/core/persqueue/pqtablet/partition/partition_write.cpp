@@ -1,9 +1,8 @@
-#include <ydb/core/persqueue/event_helpers.h>
-#include "mirrorer.h"
+#include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include "partition_util.h"
 #include "partition.h"
-#include <ydb/core/persqueue/read.h>
+#include <ydb/core/persqueue/pqtablet/cache/read.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -1137,14 +1136,14 @@ ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
 
 void TPartition::TryCorrectStartOffset(TMaybe<ui64> offset)
 {
-    auto tryCorrectStartOffset = [](TPartitionBlobEncoder& encoder, TMaybe<ui64> offset) {
-        if (!encoder.Head.GetCount() && !encoder.NewHead.GetCount() && encoder.IsEmpty() && offset) {
-            encoder.StartOffset = *offset;
-        }
+    auto isEncoderEmpty = [](TPartitionBlobEncoder& encoder) {
+        return (!encoder.Head.GetCount() && !encoder.NewHead.GetCount() && encoder.IsEmpty());
     };
 
-    tryCorrectStartOffset(CompactionBlobEncoder, offset);
-    tryCorrectStartOffset(BlobEncoder, offset);
+    if (isEncoderEmpty(CompactionBlobEncoder) && isEncoderEmpty(BlobEncoder) && offset) {
+        BlobEncoder.StartOffset = *offset;
+        CompactionBlobEncoder.StartOffset = *offset;
+    }
 }
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {

@@ -2,10 +2,11 @@
 #include "pq_impl.h"
 #include "pq_impl_types.h"
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
-#include <ydb/core/persqueue/event_helpers.h>
-#include <ydb/core/persqueue/read.h>
+#include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
+#include <ydb/core/persqueue/pqtablet/cache/read.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition_factory.h>
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/core/base/tx_processing.h>
@@ -44,13 +45,6 @@ static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
 static constexpr ui32 MAX_TXS = 1000;
-
-IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
-               const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
-               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
-               const TActorId& writeQuoterActorId,
-               TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
-               bool newPartition = false);
 
 struct TChangeNotification {
     TChangeNotification(const TActorId& actor, const ui64 txId)
@@ -308,7 +302,6 @@ private:
         ) {
             //Try another read. Set TMP_MARKER so that response is redirected to proxy, but here we will treat is as "initial" response still.
             Request.SetRequestId(TMP_REQUEST_MARKER);
-            Cerr << "==Read proxy: extra read\n!";
             Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
             Request.MutablePartitionRequest()->MutableCmdRead()->SetPartNo(0);
             THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);

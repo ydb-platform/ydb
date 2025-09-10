@@ -1,14 +1,13 @@
 PRAGMA config.flags('OptimizerFlags', 'OptimizeXNotX');
-PRAGMA warning('disable', '4510');
 
 SELECT
-    k1 AND Yql::WithSideEffectsMode(k2, AsAtom('General')) AND NOT k1,
-    k1 AND Yql::WithSideEffectsMode(k2, AsAtom('General')) AND k1 AND NOT k1,
-    k1 AND NOT k1 AND Yql::WithSideEffectsMode(k2, AsAtom('General')),
-    k1 AND NOT k1 AND Yql::WithSideEffectsMode(k2, AsAtom('General')) AND k1,
-    k1 AND NOT k1 AND Yql::WithSideEffectsMode(k2, AsAtom('General')) AND k1 AND NOT k1,
-    k1 AND NOT k1 AND Yql::WithSideEffectsMode(k2, AsAtom('General')) AND k2 AND NOT k2,
-    Yql::WithSideEffectsMode(k1, AsAtom('General')) AND NOT Yql::WithSideEffectsMode(k1, AsAtom('General')),
+    k1 AND WithSideEffects(k2) AND NOT k1,
+    k1 AND WithSideEffects(k2) AND k1 AND NOT k1,
+    k1 AND NOT k1 AND WithSideEffects(k2),
+    k1 AND NOT k1 AND WithSideEffects(k2) AND k1,
+    k1 AND NOT k1 AND WithSideEffects(k2) AND k1 AND NOT k1,
+    k1 AND NOT k1 AND WithSideEffects(k2) AND k2 AND NOT k2,
+    WithSideEffects(k1) AND NOT WithSideEffects(k1),
 FROM
     AS_TABLE([
         <|k1: TRUE, k2: TRUE|>,

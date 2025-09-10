@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/persqueue/partition_id.h>
+#include <ydb/core/persqueue/common/partition_id.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
 #include <util/system/types.h>

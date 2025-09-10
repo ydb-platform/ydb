@@ -27,7 +27,7 @@ TAsyncExpiringCache<TKey, TValue>::TEntry::TEntry(NProfiling::TCpuInstant access
 template <class TKey, class TValue>
 bool TAsyncExpiringCache<TKey, TValue>::TEntry::IsExpired(NProfiling::TCpuInstant now) const
 {
-    return now > AccessDeadline || now > UpdateDeadline;
+    return now > AccessDeadline.load() || now > UpdateDeadline.load();
 }
 
 template <class TKey, class TValue>
@@ -82,7 +82,7 @@ typename TAsyncExpiringCache<TKey, TValue>::TExtendedGetResult TAsyncExpiringCac
             const auto& entry = it->second;
             if (!entry->IsExpired(now)) {
                 HitCounter_.Increment();
-                entry->AccessDeadline = now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime);
+                entry->AccessDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
                 if (!entry->Future.IsSet()) {
                     YT_LOG_DEBUG("Waiting for cache entry (Key: %v)",
                         key);
@@ -102,7 +102,7 @@ typename TAsyncExpiringCache<TKey, TValue>::TExtendedGetResult TAsyncExpiringCac
                 Erase(it);
             } else {
                 HitCounter_.Increment();
-                entry->AccessDeadline = now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime);
+                entry->AccessDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
                 if (!entry->Future.IsSet()) {
                     YT_LOG_DEBUG("Waiting for cache entry (Key: %v)",
                         key);
@@ -155,7 +155,7 @@ TFuture<std::vector<TErrorOr<TValue>>> TAsyncExpiringCache<TKey, TValue>::GetMan
         if (!entry->Future.IsSet()) {
             keysToWaitFor.push_back(key);
         }
-        entry->AccessDeadline = now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime);
+        entry->AccessDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
     };
 
     std::vector<size_t> preliminaryIndexesToPopulate;
@@ -245,7 +245,7 @@ std::optional<TErrorOr<TValue>> TAsyncExpiringCache<TKey, TValue>::Find(const TK
         const auto& entry = it->second;
         if (!entry->IsExpired(now) && entry->Promise.IsSet()) {
             HitCounter_.Increment();
-            entry->AccessDeadline = now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime);
+            entry->AccessDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
             return entry->Future.Get();
         }
     }
@@ -270,7 +270,7 @@ std::vector<std::optional<TErrorOr<TValue>>> TAsyncExpiringCache<TKey, TValue>::
             if (!entry->IsExpired(now) && entry->Promise.IsSet()) {
                 HitCounter_.Increment();
                 results[index] = entry->Future.Get();
-                entry->AccessDeadline = now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime);
+                entry->AccessDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
             } else {
                 MissedCounter_.Increment();
             }
@@ -363,8 +363,8 @@ void TAsyncExpiringCache<TKey, TValue>::Ping(const TKey& key)
             return;
         }
 
-        entry->AccessDeadline = now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime);
-        entry->UpdateDeadline = now + NProfiling::DurationToCpuDuration(config->ExpireAfterSuccessfulUpdateTime);
+        entry->AccessDeadline.store(NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
+        entry->UpdateDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterSuccessfulUpdateTime));
         if (!config->BatchUpdate) {
             ScheduleEntryUpdate(entry, key, config);
         }
@@ -397,12 +397,12 @@ void TAsyncExpiringCache<TKey, TValue>::Set(const TKey& key, TErrorOr<TValue> va
         if (expirationTime == TDuration::Zero()) {
             Erase(it);
         } else {
-            entry->AccessDeadline = accessDeadline;
-            entry->UpdateDeadline = updateDeadline;
+            entry->AccessDeadline.store(accessDeadline);
+            entry->UpdateDeadline.store(updateDeadline);
         }
     } else if (expirationTime != TDuration::Zero()) {
         auto entry = New<TEntry>(accessDeadline);
-        entry->UpdateDeadline = updateDeadline;
+        entry->UpdateDeadline.store(updateDeadline);
         entry->Promise = MakePromise(std::move(valueOrError));
         entry->Future = entry->Promise.ToFuture();
         YT_VERIFY(Map_.emplace(key, entry).second);
@@ -538,7 +538,7 @@ void TAsyncExpiringCache<TKey, TValue>::SetResult(
     auto updateDeadline = NProfiling::GetCpuInstant() + NProfiling::DurationToCpuDuration(expirationTime);
 
     if (entryUpdated) {
-        entry->UpdateDeadline = updateDeadline;
+        entry->UpdateDeadline.store(updateDeadline);
     }
 
     if (entry->IsExpired(now) || (entryUpdated && expirationTime == TDuration::Zero())) {
@@ -600,7 +600,7 @@ bool TAsyncExpiringCache<TKey, TValue>::TryEraseExpired(const TEntryPtr& entry, 
         // If we try to erase entry because of refresh, we want to do it only if it is expired after access deadline.
         // If entry is expired after successful update, we want to give it a chance to be updated again.
         return reason == EEraseReason::Refresh
-            ? now > entry->AccessDeadline
+            ? now > entry->AccessDeadline.load()
             : entry->IsExpired(now);
     };
 
@@ -723,7 +723,7 @@ void TAsyncExpiringCache<TKey, TValue>::RefreshAllItems()
         auto guard = ReaderGuard(SpinLock_);
         for (const auto& [key, entry] : Map_) {
             if (entry->Promise.IsSet()) {
-                if (now < entry->AccessDeadline && entry->Future.Get().IsOK()) {
+                if (now < entry->AccessDeadline.load() && entry->Future.Get().IsOK()) {
                     keys.push_back(key);
                     entries.push_back(MakeWeak(entry));
                 }

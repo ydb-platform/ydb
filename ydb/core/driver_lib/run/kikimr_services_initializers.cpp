@@ -106,10 +106,7 @@
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
-#include <ydb/core/persqueue/cluster_tracker.h>
-#include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/pq.h>
-#include <ydb/core/persqueue/pq_l2_service.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/console_config.pb.h>

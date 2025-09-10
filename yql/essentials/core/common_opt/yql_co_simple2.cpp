@@ -910,7 +910,7 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, 
             branches.emplace(node->Child(++i));
         }
 
-        if (predicates.size() < width) {
+        if (!node->HasSideEffects() && predicates.size() < width) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " with identical predicates.";
             auto children = node->ChildrenList();
             for (auto i = 0U; i < children.size() - 1U;) {
@@ -921,7 +921,7 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, 
             }
             return ctx.ChangeChildren(*node, std::move(children));
         }
-        if (branches.size() < width) {
+        if (!node->HasSideEffects() && branches.size() < width) {
             for (auto i = 1U; i < node->ChildrenSize() - 2U; ++++i) {
                 if (node->Child(i) ==  node->Child(i + 2U)) {
                     YQL_CLOG(DEBUG, Core) << node->Content() << " with identical branches.";
@@ -952,6 +952,7 @@ TExprNode::TPtr CheckCompareSame(const TExprNode::TPtr& node, TExprContext& ctx,
         YQL_CLOG(DEBUG, Core) << (Equal ? "Equal" : "Unequal") << " '" << node->Content() << "' with same args";
         auto res = MakeBool<Equal>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, *optCtx.Types);
+        res = KeepSideEffects(res, node->HeadPtr(), ctx);
         return res;
     }
 

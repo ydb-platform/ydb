@@ -465,6 +465,41 @@ public:
     }
 };
 
+template <bool HasMode>
+class TSideEffects : public TCallNode {
+public:
+    TSideEffects(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "WithSideEffectsMode", 2, 2, args)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        const size_t expectedArgs = HasMode ? 2 : 1;
+        if (Args_.size() != expectedArgs) {
+            ctx.Error(Pos_) << OpName_ << " requires exactly " << expectedArgs << " arguments";
+            return false;
+        }
+
+        for (const auto& arg : Args_) {
+            if (!arg->Init(ctx, src)) {
+                return false;
+            }
+        }
+
+        if (HasMode) {
+            Args_[1] = MakeAtomFromExpression(Pos_, ctx, Args_[1]).Build();
+        } else {
+            Args_.push_back(Q("General"));
+        }
+
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TSideEffects<HasMode>(Pos_, CloneContainer(Args_));
+    }
+};
+
 class TTableName : public TCallNode {
 public:
     TTableName(TPosition pos, const TVector<TNodePtr>& args, const TString& service)
@@ -3061,6 +3096,8 @@ struct TBuiltinFuncData {
             {"ensuretype", {"EnsureType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlTypeAssert<true>>()}},
             {"ensureconvertibleto", {"EnsureConvertibleTo", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlTypeAssert<false>>()}},
             {"ensure", {"Ensure", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EnsureWarn", 2, 3)}},
+            {"withsideeffects", {"WithSideEffects", "Normal", BuildSimpleBuiltinFactoryCallback<TSideEffects<false>>()}},
+            {"withsideeffectsmode", {"WithSideEffectsMode", "Normal", BuildSimpleBuiltinFactoryCallback<TSideEffects<true>>()}},
             {"evaluateexpr", {"EvaluateExpr", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateExpr", 1, 1)}},
             {"evaluateatom", {"EvaluateAtom", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateAtom", 1, 1)}},
             {"evaluatetype", {"EvaluateType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateType", 1, 1)}},

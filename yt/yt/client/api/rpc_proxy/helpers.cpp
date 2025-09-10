@@ -699,6 +699,9 @@ void FromProto(
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
 
+#undef DESERIALIZE_I64_AND_MAYBE_FALLBACK
+#undef DESERIALIZE_DURATION_AND_MAYBE_FALLBACK
+
 void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operation)
 {
     protoOperation->Clear();

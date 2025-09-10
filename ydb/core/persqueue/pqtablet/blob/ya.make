@@ -4,6 +4,7 @@ SRCS(
     blob.cpp
     blob_serialization.cpp
     header.cpp
+    type_codecs_defs.cpp
 )
 
 

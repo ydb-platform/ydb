@@ -1778,6 +1778,20 @@ void THive::UpdateCounterNodesFrozen(i64 nodesFrozenDiff) {
     }
 }
 
+void THive::UpdateCounterDeleteTabletQueueSize() {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_DELETE_TABLET_QUEUE_SIZE];
+        counter.Set(DeleteTabletQueue.size());
+    }
+}
+
+void THive::UpdateCounterTabletsDeleting() {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_DELETING];
+        counter.Set(DeleteTabletInProgress);
+    }
+}
+
 void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
@@ -2973,7 +2987,7 @@ void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects)
         return;
     }
     Y_ENSURE(tablet->IsDeleting());
-    if (DeleteTabletInProgress < MAX_DELETE_TABLET_IN_PROGRESS) {
+    if (DeleteTabletInProgress < GetMaxDeleteTabletInProgress()) {
         ++DeleteTabletInProgress;
         if (!tablet->InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
             DeleteTabletWithoutStorage(tablet);
@@ -2981,6 +2995,8 @@ void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects)
     } else {
         DeleteTabletQueue.push(tabletId);
     }
+    UpdateCounterDeleteTabletQueueSize();
+    UpdateCounterTabletsDeleting();
 }
 
 void THive::ProcessPendingStopTablet() {

@@ -4522,7 +4522,7 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
             DIV_CLASS("row") {str << "Total collections: " << PrivatePageCache->GetStats().PageCollections; }
             DIV_CLASS("row") {str << "Total bytes in shared cache: " << PrivatePageCache->GetStats().SharedBodyBytes; }
             DIV_CLASS("row") {str << "Total bytes marked as sticky: " << PrivatePageCache->GetStats().StickyBytes; }
-            DIV_CLASS("row") {str << "Total bytes for try-keep-in-memory Mode: " << PrivatePageCache->GetStats().TryKeepInMemoryBytes; }
+            DIV_CLASS("row") {str << "Total bytes for try-keep-in-memory mode: " << PrivatePageCache->GetStats().TryKeepInMemoryBytes; }
             DIV_CLASS("row") {str << "Total bytes currently in use: " << TransactionPagesMemory; }
 
             if (GcLogic) {
@@ -4825,6 +4825,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         pageGroup.BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;
 
         writeGroup.Cache = Max(family.Cache, cache);
+        writeGroup.CacheMode = family.CacheMode;
         writeGroup.MaxBlobSize = NBlockIO::BlockSize;
         writeGroup.Channel = room->Main;
         addChannel(room->Main);

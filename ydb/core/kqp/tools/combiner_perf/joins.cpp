@@ -27,12 +27,10 @@ NKikimr::NMiniKQL::InnerJoinDescription PrepareCommonDescription(NKikimr::NMiniK
     ConvertVectorsToRuntimeTypesAndValue(*setup, GenerateKeyColumn(size, 123),
         TVector<ui64>(size, 111), TVector<TString>(size, "meow")
     );
-    // descr.LeftSource.ColumnTypes = AS_TYPE(NKikimr::NMiniKQL::TListType, descr.LeftSource.ColumnTypes)->GetItemType();
     std::tie(descr.RightSource.ColumnTypes, descr.RightSource.ValuesList) = 
     ConvertVectorsToRuntimeTypesAndValue(*setup, GenerateKeyColumn(size, 111),
         TVector<TString>(size, "woo")
     );
-    // descr.RightSource.ItemType = AS_TYPE(NKikimr::NMiniKQL::TListType, descr.RightSource.ColumnTypes)->GetItemType();
     return descr;
 }
 struct TTestResult{

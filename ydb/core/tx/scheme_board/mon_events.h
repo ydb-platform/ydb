@@ -47,73 +47,70 @@ struct TSchemeBoardMonEvents {
     struct TEvUnregister: public TEventLocal<TEvUnregister, EvUnregister> {
     };
 
-    struct TEvBackupProgress: public TEventLocal<TEvBackupProgress, EvBackupProgress> {
-        ui32 TotalPaths = 0;
-        ui32 CompletedPaths = 0;
-
-        explicit TEvBackupProgress(ui32 totalPaths, ui32 completedPaths)
-            : TotalPaths(totalPaths)
-            , CompletedPaths(completedPaths)
-        {
-        }
-
-        TString ToString() const override {
-            return TStringBuilder() << ToStringHeader() << " {"
-                << " CompletedPaths: " << CompletedPaths
-                << " TotalPaths: " << TotalPaths
-            << " }";
-        }
-    };
-
-    struct TEvBackupResult: public TEventLocal<TEvBackupResult, EvBackupResult> {
-        TMaybe<TString> Error = Nothing();
-
-        TEvBackupResult() = default;
-
-        explicit TEvBackupResult(TString error)
-            : Error(std::move(error))
-        {
-        }
-
-        TString ToString() const override {
-            return TStringBuilder() << ToStringHeader() << " {"
-                << " " << (Error.Defined() ? *Error : "Success")
-            << " }";
-        }
-    };
-
-    struct TEvRestoreProgress : public TEventLocal<TEvRestoreProgress, EvRestoreProgress> {
+    struct TEvCommonProgress {
         ui32 TotalPaths = 0;
         ui32 ProcessedPaths = 0;
 
-        TEvRestoreProgress(ui32 total, ui32 processed)
-            : TotalPaths(total)
-            , ProcessedPaths(processed)
+        explicit TEvCommonProgress(ui32 totalPaths, ui32 processedPaths)
+            : TotalPaths(totalPaths)
+            , ProcessedPaths(processedPaths)
         {
         }
 
-        TString ToString() const override {
-            return TStringBuilder() << ToStringHeader() << " {"
+        TString ToString(const TString& header) const {
+            return TStringBuilder() << header << " {"
                 << " ProcessedPaths: " << ProcessedPaths
                 << " TotalPaths: " << TotalPaths
             << " }";
         }
     };
 
-    struct TEvRestoreResult : public TEventLocal<TEvRestoreResult, EvRestoreResult> {
+    struct TEvCommonResult {
         TMaybe<TString> Error = Nothing();
 
-        TEvRestoreResult() = default;
+        TEvCommonResult() = default;
 
-        explicit TEvRestoreResult(const TString& error)
-            : Error(error)
+        explicit TEvCommonResult(TString error)
+            : Error(std::move(error))
         {
         }
 
-        TString ToString() const override {
-            return TStringBuilder() << ToStringHeader() << " {"
-                << " " << (Error.Defined() ? *Error : "Success")
+        TString ToString(const TString& header) const {
+            return TStringBuilder() << header << " {"
+                << " " << (Error ? *Error : "Success")
             << " }";
+        }
+    };
+
+    struct TEvBackupProgress: public TEventLocal<TEvBackupProgress, EvBackupProgress>, TEvCommonProgress {
+        using TEvCommonProgress::TEvCommonProgress;
+
+        TString ToString() const override {
+            return TEvCommonProgress::ToString(ToStringHeader());
+        }
+    };
+
+    struct TEvBackupResult: public TEventLocal<TEvBackupResult, EvBackupResult>, TEvCommonResult {
+        using TEvCommonResult::TEvCommonResult;
+
+        TString ToString() const override {
+            return TEvCommonResult::ToString(ToStringHeader());
+        }
+    };
+
+    struct TEvRestoreProgress : public TEventLocal<TEvRestoreProgress, EvRestoreProgress>, TEvCommonProgress {
+        using TEvCommonProgress::TEvCommonProgress;
+
+        TString ToString() const override {
+            return TEvCommonProgress::ToString(ToStringHeader());
+        }
+    };
+
+    struct TEvRestoreResult : public TEventLocal<TEvRestoreResult, EvRestoreResult>, TEvCommonResult {
+        using TEvCommonResult::TEvCommonResult;
+
+        TString ToString() const override {
+            return TEvCommonResult::ToString(ToStringHeader());
         }
     };
 

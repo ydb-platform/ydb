@@ -23,7 +23,7 @@ namespace NKikimr::NSchemeBoard {
 
 using namespace NJson;
 
-TString TBackupProgress::StatusToString() const {
+TString TCommonProgress::StatusToString() const {
     switch (Status) {
         case EStatus::Idle: return "idle";
         case EStatus::Starting: return "starting";
@@ -33,32 +33,13 @@ TString TBackupProgress::StatusToString() const {
     }
 }
 
-TString TBackupProgress::ToJson() const {
-    TJsonValue json;
-    json["completed"] = CompletedPaths;
-    json["total"] = TotalPaths;
-    json["progress"] = GetProgress();
-    json["status"] = StatusToString();
-
-    return WriteJson(json);
-}
-
-TString TRestoreProgress::StatusToString() const {
-    switch (Status) {
-        case EStatus::Idle: return "idle";
-        case EStatus::Starting: return "starting";
-        case EStatus::Running: return "running";
-        case EStatus::Completed: return "completed";
-        case EStatus::Error: return TStringBuilder() << "error: " << ErrorMessage;
-    }
-}
-
-TString TRestoreProgress::ToJson() const {
+TString TCommonProgress::ToJson() const {
     TJsonValue json;
     json["processed"] = ProcessedPaths;
     json["total"] = TotalPaths;
     json["progress"] = GetProgress();
     json["status"] = StatusToString();
+
     return WriteJson(json);
 }
 
@@ -166,7 +147,7 @@ private:
 
         if (!jsonDescription.empty()) {
             (*OutputFile) << jsonDescription << "\n";
-            ++CompletedPaths;
+            ++ProcessedPaths;
 
             // parse children and add to pending queue
             try {
@@ -213,11 +194,11 @@ private:
     void SendProgressUpdate() {
         SBB_LOG_D("SendProgressUpdate"
             << ", paths in progress: " << InProgressPaths
-            << ", completed paths: " << CompletedPaths
+            << ", processed paths: " << ProcessedPaths
             << ", total paths: " << TotalPaths
             << ", pending paths: " << PendingPaths.size()
         );
-        Send(Parent, new TSchemeBoardMonEvents::TEvBackupProgress(TotalPaths, CompletedPaths));
+        Send(Parent, new TSchemeBoardMonEvents::TEvBackupProgress(TotalPaths, ProcessedPaths));
     }
 
     void ReplyError(const TString& error) {
@@ -251,7 +232,7 @@ private:
     TVector<TString> PathByCookie;
     TMaybe<TFileOutput> OutputFile;
     ui32 InProgressPaths = 0;
-    ui32 CompletedPaths = 0;
+    ui32 ProcessedPaths = 0;
     ui32 TotalPaths = 0;
 };
 

@@ -12,51 +12,7 @@ namespace NKikimr::NSchemeBoard {
 #define SBB_LOG_W(stream) SB_LOG_W(SCHEME_BOARD_BACKUP, "[" << LogPrefix() << "]" << this->SelfId() << " " << stream)
 #define SBB_LOG_E(stream) SB_LOG_E(SCHEME_BOARD_BACKUP, "[" << LogPrefix() << "]" << this->SelfId() << " " << stream)
 
-struct TBackupProgress {
-    enum class EStatus {
-        Idle,
-        Starting,
-        Running,
-        Completed,
-        Error,
-    };
-
-    ui32 TotalPaths = 0;
-    ui32 CompletedPaths = 0;
-    EStatus Status = EStatus::Idle;
-    TString ErrorMessage;
-
-    TBackupProgress() = default;
-
-    explicit TBackupProgress(const TSchemeBoardMonEvents::TEvBackupProgress& ev)
-        : TotalPaths(ev.TotalPaths)
-        , CompletedPaths(ev.CompletedPaths)
-        , Status(EStatus::Running)
-    {
-    }
-
-    explicit TBackupProgress(const TSchemeBoardMonEvents::TEvBackupResult& ev)
-        : TotalPaths(0)
-        , CompletedPaths(0)
-        , Status(ev.Error ? EStatus::Error : EStatus::Completed)
-        , ErrorMessage(ev.Error.GetOrElse(""))
-    {
-    }
-
-    bool IsRunning() const {
-        return Status == EStatus::Starting || Status == EStatus::Running;
-    }
-
-    double GetProgress() const {
-        return TotalPaths > 0 ? (100. * CompletedPaths / TotalPaths) : 0.;
-    }
-
-    TString StatusToString() const;
-
-    TString ToJson() const;
-};
-
-struct TRestoreProgress {
+struct TCommonProgress {
     enum class EStatus {
         Idle,
         Starting,
@@ -70,16 +26,16 @@ struct TRestoreProgress {
     EStatus Status = EStatus::Idle;
     TString ErrorMessage;
 
-    TRestoreProgress() = default;
+    TCommonProgress() = default;
 
-    explicit TRestoreProgress(const TSchemeBoardMonEvents::TEvRestoreProgress& ev)
+    explicit TCommonProgress(const TSchemeBoardMonEvents::TEvCommonProgress& ev)
         : TotalPaths(ev.TotalPaths)
         , ProcessedPaths(ev.ProcessedPaths)
         , Status(EStatus::Running)
     {
     }
 
-    explicit TRestoreProgress(const TSchemeBoardMonEvents::TEvRestoreResult& ev)
+    explicit TCommonProgress(const TSchemeBoardMonEvents::TEvCommonResult& ev)
         : TotalPaths(0)
         , ProcessedPaths(0)
         , Status(ev.Error ? EStatus::Error : EStatus::Completed)
@@ -98,6 +54,14 @@ struct TRestoreProgress {
     TString StatusToString() const;
 
     TString ToJson() const;
+};
+
+struct TBackupProgress: TCommonProgress {
+    using TCommonProgress::TCommonProgress;
+};
+
+struct TRestoreProgress: TCommonProgress {
+    using TCommonProgress::TCommonProgress;
 };
 
 IActor* CreateSchemeBoardBackuper(const TString& filePath, ui32 inFlightLimit, const TActorId& parent);

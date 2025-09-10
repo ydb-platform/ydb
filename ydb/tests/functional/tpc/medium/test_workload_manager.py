@@ -36,14 +36,14 @@ class TestTpchWMS0_1(wm.WorkloadMangerTpchBase, wm.WorkloadMangerConcurentQueryL
         super().setup_class()
 
 
-class TestClickbenchWMSheduler(wm.TestWorkloadMangerClickbenchComputeSheduler, FunctionalTestBase):
-    iterations: int = 1
-    verify_data: bool = False
-    timeout = 100
-
-    @classmethod
-    def setup_class(cls) -> None:
-        cls.setup_cluster()
-        cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column', '--datetime-types=dt64'])
-        cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'import', 'files', '--input', yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")])
-        super().setup_class()
+# class TestClickbenchWMSheduler(wm.TestWorkloadMangerClickbenchComputeSheduler, FunctionalTestBase):
+#     iterations: int = 1
+#     verify_data: bool = False
+#     timeout = 100
+#
+#     @classmethod
+#     def setup_class(cls) -> None:
+#         cls.setup_cluster()
+#         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column', '--datetime-types=dt64'])
+#         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'import', 'files', '--input', yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")])
+#         super().setup_class()

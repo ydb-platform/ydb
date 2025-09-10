@@ -320,6 +320,6 @@ class TestWorkloadMangerClickbenchConcurentQueryLimit(WorkloadMangerClickbenchBa
     pass
 
 
-class TestWorkloadMangerTpchComputeShedulerS10(WorkloadMangerTpchBase, WorkloadMangerComputeSheduler):
-    tables_size = tpch.TestTpch10.tables_size
-    scale = tpch.TestTpch10.scale
+class TestWorkloadMangerTpchComputeShedulerS100(WorkloadMangerTpchBase, WorkloadMangerComputeSheduler):
+    tables_size = tpch.TestTpch100.tables_size
+    scale = tpch.TestTpch100.scale

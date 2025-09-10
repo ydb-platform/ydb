@@ -5,7 +5,7 @@
 #include <yt/yt/core/concurrency/fls.h>
 #include <yt/yt/core/concurrency/async_semaphore.h>
 
-#include <yt/yt/core/misc/crash_handler.h>
+#include <yt/yt/core/misc/backtrace.h>
 
 namespace NYT {
 
@@ -138,7 +138,7 @@ void MaybeThrowSafeAssertionException(TStringBuf message)
         }
     }
     TStringBuilder stackTrace;
-    DumpStackTrace([&stackTrace] (TStringBuf str) {
+    DumpBacktrace([&] (TStringBuf str) {
         stackTrace.AppendString(str);
     });
     TString expression(message);

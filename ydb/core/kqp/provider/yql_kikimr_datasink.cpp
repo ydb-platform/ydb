@@ -8,6 +8,7 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/services/metadata/optimization/abstract.h>
 
 namespace NYql {
 namespace {
@@ -271,9 +272,9 @@ private:
     }
 
     TStatus HandleAlterObject(TKiAlterObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "AlterObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(node);
+        Y_UNUSED(ctx);
+        return TStatus::Ok;
     }
 
     TStatus HandleDropObject(TKiDropObject node, TExprContext& ctx) override {
@@ -1002,6 +1003,7 @@ public:
                 .Repeat(TExprStep::LoadTablesMetadata)
                 .Repeat(TExprStep::RewriteIO);
 
+        YQL_ENSURE(ExternalSourceFactory);
         const auto& externalSource = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
         if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
             auto writeArgs = node->ChildrenList();
@@ -1454,9 +1456,23 @@ public:
             }
             case TKikimrKey::Type::Object:
             {
+                const auto& typeId = key.GetObjectType();
+                NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TFactory::Construct(typeId));
+                YQL_ENSURE(cBehaviour, "Unsupported object type: \"" << typeId << "\"");
+
                 NCommon::TWriteObjectSettings settings = NCommon::ParseWriteObjectSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
+
+                TExprNode::TPtr ast;
+                if (const auto optimizationManager = cBehaviour->ConstructOptimizationManager()) {
+                    ast = optimizationManager->ExtractWorldFeatures(settings.Features, ctx);
+                    if (!ast) {
+                        return nullptr;
+                    }
+                } else {
+                    ast = ctx.NewWorld(node->Pos());
+                }
 
                 if (mode == "upsertObject") {
                     return Build<TKiUpsertObject>(ctx, node->Pos())
@@ -1472,7 +1488,7 @@ public:
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .ObjectId().Build(key.GetObjectId())
-                        .TypeId().Build(key.GetObjectType())
+                        .TypeId().Build(typeId)
                         .Features(settings.Features)
                         .ReplaceIfExists<TCoAtom>()
                             .Value(mode == "createObjectOrReplace")
@@ -1480,16 +1496,21 @@ public:
                         .ExistingOk<TCoAtom>()
                             .Value(mode == "createObjectIfNotExists")
                             .Build()
+                        .Ast(ast)
                         .Done()
                         .Ptr();
-                } else if (mode == "alterObject") {
+                } else if (mode == "alterObject" || mode == "alterObjectIfExists") {
                     return Build<TKiAlterObject>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .ObjectId().Build(key.GetObjectId())
-                        .TypeId().Build(key.GetObjectType())
+                        .TypeId().Build(typeId)
                         .Features(settings.Features)
                         .ResetFeatures(settings.ResetFeatures)
+                        .MissingOk<TCoAtom>()
+                            .Value(mode == "alterObjectIfExists")
+                            .Build()
+                        .Ast(ast)
                         .Done()
                         .Ptr();
                 } else if (mode == "dropObject" || mode == "dropObjectIfExists") {

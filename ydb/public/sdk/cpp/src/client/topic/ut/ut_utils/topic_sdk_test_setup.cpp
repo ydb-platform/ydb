@@ -36,7 +36,7 @@ void TTopicSdkTestSetup::CreateTopic(const std::string& name, const std::string&
 {
     ITopicTestSetup::CreateTopic(name, consumer, partitionCount, maxPartitionCount, retention, important);
 
-    Server_.WaitInit(GetTopicPath());
+    Server_.WaitInit(GetTopicPath(name));
 }
 
 TConsumerDescription TTopicSdkTestSetup::DescribeConsumer(const std::string& name, const std::string& consumer)

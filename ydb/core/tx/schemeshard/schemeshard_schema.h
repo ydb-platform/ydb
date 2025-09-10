@@ -1243,6 +1243,7 @@ struct Schema : NIceDb::Schema {
         struct StartTime : Column<14, NScheme::NTypeIds::Uint64> {};
         struct EndTime : Column<15, NScheme::NTypeIds::Uint64> {};
         struct PeerName : Column<16, NScheme::NTypeIds::Utf8> {};
+        struct SanitizedToken : Column<20, NScheme::NTypeIds::Utf8> {};
 
         struct EnableChecksums : Column<17, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<18, NScheme::NTypeIds::Bool> {};
@@ -1269,7 +1270,8 @@ struct Schema : NIceDb::Schema {
             PeerName,
             EnableChecksums,
             EnablePermissions,
-            ExportMetadata
+            ExportMetadata,
+            SanitizedToken
         >;
     };
 
@@ -1629,6 +1631,7 @@ struct Schema : NIceDb::Schema {
         struct StartTime : Column<11, NScheme::NTypeIds::Uint64> {};
         struct EndTime : Column<12, NScheme::NTypeIds::Uint64> {};
         struct PeerName : Column<13, NScheme::NTypeIds::Utf8> {};
+        struct SanitizedToken : Column<14, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1644,7 +1647,8 @@ struct Schema : NIceDb::Schema {
             UserSID,
             StartTime,
             EndTime,
-            PeerName
+            PeerName,
+            SanitizedToken
         >;
     };
 
@@ -2237,6 +2241,16 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, Description>;
     };
 
+    struct StreamingQueryState : Table<129> {
+        struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Properties : Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2363,7 +2377,8 @@ struct Schema : NIceDb::Schema {
         IncrementalBackups,
         IncrementalBackupItems,
         Secrets,
-        SecretsAlterData
+        SecretsAlterData,
+        StreamingQueryState
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

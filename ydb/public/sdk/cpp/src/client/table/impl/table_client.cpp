@@ -226,16 +226,16 @@ void TTableClient::TImpl::StartPeriodicHostScanTask() {
         } else {
             TRequestMigrator& migrator = strongClient->RequestMigrator_;
 
-            const auto balancingPolicy = strongClient->DbDriverState_->GetBalancingPolicy();
+            const auto balancingPolicy = strongClient->DbDriverState_->GetBalancingPolicyType();
 
             // Try to find any host at foreign locations if prefer local dc
-            const ui64 foreignHost = (balancingPolicy == EBalancingPolicy::UsePreferableLocation) ?
+            const ui64 foreignHost = (balancingPolicy == TBalancingPolicy::TImpl::EPolicyType::UsePreferableLocation) ?
                 ScanForeignLocations(strongClient) : 0;
 
             std::unordered_map<ui64, size_t> hostMap;
 
             winner = ScanLocation(strongClient, hostMap,
-            balancingPolicy == EBalancingPolicy::UseAllNodes);
+            balancingPolicy == TBalancingPolicy::TImpl::EPolicyType::UseAllNodes);
 
             bool forceMigrate = false;
 

@@ -79,7 +79,7 @@ static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketPar
     if (!dbId.empty()) attributes.push_back({"database_id", dbId});
     if (!folderId.empty()) attributes.push_back({"folder_id", folderId});
     if (!attributes.empty()) {
-        return {{NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::STREAM>::Get(), attributes}};
+        return {{NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::DEFAULT>::Get(), attributes}};
     }
     return {};
 }

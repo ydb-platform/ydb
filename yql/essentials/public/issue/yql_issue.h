@@ -58,8 +58,6 @@ public:
     TTextWalker(TPosition& position, bool utf8Aware)
         : Position_(position)
         , Utf8Aware_(utf8Aware)
-        , HaveCr_(false)
-        , LfCount_(0)
     {
     }
 
@@ -76,8 +74,6 @@ public:
 private:
     TPosition& Position_;
     const bool Utf8Aware_;
-    bool HaveCr_;
-    ui32 LfCount_;
 };
 
 struct TRange {

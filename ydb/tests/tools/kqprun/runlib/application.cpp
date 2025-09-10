@@ -90,21 +90,21 @@ void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettin
         .RequiredArgument("file")
         .StoreMappedResultT<TString>(&ProfileAllocationsOutput, &GetDefaultOutput);
 
-    options.AddLongOption('M', "monitoring", "Embedded UI ports range start (use 0 to start on random free port), if used will be run as daemon")
-        .RequiredArgument("uint")
+    options.AddLongOption('M', "monitoring", "Embedded UI ports range start (start on random free port by default), if used will be run as daemon")
+        .OptionalArgument("uint")
         .Handler1([&settings](const NLastGetopt::TOptsParser* option) {
-            if (const TString& port = option->CurVal()) {
-                settings.MonitoringEnabled = true;
-                settings.FirstMonitoringPort = FromString(port);
+            settings.MonitoringEnabled = true;
+            if (const char* portStr = option->CurVal()) {
+                settings.FirstMonitoringPort = FromString(portStr);
             }
         });
 
-    options.AddLongOption('G', "grpc", "gRPC ports range start (use 0 to start on random free port), if used will be run as daemon")
-        .RequiredArgument("uint")
+    options.AddLongOption('G', "grpc", "gRPC ports range start (start on random free port by default), if used will be run as daemon")
+        .OptionalArgument("uint")
         .Handler1([&settings](const NLastGetopt::TOptsParser* option) {
-            if (const TString& port = option->CurVal()) {
-                settings.GrpcEnabled = true;
-                settings.FirstGrpcPort = FromString(port);
+            settings.GrpcEnabled = true;
+            if (const char* portStr = option->CurVal()) {
+                settings.FirstGrpcPort = FromString(portStr);
             }
         });
 

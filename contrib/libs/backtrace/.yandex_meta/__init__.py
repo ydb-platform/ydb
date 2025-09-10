@@ -10,7 +10,7 @@ def post_install(self):
             Switch(
                 [
                     ("OS_DARWIN", Linkable(SRCS=["macho.c"])),
-                    ("OS_LINUX OR OS_ANDROID", Linkable(SRCS=["elf.c"])),
+                    ("OS_LINUX OR OS_ANDROID OR OS_FREEBSD", Linkable(SRCS=["elf.c"])),
                 ]
             ),
         )

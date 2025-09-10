@@ -11,7 +11,7 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/util/ulid.h>
 
 #include <ydb/library/services/services.pb.h>

@@ -1945,7 +1945,7 @@ TExprBase FlatMapOverEquiJoin(
             .Build());
     }
 
-    if (IsPredicateFlatMap(node.Lambda().Body().Ref())) {
+    if (!node.Raw()->HasSideEffects() && IsPredicateFlatMap(node.Lambda().Body().Ref())) {
         // predicate pushdown
         const auto& row = node.Lambda().Args().Arg(0).Ref();
         auto predicate = node.Lambda().Body().Ref().ChildPtr(0);

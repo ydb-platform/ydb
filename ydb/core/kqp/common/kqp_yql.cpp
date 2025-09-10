@@ -176,6 +176,13 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
         } else if (name == TKqpReadTableSettings::PointPrefixLenSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
             settings.PointPrefixLen = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
+        } else if (name == TKqpReadTableSettings::IndexSelectionDebugInfoSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
+            auto lv = tuple.Value().Cast<TCoNameValueTupleList>();
+            for(const auto& kv: lv) {
+                settings.IndexSelectionInfo.emplace(kv.Name().Value(), kv.Value().Cast<TCoAtom>().Value());
+            }
+
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }
@@ -281,6 +288,31 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                     .Build(PointPrefixLenSettingName)
                 .Value<TCoAtom>()
                     .Value(ToString(PointPrefixLen))
+                    .Build()
+                .Done());
+    }
+
+    if (!IndexSelectionInfo.empty()) {
+        TVector<TCoNameValueTuple> isi;
+
+        for(auto& [indexName, indexInfo]: IndexSelectionInfo) {
+            isi.emplace_back(
+                Build<TCoNameValueTuple>(ctx, pos)
+                    .Name()
+                        .Build(indexName)
+                    .Value<TCoAtom>()
+                        .Value(ToString(indexInfo))
+                        .Build()
+                    .Done()
+            );
+        }
+
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(IndexSelectionDebugInfoSettingName)
+                .Value<TCoNameValueTupleList>()
+                    .Add(isi)
                     .Build()
                 .Done());
     }
@@ -439,6 +471,32 @@ TCoNameValueTupleList TKqpReadTableExplainPrompt::BuildNode(TExprContext& ctx, T
         );
     }
 
+
+    if (!IndexSelectionInfo.empty()) {
+        TVector<TCoNameValueTuple> isi;
+
+        for(auto& [indexName, indexInfo]: IndexSelectionInfo) {
+            isi.emplace_back(
+                Build<TCoNameValueTuple>(ctx, pos)
+                    .Name()
+                        .Build(indexName)
+                    .Value<TCoAtom>()
+                        .Value(ToString(indexInfo))
+                        .Build()
+                    .Done()
+            );
+        }
+
+        prompt.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(IndexSelectionDebugInfoSettingName)
+                .Value<TCoNameValueTupleList>()
+                    .Add(isi)
+                    .Build()
+                .Done());
+    }
+
     prompt.emplace_back(
         Build<TCoNameValueTuple>(ctx, pos)
             .Name()
@@ -467,6 +525,15 @@ TKqpReadTableExplainPrompt TKqpReadTableExplainPrompt::Parse(const NNodes::TCoNa
                 prompt.UsedKeyColumns.emplace_back(TString(key.Value()));
             }
 
+            continue;
+        }
+
+        if (name == TKqpReadTableExplainPrompt::IndexSelectionDebugInfoSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
+            auto lv = tuple.Value().Cast<TCoNameValueTupleList>();
+            for(const auto& kv: lv) {
+                prompt.IndexSelectionInfo.emplace(kv.Name().Value(), kv.Value().Cast<TCoAtom>().Value());
+            }
             continue;
         }
 

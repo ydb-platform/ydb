@@ -11,7 +11,11 @@ PY3_LIBRARY()
         workload_manager.py
         workload_simple_queue.py
         workload_oltp.py
+        workload_olap.py
         workload_topic.py
+        workload_kv.py
+        workload_log.py
+        workload_mixed.py
         upload.py
 
     )

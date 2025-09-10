@@ -86,7 +86,8 @@
                                                                 "PlanNodeId": 6,
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "DqCnParallelUnionAll",
+                                                                        "Node Type": "UnionAll",
+                                                                        "Parallel": "True",
                                                                         "PlanNodeId": 5,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
@@ -121,7 +122,8 @@
                                                                         ]
                                                                     },
                                                                     {
-                                                                        "Node Type": "DqCnParallelUnionAll",
+                                                                        "Node Type": "UnionAll",
+                                                                        "Parallel": "True",
                                                                         "PlanNodeId": 3,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [

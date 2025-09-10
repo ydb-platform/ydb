@@ -1614,6 +1614,9 @@
 #if !defined(NDEBUG) && !defined(Py_LIMITED_API) && !defined(DISABLE_PYDEBUG)
 #define Py_DEBUG
 #define GC_NDEBUG
+#define ABIFLAGS "d"
+#else
+#define ABIFLAGS ""
 #endif
 
 /* Defined if Python is built as a shared library. */

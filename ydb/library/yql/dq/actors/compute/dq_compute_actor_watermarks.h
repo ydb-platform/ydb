@@ -32,6 +32,9 @@ public:
     TMaybe<TInstant> GetPendingWatermark() const;
     void PopPendingWatermark();
 
+    // Should be only called only when HasPendingWatermark() is true
+    TDuration GetWatermarkDiscrepancy() const;
+
     void SetLogPrefix(const TString& logPrefix);
 
 private:
@@ -47,6 +50,7 @@ private:
 
     TMaybe<TInstant> PendingWatermark;
     TMaybe<TInstant> LastWatermark;
+    TMaybe<TInstant> MaxWatermark;
 };
 
 } // namespace NYql::NDq

@@ -780,7 +780,7 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
         };
         TExprNodeList newChildren;
         bool changed = false;
-        for (auto& group : groups) {
+        for (const auto& group : groups) {
             YQL_ENSURE(!group.empty());
             if (group.size() == 1) {
                 newChildren.push_back(children[group.front()]);
@@ -818,14 +818,13 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
                     auto childAnd = children[idx];
                     TExprNodeList preds = childAnd->ChildrenList();
                     EraseIf(preds, [&](const TExprNode::TPtr& p) { return commonSet.contains(IsNoPush(*p) ? p->Child(0) : p.Get()); });
-                    if (!preds.empty()) {
-                        newGroup.emplace_back(ctx.ChangeChildren(*childAnd, std::move(preds)));
+                    if (preds.empty()) {
+                        preds.emplace_back(MakeBool<true>(childAnd->Pos(), ctx));
                     }
+                    newGroup.emplace_back(ctx.ChangeChildren(*childAnd, std::move(preds)));
                 }
-                if (!newGroup.empty()) {
-                    auto restPreds = ctx.NewCallable(node->Pos(), "Or", std::move(newGroup));
-                    commonPreds.push_back(restPreds);
-                }
+                auto restPreds = ctx.NewCallable(node->Pos(), "Or", std::move(newGroup));
+                commonPreds.push_back(restPreds);
                 newChildren.push_back(ctx.NewCallable(node->Pos(), "And", std::move(commonPreds)));
             } else {
                 for (auto& idx : group) {
@@ -910,7 +909,7 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, 
             branches.emplace(node->Child(++i));
         }
 
-        if (predicates.size() < width) {
+        if (!node->HasSideEffects() && predicates.size() < width) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " with identical predicates.";
             auto children = node->ChildrenList();
             for (auto i = 0U; i < children.size() - 1U;) {
@@ -921,7 +920,7 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, 
             }
             return ctx.ChangeChildren(*node, std::move(children));
         }
-        if (branches.size() < width) {
+        if (!node->HasSideEffects() && branches.size() < width) {
             for (auto i = 1U; i < node->ChildrenSize() - 2U; ++++i) {
                 if (node->Child(i) ==  node->Child(i + 2U)) {
                     YQL_CLOG(DEBUG, Core) << node->Content() << " with identical branches.";
@@ -952,6 +951,7 @@ TExprNode::TPtr CheckCompareSame(const TExprNode::TPtr& node, TExprContext& ctx,
         YQL_CLOG(DEBUG, Core) << (Equal ? "Equal" : "Unequal") << " '" << node->Content() << "' with same args";
         auto res = MakeBool<Equal>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, *optCtx.Types);
+        res = KeepSideEffects(res, node->HeadPtr(), ctx);
         return res;
     }
 

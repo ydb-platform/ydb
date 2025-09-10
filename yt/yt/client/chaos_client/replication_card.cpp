@@ -187,9 +187,12 @@ void FormatValue(
         replicationCard.Era,
         MakeFormattableView(
             replicationCard.Replicas,
-            [&] (TStringBuilderBase* builder, std::pair<const NYT::TGuid, NYT::NChaosClient::TReplicaInfo> replica) {
+            [&] (
+                TStringBuilderBase* builder,
+                const std::pair<const NYT::TGuid, NYT::NChaosClient::TReplicaInfo>& replica)
+            {
                 FormatValue(builder, replica.first, TStringBuf());
-                builder->AppendString(": ");
+                builder->AppendString(": "sv);
                 FormatValue(builder, replica.second, TStringBuf(), replicationProgressProjection);
             }),
         replicationCard.CoordinatorCellIds,
@@ -602,6 +605,23 @@ TTimestamp GetReplicationProgressTimestampForKeyOrThrow(
         THROW_ERROR_EXCEPTION("Key %v is out or replication progress range", key);
     }
     return *timestamp;
+}
+
+NTransactionClient::TTimestamp GetReplicationCardProgressMinTimestamp(
+    const TReplicationCard& replicationCard,
+    NTableClient::TLegacyKey lower,
+    NTableClient::TLegacyKey upper)
+{
+    auto replicationTimestamp = MaxTimestamp;
+    for (const auto& [_, replica] : replicationCard.Replicas) {
+        auto minTimestamp = GetReplicationProgressMinTimestamp(
+            replica.ReplicationProgress,
+            lower,
+            upper);
+        replicationTimestamp = std::min(replicationTimestamp, minTimestamp);
+    }
+
+    return replicationTimestamp;
 }
 
 TTimestamp GetReplicationProgressMinTimestamp(

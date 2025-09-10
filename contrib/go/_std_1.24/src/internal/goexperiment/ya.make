@@ -11,7 +11,7 @@ IF (TRUE)
         exp_boringcrypto_off.go
         exp_cacheprog_off.go
         exp_cgocheck2_off.go
-        exp_coverageredesign_on.go
+        exp_coverageredesign_off.go
         exp_fieldtrack_off.go
         exp_heapminimum512kib_off.go
         exp_loopvar_off.go

@@ -64,7 +64,8 @@ public:
             ++CurrentTxIndex;
         }
 
-        PhyQuerySetTxPlans(query, TKqpPhysicalQuery(TransformCtx->ExplainTransformerInput), std::move(TxResults),
+        PhyQuerySetTxPlans(query, TKqpPhysicalQuery(TransformCtx->ExplainTransformerInput),
+            TKqpPhysicalQuery(input), std::move(TxResults),
             ctx, Gateway->GetDatabase(), Cluster, TransformCtx->Tables, TransformCtx->Config, TypeCtx, OptimizeCtx);
         query.SetQueryAst(KqpExprToPrettyString(*input, ctx));
 

@@ -273,6 +273,7 @@ public:
     THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
     THashMap<TPathId, TSysViewInfo::TPtr> SysViews;
     THashMap<TPathId, TSecretInfo::TPtr> Secrets;
+    THashMap<TPathId, TStreamingQueryInfo::TPtr> StreamingQueries;
 
     TTempDirsState TempDirsState;
 
@@ -896,6 +897,10 @@ public:
     // SysView
     void PersistSysView(NIceDb::TNiceDb &db, TPathId pathId);
     void PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId);
+
+    // StreamingQuery
+    void PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
 
     void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
 

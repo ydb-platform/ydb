@@ -51,6 +51,7 @@ SRCS(
     printout.cpp
     simple.cpp
     simple_block.cpp
+    simple_grace_join.cpp
     simple_last.cpp
     subprocess.cpp
     streams.cpp

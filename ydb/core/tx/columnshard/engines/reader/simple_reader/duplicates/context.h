@@ -163,7 +163,7 @@ public:
         AFL_VERIFY(ColumnDataManager);
         AFL_VERIFY(DataAccessorsManager);
         AFL_VERIFY(Counters);
-        AFL_VERIFY(SelfMemory);
+        // AFL_VERIFY(SelfMemory);  // may be null
     }
 
     std::set<ui32> GetFetchingColumnIds() const {

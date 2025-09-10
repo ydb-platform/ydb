@@ -1257,10 +1257,7 @@ IComputationNode* WrapGraceJoinCommon(TCallable& callable, const TComputationNod
     const ui32 rawJoinKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
 
 
-    auto* compNode = LocateNode(ctx.NodeLocator, callable, 0);
-    const auto flowLeft = dynamic_cast<IComputationWideFlowNode*> (compNode);
-    MKQL_ENSURE(flowLeft != nullptr, TStringBuilder() << "compNode is not IComputationWideFlowNode, it is :" << typeid(compNode).name());
-
+    const auto flowLeft = dynamic_cast<IComputationWideFlowNode*> (LocateNode(ctx.NodeLocator, callable, 0));
     IComputationWideFlowNode* flowRight = nullptr;
     if (!isSelfJoin) {
         flowRight = dynamic_cast<IComputationWideFlowNode*> (LocateNode(ctx.NodeLocator, callable, 1));

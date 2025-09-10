@@ -1211,7 +1211,7 @@ message TQueryServiceConfig {
     optional NYql.TGenericGatewayConfig Generic = 11;
     optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
-    optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
+    optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 7200];
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];

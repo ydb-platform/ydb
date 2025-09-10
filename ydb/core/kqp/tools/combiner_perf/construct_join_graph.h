@@ -15,15 +15,12 @@ struct JoinSourceData{
     TArrayRef<TType* const> ColumnTypes;
     TArrayRef<const ui32> KeyColumnIndexes;
     NYql::NUdf::TUnboxedValue ValuesList;
-    // TArrayRef<const ui32> Renames;//??
 };
 
 struct InnerJoinDescription{
     JoinSourceData LeftSource;
     JoinSourceData RightSource;
-    // TType* ReturnType;
     TDqSetup<false>* Setup; 
-    // EAnyJoinSettings AnyJoinSettings;
 };
 
 THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, InnerJoinDescription descr);

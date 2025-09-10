@@ -61,7 +61,7 @@ bool TOverloadManagerServiceOperator::RequestResources(ui64 writesCount, ui64 wr
         std::lock_guard<std::mutex> guard(Mutex);
         if (LimitReached) {
             already = true;
-            return false;
+            break;
         }
 
         // auto resWritesInFlight = WritesInFlight.Add(writesCount);

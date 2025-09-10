@@ -1,21 +1,13 @@
-import datetime
 import os
 import pytest
 
-import random
-
 import logging
 import yatest.common
+import ydb
 
-from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.olap.common.thread_helper import TestThread
 from ydb.tests.olap.common.ydb_client import YdbClient
-
-from enum import Enum
-
 
 logger = logging.getLogger(__name__)
 
@@ -45,13 +37,14 @@ class YdbWorkloadOverload:
         ]
         self.stderr = stderr
         self.stdout = stdout
+        self.table_name = table_name
 
     def _call(self, command: list[str], wait=False, timeout=None):
         logging.info(f'YdbWorkloadOverload execute {' '.join(command)} with wait = {wait}')
         yatest.common.execute(command=command, wait=wait, timeout=timeout, stderr=self.stderr, stdout=self.stdout)
 
-    def create_table(self, table_name: str):
-        command = self.begin_command + ["init", "--path", table_name, "--store", "column", "--ttl", "1000"]
+    def create_table(self):
+        command = self.begin_command + ["init", "--path", self.table_name, "--store", "column", "--ttl", "1000"]
         self._call(command=command, wait=True)
 
     def _insert_rows(self, operation_name: str, seconds: int, threads: int, rows: int, wait: bool):
@@ -114,16 +107,59 @@ class TestLogScenario(object):
     def get_row_count(self) -> int:
         return self.ydb_client.query(f"select count(*) as Rows from `{self.table_name}`")[0].rows[0]["Rows"]
 
-    def aggregation_query(self, duration: datetime.timedelta):
-        deadline: datetime = datetime.datetime.now() + duration
-        while datetime.datetime.now() < deadline:
-            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` ")
+    @pytest.mark.parametrize('writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit, partitions_count',
+                             [(1, 10000, 1), (2, 10000, 1), (1000, 1, 1), (1000, 2, 1), (1, 1, 1), (2, 2, 1),
+                              (1, 10000, 2), (2, 10000, 2), (1000, 1, 2), (1000, 2, 2), (1, 1, 2), (2, 2, 2),
+                              (1, 10000, 8), (2, 10000, 8), (1000, 1, 8), (1000, 2, 8), (1, 1, 8), (2, 2, 8),
+                              (1, 10000, 64), (2, 10000, 64), (1000, 1, 64), (1000, 2, 64), (1, 1, 64), (2, 2, 64),
+                              (1, 10000, 128), (2, 10000, 128), (1000, 1, 128), (1000, 2, 128), (1, 1, 128), (2, 2, 128)])
+    def test_overloads_bulk_upsert(self, writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit, partitions_count):
+        test_name = f"test_overloads_bulk_upsert_{writing_in_flight_requests_count_limit}_{writing_in_flight_request_bytes_limit}_{partitions_count}"
+        self._setup_ydb(writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit)
+
+        test_dir = f"{self.ydb_client.database}/{test_name}"
+        table_path = f"{test_dir}/table"
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                id Uint64 NOT NULL,
+                val Uint64,
+                PRIMARY KEY(id),
+            )
+            WITH (
+                STORE = COLUMN,
+                PARTITION_COUNT = {partitions_count}
+            )
+            """
+        )
+
+        column_types = ydb.BulkUpsertColumns()
+        column_types.add_column("id", ydb.PrimitiveType.Uint64)
+        column_types.add_column("val", ydb.PrimitiveType.Uint64)
+
+        rows_count = 10
+
+        data = [
+            {
+                "id": i,
+                "val": i * rows_count,
+            }
+            for i in range(rows_count)
+        ]
+        self.ydb_client.bulk_upsert(
+            table_path,
+            column_types,
+            data,
+        )
+
+        assert self.ydb_client.query(f"select count(*) as Rows from `{table_path}`")[0].rows[0]["Rows"] == rows_count
+
 
     @pytest.mark.parametrize('writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit', [(1, 10000), (2, 10000), (1000, 1), (1000, 2), (1, 1), (2, 2)])
-    def test_overloads(self, writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit):
+    def test_overloads_workload(self, writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit):
         self._setup_ydb(writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit)
         wait_time: int = 60
-        self.table_name: str = "log"
+        self.table_name: str = f"log_{writing_in_flight_requests_count_limit}_{writing_in_flight_request_bytes_limit}"
 
         output_path = yatest.common.test_output_path()
         output_stdout = open(os.path.join(output_path, "command_stdout.log"), "w")
@@ -134,7 +170,7 @@ class TestLogScenario(object):
             table_name=self.table_name,
             stdout=output_stdout
         )
-        ydb_workload.create_table(self.table_name)
+        ydb_workload.create_table()
 
         ydb_workload.bulk_upsert(seconds=wait_time, threads=1, rows=10, wait=True)
 
@@ -152,8 +188,6 @@ class TestLogScenario(object):
         assert keys is not None and values is not None
 
         stats = dict(zip(keys, values))
-
-        logging.info(f"Stats: {stats}")
 
         assert stats["Errors"] == "0"
 

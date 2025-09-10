@@ -188,7 +188,6 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TAc
 
 void TColumnShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&) {
     PipeServersInterconnectSessions.emplace(ev->Get()->ServerId, ev->Get()->InterconnectSession);
-    // OverloadSubscribers.AddPipeServer(ev->Get()->ServerId, ev->Get()->InterconnectSession);
     LOG_S_DEBUG("Server pipe connected at tablet " << TabletID());
 }
 
@@ -262,9 +261,6 @@ void TColumnShard::Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorCon
         ctx.Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(0));
     } else if (ev->Get()->Tag == 1) {
         WriteTasksQueue->Drain(true, ctx);
-    } else if (ev->Get()->Tag == 2) {
-        // OverloadSubscribers.NotifyAllOverloadSubscribers(SelfId(), TabletID());
-        // OverloadSubscribers.ProcessNotification();
     }
 }
 

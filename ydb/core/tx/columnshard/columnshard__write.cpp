@@ -501,10 +501,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
             auto seqNo = record.GetOverloadSubscribe();
             result->Record.SetOverloadSubscribed(seqNo);
             Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), new NOverload::TEvOverloadSubscribe({.ColumnShardId = SelfId(), .TabletId = TabletID()}, {.PipeServerId = ev->Recipient, .InterconnectSessionId = PipeServersInterconnectSessions[ev->Recipient]}, {.PipeServerId = ev->Recipient, .OverloadSubscriberId = ev->Sender, .SeqNo = seqNo}));
-
-            // const auto rejectReasons = NOverload::MakeRejectReasons(overloadStatus);
-            // OverloadSubscribers.SetOverloadSubscribed(record.GetOverloadSubscribe(), ev->Recipient, ev->Sender, rejectReasons, result->Record);
-            // OverloadSubscribers.ScheduleNotification(SelfId());
         }
         OverloadWriteFail(overloadStatus,
             NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString(),

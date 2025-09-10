@@ -1403,6 +1403,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxCancelImport(TEvImport::TEvCancelImportRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxCancelImportAck(TEvSchemeShard::TEvCancelTxResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxCancelImportAck(TEvIndexBuilder::TEvCancelResponse::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxCancelImportAck(ui64 importId, TTxId txId);
     NTabletFlatExecutor::ITransaction* CreateTxForgetImport(TEvImport::TEvForgetImportRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxListImports(TEvImport::TEvListImportsRequest::TPtr& ev);
 
@@ -1637,10 +1638,10 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TTxId completedTxId, const TActorContext& ctx);
-    
+
     // Notification function for incremental restore operation completion
     void NotifyIncrementalRestoreOperationCompleted(const TOperationId& operationId, const TActorContext& ctx);
-    
+
     NTabletFlatExecutor::ITransaction* CreateTxIncrementalRestoreResponse(TEvDataShard::TEvProposeTransactionResult::TPtr& ev);
 
     void ResumeCdcStreamScans(const TVector<TPathId>& ids, const TActorContext& ctx);

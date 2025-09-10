@@ -1494,6 +1494,13 @@ private:
         }
 
         TImportInfo::TPtr importInfo = Self->Imports.at(id);
+
+        if (importInfo->State == EState::Cancellation) {
+            // Process the race:
+            // We were trying to cancel transaction, but it had been finished one moment before
+            return Self->Execute(Self->CreateTxCancelImportAck(id, CompletedTxId), ctx);
+        }
+
         NIceDb::TNiceDb db(txc.DB);
 
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());

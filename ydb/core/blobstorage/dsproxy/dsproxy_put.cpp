@@ -649,8 +649,11 @@ public:
             << " Tactic# " << TEvBlobStorage::TEvPut::TacticName(Tactic)
             << " RestartCounter# " << RestartCounter);
 
+        TInstant now = TActivationContext::Now();
+
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            PutDeadlineMasks[PutImpl.Blobs[blobIdx].Deadline].set(blobIdx);
+            TInstant deadline = std::max(now + DsMaximumPutTimeout, PutImpl.Blobs[blobIdx].Deadline);
+            PutDeadlineMasks[deadline].set(blobIdx);
             LWTRACK(DSProxyPutBootstrapStart, PutImpl.Blobs[blobIdx].Orbit);
         }
 
@@ -822,7 +825,7 @@ public:
             }
         }
 
-        if (true || deadline != TInstant::Max()) {
+        if (deadline != TInstant::Max()) {
             Schedule(deadline, new TKikimrEvents::TEvWakeup);
         }
     }

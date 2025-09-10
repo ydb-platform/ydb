@@ -74,7 +74,7 @@ TTestResult DoRunJoinsBench(const NKikimr::NMiniKQL::TRunParams &params){
             }
         }
         thisResults.BenchDuration = GetThreadCPUTimeDelta(graphTimeStart);
-        Cerr << ToString(thisResults.LineCount) << Endl;
+        Cerr << ". Output line count(block considered to be 1 line): " << thisResults.LineCount << Endl;
         results.emplace(algo, thisResults);
 
     }

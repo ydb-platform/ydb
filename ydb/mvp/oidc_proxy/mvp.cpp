@@ -76,7 +76,6 @@ int TMVP::Init() {
 
     BaseHttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
     ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId));
-    AppData.GRpcClientLow = std::make_shared<NYdbGrpc::TGRpcClientLow>();
 
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpCache(BaseHttpProxyId, GetCachePolicy));
 
@@ -171,10 +170,9 @@ int TMVP::Run() {
 }
 
 int TMVP::Shutdown() {
-    ActorSystemStoppingLock.AcquireWrite();
-    AtomicSet(ActorSystemStopping, true);
-    ActorSystemStoppingLock.ReleaseWrite();
     ActorSystem.Stop();
+    ActorSystem.Cleanup();
+    AppData.GRpcClientLow->Stop(true);
     return 0;
 }
 
@@ -192,9 +190,7 @@ NMvp::TTokensConfig TMVP::TokensConfig;
 TOpenIdConnectSettings TMVP::OpenIdConnectSettings;
 
 TMVP::TMVP(int argc, char** argv)
-    : ActorSystemStoppingLock()
-    , ActorSystemStopping(false)
-    , LoggerSettings(BuildLoggerSettings())
+    : LoggerSettings(BuildLoggerSettings())
     , ActorSystemSetup(BuildActorSystemSetup(argc, argv))
     , ActorSystem(ActorSystemSetup, &AppData, LoggerSettings)
 {}

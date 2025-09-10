@@ -1,6 +1,4 @@
 #pragma once
-#include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/actor.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 
 namespace NMVP {
@@ -18,9 +16,8 @@ struct TMVPAppData {
     std::shared_ptr<NMonitoring::TMetricRegistry> MetricRegistry;
     NMVP::TMvpTokenator* Tokenator = nullptr;
     std::shared_ptr<NYdbGrpc::TGRpcClientLow> GRpcClientLow;
-    ~TMVPAppData();
+
+    TMVPAppData();
 };
 
-inline TMVPAppData* MVPAppData() {
-    return NActors::TActivationContext::ActorSystem()->template AppData<TMVPAppData>();
-}
+TMVPAppData* MVPAppData();

@@ -13,7 +13,7 @@ void TExtensionContext::Reply() {
         static constexpr size_t MAX_LOGGED_SIZE = 1024;
         BLOG_D("Can not process request to protected resource:\n" << Params.Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
         return Reply(CreateResponseForNotExistingResponseFromProtectedResource(Params.Request, Params.ResponseError));
-}
+    }
 }
 
 void TExtensionContext::Continue() {

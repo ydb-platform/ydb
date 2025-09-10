@@ -7,7 +7,7 @@ namespace NMVP::NOIDC {
 
 void TExtensionWhoamiWorker::Bootstrap() {
     auto connection = CreateGRpcServiceConnection<TProfileService>(Settings.WhoamiExtendedInfoEndpoint);
-    RequestContext = CreateContext();
+    RequestContext = MVPAppData()->GRpcClientLow->CreateContext();
 
     nebius::iam::v1::GetProfileRequest request;
     NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
@@ -169,6 +169,7 @@ void TExtensionWhoamiWorker::ContinueAndPassAway() {
 void TExtensionWhoamiWorker::PassAway() {
     if (RequestContext) {
         RequestContext->Cancel();
+        RequestContext.reset();
     }
     NActors::TActorBootstrapped<TExtensionWhoamiWorker>::PassAway();
 }

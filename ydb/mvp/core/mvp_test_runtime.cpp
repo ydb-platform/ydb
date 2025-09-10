@@ -45,9 +45,7 @@ void TMvpTestRuntime::InitNodeImpl(TNodeDataBase* node, size_t nodeIndex) {
     node->LogSettings->SetLevel(NActors::NLog::PRI_DEBUG, NMVP::EService::GRPC, explanation);
     node->LogSettings->SetLevel(NActors::NLog::PRI_INFO, NMVP::EService::QUERY, explanation);
 
-    auto mvpAppData = new TMVPAppData();
-    mvpAppData->GRpcClientLow = std::make_shared<NYdbGrpc::TGRpcClientLow>();
-    node->AppData0.reset(mvpAppData);
+    node->AppData0.reset(new TMVPAppData());
 
     if (!UseRealThreads) {
         node->SchedulerPool.Reset(CreateExecutorPoolStub(this, nodeIndex, node, 0));

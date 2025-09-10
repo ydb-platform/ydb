@@ -98,7 +98,7 @@ struct TSchemeBoardMonEvents {
         }
     };
 
-    struct TEvRestoreProgress : public TEventLocal<TEvRestoreProgress, EvRestoreProgress>, TEvCommonProgress {
+    struct TEvRestoreProgress: public TEventLocal<TEvRestoreProgress, EvRestoreProgress>, TEvCommonProgress {
         using TEvCommonProgress::TEvCommonProgress;
 
         TString ToString() const override {
@@ -106,7 +106,7 @@ struct TSchemeBoardMonEvents {
         }
     };
 
-    struct TEvRestoreResult : public TEventLocal<TEvRestoreResult, EvRestoreResult>, TEvCommonResult {
+    struct TEvRestoreResult: public TEventLocal<TEvRestoreResult, EvRestoreResult>, TEvCommonResult {
         using TEvCommonResult::TEvCommonResult;
 
         TString ToString() const override {

@@ -1498,19 +1498,19 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
     void Handle(TSchemeBoardMonEvents::TEvBackupProgress::TPtr& ev) {
-        Handle<TBackupProgress, TSchemeBoardMonEvents::TEvBackupProgress::TPtr>(BackupProgress, ev);
+        Handle(BackupProgress, ev);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvBackupResult::TPtr& ev) {
-        Handle<TBackupProgress, TSchemeBoardMonEvents::TEvBackupResult::TPtr>(BackupProgress, ev);
+        Handle(BackupProgress, ev);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvRestoreProgress::TPtr& ev) {
-        Handle<TRestoreProgress, TSchemeBoardMonEvents::TEvRestoreProgress::TPtr>(RestoreProgress, ev);
+        Handle(RestoreProgress, ev);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvRestoreResult::TPtr& ev) {
-        Handle<TRestoreProgress, TSchemeBoardMonEvents::TEvRestoreResult::TPtr>(RestoreProgress, ev);
+        Handle(RestoreProgress, ev);
     }
 
 public:

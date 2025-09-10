@@ -25,6 +25,11 @@ class TPartitionPruner;
 struct TPartitionPrunerConfig;
 struct TQueryExecutionStats;
 
+struct TStageScheduleInfo {
+    double StageCost = 0.0;
+    ui32 TaskCount = 0;
+};
+
 struct TTransaction : private TMoveOnly {
     NYql::NNodes::TKqpPhysicalTx Node;
     TQueryData::TPtr Params;
@@ -243,8 +248,12 @@ struct TGraphMeta {
     bool CheckDuplicateRows = false;
     bool EnableParallelPointReadConsolidation = false;
     bool ShardsResolved = false;
+    TMap<ui64, ui64> ShardIdToNodeId;
     THashMap<NYql::NDq::TStageId, THashMap<ui64, TShardInfo>> SourceScanStageIdToParititions;
     TMaybe<ui64> MaxBatchSize;
+    std::map<TString, TString> SecureParams;
+    bool AllowOlapDataQuery = true; // used by Data Executer - always true for Scan executer
+    bool StreamResult = false;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;
@@ -270,6 +279,10 @@ struct TGraphMeta {
     void SetLockMode(NKikimrDataEvents::ELockMode lockMode) {
         LockMode = lockMode;
     }
+
+    // Output properties - after BuildAllTasks()
+    bool UnknownAffectedShardCount = false; // used by Data Executer only
+    THashSet<ui64> ShardsWithEffects; // tracks which shards are expected to have effects - used by Data Executer only
 };
 
 struct TTaskInputMeta {
@@ -386,13 +399,20 @@ public:
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
         const TKqpRequestCounters::TPtr& counters);
 
+    size_t BuildAllTasks(bool isScan, bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings,
+        const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
+        const TVector<IKqpGateway::TPhysicalTxData>& transactions,
+        TQueryExecutionStats* stats,
+        size_t nodesCount,
+        const IKqpTransactionManagerPtr& txManager
+    );
+
     void BuildSysViewScanTasks(TStageInfo& stageInfo);
-    bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
-    THashSet<ui64> BuildDatashardTasks(TStageInfo& stageInfo, const IKqpTransactionManagerPtr& txManager); // returns shards with effects
-    void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, const TMap<ui64, ui64>& shardIdToNodeId, TQueryExecutionStats* stats);
-    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot,
-        ui32 scheduledTaskCount, const std::map<TString, TString>& secureParams);
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, const TMap<ui64, ui64>& shardIdToNodeId, TQueryExecutionStats* stats);
+    void BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
+    void BuildDatashardTasks(TStageInfo& stageInfo, const IKqpTransactionManagerPtr& txManager);
+    void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats);
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, TQueryExecutionStats* stats);
+    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount);
 
     void FillKqpTasksGraphStages(const TVector<IKqpGateway::TPhysicalTxData>& txs);
     void BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);

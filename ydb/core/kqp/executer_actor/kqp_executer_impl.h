@@ -79,11 +79,6 @@ inline bool IsDebugLogEnabled() {
            TlsActivationContext->LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::KQP_EXECUTER);
 }
 
-struct TStageScheduleInfo {
-    double StageCost = 0.0;
-    ui32 TaskCount = 0;
-};
-
 TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
     const NKikimrKqp::TRlPath& path);
 
@@ -154,7 +149,6 @@ public:
         , ExecuterRetriesConfig(executerConfig.TableServiceConfig.GetExecuterRetriesConfig())
         , AggregationSettings(executerConfig.TableServiceConfig.GetAggregationConfig())
         , HasOlapTable(false)
-        , StreamResult(streamResult)
         , StatementResultIndex(statementResultIndex)
         , BlockTrackingMode(executerConfig.TableServiceConfig.GetBlockTrackingMode())
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
@@ -182,6 +176,7 @@ public:
         if (BatchOperationSettings) {
             TasksGraph.GetMeta().MaxBatchSize = BatchOperationSettings->MaxBatchSize;
         }
+        TasksGraph.GetMeta().StreamResult = streamResult;
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
@@ -272,8 +267,8 @@ protected:
 
         LOG_D("Shards nodes resolved, success: " << reply.ShardNodes.size() << ", failed: " << reply.Unresolved);
 
-        ShardIdToNodeId = std::move(reply.ShardNodes);
-        for (const auto& [shardId, nodeId] : ShardIdToNodeId) {
+        GetMeta().ShardIdToNodeId = std::move(reply.ShardNodes);
+        for (const auto& [shardId, nodeId] : GetMeta().ShardIdToNodeId) {
             ShardsOnNode[nodeId].push_back(shardId);
             ParticipantNodes.emplace(nodeId);
             if (TxManager) {
@@ -318,7 +313,7 @@ protected:
         auto [it, _] = ResultChannelToComputeActor.emplace(channel.Id, ev->Sender);
         YQL_ENSURE(it->second == channelComputeActorId);
 
-        if (StreamResult && txResult.IsStream && txResult.QueryResultIndex.Defined()) {
+        if (GetMeta().StreamResult && txResult.IsStream && txResult.QueryResultIndex.Defined()) {
 
             TEvComputeChannelDataOOB computeData;
             computeData.Proto = std::move(ev->Get()->Record);
@@ -900,169 +895,11 @@ protected:
 
 
 protected:
-    void FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) {
-        for (const auto& [secretName, authInfo] : stage.GetSecureParams()) {
-            const auto& structuredToken = NYql::CreateStructuredTokenParser(authInfo).ToBuilder().ReplaceReferences(SecureParams).ToJson();
-            const auto& structuredTokenParser = NYql::CreateStructuredTokenParser(structuredToken);
-            YQL_ENSURE(structuredTokenParser.HasIAMToken(), "only token authentication supported for compute tasks");
-            secureParams.emplace(secretName, structuredTokenParser.GetIAMToken());
-        }
-    }
-
-    std::map<ui32, TStageScheduleInfo> ScheduleByCost(const IKqpGateway::TPhysicalTxData& tx, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
-        std::map<ui32, TStageScheduleInfo> result;
-        if (!resourceSnapshot.empty()) // can't schedule w/o node count
-        {
-            // collect costs and schedule stages with external sources only
-            double totalCost = 0.0;
-            for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
-                auto& stage = tx.Body->GetStages(stageIdx);
-                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
-                    if (stage.GetStageCost() > 0.0 && stage.GetTaskCount() == 0) {
-                        totalCost += stage.GetStageCost();
-                        result.emplace(stageIdx, TStageScheduleInfo{.StageCost = stage.GetStageCost()});
-                    }
-                }
-            }
-            // assign task counts
-            if (!result.empty()) {
-                // allow use 2/3 of threads in single stage
-                ui32 maxStageTaskCount = (TStagePredictor::GetUsableThreads() * 2 + 2) / 3;
-                // total limit per mode is x2
-                ui32 maxTotalTaskCount = maxStageTaskCount * 2;
-                for (auto& [_, stageInfo] : result) {
-                    // schedule tasks evenly between nodes
-                    stageInfo.TaskCount =
-                        std::max<ui32>(
-                            std::min(static_cast<ui32>(maxTotalTaskCount * stageInfo.StageCost / totalCost), maxStageTaskCount)
-                            , 1
-                        ) * resourceSnapshot.size();
-                }
-            }
-        }
-        return result;
-    }
-
-    template <bool isScan>
-    auto BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings) {
-        size_t sourceScanPartitionsCount = 0;
-
-        for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
-            const auto& tx = Request.Transactions[txIdx];
-            auto scheduledTaskCount = ScheduleByCost(tx, ResourcesSnapshot);
-            for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
-                const auto& stage = tx.Body->GetStages(stageIdx);
-                auto& stageInfo = TasksGraph.GetStageInfo(NYql::NDq::TStageId(txIdx, stageIdx));
-
-                // build task conditions
-                const bool buildFromSourceTasks = stage.SourcesSize() > 0;
-                const bool buildSysViewTasks = stageInfo.Meta.IsSysView();
-                const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!isScan && stage.SinksSize() > 0);
-                const bool buildScanTasks = isScan
-                    ? stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()
-                    : (AllowOlapDataQuery || StreamResult) && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0
-                    ;
-
-                // TODO: doesn't work right now - multiple conditions are possible in tests
-                // YQL_ENSURE(buildFromSourceTasks + buildSysViewTasks + buildComputeTasks + buildScanTasks <= 1,
-                //     "Multiple task conditions: " <<
-                //     "isScan = " << (isScan) << ", "
-                //     "stage.SourcesSize() > 0 = " << (stage.SourcesSize() > 0) << ", "
-                //     "stageInfo.Meta.IsSysView() = " << (stageInfo.Meta.IsSysView()) << ", "
-                //     "stageInfo.Meta.ShardOperations.empty() = " << (stageInfo.Meta.ShardOperations.empty()) << ", "
-                //     "stage.SinksSize() = " << (stage.SinksSize()) << ", "
-                //     "stageInfo.Meta.IsOlap() = " << (stageInfo.Meta.IsOlap()) << ", "
-                //     "stageInfo.Meta.IsDatashard() = " << (stageInfo.Meta.IsDatashard()) << ", "
-                //     "AllowOlapDataQuery = " << (AllowOlapDataQuery) << ", "
-                //     "StreamResult = " << (StreamResult)
-                // );
-
-                LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
-
-                if (buildFromSourceTasks) {
-                    switch (stage.GetSources(0).GetTypeCase()) {
-                        case NKqpProto::TKqpSource::kReadRangesSource: {
-                            if (EnableReadsMerge) {
-                                limitTasksPerNode = true;
-                                stageInfo.Introspections.push_back("Using tasks count limit because of enabled reads merge");
-                            }
-                            if (auto partitionsCount = TasksGraph.BuildScanTasksFromSource(stageInfo, limitTasksPerNode, ShardIdToNodeId, Stats.get())) {
-                                sourceScanPartitionsCount += *partitionsCount;
-                            } else {
-                                UnknownAffectedShardCount = true;
-                            }
-                        } break;
-                        case NKqpProto::TKqpSource::kExternalSource: {
-                            YQL_ENSURE(!isScan);
-                            auto it = scheduledTaskCount.find(stageIdx);
-                            TasksGraph.BuildReadTasksFromSource(stageInfo, ResourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0, SecureParams);
-                        } break;
-                        default:
-                            YQL_ENSURE(false, "unknown source type");
-                    }
-                } else if (buildSysViewTasks) {
-                    TasksGraph.BuildSysViewScanTasks(stageInfo);
-                } else if (buildComputeTasks) {
-                    auto nodesCount = ShardsOnNode.size();
-                    if constexpr (!isScan) {
-                        nodesCount = std::max<ui32>(nodesCount, ResourcesSnapshot.size());
-                    }
-                    UnknownAffectedShardCount |= TasksGraph.BuildComputeTasks(stageInfo, nodesCount);
-                } else if (buildScanTasks) {
-                    HasOlapTable = true;
-                    TasksGraph.BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination(), ShardIdToNodeId,
-                        CollectProfileStats(Request.StatsMode) ? Stats.get() : nullptr);
-                } else {
-                    if constexpr (!isScan) {
-                        auto shardsWithEffects = TasksGraph.BuildDatashardTasks(stageInfo, TxManager);
-                        ShardsWithEffects.insert(shardsWithEffects.begin(), shardsWithEffects.end());
-                    } else {
-                        YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);
-                    }
-                }
-
-                if (llvmSettings) {
-                    const bool useLlvm = llvmSettings->GetUseLlvm(stage.GetProgram().GetSettings());
-                    for (auto& taskId : stageInfo.Tasks) {
-                        TasksGraph.GetTask(taskId).SetUseLlvm(useLlvm);
-                    }
-                    if (Stats && CollectProfileStats(Request.StatsMode)) {
-                        Stats->SetUseLlvm(stageInfo.Id.StageId, useLlvm);
-                    }
-                }
-
-                if (stage.GetIsSinglePartition()) {
-                    YQL_ENSURE(stageInfo.Tasks.size() <= 1, "Unexpected multiple tasks in single-partition stage");
-                }
-
-                for (const auto& taskId : stageInfo.Tasks) {
-                    auto& task = TasksGraph.GetTask(taskId);
-
-                    task.Meta.ExecuterId = this->SelfId();
-                    FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-                    BuildSinks(stage, stageInfo, task);
-                }
-
-                // Not task-related
-                TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
-                if (!TasksGraph.GetMeta().IsRestored) {
-                    TasksGraph.BuildKqpStageChannels(stageInfo, TxId, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
-                }
-            }
-
-            // Not task-related
-            ResponseEv->InitTxResult(tx.Body);
-            TasksGraph.BuildKqpTaskGraphResultChannels(tx.Body, txIdx);
-        }
-
-        return sourceScanPartitionsCount;
-    }
-
     void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) {
         const auto& extSink = sink.GetExternalSink();
         auto sinkName = extSink.GetSinkName();
         if (sinkName) {
-            auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
+            auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson();
             task.Meta.SecureParams.emplace(sinkName, structuredToken);
             if (GetUserRequestContext()->TraceId) {
                 task.Meta.TaskParams.emplace("fq.job_id", GetUserRequestContext()->CustomerSuppliedId);
@@ -1706,6 +1543,16 @@ protected:
         return TasksGraph.GetTask(taskId);
     }
 
+    size_t BuildAllTasks(bool isScan, bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings) {
+        auto nodesCount = ShardsOnNode.size();
+        if (!isScan) {
+            nodesCount = std::max<ui32>(nodesCount, ResourcesSnapshot.size());
+        }
+
+        return TasksGraph.BuildAllTasks(isScan, limitTasksPerNode, llvmSettings,
+            ResourcesSnapshot, Request.Transactions, Stats.get(), nodesCount, TxManager);
+    }
+
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
@@ -1744,7 +1591,6 @@ protected:
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
 
-    TMap<ui64, ui64> ShardIdToNodeId;
     TMap<ui64, TVector<ui64>> ShardsOnNode;
 
     ui64 LastTaskId = 0;
@@ -1754,15 +1600,11 @@ protected:
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig ExecuterRetriesConfig;
 
     std::vector<TString> SecretNames;
-    std::map<TString, TString> SecureParams;
 
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
-    bool AllowOlapDataQuery = true; // used by Data executer - always true for Scan executer
     bool HasOlapTable = false;
-    bool StreamResult = false;
     bool HasDatashardSourceScan = false;
-    bool UnknownAffectedShardCount = false;
 
     THashMap<ui64, TActorId> ResultChannelToComputeActor;
 
@@ -1787,8 +1629,6 @@ protected:
     bool AccountDefaultPoolInScheduler = false;
 
     THashSet<ui32> SentResultIndexes;
-
-    THashSet<ui64> ShardsWithEffects; // tracks which shards are expected to have effects - only Data executer
 
     TActorId CheckpointCoordinatorId;
 

@@ -63,13 +63,13 @@ public:
         size_t resultsSize = Request.Transactions[0].Body->ResultsSize();
         YQL_ENSURE(resultsSize != 0);
 
-        StreamResult = Request.Transactions[0].Body->GetResults(0).GetIsStream();
+        GetMeta().StreamResult = Request.Transactions[0].Body->GetResults(0).GetIsStream();
 
-        if (StreamResult) {
+        if (GetMeta().StreamResult) {
             YQL_ENSURE(resultsSize == 1);
         } else {
             for (size_t i = 1; i < resultsSize; ++i) {
-                YQL_ENSURE(Request.Transactions[0].Body->GetResults(i).GetIsStream() == StreamResult);
+                YQL_ENSURE(Request.Transactions[0].Body->GetResults(i).GetIsStream() == GetMeta().StreamResult);
             }
         }
     }
@@ -177,7 +177,7 @@ private:
             }
         }
 
-        BuildAllTasks<true>(false, LlvmSettings);
+        BuildAllTasks(true, EnableReadsMerge, LlvmSettings);
 
         TIssue validateIssue;
         if (!ValidateTasks(GetTasksGraph(), EExecType::Scan, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, validateIssue)) {

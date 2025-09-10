@@ -121,7 +121,7 @@ public:
         , QueryServiceConfig(queryServiceConfig)
         , Generation(generation)
     {
-        AllowOlapDataQuery = executerConfig.TableServiceConfig.GetAllowOlapDataQuery();
+        GetMeta().AllowOlapDataQuery = executerConfig.TableServiceConfig.GetAllowOlapDataQuery();
         Target = creator;
 
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
@@ -1836,7 +1836,7 @@ private:
         YQL_ENSURE(ev->Get()->Description.Status == Ydb::StatusIds::SUCCESS, "failed to get secrets snapshot with issues: " << ev->Get()->Description.Issues.ToOneLineString());
 
         for (size_t i = 0; i < SecretNames.size(); ++i) {
-            SecureParams.emplace(SecretNames[i], ev->Get()->Description.SecretValues[i]);
+            GetMeta().SecureParams.emplace(SecretNames[i], ev->Get()->Description.SecretValues[i]);
         }
 
         SecretSnapshotRequired = false;
@@ -1908,7 +1908,7 @@ private:
     }
 
     bool HasDmlOperationOnOlap(NKqpProto::TKqpPhyTx_EType queryType, const NKqpProto::TKqpPhyStage& stage) {
-        if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA && !AllowOlapDataQuery) {
+        if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA && !GetMeta().AllowOlapDataQuery) {
             return true;
         }
 
@@ -1975,7 +1975,7 @@ private:
             }
         }
 
-        size_t sourceScanPartitionsCount = BuildAllTasks<false>(StreamResult || EnableReadsMerge, {});
+        size_t sourceScanPartitionsCount = BuildAllTasks(false, GetMeta().StreamResult || EnableReadsMerge, {});
 
         TIssue validateIssue;
         if (!ValidateTasks(GetTasksGraph(), EExecType::Data, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, validateIssue)) {
@@ -2056,7 +2056,7 @@ private:
         // Single-shard datashard transactions are always immediate
         auto topicSize = (BufferActorId) ? TxManager->GetTopicOperations().GetSize() : Request.TopicOperations.GetSize();
         ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + topicSize + sourceScanPartitionsCount) <= 1
-                    && !UnknownAffectedShardCount
+                    && !GetMeta().UnknownAffectedShardCount
                     && evWriteTxs.empty()
                     && !HasOlapTable;
 
@@ -2154,7 +2154,7 @@ private:
             }
         }
 
-        if (StreamResult || EnableReadsMerge || AllowOlapDataQuery) {
+        if (GetMeta().StreamResult || EnableReadsMerge || GetMeta().AllowOlapDataQuery) {
             TSet<ui64> shardIds;
             for (const auto& [stageId, stageInfo] : GetTasksGraph().GetStagesInfo()) {
                 if (stageInfo.Meta.IsOlap()) {
@@ -2377,7 +2377,7 @@ private:
 
             // When locks with writes are committed this commits accumulated effects
             if (Request.LocksOp == ELocksOp::Commit && hasWrites) {
-                ShardsWithEffects.insert(shardId);
+                GetMeta().ShardsWithEffects.insert(shardId);
                 YQL_ENSURE(!ReadOnlyTx);
             }
         }
@@ -2395,7 +2395,7 @@ private:
             // We don't want readonly volatile transactions
             !ReadOnlyTx &&
             // We only want to use volatile transactions with side-effects
-            !ShardsWithEffects.empty() &&
+            !GetMeta().ShardsWithEffects.empty() &&
             // We don't want to use volatile transactions when doing a rollback
             !needRollback &&
             // We cannot use volatile transactions with topics
@@ -2440,7 +2440,7 @@ private:
                         // Locks may be broken so shards with locks need to send readsets
                         sendingShardsSet.insert(shardId);
                     }
-                    if (ShardsWithEffects.contains(shardId)) {
+                    if (GetMeta().ShardsWithEffects.contains(shardId)) {
                         // Volatile transactions may abort effects, so they send readsets
                         if (VolatileTx) {
                             sendingShardsSet.insert(shardId);
@@ -2459,7 +2459,7 @@ private:
                             sendingColumnShardsSet.insert(shardId);
                         }
                     }
-                    if (ShardsWithEffects.contains(shardId)) {
+                    if (GetMeta().ShardsWithEffects.contains(shardId)) {
                         // Volatile transactions may abort effects, so they send readsets
                         if (VolatileTx) {
                             sendingShardsSet.insert(shardId);
@@ -2651,15 +2651,15 @@ private:
 
         // TODO: task-related stuff should be outside executer
         for (auto& [shardId, tasks] : RemoteComputeTasks) {
-            auto it = ShardIdToNodeId.find(shardId);
-            YQL_ENSURE(it != ShardIdToNodeId.end());
+            auto it = GetMeta().ShardIdToNodeId.find(shardId);
+            YQL_ENSURE(it != GetMeta().ShardIdToNodeId.end());
             for (ui64 taskId : tasks) {
                 auto& task = GetTask(taskId);
                 task.Meta.NodeId = it->second;
             }
         }
 
-        GetMeta().SinglePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty();
+        GetMeta().SinglePartitionOptAllowed = !HasOlapTable && !GetMeta().UnknownAffectedShardCount && !HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty();
         GetMeta().LocalComputeTasks = !DatashardTxs.empty();
         GetMeta().MayRunTasksLocally = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.empty());
 

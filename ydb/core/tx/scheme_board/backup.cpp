@@ -109,6 +109,7 @@ private:
             ++InProgressPaths;
 
             Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvResolveSchemeBoard(path), 0, cookie);
+            Schedule(DefaultTimeout, new TEvents::TEvWakeup(cookie));
 
             SBB_LOG_D("ProcessPaths"
                 << ", path: " << path
@@ -137,6 +138,7 @@ private:
         }
 
         Send(SelectReplica(replicas), new TSchemeBoardMonEvents::TEvDescribeRequest(path), 0, cookie);
+        Schedule(DefaultTimeout, new TEvents::TEvWakeup(cookie));
     }
 
     static TActorId SelectReplica(const TVector<TActorId>& replicas) {
@@ -195,14 +197,27 @@ private:
         --InProgressPaths;
     }
 
-    void HandleTimeout() {
-        SBB_LOG_D("Timeout");
-        --InProgressPaths;
+    void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
+        const ui64 cookie = ev->Get()->Tag;
+        auto it = PathByCookie.find(cookie);
+        if (it == PathByCookie.end()) {
+            // assume already processed
+            SBB_LOG_D("Timeout with inactive cookie: " << cookie);
+            return;
+        }
+        SBB_LOG_I("Timeout");
+        MarkPathCompleted(it);
     }
 
-    void HandleUndelivered() {
-        SBB_LOG_D("Undelivered");
-        --InProgressPaths;
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        SBB_LOG_I("Undelivered");
+        const ui64 cookie = ev->Cookie;
+        auto it = PathByCookie.find(cookie);
+        if (it == PathByCookie.end()) {
+            SBB_LOG_N("Unexpected cookie: " << cookie);
+            return;
+        }
+        MarkPathCompleted(it);
     }
 
     void SendProgressUpdate() {
@@ -230,8 +245,8 @@ private:
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeResponse, Handle);
 
-            cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
-            cFunc(TEvents::TEvUndelivered::EventType, HandleUndelivered);
+            hFunc(TEvents::TEvUndelivered, HandleUndelivered);
+            hFunc(TEvents::TEvWakeup, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         }
     }

@@ -9,14 +9,16 @@ TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& dis
     , Counters(counters)
     , MaxBatchSize(config.GetMaxBatchSize()) {
     Workers.reserve(WorkersCount);
+    bool isBatchPool = false;
     for (auto&& i : config.GetLinks()) {
         AFL_VERIFY((ui64)i.GetCategory() < categories.size());
         Processes.emplace_back(TWeightedCategory(i.GetWeight(), categories[(ui64)i.GetCategory()], Counters->GetCategorySignals(i.GetCategory())));
+        isBatchPool |= i.GetCategory() == ESpecialTaskCategory::Compaction;
     }
     AFL_VERIFY(Processes.size());
     for (ui32 i = 0; i < WorkersCount; ++i) {
         Workers.emplace_back(std::make_unique<TWorker>(
-            poolName, config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetUsableThreads()), distributorId, i, config.GetWorkersPoolId()));
+            poolName, config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetUsableThreads()), distributorId, i, config.GetWorkersPoolId()), isBatchPool);
         ActiveWorkersIdx.emplace_back(i);
     }
     AFL_VERIFY(WorkersCount)("name", poolName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)(

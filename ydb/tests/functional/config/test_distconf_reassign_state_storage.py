@@ -4,6 +4,7 @@ from hamcrest import assert_that, is_, has_length
 import time
 import requests
 from copy import deepcopy
+import re
 import yaml
 
 from ydb.tests.library.common.types import Erasure, TabletStates, TabletTypes
@@ -388,29 +389,64 @@ class KiKiMRChangeRingGroupWithConfigTest(KiKiMRDistConfReassignStateStorageBase
         raise TimeoutError(error_message)
 
 
-class TestKiKiMRChangeRingGroupWithConfig(KiKiMRChangeRingGroupWithConfigTest):
-    use_self_management = False
-
-    def do_test(self, storageName):
-        fetched_config = fetch_config_dynconfig(self.dynconfig_client)
-        parsed_fetched_config = yaml.safe_load(fetched_config)
-        logger.debug(f"parsed_fetched_config: {yaml.dump(parsed_fetched_config)}")
-
-        ssConfig = {"ring_group": {"nto_select": 1, "ring": [{"node": [1]}, {"node": [2]}, {"node": [3]}, {"node": [4]}, {"node": [5]}, {"node": [6]}, {"node": [7]}, {"node": [8]}]}}
+class TestKiKiMRChangeRingGroupWithConfigDistconfBadCases(KiKiMRDistConfReassignStateStorageTest):
+    def set_ss_config(self, parsed_fetched_config, ssConfig):
         parsed_fetched_config["metadata"]["version"] = 1
-        parsed_fetched_config["domains_config"] = {
-            "domain": [{"domain_id": 1}],
+        parsed_fetched_config["config"]["domains_config"] = {
             "explicit_state_storage_config": ssConfig,
             "explicit_state_storage_board_config": ssConfig,
             "explicit_scheme_board_config": ssConfig
         }
+
+    def do_bad_case_test(self, ssConfig, message):
+        fetched_config = fetch_config(self.config_client)
+        parsed_fetched_config = yaml.safe_load(fetched_config)
+        logger.debug(f"parsed_fetched_config: {yaml.dump(parsed_fetched_config)}")
+
+        self.set_ss_config(parsed_fetched_config, ssConfig)
         time.sleep(1)
         replace_config_response = self.config_client.replace_config(yaml.dump(parsed_fetched_config))
-        self.cluster.restart_nodes()
-        self.wait_for_all_nodes_start(len(self.cluster.nodes))
         logger.debug(f"replace_config: {replace_config_response}")
 
-        assert_that(replace_config_response.operation.status != StatusIds.SUCCESS)
+        assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
+        assert_that(replace_config_response.operation.issues[0].message.startswith(message))
+
+    def test(self):
+        self.do_bad_case_test({"ring_groups": [{"nto_select": 10, "ring": [{"node": [1]}]}]},
+                              "Error while deriving StorageConfig: StateStorage NToSelect/rings differs")
+        self.do_bad_case_test({"ring_groups": [
+                              {"nto_select": 5, "ring": [{"node": [1]}, {"node": [2]}, {"node": [3]}, {"node": [4]}, {"node": [5]}, {"node": [6]}, {"node": [7]}, {"node": [8]}]},
+                              {"nto_select": 10, "ring": [{"node": [1]}]}]},
+                              "Error while deriving StorageConfig: StateStorage invalid ring group selection")
+
+
+class TestKiKiMRChangeRingGroupWithConfigDistconf(KiKiMRChangeRingGroupWithConfigTest):
+    def set_ss_config(self, parsed_fetched_config, ssConfig):
+        parsed_fetched_config["metadata"]["version"] = 1
+        parsed_fetched_config["config"]["domains_config"] = {
+            "explicit_state_storage_config": ssConfig,
+            "explicit_state_storage_board_config": ssConfig,
+            "explicit_scheme_board_config": ssConfig
+        }
+
+    def do_test(self, storageName):
+        fetched_config = fetch_config(self.config_client)
+        parsed_fetched_config = yaml.safe_load(fetched_config)
+        logger.debug(f"parsed_fetched_config: {yaml.dump(parsed_fetched_config)}")
+        ssConfig = {"ring_groups": [
+            {"nto_select": 5, "ring": [{"node": [1]}, {"node": [2]}, {"node": [3]}, {"node": [4]}, {"node": [5]}, {"node": [6]}, {"node": [7]}, {"node": [8]}]},
+            {"nto_select": 1, "write_only": True, "ring": [{"node": [3]}]}
+        ]}
+        self.set_ss_config(parsed_fetched_config, ssConfig)
+        time.sleep(1)
+        replace_config_response = self.config_client.replace_config(yaml.dump(parsed_fetched_config))
+        logger.debug(f"replace_config: {replace_config_response}")
+
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+        assert_eq(self.do_request_config()[f"{storageName}Config"], {"RingGroups": [
+            {"NToSelect": 5, "Ring": [{"Node": [1]}, {"Node": [2]}, {"Node": [3]}, {"Node": [4]}, {"Node": [5]}, {"Node": [6]}, {"Node": [7]}, {"Node": [8]}]},
+            {"NToSelect": 1, "WriteOnly": True, "Ring": [{"Node": [3]}]}
+        ]})
 
 
 class TestKiKiMRInitialDistconfExplicitConfigDistconf(KiKiMRChangeRingGroupWithConfigTest):
@@ -434,7 +470,14 @@ class TestKiKiMRInitialDistconfExplicitConfig(KiKiMRChangeRingGroupWithConfigTes
         "explicit_scheme_board_config": {"ring": {"nto_select": 1, "ring": [{"node": [3]}]}},
     }
 
+    def do_request_nw(self):
+        url = f'http://localhost:{self.cluster.nodes[1].mon_port}/actors/nodewarden'
+        return requests.get(url).text
+
     def do_test(self, storageName):
-        fetched_config = fetch_config(self.config_client)
-        parsed_fetched_config = yaml.safe_load(fetched_config)
-        logger.debug(f"parsed_fetched_config: {yaml.dump(parsed_fetched_config)}")
+        resp = self.do_request_nw()
+        resp = re.sub(r'[\s]', '', resp)
+        logger.debug(resp)
+        assert_that("StateStorageConfig{Ring{NToSelect:1Ring{Node:3}}}" in resp)
+        assert_that("StateStorageBoardConfig{Ring{NToSelect:1Ring{Node:3}}}" in resp)
+        assert_that("SchemeBoardConfig{Ring{NToSelect:1Ring{Node:3}}}" in resp)

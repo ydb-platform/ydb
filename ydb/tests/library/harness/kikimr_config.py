@@ -533,7 +533,7 @@ class KikimrConfigGenerator(object):
             self.yaml_config["fail_domain_type"] = "rack"
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
 
-            for name in ['blob_storage_config', 'system_tablets', 'grpc_config',
+            for name in ['blob_storage_config', 'domains_config', 'system_tablets', 'grpc_config',
                          'channel_profile_config', 'interconnect_config']:
                 del self.yaml_config[name]
         if self.simple_config:
@@ -545,6 +545,15 @@ class KikimrConfigGenerator(object):
             self.yaml_config.pop("sqs_config")
             self.yaml_config.pop("table_service_config")
             self.yaml_config.pop("kqpconfig")
+
+        if self.explicit_statestorage_config:
+            if "domains_config" not in self.yaml_config:
+                self.yaml_config["domains_config"] = dict()
+            if "state_storage" in self.yaml_config["domains_config"]:
+                del self.yaml_config["domains_config"]["state_storage"]
+            self.yaml_config["domains_config"]["explicit_state_storage_config"] = self.explicit_statestorage_config["explicit_state_storage_config"]
+            self.yaml_config["domains_config"]["explicit_state_storage_board_config"] = self.explicit_statestorage_config["explicit_state_storage_board_config"]
+            self.yaml_config["domains_config"]["explicit_scheme_board_config"] = self.explicit_statestorage_config["explicit_scheme_board_config"]
 
         if metadata_section:
             self.full_config["metadata"] = metadata_section
@@ -724,13 +733,6 @@ class KikimrConfigGenerator(object):
         return self.__node_ids
 
     def _add_state_storage_config(self):
-        if "domain" not in self.yaml_config["domains_config"]:
-            self.yaml_config["domains_config"]["domain"] = [{"domain_id": 1}]
-        if self.explicit_statestorage_config:
-            self.yaml_config["domains_config"]["explicit_state_storage_config"] = self.explicit_statestorage_config["explicit_state_storage_config"]
-            self.yaml_config["domains_config"]["explicit_state_storage_board_config"] = self.explicit_statestorage_config["explicit_state_storage_board_config"]
-            self.yaml_config["domains_config"]["explicit_scheme_board_config"] = self.explicit_statestorage_config["explicit_scheme_board_config"]
-            return
         if self.use_self_management and self.n_to_select is None and self.state_storage_rings is None:
             return
         if self.n_to_select is None:

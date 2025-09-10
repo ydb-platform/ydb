@@ -317,7 +317,7 @@ public:
         return operation;
     }
 
-    void WaitScriptExecution(const TOperation::TOperationId& operationId, EExecStatus finalStatus = EExecStatus::Completed, bool waitRetry = false) {
+    TScriptExecutionOperation WaitScriptExecution(const TOperation::TOperationId& operationId, EExecStatus finalStatus = EExecStatus::Completed, bool waitRetry = false) {
         const bool waitForFinalStatus = !waitRetry && IsIn({EExecStatus::Completed, EExecStatus::Failed}, finalStatus);
 
         std::optional<TScriptExecutionOperation> operation;
@@ -346,10 +346,11 @@ public:
         }
 
         UNIT_ASSERT_VALUES_EQUAL(operation->Ready(), waitForFinalStatus);
+        return *operation;
     }
 
-    void ExecAndWaitScript(const TString& query, EExecStatus finalStatus = EExecStatus::Completed, std::optional<TExecuteScriptSettings> settings = std::nullopt) {
-        WaitScriptExecution(ExecScript(query, settings), finalStatus, false);
+    TScriptExecutionOperation ExecAndWaitScript(const TString& query, EExecStatus finalStatus = EExecStatus::Completed, std::optional<TExecuteScriptSettings> settings = std::nullopt) {
+        return WaitScriptExecution(ExecScript(query, settings), finalStatus, false);
     }
 
     TResultSet FetchScriptResult(const TOperation::TOperationId& operationId, ui64 resultSetId = 0) {
@@ -563,7 +564,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         TString topicName = "topicName";
         CreateTopic(topicName);
 
-        ExecAndWaitScript(fmt::format(R"(
+        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
             SELECT * FROM `{source}`.`{topic}`
                 WITH (
                     FORMAT="json_each_row",
@@ -576,6 +577,27 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "source"_a=sourceName,
             "topic"_a=topicName
         ), EExecStatus::Failed);
+
+        const auto& status = scriptExecutionOperation.Status();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::INTERNAL_ERROR, status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "External source with type YdbTopics is disabled. Please contact your system administrator to enable it");
+    }
+
+    Y_UNIT_TEST_F(ReadTopicEndpointValidation, TStreamingTestFixture) {
+        constexpr char sourceName[] = "sourceName";
+        CreatePqSource(sourceName);
+
+        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
+            SELECT * FROM `{source}`.`topicName`
+            )",
+            "source"_a=sourceName
+        ), EExecStatus::Failed);
+
+        const auto& status = scriptExecutionOperation.Status();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
+        const auto& issues = status.GetIssues().ToString();
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Couldn't determine external YDB entity type");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Describe path 'local/topicName' in external YDB database 'local'");
     }
 
     Y_UNIT_TEST_F(ReadTopic, TStreamingTestFixture) {

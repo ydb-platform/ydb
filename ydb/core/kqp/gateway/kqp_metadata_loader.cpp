@@ -1044,10 +1044,20 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     path)
                                     .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata, promise] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
                                         TGetSchemeEntryResult value = result.GetValue();
-                                        if (value.Issues) {
-                                            externalDataSourceMetadata.AddIssues(value.Issues);
+                                        if (!value.EntryType) {
+                                            NYql::TIssue rootIssue("Couldn't determine external YDB entity type");
+                                            for (const auto& issue : value.Issues) {
+                                                rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+                                            }
+
+                                            TTableMetadataResult result;
+                                            result.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
+                                            result.AddIssues({rootIssue});
+                                            promise.SetValue(result);
+                                            return;
                                         }
-                                        if (value.EntryType == NYdb::NScheme::ESchemeEntryType::Topic) {
+
+                                        if (*value.EntryType == NYdb::NScheme::ESchemeEntryType::Topic) {
                                             externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NYql::EDatabaseType::YdbTopics);
                                         }
                                         f(externalDataSourceMetadata);

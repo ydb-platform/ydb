@@ -43,6 +43,14 @@ namespace {
         return sinkSettings.GetAtomicUploadCommit();
     }
 
+    NYql::TIssue YdbIssueToYqlIssue(const NYdb::NIssue::TIssue& issue) {
+        NYql::TIssue yqlIssue(issue.GetMessage());
+        for (const auto& issue : issue.GetSubIssues()) {
+            yqlIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(YdbIssueToYqlIssue(*issue)));
+        }
+        return yqlIssue;
+    }
+
 }  // anonymous namespace
 
     bool CheckNestingDepth(const google::protobuf::Message& message, ui32 maxDepth) {
@@ -396,9 +404,12 @@ namespace {
                 if (!describePathResult.IsSuccess()) {
                     TString message = TStringBuilder() <<  "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
                     LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, message + describePathResult.GetIssues().ToString());
-                    auto issue = YqlIssue({}, NYql::TIssuesIds::INFO, message);
-                    issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(YqlIssue({}, NYql::TIssuesIds::INFO, describePathResult.GetIssues().ToString())));
-                    res.Issues.AddIssue(issue);  
+
+                    auto rootIssue = NYql::TIssue(message);
+                    for (const auto& issue : describePathResult.GetIssues()) {
+                        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(YdbIssueToYqlIssue(issue)));
+                    }
+                    res.Issues.AddIssue(rootIssue);
                 } else {
                     NYdb::NScheme::TSchemeEntry entry = describePathResult.GetEntry();
                     res.EntryType = entry.Type;

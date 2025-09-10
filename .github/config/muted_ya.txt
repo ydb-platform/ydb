@@ -67,7 +67,6 @@ ydb/core/sys_view/ut SystemView.AuthUsers_Access
 ydb/core/sys_view/ut SystemView.ShowCreateTableChangefeeds
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
-ydb/core/tx/datashard/ut_upload_rows TTxDataShardUploadRows.RetryUploadRowsToShard
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots TCdcStreamWithRebootsTests.CreateDropRecreate[TabletReboots]
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelShouldSucceedOnMultiShardTable

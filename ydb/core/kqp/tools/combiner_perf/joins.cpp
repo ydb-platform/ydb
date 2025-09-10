@@ -17,8 +17,8 @@ TVector<ui64> GenerateKeyColumn(i32 size, i32 seed){
 }
 
 
-NKikimr::NMiniKQL::InnerJoinDescription PrepareCommonDescription(NKikimr::NMiniKQL::TDqSetup<false>* setup){
-    NKikimr::NMiniKQL::InnerJoinDescription descr;
+NKikimr::NMiniKQL::TInnerJoinDescription PrepareCommonDescription(NKikimr::NMiniKQL::TDqSetup<false>* setup){
+    NKikimr::NMiniKQL::TInnerJoinDescription descr;
     descr.Setup = setup;
     const int size = 1<<14;
 
@@ -46,14 +46,10 @@ void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams &params, TTestResultColle
 
     const TVector<const ui32> keyColumns{0};
 
-    struct JoinTestResult{
-        i64 LineCount;
-        TDuration BenchDuration;
-    };
     TVector<std::pair<NYKQL::ETestedJoinAlgo, std::string_view>> cases = {{NYKQL::ETestedJoinAlgo::kScalarGrace, "ScalarGrace"}, {NYKQL::ETestedJoinAlgo::kBlockMap, "BlockMap"}};
 
     for(auto [algo, name]: cases){
-        NYKQL::InnerJoinDescription descr = PrepareCommonDescription(&setup);
+        NYKQL::TInnerJoinDescription descr = PrepareCommonDescription(&setup);
         TRunResult thisNodeResult;
         descr.LeftSource.KeyColumnIndexes = keyColumns;
         descr.RightSource.KeyColumnIndexes = keyColumns;

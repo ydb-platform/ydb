@@ -8,6 +8,9 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/defs.h>
@@ -994,13 +997,18 @@ private:
     TBaseAggregationState& UnboxedState;
 };
 
-class TDqHashCombine: public TMutableComputationNode<TDqHashCombine>
+class TDqHasCombineFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TDqHasCombineFlowWrapper>
+{
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TDqHasCombineFlowWrapper>;
+};
+
+class TDqHashCombineStreamWrapper: public TMutableComputationNode<TDqHashCombineStreamWrapper>
 {
 private:
-    using TBaseComputation = TMutableComputationNode<TDqHashCombine>;
+    using TBaseComputation = TMutableComputationNode<TDqHashCombineStreamWrapper>;
 
 public:
-    TDqHashCombine(
+    TDqHashCombineStreamWrapper(
         TComputationMutables& mutables, IComputationNode* streamSource,
         const bool blockMode,
         const std::vector<TType*>& inputTypes, const std::vector<TType*>& outputTypes,
@@ -1083,7 +1091,7 @@ IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeF
     const TTupleLiteral* operatorParams = AS_VALUE(TTupleLiteral, callable.GetInput(NDqHashOperatorParams::OperatorParams));
     const ui64 memLimit = AS_VALUE(TDataLiteral, operatorParams->GetValue(NDqHashOperatorParams::CombineParamMemLimit))->AsValue().Get<ui64>();
 
-    auto result = new TDqHashCombine(
+    auto result = new TDqHashCombineStreamWrapper(
         ctx.Mutables,
         input,
         inputIsBlocks,

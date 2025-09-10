@@ -75,25 +75,20 @@
                                                         "PlanNodeId": 8,
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "DqCnParallelUnionAll",
+                                                                "Node Type": "UnionAll",
+                                                                "Parallel": "True",
                                                                 "PlanNodeId": 7,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "ConstantExpr",
-                                                                        "Operators": [
-                                                                            {
-                                                                                "Inputs": [],
-                                                                                "Iterator": "[{column0: 2 + 2,column1: 57}]",
-                                                                                "Name": "Iterator"
-                                                                            }
-                                                                        ],
+                                                                        "Node Type": "Stage",
                                                                         "PlanNodeId": 6
                                                                     }
                                                                 ]
                                                             },
                                                             {
-                                                                "Node Type": "DqCnParallelUnionAll",
+                                                                "Node Type": "UnionAll",
+                                                                "Parallel": "True",
                                                                 "PlanNodeId": 5,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [

@@ -240,8 +240,8 @@ private:
                     // This is fine, we can drop last message;
                     break;
                 }
-                auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
-                if (rr->GetSeqNo() != currentReadResult.GetSeqNo() || rr->GetPartNo() + 1 != currentReadResult.GetPartNo()) {
+                const auto& lastReadResult = partResp->GetResult(partResp->ResultSize() - 1);
+                if (lastReadResult.GetSeqNo() != currentReadResult.GetSeqNo() || lastReadResult.GetPartNo() + 1 != currentReadResult.GetPartNo()) {
                     break;
                 }
             }
@@ -282,7 +282,7 @@ private:
                     break;
 
                 }
-                auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
+                auto* rr = partResp->MutableResult(partResp->ResultSize() - 1);
                 if (rr->GetSeqNo() != currentReadResult.GetSeqNo() || rr->GetPartNo() + 1 != currentReadResult.GetPartNo()) {
                     PQ_LOG_CRIT("Handle TEvRead last read pos (seqno/parno): " << rr->GetSeqNo() << "," << rr->GetPartNo() << " readed now "
                                     << currentReadResult.GetSeqNo() << ", " << currentReadResult.GetPartNo()

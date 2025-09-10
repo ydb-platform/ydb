@@ -2,6 +2,38 @@
 
 ## Версия 25.1 {#25-1}
 
+### Релиз кандидат 25.1.4.7 {#25-1-4-7}
+
+Дата выхода: 
+
+#### Функциональность
+
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/21119) возможность использовать привычные инструменты потоковой обработки данных –  Kafka Connect, Confluent Schema Registry, Kafka Streams, Apache Flink, AKH через [Kafka API](../reference/kafka-api/) при работе с YDB Topics. Теперь YDB Topics Kafka API поддерживает:
+  *  клиентскую балансировку читателей – включается установкой флага `enable_kafka_native_balancing` в [конфигурации кластера](./reference/configuration/index.md),
+  *  компактифицированные топики и транзакции – включается установкой флага `enable_kafka_transactions`.
+* [Добавлен](https://github.com/ydb-platform/ydb/pull/20982) новый протокол в Node Broker, устраняющий всплески сетевого трафика на больших кластерах, связанного с рассылкой информации об узлах.
+
+#### YDB UI
+
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/17839) [ошибка](https://github.com/ydb-platform/ydb-embedded-ui/issues/18615), из-за которой не все таблетки отображались на вкладке Tablets в разделе диагностики.
+* Исправлена [ошибка](https://github.com/ydb-platform/ydb/issues/18735), из-за которой на вкладке Storage в разделе диагностики базы данных отображались не только узлы хранения.
+* Исправлена [ошибка сериализации](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164), которая могла приводить к падению при открытии статистики выполнения запроса.  
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19676) make nodes less critical (to make cluster less critical). 
+
+#### Производительность
+
+* Внедрён новый способ работы [системы акторов](../concepts/glossary#actor-system), который позволяет более эффективно использовать вычислительные ресурсы. Включается установкой флага `use_shared_threads` в [конфигурации актор-системы](../devops/configuration-management/configuration-v1/change_actorsystem_configs).
+* [Оптимизирована](https://github.com/ydb-platform/ydb/pull/20197) обработка пустых входов при выполнении JOIN-операций.
+
+#### Исправления ошибок
+
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/21918) поддержка в асинхронной репликации нового типа записи об изменениях — `reset`-записи (в дополнение к `update`- и `erase`-записям).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/21836) [ошибка](https://github.com/ydb-platform/ydb/issues/21814), из-за которой экземпляр репликации с неуказанным параметром `COMMIT_INTERVAL` приводил к сбою процесса.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/21652) редкие ошибки при чтении из топика во время балансировки партиций.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/22455) ошибка, из-за которой при удалении выделенной базы данных могли неправильно очищаться системные таблицы базы данных.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/22203) ошибка, из-за которой планшеты зависали при критической нехватке памяти на узлах. Теперь планшеты будут автоматически запускаться, как только на каком-либо из узлов освободится достаточно ресурсов.
+
+
 ### Релиз кандидат 25.1.2.7 {#25-1-2-7-rc}
 
 Дата выхода: 14 июля 2025.

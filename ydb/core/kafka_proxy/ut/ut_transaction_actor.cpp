@@ -55,10 +55,10 @@ namespace {
                     response = MakeResponseOnSelectFromKqp();
                 }
                 Send(new IEventHandle(
-                    ev->Sender, 
-                    ctx.SelfID, 
+                    ev->Sender,
+                    ctx.SelfID,
                     response.Release(),
-                    0, 
+                    0,
                     ev->Cookie
                 ));
             }
@@ -85,7 +85,7 @@ namespace {
                     auto* consumersState = record.MutableResponse()->AddYdbResults();
                     *consumersState = CreateConsumersStatesResultSet();
                 }
-                
+
                 response->Record = record;
                 return response;
             }
@@ -95,7 +95,7 @@ namespace {
                     "columns {\n"
                     "  name: \"transactional_id\"\n"
                     "  type {\n"
-                    "    type_id: UTF8\n" 
+                    "    type_id: UTF8\n"
                     "  }\n"
                     "}\n"
                     "columns {\n"
@@ -128,7 +128,7 @@ namespace {
 
             Ydb::ResultSet CreateConsumersStatesResultSet() {
                 TStringBuilder builder;
-                builder << 
+                builder <<
                     "columns {\n"
                     "  name: \"consumer_group\"\n"
                     "  type {\n"
@@ -176,7 +176,7 @@ namespace {
             struct TConsumerCommitMatcher {
                 TString ConsumerName;
                 i32 GenerationId;
-                // map, where key - topicName, value - vector with pairs, 
+                // map, where key - topicName, value - vector with pairs,
                 // where left - partition index, right - consumer offset for this partition
                 std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> PartitionOffsetsByTopic;
             };
@@ -189,7 +189,7 @@ namespace {
             struct TCommitRequest {
                 TString ConsumerName;
                 i32 GenerationId;
-                // map, where key - topicName, value - vector with pairs, 
+                // map, where key - topicName, value - vector with pairs,
                 // where left - partition index, right - consumer offset for this partition
                 std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> PartitionOffsetsToCommitByTopic;
             };
@@ -205,10 +205,10 @@ namespace {
             const i64 ProducerId = 1;
             const i32 ProducerEpoch = 1;
             ui32 QueryRequestsCounter = 0;
-            
+
             void SetUp(NUnitTest::TTestContext&) override {
                 Ctx.ConstructInPlace();
-                
+
                 Ctx->Prepare();
                 Ctx->Runtime->SetScheduledLimit(5'000);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_DEBUG);
@@ -220,7 +220,8 @@ namespace {
                     TransactionalId,
                     {ProducerId, ProducerEpoch},
                     Database,
-                    5000            
+                    5000,
+                    Database
                 ));
                 DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch);
             }
@@ -243,7 +244,7 @@ namespace {
                     }
                     message->Topics.push_back(topic);
                 }
-                auto event = MakeHolder<NKafka::TEvKafka::TEvAddPartitionsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddPartitionsToTxnRequestData>({}, message), Ctx->Edge, Database);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvAddPartitionsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddPartitionsToTxnRequestData>({}, message), Ctx->Edge, Database, Database);
 
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 
@@ -268,7 +269,7 @@ namespace {
                     }
                     message->Topics.push_back(topic);
                 }
-                auto event = MakeHolder<NKafka::TEvKafka::TEvTxnOffsetCommitRequest>(correlationId, NKafka::TMessagePtr<NKafka::TTxnOffsetCommitRequestData>({}, message), Ctx->Edge, Database);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvTxnOffsetCommitRequest>(correlationId, NKafka::TMessagePtr<NKafka::TTxnOffsetCommitRequestData>({}, message), Ctx->Edge, Database, Database);
 
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 
@@ -281,8 +282,8 @@ namespace {
                 message->ProducerId = ProducerId;
                 message->ProducerEpoch = ProducerEpoch;
                 message->Committed = commit;
-                auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, message), Ctx->Edge, Database);
-                
+                auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, message), Ctx->Edge, Database, Database);
+
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 
                 return Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
@@ -321,7 +322,7 @@ namespace {
                 UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetAction(), NKikimrKqp::QUERY_ACTION_TOPIC);
                 UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetKafkaApiOperations().GetProducerId(), ProducerId);
                 UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetKafkaApiOperations().GetProducerEpoch(), ProducerEpoch);
-                
+
                 MatchPartitionsInTxn(request, matcher);
                 MatchOffsetsInTxn(request, matcher);
             }
@@ -354,12 +355,12 @@ namespace {
                     for (auto& [topicName, partitionOffsets] : consumerCommitMatcher.PartitionOffsetsByTopic) {
                         for (auto& partitionOffset : partitionOffsets) {
                             auto it = std::find_if(offsetCommitsInRequest.begin(), offsetCommitsInRequest.end(), [&](const KafkaApiOffsetInTxn& offsetCommit) {
-                                return offsetCommit.GetTopicPath() == GetExpectedTopicPath(topicName) 
+                                return offsetCommit.GetTopicPath() == GetExpectedTopicPath(topicName)
                                     && offsetCommit.GetPartitionId() == partitionOffset.first
                                     && offsetCommit.GetConsumerName() == consumerCommitMatcher.ConsumerName;
                             });
-    
-                            UNIT_ASSERT_C(it != offsetCommitsInRequest.end(), TStringBuilder() << 
+
+                            UNIT_ASSERT_C(it != offsetCommitsInRequest.end(), TStringBuilder() <<
                                 "Consumer commit for consuemr group " << consumerCommitMatcher.ConsumerName <<
                                 " and topic partition " << topicName << "-" << partitionOffset.first <<
                                 " not found in txn");

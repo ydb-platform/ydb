@@ -59,9 +59,13 @@ namespace NKafka {
                 Die(ctx);
                 return;
             }
-            Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
+            Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
             KAFKA_LOG_D("Bootstrapping actor for transactional producer. Sending init table request to KQP.");
-            Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
+            if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
+                Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
+            } else {
+                Kqp->SendCreateSessionRequest(ctx);
+            }
             Become(&TKafkaInitProducerIdActor::StateWork);
         } else {
             TInitProducerIdResponseData::TPtr response = CreateResponseWithRandomProducerId(ctx);
@@ -362,7 +366,7 @@ namespace NKafka {
         return std::regex_replace(
             templateStr.c_str(),
             std::regex("<table_name>"),
-            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->GetStorageTablePath().c_str()
+            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
         );
     }
 

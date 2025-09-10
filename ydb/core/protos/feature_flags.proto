@@ -34,7 +34,7 @@ message TFeatureFlags {
     optional bool AllowHugeKeyValueDeletes = 13 [default = true]; // delete when all clients limit deletes per request
     optional bool SendSchemaVersionToDatashard = 14 [default = true]; // deprecated: always true
     optional bool EnableSchemeBoardCache = 15 [default = true]; // deprecated: always true
-    optional bool EnableSystemViews = 16 [default = true, (RequireRestart) = true];
+    optional bool EnableSystemViews = 16 [default = true]; // deprecated: always true
     optional bool EnableExternalHive = 17 [default = true];
     optional bool UseSchemeBoardCacheForSchemeRequests = 18 [default = true]; // deprecated: always true
     optional bool CompileMinikqlWithVersion = 19 [default = true]; // deprecated: always true
@@ -229,4 +229,5 @@ message TFeatureFlags {
     optional bool EnableSchemaSecrets = 203 [default = false];
     optional bool EnableTableCacheModes = 204 [default = false];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = true];
+    optional bool EnableStreamingQueries = 206 [default = false];
 }

@@ -23,6 +23,9 @@ class TestExportImportS3(MixedClusterFixture):
         TABLE = 0
         TOPIC = 1
 
+    def _is_topic_export_avaliable(self):
+        return min(self.versions) >= (25, 3)
+
     @pytest.fixture(autouse=True)
     def setup(self):
         if min(self.versions) < (25, 1):
@@ -94,6 +97,8 @@ class TestExportImportS3(MixedClusterFixture):
                     self.settings = self.settings.with_source_and_destination(table_name, table_name)
 
     def _create_topics(self):
+        if not self._is_topic_export_avaliable():
+            return
         with ydb.SessionPool(self.driver, size=1) as pool:
             with pool.checkout() as session:
                 for num in range(1, 6):
@@ -133,7 +138,7 @@ class TestExportImportS3(MixedClusterFixture):
                 keys_expected.add(table_name + "/metadata.json")
                 keys_expected.add(table_name + "/scheme.pb")
 
-            if self._is_current_version():
+            if self._is_topic_export_avaliable():
                 if "TOPIC" in scheme_objects:
                     topic_name = f"Root/{self.prefix_topics}/sample_topic_{num}"
                     keys_expected.add(topic_name + "/create_topic.pb")
@@ -168,7 +173,7 @@ class TestExportImportS3(MixedClusterFixture):
                 imported_table_name = f"/Root/{imported_prefix}/sample_table_{num}"
                 import_settings = import_settings.with_source_and_destination(table_name, imported_table_name)
 
-            if self._is_current_version():
+            if self._is_topic_export_avaliable():
                 if "TOPIC" in scheme_objects:
                     topic_name = f"Root/{self.prefix_topics}/sample_topic_{num}"
                     imported_topic_name = f"/Root/{imported_prefix}/sample_topic_{num}"
@@ -191,7 +196,7 @@ class TestExportImportS3(MixedClusterFixture):
                         desc = session.describe_table(imported_table_name)
                         assert desc is not None, f"Table {imported_table_name} not found after import"
 
-                    if self._is_current_version():
+                    if self._is_topic_export_avaliable():
                         if "TOPIC" in scheme_objects:
                             imported_topic_name = f"/Root/{imported_prefix}/sample_topic_{num}"
                             desc = TopicClient(self.driver, None).describe_topic(imported_topic_name)
@@ -209,10 +214,12 @@ class TestExportImportS3(MixedClusterFixture):
         self._import_check_table()
 
     def test_topics(self):
-        if min(self.versions) >= (25, 3):
-            self._create_topics()
-            self._export_check_topic()
-            self._import_check_topic()
+        if not self._is_topic_export_avaliable():
+            pytest.skip("Topic export is available since 25-3")
+
+        self._create_topics()
+        self._export_check_topic()
+        self._import_check_topic()
 
     def test_all_scheme_objects(self):
         self._create_items()

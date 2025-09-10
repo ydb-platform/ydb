@@ -800,7 +800,15 @@ protected:
                          YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, "Not enough computation units to execute query"));
                     break;
                 }
-
+                case NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN: {
+                    for (auto& task : record.GetNotStartedTasks()) {
+                        if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN
+                              and ev->Sender.NodeId() != SelfId().NodeId()) {
+                            Planner->SendStartKqpTasksRequest(task.GetRequestId(), SelfId());
+                        }
+                    }
+                    break;
+                }
                 case NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR: {
                     InternalError("KqpNode internal error");
                     break;
@@ -1627,7 +1635,6 @@ protected:
         ui32 inputTasks = 0;
         bool isShuffle = false;
         bool forceMapTasks = false;
-        bool isParallelUnionAll = false;
         ui32 mapCnt = 0;
 
 
@@ -1676,8 +1683,7 @@ protected:
                     break;
                 }
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
-                    inputTasks += originStageInfo.Tasks.size();
-                    isParallelUnionAll = true;
+                    partitionsCount = std::max<ui64>(partitionsCount, originStageInfo.Tasks.size());
                     break;
                 }
                 case NKqpProto::TKqpPhyConnection::kVectorResolve: {
@@ -1694,7 +1700,7 @@ protected:
 
         Y_ENSURE(mapCnt < 2, "There can be only < 2 'Map' connections");
 
-        if ((isShuffle || isParallelUnionAll) && !forceMapTasks) {
+        if (isShuffle && !forceMapTasks) {
             if (stage.GetTaskCount()) {
                 partitionsCount = stage.GetTaskCount();
                 intros.push_back("Manually overridden - " + ToString(partitionsCount));

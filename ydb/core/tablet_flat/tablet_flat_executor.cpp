@@ -82,6 +82,27 @@ namespace NFlatExecutorSetup {
     void ITablet::OnFollowerDataUpdated() {
         // nothing by default
     }
+
+    bool ITablet::NeedBackup() const {
+        if (TabletInfo->TenantPathId != TPathId()) {
+            return false;
+        }
+
+        switch (TabletInfo->TabletType) {
+            case NKikimrTabletBase::TTabletTypes_EType_Mediator:
+            case NKikimrTabletBase::TTabletTypes_EType_Coordinator:
+            case NKikimrTabletBase::TTabletTypes_EType_Hive:
+            case NKikimrTabletBase::TTabletTypes_EType_BSController:
+            case NKikimrTabletBase::TTabletTypes_EType_SchemeShard:
+            case NKikimrTabletBase::TTabletTypes_EType_Cms:
+            case NKikimrTabletBase::TTabletTypes_EType_NodeBroker:
+            case NKikimrTabletBase::TTabletTypes_EType_TxAllocator:
+            case NKikimrTabletBase::TTabletTypes_EType_Console:
+                return true;
+            default:
+                return false;
+        }
+    }
 }
 
 }}

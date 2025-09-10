@@ -199,40 +199,27 @@ namespace NKikimr {
                 return CreateWithErrorReason(ev, ev->Status, ev->Id, StatusFlags, self.GroupId, ApproximateFreeSpaceShare);
             }
 
-            template<typename TEvent>
-            std::unique_ptr<IEventBase> ProcessFullQuorumResponse(TThis& self, std::unique_ptr<TEvent> ev) {
-                // combine responses
-                if (CombinedResponse) {
-                    Y_DEBUG_ABORT_UNLESS(dynamic_cast<TEvent*>(CombinedResponse.get()));
-                }
-                CombinedResponse = Combine(self, ev.get(), static_cast<TEvent*>(CombinedResponse.get()));
-                const bool readyToReply = !ResponsesPending ||
-                    (ev->Status != NKikimrProto::OK && ev->Status != NKikimrProto::NODATA);
-                return readyToReply
-                    ? std::exchange(CombinedResponse, nullptr)
-                    : nullptr;
+            std::unique_ptr<IEventBase> Combine(TThis& /*self*/, TEvBlobStorage::TEvGetBlockResult *ev, auto *current) {
+                Y_ABORT_UNLESS(!current || current->TabletId == ev->TabletId);
+                return CreateWithErrorReason(ev, ev->Status, ev->TabletId,
+                    Max(current ? current->BlockedGeneration : 0, ev->BlockedGeneration));
             }
 
             template<typename TEvent>
-            std::unique_ptr<IEventBase> ProcessPrimaryPileResponse(TThis& self, std::unique_ptr<TEvent> ev,
-                    const TBridgeInfo::TPile& pile) {
-                if (CombinedResponse) {
-                    Y_DEBUG_ABORT_UNLESS(dynamic_cast<TEvent*>(CombinedResponse.get()));
-                }
-                if (ev->Status != NKikimrProto::OK && ev->Status != NKikimrProto::NODATA) {
-                    // if any pile reports error, we finish with error
-                    return MakeErrorFrom(self, ev.get());
-                }
-                if (pile.IsPrimary) {
-                    return ev;
-                }
-                Y_ABORT_UNLESS(ResponsesPending);
-                return nullptr;
+            std::unique_ptr<IEventBase> ProcessFullQuorumResponse(TThis& self, std::unique_ptr<TEvent> ev) {
+                // combine responses
+                Y_DEBUG_ABORT_UNLESS(!CombinedResponse || dynamic_cast<TEvent*>(CombinedResponse.get()));
+                Y_DEBUG_ABORT_UNLESS(ev->Status != NKikimrProto::NODATA);
+                const bool readyToReply = !ResponsesPending || ev->Status != NKikimrProto::OK;
+                CombinedResponse = Combine(self, ev.get(), static_cast<TEvent*>(CombinedResponse.get()));
+                return readyToReply ? std::move(CombinedResponse) : nullptr;
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvPutResult> ev,
                     const TBridgeInfo::TPile& /*pile*/, TRequestPayload& payload) {
                 if (IsRestoring) {
+                    Y_ABORT_UNLESS(!std::holds_alternative<TPutState>(State));
+
                     if (ev->Status != NKikimrProto::OK) { // can't restore this blob
                         return std::visit(TOverloaded{
                             [&](TGetState& state) -> std::unique_ptr<IEventBase> {
@@ -463,8 +450,8 @@ namespace NKikimr {
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetBlockResult> ev,
-                    const TBridgeInfo::TPile& pile, TRequestPayload& /*payload*/) {
-                return ProcessPrimaryPileResponse(self, std::move(ev), pile);
+                    const TBridgeInfo::TPile& /*pile*/, TRequestPayload& /*payload*/) {
+                return ProcessFullQuorumResponse(self, std::move(ev));
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> ev,
@@ -876,6 +863,7 @@ namespace NKikimr {
 
                         STLOG(success ? PRI_INFO : PRI_NOTICE, BS_PROXY_BRIDGE, BPB01, "request finished",
                             (RequestId, request->RequestId),
+                            (Status, common->Status),
                             (Response, response->ToString()),
                             (Passed, TDuration::Seconds(request->Timer.Passed())),
                             (SubrequestTimings, makeSubrequestTimings()));

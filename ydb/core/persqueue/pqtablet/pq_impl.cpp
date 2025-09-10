@@ -309,7 +309,6 @@ private:
         ) {
             //Try another read. Set TMP_MARKER so that response is redirected to proxy, but here we will treat is as "initial" response still.
             Request.SetRequestId(TMP_REQUEST_MARKER);
-            Cerr << "==Read proxy: extra read\n!";
             Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
             Request.MutablePartitionRequest()->MutableCmdRead()->SetPartNo(0);
             THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);

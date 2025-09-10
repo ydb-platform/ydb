@@ -18,6 +18,7 @@
 #include "flat_boot_oven.h"
 #include "flat_executor_tx_env.h"
 #include "flat_executor_counters.h"
+#include "flat_executor_backup.h"
 #include "logic_snap_main.h"
 #include "logic_alter_main.h"
 #include "flat_abi_evol.h"
@@ -207,6 +208,8 @@ void TExecutor::PassAway() {
     Owner = nullptr;
 
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister());
+
+    Send(BackupWriter, new TEvents::TEvPoisonPill());
 
     return TActor::PassAway();
 }
@@ -528,6 +531,8 @@ void TExecutor::Active(const TActorContext &ctx) {
     }
 
     PlanTransactionActivation();
+
+    StartBackup();
 
     Owner->ActivateExecutor(OwnerCtx());
 
@@ -5026,6 +5031,20 @@ void TExecutor::ApplyCompactionChanges(
 
 void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
     PreloadTablesData = std::move(tables);
+}
+
+
+void TExecutor::StartBackup() {
+    if (!Owner->NeedBackup()) {
+        return;
+    }
+
+    const auto& backupConfig = AppData()->SystemTabletBackupConfig;
+    TTabletTypes::EType tabletType = Owner->TabletType();
+    ui64 tabletId = Owner->TabletID();
+    if (auto* writer = CreateBackupWriter(backupConfig, tabletType, tabletId, Generation0); writer != nullptr) {
+        BackupWriter = Register(writer, TMailboxType::HTSwap, AppData()->IOPoolId);
+    }
 }
 
 }

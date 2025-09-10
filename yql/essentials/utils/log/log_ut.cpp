@@ -24,6 +24,29 @@ using namespace NLog;
 
 Y_UNIT_TEST_SUITE(TLogTest)
 {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(WrittingWithoutMacro) {
+        TStringStream out;
+        YqlLoggerScope logger(&out, Format, /* isStrict */ false);
+
+        TString message = "some performance info";
+        YqlLogger().Write(ELogPriority::TLOG_INFO, message);
+
+        TString logRow = out.Str();
+        UNIT_ASSERT_STRING_CONTAINS(logRow, message);
+    }
+
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(WrittingUnknownMetaFlag) {
+        TStringStream out;
+        YqlLoggerScope logger(&out, Format, /* isStrict */ false);
+
+        TString message = "some performance info";
+        YqlLogger().Write(ELogPriority::TLOG_INFO, message, {{"unknown", "value"}});
+
+        TString logRow = out.Str();
+        UNIT_ASSERT_STRING_CONTAINS(logRow, message);
+        UNIT_ASSERT_STRING_CONTAINS(logRow, "unknown = value");
+    }
+
     Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Formatting) {
         TStringStream out;
         YqlLoggerScope logger(&out, Format);

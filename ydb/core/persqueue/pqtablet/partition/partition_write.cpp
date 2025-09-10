@@ -1136,14 +1136,14 @@ ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
 
 void TPartition::TryCorrectStartOffset(TMaybe<ui64> offset)
 {
-    auto tryCorrectStartOffset = [](TPartitionBlobEncoder& encoder, TMaybe<ui64> offset) {
-        if (!encoder.Head.GetCount() && !encoder.NewHead.GetCount() && encoder.IsEmpty() && offset) {
-            encoder.StartOffset = *offset;
-        }
+    auto isEncoderEmpty = [](TPartitionBlobEncoder& encoder) {
+        return (!encoder.Head.GetCount() && !encoder.NewHead.GetCount() && encoder.IsEmpty());
     };
 
-    tryCorrectStartOffset(CompactionBlobEncoder, offset);
-    tryCorrectStartOffset(BlobEncoder, offset);
+    if (isEncoderEmpty(CompactionBlobEncoder) && isEncoderEmpty(BlobEncoder) && offset) {
+        BlobEncoder.StartOffset = *offset;
+        CompactionBlobEncoder.StartOffset = *offset;
+    }
 }
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {

@@ -16,6 +16,11 @@ PY3_LIBRARY()
         workload_kv.py
         workload_log.py
         workload_mixed.py
+        workload_ctas.py
+        workload_transfer.py
+        workload_kafka.py
+        workload_topic_kafka.py
+        workload_show_create.py
         upload.py
 
     )

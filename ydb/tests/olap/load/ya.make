@@ -12,6 +12,11 @@ PY3TEST()
     ENV(LOG_WORKLOAD_BINARY="ydb/tests/stress/log/workload_log")
     ENV(MIXED_WORKLOAD_BINARY="ydb/tests/stress/mixedpy/workload_mixed")
     ENV(KV_WORKLOAD_BINARY="ydb/tests/stress/kv/workload_kv")
+    ENV(CTAS_WORKLOAD_BINARY="ydb/tests/stress/ctas/ctas")
+    ENV(KAFKA_WORKLOAD_BINARY="ydb/tests/stress/kafka/kafka_streams_test")
+    ENV(TOPIC_KAFKA_WORKLOAD_BINARY="ydb/tests/stress/topic_kafka/workload_topic_kafka")
+    ENV(TRANSFER_WORKLOAD_BINARY="ydb/tests/stress/transfer/transfer")
+    ENV(SHOW_CREATE_WORKLOAD_BINARY="ydb/tests/stress/show_create/view/show_create_view")
     ENV(NEMESIS_BINARY="ydb/tests/tools/nemesis/driver/nemesis")
 
     TEST_SRCS (
@@ -29,6 +34,11 @@ PY3TEST()
         test_workload_log.py
         test_workload_mixed.py
         test_workload_kv.py
+        test_workload_ctas.py
+        test_workload_kafka.py
+        test_workload_topic_kafka.py
+        test_workload_transfer.py
+        test_workload_show_create.py
     )
 
     PEERDIR (
@@ -45,6 +55,11 @@ PY3TEST()
             ydb/tests/stress/kv
             ydb/tests/stress/oltp_workload
             ydb/tests/stress/olap_workload
+            ydb/tests/stress/ctas
+            ydb/tests/stress/kafka
+            ydb/tests/stress/topic_kafka
+            ydb/tests/stress/transfer
+            ydb/tests/stress/show_create/view
             ydb/tests/tools/nemesis/driver
         )
     ENDIF()

@@ -396,4 +396,6 @@ message TTableServiceConfig {
     optional bool EnableTempTablesForUser = 95 [default = false];
 
     optional bool EnableOlapPushdownAggregate = 98  [ default = false ];
+
+    optional bool EnableDataShardCreateTableAs = 102 [default = false];
 };

@@ -631,7 +631,7 @@
         if (errorText && errorText.trim() !== "") {
             const errorPrefix = "**Error Summary:**%0A```%0A";
             const errorSuffix = "%0A```%0A%0A";
-            const truncationMsg = "... (see full error in test report)";
+            const truncationMsg = "%0A<TRUNCATED>";
             
             // Start with full error text and try to fit it
             const fullErrorText = errorText.trim();

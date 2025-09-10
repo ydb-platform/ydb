@@ -14,7 +14,7 @@ from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.utils import get_external_param
 from threading import Thread, Event
 from datetime import datetime
-from matplotlib import pyplot
+from matplotlib import pyplot, dates
 from os import getenv
 
 
@@ -179,7 +179,8 @@ class WorkloadMangerClickbenchBase:
 
     @classmethod
     def benchmark_setup(cls) -> None:
-        ClickbenchParallelBase.do_setup_class()
+        if not hasattr(cls, 'verify_data') or cls.verify_data:
+            ClickbenchParallelBase.do_setup_class()
 
 
 class WorkloadMangerTpchBase:
@@ -245,6 +246,11 @@ class WorkloadMangerComputeSheduler(WorkloadMangerBase):
         ]
 
     @classmethod
+    def before_workload(cls):
+        cls.metrics = []
+        cls.metrics_keys = set()
+
+    @classmethod
     def after_workload(cls):
         keys = sorted(cls.metrics_keys)
         report = ('<html><body><table border=1 valign="center" width="100%">'
@@ -273,19 +279,18 @@ class WorkloadMangerComputeSheduler(WorkloadMangerBase):
             report += '</tr>\n'
         report += '</table></body></html>'
         allure.attach(report, 'metrics', allure.attachment_type.HTML)
-        times = [t for t, _ in cls.metrics]
-        fig, axs = pyplot.subplots(4, 1, layout='constrained', figsize=(6.4, 25.6))
-        for pool in cls.get_resource_pools():
-            axs[0].plot(times, [m.get(f'{pool.name} satisfaction') for m in norm_metrics], label=pool.name)
-            axs[0].set_ylabel('satisfaction')
-            axs[1].plot(times, [m.get(f'{pool.name} usage d') for m in norm_metrics], label=pool.name)
-            axs[1].set_ylabel('usage')
-            axs[2].plot(times, [m.get(f'{pool.name} throttle d') for m in norm_metrics], label=pool.name)
-            axs[2].set_ylabel('throttle')
-            axs[3].plot(times, [m.get(f'{pool.name} fair share d') for m in norm_metrics], label=pool.name)
-            axs[3].set_ylabel('fair share')
-        for a in axs:
-            a.legend()
+        times = [datetime.fromtimestamp(t) for t, _ in cls.metrics]
+        pools = cls.get_resource_pools()
+        fig, axs = pyplot.subplots(len(pools), 1, layout='constrained', figsize=(6.4, 3.2 * len(pools)))
+        for p in range(len(pools)):
+            pool = pools[p]
+            axs[p].plot(times, [m.get(f'{pool.name} satisfaction') for m in norm_metrics], label=pool.name)
+            axs[p].set_ylabel('satisfaction')
+            axs[p].legend()
+            axs[p].grid()
+            axs[p].xaxis.set_major_formatter(
+                dates.ConciseDateFormatter(axs[p].xaxis.get_major_locator())
+            )
 
         pyplot.savefig('satisfaction.plot.svg', format='svg')
         with open('satisfaction.plot.svg') as s:
@@ -297,9 +302,6 @@ class WorkloadMangerComputeSheduler(WorkloadMangerBase):
         for pool in cls.get_resource_pools():
             metrics_request.update({
                 f'{pool.name} satisfaction': {'scheduler/pool': pool.name, 'sensor': 'Satisfaction'},
-                f'{pool.name} usage d': {'scheduler/pool': pool.name, 'sensor': 'Usage'},
-                f'{pool.name} throttle d': {'scheduler/pool': pool.name, 'sensor': 'Throttle'},
-                f'{pool.name} fair share d': {'scheduler/pool': pool.name, 'sensor': 'FairShare'},
             })
         metrics = YdbCluster.get_metrics(db_only=True, counters='kqp', metrics=metrics_request)
         sum = {}
@@ -308,6 +310,9 @@ class WorkloadMangerComputeSheduler(WorkloadMangerBase):
                 sum.setdefault(k, 0.)
                 sum[k] += v
                 cls.metrics_keys.add(k)
+        for k in sum.keys():
+            if not k.endswith(' d'):
+                sum[k] /= len(metrics)
         cls.metrics.append((time.time(), sum))
         return ''
 

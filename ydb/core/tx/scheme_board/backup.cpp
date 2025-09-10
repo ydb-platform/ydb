@@ -101,13 +101,12 @@ private:
     }
 
     void ProcessPaths() {
-        while (!PendingPaths.empty() && InProgressPaths < InFlightLimit) {
+        while (!PendingPaths.empty() && PathByCookie.size() < InFlightLimit) {
             const TString path = PendingPaths.front();
             PendingPaths.pop();
 
             const ui64 cookie = ++NextCookie;
             PathByCookie[cookie] = path;
-            ++InProgressPaths;
 
             Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvResolveSchemeBoard(path), 0, cookie);
             Schedule(DefaultTimeout, new TEvents::TEvWakeup(cookie));
@@ -115,7 +114,7 @@ private:
             SBB_LOG_D("ProcessPaths"
                 << ", path: " << path
                 << ", cookie: " << cookie
-                << ", paths in progress: " << InProgressPaths
+                << ", paths in progress: " << PathByCookie.size()
             );
         }
 
@@ -188,14 +187,13 @@ private:
 
         ProcessPaths();
 
-        if (InProgressPaths == 0 && PendingPaths.empty()) {
+        if (PathByCookie.empty() && PendingPaths.empty()) {
             ReplySuccess();
         }
     }
 
     void MarkPathCompleted(THashMap<ui64, TString>::iterator it) {
         PathByCookie.erase(it);
-        --InProgressPaths;
     }
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
@@ -223,7 +221,7 @@ private:
 
     void SendProgressUpdate() {
         SBB_LOG_D("SendProgressUpdate"
-            << ", paths in progress: " << InProgressPaths
+            << ", paths in progress: " << PathByCookie.size()
             << ", processed paths: " << ProcessedPaths
             << ", total paths: " << TotalPaths
             << ", pending paths: " << PendingPaths.size()
@@ -261,7 +259,6 @@ private:
     TQueue<TString> PendingPaths;
     THashMap<ui64, TString> PathByCookie;
     TMaybe<TFileOutput> OutputFile;
-    ui32 InProgressPaths = 0;
     ui32 ProcessedPaths = 0;
     ui32 TotalPaths = 0;
     ui64 NextCookie = 0;

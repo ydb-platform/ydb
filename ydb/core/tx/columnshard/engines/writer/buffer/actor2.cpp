@@ -47,6 +47,7 @@ void TActor::Handle(TEvFlushBuffer::TPtr& /*ev*/) {
 void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
     auto* evBase = ev->Get();
     AFL_VERIFY(evBase->GetWriteData()->GetBlobsAction()->GetStorageId() == NOlap::IStoragesManager::DefaultStorageId);
+    bool isBulkUpsert = evBase->GetIsBulk();
 
     SumSize += evBase->GetWriteData()->GetSize();
     const auto& pathId = evBase->GetWriteData()->GetWriteMeta().GetPathId().InternalPathId;
@@ -61,7 +62,7 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
         it->second.MergeContext(*evBase->GetContext());
     }
     it->second.AddUnit(TWriteUnit(evBase->GetWriteData(), evBase->GetRecordBatch()));
-    if (it->second.GetSumSize() > (ui64)AppDataVerified().ColumnShardConfig.GetWritingBufferVolumeBytes() || !FlushDuration) {
+    if (it->second.GetSumSize() > (ui64)AppDataVerified().ColumnShardConfig.GetWritingBufferVolumeBytes() || !FlushDuration || !isBulkUpsert || !AppDataVerified().ColumnShardConfig.GetBulkUpsertRequireAllColumns()) {
         SumSize -= it->second.GetSumSize();
         it->second.Flush(TabletId);
     }

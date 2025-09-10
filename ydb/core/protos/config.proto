@@ -2122,7 +2122,7 @@ message TColumnShardConfig {
     optional bool DeduplicationEnabled = 46 [default = true];
     optional bool BulkUpsertRequireAllColumns = 47 [default = true];
     optional uint64 ProxyMemoryInFlightLimit = 48;
-    optional uint64 WritingBufferVolumeBytes = 49 [default = 20480];
+    optional uint64 WritingBufferVolumeBytes = 49 [default = 524288];
 }
 
 message TSchemeShardConfig {

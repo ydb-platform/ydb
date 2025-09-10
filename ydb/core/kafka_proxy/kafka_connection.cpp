@@ -567,7 +567,7 @@ protected:
         Context->CloudId = event->CloudId;
         Context->FolderId = event->FolderId;
         Context->IsServerless = event->IsServerless;
-        Context->ResourceDatabasePath = event->ResourceDatabasePath ? event->ResourceDatabasePath : Context->DatabasePath ;
+        Context->ResourceDatabasePath = event->ResourceDatabasePath ? NKikimr::CanonizePath(event->ResourceDatabasePath) : Context->DatabasePath;
 
         KAFKA_LOG_D("Authentificated successful. SID=" << Context->UserToken->GetUserSID());
         Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);

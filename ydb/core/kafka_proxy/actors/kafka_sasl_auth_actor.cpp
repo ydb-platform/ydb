@@ -44,7 +44,7 @@ void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
 
     DatabasePath = CanonizePath(ClientAuthData.Database);
 
-    RequestState = ENavigateRequestState::RETRIEVING_DATABASE_PATH;
+    RequestState = ENavigateRequestState::DESCRIBING_DATABASE;
     SendDescribeRequest(ctx);
 }
 
@@ -194,8 +194,8 @@ void TKafkaSaslAuthActor::GetPathByPathId(const TPathId& pathId, const TActorCon
     entry.RequestType = NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
     entry.Operation = NKikimr::NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.SyncVersion = false;
+    entry.RedirectRequired = false;
     schemeCacheRequest->ResultSet.emplace_back(entry);
-    // schemeCacheRequest->DatabaseName = CanonizePath(DatabasePath);
     ctx.Send(NKikimr::MakeSchemeCacheID(), MakeHolder<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
 }
 
@@ -216,7 +216,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
         }
         return;
     }
-    if (RequestState == ENavigateRequestState::RETRIEVING_DATABASE_PATH) {
+    if (RequestState == ENavigateRequestState::DESCRIBING_DATABASE) {
         Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
         IsServerless = navigate->ResultSet.front().DomainInfo->IsServerless();
 

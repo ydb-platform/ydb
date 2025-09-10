@@ -1222,6 +1222,21 @@ message TStreamingQueriesConfig {
     optional bool PrivateSystemTables = 2 [default = true];
 }
 
+message TExternalYdbTopicsConfig {
+    message TYdbDriverConfig {
+        optional uint64 NetworkThreadsNum = 1 [default = 2];
+        optional uint64 ClientThreadsNum = 2 [default = 0]; // 0 means adaptive thread pool
+        optional uint64 GrpcMemoryQuota = 3 [default = 0]; // 0 means unlimited
+        optional bool UseUnderlayNetwork = 4 [default = false];
+    }
+
+    optional TYdbDriverConfig YdbDriverConfig = 1;
+    optional string ReconnectPeriod = 2; // default: disabled
+    optional uint32 TopicClientHandlersExecutorThreadsNum = 3 [default = 0]; // 0 means use default from TopicClientSettings
+    optional uint32 TopicClientCompressionExecutorThreadsNum = 4 [default = 0]; // 0 means use default from TopicClientSettings
+    repeated NYql.TAttr DefaultSettings = 5;
+}
+
 message TQueryServiceConfig {
     optional uint64 ScriptOperationTimeoutDefaultSeconds = 1 [default = 604800]; // default = 1 week
     optional uint64 ScriptForgetAfterDefaultSeconds = 2 [default = 31536000]; // default = 1 year; 0 = infinity
@@ -1250,6 +1265,7 @@ message TQueryServiceConfig {
     optional TCheckpointsConfig CheckpointsConfig = 24;
     optional TStreamingQueriesConfig StreamingQueries = 25;
     optional TSharedReadingConfig SharedReading = 26;
+    optional TExternalYdbTopicsConfig ExternalYdbTopics = 27;
 }
 
 // Config describes immediate controls and allows

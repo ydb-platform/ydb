@@ -16,6 +16,8 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/public/api/protos/ydb_discovery.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extensions/discovery_mutator/discovery_mutator.h>
 #include <yql/essentials/public/issue/yql_issue_utils.h>
 
 #include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
@@ -88,14 +90,67 @@ namespace {
         return NYql::IHTTPGateway::Make(&httpGatewayConfig, httpGatewayGroup);
     }
 
-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const NYql::TPqGatewayConfig& pqGatewayConfig) {
-        NYql::TPqGatewayServices pqServices(
+    std::shared_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr, const NKikimrConfig::TExternalYdbTopicsConfig::TYdbDriverConfig& config) {
+        NYdb::TDriverConfig cfg;
+        cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
+        cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+
+        if (const auto threads = config.GetNetworkThreadsNum()) {
+            cfg.SetNetworkThreadsNum(threads);
+        }
+
+        if (const auto threads = config.GetClientThreadsNum()) {
+            cfg.SetClientThreadsNum(threads);
+        }
+
+        if (const auto quota = config.GetGrpcMemoryQuota()) {
+            cfg.SetGrpcMemoryQuota(quota);
+        }
+
+        auto driver = std::make_shared<NYdb::TDriver>(cfg);
+
+        if (config.GetUseUnderlayNetwork()) {
+            driver->AddExtension<NDiscoveryMutator::TDiscoveryMutator>(NDiscoveryMutator::TDiscoveryMutator::TParams([](Ydb::Discovery::ListEndpointsResult* proto, NYdb::TStatus status, const NYdb::IDiscoveryMutatorApi::TAuxInfo& aux) {
+                constexpr char underlayPrefix[] = "u-";
+                if (!aux.DiscoveryEndpoint.starts_with(underlayPrefix) || !proto) {
+                    return status;
+                }
+
+                for (auto& endpointInfo : *proto->Mutableendpoints()) {
+                    if (const auto& address = endpointInfo.address(); !address.StartsWith(underlayPrefix)) {
+                        endpointInfo.set_address(underlayPrefix + address);
+                    }
+                }
+
+                return status;
+            }));
+        }
+
+        return driver;
+    }
+
+    std::pair<NYql::IPqGateway::TPtr, NYql::TPqGatewayConfig> MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const NKikimrConfig::TExternalYdbTopicsConfig& topicsConfig) {
+        NYdb::NTopic::TTopicClientSettings settings;
+        if (const auto threads = topicsConfig.GetTopicClientHandlersExecutorThreadsNum()) {
+            settings.DefaultHandlersExecutor(NYdb::NTopic::CreateThreadPoolExecutor(threads));
+        }
+
+        if (const auto threads = topicsConfig.GetTopicClientCompressionExecutorThreadsNum()) {
+            settings.DefaultCompressionExecutor(NYdb::NTopic::CreateThreadPoolExecutor(threads));
+        }
+
+        NYql::TPqGatewayConfig pqGatewayConfig;
+        pqGatewayConfig.MutableDefaultSettings()->Assign(topicsConfig.GetDefaultSettings().begin(), topicsConfig.GetDefaultSettings().end());
+
+        return {CreatePqNativeGateway(NYql::TPqGatewayServices(
             *driver,
             nullptr,
             nullptr,
             std::make_shared<NYql::TPqGatewayConfig>(pqGatewayConfig),
-            nullptr);
-        return CreatePqNativeGateway(pqServices);
+            nullptr,
+            nullptr,
+            settings
+        )), pqGatewayConfig};
     }
 
     NYql::THttpGatewayConfig DefaultHttpGatewayConfig() {
@@ -147,12 +202,10 @@ namespace {
         DqTaskTransformFactory = NYql::CreateYtDqTaskTransformFactory(true);
 
         ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
-        NYdb::TDriverConfig cfg;
-        cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
-        Driver = std::make_shared<NYdb::TDriver>(cfg);
 
-        PqGatewayConfig = NYql::TPqGatewayConfig{};
-        PqGateway = MakePqGateway(Driver, NYql::TPqGatewayConfig{});
+        const auto& externalTopics = queryServiceConfig.GetExternalYdbTopics();
+        Driver = MakeYdbDriver(ActorSystemPtr, externalTopics.GetYdbDriverConfig());
+        std::tie(PqGateway, PqGatewayConfig) = MakePqGateway(Driver, externalTopics);
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {

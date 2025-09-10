@@ -10,6 +10,41 @@
 
 namespace NKikimr {
 
+struct TEvCommonProgress {
+    ui32 TotalPaths = 0;
+    ui32 ProcessedPaths = 0;
+
+    explicit TEvCommonProgress(ui32 totalPaths, ui32 processedPaths)
+        : TotalPaths(totalPaths)
+        , ProcessedPaths(processedPaths)
+    {
+    }
+
+    TString ToString(const TString& header) const {
+        return TStringBuilder() << header << " {"
+            << " ProcessedPaths: " << ProcessedPaths
+            << " TotalPaths: " << TotalPaths
+        << " }";
+    }
+};
+
+struct TEvCommonResult {
+    TMaybe<TString> Error = Nothing();
+
+    TEvCommonResult() = default;
+
+    explicit TEvCommonResult(TString error)
+        : Error(std::move(error))
+    {
+    }
+
+    TString ToString(const TString& header) const {
+        return TStringBuilder() << header << " {"
+            << " " << (Error ? *Error : "Success")
+        << " }";
+    }
+};
+
 struct TSchemeBoardMonEvents {
     enum EEv {
         EvRegister = EventSpaceBegin(TKikimrEvents::ES_SCHEME_BOARD_MON),
@@ -45,41 +80,6 @@ struct TSchemeBoardMonEvents {
     };
 
     struct TEvUnregister: public TEventLocal<TEvUnregister, EvUnregister> {
-    };
-
-    struct TEvCommonProgress {
-        ui32 TotalPaths = 0;
-        ui32 ProcessedPaths = 0;
-
-        explicit TEvCommonProgress(ui32 totalPaths, ui32 processedPaths)
-            : TotalPaths(totalPaths)
-            , ProcessedPaths(processedPaths)
-        {
-        }
-
-        TString ToString(const TString& header) const {
-            return TStringBuilder() << header << " {"
-                << " ProcessedPaths: " << ProcessedPaths
-                << " TotalPaths: " << TotalPaths
-            << " }";
-        }
-    };
-
-    struct TEvCommonResult {
-        TMaybe<TString> Error = Nothing();
-
-        TEvCommonResult() = default;
-
-        explicit TEvCommonResult(TString error)
-            : Error(std::move(error))
-        {
-        }
-
-        TString ToString(const TString& header) const {
-            return TStringBuilder() << header << " {"
-                << " " << (Error ? *Error : "Success")
-            << " }";
-        }
     };
 
     struct TEvBackupProgress: public TEventLocal<TEvBackupProgress, EvBackupProgress>, TEvCommonProgress {

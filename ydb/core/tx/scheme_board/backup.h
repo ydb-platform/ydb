@@ -1,7 +1,13 @@
 #pragma once
 
 #include "helpers.h"
-#include "mon_events.h"
+
+namespace NKikimr {
+
+struct TEvCommonProgress;
+struct TEvCommonResult;
+
+}
 
 namespace NKikimr::NSchemeBoard {
 
@@ -28,9 +34,9 @@ struct TCommonProgress {
 
     TCommonProgress() = default;
 
-    explicit TCommonProgress(const TSchemeBoardMonEvents::TEvCommonProgress& ev);
+    explicit TCommonProgress(const TEvCommonProgress& ev);
 
-    explicit TCommonProgress(const TSchemeBoardMonEvents::TEvCommonResult& ev);
+    explicit TCommonProgress(const TEvCommonResult& ev);
 
     bool IsRunning() const {
         return Status == EStatus::Starting || Status == EStatus::Running;

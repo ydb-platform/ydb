@@ -1,4 +1,5 @@
 #include "backup.h"
+#include "mon_events.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
@@ -23,14 +24,14 @@ namespace NKikimr::NSchemeBoard {
 
 using namespace NJson;
 
-TCommonProgress::TCommonProgress(const TSchemeBoardMonEvents::TEvCommonProgress& ev)
+TCommonProgress::TCommonProgress(const TEvCommonProgress& ev)
     : TotalPaths(ev.TotalPaths)
     , ProcessedPaths(ev.ProcessedPaths)
     , Status(EStatus::Running)
 {
 }
 
-TCommonProgress::TCommonProgress(const TSchemeBoardMonEvents::TEvCommonResult& ev)
+TCommonProgress::TCommonProgress(const TEvCommonResult& ev)
     : TotalPaths(0)
     , ProcessedPaths(0)
     , Status(ev.Error ? EStatus::Error : EStatus::Completed)

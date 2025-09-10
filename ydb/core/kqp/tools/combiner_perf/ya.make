@@ -47,7 +47,7 @@ ENDIF()
 SRCS(
     joins.cpp
     construct_join_graph.cpp
-    ydb/library/yql/dq/comp_nodes/ut/utils.cpp # todo: this too
+    ydb/library/yql/dq/comp_nodes/ut/utils.cpp # todo (becalm): make proper library with testing utils
     converters.cpp
     dq_combine_vs.cpp
     factories.cpp

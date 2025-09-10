@@ -4195,23 +4195,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // unknown index setting: 
         check("XxX=YyY, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Unknown index setting: XxX");
+            "Unknown index setting: xxx");
         check("XxX=42, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Unknown index setting: XxX");
+            "Unknown index setting: xxx");
         
         // distance:
         check("distance=XxX, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Invalid distance: XxX");
+            "Invalid distance: xxx");
         check("distance=42, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
             "Invalid distance: 42");
         
         // similarity
         check("similarity=XxX, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Invalid similarity: XxX");
+            "Invalid similarity: xxx");
         check("similarity=42, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
             "Invalid similarity: 42");
         check("similarity=True, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Invalid similarity: True");
+            "Invalid similarity: true");
 
         // distance + similarity (none or both)
         check("distance=manhattan, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
@@ -4221,7 +4221,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // vector_type
         check("similarity=inner_product, vector_type=XxX, vector_dimension=1024, levels=3, clusters=10",
-            "Invalid vector_type: XxX");
+            "Invalid vector_type: xxx");
         check("similarity=inner_product, vector_type=42, vector_dimension=1024, levels=3, clusters=10",
             "Invalid vector_type: 42");
         check("similarity=inner_product, vector_dimension=1024, levels=3, clusters=10",
@@ -4229,7 +4229,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         
         // vector_dimension
         check("similarity=inner_product, vector_type=float, vector_dimension=XxX, levels=3, clusters=10",
-            "Invalid vector_dimension: XxX");
+            "Invalid vector_dimension: xxx");
         check("similarity=inner_product, vector_type=float, vector_dimension=0, levels=3, clusters=10",
             "Invalid vector_dimension: 0 should be between 1 and 16384");
         check("similarity=inner_product, vector_type=float, vector_dimension=1, levels=3, clusters=10", "");
@@ -4246,7 +4246,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             
         // levels
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=XxX, clusters=2",
-            "Invalid levels: XxX");
+            "Invalid levels: xxx");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=0, clusters=2",
             "Invalid levels: 0 should be between 1 and 16");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2", "");
@@ -4263,7 +4263,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // clusters
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=XxX",
-            "Invalid clusters: XxX");
+            "Invalid clusters: xxx");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=0",
             "Invalid clusters: 0 should be between 2 and 2048");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=1",

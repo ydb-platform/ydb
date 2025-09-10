@@ -1187,33 +1187,6 @@ namespace NSQLTranslationV1 {
         TNodePtr CacheMode;
     };
 
-    struct TVectorIndexSettings {
-        enum class EDistance {
-              Cosine        /* "cosine" */
-            , Manhattan     /* "manhattan" */
-            , Euclidean     /* "euclidean" */
-        };
-
-        enum class ESimilarity {
-              Cosine        /* "cosine" */
-            , InnerProduct  /* "inner_product" */
-        };
-
-        enum class EVectorType {
-              Float         /* "float" */
-            , Uint8         /* "uint8" */
-            , Int8          /* "int8" */
-            , Bit           /* "bit" */
-        };
-
-        std::optional<EDistance> Distance;
-        std::optional<ESimilarity> Similarity;
-        std::optional<EVectorType> VectorType;
-        std::optional<ui32> VectorDimension;
-        std::optional<ui32> Clusters;
-        std::optional<ui32> Levels;
-    };
-
     struct TIndexDescription {
         enum class EType {
             GlobalSync,
@@ -1233,7 +1206,7 @@ namespace NSQLTranslationV1 {
         TVector<TIdentifier> DataColumns;
         TTableSettings TableSettings;
 
-        using TIndexSettings = std::variant<std::monostate, TVectorIndexSettings>;
+        using TIndexSettings = TMap<TString, TString>;
         TIndexSettings IndexSettings;
     };
 

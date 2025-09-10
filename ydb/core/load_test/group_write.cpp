@@ -629,9 +629,6 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         void StartWorking(const TActorContext& ctx) {
             MainCycleStarted = true;
             StartTimestamp = TActivationContext::Monotonic();
-            if (Self.TestDuration) {
-                ctx.Schedule(*Self.TestDuration, new TEvents::TEvPoisonPill());
-            }
             InitializeTrackers(StartTimestamp);
             WriteSettings.DelayManager->Start(StartTimestamp);
             IssueWriteIfPossible(ctx);

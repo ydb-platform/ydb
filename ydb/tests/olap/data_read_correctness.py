@@ -91,6 +91,7 @@ class TestDataReadCorrectness(object):
         assert keys == [i for i in range(self.rows_count)], keys
         assert values == [i * 10 for i in range(self.rows_count)], values
 
+
 class TestDataReadPerformanceNoIntersections(object):
     test_name = "data_read_performance_no_intersections"
     rows_count = 10000

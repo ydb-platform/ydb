@@ -3,7 +3,7 @@ import yatest.common
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 
 
-class TestClickbenchWM(wm.TestWorkloadMangerClickbenchConcurentQueryLimit, FunctionalTestBase):
+class TestClickbenchWM(wm.TestWorkloadManagerClickbenchConcurrentQueryLimit, FunctionalTestBase):
     iterations: int = 2
     verify_data: bool = False
 
@@ -15,7 +15,7 @@ class TestClickbenchWM(wm.TestWorkloadMangerClickbenchConcurentQueryLimit, Funct
         super().setup_class()
 
 
-class TestTpchWMS0_1(wm.WorkloadMangerTpchBase, wm.WorkloadMangerConcurentQueryLimit, FunctionalTestBase):
+class TestTpchWMS0_1(wm.WorkloadManagerTpchBase, wm.WorkloadManagerConcurrentQueryLimit, FunctionalTestBase):
     tables_size: dict[str, int] = {
         'lineitem': 600572,
     }
@@ -36,7 +36,7 @@ class TestTpchWMS0_1(wm.WorkloadMangerTpchBase, wm.WorkloadMangerConcurentQueryL
         super().setup_class()
 
 
-# class TestClickbenchWMSheduler(wm.TestWorkloadMangerClickbenchComputeSheduler, FunctionalTestBase):
+# class TestClickbenchWMScheduler(wm.TestWorkloadMangerClickbenchComputeScheduler, FunctionalTestBase):
 #     iterations: int = 1
 #     verify_data: bool = False
 #     timeout = 100

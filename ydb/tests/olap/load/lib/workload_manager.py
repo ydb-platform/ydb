@@ -19,10 +19,10 @@ from os import getenv
 
 
 class ResourcePool:
-    def __init__(self, name: str, users: list[str] | str, **kvargs):
+    def __init__(self, name: str, users: list[str], **kwargs):
         self.name = name
-        self.users = users if isinstance(users, list) else [users]
-        self.params = kvargs
+        self.users = users
+        self.params = kwargs
 
     def get_create_users_sql(self) -> str:
         result = ''
@@ -55,7 +55,7 @@ class ResourcePool:
         return result
 
 
-class WorkloadMangerBase(LoadSuiteBase):
+class WorkloadManagerBase(LoadSuiteBase):
     stop_checking = Event()
     signal_errors: list[tuple[datetime, str]] = []
     threads: int = 1
@@ -165,7 +165,7 @@ class WorkloadMangerBase(LoadSuiteBase):
             pytest.fail(f'Errors while execute: {errors}')
 
 
-class WorkloadMangerClickbenchBase:
+class WorkloadManagerClickbenchBase:
     workload_type = ClickbenchParallelBase.workload_type
     iterations: int = ClickbenchParallelBase.iterations
 
@@ -183,7 +183,7 @@ class WorkloadMangerClickbenchBase:
             ClickbenchParallelBase.do_setup_class()
 
 
-class WorkloadMangerTpchBase:
+class WorkloadManagerTpchBase:
     workload_type = tpch.TpchParallelBase.workload_type
     iterations: int = tpch.TpchParallelBase.iterations
 
@@ -202,14 +202,14 @@ class WorkloadMangerTpchBase:
         tpch.TpchParallelBase.check_tables_size(folder=cls.get_path(), tables=tpch.TpchSuiteBase._get_tables_size(cls))
 
 
-class WorkloadMangerConcurentQueryLimit(WorkloadMangerBase):
+class WorkloadManagerConcurrentQueryLimit(WorkloadManagerBase):
     query_limit = 2
     hard_query_limit: int = 0
     max_in_fly = 0.
 
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
-        return [ResourcePool('test_pool', 'testuser', concurrent_query_limit=cls.query_limit)]
+        return [ResourcePool('test_pool', ['testuser'], concurrent_query_limit=cls.query_limit)]
 
     @classmethod
     def before_workload(cls):
@@ -232,7 +232,7 @@ class WorkloadMangerConcurentQueryLimit(WorkloadMangerBase):
         return ''
 
 
-class WorkloadMangerComputeSheduler(WorkloadMangerBase):
+class WorkloadManagerComputeScheduler(WorkloadManagerBase):
     threads = 10
     metrics: list[(float, dict[str, float])] = []
     metrics_keys = set()
@@ -240,9 +240,9 @@ class WorkloadMangerComputeSheduler(WorkloadMangerBase):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_30', 'testuser1', total_cpu_limit_percent_per_node=30, resource_weight=4),
-            ResourcePool('test_pool_40', 'testuser2', total_cpu_limit_percent_per_node=40, resource_weight=4),
-            ResourcePool('test_pool_50', 'testuser3', total_cpu_limit_percent_per_node=50, resource_weight=4),
+            ResourcePool('test_pool_30', ['testuser1'], total_cpu_limit_percent_per_node=30, resource_weight=4),
+            ResourcePool('test_pool_40', ['testuser2'], total_cpu_limit_percent_per_node=40, resource_weight=4),
+            ResourcePool('test_pool_50', ['testuser3'], total_cpu_limit_percent_per_node=50, resource_weight=4),
         ]
 
     @classmethod
@@ -317,14 +317,14 @@ class WorkloadMangerComputeSheduler(WorkloadMangerBase):
         return ''
 
 
-class TestWorkloadMangerClickbenchComputeSheduler(WorkloadMangerClickbenchBase, WorkloadMangerComputeSheduler):
+class TestWorkloadManagerClickbenchComputeScheduler(WorkloadManagerClickbenchBase, WorkloadManagerComputeScheduler):
     pass
 
 
-class TestWorkloadMangerClickbenchConcurentQueryLimit(WorkloadMangerClickbenchBase, WorkloadMangerConcurentQueryLimit):
+class TestWorkloadManagerClickbenchConcurrentQueryLimit(WorkloadManagerClickbenchBase, WorkloadManagerConcurrentQueryLimit):
     pass
 
 
-class TestWorkloadMangerTpchComputeShedulerS100(WorkloadMangerTpchBase, WorkloadMangerComputeSheduler):
+class TestWorkloadManagerTpchComputeSchedulerS100(WorkloadManagerTpchBase, WorkloadManagerComputeScheduler):
     tables_size = tpch.TestTpch100.tables_size
     scale = tpch.TestTpch100.scale

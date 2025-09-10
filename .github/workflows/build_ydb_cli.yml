@@ -209,7 +209,7 @@ jobs:
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
       run: |
-        ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }}
+        "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64
         echo "VS environment prepared, testing ya.bat..."
         .\ya.bat --version
         echo "Getting toolchain path..."

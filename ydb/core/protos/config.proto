@@ -1401,6 +1401,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 10000000000, // 10 GB/s
             DefaultValue: 0 }];
+
+        optional uint64 DefragThrottlerBytesRate = 37 [(ControlOptions) = {
+            Description: "Rate bytes in 1 second for requests (sum of write and read) in defragmentation throttler",
+            MinValue: 0,
+            MaxValue: 10000000000, // 10 GB/s
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {

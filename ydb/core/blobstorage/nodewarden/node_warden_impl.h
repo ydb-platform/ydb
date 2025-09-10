@@ -149,6 +149,7 @@ namespace NKikimr::NStorage {
         TControlWrapper HullCompFullCompPeriodSec;
         TControlWrapper HullCompThrottlerBytesRate;
         TControlWrapper GarbageThresholdToRunFullCompactionPerMille;
+        TControlWrapper DefragThrottlerBytesRate;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
@@ -197,6 +198,7 @@ namespace NKikimr::NStorage {
             , HullCompFullCompPeriodSec(0, 0, 7 * 24 * 60 * 60)
             , HullCompThrottlerBytesRate(0, 0, 10'000'000'000) // 10 GB/s
             , GarbageThresholdToRunFullCompactionPerMille(0, 0, 300)
+            , DefragThrottlerBytesRate(0, 0, 10'000'000'000) // 10 GB/s
             , CostMetricsParametersByMedia({
                 TCostMetricsParameters{200},
                 TCostMetricsParameters{50},

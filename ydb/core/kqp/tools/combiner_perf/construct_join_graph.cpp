@@ -110,7 +110,12 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, I
     case ETestedJoinAlgo::kScalarMap: {
         pb.MapJoinCore(
         leftScalarArg,
-        pb.ToSortedDict(descr.RightSource.ColumnTypes), 
+        pb.ToSortedDict(rightScalarArg, false, [&](TRuntimeNode tuple){
+            return pb.Nth(tuple, 0);
+        },
+    [&](TRuntimeNode tuple){
+            return pb.AddMember(pb.NewEmptyStruct(), "Payload", pb.Member(tuple, "Payload"));
+    }), 
         kInnerJoin,
         descr.LeftSource.KeyColumnIndexes,  
         leftRenames,rightRenames,

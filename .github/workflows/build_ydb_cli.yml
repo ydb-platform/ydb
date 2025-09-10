@@ -212,10 +212,10 @@ jobs:
         ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }}
         && echo VS environment prepared, getting toolchain...
         && for /f "tokens=*" %%i in ('.\ya.bat tool c++ --print-toolchain-path') do set TOOLCHAIN_PATH=%%i
-        && call echo Using toolchain path: ${{ '%%TOOLCHAIN_PATH%%' }}
+        && call echo Using toolchain path: %%TOOLCHAIN_PATH%%
         && call .\ya.bat make ydb/apps/ydb -r -DUSE_SSE4=no -o .\
-        --c-compiler ${{ '%%TOOLCHAIN_PATH%%' }}\bin\clang-cl.exe
-        --cxx-compiler ${{ '%%TOOLCHAIN_PATH%%' }}\bin\clang-cl.exe
+        --c-compiler %%TOOLCHAIN_PATH%%\bin\clang-cl.exe
+        --cxx-compiler %%TOOLCHAIN_PATH%%\bin\clang-cl.exe
     
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}

@@ -32,6 +32,7 @@ namespace NKikimr {
         , HugeKeeperId(hugeKeeperId)
         , DefragMonGroup(VCtx->VDiskCounters, "subsystem", "defrag")
         , RunDefragBySchedule(runDefrageBySchedule)
+        , Throttler(std::make_shared<TEventsQuoter>())
     {}
 
     TDefragCtx::~TDefragCtx() = default;

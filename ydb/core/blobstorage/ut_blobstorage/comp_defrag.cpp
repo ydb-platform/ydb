@@ -11,6 +11,7 @@
 struct TMetrics {
     ui64 CompactionBytesRead = 0;
     ui64 CompactionBytesWritten = 0;
+    ui64 DefragBytesRewritten = 0;
 
     ui64 Level0 = 0;
     ui64 Level1 = 0;
@@ -79,6 +80,7 @@ struct TTetsEnvBase {
 
         metrics.CompactionBytesRead = AggregateVDiskCounters("lsmhull", "LsmCompactionBytesRead");
         metrics.CompactionBytesWritten = AggregateVDiskCounters("lsmhull", "LsmCompactionBytesWritten");
+        metrics.DefragBytesRewritten = AggregateVDiskCounters("defrag", "DefragBytesRewritten");
 
         metrics.Level0 = AggregateVDiskCounters("levels", "NumItems", {{"level", "0"}});
         metrics.Level1 = AggregateVDiskCounters("levels", "NumItems", {{"level", "1..8"}})
@@ -103,6 +105,7 @@ struct TTetsEnvBase {
         auto metrics = GetMetrics();
         Cerr << "Compaction bytes read: " << metrics.CompactionBytesRead << Endl
              << "Compaction bytes written: " << metrics.CompactionBytesWritten << Endl
+             << "Defrag bytes rewritten: " << metrics.DefragBytesRewritten << Endl
              << "Level 0: " << metrics.Level0 << Endl
              << "Level 1: " << metrics.Level1 << Endl
              << "Level 2: " << metrics.Level2 << Endl
@@ -778,6 +781,56 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
             });
         }
         env.Env.Sim(TDuration::Minutes(10));
+    }
+
+    Y_UNIT_TEST(DefragThrottling) {
+        ui64 totalBytesToDefrag = 0;
+        { // without throttling
+            TTestEnvCompDefragIndependent env(0.01);
+            ui32 N = 50000;
+            ui32 batchSize = 1000;
+            
+            env.WriteData(N, batchSize);
+            env.RunFullCompaction();
+
+            DeleteHugeBlobsOfTablet(env, N, 1);
+
+            env.Env.Sim(TDuration::Minutes(30));
+
+            totalBytesToDefrag = env.PrintMetrics().DefragBytesRewritten;
+            Cerr << "Total bytes to defrag: " << totalBytesToDefrag << Endl;
+        }
+
+        UNIT_ASSERT_GT(totalBytesToDefrag, 512_MB);
+
+        { // with throttling
+            TTestEnvCompDefragIndependent env(0.01);
+            ui32 N = 50000;
+            ui32 batchSize = 1000;
+            
+            env.WriteData(N, batchSize);
+            env.RunFullCompaction();
+
+            env.PrintMetrics();
+
+            DeleteHugeBlobsOfTablet(env, N, 1);
+
+            env.SetIcbControl("VDiskControls.DefragThrottlerBytesRate", 1_MB);
+            TDuration maxThrottlingDuration = TDuration::Minutes(6) + totalBytesToDefrag / 1_MB / 8 * TDuration::Seconds(1) * 2; // 2 is a factor of safety
+            Cerr << "Max throttling duration: " << maxThrottlingDuration.ToString() << Endl;
+
+            ui64 defragBytesRewrittenBefore = env.PrintMetrics().DefragBytesRewritten;
+            for (ui32 i = 0; i < maxThrottlingDuration.Seconds(); ++i) {
+                env.Env.Sim(TDuration::Seconds(1));
+                ui64 cur = env.GetMetrics().DefragBytesRewritten;
+                ui64 defragBytesRewritten = cur - defragBytesRewrittenBefore;
+                UNIT_ASSERT_LE(defragBytesRewritten, 1_MB * 8);
+                defragBytesRewrittenBefore = cur;
+            }
+
+            env.PrintMetrics();
+            UNIT_ASSERT_VALUE_IN(totalBytesToDefrag - totalBytesToDefrag / 100, defragBytesRewrittenBefore, totalBytesToDefrag + totalBytesToDefrag / 100);
+        }
     }
 
 }

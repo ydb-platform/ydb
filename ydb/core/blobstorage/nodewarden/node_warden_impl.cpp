@@ -200,6 +200,7 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(HullCompFullCompPeriodSec, "VDiskControls.HullCompFullCompPeriodSec");
         icb->RegisterSharedControl(HullCompThrottlerBytesRate, "VDiskControls.HullCompThrottlerBytesRate");
         icb->RegisterSharedControl(GarbageThresholdToRunFullCompactionPerMille, "VDiskControls.GarbageThresholdToRunFullCompactionPerMille");
+        icb->RegisterSharedControl(DefragThrottlerBytesRate, "VDiskControls.DefragThrottlerBytesRate");
 
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
                 "VDiskControls.BurstThresholdNsHDD");

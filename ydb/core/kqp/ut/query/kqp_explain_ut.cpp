@@ -935,6 +935,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
     Y_UNIT_TEST_TWIN(CreateTableAs, Stats) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         auto kikimrSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false)

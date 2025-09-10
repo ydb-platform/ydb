@@ -907,6 +907,7 @@ Y_UNIT_TEST_TWIN(CreateTableAsStats, IsOlap) {
         .SetEnableTempTables(true);
     serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
     serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(!IsOlap);
     serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
     serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
     TKikimrRunner kikimr(serverSettings);

@@ -1279,7 +1279,7 @@ Y_UNIT_TEST(TryKeepInMemoryMode_AfterCompaction) {
     env.SendSync(new NFake::TEvCompact(TableId));
     Cerr << "...waiting until first table gen 1 compacted" << Endl;
     env.WaitFor<NFake::TEvCompacted>();
-    // generations 2+ are not preserved in memory in standart user table compaction policy
+    // generations 2+ are not preserved in memory in the default user table compaction policy
     env.SendSync(new NFake::TEvCompact(TableId));
     Cerr << "...waiting until first table gen 2 compacted" << Endl;
     env.WaitFor<NFake::TEvCompacted>();

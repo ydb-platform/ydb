@@ -1628,28 +1628,30 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                     break;
                 }
             }
+        }
 
 #define UPDATE_EXPLICIT_CONFIG(NAME) \
-            if (domains.HasExplicit##NAME##Config()) { \
-                if (config->Has##NAME##Config()) { \
-                    *errorReason = VerifyConfigCompatibility(#NAME, config->Get##NAME##Config(), domains.GetExplicit##NAME##Config()); \
-                    if (!errorReason->empty()) { \
-                        return false; \
-                    } \
+        if (domains.HasExplicit##NAME##Config()) { \
+            if (config->Has##NAME##Config()) { \
+                *errorReason = VerifyConfigCompatibility(#NAME, config->Get##NAME##Config(), domains.GetExplicit##NAME##Config()); \
+                if (!errorReason->empty()) { \
+                    return false; \
                 } \
-                config->Mutable##NAME##Config()->CopyFrom(domains.GetExplicit##NAME##Config()); \
-            }
-
-            UPDATE_EXPLICIT_CONFIG(StateStorage)
-            UPDATE_EXPLICIT_CONFIG(StateStorageBoard)
-            UPDATE_EXPLICIT_CONFIG(SchemeBoard)
+            } \
+            config->Mutable##NAME##Config()->CopyFrom(domains.GetExplicit##NAME##Config()); \
         }
+
+        UPDATE_EXPLICIT_CONFIG(StateStorage)
+        UPDATE_EXPLICIT_CONFIG(StateStorageBoard)
+        UPDATE_EXPLICIT_CONFIG(SchemeBoard)
     }
 
     return true;
 }
 
 TString NKikimr::VerifyConfigCompatibility(const char* name, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSSConfig, const NKikimrConfig::TDomainsConfig::TStateStorage& newSSConfig) {
+    STLOG(PRI_DEBUG, BS_NODE, NW102, "VerifyConfigCompatibility", (oldSSConfig, oldSSConfig), (newSSConfig, newSSConfig));
+
     if ((oldSSConfig.HasRing() || oldSSConfig.RingGroupsSize() == 1) && (newSSConfig.HasRing() || newSSConfig.RingGroupsSize() == 1)) {
         auto toInfo = BuildStateStorageInfo(newSSConfig);
         auto fromInfo = BuildStateStorageInfo(oldSSConfig);

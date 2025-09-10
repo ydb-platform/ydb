@@ -29,6 +29,15 @@ def value_for(key, tablet_id):
         key=key, tablet_id=tablet_id)
 
 
+def generate_config(dynconfig_client):
+    generate_config_response = dynconfig_client.fetch_startup_config()
+    assert_that(generate_config_response.operation.status == StatusIds.SUCCESS)
+
+    result = dynconfig.FetchStartupConfigResult()
+    generate_config_response.operation.result.Unpack(result)
+    return result.config
+
+
 def fetch_config_dynconfig(dynconfig_client):
     fetch_config_response = dynconfig_client.fetch_config()
     assert_that(fetch_config_response.operation.status == StatusIds.SUCCESS)
@@ -89,6 +98,7 @@ class KiKiMRDistConfReassignStateStorageTest(object):
         "version": 0,
         "cluster": "",
     }
+    explicit_statestorage_config = None
 
     @classmethod
     def setup_class(cls):
@@ -106,6 +116,8 @@ class KiKiMRDistConfReassignStateStorageTest(object):
             simple_config=True,
             use_self_management=cls.use_self_management,
             extra_grpc_services=['config'],
+            explicit_hosts_and_host_configs=True,
+            explicit_statestorage_config=cls.explicit_statestorage_config,
             additional_log_configs=log_configs)
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
@@ -376,24 +388,53 @@ class KiKiMRChangeRingGroupWithConfigTest(KiKiMRDistConfReassignStateStorageBase
         raise TimeoutError(error_message)
 
 
-class TestKiKiMRChangeRingGroupWithConfigSameConfig(KiKiMRChangeRingGroupWithConfigTest):
+class TestKiKiMRChangeRingGroupWithConfig(KiKiMRChangeRingGroupWithConfigTest):
+    use_self_management = False
 
     def do_test(self, storageName):
         fetched_config = fetch_config_dynconfig(self.dynconfig_client)
         parsed_fetched_config = yaml.safe_load(fetched_config)
         logger.debug(f"parsed_fetched_config: {yaml.dump(parsed_fetched_config)}")
 
-        ssConfig = {"ring": {"nto_select": 5, "ring": [{"node": [1]}, {"node": [2]}, {"node": [3]}, {"node": [4]}, {"node": [5]}, {"node": [6]}, {"node": [7]}, {"node": [8]}]}}
+        ssConfig = {"ring_group": {"nto_select": 1, "ring": [{"node": [1]}, {"node": [2]}, {"node": [3]}, {"node": [4]}, {"node": [5]}, {"node": [6]}, {"node": [7]}, {"node": [8]}]}}
         parsed_fetched_config["metadata"]["version"] = 1
-        parsed_fetched_config["domains_config"] = dict()
-        parsed_fetched_config["domains_config"]["explicit_state_storage_config"] = ssConfig
-        parsed_fetched_config["domains_config"]["explicit_state_storage_board_config"] = ssConfig
-        parsed_fetched_config["domains_config"]["explicit_scheme_board_config"] = ssConfig
-
+        parsed_fetched_config["domains_config"] = {
+            "domain": [{"domain_id": 1}],
+            "explicit_state_storage_config": ssConfig,
+            "explicit_state_storage_board_config": ssConfig,
+            "explicit_scheme_board_config": ssConfig
+        }
         time.sleep(1)
-        replace_config(self.config_client, yaml.dump(parsed_fetched_config))
+        replace_config_response = self.config_client.replace_config(yaml.dump(parsed_fetched_config))
         self.cluster.restart_nodes()
         self.wait_for_all_nodes_start(len(self.cluster.nodes))
-        logger.debug(f"do_request_config: {self.do_request_config()[f"{storageName}Config"]}")
+        logger.debug(f"replace_config: {replace_config_response}")
+
+        assert_that(replace_config_response.operation.status != StatusIds.SUCCESS)
+
+
+class TestKiKiMRInitialDistconfExplicitConfigDistconf(KiKiMRChangeRingGroupWithConfigTest):
+    explicit_statestorage_config = {
+        "explicit_state_storage_config": {"ring": {"nto_select": 1, "ring": [{"node": [3]}]}},
+        "explicit_state_storage_board_config": {"ring": {"nto_select": 1, "ring": [{"node": [3]}]}},
+        "explicit_scheme_board_config": {"ring": {"nto_select": 1, "ring": [{"node": [3]}]}},
+    }
+
+    def do_test(self, storageName):
         assert_eq(self.do_request_config()[f"{storageName}Config"],
-                  {'RingGroups': [{'NToSelect': 5, 'Ring': [{'Node': [1]}, {'Node': [2]}, {'Node': [3]}, {'Node': [4]}, {'Node': [5]}, {'Node': [6]}, {'Node': [7]}, {'Node': [8]}]}]})
+                  {'Ring': {'NToSelect': 1, 'Ring': [{'Node': [3]}]}})
+
+
+class TestKiKiMRInitialDistconfExplicitConfig(KiKiMRChangeRingGroupWithConfigTest):
+    use_self_management = False
+
+    explicit_statestorage_config = {
+        "explicit_state_storage_config": {"ring": {"nto_select": 1, "ring": [{"node": [3]}]}},
+        "explicit_state_storage_board_config": {"ring": {"nto_select": 1, "ring": [{"node": [3]}]}},
+        "explicit_scheme_board_config": {"ring": {"nto_select": 1, "ring": [{"node": [3]}]}},
+    }
+
+    def do_test(self, storageName):
+        fetched_config = fetch_config(self.config_client)
+        parsed_fetched_config = yaml.safe_load(fetched_config)
+        logger.debug(f"parsed_fetched_config: {yaml.dump(parsed_fetched_config)}")

@@ -21,6 +21,10 @@ from .kikimr_port_allocator import KikimrPortManagerPortAllocator
 from .param_constants import kikimr_driver_path, ydb_cli_path
 from .util import LogLevels
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 PDISK_SIZE_STR = os.getenv("YDB_PDISK_SIZE", str(64 * 1024 * 1024 * 1024))
 if PDISK_SIZE_STR.endswith("GB"):
     PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024 * 1024
@@ -180,7 +184,8 @@ class KikimrConfigGenerator(object):
             memory_controller_config=None,
             verbose_memory_limit_exception=False,
             enable_static_auth=False,
-            cms_config=None
+            cms_config=None,
+            explicit_statestorage_config=None
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -191,6 +196,7 @@ class KikimrConfigGenerator(object):
         if disabled_grpc_services is None:
             disabled_grpc_services = []
 
+        self.explicit_statestorage_config = explicit_statestorage_config
         self.cms_config = cms_config
         self.use_log_files = use_log_files
         self.use_self_management = use_self_management
@@ -424,7 +430,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config["deduplication_grouped_memory_limiter_config"] = deduplication_grouped_memory_limiter_config
 
         self.__build()
-
         if self.grpc_ssl_enable:
             self.yaml_config["grpc_config"]["ca"] = self.grpc_tls_ca_path
             self.yaml_config["grpc_config"]["cert"] = self.grpc_tls_cert_path
@@ -522,12 +527,13 @@ class KikimrConfigGenerator(object):
             self._add_host_config_and_hosts()
             self.yaml_config.pop("nameservice_config")
         if self.use_self_management:
-            self.yaml_config["domains_config"].pop("security_config")
+            if "security_config" in self.yaml_config["domains_config"]:
+                self.yaml_config["domains_config"].pop("security_config")
             self.yaml_config["default_disk_type"] = "ROT"
             self.yaml_config["fail_domain_type"] = "rack"
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
 
-            for name in ['blob_storage_config', 'domains_config', 'system_tablets', 'grpc_config',
+            for name in ['blob_storage_config', 'system_tablets', 'grpc_config',
                          'channel_profile_config', 'interconnect_config']:
                 del self.yaml_config[name]
         if self.simple_config:
@@ -718,6 +724,13 @@ class KikimrConfigGenerator(object):
         return self.__node_ids
 
     def _add_state_storage_config(self):
+        if "domain" not in self.yaml_config["domains_config"]:
+            self.yaml_config["domains_config"]["domain"] = [{"domain_id": 1}]
+        if self.explicit_statestorage_config:
+            self.yaml_config["domains_config"]["explicit_state_storage_config"] = self.explicit_statestorage_config["explicit_state_storage_config"]
+            self.yaml_config["domains_config"]["explicit_state_storage_board_config"] = self.explicit_statestorage_config["explicit_state_storage_board_config"]
+            self.yaml_config["domains_config"]["explicit_scheme_board_config"] = self.explicit_statestorage_config["explicit_scheme_board_config"]
+            return
         if self.use_self_management and self.n_to_select is None and self.state_storage_rings is None:
             return
         if self.n_to_select is None:

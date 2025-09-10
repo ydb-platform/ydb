@@ -93,7 +93,6 @@ class TestLogScenario(object):
         config = KikimrConfigGenerator(
             extra_feature_flags={"enable_immediate_writing_on_bulk_upsert": True,
                                  "enable_cs_overloads_subscription_retries": True},
-                                #  "enable_topic_compactification_by_key": True},
             column_shard_config={"alter_object_enabled": True,
                                  "writing_in_flight_requests_count_limit": writing_in_flight_requests_count_limit,
                                  "writing_in_flight_request_bytes_limit": writing_in_flight_request_bytes_limit},
@@ -153,7 +152,6 @@ class TestLogScenario(object):
         )
 
         assert self.ydb_client.query(f"select count(*) as Rows from `{table_path}`")[0].rows[0]["Rows"] == rows_count
-
 
     @pytest.mark.parametrize('writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit', [(1, 10000), (2, 10000), (1000, 1), (1000, 2), (1, 1), (2, 2)])
     def test_overloads_workload(self, writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit):

@@ -1,3 +1,5 @@
+#pragma once
+
 #include "helpers.h"
 #include "mon_events.h"
 

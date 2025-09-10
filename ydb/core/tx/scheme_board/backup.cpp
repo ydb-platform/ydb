@@ -290,11 +290,13 @@ private:
 
         while (InputFile->ReadLine(line)) {
             TTwoPartDescription description;
-            auto status = google::protobuf::json::JsonStringToMessage(line, &description.Record);
+            const auto status = google::protobuf::json::JsonStringToMessage(line, &description.Record);
             if (!status.ok()) {
-                return ReplyError(TStringBuilder() << "Failed to parse JSON line: " << TStringBuf(line, 0, 100) << ", status: " << status.ToString());
+                return ReplyError(TStringBuilder() << "Failed to parse JSON"
+                    << ": line: " << TStringBuf(line, 0, 100)
+                    << ", status: " << status.ToString());
             }
-            TPathId pathId(description.Record.GetPathOwnerId(), description.Record.GetPathId());
+            const TPathId pathId(description.Record.GetPathOwnerId(), description.Record.GetPathId());
             if (pathId.OwnerId != SchemeShardId) {
                 continue;
             }
@@ -332,6 +334,7 @@ private:
         if (ev->Sender != Populator || !ev->Get()->Record.HasPopulatorResponse()) {
             SBB_LOG_N("Unexpected info response");
         }
+
         const auto& info = ev->Get()->Record.GetPopulatorResponse();
         TPathId maxRequestedPathId(info.GetMaxRequestedPathId().GetOwnerId(), info.GetMaxRequestedPathId().GetLocalPathId());
         const auto position = LowerBound(PathsToProcess.begin(), PathsToProcess.end(), maxRequestedPathId);
@@ -340,6 +343,7 @@ private:
         if (ProcessedPaths == TotalPaths) {
             return ReplySuccess();
         }
+
         TActivationContext::Schedule(ProgressPollingInterval, new IEventHandle(Populator, SelfId(), new TSchemeBoardMonEvents::TEvInfoRequest(1)));
     }
 

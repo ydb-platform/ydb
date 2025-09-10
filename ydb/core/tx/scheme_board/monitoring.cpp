@@ -1396,7 +1396,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                     ));
                 }
 
-                TString filePath = params.Get("backupPath");
+                const TString filePath = params.Get("backupPath");
                 if (filePath.empty()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderBackup(BackupProgress, false, "Backup file path is required")
@@ -1405,8 +1405,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
                 ui32 inFlightLimit = BackupLimits.DefaultInFlight;
                 if (params.Has("inFlightLimit")) {
-                    TString inFlightLimitStr = params.Get("inFlightLimit");
-                    if (!TryFromString(inFlightLimitStr, inFlightLimit)) {
+                    if (!TryFromString(params.Get("inFlightLimit"), inFlightLimit)) {
                         return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                             RenderBackup(BackupProgress, false, "Invalid in-flight limit value")
                         ));
@@ -1441,7 +1440,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                     ));
                 }
 
-                TString filePath = params.Get("restorePath");
+                const TString filePath = params.Get("restorePath");
                 if (filePath.empty()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderRestore(RestoreProgress, false, "Restore file path is required")
@@ -1491,8 +1490,8 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         Send(ev->Sender, new NMon::TEvHttpInfoRes(NMonitoring::HTTPNOTFOUND, 0, EContentType::Custom));
     }
 
-    template <typename TProgress, typename TEvent>
-    void Handle(TProgress& progress, TEvent::TPtr& ev) {
+    template <typename TProgress, typename TEventPtr>
+    void Handle(TProgress& progress, TEventPtr& ev) {
         const auto& msg = *ev->Get();
         SBB_LOG_D("Handle " << msg.ToString());
         progress = TProgress(msg);

@@ -93,7 +93,6 @@ bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot type, TFunc&& callback) {
         case NUdf::EDataSlot::Decimal:
         case NUdf::EDataSlot::Uuid:
             return callback(TTypeWrapper<arrow::FixedSizeBinaryType>());
-        // TODO convert Tz-types to native arrow date and time types.
         case NUdf::EDataSlot::TzDate:
         case NUdf::EDataSlot::TzDatetime:
         case NUdf::EDataSlot::TzTimestamp:
@@ -104,28 +103,26 @@ bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot type, TFunc&& callback) {
     }
 }
 
-// Check if the type needs to be wrapped with external structure by YQL-15332
-// For example, Variant -> arrow::DenseUnionType does not have validity bitmap, wrap it in arrow::Struct
-bool NeedWrapByStruct(const TType* type) {
+bool NeedWrapByExternalOptional(const TType* type) {
     switch (type->GetKind()) {
-        case TType::EKind::Optional:
-        case TType::EKind::Variant:
-            return true;
         case TType::EKind::Void:
         case TType::EKind::Null:
-            // Void and Null do not have validity bitmap (arrow::Type::NA), but they are without values
+        case TType::EKind::Variant:
+        case TType::EKind::Optional:
+            return true;
+        case TType::EKind::EmptyList:
+        case TType::EKind::EmptyDict:
         case TType::EKind::Data:
         case TType::EKind::Struct:
         case TType::EKind::Tuple:
         case TType::EKind::List:
         case TType::EKind::Dict:
-        case TType::EKind::EmptyList:
-        case TType::EKind::EmptyDict:
             return false;
         default:
-            THROW yexception() << "Unsupported type: " << type->GetKindAsStr();
+            Y_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
     }
-    return false;
+
+    return true;
 }
 
 template <typename TArrowType>
@@ -279,8 +276,10 @@ std::shared_ptr<arrow::DataType> GetArrowType(const TStructType* structType) {
     fields.reserve(structType->GetMembersCount());
     for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
         auto memberType = structType->GetMemberType(index);
-        fields.emplace_back(std::make_shared<arrow::Field>(std::string(structType->GetMemberName(index)),
-            NArrow::GetArrowType(memberType)));
+        auto memberName = std::string(structType->GetMemberName(index));
+        auto memberArrowType = NArrow::GetArrowType(memberType);
+
+        fields.emplace_back(std::make_shared<arrow::Field>(memberName, memberArrowType, memberType->IsOptional()));
     }
     return arrow::struct_(fields);
 }
@@ -289,15 +288,20 @@ std::shared_ptr<arrow::DataType> GetArrowType(const TTupleType* tupleType) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(tupleType->GetElementsCount());
     for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
+        auto elementName = std::string("field" + ToString(index));
         auto elementType = tupleType->GetElementType(index);
-        fields.push_back(std::make_shared<arrow::Field>("", NArrow::GetArrowType(elementType)));
+        auto elementArrowType = NArrow::GetArrowType(elementType);
+
+        fields.push_back(std::make_shared<arrow::Field>(elementName, elementArrowType, elementType->IsOptional()));
     }
     return arrow::struct_(fields);
 }
 
 std::shared_ptr<arrow::DataType> GetArrowType(const TListType* listType) {
     auto itemType = listType->GetItemType();
-    return arrow::list(NArrow::GetArrowType(itemType));
+    auto itemArrowType = NArrow::GetArrowType(itemType);
+    auto field = std::make_shared<arrow::Field>("item", itemArrowType, itemType->IsOptional());
+    return arrow::list(field);
 }
 
 std::shared_ptr<arrow::DataType> GetArrowType(const TDictType* dictType) {
@@ -307,18 +311,18 @@ std::shared_ptr<arrow::DataType> GetArrowType(const TDictType* dictType) {
     auto keyArrowType = NArrow::GetArrowType(keyType);
     auto payloadArrowType = NArrow::GetArrowType(payloadType);
 
-    auto custom = std::make_shared<arrow::Field>("", arrow::uint64(), false);
+    auto custom = std::make_shared<arrow::Field>("custom", arrow::uint64(), false);
 
     if (keyType->GetKind() == TType::EKind::Optional) {
         std::vector<std::shared_ptr<arrow::Field>> items;
-        items.emplace_back(std::make_shared<arrow::Field>("", keyArrowType));
-        items.emplace_back(std::make_shared<arrow::Field>("", payloadArrowType));
+        items.emplace_back(std::make_shared<arrow::Field>("key", keyArrowType, true));
+        items.emplace_back(std::make_shared<arrow::Field>("payload", payloadArrowType, payloadType->IsOptional()));
 
-        auto fieldList = std::make_shared<arrow::Field>("", arrow::list(arrow::struct_(items)), false);
-        return arrow::struct_({fieldList, custom});
+        auto fieldMap = std::make_shared<arrow::Field>("map", arrow::list(arrow::struct_(items)), false);
+        return arrow::struct_({fieldMap, custom});
     }
 
-    auto fieldMap = std::make_shared<arrow::Field>("", arrow::map(keyArrowType, payloadArrowType), false);
+    auto fieldMap = std::make_shared<arrow::Field>("map", arrow::map(keyArrowType, payloadArrowType), false);
     return arrow::struct_({fieldMap, custom});
 }
 
@@ -327,6 +331,7 @@ std::shared_ptr<arrow::DataType> GetArrowType(const TVariantType* variantType) {
     arrow::FieldVector types;
     TStructType* structType = nullptr;
     TTupleType* tupleType = nullptr;
+
     if (innerType->IsStruct()) {
         structType = static_cast<TStructType*>(innerType);
     } else {
@@ -334,42 +339,43 @@ std::shared_ptr<arrow::DataType> GetArrowType(const TVariantType* variantType) {
         tupleType = static_cast<TTupleType*>(innerType);
     }
 
+    // Create Union of unions if there are more types then arrow::dense_union supports.
     if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
-        // Create Union of unions if there are more types then arrow::dense_union supports.
         ui32 numberOfGroups = (variantType->GetAlternativesCount() - 1) / arrow::UnionType::kMaxTypeCode + 1;
         types.reserve(numberOfGroups);
+
         for (ui32 groupIndex = 0; groupIndex < numberOfGroups; ++groupIndex) {
             ui32 beginIndex = groupIndex * arrow::UnionType::kMaxTypeCode;
             ui32 endIndex = std::min((groupIndex + 1) * arrow::UnionType::kMaxTypeCode, variantType->GetAlternativesCount());
+
             arrow::FieldVector groupTypes;
             groupTypes.reserve(endIndex - beginIndex);
-            if (structType == nullptr) {
-                for (ui32 index = beginIndex; index < endIndex; ++ index) {
-                    groupTypes.emplace_back(std::make_shared<arrow::Field>("",
-                        NArrow::GetArrowType(tupleType->GetElementType(index))));
-                }
-            } else {
-                for (ui32 index = beginIndex; index < endIndex; ++ index) {
-                    groupTypes.emplace_back(std::make_shared<arrow::Field>(std::string(structType->GetMemberName(index)),
-                        NArrow::GetArrowType(structType->GetMemberType(index))));
-                }
+
+            for (ui32 index = beginIndex; index < endIndex; ++index) {
+                auto itemName = (structType == nullptr) ? std::string("field" + ToString(index)) : std::string(structType->GetMemberName(index));
+                auto itemType = (structType == nullptr) ? tupleType->GetElementType(index) : structType->GetMemberType(index);
+                auto itemArrowType = NArrow::GetArrowType(itemType);
+
+                groupTypes.emplace_back(std::make_shared<arrow::Field>(itemName, itemArrowType, itemType->IsOptional()));
             }
-            types.emplace_back(std::make_shared<arrow::Field>("", arrow::dense_union(groupTypes)));
+
+            auto fieldName = std::string("field" + ToString(groupIndex));
+            types.emplace_back(std::make_shared<arrow::Field>(fieldName, arrow::dense_union(groupTypes), false));
         }
-    } else {
-        // Simply put all types in one arrow::dense_union
-        types.reserve(variantType->GetAlternativesCount());
-        if (structType == nullptr) {
-            for (ui32 index = 0; index < variantType->GetAlternativesCount(); ++index) {
-                types.push_back(std::make_shared<arrow::Field>("", NArrow::GetArrowType(tupleType->GetElementType(index))));
-            }
-        } else {
-            for (ui32 index = 0; index < variantType->GetAlternativesCount(); ++index) {
-                types.emplace_back(std::make_shared<arrow::Field>(std::string(structType->GetMemberName(index)),
-                   NArrow::GetArrowType(structType->GetMemberType(index))));
-            }
-        }
+
+        return arrow::dense_union(types);
     }
+
+    // Else put all types in one arrow::dense_union
+    types.reserve(variantType->GetAlternativesCount());
+    for (ui32 index = 0; index < variantType->GetAlternativesCount(); ++index) {
+        auto itemName = (structType == nullptr) ? std::string("field" + ToString(index)) : std::string(structType->GetMemberName(index));
+        auto itemType = (structType == nullptr) ? tupleType->GetElementType(index) : structType->GetMemberType(index);
+        auto itemArrowType = NArrow::GetArrowType(itemType);
+
+        types.emplace_back(std::make_shared<arrow::Field>(itemName, itemArrowType, itemType->IsOptional()));
+    }
+
     return arrow::dense_union(types);
 }
 
@@ -382,16 +388,15 @@ std::shared_ptr<arrow::DataType> GetArrowType(const TOptionalType* optionalType)
         ++depth;
     }
 
-    if (NeedWrapByStruct(currentType)) {
+    if (NeedWrapByExternalOptional(currentType)) {
         ++depth;
     }
 
     std::shared_ptr<arrow::DataType> innerArrowType = NArrow::GetArrowType(currentType);
 
     for (ui32 i = 1; i < depth; ++i) {
-        std::vector<std::shared_ptr<arrow::Field>> fields;
-        fields.emplace_back(std::make_shared<arrow::Field>("opt", innerArrowType, false));
-        innerArrowType = std::make_shared<arrow::StructType>(fields);
+        auto field = std::make_shared<arrow::Field>("opt", innerArrowType, false);
+        innerArrowType = std::make_shared<arrow::StructType>(std::vector<std::shared_ptr<arrow::Field>>{ field });
     }
 
     return innerArrowType;
@@ -463,6 +468,7 @@ void AppendDataValue<arrow::BinaryType>(arrow::ArrayBuilder* builder, NUdf::TUnb
     Y_VERIFY_S(status.ok(), status.ToString());
 }
 
+// Only for timezone datetime types
 template <>
 void AppendDataValue<arrow::StructType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
     Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::STRUCT);
@@ -485,37 +491,33 @@ void AppendDataValue<arrow::StructType>(arrow::ArrayBuilder* builder, NUdf::TUnb
         // NUdf::EDataSlot::TzDate
         case arrow::Type::UINT16: {
             status = reinterpret_cast<arrow::UInt16Builder*>(datetimeArray)->Append(value.Get<ui16>());
-            Y_VERIFY_S(status.ok(), status.ToString());
             break;
         }
         // NUdf::EDataSlot::TzDatetime
         case arrow::Type::UINT32: {
             status = reinterpret_cast<arrow::UInt32Builder*>(datetimeArray)->Append(value.Get<ui32>());
-            Y_VERIFY_S(status.ok(), status.ToString());
             break;
         }
         // NUdf::EDataSlot::TzTimestamp
         case arrow::Type::UINT64: {
             status = reinterpret_cast<arrow::UInt64Builder*>(datetimeArray)->Append(value.Get<ui64>());
-            Y_VERIFY_S(status.ok(), status.ToString());
             break;
         }
         // NUdf::EDataSlot::TzDate32
         case arrow::Type::INT32: {
             status = reinterpret_cast<arrow::Int32Builder*>(datetimeArray)->Append(value.Get<i32>());
-            Y_VERIFY_S(status.ok(), status.ToString());
             break;
         }
         // NUdf::EDataSlot::TzDatetime64, NUdf::EDataSlot::TzTimestamp64
         case arrow::Type::INT64: {
             status = reinterpret_cast<arrow::Int64Builder*>(datetimeArray)->Append(value.Get<i64>());
-            Y_VERIFY_S(status.ok(), status.ToString());
             break;
         }
         default:
             Y_DEBUG_ABORT_UNLESS(false, "Unexpected timezone datetime slot");
             return;
     }
+    Y_VERIFY_S(status.ok(), status.ToString());
 
     status = timezoneArray->Append(value.GetTimezoneId());
     Y_VERIFY_S(status.ok(), status.ToString());
@@ -539,8 +541,10 @@ void AppendFixedSizeDataValue(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue 
             auto intVal = value.GetInt128();
             status = typedBuilder->Append(reinterpret_cast<const char*>(&intVal));
         } else {
-            auto intVal = value.GetInt128();
-            status = typedBuilder->Append(reinterpret_cast<const char*>(&intVal));
+            Y_DEBUG_ABORT_UNLESS(false, "Unexpected data slot");
+
+            auto data = value.AsStringRef();
+            status = typedBuilder->Append(data.Data());
         }
     }
     Y_VERIFY_S(status.ok(), status.ToString());
@@ -585,7 +589,7 @@ std::shared_ptr<arrow::DataType> GetArrowType(const TType* type) {
             return GetArrowType(variantType);
         }
     default:
-        THROW yexception() << "Unsupported type: " << type->GetKindAsStr();
+        Y_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
     }
     return arrow::null();
 }
@@ -598,6 +602,7 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
         case TType::EKind::EmptyDict:
         case TType::EKind::Data:
             return true;
+
         case TType::EKind::Struct: {
             auto structType = static_cast<const TStructType*>(type);
             bool isCompatible = true;
@@ -607,6 +612,7 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
             }
             return isCompatible;
         }
+
         case TType::EKind::Tuple: {
             auto tupleType = static_cast<const TTupleType*>(type);
             bool isCompatible = true;
@@ -616,19 +622,22 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
             }
             return isCompatible;
         }
+
         case TType::EKind::Optional: {
             auto optionalType = static_cast<const TOptionalType*>(type);
             auto innerOptionalType = optionalType->GetItemType();
-            if (innerOptionalType->IsOptional() || innerOptionalType->IsVariant()) {
+            if (NeedWrapByExternalOptional(innerOptionalType)) {
                 return false;
             }
             return IsArrowCompatible(innerOptionalType);
         }
+
         case TType::EKind::List: {
             auto listType = static_cast<const TListType*>(type);
             auto itemType = listType->GetItemType();
             return IsArrowCompatible(itemType);
         }
+
         case TType::EKind::Variant: {
             auto variantType = static_cast<const TVariantType*>(type);
             if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
@@ -638,6 +647,7 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
             Y_VERIFY_S(innerType->IsTuple() || innerType->IsStruct(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
             return IsArrowCompatible(innerType);
         }
+
         case TType::EKind::Dict:
         case TType::EKind::Block:
         case TType::EKind::Type:
@@ -666,53 +676,61 @@ std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const TType* type) {
 void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const TType* type) {
     switch (type->GetKind()) {
         case TType::EKind::Void:
-        case TType::EKind::Null:
-        case TType::EKind::EmptyList:
-        case TType::EKind::EmptyDict: {
+        case TType::EKind::Null: {
+            Y_ENSURE(builder->type()->id() == arrow::Type::NA, "Unexpected builder type");
             auto status = builder->AppendNull();
             Y_VERIFY_S(status.ok(), status.ToString());
             break;
         }
 
+        case TType::EKind::EmptyList:
+        case TType::EKind::EmptyDict: {
+            Y_ENSURE(builder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
+            auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
+            auto status = structBuilder->Append();
+            Y_VERIFY_S(status.ok(), status.ToString());
+            break;
+        }
+
         case TType::EKind::Data: {
-            // TODO for TzDate, TzDatetime, TzTimestamp pass timezone to arrow builder?
             auto dataType = static_cast<const TDataType*>(type);
-            bool success = SwitchMiniKQLDataTypeToArrowType(*dataType->GetDataSlot().Get(), [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
+            auto slot = *dataType->GetDataSlot().Get();
+            bool success = SwitchMiniKQLDataTypeToArrowType(slot, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
                 Y_UNUSED(typeHolder);
                 if constexpr (std::is_same_v<TType, arrow::FixedSizeBinaryType>) {
-                    AppendFixedSizeDataValue<TType>(builder, value, *dataType->GetDataSlot().Get());
+                    AppendFixedSizeDataValue<TType>(builder, value, slot);
                 } else {
                     AppendDataValue<TType>(builder, value);
                 }
                 return true;
             });
-            Y_ABORT_UNLESS(success);
+            Y_VERIFY_S(success, "Failed to append UnboxedValue to arrow builder");
             break;
         }
 
         case TType::EKind::Optional: {
-            auto curType = type;
-            ui32 depth = 0;
+            auto innerType = static_cast<const TOptionalType*>(type)->GetItemType();
+            ui32 depth = 1;
 
-            while (curType->IsOptional()) {
-                curType = static_cast<const TOptionalType*>(curType)->GetItemType();
+            while (innerType->IsOptional()) {
+                innerType = static_cast<const TOptionalType*>(innerType)->GetItemType();
                 ++depth;
             }
 
-            if (NeedWrapByStruct(curType)) {
+            if (NeedWrapByExternalOptional(innerType)) {
                 ++depth;
             }
 
-            auto curBuilder = builder;
-            auto curValue = value;
+            auto innerBuilder = builder;
+            auto innerValue = value;
 
             for (ui32 i = 1; i < depth; ++i) {
-                Y_DEBUG_ABORT_UNLESS(curBuilder->type()->id() == arrow::Type::STRUCT);
-                auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(curBuilder);
-                Y_DEBUG_ABORT_UNLESS(structBuilder->num_fields() == 1);
+                Y_VERIFY_S(innerBuilder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
+                auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(innerBuilder);
+                Y_VERIFY_S(structBuilder->num_fields() == 1, "Unexpected number of fields");
 
-                if (!curValue) {
-                    auto status = curBuilder->AppendNull();
+                if (!innerValue) {
+                    auto status = innerBuilder->AppendNull();
                     Y_VERIFY_S(status.ok(), status.ToString());
                     return;
                 }
@@ -720,14 +738,14 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
                 auto status = structBuilder->Append();
                 Y_VERIFY_S(status.ok(), status.ToString());
 
-                curValue = curValue.GetOptionalValue();
-                curBuilder = structBuilder->field_builder(0);
+                innerValue = innerValue.GetOptionalValue();
+                innerBuilder = structBuilder->field_builder(0);
             }
 
-            if (curValue) {
-                AppendElement(curValue.GetOptionalValue(), curBuilder, curType);
+            if (innerValue) {
+                AppendElement(innerValue.GetOptionalValue(), innerBuilder, innerType);
             } else {
-                auto status = curBuilder->AppendNull();
+                auto status = innerBuilder->AppendNull();
                 Y_VERIFY_S(status.ok(), status.ToString());
             }
             break;
@@ -736,16 +754,19 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         case TType::EKind::List: {
             auto listType = static_cast<const TListType*>(type);
             auto itemType = listType->GetItemType();
-            Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::LIST);
+
+            Y_VERIFY_S(builder->type()->id() == arrow::Type::LIST, "Unexpected builder type");
             auto listBuilder = reinterpret_cast<arrow::ListBuilder*>(builder);
+
             auto status = listBuilder->Append();
             Y_VERIFY_S(status.ok(), status.ToString());
+
             auto innerBuilder = listBuilder->value_builder();
-            if (auto p = value.GetElements()) {
-                auto len = value.GetListLength();
-                while (len > 0) {
-                    AppendElement(*p++, innerBuilder, itemType);
-                    --len;
+            if (auto item = value.GetElements()) {
+                auto length = value.GetListLength();
+                while (length > 0) {
+                    AppendElement(*item++, innerBuilder, itemType);
+                    --length;
                 }
             } else {
                 const auto iter = value.GetListIterator();
@@ -758,11 +779,14 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
 
         case TType::EKind::Struct: {
             auto structType = static_cast<const TStructType*>(type);
-            Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::STRUCT);
+
+            Y_VERIFY_S(builder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
             auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
+
             auto status = structBuilder->Append();
             Y_VERIFY_S(status.ok(), status.ToString());
-            Y_DEBUG_ABORT_UNLESS(static_cast<ui32>(structBuilder->num_fields()) == structType->GetMembersCount());
+
+            Y_VERIFY_S(static_cast<ui32>(structBuilder->num_fields()) == structType->GetMembersCount(), "Unexpected number of fields");
             for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
                 auto innerBuilder = structBuilder->field_builder(index);
                 auto memberType = structType->GetMemberType(index);
@@ -773,11 +797,14 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
 
         case TType::EKind::Tuple: {
             auto tupleType = static_cast<const TTupleType*>(type);
-            Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::STRUCT);
+
+            Y_VERIFY_S(builder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
             auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
+
             auto status = structBuilder->Append();
             Y_VERIFY_S(status.ok(), status.ToString());
-            Y_DEBUG_ABORT_UNLESS(static_cast<ui32>(structBuilder->num_fields()) == tupleType->GetElementsCount());
+
+            Y_VERIFY_S(static_cast<ui32>(structBuilder->num_fields()) == tupleType->GetElementsCount(), "Unexpected number of fields");
             for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
                 auto innerBuilder = structBuilder->field_builder(index);
                 auto elementType = tupleType->GetElementType(index);
@@ -795,32 +822,30 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
             arrow::ArrayBuilder* itemBuilder = nullptr;
             arrow::StructBuilder* structBuilder = nullptr;
 
-            Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::STRUCT);
+            Y_VERIFY_S(builder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
             arrow::StructBuilder* wrapBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
-            Y_DEBUG_ABORT_UNLESS(wrapBuilder->num_fields() == 2);
+            Y_VERIFY_S(wrapBuilder->num_fields() == 2, "Unexpected number of fields");
 
             auto status = wrapBuilder->Append();
             Y_VERIFY_S(status.ok(), status.ToString());
 
             if (keyType->GetKind() == TType::EKind::Optional) {
-                Y_DEBUG_ABORT_UNLESS(wrapBuilder->field_builder(0)->type()->id() == arrow::Type::LIST);
+                Y_VERIFY_S(wrapBuilder->field_builder(0)->type()->id() == arrow::Type::LIST, "Unexpected builder type");
                 auto listBuilder = reinterpret_cast<arrow::ListBuilder*>(wrapBuilder->field_builder(0));
-                Y_DEBUG_ABORT_UNLESS(listBuilder->value_builder()->type()->id() == arrow::Type::STRUCT);
 
-                // Start a new list in ListArray of structs
                 auto status = listBuilder->Append();
                 Y_VERIFY_S(status.ok(), status.ToString());
 
+                Y_VERIFY_S(listBuilder->value_builder()->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
                 structBuilder = reinterpret_cast<arrow::StructBuilder*>(listBuilder->value_builder());
-                Y_DEBUG_ABORT_UNLESS(structBuilder->num_fields() == 2);
+                Y_VERIFY_S(structBuilder->num_fields() == 2, "Unexpected number of fields");
 
                 keyBuilder = structBuilder->field_builder(0);
                 itemBuilder = structBuilder->field_builder(1);
             } else {
-                Y_DEBUG_ABORT_UNLESS(wrapBuilder->field_builder(0)->type()->id() == arrow::Type::MAP);
+                Y_VERIFY_S(wrapBuilder->field_builder(0)->type()->id() == arrow::Type::MAP, "Unexpected builder type");
                 auto mapBuilder = reinterpret_cast<arrow::MapBuilder*>(wrapBuilder->field_builder(0));
 
-                // Start a new map in MapArray
                 auto status = mapBuilder->Append();
                 Y_VERIFY_S(status.ok(), status.ToString());
 
@@ -832,8 +857,8 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
             status = customBuilder->Append(0);
             Y_VERIFY_S(status.ok(), status.ToString());
 
-            const auto iter = value.GetDictIterator();
             // We do not sort dictionary before appending it to builder.
+            const auto iter = value.GetDictIterator();
             for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) {
                 if (structBuilder != nullptr) {
                     status = structBuilder->Append();
@@ -849,33 +874,42 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         case TType::EKind::Variant: {
             // TODO Need to properly convert variants containing more than 127*127 types?
             auto variantType = static_cast<const TVariantType*>(type);
-            Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::DENSE_UNION);
+
+            Y_VERIFY_S(builder->type()->id() == arrow::Type::DENSE_UNION, "Unexpected builder type");
             auto unionBuilder = reinterpret_cast<arrow::DenseUnionBuilder*>(builder);
+
             ui32 variantIndex = value.GetVariantIndex();
             TType* innerType = variantType->GetUnderlyingType();
+
             if (innerType->IsStruct()) {
                 innerType = static_cast<TStructType*>(innerType)->GetMemberType(variantIndex);
             } else {
                 Y_VERIFY_S(innerType->IsTuple(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
                 innerType = static_cast<TTupleType*>(innerType)->GetElementType(variantIndex);
             }
+
             if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
                 ui32 numberOfGroups = (variantType->GetAlternativesCount() - 1) / arrow::UnionType::kMaxTypeCode + 1;
                 Y_DEBUG_ABORT_UNLESS(static_cast<ui32>(unionBuilder->num_children()) == numberOfGroups);
+
                 ui32 groupIndex = variantIndex / arrow::UnionType::kMaxTypeCode;
                 auto status = unionBuilder->Append(groupIndex);
                 Y_VERIFY_S(status.ok(), status.ToString());
+
                 auto innerBuilder = unionBuilder->child_builder(groupIndex);
                 Y_DEBUG_ABORT_UNLESS(innerBuilder->type()->id() == arrow::Type::DENSE_UNION);
                 auto innerUnionBuilder = reinterpret_cast<arrow::DenseUnionBuilder*>(innerBuilder.get());
+
                 ui32 innerVariantIndex = variantIndex % arrow::UnionType::kMaxTypeCode;
                 status = innerUnionBuilder->Append(innerVariantIndex);
                 Y_VERIFY_S(status.ok(), status.ToString());
+
                 auto doubleInnerBuilder = innerUnionBuilder->child_builder(innerVariantIndex);
                 AppendElement(value.GetVariantItem(), doubleInnerBuilder.get(), innerType);
             } else {
                 auto status = unionBuilder->Append(variantIndex);
                 Y_VERIFY_S(status.ok(), status.ToString());
+
                 auto innerBuilder = unionBuilder->child_builder(variantIndex);
                 AppendElement(value.GetVariantItem(), innerBuilder.get(), innerType);
             }
@@ -883,7 +917,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         }
 
     default:
-        THROW yexception() << "Unsupported type: " << type->GetKindAsStr();
+        Y_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
     }
 }
 
@@ -904,12 +938,14 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
     if (array->IsNull(row)) {
         return NUdf::TUnboxedValuePod();
     }
+
     switch(itemType->GetKind()) {
         case TType::EKind::Void:
         case TType::EKind::Null:
         case TType::EKind::EmptyList:
         case TType::EKind::EmptyDict:
             break;
+
         case TType::EKind::Data: {
             auto dataType = static_cast<const TDataType*>(itemType);
             NUdf::TUnboxedValue result;
@@ -918,86 +954,98 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
                 result = GetUnboxedValue<TType>(array, row);
                 return true;
             });
-            Y_DEBUG_ABORT_UNLESS(success);
+            Y_ENSURE(success, "Failed to extract unboxed value from arrow array");
             return result;
         }
+
         case TType::EKind::Struct: {
             auto structType = static_cast<const TStructType*>(itemType);
+
             Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::STRUCT);
             auto typedArray = static_pointer_cast<arrow::StructArray>(array);
             Y_DEBUG_ABORT_UNLESS(static_cast<ui32>(typedArray->num_fields()) == structType->GetMembersCount());
+
             NUdf::TUnboxedValue* itemsPtr = nullptr;
             auto result = holderFactory.CreateDirectArrayHolder(structType->GetMembersCount(), itemsPtr);
+
             for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
                 auto memberType = structType->GetMemberType(index);
                 itemsPtr[index] = ExtractUnboxedValue(typedArray->field(index), row, memberType, holderFactory);
             }
             return result;
         }
+
         case TType::EKind::Tuple: {
             auto tupleType = static_cast<const TTupleType*>(itemType);
+
             Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::STRUCT);
             auto typedArray = static_pointer_cast<arrow::StructArray>(array);
             Y_DEBUG_ABORT_UNLESS(static_cast<ui32>(typedArray->num_fields()) == tupleType->GetElementsCount());
+
             NUdf::TUnboxedValue* itemsPtr = nullptr;
             auto result = holderFactory.CreateDirectArrayHolder(tupleType->GetElementsCount(), itemsPtr);
+
             for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
                 auto elementType = tupleType->GetElementType(index);
                 itemsPtr[index] = ExtractUnboxedValue(typedArray->field(index), row, elementType, holderFactory);
             }
             return result;
         }
+
         case TType::EKind::Optional: {
             auto optionalType = static_cast<const TOptionalType*>(itemType);
             auto innerOptionalType = optionalType->GetItemType();
-            if (NeedWrapByStruct(innerOptionalType)) {
+
+            if (NeedWrapByExternalOptional(innerOptionalType)) {
                 Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::STRUCT);
 
-                auto curArray = array;
-                auto curType = itemType;
+                auto innerArray = array;
+                auto innerType = itemType;
 
                 NUdf::TUnboxedValue value;
                 int depth = 0;
 
-                while (curArray->type_id() == arrow::Type::STRUCT) {
-                    auto structArray = static_pointer_cast<arrow::StructArray>(curArray);
+                while (innerArray->type_id() == arrow::Type::STRUCT) {
+                    auto structArray = static_pointer_cast<arrow::StructArray>(innerArray);
                     Y_DEBUG_ABORT_UNLESS(structArray->num_fields() == 1);
-
-                    ++depth;
 
                     if (structArray->IsNull(row)) {
                         value = NUdf::TUnboxedValuePod();
                         break;
                     }
 
-                    curType = static_cast<const TOptionalType*>(curType)->GetItemType();
-                    curArray = structArray->field(0);
+                    innerType = static_cast<const TOptionalType*>(innerType)->GetItemType();
+                    innerArray = structArray->field(0);
+                    ++depth;
                 }
 
-                if (curType->IsVariant()) {
-                    --depth;
-                }
-
-                if (curType->IsVariant() || !curArray->IsNull(row)) {
-                    value = ExtractUnboxedValue(curArray, row, curType, holderFactory);
+                auto wrap = NeedWrapByExternalOptional(innerType);
+                if (wrap || !innerArray->IsNull(row)) {
+                    value = ExtractUnboxedValue(innerArray, row, innerType, holderFactory);
+                    if (wrap) {
+                        --depth;
+                    }
                 }
 
                 for (int i = 0; i < depth; ++i) {
                     value = value.MakeOptional();
                 }
-
                 return value;
-            } else {
-                return ExtractUnboxedValue(array, row, innerOptionalType, holderFactory).Release().MakeOptional();
             }
+
+            return ExtractUnboxedValue(array, row, innerOptionalType, holderFactory).Release().MakeOptional();
         }
+
         case TType::EKind::List: {
             auto listType = static_cast<const TListType*>(itemType);
+
             Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::LIST);
             auto typedArray = static_pointer_cast<arrow::ListArray>(array);
+
             auto arraySlice = typedArray->value_slice(row);
             auto itemType = listType->GetItemType();
             const auto len = arraySlice->length();
+
             NUdf::TUnboxedValue *items = nullptr;
             auto list = holderFactory.CreateDirectArrayHolder(len, items);
             for (ui64 i = 0; i < static_cast<ui64>(len); ++i) {
@@ -1005,8 +1053,10 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
             }
             return list;
         }
+
         case TType::EKind::Dict: {
             auto dictType = static_cast<const TDictType*>(itemType);
+
             auto keyType = dictType->GetKeyType();
             auto payloadType = dictType->GetPayloadType();
             auto dictBuilder = holderFactory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed);
@@ -1021,27 +1071,29 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
             Y_DEBUG_ABORT_UNLESS(wrapArray->num_fields() == 2);
 
             auto dictSlice = wrapArray->field(0);
-            auto customSlice = wrapArray->field(1);
-            Y_UNUSED(customSlice); // Custom destructor for matching YQL-15332
 
             if (keyType->GetKind() == TType::EKind::Optional) {
                 Y_DEBUG_ABORT_UNLESS(dictSlice->type_id() == arrow::Type::LIST);
                 auto listArray = static_pointer_cast<arrow::ListArray>(dictSlice);
+
                 auto arraySlice = listArray->value_slice(row);
                 Y_DEBUG_ABORT_UNLESS(arraySlice->type_id() == arrow::Type::STRUCT);
                 auto structArray = static_pointer_cast<arrow::StructArray>(arraySlice);
                 Y_DEBUG_ABORT_UNLESS(structArray->num_fields() == 2);
+
                 dictLength = arraySlice->length();
                 keyArray = structArray->field(0);
                 payloadArray = structArray->field(1);
             } else {
                 Y_DEBUG_ABORT_UNLESS(dictSlice->type_id() == arrow::Type::MAP);
                 auto mapArray = static_pointer_cast<arrow::MapArray>(dictSlice);
+
                 dictLength = mapArray->value_length(row);
                 offset = mapArray->value_offset(row);
                 keyArray = mapArray->keys();
                 payloadArray = mapArray->items();
             }
+
             for (ui64 i = offset; i < offset + static_cast<ui64>(dictLength); ++i) {
                 auto key = ExtractUnboxedValue(keyArray, i, keyType, holderFactory);
                 auto payload = ExtractUnboxedValue(payloadArray, i, payloadType, holderFactory);
@@ -1049,23 +1101,29 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
             }
             return dictBuilder->Build();
         }
+
         case TType::EKind::Variant: {
             // TODO Need to properly convert variants containing more than 127*127 types?
             auto variantType = static_cast<const TVariantType*>(itemType);
+
             Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::DENSE_UNION);
             auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
+
             auto variantIndex = unionArray->child_id(row);
             auto rowInChild = unionArray->value_offset(row);
             std::shared_ptr<arrow::Array> valuesArray = unionArray->field(variantIndex);
+
             if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
                 // Go one step deeper
                 Y_DEBUG_ABORT_UNLESS(valuesArray->type_id() == arrow::Type::DENSE_UNION);
                 auto innerUnionArray = static_pointer_cast<arrow::DenseUnionArray>(valuesArray);
                 auto innerVariantIndex = innerUnionArray->child_id(rowInChild);
+
                 rowInChild = innerUnionArray->value_offset(rowInChild);
                 valuesArray = innerUnionArray->field(innerVariantIndex);
                 variantIndex = variantIndex * arrow::UnionType::kMaxTypeCode + innerVariantIndex;
             }
+
             TType* innerType = variantType->GetUnderlyingType();
             if (innerType->IsStruct()) {
                 innerType = static_cast<TStructType*>(innerType)->GetMemberType(variantIndex);
@@ -1073,11 +1131,12 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
                 Y_VERIFY_S(innerType->IsTuple(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
                 innerType = static_cast<TTupleType*>(innerType)->GetElementType(variantIndex);
             }
+
             NUdf::TUnboxedValue value = ExtractUnboxedValue(valuesArray, rowInChild, innerType, holderFactory);
             return holderFactory.CreateVariantHolder(value.Release(), variantIndex);
         }
     default:
-        THROW yexception() << "Unsupported type: " << itemType->GetKindAsStr();
+        Y_ENSURE(false, "Unsupported type: " << itemType->GetKindAsStr());
     }
     return NUdf::TUnboxedValuePod();
 }

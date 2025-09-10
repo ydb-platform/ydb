@@ -1595,7 +1595,7 @@ column1:   -- is_valid: all not null
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
-  -- child 0 type: dense_union<bar: uint8=0, foo: int32=1>
+  -- child 0 type: dense_union<bar: uint8 not null=0, foo: int32 not null=1>
     -- is_valid: all not null
     -- type_ids:       [
         1
@@ -1635,9 +1635,9 @@ R"(column0:   -- is_valid: all not null
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
-  -- child 0 type: struct<opt: dense_union<bar: uint8=0, foo: int32=1, foobar: binary=2> not null>
+  -- child 0 type: struct<opt: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2> not null>
     -- is_valid: all not null
-    -- child 0 type: dense_union<bar: uint8=0, foo: int32=1, foobar: binary=2>
+    -- child 0 type: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2>
       -- is_valid: all not null
       -- type_ids:         [
           1
@@ -1802,10 +1802,7 @@ R"(column0:   [
             UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be STRUCT");
 
             const TString expected =
-R"(column0:   -- is_valid:
-      [
-      false
-    ]
+R"(column0:   -- is_valid: all not null
 )";
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
         }
@@ -1909,7 +1906,7 @@ R"(column0:   -- is_valid: all not null
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
-  -- child 0 type: list<item: struct<: binary, : int32>>
+  -- child 0 type: list<item: struct<key: binary, payload: int32 not null>>
     [
       -- is_valid: all not null
       -- child 0 type: binary
@@ -1953,10 +1950,7 @@ R"(column0:   -- is_valid: all not null
             UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be STRUCT");
 
             const TString expected =
-R"(column0:   -- is_valid:
-      [
-      false
-    ]
+R"(column0:   -- is_valid: all not null
 )";
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
         }

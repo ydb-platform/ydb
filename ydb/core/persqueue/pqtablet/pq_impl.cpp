@@ -182,6 +182,9 @@ private:
             auto readRes = partResp->MutableCmdReadResult();
             readRes->SetBlobsFromDisk(readRes->GetBlobsFromDisk() + readResult.GetBlobsFromDisk());
             readRes->SetBlobsFromCache(readRes->GetBlobsFromCache() + readResult.GetBlobsFromCache());
+            if (AppData(ctx)->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+                readRes->SetReadFromTimestampMs(readFromTimestampMs);
+            }
         }
         if (record.GetPartitionResponse().HasCookie())
             responseRecord.MutablePartitionResponse()->SetCookie(record.GetPartitionResponse().GetCookie());
@@ -220,7 +223,7 @@ private:
                 continue; // Skip the empty part;
             }
             if (LastSkipOffset.Defined() && currentReadResult.GetOffset() == *LastSkipOffset) {
-                continue; // This is part of the message which is already being skipped due to empty parts. Skip all other parts as well;
+                continue; // This is part of the message which is already being skipped due to empty parts or timestamp filtering. Skip all other parts as well;
             }
             if (!InitialRequest) {
                 // This is follow-up request to read missing parts;
@@ -262,6 +265,10 @@ private:
                                     << " full request(now): " << Request);
                         break;
                     }
+                }
+                if (currentReadResult.GetWriteTimestampMS() < readFromTimestampMs && AppData(ctx)->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+                    LastSkipOffset = currentReadResult.GetOffset();
+                    continue;
                 }
                 // Create new message for first part;
                 partResp->AddResult()->CopyFrom(readResult.GetResult(i));

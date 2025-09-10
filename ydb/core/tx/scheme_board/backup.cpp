@@ -104,8 +104,8 @@ private:
             const TString path = PendingPaths.front();
             PendingPaths.pop();
 
-            const ui64 cookie = PathByCookie.size();
-            PathByCookie.emplace_back(path);
+            const ui64 cookie = ++NextCookie;
+            PathByCookie[cookie] = path;
             ++InProgressPaths;
 
             Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvResolveSchemeBoard(path), 0, cookie);
@@ -121,20 +121,19 @@ private:
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr& ev) {
-        SBB_LOG_D("Handle " << ev->Get()->ToString()
-            << ", path by cookie size: " << PathByCookie.size()
-        );
-
         const ui64 cookie = ev->Cookie;
-        if (PathByCookie.size() <= cookie) {
+        auto it = PathByCookie.find(cookie);
+        if (it == PathByCookie.end()) {
             SBB_LOG_N("Unexpected cookie: " << cookie);
             return;
         }
-        const auto& path = PathByCookie[cookie];
+
+        const TString& path = it->second;
+        SBB_LOG_D("Handle " << ev->Get()->ToString() << ", path: " << path);
 
         const auto replicas = ev->Get()->GetPlainReplicas();
         if (replicas.empty()) {
-            return MarkPathCompleted();
+            return MarkPathCompleted(it);
         }
 
         Send(SelectReplica(replicas), new TSchemeBoardMonEvents::TEvDescribeRequest(path), 0, cookie);
@@ -146,17 +145,16 @@ private:
     }
 
     void Handle(TSchemeBoardMonEvents::TEvDescribeResponse::TPtr& ev) {
-        SBB_LOG_D("Handle " << ev->Get()->ToString()
-            << ", path by cookie size: " << PathByCookie.size()
-        );
-
         const ui64 cookie = ev->Cookie;
-        if (PathByCookie.size() <= cookie) {
+        auto it = PathByCookie.find(cookie);
+        if (it == PathByCookie.end()) {
             SBB_LOG_N("Unexpected cookie: " << cookie);
             return;
         }
-        const auto& path = PathByCookie[cookie];
-        MarkPathCompleted();
+
+        const TString path = it->second;
+        SBB_LOG_D("Handle " << ev->Get()->ToString() << ", path: " << path);
+        MarkPathCompleted(it);
 
         const TString& jsonDescription = ev->Get()->Record.GetJson();
 
@@ -192,18 +190,19 @@ private:
         }
     }
 
-    void MarkPathCompleted() {
+    void MarkPathCompleted(THashMap<ui64, TString>::iterator it) {
+        PathByCookie.erase(it);
         --InProgressPaths;
     }
 
     void HandleTimeout() {
         SBB_LOG_D("Timeout");
-        MarkPathCompleted();
+        --InProgressPaths;
     }
 
     void HandleUndelivered() {
         SBB_LOG_D("Undelivered");
-        MarkPathCompleted();
+        --InProgressPaths;
     }
 
     void SendProgressUpdate() {
@@ -244,11 +243,12 @@ private:
     const ui32 InFlightLimit;
     const TActorId Parent;
     TQueue<TString> PendingPaths;
-    TVector<TString> PathByCookie;
+    THashMap<ui64, TString> PathByCookie;
     TMaybe<TFileOutput> OutputFile;
     ui32 InProgressPaths = 0;
     ui32 ProcessedPaths = 0;
     ui32 TotalPaths = 0;
+    ui64 NextCookie = 0;
 };
 
 class TRestoreActor: public TActorBootstrapped<TRestoreActor> {

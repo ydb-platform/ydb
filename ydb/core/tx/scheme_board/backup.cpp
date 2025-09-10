@@ -305,9 +305,10 @@ private:
             descriptions.emplace_back(pathId, std::move(description));
         }
 
-        if (!descriptions.empty()) {
-            Populate(std::move(descriptions));
+        if (descriptions.empty()) {
+            return ReplyError("No descriptions, nothing to restore");
         }
+        Populate(std::move(descriptions));
     }
 
     void Populate(std::vector<std::pair<TPathId, NSchemeBoard::TTwoPartDescription>>&& descriptions) {

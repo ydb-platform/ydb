@@ -507,6 +507,21 @@ namespace NTable {
                 WriteStats.HiddenRows += Current.HiddenRows;
                 WriteStats.HiddenDrops += Current.HiddenDrops;
 
+                Current.BTreeGroupIndexes.clear();
+                Current.BTreeHistoricIndexes.clear();
+                if (WriteBTreeIndex) {
+                    Current.BTreeGroupIndexes.reserve(Groups.size());
+                    for (auto& g : Groups) {
+                        Current.BTreeGroupIndexes.push_back(g.BTreeIndex.Finish(Pager));
+                    }
+                    if (Current.HistoryWritten > 0) {
+                        Current.BTreeHistoricIndexes.reserve(Histories.size());
+                        for (auto& g : Histories) {
+                            Current.BTreeHistoricIndexes.push_back(g.BTreeIndex.Finish(Pager));
+                        }
+                    }
+                }
+
                 Current.FlatHistoricIndexes.clear();
                 Current.FlatGroupIndexes.clear();
                 Current.FlatIndex = Max<TPageId>();
@@ -526,21 +541,6 @@ namespace NTable {
                     }
 
                     Current.FlatIndex = WritePage(Groups[0].FlatIndex.Flush(), EPage::FlatIndex);
-                }
-                
-                Current.BTreeGroupIndexes.clear();
-                Current.BTreeHistoricIndexes.clear();
-                if (WriteBTreeIndex) {
-                    Current.BTreeGroupIndexes.reserve(Groups.size());
-                    for (auto& g : Groups) {
-                        Current.BTreeGroupIndexes.push_back(g.BTreeIndex.Finish(Pager));
-                    }
-                    if (Current.HistoryWritten > 0) {
-                        Current.BTreeHistoricIndexes.reserve(Histories.size());
-                        for (auto& g : Histories) {
-                            Current.BTreeHistoricIndexes.push_back(g.BTreeIndex.Finish(Pager));
-                        }
-                    }
                 }
 
                 Current.Large = WriteIf(FrameL.Make(), EPage::Frames);

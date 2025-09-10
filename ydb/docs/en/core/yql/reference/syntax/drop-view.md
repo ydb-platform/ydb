@@ -1,6 +1,6 @@
 # DROP VIEW
 
-`DROP VIEW` deletes an existing [view](../../../../concepts/datamodel/view.md).
+`DROP VIEW` deletes an existing [view](../../../concepts/datamodel/view.md).
 
 ## Syntax
 

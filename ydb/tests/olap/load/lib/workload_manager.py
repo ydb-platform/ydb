@@ -233,7 +233,7 @@ class WorkloadMangerConcurentQueryLimit(WorkloadMangerBase):
 
 
 class WorkloadMangerComputeSheduler(WorkloadMangerBase):
-    threads = 1
+    threads = 10
     metrics: list[(float, dict[str, float])] = []
     metrics_keys = set()
 

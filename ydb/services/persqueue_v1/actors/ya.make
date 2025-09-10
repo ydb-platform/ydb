@@ -8,7 +8,6 @@ PEERDIR(
     ydb/core/util
     ydb/core/base
     ydb/core/grpc_services
-    ydb/core/persqueue
     ydb/core/persqueue/events
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/cluster_tracker

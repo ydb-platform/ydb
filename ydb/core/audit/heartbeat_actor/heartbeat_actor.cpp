@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <ydb/core/audit/audit_log.h>
 
@@ -17,19 +18,18 @@ class THeartbeatActor : public NActors::TActorBootstrapped<THeartbeatActor> {
 public:
     explicit THeartbeatActor(const TAuditConfig& auditConfig)
         : HeartbeatInterval(GetInterval(auditConfig))
+        , EnableLogging(auditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::AuditHeartbeat, NKikimrConfig::TAuditConfig::TLogClassConfig::Completed, NACLibProto::SUBJECT_TYPE_ANONYMOUS))
     {
     }
 
     static TDuration GetInterval(const TAuditConfig& auditConfig) {
-        if (auditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::AuditHeartbeat, NKikimrConfig::TAuditConfig::TLogClassConfig::Completed, NACLibProto::SUBJECT_TYPE_ANONYMOUS)) {
-            return TDuration::Seconds(auditConfig.GetHeartbeat().GetIntervalSeconds());
-        }
-        return TDuration::Zero();
+        return TDuration::Seconds(auditConfig.GetHeartbeat().GetIntervalSeconds());
     }
 
     void Bootstrap() {
         Become(&THeartbeatActor::StateFunc);
-        if (HeartbeatInterval) {
+        Y_VERIFY(HeartbeatInterval);
+        if (EnableLogging) {
             PerformHeartbeat();
         } else {
             PassAway();
@@ -62,6 +62,7 @@ public:
 
 private:
     const TDuration HeartbeatInterval;
+    const bool EnableLogging;
 };
 
 }

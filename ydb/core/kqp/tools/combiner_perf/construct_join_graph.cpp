@@ -48,6 +48,7 @@ void SetEntryPointValues(IComputationGraph& g, NYql::NUdf::TUnboxedValue left, N
     g.GetEntryPoint(0,false)->SetValue(ctx,std::move(left));
     g.GetEntryPoint(1,false)->SetValue(ctx,std::move(right));
 }
+
     
 }    
 THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, InnerJoinDescription descr){
@@ -76,51 +77,59 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, I
     
     TType* multiResultType = dqPb.NewMultiType(resultTypesArr);
     const bool kNotScalar = false;
+    auto asTupleListArg = [&dqPb](TArrayRef<TType*const > columns){
+        return dqPb.Arg(dqPb.NewListType(dqPb.NewTupleType(columns)));
+    };
+    auto asBlockTupleListArg = [&pb](TArrayRef<TType*const > columns){
+        return pb.Arg(pb.NewListType(MakeBlockTupleType(pb, pb.NewTupleType(columns),kNotScalar)));
+    };
+    TRuntimeNode leftScalarArg = asTupleListArg(descr.LeftSource.ColumnTypes);
+    TRuntimeNode rightScalarArg = asTupleListArg(descr.RightSource.ColumnTypes);
+    TRuntimeNode leftBlockArg = asBlockTupleListArg(descr.LeftSource.ColumnTypes);
+    TRuntimeNode rightBlockArg = asBlockTupleListArg(descr.RightSource.ColumnTypes);
 
     switch (algo) {
 
     case ETestedJoinAlgo::kScalarGrace: {
-        auto asTupleListArg = [&dqPb](TArrayRef<TType*const > columns){
-            return dqPb.Arg(dqPb.NewListType(dqPb.NewTupleType(columns)));
-        };
 
-        TRuntimeNode leftArg = asTupleListArg(descr.LeftSource.ColumnTypes);
-        TRuntimeNode rightArg = asTupleListArg(descr.RightSource.ColumnTypes);
 
         
         auto wideStream =dqPb.FromFlow(dqPb.GraceJoin(
-            ToWideFlow(pb, leftArg),
-           ToWideFlow(pb, rightArg),
+            ToWideFlow(pb, leftScalarArg),
+           ToWideFlow(pb, rightScalarArg),
             kInnerJoin, descr.LeftSource.KeyColumnIndexes,
             descr.RightSource.KeyColumnIndexes, leftRenames,rightRenames,
             dqPb.NewFlowType( multiResultType)));
         std::vector<TNode*> entrypoints;
-        entrypoints.push_back(leftArg.GetNode());
-        entrypoints.push_back(rightArg.GetNode());
-        MKQL_ENSURE(leftArg.GetStaticType()->IsList(), TStringBuilder() << "left entrypint node should be of list type, type is " << leftArg.GetStaticType()->GetKindAsStr() << " instead");
-        MKQL_ENSURE(rightArg.GetStaticType()->IsList(), TStringBuilder() << "right entrypint node should be of list type, type is " << rightArg.GetStaticType()->GetKindAsStr() << " instead");
+        entrypoints.push_back(leftScalarArg.GetNode());
+        entrypoints.push_back(rightScalarArg.GetNode());
         THolder<IComputationGraph> graph = descr.Setup->BuildGraph(wideStream,entrypoints);
         SetEntryPointValues(*graph, descr.LeftSource.ValuesList, descr.RightSource.ValuesList);
         return graph;
+    }
+    case ETestedJoinAlgo::kScalarMap: {
+        pb.MapJoinCore(
+        leftScalarArg,
+        pb.ToSortedDict(descr.RightSource.ColumnTypes), 
+        kInnerJoin,
+        descr.LeftSource.KeyColumnIndexes,  
+        leftRenames,rightRenames,
+        pb.NewStreamType(multiResultType)
+    );
     }
     case ETestedJoinAlgo::kBlockMap: {
         TVector<ui32> kEmptyColumnDrops;
         TVector<ui32> kRightDroppedColumns;
         std::copy(descr.RightSource.KeyColumnIndexes.begin(),descr.RightSource.KeyColumnIndexes.end(), std::back_inserter(kRightDroppedColumns));
         
-        auto asBlockTupleListArg = [&pb](TArrayRef<TType*const > columns){
-            return pb.Arg(pb.NewListType(MakeBlockTupleType(pb, pb.NewTupleType(columns),kNotScalar)));
-        };
-        TRuntimeNode leftArg = asBlockTupleListArg(descr.LeftSource.ColumnTypes);
-        TRuntimeNode rightArg = asBlockTupleListArg(descr.RightSource.ColumnTypes);
         TRuntimeNode wideStream = BuildBlockJoin(pb, kInnerJoin,
-            leftArg, descr.LeftSource.KeyColumnIndexes, kEmptyColumnDrops,
-            rightArg, descr.RightSource.KeyColumnIndexes, kRightDroppedColumns,
+            leftBlockArg, descr.LeftSource.KeyColumnIndexes, kEmptyColumnDrops,
+            rightBlockArg, descr.RightSource.KeyColumnIndexes, kRightDroppedColumns,
             false
         );
         std::vector<TNode*> entrypints;
-        entrypints.push_back(leftArg.GetNode());
-        entrypints.push_back(rightArg.GetNode());
+        entrypints.push_back(leftBlockArg.GetNode());
+        entrypints.push_back(rightBlockArg.GetNode());
         THolder<IComputationGraph> graph = descr.Setup->BuildGraph(wideStream, entrypints);
         TComputationContext& ctx = graph->GetContext();
         const int kBlockSize = 128;

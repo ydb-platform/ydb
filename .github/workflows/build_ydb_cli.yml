@@ -3,6 +3,7 @@ run-name: Build YDB CLI
 
 permissions:
   contents: write
+  pull-requests: write
 
 on:
   workflow_dispatch:
@@ -317,6 +318,7 @@ jobs:
         uses: ./.github/actions/configure_git
 
       - name: Create and auto-merge PR
+        id: create-pr
         env:
           GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
@@ -332,31 +334,40 @@ jobs:
             '### Description for reviewers' \
             "Automated release PR for CLI version ${{ needs.prepare-release.outputs.new-version }}"
 
-          PR_NUMBER=$(gh pr create \
+          PR_URL=$(gh pr create \
             --title "$PR_TITLE" \
             --body "$PR_BODY" \
             --head "${{ needs.prepare-release.outputs.branch-name }}" \
             --base main \
-            --label "automated-release" \
             --repo ${{ github.repository }})
 
+          # Extract PR number from URL (e.g., "https://github.com/user/repo/pull/12" -> "12")
+          PR_NUMBER=$(basename "$PR_URL")
+
           echo "Created PR #$PR_NUMBER"
+          echo "PR URL: $PR_URL"
+          echo "pr-number=$PR_NUMBER" >> $GITHUB_OUTPUT
 
-          # Enable auto-merge
-          gh pr merge "$PR_NUMBER" --merge --auto
-          echo "Enabled auto-merge for PR #$PR_NUMBER"
+          if gh pr merge "$PR_NUMBER" --merge --auto; then
+            echo "Auto-merge enabled for PR #$PR_NUMBER"
+          else
+            echo "Auto-merge failed - branch protection rules required"
+            echo "Please merge PR manually: $PR_URL"
+            exit 1
+          fi
 
-      - name: Wait for PR merge and create tag
+      - name: Wait for PR merge
         env:
           GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
-          echo "Waiting for PR to be merged..."
+          PR_NUMBER="${{ steps.create-pr.outputs.pr-number }}"
+          echo "Waiting for PR #$PR_NUMBER to be merged (tests may take 30-60+ minutes)..."
 
-          # Wait up to 2 hours, checking every 5 minutes  
-          for i in {1..24}; do  # 24 * 5 minutes = 2 hours
+          # Wait up to 4 hours, checking every 5 minutes  
+          for i in {1..48}; do  # 48 * 5 minutes = 4 hours
             # Check if PR is merged via GitHub API
-            PR_STATE=$(gh pr view "$PR_NUMBER" --json state,merged --jq '.state + ":" + (.merged | tostring)')
-            
+            PR_STATE=$(gh pr view "$PR_NUMBER" --json state,mergedAt --jq '.state + ":" + (.mergedAt != null | tostring)')
+
             if [[ "$PR_STATE" == "MERGED:true" ]]; then
               echo "PR merged successfully"
               break
@@ -375,13 +386,16 @@ jobs:
           done
 
           # Check if we timed out
-          PR_STATE=$(gh pr view "$PR_NUMBER" --json state,merged --jq '.state + ":" + (.merged | tostring)')
+          PR_STATE=$(gh pr view "$PR_NUMBER" --json state,mergedAt --jq '.state + ":" + (.mergedAt != null | tostring)')
           if [[ "$PR_STATE" != "MERGED:true" ]]; then
-            echo "ERROR: PR was not merged after 2 hours. Current state: $PR_STATE"
+            echo "ERROR: PR was not merged after 4 hours. Current state: $PR_STATE"
+            echo "Please check the PR status and approve if needed."
             echo "PR URL: $(gh pr view "$PR_NUMBER" --json url --jq '.url')"
             exit 1
           fi
 
+      - name: Create release tag
+        run: |
           # Create tag on release branch (exact state that CLI was built in)
           git fetch origin "${{ needs.prepare-release.outputs.branch-name }}"
           git checkout "${{ needs.prepare-release.outputs.branch-name }}"

@@ -46,6 +46,9 @@ ui64 TPartition::GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) cons
     if (estimatedOffset == Max<ui64>()) {
         estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp, Max<ui64>());
     }
+    if (estimatedOffset == Max<ui64>() && AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+        estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, *readTimestamp, Max<ui64>());
+    }
     if (estimatedOffset == Max<ui64>()) {
         estimatedOffset = Min(BlobEncoder.Head.Offset, BlobEncoder.EndOffset - 1);
     }

@@ -315,7 +315,9 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
             "required_portions", JoinSeq(',', portionIdsToFetch));
         TBuildFilterContext columnFetchingRequest(SelfId(), constructor, std::move(portionsToFetch), std::move(intervalsToBuild),
             GetFetchingColumns(), PKSchema, ColumnDataManager, DataAccessorsManager, Counters, memoryGuard);
-        memoryGuard->Update(columnFetchingRequest.GetDataSize());
+        if (memoryGuard) {
+            memoryGuard->Update(columnFetchingRequest.GetDataSize());
+        }
         const ui64 mem = TColumnDataAccessorFetching::GetRequiredMemory(columnFetchingRequest, LastSchema);
         NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(constructor->GetMemoryProcessId(),
             constructor->GetMemoryScopeId(), constructor->GetMemoryGroupId(),

@@ -53,6 +53,7 @@
 /ydb/tests/functional/suite_tests @ydb-platform/qp
 /ydb/tests/functional/clickbench @ydb-platform/qp
 /ydb/tests/functional/postgresql @ydb-platform/qp
+/ydb/tests/functional/kqp @ydb-platform/qp
 
 #YDB Application Team @asmyasnikov TEAM:@ydb-platform/appteam
 /ydb/public/sdk @ydb-platform/appteam
@@ -84,6 +85,7 @@
 /ydb/core/blob_depot @ydb-platform/blobstorage
 /ydb/core/erasure @ydb-platform/blobstorage
 /ydb/tests/functional/config @ydb-platform/blobstorage
+/ydb/services/keyvalue/ut @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config/ut @ydb-platform/core
@@ -91,6 +93,7 @@
 /ydb/tests/functional/cms @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core
 /ydb/library/yaml_config/ut_transform @ydb-platform/core
+/ydb/services/ydb/backup_ut @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/tests/functional/sqs @ydb-platform/Topics

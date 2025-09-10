@@ -28,20 +28,9 @@ struct TCommonProgress {
 
     TCommonProgress() = default;
 
-    explicit TCommonProgress(const TSchemeBoardMonEvents::TEvCommonProgress& ev)
-        : TotalPaths(ev.TotalPaths)
-        , ProcessedPaths(ev.ProcessedPaths)
-        , Status(EStatus::Running)
-    {
-    }
+    explicit TCommonProgress(const TSchemeBoardMonEvents::TEvCommonProgress& ev);
 
-    explicit TCommonProgress(const TSchemeBoardMonEvents::TEvCommonResult& ev)
-        : TotalPaths(0)
-        , ProcessedPaths(0)
-        , Status(ev.Error ? EStatus::Error : EStatus::Completed)
-        , ErrorMessage(ev.Error.GetOrElse(""))
-    {
-    }
+    explicit TCommonProgress(const TSchemeBoardMonEvents::TEvCommonResult& ev);
 
     bool IsRunning() const {
         return Status == EStatus::Starting || Status == EStatus::Running;

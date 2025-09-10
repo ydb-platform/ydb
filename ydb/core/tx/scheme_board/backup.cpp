@@ -23,6 +23,21 @@ namespace NKikimr::NSchemeBoard {
 
 using namespace NJson;
 
+TCommonProgress::TCommonProgress(const TSchemeBoardMonEvents::TEvCommonProgress& ev)
+    : TotalPaths(ev.TotalPaths)
+    , ProcessedPaths(ev.ProcessedPaths)
+    , Status(EStatus::Running)
+{
+}
+
+TCommonProgress::TCommonProgress(const TSchemeBoardMonEvents::TEvCommonResult& ev)
+    : TotalPaths(0)
+    , ProcessedPaths(0)
+    , Status(ev.Error ? EStatus::Error : EStatus::Completed)
+    , ErrorMessage(ev.Error.GetOrElse(""))
+{
+}
+
 TString TCommonProgress::StatusToString() const {
     switch (Status) {
         case EStatus::Idle: return "idle";

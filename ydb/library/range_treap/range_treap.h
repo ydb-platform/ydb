@@ -175,29 +175,31 @@ public:
       * Order is sorted by (range.Left, value, range.Right) tuples.
       */
     template <class TCallback>
-    void EachRange(TCallback&& callback) const {
+    bool EachRange(TCallback&& callback) const {
         if (Root) {
-            DoEachRange(Root.Get(), callback);
+            return DoEachRange(Root.Get(), callback);
         }
+        return true;
     }
 
     /**
       * Calls callback for each range with the given point
       */
     template <class TCallback>
-    void EachIntersection(TKeyView point, TCallback&& callback) const {
-        EachIntersection(TRange(point, true, point, true), callback);
+    bool EachIntersection(TKeyView point, TCallback&& callback) const {
+        return EachIntersection(TRange(point, true, point, true), callback);
     }
 
     /**
       * Calls callback for each range intersecting with the query
       */
     template <class TCallback>
-    void EachIntersection(const TRange& range, TCallback&& callback) const {
+    bool EachIntersection(const TRange& range, TCallback&& callback) const {
         if (Root) {
-            DoEachIntersection(Root.Get(), TBorder::MakeLeft(range.LeftKey, range.LeftInclusive),
+            return DoEachIntersection(Root.Get(), TBorder::MakeLeft(range.LeftKey, range.LeftInclusive),
                 TBorder::MakeRight(range.RightKey, range.RightInclusive), callback);
         }
+        return true;
     }
 
 private:

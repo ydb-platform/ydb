@@ -45,7 +45,7 @@ The table below lists the limits that apply to query execution.
 
 | Parameter | Default | Explanation | Status<br/>in case of<br/>a violation<br/>of the limit |
 | :--- | :--- | :--- | :---: |
-| Query duration | 1800 seconds (30 minutes) | The maximum amount of time allowed for a single query to execute. | TIMEOUT |
+| Query duration | 2 hours | The maximum amount of time allowed for a single query to execute. | TIMEOUT |
 | Maximum number of sessions per cluster node | 1,000 | The limit on the number of sessions that clients can create with each {{ ydb-short-name }} node. | OVERLOADED |
 | Maximum query text length | 10 KB | The maximum allowable length of YQL query text. | BAD_REQUEST |
 | Maximum size of parameter values | 50 MB | The maximum total size of parameters passed when executing a previously prepared query. | BAD_REQUEST |

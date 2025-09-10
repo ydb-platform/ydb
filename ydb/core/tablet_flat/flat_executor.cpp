@@ -4820,6 +4820,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         pageGroup.BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;
 
         writeGroup.Cache = Max(family.Cache, cache);
+        writeGroup.CacheMode = family.CacheMode;
         writeGroup.MaxBlobSize = NBlockIO::BlockSize;
         writeGroup.Channel = room->Main;
         addChannel(room->Main);

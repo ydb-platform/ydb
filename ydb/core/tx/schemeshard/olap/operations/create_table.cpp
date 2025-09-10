@@ -603,6 +603,12 @@ public:
             return result;
         }
 
+        if (shardsCount > AppData()->ColumnShardConfig.GetMaxPartitionsPerTable()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Too many partitions per table. Maximum is " + ToString(AppData()->ColumnShardConfig.GetMaxPartitionsPerTable()) + " but provided " + ToString(shardsCount) + " partitions");
+            return result;
+        }
+
         if (createDescription.GetSharding().GetColumnShards().size()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "Incoming tx message has initialized shard ids");

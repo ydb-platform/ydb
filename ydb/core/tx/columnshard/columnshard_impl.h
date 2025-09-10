@@ -541,7 +541,6 @@ private:
     TSpaceWatcher* SpaceWatcher;
     TActorId SpaceWatcherId;
     THashMap<TActorId, TActorId> PipeServersInterconnectSessions;
-    // NOverload::TOverloadSubscribers OverloadSubscribers;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();

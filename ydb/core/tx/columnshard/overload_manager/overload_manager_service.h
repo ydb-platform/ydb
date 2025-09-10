@@ -12,15 +12,15 @@ class TOverloadManagerServiceOperator {
 private:
     using TSelf = TOverloadManagerServiceOperator;
 
-    // static TPositiveControlInteger WritesInFlight;
-    // static TPositiveControlInteger WritesSizeInFlight;
-    // static std::atomic_bool LimitReached;
-    static ui64 WritesInFlight;
-    static ui64 WritesSizeInFlight;
-    static bool LimitReached;
+    static TPositiveControlInteger WritesInFlight;
+    static TPositiveControlInteger WritesSizeInFlight;
+    static std::atomic_bool LimitReached;
+    // static ui64 WritesInFlight;
+    // static ui64 WritesSizeInFlight;
+    // static bool LimitReached;
     static inline const double WritesInFlightSoftLimitCoefficient = 0.9;
     static inline const double WritesInFlightSizeSoftLimitCoefficient = 0.9;
-    static std::mutex Mutex;
+    // static std::mutex Mutex;
 
 public:
     static NActors::TActorId MakeServiceId();
@@ -28,6 +28,13 @@ public:
 
     static ui64 GetShardWritesInFlyLimit();
     static ui64 GetShardWritesSizeInFlyLimit();
+
+    static ui64 GetShardWritesInFly() {
+        return WritesInFlight.Val();
+    };
+    static ui64 GetShardWritesSizeInFly() {
+        return WritesSizeInFlight.Val();
+    }
 
     static void NotifyIfResourcesAvailable(bool force);
 

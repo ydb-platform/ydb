@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
@@ -14,9 +15,9 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) co
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
     auto writeOperation = owner->OperationsManager->CreateWriteOperation(PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, IsBulk);
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier()); /*(
-         "in_flight", owner->Counters.GetWritesMonitor()->GetWritesInFlight())(
-         "size_in_flight", owner->Counters.GetWritesMonitor()->GetWritesSizeInFlight());*/
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
+        "in_flight", NOverload::TOverloadManagerServiceOperator::GetShardWritesInFly())(
+        "size_in_flight", NOverload::TOverloadManagerServiceOperator::GetShardWritesSizeInFly());
 
     AFL_VERIFY(writeOperation);
     writeOperation->SetBehaviour(Behaviour);
@@ -37,6 +38,18 @@ void TWriteTask::Abort(TColumnShard* owner, const TString& reason, const TActorC
     owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
     ctx.Send(SourceId, result.release(), 0, Cookie);
     if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED && OverloadSubscribeSeqNo) {
+        result->Record.SetOverloadSubscribed(*OverloadSubscribeSeqNo);
+        // TODO: get here pipe server id
+
+        // Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), new NOverload::TEvOverloadSubscribe(
+        //     {.ColumnShardId = owner->SelfId(), .TabletId = owner->TabletID()},
+        //     {.PipeServerId = SourceId, .InterconnectSessionId = PipeServersInterconnectSessions[ev->Recipient]},
+        //     {.PipeServerId = SourceId, .OverloadSubscriberId = ev->Sender, .SeqNo = *OverloadSubscribeSeqNo}));
+
+        // Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), new NOverload::TEvOverloadSubscribe(
+        // {.ColumnShardId = SelfId(), .TabletId = TabletID()},
+        // {.PipeServerId = ev->Recipient, .InterconnectSessionId = PipeServersInterconnectSessions[ev->Recipient]},
+        // {.PipeServerId = ev->Recipient, .OverloadSubscriberId = ev->Sender, .SeqNo = seqNo}));
         // const auto rejectReasons = NOverload::MakeRejectReasons(EOverloadStatus::ShardWritesInFly);
         // owner->OverloadSubscribers.SetOverloadSubscribed(*OverloadSubscribeSeqNo, owner->SelfId(), SourceId, rejectReasons, result->Record);
         // owner->OverloadSubscribers.ScheduleNotification(owner->SelfId());

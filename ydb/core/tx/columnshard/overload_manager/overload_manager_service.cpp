@@ -13,13 +13,13 @@ std::atomic_uint64_t DEFAULT_WRITES_SIZE_IN_FLY_LIMIT{0};
 
 } // namespace
 
-// TPositiveControlInteger TOverloadManagerServiceOperator::WritesInFlight;
-// TPositiveControlInteger TOverloadManagerServiceOperator::WritesSizeInFlight;
-// std::atomic_bool TOverloadManagerServiceOperator::LimitReached = false;
-ui64 TOverloadManagerServiceOperator::WritesInFlight = 0;
-ui64 TOverloadManagerServiceOperator::WritesSizeInFlight = 0;
-bool TOverloadManagerServiceOperator::LimitReached = false;
-std::mutex TOverloadManagerServiceOperator::Mutex;
+TPositiveControlInteger TOverloadManagerServiceOperator::WritesInFlight;
+TPositiveControlInteger TOverloadManagerServiceOperator::WritesSizeInFlight;
+std::atomic_bool TOverloadManagerServiceOperator::LimitReached = false;
+// ui64 TOverloadManagerServiceOperator::WritesInFlight = 0;
+// ui64 TOverloadManagerServiceOperator::WritesSizeInFlight = 0;
+// bool TOverloadManagerServiceOperator::LimitReached = false;
+// std::mutex TOverloadManagerServiceOperator::Mutex;
 
 ui64 TOverloadManagerServiceOperator::GetShardWritesInFlyLimit() {
     if (DEFAULT_WRITES_IN_FLY_LIMIT.load() == 0) {
@@ -50,10 +50,10 @@ NActors::IActor* TOverloadManagerServiceOperator::CreateService() {
 void TOverloadManagerServiceOperator::NotifyIfResourcesAvailable(bool force) {
     bool send = false;
     {
-        std::lock_guard<std::mutex> guard(Mutex);
+        // std::lock_guard<std::mutex> guard(Mutex);
         send = (force || LimitReached) &&
-            WritesInFlight <= GetShardWritesInFlyLimit() * WritesInFlightSoftLimitCoefficient &&
-            WritesSizeInFlight <= GetShardWritesSizeInFlyLimit() * WritesInFlightSizeSoftLimitCoefficient;
+            WritesInFlight.Val() <= GetShardWritesInFlyLimit() * WritesInFlightSoftLimitCoefficient &&
+            WritesSizeInFlight.Val() <= GetShardWritesSizeInFlyLimit() * WritesInFlightSizeSoftLimitCoefficient;
         if (send) {
             LimitReached = false;
         }
@@ -69,18 +69,18 @@ bool TOverloadManagerServiceOperator::RequestResources(ui64 writesCount, ui64 wr
     bool already = false;
     bool limitReached = false;
     do {
-        std::lock_guard<std::mutex> guard(Mutex);
+        // std::lock_guard<std::mutex> guard(Mutex);
         if (LimitReached) {
             already = true;
             break;
         }
 
-        // auto resWritesInFlight = WritesInFlight.Add(writesCount);
-        // auto resWriteSizeInFlight = WritesSizeInFlight.Add(writesSize);
-        // if (resWritesInFlight >= GetShardWritesInFlyLimit() || resWriteSizeInFlight >= GetShardWritesSizeInFlyLimit()) {
-        WritesInFlight += writesCount;
-        WritesSizeInFlight += writesSize;
-        if (WritesInFlight >= GetShardWritesInFlyLimit() || WritesSizeInFlight >= GetShardWritesSizeInFlyLimit()) {
+        auto resWritesInFlight = WritesInFlight.Add(writesCount);
+        auto resWriteSizeInFlight = WritesSizeInFlight.Add(writesSize);
+        if (resWritesInFlight >= GetShardWritesInFlyLimit() || resWriteSizeInFlight >= GetShardWritesSizeInFlyLimit()) {
+            // WritesInFlight += writesCount;
+            // WritesSizeInFlight += writesSize;
+            // if (WritesInFlight >= GetShardWritesInFlyLimit() || WritesSizeInFlight >= GetShardWritesSizeInFlyLimit()) {
             LimitReached = true;
             limitReached = true;
         }
@@ -100,12 +100,12 @@ bool TOverloadManagerServiceOperator::RequestResources(ui64 writesCount, ui64 wr
 void TOverloadManagerServiceOperator::ReleaseResources(ui64 writesCount, ui64 writesSize) {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Releasing resources");
     {
-        std::lock_guard<std::mutex> guard(Mutex);
+        // std::lock_guard<std::mutex> guard(Mutex);
 
-        // WritesInFlight.Sub(writesCount);
-        // WritesSizeInFlight.Sub(writesSize);
-        WritesInFlight -= writesCount;
-        WritesSizeInFlight -= writesSize;
+        WritesInFlight.Sub(writesCount);
+        WritesSizeInFlight.Sub(writesSize);
+        // WritesInFlight -= writesCount;
+        // WritesSizeInFlight -= writesSize;
     }
 
     NotifyIfResourcesAvailable(false);

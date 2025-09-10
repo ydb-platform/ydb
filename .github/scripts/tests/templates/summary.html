@@ -494,8 +494,14 @@
     const LOG_ENTRY_ESTIMATE = 150; // Estimated characters per log entry
     const MIN_REMAINING_SPACE = 100; // Minimum space needed for log section
     const ERROR_BUFFER_SPACE = 50; // Buffer space when adding error details
+    const MAX_BINARY_SEARCH_ITERATIONS = 4; // Limit binary search to 4 iterations for performance
+    const GITHUB_ISSUE_BASE_URL = "https://github.com/ydb-platform/ydb/issues/new"; // Base URL for GitHub issues
 
     // Utility functions
+    function buildGitHubIssueUrl(title, body, labels) {
+        return GITHUB_ISSUE_BASE_URL + "?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
+    }
+
     function parseTestName(full_name) {
         const trimmed = full_name.trim();
         let pieces;
@@ -634,7 +640,7 @@
             const fullErrorText = errorText.trim();
             let testErrorSection = errorPrefix + encodeURIComponent(fullErrorText) + errorSuffix;
             let testBody = body + testErrorSection;
-            let testUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + testBody + "&labels=" + labels + "&type=Bug";
+            let testUrl = buildGitHubIssueUrl(title, testBody, labels);
             
             if (testUrl.length <= maxUrlLength) {
                 // Full error fits, use it
@@ -644,15 +650,14 @@
                 let left = 0;
                 let right = fullErrorText.length;
                 let bestLength = 0;
-                let iterations = 0;
-                const maxIterations = 4;
-                
-                while (left <= right && iterations < maxIterations) {
+                    let iterations = 0;
+                    
+                    while (left <= right && iterations < MAX_BINARY_SEARCH_ITERATIONS) {
                     const mid = Math.floor((left + right) / 2);
                     const errorToTest = fullErrorText.substring(0, mid);
                     testErrorSection = errorPrefix + encodeURIComponent(errorToTest) + truncationMsg + errorSuffix;
                     testBody = body + testErrorSection;
-                    testUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + testBody + "&labels=" + labels + "&type=Bug";
+                    testUrl = buildGitHubIssueUrl(title, testBody, labels);
                     
                     if (testUrl.length <= maxUrlLength) {
                         bestLength = mid;
@@ -713,7 +718,7 @@
         const finalBody = buildBodyWithLengthLimit(body, logUrls, errorText, title, labels, MAX_URL_LENGTH);
         
         // Create final URL and open
-        const finalUrl = "https://github.com/ydb-platform/ydb/issues/new?title=" + title + "&body=" + finalBody + "&labels=" + labels + "&type=Bug";
+        const finalUrl = buildGitHubIssueUrl(title, finalBody, labels);
         window.open(finalUrl, '_blank');
     }
 

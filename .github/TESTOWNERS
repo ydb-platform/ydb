@@ -92,6 +92,7 @@
 /ydb/tests/functional/cms @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core
 /ydb/library/yaml_config/ut_transform @ydb-platform/core
+/ydb/services/ydb/backup_ut @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/tests/functional/sqs @ydb-platform/Topics

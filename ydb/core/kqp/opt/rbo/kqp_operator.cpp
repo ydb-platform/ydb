@@ -333,7 +333,25 @@ namespace NKikimr
             }
             for (auto mapElement : opMap.MapElements())
             {
-                OutputIUs.push_back(TInfoUnit(mapElement.Variable().StringValue()));
+                auto iu = TInfoUnit(mapElement.Variable().StringValue());
+                OutputIUs.push_back(iu);
+                if (mapElement.Maybe<TKqpOpMapElementRename>()) {
+                    auto element = mapElement.Cast<TKqpOpMapElementRename>();
+                    auto fromIU = TInfoUnit(element.From().StringValue());
+                    MapElements.push_back(std::make_pair(iu, fromIU));
+                }
+                else {
+                    auto element = mapElement.Cast<TKqpOpMapElementLambda>();
+                    if (element.Lambda().Body().Maybe<TCoMember>().Name().Maybe<TCoAtom>()) {
+                        auto member = element.Lambda().Body().Cast<TCoMember>();
+                        auto name = member.Name().Cast<TCoAtom>();
+                        auto fromIU = TInfoUnit(name.StringValue());
+                        MapElements.push_back(std::make_pair(iu, fromIU));
+                    }
+                    else {
+                        MapElements.push_back(std::make_pair(iu, element.Lambda().Ptr()));
+                    }
+                }
             }
         }
 
@@ -344,15 +362,15 @@ namespace NKikimr
 
             TVector<TExprNode::TPtr> newMapElements;
 
-            for (auto mapEl : current.MapElements())
+            for (auto & [iu, body] : MapElements)
             {
-                if (mapEl.Maybe<TKqpOpMapElementRename>())
+                if (std::holds_alternative<TInfoUnit>(body))
                 {
                     // clang-format off
             newMapElements.push_back(Build<TKqpOpMapElementRename>(ctx, Node->Pos())
                 .Input(newInput)
-                .Variable(mapEl.Variable())
-                .From(mapEl.Cast<TKqpOpMapElementRename>().From())
+                .Variable().Build(iu.GetFullName())
+                .From().Build(std::get<TInfoUnit>(body).GetFullName())
             .Done().Ptr());
                     // clang-format on
                 }
@@ -361,8 +379,8 @@ namespace NKikimr
                     // clang-format off
             newMapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, Node->Pos())
                 .Input(newInput)
-                .Variable(mapEl.Variable())
-                .Lambda(mapEl.Cast<TKqpOpMapElementLambda>().Lambda())
+                .Variable().Build(iu.GetFullName())
+                .Lambda(std::get<TExprNode::TPtr>(body))
             .Done().Ptr());
                     // clang-format on
                 }
@@ -393,6 +411,25 @@ namespace NKikimr
                 // clang-format on
             }
             return std::make_shared<TOpMap>(result);
+        }
+
+        bool TOpMap::HasRenames() const {
+            for (auto & [iu, body] : MapElements) {
+                if (std::holds_alternative<TInfoUnit>(body)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
+            TVector<std::pair<TInfoUnit, TInfoUnit>> result;
+            for (auto & [iu, body] : MapElements) {
+                if (std::holds_alternative<TInfoUnit>(body)) {
+                    result.push_back(std::make_pair(iu, std::get<TInfoUnit>(body)));
+                }
+            }
+            return result;
         }
 
         TOpProject::TOpProject(TExprNode::TPtr node) : IUnaryOperator(EOperator::Project, node)

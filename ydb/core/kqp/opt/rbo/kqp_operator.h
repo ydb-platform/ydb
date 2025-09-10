@@ -181,6 +181,7 @@ class IOperator {
     TExprNode::TPtr Node;
     TPhysicalOpProps Props;
     TVector<std::shared_ptr<IOperator>> Children;
+    TVector<std::weak_prt<IOperator>> Parents;
     TVector<TInfoUnit> OutputIUs;
 };
 
@@ -236,6 +237,8 @@ class TOpMap : public IUnaryOperator {
     public:
     TOpMap(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    bool HasRenames() const;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
 
     TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> MapElements;
     bool Project = true;
@@ -279,6 +282,7 @@ class TOpRoot : public IUnaryOperator {
     public:
     TOpRoot(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    void ComputeParents();
 
     TPlanProps PlanProps;
 

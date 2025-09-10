@@ -23,6 +23,7 @@ class IRule {
     virtual ~IRule() = default;
 
     TString RuleName;
+    bool RequiresParentRecompute;
 };
 
 class TSimplifiedRule : public IRule {

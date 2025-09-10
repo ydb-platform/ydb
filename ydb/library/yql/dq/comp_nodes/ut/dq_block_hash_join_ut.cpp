@@ -1,6 +1,6 @@
-#include "dq_setup.h"
-#include "dq_factories.h"
-#include "utils.h"
+#include "utils/dq_setup.h"
+#include "utils/dq_factories.h"
+#include "utils/utils.h"
 
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>

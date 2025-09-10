@@ -1,7 +1,7 @@
 #include "joins.h"
 #include "construct_join_graph.h"
 #include "factories.h"
-#include <ydb/library/yql/dq/comp_nodes/ut/utils.h>
+#include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 namespace {
 TVector<ui64> GenerateKeyColumn(i32 size, i32 seed){
     std::default_random_engine eng;

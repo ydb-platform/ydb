@@ -21,6 +21,7 @@ private:
     const NActors::TActorId OwnerActorId;
     THashMap<ui64, TProcessMemory> Processes;
     std::map<TProcessMemoryUsage, TProcessMemory*> ProcessesOrdered;
+    std::set<TProcessMemoryUsage> WaitingProcesses;
     std::shared_ptr<TStageFeatures> DefaultStage;
     TIdsControl ProcessIds;
 
@@ -78,6 +79,8 @@ private:
             return nullptr;
         }
     }
+
+    void UpdateWaitingProcesses(TProcessMemory* process);
 
 public:
     TManager(const NActors::TActorId& ownerActorId, const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals,

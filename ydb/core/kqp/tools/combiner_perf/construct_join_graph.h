@@ -1,5 +1,4 @@
 #pragma once
-// #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_program_builder.h>
 #include <ydb/library/yql/dq/comp_nodes/ut/dq_setup.h>
 

@@ -80,9 +80,7 @@ TTestResult DoRunJoinsBench(const NKikimr::NMiniKQL::TRunParams &params){
         results.emplace(algo, thisResults);
 
     }
-    finalResult.ResultTime = std::ranges::min_element(results, [](const auto& first, const auto& second){
-        return first.second.BenchDuration < second.second.BenchDuration;
-    })->second.BenchDuration;
+    finalResult.ResultTime = std::ranges::min_element(results, {}, [](const auto& p){return p.second.BenchDuration;})->second.BenchDuration;
     return {finalResult, "allJoins"};
 
 }

@@ -1,5 +1,4 @@
 #include "construct_join_graph.h"
-// #include <yql/essentials/minikql/comp_nodes/ut/mkql_block_map_join_ut_utils.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/dq/comp_nodes/ut/utils.h>
 #include <algorithm>

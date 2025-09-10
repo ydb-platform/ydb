@@ -9,8 +9,6 @@ namespace NMiniKQL {
 // TODO (mfilitov): think how can we reuse the code
 // Code from https://github.com/ydb-platform/ydb/blob/main/yql/essentials/minikql/comp_nodes/ut/mkql_block_map_join_ut_utils.h
 
-// <a, b, c> <d, e> -> <ad, b, c, e, size> 
-
 // List<Tuple<T1, ..., Tn, Tlast>> -> List<Struct<"0": Block<T1>, ..., "n": Block<Tn>, "_yql_block_length": Scalar<Tlast>>>
 TRuntimeNode ToBlockList(TProgramBuilder& pgmBuilder, TRuntimeNode list);
 
@@ -39,7 +37,6 @@ TRuntimeNode FromWideFlow(TProgramBuilder& pgmBuilder, TRuntimeNode wideFlow);
 TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list); 
 
 void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected, const NUdf::TUnboxedValue& got);
-namespace detail{
 template<typename Type>
 const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
     const TVector<Type>& vector
@@ -86,13 +83,12 @@ const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
     }
     return lists;
 }
-}
 template<typename... TVectors>
 const std::pair<TType*, NUdf::TUnboxedValue> ConvertVectorsToTuples(
     TDqSetup<false>& setup, TVectors... vectors
 ) {
     TProgramBuilder& pb = *setup.PgmBuilder;
-    const auto lists = detail::BuildListNodes(pb, std::forward<TVectors>(vectors)...);
+    const auto lists = BuildListNodes(pb, std::forward<TVectors>(vectors)...);
     const auto tuplesNode = pb.Zip(lists);
     const auto tuplesNodeType = tuplesNode.GetStaticType();
     const auto tuples = setup.BuildGraph(tuplesNode)->GetValue();

@@ -5,6 +5,7 @@
 #define ENABLE_GWP_ASAN 1
 #include <gwp_asan/guarded_pool_allocator.h>
 #include <gwp_asan/crash_handler.h>
+#include <gwp_asan/optional/segv_handler.h>
 #include <cstdlib>
 #include <cstring>
 #include <cstdarg>
@@ -111,7 +112,7 @@ void InitializeGwpAsan() {
     
     // Install signal handlers for better error reporting
     if (Opts.InstallSignalHandlers) {
-        gwp_asan::crash_handler::installSignalHandlers(&GPA, PrintfImpl);
+        gwp_asan::segv_handler::installSignalHandlers(&GPA, PrintfImpl, gwp_asan::backtrace::getPrintBacktraceFunction(), gwp_asan::backtrace::getSegvBacktraceFunction());
     }
     
     GwpAsanInitialized = true;

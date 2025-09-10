@@ -6,12 +6,16 @@ import allure
 import time
 import traceback
 
-from .clickbench import LoadSuiteBase, ClickbenchParallelBase
+from . import tpch
+from .conftest import LoadSuiteBase
+from .clickbench import ClickbenchParallelBase
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.olap.lib.utils import get_external_param
 from threading import Thread, Event
 from datetime import datetime
 from matplotlib import pyplot
+from os import getenv
 
 
 class ResourcePool:
@@ -90,6 +94,8 @@ class WorkloadMangerBase(LoadSuiteBase):
                 return False
             return True
 
+        cls.benchmark_setup()
+
         sessions_pool = ydb.QuerySessionPool(YdbCluster.get_ydb_driver())
 
         for pool in cls.get_resource_pools():
@@ -159,7 +165,7 @@ class WorkloadMangerBase(LoadSuiteBase):
             pytest.fail(f'Errors while execute: {errors}')
 
 
-class WorkloadMangerClickbenchBase(WorkloadMangerBase):
+class WorkloadMangerClickbenchBase:
     workload_type = ClickbenchParallelBase.workload_type
     iterations: int = ClickbenchParallelBase.iterations
 
@@ -171,8 +177,31 @@ class WorkloadMangerClickbenchBase(WorkloadMangerBase):
     def get_path(cls) -> str:
         return ClickbenchParallelBase.get_path()
 
+    @classmethod
+    def benchmark_setup(cls) -> None:
+        ClickbenchParallelBase.do_setup_class()
 
-class TestWorkloadMangerClickbenchConcurentQueryLimit(WorkloadMangerClickbenchBase):
+
+class WorkloadMangerTpchBase:
+    workload_type = tpch.TpchParallelBase.workload_type
+    iterations: int = tpch.TpchParallelBase.iterations
+
+    @classmethod
+    def get_query_list(cls) -> list[str]:
+        return tpch.TpchParallelBase.get_query_list()
+
+    @classmethod
+    def get_path(cls) -> str:
+        return get_external_param(f'table-path-{cls.suite()}', f'tpch/s{cls.scale}'.replace('.', '_'))
+
+    @classmethod
+    def benchmark_setup(cls) -> None:
+        if not cls.verify_data or getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{cls.scale}'):
+            return
+        tpch.TpchParallelBase.check_tables_size(folder=cls.get_path(), tables=tpch.TpchSuiteBase._get_tables_size(cls))
+
+
+class WorkloadMangerConcurentQueryLimit(WorkloadMangerBase):
     query_limit = 2
     hard_query_limit: int = 0
     max_in_fly = 0.
@@ -202,7 +231,7 @@ class TestWorkloadMangerClickbenchConcurentQueryLimit(WorkloadMangerClickbenchBa
         return ''
 
 
-class TestWorkloadMangerClickbenchComputeSheduler(WorkloadMangerClickbenchBase):
+class WorkloadMangerComputeSheduler(WorkloadMangerBase):
     threads = 1
     metrics: list[(float, dict[str, float])] = []
     metrics_keys = set()
@@ -281,3 +310,16 @@ class TestWorkloadMangerClickbenchComputeSheduler(WorkloadMangerClickbenchBase):
                 cls.metrics_keys.add(k)
         cls.metrics.append((time.time(), sum))
         return ''
+
+
+class TestWorkloadMangerClickbenchComputeSheduler(WorkloadMangerClickbenchBase, WorkloadMangerComputeSheduler):
+    pass
+
+
+class TestWorkloadMangerClickbenchConcurentQueryLimit(WorkloadMangerClickbenchBase, WorkloadMangerConcurentQueryLimit):
+    pass
+
+
+class TestWorkloadMangerTpchComputeShedulerS10(WorkloadMangerTpchBase, WorkloadMangerComputeSheduler):
+    tables_size = tpch.TestTpch10.tables_size
+    scale = tpch.TestTpch10.scale

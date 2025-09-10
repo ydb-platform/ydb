@@ -293,7 +293,7 @@ private:
             const auto status = google::protobuf::json::JsonStringToMessage(line, &description.Record);
             if (!status.ok()) {
                 return ReplyError(TStringBuilder() << "Failed to parse JSON"
-                    << ": line: " << TStringBuf(line, 0, 100)
+                    << ", line: " << TStringBuf(line, 0, 100)
                     << ", status: " << status.ToString());
             }
             const TPathId pathId(description.Record.GetPathOwnerId(), description.Record.GetPathId());

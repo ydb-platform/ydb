@@ -1,4 +1,5 @@
 #include "fulltext.h"
+#include <regex>
 
 namespace NKikimr::NFulltext {
 
@@ -40,6 +41,38 @@ namespace {
             error = TStringBuilder() << "Invalid " << name << ": " << value;
         }
         return result;
+    }
+
+    // Note: written by llm, can be optimized a lot later
+    TVector<TString> Tokenize(const TString& text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer) {
+        TVector<TString> tokens;
+        switch (tokenizer) {
+            case Ydb::Table::FulltextIndexSettings::WHITESPACE: {
+                std::istringstream stream(text);
+                TString token;
+                while (stream >> token) {
+                    tokens.push_back(token);
+                }
+                break;
+            }
+            case Ydb::Table::FulltextIndexSettings::STANDARD: {
+                std::regex word_regex(R"(\b\w+\b)"); // match alphanumeric words
+                std::sregex_iterator it(text.begin(), text.end(), word_regex);
+                std::sregex_iterator end;
+                while (it != end) {
+                    tokens.push_back(it->str());
+                    ++it;
+                }
+                break;
+            }
+            case Ydb::Table::FulltextIndexSettings::KEYWORD:
+                tokens.push_back(text);
+                break;
+            default:
+                Y_ENSURE(TStringBuilder() << "Invalid tokenizer: " << static_cast<int>(tokenizer));
+        }
+
+        return tokens;
     }
 
     bool ValidateSettings(const Ydb::Table::FulltextIndexSettings::Analyzers& settings, TString& error) {
@@ -92,6 +125,18 @@ namespace {
     }
 }
 
+TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings) {
+    TVector<TString> tokens = Tokenize(text, settings.tokenizer());
+
+    if (settings.use_filter_lowercase()) {
+        for (auto& token : tokens) {
+            token.to_lower();
+        }
+    }
+
+    return tokens;
+}
+
 bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString& error) {
     if (!settings.has_layout() || settings.layout() == Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED) {
         error = "layout should be set";
@@ -118,6 +163,7 @@ bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString
         }
     }
 
+    error = "";
     return true;
 }
 
@@ -164,7 +210,7 @@ Ydb::Table::FulltextIndexSettings FillSettings(const TString& column, const TVec
         // only single-columned index is supported for now
         auto columnAnalyzers = result.add_columns();
         columnAnalyzers->set_column(column);
-        columnAnalyzers->CopyFrom(resultAnalyzers);
+        columnAnalyzers->mutable_analyzers()->CopyFrom(resultAnalyzers);
     }
 
     ValidateSettings(result, error);

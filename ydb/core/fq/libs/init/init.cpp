@@ -62,12 +62,12 @@ using namespace NKikimr;
 NYdb::NTopic::TTopicClientSettings GetCommonTopicClientSettings(const NFq::NConfig::TCommonConfig& config) {
     NYdb::NTopic::TTopicClientSettings settings;
     if (auto threadsNum = config.GetTopicClientHandlersExecutorThreadsNum()) {
-        auto threadPool = CreateThreadPool(threadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_client"));
+        auto threadPool = CreateThreadPool(threadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_client").SetBlocking(true).SetCatching(false));
         auto sharedPool = std::shared_ptr<IThreadPool>(threadPool.Release());
         settings.DefaultHandlersExecutor(NYdb::NTopic::CreateThreadPoolExecutorAdapter(sharedPool));
     }
     if (auto threadsNum = config.GetTopicClientCompressionExecutorThreadsNum()) {
-        auto threadPool = CreateThreadPool(threadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_compession"));
+        auto threadPool = CreateThreadPool(threadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_compession").SetBlocking(true).SetCatching(false));
         auto sharedPool = std::shared_ptr<IThreadPool>(threadPool.Release());
         settings.DefaultCompressionExecutor(NYdb::NTopic::CreateThreadPoolExecutorAdapter(sharedPool));
     }

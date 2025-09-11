@@ -1,7 +1,8 @@
 #pragma once
 
 #include "distconf.h"
-#include <ydb/core/cms/sentinel_impl.h>
+
+#include <ydb/core/base/nodestate.h>
 
 namespace NKikimr::NStorage {
 
@@ -16,7 +17,7 @@ namespace NKikimr::NStorage {
         void AddRingGroup(NKikimrConfig::TDomainsConfig::TStateStorage *ss);
 
     private:
-        static constexpr ui32 NodeStatesSize = (ui32)NCms::NSentinel::TNodeStatusComputer::ENodeState::BAD + 2;
+        static constexpr ui32 NodeStatesSize = (ui32)ENodeState::NODE_STATE_MAX;
 
         struct TNodeGroup {
             std::vector<std::tuple<ui32, TNodeLocation>> Nodes;

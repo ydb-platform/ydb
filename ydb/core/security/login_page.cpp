@@ -39,7 +39,7 @@ void AuditLogWebUILogout(const NHttp::THttpIncomingRequest& request, const TStri
         AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
         //NOTE: no database specified as web logout considered cluster-wide
         AUDIT_PART("operation", LogoutOperationName)
-        AUDIT_PART("status", TString("SUCCESS"))
+        AUDIT_PART("status", "SUCCESS")
     );
 }
 

@@ -355,6 +355,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(MultiWriteInTime) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
+        settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferVolumeBytes(32_MB);
         settings.AppConfig.MutableColumnShardConfig()->SetOnlyBulkUpsertWritingBuffer(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -413,6 +414,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(MultiWriteInTimeDiffSchemas) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
+        settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferVolumeBytes(32_MB);
         settings.AppConfig.MutableColumnShardConfig()->SetBulkUpsertRequireAllColumns(false);
         settings.AppConfig.MutableColumnShardConfig()->SetOnlyBulkUpsertWritingBuffer(false);
         TKikimrRunner kikimr(settings);

@@ -17,6 +17,7 @@
 2. Изменить конфигурационный файл `config.yaml`, поменяв значение параметра `domains_config`:
 
     Конфигурация может быть задана единая для всех компонент StateStorage, Board, SchemeBoard:
+
     ```yaml
     config:
         domains_config:
@@ -28,6 +29,7 @@
     ```
 
     Либо раздельно для каждого типа:
+
     ```yaml
     config:
         domains_config:
@@ -74,6 +76,7 @@
 
 **Шаг 0**
 Текущая конфигурация `explicit_scheme_board_config`
+
 ```yaml
 config:
   domains_config:

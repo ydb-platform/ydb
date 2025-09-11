@@ -3846,7 +3846,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         ui64 buildIndexId = 0;
         auto addIndexWithBlock = [&buildIndexId](TServer::TPtr server, const TActorId&) {
             auto& runtime = *server->GetRuntime();
-            TBlockEvents<TEvDataShard::TEvBuildIndexProgressResponse> blockProgress(runtime);
+            TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> blockProgress(runtime);
             buildIndexId = AsyncAlterAddIndex(server, "/Root", "/Root/Table", TShardedTableOptions::TIndex{"Index", {"value"}});
             runtime.WaitFor("Progress", [&]{ return blockProgress.size(); });
             blockProgress.Stop();

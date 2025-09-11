@@ -234,8 +234,6 @@ namespace NKikimr {
             LevelIndex->SerializeToProto(*pb.MutableLevelIndex());
             Metadata.RemovedHugeBlobs.SerializeToProto(*pb.MutableRemovedHugeBlobs());
             Metadata.AllocatedHugeBlobs.SerializeToProto(*pb.MutableAllocatedHugeBlobs());
-            pb.SetHullCompLevel0MaxSstsAtOnce(Ctx->HullCtx->HullCompLevel0MaxSstsAtOnce);
-            pb.SetHullCompSortedPartsNum(Ctx->HullCtx->HullCompSortedPartsNum);
             return THullDbSignatureRoutines::Serialize(pb);
         }
 

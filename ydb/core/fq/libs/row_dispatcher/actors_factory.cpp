@@ -31,7 +31,7 @@ struct TActorFactory : public IActorFactory {
             endpoint,
             database,
             config,
-            std::move(functionRegistry),
+            functionRegistry,
             rowDispatcherActorId,
             compileServiceActorId,
             partitionId,

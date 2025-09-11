@@ -29,7 +29,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
         credentialsFactory,
         tenant,
         NFq::NRowDispatcher::CreateActorFactory(),
-        std::move(functionRegistry),
+        functionRegistry,
         counters,
         countersRoot,
         pqGateway,

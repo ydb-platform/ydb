@@ -401,7 +401,7 @@ TTopicSession::TTopicSession(
     , PqGateway(pqGateway)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , Config(config)
-    , FormatHandlerConfig(CreateFormatHandlerConfig(config, std::move(functionRegistry), compileServiceActorId))
+    , FormatHandlerConfig(CreateFormatHandlerConfig(config, functionRegistry, compileServiceActorId))
     , BufferSize(maxBufferSize)
     , LogPrefix("TopicSession")
     , Counters(counters)
@@ -1002,7 +1002,7 @@ std::unique_ptr<IActor> NewTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize) {
-    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, std::move(functionRegistry), rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
+    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
 }
 
 }  // namespace NFq

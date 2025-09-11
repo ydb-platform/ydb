@@ -514,7 +514,7 @@ TRowDispatcher::TRowDispatcher(
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
-    , FunctionRegistry(std::move(functionRegistry))
+    , FunctionRegistry(functionRegistry)
     , LogPrefix("RowDispatcher: ")
     , Tenant(tenant)
     , ActorFactory(actorFactory)
@@ -1310,7 +1310,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         credentialsFactory,
         tenant,
         actorFactory,
-        std::move(functionRegistry),
+        functionRegistry,
         counters,
         countersRoot,
         pqGateway,

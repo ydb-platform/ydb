@@ -2196,26 +2196,25 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         {
             auto result = client.ExecuteQuery(R"(
-                CREATE OR REPLACE TABLE `/Root/RowDst` (
-                    PRIMARY KEY (Col1)
-                )
-                WITH (STORE = COLUMN) AS
-                SELECT 1 AS Col1;
-            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "OR REPLACE feature is supported only for EXTERNAL DATA SOURCE and EXTERNAL TABLE", result.GetIssues().ToString());
-        }
-
-        {
-            auto result = client.ExecuteQuery(R"(
-                CREATE OR REPLACE TABLE `/Root/RowDst` (
+                CREATE TABLE `/Root/RowDst` (
                     PRIMARY KEY (Col1)
                 )
                 WITH (STORE = ROW) AS
                 SELECT 1 AS Col1;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "OR REPLACE feature is supported only for EXTERNAL DATA SOURCE and EXTERNAL TABLE", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "CTAS statement is disabled for row-oriented tables.", result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/RowDst` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (STORE = COLUMN) AS
+                SELECT 1 AS Col1;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 

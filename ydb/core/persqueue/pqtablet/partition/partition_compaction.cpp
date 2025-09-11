@@ -148,7 +148,7 @@ size_t TPartition::GetBodyKeysCountLimit() const
 
 ui64 TPartition::GetCumulativeSizeLimit() const
 {
-    return AppData()->PQConfig.GetCompactionConfig().GetBlobsSize();
+    return Min(AppData()->PQConfig.GetCompactionConfig().GetBlobsSize(), 2 * MaxBlobSize);
 }
 
 ui64 TPartition::GetCompactedBlobSizeLowerBound() const
@@ -159,58 +159,81 @@ ui64 TPartition::GetCompactedBlobSizeLowerBound() const
 void TPartition::TryRunCompaction()
 {
     if (CompactionInProgress) {
-        LOG_D("compaction in progress");
+        PQ_LOG_D("Blobs compaction in progress");
         return;
     }
 
     if (BlobEncoder.DataKeysBody.empty()) {
-        LOG_D("no data for compaction");
+        PQ_LOG_D("No data for blobs compaction");
         return;
     }
 
-    const ui64 cumulativeSize = BlobEncoder.BodySize;
+    PQ_LOG_D("==== keys for blobs compaction ====");
+    for (size_t i = 0; i < BlobEncoder.DataKeysBody.size(); ++i) {
+        const auto& k = BlobEncoder.DataKeysBody[i];
+        PQ_LOG_D(((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*') << " " << k.Key.ToString() << " " << k.Size);
+    }
+    PQ_LOG_D("===================================");
 
-    if ((cumulativeSize < GetCumulativeSizeLimit()) &&
-        (BlobEncoder.DataKeysBody.size() < GetBodyKeysCountLimit())) {
-        LOG_D("need more data for compaction. " <<
-                 //"cumulativeSize=" << cumulativeSize << ", requestSize=" << requestSize <<
-                 "cumulativeSize=" << cumulativeSize <<
-                 ", count=" << BlobEncoder.DataKeysBody.size() <<
-                 ", cumulativeSizeLimit=" << GetCumulativeSizeLimit() <<
-                 ", bodyKeysCountLimit=" << GetBodyKeysCountLimit());
+    const ui64 blobsKeyCountLimit = GetBodyKeysCountLimit();
+    const ui64 compactedBlobSizeLowerBound = GetCompactedBlobSizeLowerBound();
+
+    if (BlobEncoder.DataKeysBody.size() >= blobsKeyCountLimit) {
+        CompactionInProgress = true;
+        Send(SelfId(), new TEvPQ::TEvRunCompaction(blobsKeyCountLimit));
         return;
     }
 
-    LOG_D("need run compaction for " << cumulativeSize << " bytes in " << BlobEncoder.DataKeysBody.size() << " blobs");
+    size_t blobsCount = 0, blobsSize = 0;
+    for (; blobsCount < BlobEncoder.DataKeysBody.size(); ++blobsCount) {
+        const auto& k = BlobEncoder.DataKeysBody[blobsCount];
+        if (k.Size < compactedBlobSizeLowerBound) {
+            // неполный блоб. можно дописать
+            blobsSize += k.Size;
+            if (blobsSize > 2 * MaxBlobSize) {
+                // KV не может отдать много
+                blobsSize -= k.Size;
+                break;
+            }
+            PQ_LOG_D("Blob key for append " << k.Key.ToString());
+        } else {
+            PQ_LOG_D("Blob key for rename " << k.Key.ToString());
+        }
+    }
+    PQ_LOG_D(blobsCount << " keys were taken away. Let's read " << blobsSize << " bytes");
+
+    if (blobsSize < GetCumulativeSizeLimit()) {
+        PQ_LOG_D("Need more data for compaction. " <<
+                 "Blobs " << BlobEncoder.DataKeysBody.size() <<
+                 ", size " << blobsSize);
+        return;
+    }
+
+    PQ_LOG_D("Run compaction for " << blobsCount << " blobs");
 
     CompactionInProgress = true;
 
-    Send(SelfId(), new TEvPQ::TEvRunCompaction(MaxBlobSize, Min<ui64>(cumulativeSize, 2 * MaxBlobSize)));
+    Send(SelfId(), new TEvPQ::TEvRunCompaction(blobsCount));
 }
 
 void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
 {
-    const ui64 cumulativeSize = ev->Get()->CumulativeSize;
+    const ui64 blobsCount = ev->Get()->BlobsCount;
 
-    LOG_D("begin compaction for " << cumulativeSize << " bytes in " << BlobEncoder.DataKeysBody.size() << " blobs");
+    PQ_LOG_D("begin compaction for " << blobsCount << " blobs");
 
     TVector<TRequestedBlob> blobs;
     TBlobKeyTokens tokens;
 
     KeysForCompaction.clear();
-
-    ui64 size = 0;
-    for (const auto& k : BlobEncoder.DataKeysBody) {
+    for (size_t i = 0; i < blobsCount; ++i) {
+        const auto& k = BlobEncoder.DataKeysBody[i];
         if (k.Size >= GetCompactedBlobSizeLowerBound()) {
-            KeysForCompaction.emplace_back(k.Key, Max<size_t>());
+            KeysForCompaction.emplace_back(k.Key, Max<ui64>());
             continue;
         }
 
-        size += k.Size;
-        if (size > cumulativeSize) {
-            size -= k.Size;
-            break;
-        }
+        PQ_LOG_D("Request blob key " << k.Key.ToString());
 
         KeysForCompaction.emplace_back(k.Key, blobs.size());
 
@@ -227,16 +250,14 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
         tokens.Append(k.BlobKeyToken);
     }
 
-    for (const auto& b : blobs) {
-        LOG_D("request key " << b.Key.ToString() << ", size " << b.Size);
-    }
     CompactionBlobsCount = blobs.size();
+
     auto request = MakeHolder<TEvPQ::TEvBlobRequest>(ERequestCookie::ReadBlobsForCompaction,
                                                      Partition,
                                                      std::move(blobs));
     Send(BlobCache, request.Release());
 
-    LOG_D("request " << CompactionBlobsCount << " blobs for compaction");
+    PQ_LOG_D("Request " << CompactionBlobsCount << " blobs for compaction");
 }
 
 void TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
@@ -290,10 +311,14 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 {
     const auto& ctx = ActorContext();
 
-    LOG_D("continue compaction");
+    PQ_LOG_D("Continue blobs compaction");
 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(blobs.size() == CompactionBlobsCount);
+
+    CompactionInProgress = false;
+
+    return;
 
     TProcessParametersBase parameters;
     parameters.CurOffset = CompactionBlobEncoder.PartitionedBlob.IsInited()

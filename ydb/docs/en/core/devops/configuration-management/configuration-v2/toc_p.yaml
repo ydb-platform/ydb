@@ -9,8 +9,6 @@ items:
   href: config-settings.md
 - name: Cluster expansion
   href: cluster-expansion.md
-- name: State Storage Reconfiguration
-  href: state-storage-reconfiguration.md
 - name: State Storage move
   href: state-storage-move.md
 - name: Static group move

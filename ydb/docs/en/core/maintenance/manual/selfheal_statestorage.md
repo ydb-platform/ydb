@@ -1,47 +1,48 @@
 # Working with SelfHeal State Storage
 
-While a clusters are running, entire nodes that {{ ydb-short-name }} runs on can fail.
 
-SelfHeal ensures a cluster's continuous performance and fault tolerance if malfunctioning nodes cannot be repaired quickly.
-It also automatically distributes the load to more replicas when new nodes are added to the cluster.
+During cluster operation, the entire nodes on which {{ydb-short-name }} is running may fail.
 
-SelfHeal can:
+Self Heal State Storage is used to maintain the operability and fault tolerance of the [StateStorage] subsystem(../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), [SchemeBoard](../../../concepts/glossary.md#scheme-board) of a cluster, if it is impossible to quickly restore failed nodes, and automatically increase the number of replicas of these subsystems when new nodes are added to the cluster.
 
-* Detect faulty system nodes;
-* detect an increase in load and redistribute it to more replicas;
-* move StateStorage, Board, and SchemeBoard replicas to other nodes or add new replicas.
+Self Heal State Storage allows you to:
 
-State storage SelfHeal is enabled by default.
+* detect faulty system components;
+* move replicas of [StateStorage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), [SchemeBoard](../../../concepts/glossary.md#scheme-board) to other nodes or add new replicas.
 
-{{ ydb-short-name }} component responsible for State Storage SelfHeal is called "Sentinel".
+Self Heal State Storage is enabled by default.
 
-## Enabling and disabling State Storage SelfHeal and options {#on-off}
+The {{ydb-short-name }} component responsible for Self Heal State Storage is called [CMS Sentinel](../../../concepts/glossary.md#cms).
 
-You can enable and disable SelfHeal using configuration.
-Both CMS Sentinel and distconf must be activated to work.
+## Turning Self Heal State Storage on and off {#on-off}
 
-```yaml
-config:
-    self_management_config:
-        enabled: true # When you enable distconf, it generates a new configuration and sends it to the nodes
-    cms_config:
-        sentinel_config:
-            enable: true # Enabling Sentinel, which monitors node availability and issues a self-heal command in distconf
-            update_state_interval: 60000000 # Node status polling frequency. Default is 1 minute
-            state_storage_self_heal_config:
-                enable: true # Enabling self-heal state storage
-                node_good_state_limit: 10 # The number of polls during which the node must be in good condition (available) in order to be used in the configuration
-                node_pretty_good_state_limit: 7 # The number of polls during which the node must be in good condition in order to use it in the configuration, but the SelfHeal command is not issued in distconf
-                node_bad_state_limit: 10 # The number of cycles during which the node must be unavailable in order to issue the self-heal command in distconf
-                wait_for_config_step: 60000000 # The period between configuration change steps. The default value is 1 minute.
-                relax_time: 360000000 # Minimum period between SelfHeal. commands. Default is 10 minutes
-                pileup_replicas: false # StateStorage, Board, SchemeBoard replicas should be located on the same node. If the cluster can be rolled back to the old V1 config version, this will result in a compatible state
-```
+You can turn Self Heal State Storage on and off by changing the configuration.
+The mechanism requires activation of both [CMS Sentinel](../../../concepts/glossary.md#cms) and [distributed configuration](../../../concepts/glossary.md#distributed-configuration).
 
-## How it works
+1. Get the current cluster configuration using the command [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md):
 
-BS_CONTROLLER keeps in touch with all the NodeWarden's of the storage nodes that are running in the cluster.
-Each node registers with BSC when it starts and maintains a persistent connection, which is recorded when it is disconnected.
-The status of each node is collected, including how long it has been unavailable, which is used to determine whether to initiate the self-healing process.
-Self-healing generates a recommended configuration for the cluster based on the availability of the nodes, and if it differs from the current configuration, it is applied.
-The change in the cluster's node composition is also monitored, and one replica is added to each ring for every 1,000 nodes. This allows for automatic load balancing.
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
+    ```
+2. Change the configuration file `config.yaml` by changing the value of the parameter `state_storage_self_heal_config.enable` to `true` or to `false`:
+
+    ```yaml
+    config:
+        cms_config:
+            sentinel_config:
+                state_storage_self_heal_config:
+                    enable: true # Включение self heal state storage
+    ```
+    {% cut "More detailed" %}
+
+    The mechanism requires activation of both [CMS Sentinel](../../../concepts/glossary.md#cms) and [distributed configuration](../../../concepts/glossary.md#distributed-configuration). Make sure they are enabled.
+
+    The `state_storage_self_heal_config` option is responsible for managing the mechanism for maintaining health and fault tolerance [StateStorage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), [SchemeBoard](../../../concepts/glossary.md#scheme-board)
+
+    {% endcut %}
+
+3. Upload the updated configuration file to the cluster using [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
+
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
+    ```

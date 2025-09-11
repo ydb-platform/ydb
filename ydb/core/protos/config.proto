@@ -1203,11 +1203,16 @@ message TExternalYdbTopicsConfig {
         optional bool UseUnderlayNetwork = 4 [default = false];
     }
 
+    message TSetting {
+        optional string Name = 1;
+        optional string Value = 2;
+    }
+
     optional TYdbDriverConfig YdbDriverConfig = 1;
     optional string ReconnectPeriod = 2; // default: disabled
     optional uint32 TopicClientHandlersExecutorThreadsNum = 3 [default = 0]; // 0 means use default from TopicClientSettings
     optional uint32 TopicClientCompressionExecutorThreadsNum = 4 [default = 0]; // 0 means use default from TopicClientSettings
-    repeated NYql.TAttr DefaultSettings = 5;
+    repeated TSetting DefaultSettings = 5;
 }
 
 message TQueryServiceConfig {

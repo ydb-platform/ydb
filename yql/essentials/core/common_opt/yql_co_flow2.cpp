@@ -2461,7 +2461,11 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
-        if (self.Input().Maybe<TCoPartitionByKey>()) {
+        if (self.Input().Maybe<TCoPartitionByKeyBase>()) {
+            if (self.Input().Maybe<TCoPartitionsByKeys>() && !CanApplyExtractMembersToPartitionsByKeys(optCtx.Types)) {
+                return node;
+            }
+
             if (auto res = ApplyExtractMembersToPartitionByKey(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
                 return res;
             }

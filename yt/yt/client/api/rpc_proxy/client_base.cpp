@@ -1114,6 +1114,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_expression_builder_version(options.ExpressionBuilderVersion);
     req->set_use_order_by_in_join_subqueries(options.UseOrderByInJoinSubqueries);
     YT_OPTIONAL_SET_PROTO(req, statistics_aggregation, options.StatisticsAggregation);
+    req->set_read_from(ToProto(options.ReadFrom));
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;

@@ -299,7 +299,7 @@ static INode::TPtr CreateIndexSettings(const TIndexDescription::TIndexSettings& 
 
     for (const auto& [_, indexSetting] : indexSettings) {
         settings = L(settings, Q(Y(
-            BuildQuotedAtom(indexSetting.NamePosition, indexSetting.Name), 
+            BuildQuotedAtom(indexSetting.NamePosition, indexSetting.Name),
             BuildQuotedAtom(indexSetting.ValuePosition, indexSetting.Value))));
     }
 

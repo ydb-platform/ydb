@@ -4383,6 +4383,29 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:10:29: Error: Invalid clusters^levels: 2048^3 should be less than 1073741824\n");
         }
+
+        { // no WITH section
+            TString query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    Covered String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:10:29: Error: vector index settings should be set\n");
+        }
     }
 
     Y_UNIT_TEST(AlterTableVectorIndexInvalidSettingsPositions) {
@@ -4471,6 +4494,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:5:25: Error: Invalid clusters^levels: 2048^3 should be less than 1073741824\n");
+        }
+
+        { // no WITH section
+            TString query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:5:25: Error: vector index settings should be set");
         }
     }
 

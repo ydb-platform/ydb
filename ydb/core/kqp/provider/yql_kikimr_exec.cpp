@@ -1947,11 +1947,6 @@ public:
                                     return SyncError();
                                 }
                             }
-
-                            if (!NKikimr::NKMeans::ValidateSettings(settings, error)) {
-                                ctx.AddError(TIssue(ctx.GetPosition(indexSettings.Pos()), error));
-                                return SyncError();
-                            }
                         }
                         else {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown add vector index setting: " << name));
@@ -1961,6 +1956,14 @@ public:
                     YQL_ENSURE(add_index->name());
                     YQL_ENSURE(add_index->type_case() != Ydb::Table::TableIndex::TYPE_NOT_SET);
                     YQL_ENSURE(add_index->index_columns_size());
+
+                    if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex) {
+                        TString error;
+                        if (!NKikimr::NKMeans::ValidateSettings(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                            return SyncError();
+                        }
+                    }
                 } else if (name == "alterIndex") {
                     if (maybeAlter.Cast().Actions().Size() > 1) {
                         ctx.AddError(

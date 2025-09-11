@@ -16,6 +16,7 @@ DROP TOPIC topic_path;
 DROP TOPIC `my_topic`;
 ```
 
-См. также
+## См. также
+
 * [CREATE TOPIC](create-topic.md)
 * [ALTER TOPIC](alter-topic.md)

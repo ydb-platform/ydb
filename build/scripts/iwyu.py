@@ -42,6 +42,18 @@ FORWARD_DECL_RE = re.compile(
 DEFAULT_VERBOSE_LEVEL = "3"
 
 
+def should_output_verbose_to_stderr(args):
+    """Check if verbose output should be sent to stderr"""
+    return args.verbose and args.verbose != DEFAULT_VERBOSE_LEVEL
+
+
+def get_verbose_stderr_output(args, iwyu_bin, filtered_clang_cmd, mapping_file, source_root):
+    """Run IWYU with verbose output and return normalized stderr"""
+    process = run_iwyu_command(iwyu_bin, filtered_clang_cmd, args.verbose, mapping_file)
+    _, iwyu_verbose_stderr = process.communicate()
+    return _normalize_paths(iwyu_verbose_stderr.decode("utf-8", errors="replace"), source_root)
+
+
 def parse_args():
     """Parse command line arguments for IWYU wrapper."""
     parser = argparse.ArgumentParser()
@@ -203,6 +215,11 @@ def separate_verbose_from_suggestions(iwyu_full_output: str) -> Tuple[str, str]:
 
         if VERBOSE_DEFINED_RE.match(s.strip()):
             verbose.append(s)
+            continue
+
+        # Check for "has correct #includes/fwd-decls" messages
+        if "has correct #includes/fwd-decls" in s:
+            sugg.append(s)
             continue
 
         if state == IN_NONE:
@@ -461,9 +478,37 @@ def main() -> None:
 
     verbose_text, raw_suggestions = separate_verbose_from_suggestions(stderr)
 
-    # No IWYU sections: either pure compile error (fail) or silence (ok)
-    if not raw_suggestions.strip():
+    # Check if IWYU analysis succeeded despite compilation errors
+    iwyu_analysis_succeeded = bool(raw_suggestions.strip())
+
+    # If IWYU analysis succeeded, process suggestions regardless of compilation errors
+    if iwyu_analysis_succeeded:
+        headers_to_skip = parse_verbose_headers_to_skip(verbose_text)
+        iwyu_clean_output = build_clean_output(raw_suggestions, headers_to_skip)
+        iwyu_clean_output = _normalize_paths(iwyu_clean_output, args.source_root)
+
+        iwyu_stderr = _normalize_paths(stderr, args.source_root)
+
+        if should_output_verbose_to_stderr(args):
+            iwyu_stderr = get_verbose_stderr_output(
+                args, args.iwyu_bin, filtered_clang_cmd, mapping_file, args.source_root
+            )
+
+        result = {
+            "file": testing_src,
+            "exit_code": 0 if not iwyu_clean_output.strip() else 1,
+            "stderr": iwyu_stderr,
+            "stdout": iwyu_clean_output,
+        }
+    else:
+        # No IWYU sections: either pure compile error (fail) or silence (ok)
         err_norm = _normalize_paths(stderr, args.source_root)
+
+        if should_output_verbose_to_stderr(args):
+            err_norm = get_verbose_stderr_output(
+                args, args.iwyu_bin, filtered_clang_cmd, mapping_file, args.source_root
+            )
+
         if ERROR_PATTERNS.search(stderr):
             result = {
                 "file": testing_src,
@@ -478,28 +523,7 @@ def main() -> None:
                 "stderr": err_norm,
                 "stdout": "",
             }
-        with open(args.iwyu_json, "w") as fh:
-            json.dump(result, fh, indent=2)
-        return
 
-    # IWYU sections present — parse/clean normally
-    headers_to_skip = parse_verbose_headers_to_skip(verbose_text)
-    iwyu_clean_output = build_clean_output(raw_suggestions, headers_to_skip)
-    iwyu_clean_output = _normalize_paths(iwyu_clean_output, args.source_root)
-
-    iwyu_stderr = _normalize_paths(stderr, args.source_root)
-
-    if args.verbose and args.verbose != DEFAULT_VERBOSE_LEVEL:
-        process = run_iwyu_command(args.iwyu_bin, filtered_clang_cmd, args.verbose, mapping_file)
-        _, iwyu_verbose_stderr = process.communicate()
-        iwyu_stderr = _normalize_paths(iwyu_verbose_stderr.decode("utf-8", errors="replace"), args.source_root)
-
-    result = {
-        "file": testing_src,
-        "exit_code": 0 if not iwyu_clean_output.strip() else 1,
-        "stderr": iwyu_stderr,
-        "stdout": iwyu_clean_output,
-    }
     with open(args.iwyu_json, "w") as fh:
         json.dump(result, fh, indent=2)
 

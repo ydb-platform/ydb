@@ -18,7 +18,7 @@ Release date: September , 2025.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/17839) an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/18615) where not all tablets are shown for pers queue group on the tablets tab in diagnostics.
 * Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18735) where the storage tab on the diagnostics page was displaying nodes of other types in addition to storage nodes.
 * Fixed an [serialization issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164) that caused an error to occur when opening query execution statistics.
-* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19676) make nodes less critical (to make cluster less critical).
+* Changed the logic for nodes transitioning to critical state (e.g., a full CPU pool now triggers a warning instead of a critical state).
 
 ### Performance
 
@@ -32,7 +32,7 @@ Release date: September , 2025.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/21652) rare errors when reading from a topic during partition balancing.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/22455) an [issue](https://github.com/ydb-platform/ydb/issues/19842) where dedicated database deletion may leave database system tablets improperly cleaned.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/22203) an [issue](https://github.com/ydb-platform/ydb/issues/22030) that caused tablets to hang when nodes experienced critical memory shortage. Now tablets will automatically start as soon as any of the nodes frees up sufficient resources.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/24278) an issue where only the first message from a batch was saved when writing Kafka messages using batch formats v0 and v1, with all other messages in the batch being ignored.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/24278) an issue where only the first message from a batch was saved when writing Kafka messages, with all other messages in the batch being ignored.
 
 ### Release candidate 25.1.2.7 {#25-1-2-7-rc}
 

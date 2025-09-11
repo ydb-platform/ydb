@@ -118,7 +118,7 @@ class TestSelect1(object):
         assert (
             "Query failed with code " + ("ABORTED" if yq_version == "v1" else "GENERIC_ERROR") in describe_string
         ), describe_string
-        assert "Unexpected token" in describe_string, describe_string
+        assert "Unexpected token" in describe_string or "extraneous input" in describe_string, describe_string
         # Failed to parse query is added in YQv1 only
         if yq_version == "v1":
             assert "Failed to parse query" in describe_string, describe_string

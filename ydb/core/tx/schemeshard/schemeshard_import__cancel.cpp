@@ -111,8 +111,8 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 }; // TTxCancel
 
 struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase {
-    ui64 ImportId;
-    TTxId TxId;
+    const ui64 ImportId;
+    const TTxId TxId;
 
     explicit TTxCancelAck(TSelf *self, ui64 importId, TTxId txId)
         : TXxport::TTxBase(self)

@@ -108,3 +108,5 @@
 ### Стабильный релиз {#cli-stable}
 
 Чтобы объявить тег {{ ydb-short-name }} CLI стабильным, участник [релизной команды {{ ydb-short-name }}](https://github.com/orgs/ydb-platform/teams/release) готовит [перечень изменений](../changelog-cli.md), и публикует релиз на странице GitHub [Releases](https://github.com/ydb-platform/ydb/releases) и в разделе [Загрузки](../downloads/index.md#ydb-cli) документации.
+
+{% include [career](./_includes/career.md) %}

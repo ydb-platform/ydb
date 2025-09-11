@@ -319,7 +319,7 @@ private:
     STFUNC(StateWaitResolveTable) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            HFunc(TEvents::TEvWakeup, HandleOnWaitResolveTable);
             HFunc(TEvents::TEvPoison, Handle);
 
             default:
@@ -656,8 +656,17 @@ private:
         Y_ABORT_UNLESS(request.ResultSet.size() == 1);
         const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request.ResultSet.front();
 
-        if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+        if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable) {
             return ReplyWithError(entry.Status, ctx);
+        }
+
+        if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+            if (Backoff.HasMore()) {
+                ctx.Schedule(Backoff.Next(), new TEvents::TEvWakeup(static_cast<ui64>(EWakeupTags::Retry)));
+                return;
+            } else {
+                return ReplyWithError(entry.Status, ctx);
+            }
         }
 
         TableKind = entry.Kind;
@@ -769,6 +778,8 @@ private:
             UploadCounters.OnRequest(Batch->num_rows(), WrittenBytes);
         }
 
+        Backoff.Reset();
+
         if (TableKind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
             ResolveShards(ctx);
         } else if (isColumnTable) {
@@ -777,6 +788,16 @@ private:
         } else {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "is not supported", ctx);
         }
+    }
+
+    void HandleOnWaitResolveTable(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Tag != static_cast<ui64>(EWakeupTags::Retry)) {
+            return HandleTimeout(ctx);
+        }
+
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << "Resolve table retry iteration " << Backoff.GetIteration());
+
+        ResolveTable(GetTable(), ctx);
     }
 
     void WriteToColumnTable(const NActors::TActorContext& ctx) {

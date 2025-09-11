@@ -910,7 +910,7 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
         )sql", NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(createSchemaResult.IsSuccess(), createSchemaResult.GetIssues().ToString());
 
-        for (bool cancelExport : {false, true}) {
+        for (bool cancelExport : {true, false}) {
             TString exportPrefix = TStringBuilder() << "Prefix_" << cancelExport;
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", exportPrefix);
             auto exportResult = YdbExportClient().ExportToS3(exportSettings).GetValueSync();

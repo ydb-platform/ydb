@@ -176,13 +176,7 @@ public:
     }
 
     ui64 GetNodePortionsCountLimit() const {
-        if (NodePortionsCountLimit) {
-            return *NodePortionsCountLimit;
-            if (std::cmp_less_equal(*NodePortionsCountLimit, NodePortionsCounter.Val())) {
-                return true;
-            }
-        }
-        return DynamicPortionsCountLimit.load();
+        return NodePortionsCountLimit.value_or(DynamicPortionsCountLimit.load());
     }
 
     bool IsHighPriority() const {

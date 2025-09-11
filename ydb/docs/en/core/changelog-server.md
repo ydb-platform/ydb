@@ -52,9 +52,9 @@ Release date: July 14, 2025.
 
 #### YDB UI
 
-* Query Editor was redesigned to [support partial results load]((https://github.com/ydb-platform/ydb-embedded-ui/pull/1974)) - it starts displaying results when receives a chunk from the server, doesn't have to wait until the query completion. This approach allows application developers to see query results faster.
+* Query Editor was redesigned to [support partial results load](https://github.com/ydb-platform/ydb-embedded-ui/pull/1974) - it starts displaying results when receives a chunk from the server, doesn't have to wait until the query completion. This approach allows application developers to see query results faster.
 * [Security Improvement](https://github.com/ydb-platform/ydb-embedded-ui/pull/1967): controls that are could not be activated by current user due to lack of permissions are not displayed. Users won't click and experience Access Denied error.
-* [Added]((https://github.com/ydb-platform/ydb-embedded-ui/pull/1981)) search by tablet id on Tablets tab.
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1981) search by tablet id on Tablets tab.
 * HotKeys help tab accessible by ⌘+K key is added.
 * Operations tab is added to Database page. Operations allow to list operations and cancel them.
 * Cluster dashboard redesign and make it collapsable.

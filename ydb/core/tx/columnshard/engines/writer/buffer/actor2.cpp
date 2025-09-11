@@ -62,7 +62,8 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
         it->second.MergeContext(*evBase->GetContext());
     }
     it->second.AddUnit(TWriteUnit(evBase->GetWriteData(), evBase->GetRecordBatch()));
-    if (it->second.GetSumSize() > (ui64)AppDataVerified().ColumnShardConfig.GetWritingBufferVolumeBytes() || !FlushDuration || !isBulkUpsert || !AppDataVerified().ColumnShardConfig.GetBulkUpsertRequireAllColumns()) {
+    bool forceFlush = AppDataVerified().ColumnShardConfig.GetOnlyBulkUpsertWritingBuffer() ? !isBulkUpsert || !AppDataVerified().ColumnShardConfig.GetBulkUpsertRequireAllColumns() : false;
+    if (it->second.GetSumSize() > (ui64)AppDataVerified().ColumnShardConfig.GetWritingBufferVolumeBytes() || !FlushDuration || forceFlush) {
         SumSize -= it->second.GetSumSize();
         it->second.Flush(TabletId);
     }

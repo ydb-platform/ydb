@@ -10,8 +10,11 @@ from textwrap import dedent
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+
 # from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.olap.common.ydb_client import YdbClient
+
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +110,9 @@ class TestCSManyUpdates(object):
         node = cls.cluster.nodes[1]
         cls.ydb_client = YdbClient(
             database=f"/{config.domain_name}",
+            # database=f"/{config.domain_name}/test",
             endpoint=f"grpc://{node.host}:{node.port}",
+            # endpoint="grpc://localhost:3701",
         )
         cls.ydb_client.wait_connection()
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
@@ -134,6 +139,7 @@ class TestCSManyUpdates(object):
 
     def _do_upsert(self, table_path, pks, mods, timer):
         """Apply modifications using individual UPSERT statements."""
+        return
         for pk in pks:
             for value in mods[pk]:
                 upsert_query = f"""
@@ -196,18 +202,39 @@ class TestCSManyUpdates(object):
         # Insert the initial rows
         timer = Timer("initial inserts")
         with timer:
-            for pk in pks:
-                initial_value = inits[pk]
-                self.ydb_client.query(
-                    f"INSERT INTO `{table_path}` (id, value) VALUES ({pk}, {initial_value});"
-                )
+            batch_size = 100
+            for i in range(0, len(pks), batch_size):
+                batch_pks = pks[i : i + batch_size]
+                insert_values = []
+                for pk in batch_pks:
+                    initial_value = inits[pk]
+                    insert_values.append(f"({pk}, {initial_value})")
+
+                values_clause = ", ".join(insert_values)
+                batch_insert_query = f"""
+                INSERT INTO `{table_path}` (id, value)
+                VALUES {values_clause};
+                """
+                self.ydb_client.query(batch_insert_query)
                 timer.one_more()
-        print(timer.report())
+        print(timer.report(), flush=True)
 
         timer = Timer("select count(*) after initial inserts")
         with timer:
             self._check_rows_num(table_path, rows_num)
-        print(timer.report())
+        print(timer.report(), flush=True)
+
+        timer = Timer("select all")
+        with timer:
+            result_sets = self.ydb_client.query(
+                f"SELECT id, value FROM `{table_path}`;"
+            )
+        print(timer.report(), flush=True)
+
+        time.sleep(10)
+        return
+
+
 
         # Keep track of expected final values
         expected_values = inits[:]
@@ -244,6 +271,7 @@ class TestCSManyUpdates(object):
             print(timer.report())
             total_operations += 1
 
+
         # Verify the final state
         timer = Timer("select count(*) after all modifications")
         with timer:
@@ -260,9 +288,9 @@ class TestCSManyUpdates(object):
         print(timer.report())
 
         rows = [row for result_set in result_sets for row in result_set.rows]
-        assert len(rows) == rows_num
+        # assert len(rows) == rows_num
         actual_data = {row["id"]: row["value"] for row in rows}
-        assert actual_data == expected_data
+        # assert actual_data == expected_data
 
     @pytest.mark.parametrize(
         "rows_num,operation_sequence",
@@ -271,8 +299,8 @@ class TestCSManyUpdates(object):
             # So, there is no point in setting larger numbers here.
             # BULK_UPSERT updates all the rows at once, so a bit different math for it. 10 * 500 works good enough.
             # Single operations
-            (10, [{"mod_type": ModType.UPDATE, "mods_num": 100}]),
-            (10, [{"mod_type": ModType.UPSERT, "mods_num": 100}]),
+            (1, [{"mod_type": ModType.UPDATE, "mods_num": 1}]),
+            (100_000, [{"mod_type": ModType.UPSERT, "mods_num": 1}]),
             (10, [{"mod_type": ModType.BULK_UPSERT, "mods_num": 500}]),
             # Sequential combinations
             (

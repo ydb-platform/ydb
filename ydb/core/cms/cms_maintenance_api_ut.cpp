@@ -323,21 +323,35 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
     Y_UNIT_TEST(TestDrainAction) {
         TCmsTestEnv env(8);
 
+        ui64 requestDrainCount = 0;
         auto observer = env.AddObserver([&](auto&& ev) {
             if (ev->Type == TEvHive::EvDrainNode) {
-                env.Send(new IEventHandle(ev->Sender, env.GetSender(), new TEvHive::TEvDrainNodeAck()), 0);
+                Cerr << "Observe\n";
+                env.Send(new IEventHandle(ev->Sender, env.GetSender(), new TEvHive::TEvDrainNodeAck(), 0, ev->Cookie), 0);
+            }
+            if (ev->Type == TEvHive::EvRequestDrainInfo) {
+                auto response = std::make_unique<TEvHive::TEvResponseDrainInfo>();
+                response->Record.SetNodeId(env.GetNodeId(1));
+                response->Record.SetDrainSeqNo(requestDrainCount++);
+                response->Record.SetDrainInProgress(true);
+                env.Send(new IEventHandle(ev->Sender, env.GetSender(), response.release(), 0, ev->Cookie), 0);
             }
         });
 
+        Cerr << env.GetCurrentTime() << ": CheckCreate\n";
         env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
             MakeActionGroup(
                 MakeDrainAction(env.GetNodeId(1))
             )
         );
 
-        auto getResult = env.CheckMaintenanceTaskGet("task-1", Ydb::StatusIds::SUCCESS);
-        auto status = getResult.action_group_states(0).action_states(0).status();
-        UNIT_ASSERT(status == ActionState::ACTION_STATUS_IN_PROGRESS || status == ActionState::ACTION_STATUS_PERFORMED);
+        Cerr << env.GetCurrentTime() << ": CheckGet\n";
+        auto getResult1 = env.CheckMaintenanceTaskGet("task-1", Ydb::StatusIds::SUCCESS);
+        auto status1 = getResult1.action_group_states(0).action_states(0).status();
+        UNIT_ASSERT(status1 == ActionState::ACTION_STATUS_IN_PROGRESS);
+        auto getResult2 = env.CheckMaintenanceTaskGet("task-1", Ydb::StatusIds::SUCCESS);
+        auto status2 = getResult2.action_group_states(0).action_states(0).status();
+        UNIT_ASSERT(status2 == ActionState::ACTION_STATUS_PERFORMED);
     }
 
     Y_UNIT_TEST(TestCordonAction) {

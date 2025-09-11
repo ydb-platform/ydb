@@ -374,6 +374,7 @@ public:
     }
 
     void Handle(TEvCms::TEvPermissionResponse::TPtr& ev) {
+        Cerr << "Handle PermissionResponse\n";
         const auto& record = ev->Get()->Record;
 
         switch (record.GetStatus().GetCode()) {
@@ -578,6 +579,7 @@ class TCreateMaintenanceTask
         switch (action.scope().scope_case()) {
         case Ydb::Maintenance::ActionScope::kPdisk:
             cmsAction.SetType(NKikimrCms::TAction::REPLACE_DEVICES);
+            break;
         default:
             cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
         }
@@ -629,6 +631,7 @@ class TCreateMaintenanceTask
                     const int actionNo = cmsRequest.ActionsSize();
                     ConvertAction(action.drain_action(), *cmsRequest.AddActions());
                     const auto nodeId = action.drain_action().scope().node_id();
+                    Cerr << "Send DrainNode\n";
                     NTabletPipe::SendData(SelfId(), HivePipe(SelfId()), new TEvHive::TEvDrainNode(nodeId), actionNo);
                     PendingDrainActions.insert(actionNo);
                 } else if (action.has_cordon_action()) {
@@ -650,6 +653,7 @@ class TCreateMaintenanceTask
     }
 
     void Handle(TEvHive::TEvDrainNodeAck::TPtr& ev) {
+        Cerr << "Handle DrainNodeAck\n";
         int actionNo = ev->Cookie;
         if (!PendingDrainActions.erase(actionNo)) {
             return;

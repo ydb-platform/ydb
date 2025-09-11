@@ -614,6 +614,8 @@ bool TCms::CheckAction(const TAction &action, const TActionOptions &opts, TError
             return CheckActionReplaceDevices(action, opts.PermissionDuration, error);
         case TAction::DRAIN_NODE:
         case TAction::CORDON_NODE:
+            error.Deadline = TActivationContext::Now() + opts.PermissionDuration;
+            Cerr << "now " << TActivationContext::Now() << ", dedaline at " << error.Deadline << Endl;
             return true;
         case TAction::START_SERVICES:
         case TAction::STOP_SERVICES:
@@ -1159,8 +1161,10 @@ void TCms::DoPermissionsCleanup(const TActorContext &ctx)
         const TDuration duration = TDuration::MicroSeconds(entry.second.Action.GetDuration());
         const TDuration doubleDuration = ((TDuration::Max() / 2) >= duration ? (2 * duration) : TDuration::Max());
         const TInstant deadline(entry.second.Deadline);
-        if ((deadline + doubleDuration) <= now)
+        if ((deadline + doubleDuration) <= now) {
+            Cerr << now << " vs " << deadline << " + " << doubleDuration << Endl;
             ids.push_back(entry.first);
+        }
     }
 
     Execute(CreateTxRemovePermissions(std::move(ids), nullptr, nullptr, true), ctx);
@@ -2109,6 +2113,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
 
         TAutoPtr<TRequestInfo> copy;
         if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks()) {
+            Cerr << "Owner = " << user << Endl;
             scheduled.Owner = user;
             scheduled.Order = State->NextRequestId - 1;
             scheduled.Priority = priority;
@@ -2118,6 +2123,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
             copy = new TRequestInfo(scheduled);
             State->ScheduledRequests.emplace(reqId, std::move(scheduled));
         } else if (user == WALLE_CMS_USER || rec.HasMaintenanceTaskId()) {
+            Cerr << "Owner := " << user << Endl;
             scheduled.Owner = user;
             scheduled.RequestId = reqId;
 

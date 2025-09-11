@@ -386,18 +386,18 @@ inline Ydb::Maintenance::Action MakeLockAction(ui32 nodeId, TDuration duration) 
 
 inline Ydb::Maintenance::Action MakeDrainAction(ui32 nodeId) {
     Ydb::Maintenance::Action action;
-    auto *lockAction = action.mutable_drain_action();
+    auto *drainAction = action.mutable_drain_action();
 
-    lockAction->mutable_scope()->set_node_id(nodeId);
+    drainAction->mutable_scope()->set_node_id(nodeId);
 
     return action;
 }
 
 inline Ydb::Maintenance::Action MakeCordonAction(ui32 nodeId) {
     Ydb::Maintenance::Action action;
-    auto *lockAction = action.mutable_cordon_action();
+    auto *cordonAction = action.mutable_cordon_action();
 
-    lockAction->mutable_scope()->set_node_id(nodeId);
+    cordonAction->mutable_scope()->set_node_id(nodeId);
 
     return action;
 }

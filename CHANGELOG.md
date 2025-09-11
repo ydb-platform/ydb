@@ -2,8 +2,8 @@
 
 ### Functionality
 
-* Added support for creating unique indexes on existing tables ([Vasily Gerasimov](https://github.com/UgnineSirdis))
-* Added support for encrypted exports to S3, allowing secure storage of exported data ([Vasily Gerasimov](https://github.com/UgnineSirdis))
+* Added support for creating unique indexes on existing tables. This feature is enabled by setting the `enable_add_unique_index` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
+* Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 15186:Increased [the query text limit size](../dev/system-views#query-metrics) in system views from 4 KB to 10 KB. [#15186](https://github.com/ydb-platform/ydb/pull/15186) ([spuchin](https://github.com/spuchin))
 * 15693:Added a health check configuration that administrators can customize: the number of node restarts, tablets, the time difference between database dynodes,
 and timeout (by default, the maximum response time from healthcheck). Documentation is under construction. [#15693](https://github.com/ydb-platform/ydb/pull/15693) ([Andrei Rykov](https://github.com/StekPerepolnen))

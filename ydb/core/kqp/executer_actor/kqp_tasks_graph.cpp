@@ -1725,7 +1725,6 @@ void TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
     ui32 inputTasks = 0;
     bool isShuffle = false;
     bool forceMapTasks = false;
-    bool isParallelUnionAll = false;
     ui32 mapConnectionCount = 0;
 
     for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {

@@ -20,6 +20,8 @@ PY3_LIBRARY()
         workload_transfer.py
         workload_kafka.py
         workload_topic_kafka.py
+        workload_node_broker.py
+        workload_reconfig_state_storage.py
         workload_show_create.py
         upload.py
 

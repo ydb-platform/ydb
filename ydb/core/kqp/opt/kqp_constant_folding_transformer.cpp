@@ -116,7 +116,6 @@ IGraphTransformer::TStatus TKqpConstantFoldingTransformer::DoTransform(TExprNode
 
     if (replaces.empty()) {
         return IGraphTransformer::TStatus::Ok;
-        ;
     } else {
         TOptimizeExprSettings settings(&TypeCtx);
         settings.VisitTuples = false;
@@ -133,7 +132,7 @@ IGraphTransformer::TStatus TKqpConstantFoldingTransformer::DoTransform(TExprNode
 void TKqpConstantFoldingTransformer::Rewind() {
 }
 
-TAutoPtr<IGraphTransformer> NKikimr::NKqp::CreateKqpConstantFoldingTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config) {
-    return THolder<IGraphTransformer>(new TKqpConstantFoldingTransformer(kqpCtx, typeCtx, config));
+TAutoPtr<IGraphTransformer> NKikimr::NKqp::CreateKqpConstantFoldingTransformer(TTypeAnnotationContext& typeCtx,
+                                                                               const TKikimrConfiguration::TPtr& config) {
+    return THolder<IGraphTransformer>(new TKqpConstantFoldingTransformer(typeCtx, config));
 }

@@ -23,11 +23,11 @@ using namespace NOpt;
 */
 class TKqpConstantFoldingTransformer : public TSyncTransformerBase {
     public:
-        TKqpConstantFoldingTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
-            const TKikimrConfiguration::TPtr& config) : 
+        TKqpConstantFoldingTransformer(TTypeAnnotationContext& typeCtx,
+                                       const TKikimrConfiguration::TPtr& config) :
             Config(config),
-            TypeCtx(typeCtx),
-            KqpCtx(*kqpCtx) {}
+            TypeCtx(typeCtx)
+        {}
 
         // Main method of the transformer
         IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
@@ -36,10 +36,9 @@ class TKqpConstantFoldingTransformer : public TSyncTransformerBase {
     private:
         const TKikimrConfiguration::TPtr& Config;
         TTypeAnnotationContext& TypeCtx;
-        const TKqpOptimizeContext& KqpCtx;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpConstantFoldingTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config);
+TAutoPtr<IGraphTransformer> CreateKqpConstantFoldingTransformer(TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config);
 
 }
 }

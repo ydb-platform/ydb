@@ -579,14 +579,35 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         ), EExecStatus::Failed);
 
         const auto& status = scriptExecutionOperation.Status();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::INTERNAL_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "External source with type YdbTopics is disabled. Please contact your system administrator to enable it");
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
+    }
+
+    Y_UNIT_TEST_F(ReadTopicEndpointValidationWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
+        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        cfg.AddAvailableExternalDataSources("Ydb");
+        cfg.SetAllExternalDataSourcesAreAvailable(false);
+
+        constexpr char sourceName[] = "sourceName";
+        CreatePqSource(sourceName);
+
+        // Execute script without existing topic
+        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
+            SELECT * FROM `{source}`.`topicName`
+            )",
+            "source"_a=sourceName
+        ), EExecStatus::Failed);
+
+        const auto& status = scriptExecutionOperation.Status();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
     }
 
     Y_UNIT_TEST_F(ReadTopicEndpointValidation, TStreamingTestFixture) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
+        // Execute script without existing topic
         const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
             SELECT * FROM `{source}`.`topicName`
             )",

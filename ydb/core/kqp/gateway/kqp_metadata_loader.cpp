@@ -1021,7 +1021,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     promise.SetValue(externalDataSourceMetadata);
                                 }
                             };
-                            if (externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath) {
+                            if (externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath &&
+                                settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
                                 auto& source = externalDataSourceMetadata.Metadata->ExternalSource;
                                 THashMap<TString, TString> properties = {source.Properties.GetProperties().begin(), source.Properties.GetProperties().end()};
 

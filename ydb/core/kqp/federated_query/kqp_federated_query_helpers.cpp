@@ -148,7 +148,11 @@ namespace {
         }
 
         NYql::TPqGatewayConfig pqGatewayConfig;
-        pqGatewayConfig.MutableDefaultSettings()->Assign(topicsConfig.GetDefaultSettings().begin(), topicsConfig.GetDefaultSettings().end());
+        for (const auto& setting : topicsConfig.GetDefaultSettings()) {
+            auto& yqlSetting = *pqGatewayConfig.MutableDefaultSettings()->Add();
+            yqlSetting.SetName(setting.GetName());
+            yqlSetting.SetValue(setting.GetValue());
+        }
 
         return {CreatePqNativeGateway(NYql::TPqGatewayServices(
             *driver,

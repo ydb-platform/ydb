@@ -170,7 +170,7 @@ private:
                 FreeSpace = 1_KB;
             }
 
-            req->Record.SetFreeSpace(FreeSpace); // anely-d: is this valid logic of FreeSpace or Freespace should be divided into numNodes?
+            req->Record.SetFreeSpace(FreeSpace);
 
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
                 "Send request to node, node_id="  << nodeId << ", request: " << req->Record.ShortDebugString());

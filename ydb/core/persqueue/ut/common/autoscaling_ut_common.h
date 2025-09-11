@@ -44,7 +44,7 @@ void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionL
 
 TWriteMessage Msg(const TString& data, ui64 seqNo);
 
-TTopicSdkTestSetup CreateSetup();
+TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority = NActors::NLog::PRI_DEBUG);
 
 std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition = std::nullopt, TString topic = TString{TEST_TOPIC}, bool useCodec = true);
 

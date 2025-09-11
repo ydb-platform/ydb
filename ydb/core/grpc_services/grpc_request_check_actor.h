@@ -173,8 +173,7 @@ public:
         const TVector<std::pair<TString, TString>>& rootAttributes)
         : TGrpcRequestCheckActor(owner, schemeData, securityObject, request, counters, skipCheckConnectRights, facilityProvider, rootAttributes, {
             .UseAccessService = AppData()->AuthConfig.GetUseAccessService(),
-            .NeedClusterAccessResourceCheck = AppData()->DomainsConfig.GetSecurityConfig().DatabaseAllowedSIDsSize() > 0 ||
-                AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
+            .NeedClusterAccessResourceCheck = AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
                 AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0 ||
                 AppData()->DomainsConfig.GetSecurityConfig().AdministrationAllowedSIDsSize() > 0,
             .AccessServiceType = AppData()->AuthConfig.GetAccessServiceType()

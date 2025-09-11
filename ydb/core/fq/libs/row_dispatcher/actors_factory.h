@@ -7,7 +7,6 @@
 #include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
-#include <yql/essentials/minikql/mkql_function_registry.h>
 
 namespace NFq::NRowDispatcher {
 

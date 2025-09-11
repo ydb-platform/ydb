@@ -408,6 +408,7 @@ def run_iwyu_command(iwyu_bin: str, filtered_clang_cmd: List[str], verbose: str,
         f"--verbose={verbose}",
         "--cxx17ns",
         "--no_fwd_decls",
+        "--error",
     ):
         cmd.extend(["-Xiwyu", arg])
     return subprocess.Popen(stdout=subprocess.PIPE, stderr=subprocess.PIPE, args=cmd)
@@ -444,6 +445,19 @@ def main() -> None:
     process = run_iwyu_command(args.iwyu_bin, filtered_clang_cmd, DEFAULT_VERBOSE_LEVEL, mapping_file)
     iwyu_raw_stdout, iwyu_raw_stderr = process.communicate()
     stderr = iwyu_raw_stderr.decode("utf-8", errors="replace")
+    iwyu_raw_stdout = iwyu_raw_stdout.decode("utf-8", errors="replace")
+
+    # For developer: iwyu errors
+    if iwyu_raw_stdout:
+        result = {
+            "file": testing_src,
+            "exit_code": 1,
+            "stderr": iwyu_raw_stdout,
+            "stdout": iwyu_raw_stdout,
+        }
+        with open(args.iwyu_json, "w") as fh:
+            json.dump(result, fh, indent=2)
+        return
 
     verbose_text, raw_suggestions = separate_verbose_from_suggestions(stderr)
 
@@ -456,8 +470,6 @@ def main() -> None:
                 "exit_code": 1,
                 "stderr": err_norm,
                 "stdout": err_norm,
-                "iwyu_raw_stdout": iwyu_raw_stdout.decode(errors="replace"),
-                "iwyu_raw_stderr": iwyu_raw_stderr.decode(errors="replace"),
             }
         else:
             result = {
@@ -487,8 +499,6 @@ def main() -> None:
         "exit_code": 0 if not iwyu_clean_output.strip() else 1,
         "stderr": iwyu_stderr,
         "stdout": iwyu_clean_output,
-        "iwyu_raw_stdout": iwyu_raw_stdout.decode(errors="replace"),
-        "iwyu_raw_stderr": iwyu_raw_stderr.decode(errors="replace"),
     }
     with open(args.iwyu_json, "w") as fh:
         json.dump(result, fh, indent=2)

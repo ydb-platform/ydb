@@ -41,6 +41,8 @@ common:
     to: /concepts/datamodel/table.md
   - from: /concepts/topic.md
     to: /concepts/datamodel/topic.md 
+  - from: /reference/ydb-cli/workload-transfer.md
+    to: /reference/ydb-cli/index.md
 
 # DevOps-related redirects
   - from: /getting_started/kubernetes.md

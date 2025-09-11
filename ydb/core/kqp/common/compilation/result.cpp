@@ -11,11 +11,14 @@ std::shared_ptr<NYql::TAstParseResult> TKqpCompileResult::GetAst() const {
     return nullptr;
 }
 
-void TKqpCompileResult::SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to) const {
+void TKqpCompileResult::SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to, std::optional<ui64> lastAccessedAt) const {
     to->SetQueryId(Uid);
     to->SetAccessCount(GetAccessCount());
     to->SetCompiledQueryAt(CompiledAt.MicroSeconds());
-
+    if (lastAccessedAt) {
+        to->SetLastAccessedAt(lastAccessedAt.value());
+    }
+    to->SetWarnings(SerializeIssues());
     if (Query.Defined()) {
         if (Query->Text.size() > QUERY_TEXT_LIMIT) {
             TString truncatedText = Query->Text.substr(0, QUERY_TEXT_LIMIT);

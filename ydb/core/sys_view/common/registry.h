@@ -870,7 +870,8 @@ struct Schema : NIceDb::Schema {
         struct AccessCount : Column<4, NScheme::NTypeIds::Uint64> {};
         struct CompiledQueryAt : Column<5, NScheme::NTypeIds::Timestamp> {};
         struct UserSID : Column<6, NScheme::NTypeIds::Utf8> {};
-
+        struct LastAccessedAt : Column<7, NScheme::NTypeIds::Timestamp> {};
+        struct Warnings : Column<8, NScheme::NTypeIds::Utf8> {};
         using TKey = TableKey<QueryId>;
         using TColumns = TableColumns<
             QueryId,

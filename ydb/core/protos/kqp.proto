@@ -366,6 +366,8 @@ message TCompileCacheQueryInfo {
     optional uint64 AccessCount = 4;
     optional int64 CompiledQueryAt = 5;
     optional string UserSID = 6;
+    optional int64 LastAccessedAt = 7;
+    optional string Warnings = 8;
 }
 
 message TSessionInfo {

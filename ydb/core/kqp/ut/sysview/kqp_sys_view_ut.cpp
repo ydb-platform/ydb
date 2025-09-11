@@ -13,6 +13,53 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 using namespace NYdb::NScheme;
 
+namespace {
+    ui64 SelectCompileCacheCount(TTableClient& tableClient) {
+        auto session = tableClient.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+
+        const TString query = R"(SELECT COUNT(*) AS cnt FROM .sys/compile_cache_queries;)";
+
+        auto result = session.GetSession().ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT_C(false, resultSet.RowsCount()); // not valid check but i want to see
+        auto value = parser.ColumnParser(0).GetOptionalInt64().value();
+        return value;
+    }
+
+    void ExecParamQueryOnce(TTableClient& tableClient, i32 v) {
+        auto session = tableClient.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+
+        const TString sql = R"(
+            -- force compilation; keep text stable for cache key
+            DECLARE $v AS Int32;
+            SELECT $v + 1 AS s;
+        )";
+
+        auto paramsBuilder = TParamsBuilder();
+        paramsBuilder.AddParam("$v").Int32(v).Build();
+
+        auto res = session.GetSession().ExecuteDataQuery(
+            sql,
+            TTxControl::BeginTx().CommitTx(),
+            paramsBuilder.Build()
+        ).GetValueSync();
+
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        // consume result
+        auto rs = res.GetResultSet(0);
+        NYdb::TResultSetParser row(rs);
+        UNIT_ASSERT(row.TryNextRow());
+        auto s = row.ColumnParser("s").GetOptionalInt32().value();
+        UNIT_ASSERT_VALUES_EQUAL(s, v + 1);
+}
+
+} // namespace
 Y_UNIT_TEST_SUITE(KqpSystemView) {
 
     Y_UNIT_TEST(Join) {
@@ -837,7 +884,74 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
         Y_FAIL("Timeout waiting for from partition_stats");
     }
+
+    Y_UNIT_TEST(CompileCache) {
+        TKikimrRunner kikimr;
+        auto tableClient = kikimr.GetTableClient();
+        ui64 initial = SelectCompileCacheCount(tableClient);
+        UNIT_ASSERT_C(initial == 0, "Compile cache is not empty at the beginning");
+        for (ui32 i = 0; i < 3; ++i) {
+            ExecParamQueryOnce(tableClient, i);
+        }
+
+    }
+
+    Y_UNIT_TEST(CompileCacheCheckWarnings) {
+        TKikimrRunner kikimr;
+                auto client = kikimr.GetQueryClient();
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto createResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE TestTable (
+                Key Int32,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(createResult.GetStatus(), EStatus::SUCCESS);
+
+        TString query = R"(
+            DECLARE $list AS List<Int32?>;
+            SELECT * FROM TestTable WHERE Key IN $list;
+        )";
+        // , NYdb::NQuery::TTxControl::NoTx()
+        auto compileResult = session.PrepareDataQuery(query).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(compileResult.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT(!compileResult.IsQueryFromCache(), "expected no cache");
+        // if query is in cache can check on warnings
+        Sleep(TDuration::MilliSeconds(100));
+        auto cachedResult = session.PrepareDataQuery(query).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(compileResult.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT(compileResult.IsQueryFromCache());
+        
+        TString sysViewQuery = R"(
+            SELECT warnings from .sys/compile_cache_view;
+        )";
+
+        auto result = session.ExecuteDataQuery(sysViewQuery, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        // UNIT_ASSERT_VALUES_EQUAL(result.cachedResult.GetIssues().ToOneLineString(), );
+        auto rs = result.GetResultSet(0);
+        UNIT_ASSERT_C(false, rs.RowsCount());
+        // for (const auto& issue : issues) {
+        //     if (issue.GetMessage().Contains("nullable") && 
+        //         issue.GetSeverity() == NYql::TSeverityIds::S_WARNING) {
+        //         hasNullableWarning = true;
+        //         break;
+        //     }
+        // }
+
+        // UNIT_ASSERT_C(hasNullableWarning, "Expected warning about nullable column in IN operator");
+
+        // and here add the logic that i have warning in sysview 
+        
+    }
+
+    // check any limit of queries in cache if they are exist?
+
 }
 
-} // namspace NKqp
+} // namespace NKqp
 } // namespace NKikimr

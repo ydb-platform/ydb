@@ -1,6 +1,6 @@
 # DROP TOPIC
 
-С помощью оператора `DROP TOPIC` можно удалить [топик](../../../../concepts/datamodel/topic.md).
+С помощью оператора `DROP TOPIC` можно удалить [топик](../../../concepts/datamodel/topic.md).
 
 ## Синтаксис
 

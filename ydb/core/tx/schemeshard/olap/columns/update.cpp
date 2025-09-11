@@ -295,6 +295,7 @@ bool TOlapColumnBase::IsAllowedType(ui32 typeId) {
         case NYql::NProto::Bool:
         case NYql::NProto::Interval:
         case NYql::NProto::DyNumber:
+        case NYql::NProto::Uuid:
             return false;
         default:
             break;

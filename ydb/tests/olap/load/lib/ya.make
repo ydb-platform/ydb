@@ -11,7 +11,11 @@ PY3_LIBRARY()
         workload_manager.py
         workload_simple_queue.py
         workload_oltp.py
+        workload_olap.py
         workload_topic.py
+        workload_kv.py
+        workload_log.py
+        workload_mixed.py
         upload.py
 
     )
@@ -19,6 +23,7 @@ PY3_LIBRARY()
     PEERDIR (
         contrib/python/allure-pytest
         contrib/python/allure-python-commons
+        contrib/python/matplotlib
         ydb/public/sdk/python/enable_v3_new_behavior
         ydb/tests/olap/lib
         ydb/tests/olap/scenario/helpers

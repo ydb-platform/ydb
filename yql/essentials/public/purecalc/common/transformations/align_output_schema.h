@@ -6,6 +6,8 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NYql {
+    struct TTypeAnnotationContext;
+
     namespace NPureCalc {
         /**
          * A transformer which converts an output type of the expression to the given type or reports an error.
@@ -19,7 +21,8 @@ namespace NYql {
         TAutoPtr<IGraphTransformer> MakeOutputAligner(
             const TTypeAnnotationNode* outputStruct,
             bool acceptsBlocks,
-            EProcessorMode processorMode
+            EProcessorMode processorMode,
+            const TTypeAnnotationContext& typeCtx
         );
     }
 }

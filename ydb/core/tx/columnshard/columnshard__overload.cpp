@@ -1,11 +1,12 @@
 #include "columnshard_impl.h"
+#include <ydb/core/kqp/query_data/kqp_predictor.h>
 
 namespace NKikimr::NColumnShard {
 
 namespace {
 
-constexpr ui64 DEFAULT_WRITES_IN_FLY_LIMIT = 1000000;
-constexpr ui64 DEFAULT_WRITES_SIZE_IN_FLY_LIMIT = (((ui64)1) << 30);
+std::atomic_uint64_t DEFAULT_WRITES_IN_FLY_LIMIT{0};
+std::atomic_uint64_t DEFAULT_WRITES_SIZE_IN_FLY_LIMIT{0};
 
 } // namespace
 
@@ -16,11 +17,21 @@ void TColumnShard::OnYellowChannelsChanged() {
 }
 
 ui64 TColumnShard::GetShardWritesInFlyLimit() const {
-    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit() : DEFAULT_WRITES_IN_FLY_LIMIT;
+    if (DEFAULT_WRITES_IN_FLY_LIMIT.load() == 0) {
+        ui64 oldValue = 0;
+        const ui64 newValue = std::max(NKqp::TStagePredictor::GetUsableThreads() * 200, ui32(1000));
+        DEFAULT_WRITES_IN_FLY_LIMIT.compare_exchange_strong(oldValue, newValue);
+    }
+    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit() : DEFAULT_WRITES_IN_FLY_LIMIT.load();
 }
 
 ui64 TColumnShard::GetShardWritesSizeInFlyLimit() const {
-    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestBytesLimit() : DEFAULT_WRITES_SIZE_IN_FLY_LIMIT;
+    if (DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.load() == 0) {
+        ui64 oldValue = 0;
+        const ui64 newValue = NKqp::TStagePredictor::GetUsableThreads() * 20_MB;
+        DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.compare_exchange_strong(oldValue, newValue);
+    }
+    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestBytesLimit() : DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.load();
 }
 
 TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInternalPathId /* pathId */) const {

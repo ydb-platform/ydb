@@ -11,8 +11,13 @@ public:
     void SetTaskCounters(const TIntrusivePtr<NYql::NDq::TSpillingTaskCounters>& /*spillingTaskCounters*/) override {
     }
 
+    void SetMemoryReportingCallbacks(ISpiller::TMemoryReportCallback reportAlloc, ISpiller::TMemoryReportCallback reportFree) override {
+        ReportAllocCallback_ = reportAlloc;
+        ReportFreeCallback_ = reportFree;
+    }
+
     ISpiller::TPtr CreateSpiller() override {
-        auto new_spiller = CreateMockSpiller();
+        auto new_spiller = CreateMockSpiller(ReportAllocCallback_, ReportFreeCallback_);
         Spillers_.push_back(new_spiller);
         return new_spiller;
     }
@@ -23,6 +28,9 @@ public:
 
 private:
     std::vector<ISpiller::TPtr> Spillers_;
+    ISpiller::TMemoryReportCallback ReportAllocCallback_;
+    ISpiller::TMemoryReportCallback ReportFreeCallback_;
 };
 
 } // namespace NKikimr::NMiniKQL
+

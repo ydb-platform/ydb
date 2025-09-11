@@ -20,22 +20,8 @@ TImportTui::TImportTui(std::shared_ptr<TLog>& log, const TRunConfig& runConfig, 
     , Config(runConfig)
     , LogBackend(logBacked)
     , DataToDisplay(data)
-    , Screen(ScreenInteractive::Fullscreen())
 {
-    TuiThread = std::thread([&] {
-        Screen.Loop(BuildComponent());
-
-        // ftxui catches signals and breaks the loop above, but
-        // we have to let know the rest of app
-        GetGlobalInterruptSource().request_stop();
-    });
-}
-
-TImportTui::~TImportTui() {
-    Screen.Exit();
-    if (TuiThread.joinable()) {
-        TuiThread.join();
-    }
+    StartLoop();
 }
 
 void TImportTui::Update(const TImportDisplayData& data) {

@@ -316,6 +316,7 @@ private:
         bool enableHtapTx = TableServiceConfig.GetEnableHtapTx();
         bool enableStreamWrite = TableServiceConfig.GetEnableStreamWrite();
         bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs();
+        bool enableDataShardCreateTableAs = TableServiceConfig.GetEnableDataShardCreateTableAs();
         auto blockChannelsMode = TableServiceConfig.GetBlockChannelsMode();
 
         bool enableAstCache = TableServiceConfig.GetEnableAstCache();
@@ -353,6 +354,11 @@ private:
 
         bool enableOlapPushdownAggregate = TableServiceConfig.GetEnableOlapPushdownAggregate();
 
+        bool enableOrderOptimizaionFSM = TableServiceConfig.GetEnableOrderOptimizaionFSM();
+
+        bool enableTopSortSelectIndex = TableServiceConfig.GetEnableTopSortSelectIndex();
+        bool enablePointPredicateSortAutoSelectIndex = TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -369,6 +375,7 @@ private:
             TableServiceConfig.GetEnableOltpSink() != enableOltpSink ||
             TableServiceConfig.GetEnableHtapTx() != enableHtapTx ||
             TableServiceConfig.GetEnableCreateTableAs() != enableCreateTableAs ||
+            TableServiceConfig.GetEnableDataShardCreateTableAs() != enableDataShardCreateTableAs ||
             TableServiceConfig.GetBlockChannelsMode() != blockChannelsMode ||
             TableServiceConfig.GetExtractPredicateRangesLimit() != rangesLimit ||
             TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() != mkqlHeavyLimit ||
@@ -394,7 +401,10 @@ private:
             TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser ||
             TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimization() != enableSimpleProgramsSinglePartitionOptimization ||
             TableServiceConfig.GetDefaultLangVer() != defaultLangVer ||
-            TableServiceConfig.GetEnableOlapPushdownAggregate() != enableOlapPushdownAggregate)
+            TableServiceConfig.GetEnableOlapPushdownAggregate() != enableOlapPushdownAggregate ||
+            TableServiceConfig.GetEnableOrderOptimizaionFSM() != enableOrderOptimizaionFSM ||
+            TableServiceConfig.GetEnableTopSortSelectIndex() != enableTopSortSelectIndex ||
+            TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex() != enablePointPredicateSortAutoSelectIndex)
         {
 
             QueryCache->Clear();

@@ -1223,7 +1223,7 @@ void TViewerPipeClient::RedirectToDatabase(const TString& database) {
     Become(&TViewerPipeClient::StateResolveDatabase);
 }
 
-bool TViewerPipeClient::NeedToRedirect() {
+bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
     auto request = GetRequest();
     if (NeedRedirect && request) {
         NeedRedirect = false;
@@ -1233,7 +1233,7 @@ bool TViewerPipeClient::NeedToRedirect() {
             RedirectToDatabase(Database); // to find some dynamic node and redirect query there
             return true;
         }
-        if (!Viewer->CheckAccessViewer(request)) {
+        if (checkDatabaseAuth && !Viewer->CheckAccessViewer(request)) {
             ReplyAndPassAway(GetHTTPFORBIDDEN("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
             return true;
         }

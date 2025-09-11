@@ -20,8 +20,8 @@ class MetadataEndpointTest(TestCase):
             "introspection_endpoint": "https://foo.bar/introspect",
             "token_endpoint": "https://foo.bar/token"
         }
-        from oauthlib.oauth2 import Server as OAuth2Server
-        from oauthlib.openid import Server as OpenIDServer
+        from oauthlib.oauth2 import Server as OAuth2Server  # noqa: PLC0415
+        from oauthlib.openid import Server as OpenIDServer  # noqa: PLC0415
 
         endpoint = OAuth2Server(None)
         metadata = MetadataEndpoint([endpoint], default_claims)
@@ -98,6 +98,7 @@ class MetadataEndpointTest(TestCase):
             "scopes_supported": ["email", "profile"],
             "grant_types_supported": [
                 "authorization_code",
+                "urn:ietf:params:oauth:grant-type:device_code",
                 "password",
                 "client_credentials",
                 "refresh_token",
@@ -130,8 +131,8 @@ class MetadataEndpointTest(TestCase):
         }
 
         def sort_list(claims):
-            for k in claims.keys():
-                claims[k] = sorted(claims[k])
+            for key, value in claims.items():
+                claims[key] = sorted(value)
 
         sort_list(metadata.claims)
         sort_list(expected_claims)

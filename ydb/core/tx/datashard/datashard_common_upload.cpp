@@ -50,7 +50,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     if (record.GetSchemaVersion() && tableInfo.GetTableSchemaVersion() &&
         record.GetSchemaVersion() != tableInfo.GetTableSchemaVersion())
     {
-        SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder()
+        SetError(NKikimrTxDataShard::TError::SCHEME_CHANGED, TStringBuilder()
             << "Schema version mismatch"
             << ": requested " << record.GetSchemaVersion()
             << ", expected " << tableInfo.GetTableSchemaVersion()

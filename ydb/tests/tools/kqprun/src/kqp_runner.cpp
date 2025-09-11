@@ -10,7 +10,7 @@ namespace NKqpRun {
 //// TKqpRunner::TImpl
 
 class TKqpRunner::TImpl {
-    using EVerbose = TYdbSetupSettings::EVerbose;
+    using EVerbosity = TYdbSetupSettings::EVerbosity;
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
 
     static constexpr TDuration RETRY_PERIOD = TDuration::MilliSeconds(100);
@@ -25,7 +25,7 @@ public:
 
     explicit TImpl(const TRunnerOptions& options)
         : Options_(options)
-        , VerboseLevel_(Options_.YdbSettings.VerboseLevel)
+        , VerbosityLevel_(Options_.YdbSettings.VerbosityLevel)
         , YdbSetup_(options.YdbSettings)
         , StatsPrinter_(Options_.PlanOutputFormat)
         , CerrColors_(NColorizer::AutoColors(Cerr))
@@ -70,7 +70,7 @@ public:
     Ydb::StatusIds::StatusCode ExecuteSchemeQuery(const TRequestOptions& query) const {
         StartSchemeTraceOpt();
 
-        if (VerboseLevel_ >= EVerbose::QueriesText) {
+        if (VerbosityLevel_ >= EVerbosity::QueriesText) {
             Cout << CoutColors_.Cyan() << "Starting scheme request:\n" << CoutColors_.Default() << query.Query << Endl;
         }
 
@@ -91,7 +91,7 @@ public:
     Ydb::StatusIds::StatusCode ExecuteScript(const TRequestOptions& script, TDuration* duration) {
         StartScriptTraceOpt(script.QueryId);
 
-        if (VerboseLevel_ >= EVerbose::QueriesText) {
+        if (VerbosityLevel_ >= EVerbosity::QueriesText) {
             Cout << CoutColors_.Cyan() << "Starting script request:\n" << CoutColors_.Default() << script.Query << Endl;
         }
 
@@ -112,7 +112,7 @@ public:
         StartScriptTraceOpt(query.QueryId);
         StartTime_ = TInstant::Now();
 
-        if (VerboseLevel_ >= EVerbose::QueriesText) {
+        if (VerbosityLevel_ >= EVerbosity::QueriesText) {
             Cout << CoutColors_.Cyan() << "Starting query request:\n" << CoutColors_.Default() << query.Query << Endl;
         }
 
@@ -201,7 +201,7 @@ public:
         if (Options_.ResultOutput) {
             Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Writing script query results..." << CoutColors_.Default() << Endl;
             for (size_t i = 0; i < ResultSets_.size(); ++i) {
-                if (ResultSets_.size() > 1 && VerboseLevel_ >= EVerbose::Info) {
+                if (ResultSets_.size() > 1 && VerbosityLevel_ >= EVerbosity::Info) {
                     *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
                 }
                 PrintResultSet(Options_.ResultOutputFormat, *Options_.ResultOutput, ResultSets_[i]);
@@ -236,7 +236,7 @@ private:
                 return status.Status;
             }
 
-            if (const auto newIssues = status.Issues.ToString(); newIssues && previousIssues != newIssues && Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
+            if (const auto newIssues = status.Issues.ToString(); newIssues && previousIssues != newIssues && Options_.YdbSettings.VerbosityLevel >= EVerbosity::Info) {
                 previousIssues = newIssues;
                 Cerr << CerrColors_.Red() << "Script execution issues updated:" << CerrColors_.Default() << Endl << newIssues << Endl;
             }
@@ -290,7 +290,7 @@ private:
 
     void PrintSchemeQueryAst(const TString& ast) const {
         if (Options_.SchemeQueryAstOutput) {
-            if (VerboseLevel_ >= EVerbose::Info) {
+            if (VerbosityLevel_ >= EVerbosity::Info) {
                 Cout << CoutColors_.Cyan() << "Writing scheme query ast" << CoutColors_.Default() << Endl;
             }
             Options_.SchemeQueryAstOutput->Write(ast);
@@ -300,7 +300,7 @@ private:
 
     void PrintScriptAst(size_t queryId, const TString& ast) const {
         if (const auto output = GetValue<IOutputStream*>(queryId, Options_.ScriptQueryAstOutputs, nullptr)) {
-            if (VerboseLevel_ >= EVerbose::Info) {
+            if (VerbosityLevel_ >= EVerbosity::Info) {
                 Cout << CoutColors_.Cyan() << "Writing script query ast" << CoutColors_.Default() << Endl;
             }
             output->Write(ast);
@@ -310,7 +310,7 @@ private:
 
     void PrintScriptPlan(size_t queryId, const TString& plan) const {
         if (const auto output = GetValue<IOutputStream*>(queryId, Options_.ScriptQueryPlanOutputs, nullptr)) {
-            if (VerboseLevel_ >= EVerbose::Info) {
+            if (VerbosityLevel_ >= EVerbosity::Info) {
                 Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
             }
             StatsPrinter_.PrintPlan(plan, *output);
@@ -339,7 +339,7 @@ private:
     }
 
     void PrintScriptFinish(const TQueryMeta& meta, const TString& queryType, TDuration* duration = nullptr) const {
-        if (Options_.YdbSettings.VerboseLevel < EVerbose::Info) {
+        if (Options_.YdbSettings.VerbosityLevel < EVerbosity::Info) {
             return;
         }
         Cout << CoutColors_.Cyan() << queryType << " request finished.";
@@ -378,7 +378,7 @@ private:
 
 private:
     TRunnerOptions Options_;
-    EVerbose VerboseLevel_;
+    EVerbosity VerbosityLevel_;
     IRetryPolicy::TPtr RetryPolicy_;
     IRetryPolicy::IRetryState::TPtr RetryState_;
     std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> RetryMapping_;

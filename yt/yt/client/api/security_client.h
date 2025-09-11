@@ -49,7 +49,7 @@ struct TCheckPermissionResponse
     : public TCheckPermissionResult
 {
     std::optional<std::vector<TCheckPermissionResult>> Columns;
-    std::optional<std::vector<NSecurityClient::TRowLevelAccessControlEntry>> Rlaces;
+    std::optional<std::vector<NSecurityClient::TRowLevelAccessControlEntry>> RlAcl;
 };
 
 struct TCheckPermissionByAclOptions

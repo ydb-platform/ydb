@@ -190,6 +190,7 @@ struct TKikimrEvents : TEvents {
         ES_GENERAL_CACHE_SOURCE = 4267,
         ES_TRANSFER = 4268,
         ES_TOKEN_MANAGER = 4269,
+        ES_TOKEN_AGENT = 4270,
     };
 };
 

@@ -26,20 +26,17 @@ struct TCounterState final
     TCounterState(
         TWeakPtr<TRefCounted> owner,
         std::function<i64()> reader,
-        const TTagIdList& tagIds,
-        const TProjectionSet& projections)
+        TTagIdSet tagSet)
         : Owner(std::move(owner))
         , Reader(std::move(reader))
-        , TagIds(tagIds)
-        , Projections(projections)
+        , TagSet(std::move(tagSet))
     { }
 
     const TWeakPtr<TRefCounted> Owner;
     const std::function<i64()> Reader;
-    i64 LastValue = 0;
+    TTagIdSet TagSet;
 
-    TTagIdList TagIds;
-    const TProjectionSet Projections;
+    i64 LastValue = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(TCounterState)
@@ -52,18 +49,15 @@ struct TTimeCounterState final
 {
     TTimeCounterState(
         TWeakPtr<ITimeCounter> owner,
-        const TTagIdList& tagIds,
-        const TProjectionSet& projections)
+        TTagIdSet tagSet)
         : Owner(std::move(owner))
-        , TagIds(tagIds)
-        , Projections(projections)
+        , TagSet(std::move(tagSet))
     { }
 
     const TWeakPtr<ITimeCounter> Owner;
-    TDuration LastValue = TDuration::Zero();
+    TTagIdSet TagSet;
 
-    TTagIdList TagIds;
-    const TProjectionSet Projections;
+    TDuration LastValue = TDuration::Zero();
 };
 
 DEFINE_REFCOUNTED_TYPE(TTimeCounterState)
@@ -77,19 +71,15 @@ struct TGaugeState final
     TGaugeState(
         TWeakPtr<TRefCounted> owner,
         std::function<double()> reader,
-        const TTagIdList& tagIds,
-        const TProjectionSet& projections)
+        TTagIdSet tagSet)
         : Owner(std::move(owner))
         , Reader(std::move(reader))
-        , TagIds(tagIds)
-        , Projections(projections)
+        , TagSet(std::move(tagSet))
     { }
 
     const TWeakPtr<TRefCounted> Owner;
     const std::function<double()> Reader;
-
-    TTagIdList TagIds;
-    const TProjectionSet Projections;
+    TTagIdSet TagSet;
 };
 
 DEFINE_REFCOUNTED_TYPE(TGaugeState)
@@ -102,17 +92,13 @@ struct TSummaryState final
 {
     TSummaryState(
         TWeakPtr<ISummary> owner,
-        const TTagIdList& tagIds,
-        const TProjectionSet& projections)
+        TTagIdSet tagSet)
         : Owner(std::move(owner))
-        , TagIds(tagIds)
-        , Projections(projections)
+        , TagSet(std::move(tagSet))
     { }
 
     const TWeakPtr<ISummary> Owner;
-
-    TTagIdList TagIds;
-    const TProjectionSet Projections;
+    TTagIdSet TagSet;
 };
 
 DEFINE_REFCOUNTED_TYPE(TSummaryState)
@@ -125,17 +111,13 @@ struct TTimerSummaryState final
 {
     TTimerSummaryState(
         TWeakPtr<ITimer> owner,
-        const TTagIdList& tagIds,
-        const TProjectionSet& projections)
+        TTagIdSet tagSet)
         : Owner(owner)
-        , TagIds(tagIds)
-        , Projections(projections)
+        , TagSet(std::move(tagSet))
     { }
 
     const TWeakPtr<ITimer> Owner;
-
-    TTagIdList TagIds;
-    const TProjectionSet Projections;
+    TTagIdSet TagSet;
 };
 
 DEFINE_REFCOUNTED_TYPE(TTimerSummaryState)
@@ -149,17 +131,13 @@ struct THistogramState final
 {
     THistogramState(
         TWeakPtr<THistogram> owner,
-        const TTagIdList& tagIds,
-        const TProjectionSet& projections)
+        TTagIdSet tagSet)
         : Owner(owner)
-        , TagIds(tagIds)
-        , Projections(projections)
+        , TagSet(std::move(tagSet))
     { }
 
     const TWeakPtr<THistogram> Owner;
-
-    TTagIdList TagIds;
-    const TProjectionSet Projections;
+    TTagIdSet TagSet;
 };
 
 DEFINE_REFCOUNTED_TYPE(THistogramState)

@@ -1,3 +1,4 @@
+import traceback
 import allure
 import logging
 import os
@@ -531,7 +532,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
         # Копируем cluster.yaml (если указан cluster_path)
         cluster_result = cls._copy_single_config(
-            host, cls.cluster_path, "/Berkanavt/kikimr/cfg/config.yaml",
+            host, cls.cluster_path, "/Berkanavt/nemesis/cfg/config.yaml",
             "cluster config", None, host_log
         )
         if not cluster_result["success"]:
@@ -1228,6 +1229,7 @@ class WorkloadTestBase(LoadSuiteBase):
                             node_host = node_plan["node"]["node"].host
                             logging.error(
                                 f"Error executing on {node_host}: {e}")
+                            logging.error(traceback.format_exc())
                             # Добавляем информацию об ошибке
                             node_results.append(
                                 {

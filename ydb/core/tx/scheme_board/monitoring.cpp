@@ -1,3 +1,4 @@
+#include "backup.h"
 #include "mon_events.h"
 #include "monitoring.h"
 
@@ -40,8 +41,19 @@ namespace NSchemeBoard {
 
 using namespace NJson;
 
+struct TBackupLimits {
+    ui32 DefaultInFlight = 1'000;
+    ui32 MinInFlight = 1;
+    ui32 MaxInFlight = 10'000;
+};
+
 class TMonitoring: public TActorBootstrapped<TMonitoring> {
     static constexpr char ROOT[] = "scheme_board";
+    static constexpr TBackupLimits BackupLimits = TBackupLimits();
+
+    static constexpr TStringBuf LogPrefix() {
+        return "monitoring"sv;
+    }
 
     using TActivity = NKikimrServices::TActivity;
     using EActivityType = TActivity::EType;
@@ -60,6 +72,8 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         Describe,
         Resolver,
         Resolve,
+        Backup,
+        Restore,
     };
 
     enum class EAttributeType {
@@ -133,6 +147,10 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             return ERequestType::Resolver;
         } else if (relPath.StartsWith("/resolve")) {
             return ERequestType::Resolve;
+        } else if (relPath.StartsWith("/backup")) {
+            return ERequestType::Backup;
+        } else if (relPath.StartsWith("/restore")) {
+            return ERequestType::Restore;
         } else {
             return ERequestType::Unknown;
         }
@@ -168,6 +186,10 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             return str << "resolver";
         case ERequestType::Resolve:
             return str << "resolve";
+        case ERequestType::Backup:
+            return str << "backup";
+        case ERequestType::Restore:
+            return str << "restore";
         case ERequestType::Unknown:
             return str;
         }
@@ -195,7 +217,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             if (type->GetStringSafe() == "ACTOR_ID") {
                 return EAttributeType::ActorId;
             }
-            // can not detenmine map type, fallback to unknown
+            // can not determine map type, fallback to unknown
             [[fallthrough]];
         }
 
@@ -526,21 +548,52 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
     static void Navbar(IOutputStream& str, ERequestType originRequestType) {
-        static THashMap<ERequestType, TStringBuf> requestTypeToTitle = {
+        static const TVector<std::pair<ERequestType, TStringBuf>> requestTypeToTitle = {
             {ERequestType::Index, "Main"},
             {ERequestType::Resolver, "Resolver"},
+            {ERequestType::Backup, "Backup"},
+            {ERequestType::Restore, "Restore"},
         };
 
         const bool isIndex = originRequestType == ERequestType::Index;
 
         HTML(str) {
+            str << "<style>"
+                << ".backup-tab, .restore-tab { color: red !important; }"
+                << ".backup-tab:hover, .restore-tab:hover { background-color: red !important; color: white !important; }"
+                << ".nav-pills > li.active > a.backup-tab, .nav-pills > li.active > a.restore-tab { background-color: red !important; color: white !important; }"
+                << ".nav-pills > li.active > a.backup-tab:hover, .nav-pills > li.active > a.restore-tab:hover { background-color: darkred !important; color: white !important; }"
+                << "</style>";
+
             TAG_CLASS(TNav, "navbar") {
                 UL_CLASS("nav nav-pills") {
                     for (const auto& [rt, title] : requestTypeToTitle) {
+                        const TStringBuf linkPrefix = isIndex
+                            ? ROOT
+                            : (rt == ERequestType::Index ? ".." : "");
+
+                        TString cssClass;
+                        if (rt == ERequestType::Backup || rt == ERequestType::Restore) {
+                            cssClass = TStringBuilder() << (rt == ERequestType::Backup ? "backup-tab" : "restore-tab");
+                        }
+
                         if (rt == originRequestType) {
-                            LI_CLASS("active") { Link(str, "#", title); }
+                            LI_CLASS("active") {
+                                if (!cssClass.empty()) {
+                                    str << "<a href='#' class='" << cssClass << "'>" << title << "</a>";
+                                } else {
+                                    Link(str, "#", title);
+                                }
+                            }
                         } else {
-                            LI() { Link(str, rt, title, isIndex ? ROOT : ".."); }
+                            LI() {
+                                if (!cssClass.empty()) {
+                                    str << "<a href='" << MakeLink(rt, linkPrefix)
+                                        << "' class='" << cssClass << "'>" << title << "</a>";
+                                } else {
+                                    Link(str, rt, title, linkPrefix);
+                                }
+                            }
                         }
                     }
                 }
@@ -1055,8 +1108,44 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         return str.Str();
     }
 
-    static TActorId MakeStateStorageProxyId() {
-        return NKikimr::MakeStateStorageProxyID();
+    static TString RenderBackup(
+        const TBackupProgress& backupProgress,
+        bool backupStarted = false,
+        const TString& errorMessage = ""
+    ) {
+        Y_UNUSED(backupProgress, backupStarted, errorMessage);
+        TStringStream str;
+
+        HTML(str) {
+            Navbar(str, ERequestType::Backup);
+            Header(str, "Backup", "Backup path descriptions locally, see <a href='https://ydb.tech/docs' target='_blank'>docs</a>");
+
+            DIV_CLASS("alert alert-info") {
+                str << "Backup functionality is not implemented yet";
+            }
+        }
+
+        return str.Str();
+    }
+
+    static TString RenderRestore(
+        const TRestoreProgress& restoreProgress,
+        bool restoreStarted = false,
+        const TString& errorMessage = ""
+    ) {
+        Y_UNUSED(restoreProgress, restoreStarted, errorMessage);
+        TStringStream str;
+
+        HTML(str) {
+            Navbar(str, ERequestType::Restore);
+            Header(str, "Restore", "Restore path descriptions saved locally, see <a href='https://ydb.tech/docs' target='_blank'>docs</a>");
+
+            DIV_CLASS("alert alert-info") {
+                str << "Restore functionality is not implemented yet";
+            }
+        }
+
+        return str.Str();
     }
 
     template <typename TDerived, typename TEvResponse>
@@ -1138,7 +1227,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
     public:
         explicit TReplicaEnumerator(const TActorId& replyTo)
-            : TBase(MakeStateStorageProxyId(), replyTo)
+            : TBase(MakeStateStorageProxyID(), replyTo)
         {
         }
 
@@ -1294,16 +1383,134 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             return (void)Register(new TReplicaEnumerator(ev->Sender));
 
         case ERequestType::Resolve:
-            if (RunFormAction<TReplicaResolver>(MakeStateStorageProxyId(), ev->Sender, params)) {
+            if (RunFormAction<TReplicaResolver>(MakeStateStorageProxyID(), ev->Sender, params)) {
                 return;
             }
             break;
+
+        case ERequestType::Backup:
+            if (params.Has("startBackup")) {
+                if (BackupProgress.IsRunning()) {
+                    return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                        RenderBackup(BackupProgress, false, "Backup is already running")
+                    ));
+                }
+
+                const TString filePath = params.Get("backupPath");
+                if (filePath.empty()) {
+                    return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                        RenderBackup(BackupProgress, false, "Backup file path is required")
+                    ));
+                }
+
+                ui32 inFlightLimit = BackupLimits.DefaultInFlight;
+                if (params.Has("inFlightLimit")) {
+                    if (!TryFromString(params.Get("inFlightLimit"), inFlightLimit)) {
+                        return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                            RenderBackup(BackupProgress, false, "Invalid in-flight limit value")
+                        ));
+                    }
+                }
+
+                BackupProgress = TBackupProgress();
+                BackupProgress.Status = TBackupProgress::EStatus::Starting;
+
+                SBB_LOG_I("Starting backup to " << filePath << " with in-flight limit " << inFlightLimit);
+                Register(CreateSchemeBoardBackuper(filePath, inFlightLimit, SelfId()));
+
+                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                    RenderBackup(BackupProgress, true)
+                ));
+            }
+
+            if (params.Has("backupProgress")) {
+                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                    TStringBuilder() << NMonitoring::HTTPOKJSON << BackupProgress.ToJson(),
+                    0, EContentType::Custom
+                ));
+            }
+
+            return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderBackup(BackupProgress)));
+
+        case ERequestType::Restore:
+            if (params.Has("startRestore")) {
+                if (RestoreProgress.IsRunning()) {
+                    return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                        RenderRestore(RestoreProgress, false, "Restore is already running")
+                    ));
+                }
+
+                const TString filePath = params.Get("restorePath");
+                if (filePath.empty()) {
+                    return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                        RenderRestore(RestoreProgress, false, "Restore file path is required")
+                    ));
+                }
+
+                ui64 schemeShardId = 0;
+                if (!TryFromString(params.Get("schemeShardId"), schemeShardId)) {
+                    return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                        RenderRestore(RestoreProgress, false, "Invalid Scheme Shard ID")
+                    ));
+                }
+
+                ui64 generation = 1;
+                if (params.Has("generation")) {
+                    TryFromString(params.Get("generation"), generation);
+                }
+
+                RestoreProgress = TRestoreProgress();
+                RestoreProgress.Status = TRestoreProgress::EStatus::Starting;
+
+                SBB_LOG_I("Starting restore from " << filePath
+                    << " for SchemeShard ID: " << schemeShardId
+                    << " of generation: " << generation
+                );
+
+                Register(CreateSchemeBoardRestorer(filePath, schemeShardId, generation, SelfId()));
+
+                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                    RenderRestore(RestoreProgress, true)
+                ));
+            }
+
+            if (params.Has("restoreProgress")) {
+                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                    TStringBuilder() << NMonitoring::HTTPOKJSON << RestoreProgress.ToJson(),
+                    0, EContentType::Custom
+                ));
+            }
+
+            return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderRestore(RestoreProgress)));
 
         case ERequestType::Unknown:
             break;
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(NMonitoring::HTTPNOTFOUND, 0, EContentType::Custom));
+    }
+
+    template <typename TProgress, typename TEventPtr>
+    void Handle(TProgress& progress, TEventPtr& ev) {
+        const auto& msg = *ev->Get();
+        SBB_LOG_D("Handle " << msg.ToString());
+        progress = TProgress(msg);
+    }
+
+    void Handle(TSchemeBoardMonEvents::TEvBackupProgress::TPtr& ev) {
+        Handle(BackupProgress, ev);
+    }
+
+    void Handle(TSchemeBoardMonEvents::TEvBackupResult::TPtr& ev) {
+        Handle(BackupProgress, ev);
+    }
+
+    void Handle(TSchemeBoardMonEvents::TEvRestoreProgress::TPtr& ev) {
+        Handle(RestoreProgress, ev);
+    }
+
+    void Handle(TSchemeBoardMonEvents::TEvRestoreResult::TPtr& ev) {
+        Handle(RestoreProgress, ev);
     }
 
 public:
@@ -1328,6 +1535,11 @@ public:
 
             hFunc(NMon::TEvHttpInfo, Handle);
 
+            hFunc(TSchemeBoardMonEvents::TEvBackupProgress, Handle);
+            hFunc(TSchemeBoardMonEvents::TEvBackupResult, Handle);
+            hFunc(TSchemeBoardMonEvents::TEvRestoreProgress, Handle);
+            hFunc(TSchemeBoardMonEvents::TEvRestoreResult, Handle);
+
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         }
     }
@@ -1335,6 +1547,8 @@ public:
 private:
     THashMap<TActorId, TActorInfo> RegisteredActors;
     THashMap<EActivityType, THashSet<TActorId>> ByActivityType;
+    TBackupProgress BackupProgress;
+    TRestoreProgress RestoreProgress;
 
 }; // TMonitoring
 

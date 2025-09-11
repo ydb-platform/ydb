@@ -279,14 +279,6 @@ struct TPendingPartSwitch {
     }
 };
 
-enum class ESharedCacheRequestType : ui64 {
-    Undefined = 0,
-    Transaction = 1,
-    InMemPages,
-    PendingInit,
-    BootLogic,
-};
-
 struct TExecutorStatsImpl : public TExecutorStats {
     TInstant YellowLastChecked;
     ui64 PacksMetaBytes = 0;    /* Memory occupied by NPageCollection::TMeta */
@@ -508,6 +500,8 @@ class TExecutor
     TControlWrapper LogFlushDelayOverrideUsec;
     TControlWrapper MaxCommitRedoMB;
 
+    TActorId BackupWriter;
+
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
     void PassAway() override;
@@ -554,10 +548,11 @@ class TExecutor
     void AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection);
     void DropPartStorePageCollections(const NTable::TPart &part);
     void DropPageCollection(const TLogoBlobID& pageCollectionId);
+    void StartBackup();
 
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
-    void RequestInMemPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns);
+    void RequestStickyPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns);
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
     THashMap<NTable::TTag, ECacheMode> GetCacheModes(ui32 tableId);
     ECacheMode GetCacheMode(const TVector<NTable::TPartScheme::TColumn>& columns, const THashMap<NTable::TTag, ECacheMode>& cacheModes);

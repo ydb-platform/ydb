@@ -12,7 +12,7 @@ namespace NMonitoring {
         Y_HAS_MEMBER(second, Second);
     } // namespace NPrivate
 
-    template <typename TRequest>
+    template <typename TRequest, bool UseFastest = false>
     ECompression ParseCompression(const TRequest& req) {
         auto&& headers = req.GetHeaders();
 
@@ -34,10 +34,19 @@ namespace NMonitoring {
         }
 
         NMonitoring::ECompression val{};
+
         if constexpr (isPlainPair) {
-            val = CompressionFromAcceptEncodingHeader(it->second);
+            if constexpr (UseFastest) {
+              val = FastestCompressionFromAcceptEncodingHeader(it->second);
+            } else {
+              val = CompressionFromAcceptEncodingHeader(it->second);
+            }
         } else {
-            val = CompressionFromAcceptEncodingHeader(it->Value());
+            if constexpr (UseFastest) {
+              val = FastestCompressionFromAcceptEncodingHeader(it->Value());
+            } else {
+              val = CompressionFromAcceptEncodingHeader(it->Value());
+            }
         }
 
         return val != NMonitoring::ECompression::UNKNOWN

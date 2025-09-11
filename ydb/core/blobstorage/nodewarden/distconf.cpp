@@ -216,7 +216,7 @@ namespace NKikimr::NStorage {
                     std::ranges::binary_search(NodeIdsForOutgoingBinding, nodeId)) {
                 continue; // okay
             } else if (BridgeInfo && BridgeInfo->SelfNodePile->IsPrimary && !NodesFromSamePile.contains(nodeId) &&
-                    AllNodeIds.contains(nodeId) && !Binding) {
+                    AllNodeIds.contains(nodeId) && (!Binding || !Binding->RootNodeId)) {
                 continue; // okay too -- other pile connecting to primary
             }
             Y_ABORT_S("unexpected incoming bound node NodeId# " << nodeId

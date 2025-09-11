@@ -13,6 +13,24 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TUnversionedOwningValueTest, DefaultCtor)
+{
+    TUnversionedOwningValue owningValue;
+    ASSERT_EQ(owningValue.Type(), EValueType::TheBottom);
+}
+
+TEST(TUnversionedOwningValueTest, String)
+{
+    TString string = "Hello world!";
+    TUnversionedOwningValue owningValue(MakeUnversionedStringValue(string));
+    TUnversionedValue value = owningValue;
+    ASSERT_EQ(owningValue.Type(), EValueType::String);
+    ASSERT_EQ(TString(value.Data.String, value.Length), string);
+    ASSERT_EQ(owningValue.GetStringRef().ToStringBuf(), string);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TUnversionedOwningRowTest, DefaultCtor)
 {
     TUnversionedOwningRow owningRow;

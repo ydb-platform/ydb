@@ -1,5 +1,6 @@
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -1551,6 +1552,8 @@ public:
             NKikimrIndexBuilder::TIndexBuildSettings indexBuildSettings;
             indexBuildSettings.set_source_path(table.Metadata->Name);
 
+            TVector<TSetColumnConstraintSettings> constraintSetObjects;
+
             for (auto action : maybeAlter.Cast().Actions()) {
                 auto name = action.Name().Value();
                 if (name == "renameTo") {
@@ -1662,13 +1665,15 @@ public:
                 } else if (name == "alterColumns") {
                     auto listNode = action.Value().Cast<TExprList>();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
-                        auto alter_columns = alterTableRequest.add_alter_columns();
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();
                         auto columnName = columnTuple.Item(0).Cast<TCoAtom>();
-                        alter_columns->set_name(TString(columnName));
                         auto alterColumnList = columnTuple.Item(1).Cast<TExprList>();
                         auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
+
+                        auto alter_columns = alterTableRequest.add_alter_columns();
+                        alter_columns->set_name(TString(columnName));
+
                         if (alterColumnAction == "setDefault") {
                             auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
                             if (setDefault.Size() == 1) {
@@ -1722,9 +1727,19 @@ public:
                             if (value == "drop_not_null") {
                                 alter_columns->set_not_null(false);
                             } else if (value == "set_not_null") {
-                                ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
-                                    << "SET NOT NULL is currently not supported."));
-                                return SyncError();
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableSetColumnConstraint()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
+                                        << "SET NOT NULL is currently not supported."));
+                                    return SyncError();
+                                } else {
+                                    alterTableRequest.mutable_alter_columns()->RemoveLast();
+
+                                    TSetColumnConstraintSettings value;
+                                    value.SetColumnName(TString(columnName));
+                                    value.SetConstraint(TSetColumnConstraintSettings::NOT_NULL);
+
+                                    constraintSetObjects.push_back(std::move(value));
+                                }
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
                                     << "Unknown operation in changeColumnConstraints"));
@@ -1776,6 +1791,25 @@ public:
                                 } else if (name == "compression_level") {
                                     auto level = FromString<i32>(familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                                     f->set_compression_level(level);
+                                } else if (name == "cache_mode") {
+                                    if (!SessionCtx->Config().FeatureFlags.GetEnableTableCacheModes()) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
+                                            TStringBuilder() << "Setting cache_mode is not allowed"));
+                                        return SyncError();
+                                    }
+                                    auto cacheMode = TString(
+                                        familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+                                    if (to_lower(cacheMode) == "regular") {
+                                        f->set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR);
+                                    } else if (to_lower(cacheMode) == "in_memory") {
+                                        f->set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY);
+                                    } else {
+                                        ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
+                                            TStringBuilder() << "Unknown cache mode '" << cacheMode
+                                                << "' for a column family"));
+                                        return SyncError();
+                                    }
                                 } else {
                                     ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
                                         TStringBuilder() << "Unknown column family setting name: " << name));
@@ -1897,32 +1931,17 @@ public:
                             }
                         } else if (name == "indexSettings") {
                             YQL_ENSURE(add_index->type_case() == Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex);
-                            auto& protoVectorSettings = *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
                             auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
-                            YQL_ENSURE(indexSettings.Maybe<TCoNameValueTupleList>());
+                            TVector<std::pair<TString, TString>> settings(::Reserve(indexSettings.Size()));
                             for (const auto& vectorSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
                                 YQL_ENSURE(vectorSetting.Value().Maybe<TCoAtom>());
-                                auto parseU32 = [] (const char* key, const TString& value) {
-                                    ui32 num = 0;
-                                    YQL_ENSURE(TryFromString(value, num), "Wrong " << key << ": " << value);
-                                    return num;
-                                };
-                                const auto value = vectorSetting.Value().Cast<TCoAtom>().StringValue();
-                                if (vectorSetting.Name().Value() == "distance") {
-                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseDistance(value));
-                                } else if (vectorSetting.Name().Value() == "similarity") {
-                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseSimilarity(value));
-                                } else if (vectorSetting.Name().Value() == "vector_type") {
-                                    protoVectorSettings.mutable_settings()->set_vector_type(VectorIndexSettingsParseVectorType(value));
-                                } else if (vectorSetting.Name().Value() == "vector_dimension") {
-                                    protoVectorSettings.mutable_settings()->set_vector_dimension(parseU32("vector_dimension", value));
-                                } else if (vectorSetting.Name().Value() == "clusters") {
-                                    protoVectorSettings.set_clusters(parseU32("clusters", value));
-                                } else if (vectorSetting.Name().Value() == "levels") {
-                                    protoVectorSettings.set_levels(parseU32("levels", value));
-                                } else {
-                                    YQL_ENSURE(false, "Wrong vector setting name: " << vectorSetting.Name().Value());
-                                }
+                                settings.emplace_back(vectorSetting.Name().Value(), vectorSetting.Value().Cast<TCoAtom>().StringValue());
+                            }
+                            TString error;
+                            *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = NKikimr::NKMeans::FillSettings(settings, error);
+                            if (error) {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), error));
+                                return SyncError();
                             }
                         }
                         else {
@@ -2194,8 +2213,11 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);  // Doesn't set, so always false
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
+            bool isSetConstraint = (!constraintSetObjects.empty());
 
-            if (isTableStore) {
+            if (isSetConstraint) {
+                future = Gateway->SetConstraint(table.Metadata->Name, std::move(constraintSetObjects));
+            } else if (isTableStore) {
                 AFL_VERIFY(false);
                 if (!isColumn) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),

@@ -4,6 +4,9 @@
 
 #include <yt/yt/core/misc/arithmetic_formula.h>
 
+#include <yt/yt/core/phoenix/context.h>
+#include <yt/yt/core/phoenix/type_decl.h>
+
 #include <yt/yt/core/yson/consumer.h>
 
 #include <yt/yt/core/ytree/permission.h>
@@ -66,11 +69,17 @@ void Deserialize(TSerializableAccessControlList& acl, NYson::TYsonPullParserCurs
 
 //! A small container to allow reader to selectively apply expressions based on
 //! their InapplicableExpressionMode.
-//! RLACE stands for Row-Level Access Control Entry.
+//! NB: You may encounter occurences of an "RL ACE" term.
+//! It stands for Row-Level Access Control Entry.
 struct TRowLevelAccessControlEntry
 {
     std::string Expression;
     EInapplicableExpressionMode InapplicableExpressionMode;
+
+    using TLoadContext = NPhoenix::TLoadContext;
+    using TSaveContext = NPhoenix::TSaveContext;
+
+    PHOENIX_DECLARE_TYPE(TRowLevelAccessControlEntry, 0x01201ace);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

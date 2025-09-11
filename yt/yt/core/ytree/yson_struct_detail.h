@@ -8,6 +8,8 @@
 
 #include <library/cpp/yt/misc/optional.h>
 
+#include <any>
+
 namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -103,6 +105,11 @@ struct IYsonStructParameter
     virtual const std::vector<std::string>& GetAliases() const = 0;
     virtual IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const = 0;
 
+    template <class TOption>
+    std::optional<TOption> FindOption() const;
+    template <class TOption>
+    TOption GetOptionOrThrow() const;
+    virtual std::any FindOption(const std::type_info& typeInfo) const = 0;
     virtual void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
 
     virtual bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const = 0;
@@ -307,6 +314,7 @@ public:
     const std::vector<std::string>& GetAliases() const override;
     IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const override;
 
+    std::any FindOption(const std::type_info& typeInfo) const override;
     void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
 
     bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const override;
@@ -356,6 +364,9 @@ public:
     template <class... TArgs>
     TYsonStructParameter& DefaultNew(TArgs&&... args);
 
+    template <class TOption>
+    TYsonStructParameter& AddOption(TOption option);
+
 private:
     const std::string Key_;
 
@@ -371,6 +382,7 @@ private:
     std::optional<EUnrecognizedStrategy> DefaultUnrecognizedStrategy_;
     bool EnforceDefaultUnrecognizedStrategy_ = false;
     const int FieldIndex_ = -1;
+    THashMap<std::type_index, std::any> Options_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

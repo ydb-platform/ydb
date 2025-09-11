@@ -1,0 +1,3 @@
+/* custom error: Condition violated */
+$vt = Variant<Int32,String>;
+select Way(Variant(WithSideEffects(Ensure(1,false)),"0",$vt))

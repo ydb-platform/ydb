@@ -74,6 +74,7 @@ namespace NSQLComplete {
 
     struct TColumnName: TIdentifier {
         struct TConstraints {
+            TString TableAlias;
             TVector<TAliased<TTableId>> Tables;
             THashMap<TString, THashSet<TString>> WithoutByTableAlias;
         };

@@ -35,6 +35,8 @@ class KiKiMRDistConfNodeStatusTest(object):
     use_config_store = True
     separate_node_configs = True
     pileup_replicas = False
+    state_storage_rings = None
+    n_to_select = None
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -76,6 +78,8 @@ class KiKiMRDistConfNodeStatusTest(object):
             use_self_management=True,
             extra_grpc_services=['config'],
             cms_config=cms_config,
+            state_storage_rings=cls.state_storage_rings,
+            n_to_select=cls.n_to_select,
             additional_log_configs=log_configs)
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
@@ -153,6 +157,27 @@ class TestKiKiMRDistConfSelfHealNodeDisconnected(KiKiMRDistConfNodeStatusTest):
         time.sleep(25)
         rg3 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg3, rg2)  # Current config has no bad nodes and should not run self-heal
+
+
+class TestKiKiMRDistConfSelfHealReassignNodeAfterReconfiguration(KiKiMRDistConfNodeStatusTest):
+    erasure = Erasure.MIRROR_3_DC
+    nodes_count = 12
+
+    def do_test(self, configName):
+        rg = get_ring_group(self.do_request_config(), configName)
+        assert_eq(rg["NToSelect"], 9)
+        assert_eq(len(rg["Ring"]), 9)
+        self.kill_nodes(lambda hosts, i: i == 1 or i == 2)
+        time.sleep(25)
+        rg = self.do_request_config()[f"{configName}Config"]["Ring"]
+        assert_eq(rg["NToSelect"], 9)
+        assert_eq(len(rg["Ring"]), 9)
+        assert_eq(rg["RingGroupActorIdOffset"], 1)
+        self.kill_nodes(lambda hosts, i: i == 6)
+        time.sleep(25)
+        rg = self.do_request_config()[f"{configName}Config"]["Ring"]
+        self.validate_not_contains_nodes(rg, [7])
+        assert_eq(rg["RingGroupActorIdOffset"], 1)  # reassign node api used
 
 
 class TestKiKiMRDistConfSelfHeal2NodesDisconnected(KiKiMRDistConfNodeStatusTest):

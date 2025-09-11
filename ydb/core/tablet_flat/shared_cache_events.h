@@ -37,6 +37,15 @@ namespace NKikimr::NSharedCache {
         /* +1024 range is reserved for scan events */
     };
 
+    enum class ERequestTypeCookie : ui64 {
+        Undefined = 0,
+        Transaction = 1,
+        StickyPages,
+        PendingInit,
+        BootLogic,
+        TryKeepInMemPages,
+    };
+
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR), "");
 
     struct TEvUnregister : public TEventLocal<TEvUnregister, EvUnregister> {

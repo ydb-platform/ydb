@@ -300,6 +300,44 @@ private:
     THashSet<TString> KeywordNames_;
 };
 
+bool GetParseTree(
+    const TString& query,
+    NSQLTranslation::TTranslationSettings& settings,
+    NYql::TIssues& issues,
+    NSQLTranslationV1::TLexers& lexers,
+    NSQLTranslationV1::TParsers& parsers,
+    google::protobuf::Message*& message)
+{
+    if (!ParseTranslationSettings(query, settings, issues)) {
+        return false;
+    }
+
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true);
+    auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
+        Y_UNUSED(token);
+    };
+
+    if (!lexer->Tokenize(query, "", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+        return false;
+    }
+
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    message = NSQLTranslationV1::SqlAST(
+        parsers,
+        query,
+        /* queryName = */ "",
+        issues,
+        NSQLTranslation::SQL_MAX_PARSER_ERRORS,
+        settings.AnsiLexer,
+        /* antlr4Parser = */ true,
+        settings.Arena);
+
+    return static_cast<bool>(message);
+}
+
 SIMPLE_UDF(TObfuscate, TOptional<char*>(TAutoMap<char*>)) {
     using namespace NSQLFormat;
     try {
@@ -330,38 +368,23 @@ using TRuleFreqResult = TListType<TTuple<char*, char*, ui64>>;
 SIMPLE_UDF(TRuleFreq, TOptional<TRuleFreqResult>(TAutoMap<char*>)) {
     try {
         const TString query(args[0].AsStringRef());
-        NYql::TIssues issues;
+
         google::protobuf::Arena arena;
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
-        if (!ParseTranslationSettings(query, settings, issues)) {
-            return {};
-        }
 
+        NYql::TIssues issues;
         NSQLTranslationV1::TLexers lexers;
-        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-        auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true);
-        auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
-            Y_UNUSED(token);
-        };
-
-        if (!lexer->Tokenize(query, "", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
-            return {};
-        }
-
         NSQLTranslationV1::TParsers parsers;
-        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
-        auto msg = NSQLTranslationV1::SqlAST(parsers, query, "", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS,
-            settings.AnsiLexer, true, &arena);
-        if (!msg) {
+
+        google::protobuf::Message* tree;
+        if (!GetParseTree(query, settings, issues, lexers, parsers, tree)) {
             return {};
         }
 
         TContext ctx(lexers, parsers, settings, {}, issues, query);
         TRuleFreqVisitor visitor(ctx);
-        visitor.Visit(*msg);
+        visitor.Visit(*tree);
 
         auto listBuilder = valueBuilder->NewListBuilder();
         for (const auto& [key, f] : visitor.GetFreqs()) {
@@ -379,9 +402,31 @@ SIMPLE_UDF(TRuleFreq, TOptional<TRuleFreqResult>(TAutoMap<char*>)) {
     }
 }
 
+SIMPLE_UDF(TTestSyntax, TOptional<char*>(TAutoMap<char*>)) try {
+    const TString query(args[0].AsStringRef());
+
+    google::protobuf::Arena arena;
+    NSQLTranslation::TTranslationSettings settings;
+    settings.Arena = &arena;
+
+    NYql::TIssues issues;
+    NSQLTranslationV1::TLexers lexers;
+    NSQLTranslationV1::TParsers parsers;
+
+    google::protobuf::Message* tree;
+    if (!GetParseTree(query, settings, issues, lexers, parsers, tree)) {
+        return valueBuilder->NewString(issues.ToString());
+    }
+
+    return {};
+} catch (const yexception& e) {
+    return valueBuilder->NewString(TString(e.what()));
+}
+
 SIMPLE_MODULE(TYqlLangModule,
     TObfuscate,
-    TRuleFreq
+    TRuleFreq,
+    TTestSyntax
 );
 
 REGISTER_MODULES(TYqlLangModule);

@@ -305,8 +305,8 @@ public:
 
     bool TryAllocateWaiting(const ui32 allocationsCountLimit) {
         bool allocated = false;
-        for (auto&& i : AllocationScopes) {
-            if (i.second->TryAllocateWaiting(IsPriorityProcess(), allocationsCountLimit)) {
+        for (auto&& [_, processScope] : AllocationScopes) {
+            if (processScope->TryAllocateWaiting(IsPriorityProcess(), allocationsCountLimit)) {
                 allocated = true;
             }
         }

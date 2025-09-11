@@ -101,6 +101,25 @@ struct TDSProxyEnv {
         DynCounters = new ::NMonitoring::TDynamicCounters();
         StoragePoolCounters = new NKikimr::TStoragePoolCounters(DynCounters, "", {});
         PerDiskStatsPtr = new TDiskResponsivenessTracker::TPerDiskStats;
+
+        // await until DSProxy is ready by ensuring all VDisks have queues registered
+        {
+            const ui32 groupSize = Info->GetTotalVDisksNum();
+            bool allReady = false;
+            while (!allReady) {
+                TAutoPtr<IEventHandle> queuesInfoHandle;
+                runtime.Send(new IEventHandle(RealProxyActorId, FakeProxyActorId,
+                    new TEvGetQueuesInfo(NKikimrBlobStorage::PutTabletLog)));
+                auto queuesInfo = runtime.GrabEdgeEventRethrow<TEvQueuesInfo>(queuesInfoHandle, TDuration::Seconds(1));
+                allReady = true;
+                for (ui32 orderNum = 0; orderNum < groupSize; ++orderNum) {
+                    if (!queuesInfo->Queues[orderNum].has_value()) {
+                        allReady = false;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     void SetGroupGeneration(ui32 generation) {

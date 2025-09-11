@@ -1,4 +1,4 @@
-#include <ydb/core/persqueue/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/persqueue/events/internal.h>
 
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
@@ -321,7 +321,8 @@ namespace NKikimr::NPersQueueTests {
                     Server.CleverServer->GetRuntime()->GetAppData(nodeId).PersQueueMirrorReaderFactory = Fabric.get();
                 }
 
-                Server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_MIRRORER});
+                Server.EnableLogs({NKikimrServices::PQ_READ_PROXY});
+                Server.EnableLogs({NKikimrServices::PQ_MIRRORER, NKikimrServices::PQ_MIRROR_DESCRIBER}, NActors::NLog::PRI_TRACE);
                 Server.AnnoyingClient->CreateConsumer("user");
             }
 
@@ -997,5 +998,129 @@ namespace NKikimr::NPersQueueTests {
                 ComparePartitions(createReader(srcTopic, partition), createReader(dstTopic, partition), TStringBuilder() << LabeledOutput(partition), deadline, {}, false);
             }
         }
+
+        Y_UNIT_TEST(TestTargetAutoGrow) {
+            TTestContext ctx;
+            NYdb::TDriver* driver = ctx.Driver();
+            NYdb::NTopic::TTopicClient topicClient(*driver);
+            auto& server = ctx.Server;
+
+            const ui32 sourcesCount = 12;
+            const ui32 partitionsCount = 2;
+            const ui32 maxPartitionsCount = 4;
+            const ui32 finalPartitionsCount = 4;
+            const TString srcTopic = "topic2_src";
+            const TString dstTopic = "topic1_dst";
+            const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
+            const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+
+            NKikimrPQ::TPQTabletConfig::TPartitionStrategy partitionStrategy;
+            partitionStrategy.SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+            partitionStrategy.SetMinPartitionCount(partitionsCount);
+            partitionStrategy.SetMaxPartitionCount(maxPartitionsCount);
+            partitionStrategy.SetScaleThresholdSeconds(2);
+            partitionStrategy.SetScaleUpPartitionWriteSpeedThresholdPercent(90);
+            partitionStrategy.SetScaleDownPartitionWriteSpeedThresholdPercent(1);
+
+            const ui64 writeSpeed = 1_MB;
+            const ui64 readSpeed = 1_MB;
+            ctx.AnnoyingClient()->CreateTopic(
+                srcTopicFullName,
+                partitionsCount,
+                /*ui32 lowWatermark =*/8_MB,
+                /*ui64 lifetimeS =*/86400,
+                /*ui64 writeSpeed =*/writeSpeed,
+                /*TString user =*/"",
+                /*ui64 readSpeed =*/readSpeed,
+                /*TVector<TString> rr =*/{},
+                /*TVector<TString> important =*/{},
+                /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
+                /*ui64 sourceIdMaxCount =*/6000000,
+                /*ui64 sourceIdLifetime =*/86400,
+                partitionStrategy);
+
+
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Active, 2);
+
+            for (TString name : {srcTopicFullName, }) {
+                PrintTopicDescription(name, "2", server);
+            }
+            PrechargeTopic(srcTopic, driver, sourcesCount, 1, 1, {});
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Active, 2);
+            for (TString name : {srcTopicFullName, }) {
+                PrintTopicDescription(name, "3", server);
+            }
+
+            ui64 txId = 1006;
+            SplitPartition(txId++, srcTopicFullName, 1, "\xC0", *ctx.Runtime());
+
+            NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
+            mirrorFrom.SetEndpoint("localhost");
+            mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
+            mirrorFrom.SetTopic("/Root/PQ/" + srcTopicFullName);
+            mirrorFrom.SetConsumer("some_user");
+            mirrorFrom.SetSyncWriteTime(true);
+
+            ctx.AnnoyingClient()->CreateTopic(
+                dstTopicFullName,
+                1,
+                /*ui32 lowWatermark =*/8_MB,
+                /*ui64 lifetimeS =*/86400,
+                /*ui64 writeSpeed =*/writeSpeed,
+                /*TString user =*/"",
+                /*ui64 readSpeed =*/readSpeed,
+                /*TVector<TString> rr =*/{},
+                /*TVector<TString> important =*/{},
+                mirrorFrom,
+                /*ui64 sourceIdMaxCount =*/6000000,
+                /*ui64 sourceIdLifetime =*/86400,
+                partitionStrategy);
+
+            for (TString name : {srcTopicFullName, }) {
+                PrintTopicDescription(name, "4", server);
+            }
+
+
+            THashMap<ui32, ui32> messagesPerPartition;
+            // write to source topic
+            constexpr TWriteCount writeBatch[]{
+                {0, 10},
+                {2, 15},
+                {3, 5},
+            };
+            for (const TWriteCount& wc : writeBatch) {
+                Cerr << (TStringBuilder() << "Writing to partition " << wc.Partiton << " " << wc.Count << " messages\n");
+                const auto [sourceId, written] = WriteToPartition(wc.Partiton, *driver, srcTopicFullName, wc.Count);
+                messagesPerPartition[wc.Partiton] += written;
+            }
+
+            while (CountPartitionsByStatus(dstTopicFullName, server).Partitions != finalPartitionsCount) {
+                // wait for grow
+                Sleep(TDuration::Seconds(1));
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Active, 3);
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Active, 3);
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Partitions, finalPartitionsCount);
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Partitions, finalPartitionsCount);
+
+
+            auto createReader = [&](const TString& topic, ui32 partition) {
+                auto settings =
+                    NYdb::NTopic::TReadSessionSettings()
+                        .AppendTopics(NYdb::NTopic::TTopicReadSettings(topic)
+                                          .AppendPartitionIds(partition))
+                        .WithoutConsumer()
+                        .Decompress(true);
+
+                return topicClient.CreateReadSession(settings);
+            };
+
+            const TInstant deadline = TDuration::Seconds(60).ToDeadLine();
+            for (ui32 partition = 0; partition < finalPartitionsCount; ++partition) {
+                ComparePartitions(createReader(srcTopicFullName, partition), createReader(dstTopicFullName, partition), TStringBuilder() << LabeledOutput(partition), deadline, messagesPerPartition.Value(partition, 0), false);
+            }
+        }
+
     } // Y_UNIT_TEST_SUITE(TPersQueueMirrorerWithScaling)
 } // namespace NKikimr::NPersQueueTests

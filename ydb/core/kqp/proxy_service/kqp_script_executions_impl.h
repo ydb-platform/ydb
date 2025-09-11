@@ -49,7 +49,7 @@ struct TEvPrivate {
 
         TEvLeaseCheckResult(TMaybe<Ydb::StatusIds::StatusCode> operationStatus, TMaybe<Ydb::Query::ExecStatus> executionStatus,
             TMaybe<NYql::TIssues> operationIssues, const NActors::TActorId& runScriptActorId, bool leaseExpired,
-            TMaybe<EFinalizationStatus> finalizationStatus, bool retryRequired, i64 leaseGeneration)
+            TMaybe<EFinalizationStatus> finalizationStatus, bool retryRequired, i64 leaseGeneration, bool hasRetryPolicy)
             : Status(Ydb::StatusIds::SUCCESS)
             , OperationStatus(operationStatus)
             , ExecutionStatus(executionStatus)
@@ -59,6 +59,7 @@ struct TEvPrivate {
             , FinalizationStatus(finalizationStatus)
             , RetryRequired(retryRequired)
             , LeaseGeneration(leaseGeneration)
+            , HasRetryPolicy(hasRetryPolicy)
         {}
 
         const Ydb::StatusIds::StatusCode Status;
@@ -71,6 +72,7 @@ struct TEvPrivate {
         const TMaybe<EFinalizationStatus> FinalizationStatus;
         const bool RetryRequired = false;
         const i64 LeaseGeneration = 0;
+        const bool HasRetryPolicy = false;
     };
 };
 

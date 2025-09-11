@@ -196,7 +196,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     void BaseCase(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -404,7 +403,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     void CancellationNotEnoughRetries(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -538,7 +536,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     void CancellationNoTable(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}}, Ydb::StatusIds::BAD_REQUEST);
@@ -559,7 +556,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     void WithFollowers(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -623,7 +619,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     void RejectsCreate(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
         TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/NotExist", TBuildIndexConfig{"index1", indexType, {"index"}, {}}, Ydb::StatusIds::BAD_REQUEST);
@@ -635,7 +630,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/DIR", TBuildIndexConfig{"index1", indexType, {"index"}, {}}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
               Name: "Table"
               Columns { Name: "key"   Type: "Uint64" }
@@ -646,13 +641,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             }
             IndexDescription {
               Name: "UserDefinedIndexByValue0"
+              Type: %s
               KeyColumnNames: ["value0"]
             }
             IndexDescription {
               Name: "UserDefinedIndexByValue1"
+              Type: %s
               KeyColumnNames: ["value1"]
             }
-        )");
+        )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str(), NKikimrSchemeOp::EIndexType_Name(indexType).c_str()));
         env.TestWaitNotification(runtime, txId);
 
         // should not affect index limits
@@ -716,7 +713,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     void CheckLimitWithDroppedIndex(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
         TSchemeLimits lowLimits;
@@ -755,7 +751,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     void Lock(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
         // Just create main table
@@ -846,7 +841,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         opts.EnableBackgroundCompaction(false);
         opts.DisableStatsBatching(true);
         TTestEnv env(runtime, opts);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
 
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
@@ -1031,7 +1025,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     void IndexPartitioningIsPersisted(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -1112,10 +1105,8 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     void DropIndex(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
-        const TString indexTypeStr = (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal) ? "EIndexTypeGlobal" : "EIndexTypeGlobalUnique";
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
               Name: "Table"
@@ -1134,7 +1125,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
               Type: %s
               KeyColumnNames: ["value1"]
             }
-        )", indexTypeStr.c_str(), indexTypeStr.c_str()));
+        )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str(), NKikimrSchemeOp::EIndexType_Name(indexType).c_str()));
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -1196,10 +1187,8 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     void RejectsDropIndex(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
-        const TString indexTypeStr = (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal) ? "EIndexTypeGlobal" : "EIndexTypeGlobalUnique";
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
               Name: "Table"
@@ -1213,7 +1202,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
               Type: %s
               KeyColumnNames: ["value0"]
             }
-        )", indexTypeStr.c_str()));
+        )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str()));
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -1281,7 +1270,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     void CancelBuild(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1356,7 +1344,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     void RejectsCancel(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1494,7 +1481,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     void RejectsOnDuplicatesUniq(bool crossShardDuplicates) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1575,7 +1561,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
     Y_UNIT_TEST(NullsAreUniq) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);

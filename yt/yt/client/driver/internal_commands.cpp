@@ -238,4 +238,28 @@ void TForsakeChaosCoordinator::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TGetOrderedTabletSafeTrimRowCount::Register(TRegistrar registrar)
+{
+    registrar.Parameter("requests", &TThis::Requests_);
+}
+
+void TGetOrderedTabletSafeTrimRowCount::DoExecute(ICommandContextPtr context)
+{
+    auto internalClient = context->GetInternalClientOrThrow();
+
+    std::vector<TGetOrderedTabletSafeTrimRowCountRequest> requests;
+    requests.reserve(Requests_.size());
+    for (const auto& request : Requests_) {
+        requests.push_back(*request);
+    }
+
+    auto responses = WaitFor(internalClient->GetOrderedTabletSafeTrimRowCount(requests, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .Value(responses));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

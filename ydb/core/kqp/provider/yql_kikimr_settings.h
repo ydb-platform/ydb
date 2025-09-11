@@ -186,6 +186,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui64 ExtractPredicateRangesLimit = 0;
     bool EnablePerStatementQueryExecution = false;
     bool EnableCreateTableAs = false;
+    bool EnableDataShardCreateTableAs = false;
     ui64 IdxLookupJoinsPrefixPointLimit = 1;
     bool AllowOlapDataQuery = false;
     bool EnableOlapSink = false;
@@ -214,7 +215,10 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableParallelUnionAllConnectionsForExtend = false;
     bool EnableTempTablesForUser = false;
     bool EnableOlapPushdownAggregate = false;
+    bool EnableOrderOptimizaionFSM = false;
 
+    bool EnableTopSortSelectIndex = true;
+    bool EnablePointPredicateSortAutoSelectIndex = true;
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
 
     ui32 LangVer = NYql::MinLangVersion;

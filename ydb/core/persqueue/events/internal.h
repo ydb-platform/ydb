@@ -4,14 +4,13 @@
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/persqueue/blob.h>
-#include <ydb/core/persqueue/blob_refcounter.h>
-#include <ydb/core/persqueue/key.h>
-#include <ydb/core/persqueue/metering_sink.h>
+#include <ydb/core/persqueue/common/blob_refcounter.h>
+#include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/common/metering.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/percentile_counter.h>
-#include <ydb/core/persqueue/sourceid_info.h>
-#include <ydb/core/persqueue/write_id.h>
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
+#include <ydb/core/persqueue/common/sourceid_info.h>
+#include <ydb/core/persqueue/public/write_id.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -20,7 +19,9 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 #include <util/generic/maybe.h>
+#include <expected>
 
 namespace NYdb::inline Dev {
     class ICredentialsProviderFactory;
@@ -204,6 +205,8 @@ struct TEvPQ {
         EvExclusiveLockAcquired,
         EvReleaseExclusiveLock,
         EvRunCompaction,
+        EvMirrorTopicDescription,
+        EvBroadcastPartitionError,
         EvEnd
     };
 
@@ -771,6 +774,21 @@ struct TEvPQ {
         NKikimr::TTabletCountersBase Counters;
     };
 
+    struct TEvMirrorTopicDescription : public TEventLocal<TEvMirrorTopicDescription, EvMirrorTopicDescription> {
+        TEvMirrorTopicDescription(NYdb::NTopic::TDescribeTopicResult description)
+            : Description(std::move(description))
+        {
+        }
+
+        TEvMirrorTopicDescription(TString error)
+            : Description(std::unexpected(std::move(error)))
+        {
+        }
+
+        std::expected<NYdb::NTopic::TDescribeTopicResult, TString> Description;
+    };
+
+
     struct TEvRetryWrite : public TEventLocal<TEvRetryWrite, EvRetryWrite> {
         TEvRetryWrite()
         {}
@@ -861,11 +879,15 @@ struct TEvPQ {
     };
 
     struct TEvTxCalcPredicateResult : public TEventLocal<TEvTxCalcPredicateResult, EvTxCalcPredicateResult> {
-        TEvTxCalcPredicateResult(ui64 step, ui64 txId, const NPQ::TPartitionId& partition, TMaybe<bool> predicate) :
+        TEvTxCalcPredicateResult(ui64 step, ui64 txId,
+                                 const NPQ::TPartitionId& partition,
+                                 TMaybe<bool> predicate,
+                                 const TString& issueMsg) :
             Step(step),
             TxId(txId),
             Partition(partition),
-            Predicate(predicate)
+            Predicate(predicate),
+            IssueMsg(issueMsg)
         {
         }
 
@@ -873,6 +895,7 @@ struct TEvPQ {
         ui64 TxId;
         NPQ::TPartitionId Partition;
         TMaybe<bool> Predicate;
+        TString IssueMsg;
     };
 
     struct TEvProposePartitionConfig : public TEventLocal<TEvProposePartitionConfig, EvProposePartitionConfig> {
@@ -1190,6 +1213,19 @@ struct TEvPQ {
         TEvPartitionScaleStatusChanged(ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus) {
             Record.SetPartitionId(partitionId);
             Record.SetScaleStatus(scaleStatus);
+        }
+    };
+
+    struct TBroadcastPartitionError : public TEventPB<TBroadcastPartitionError,
+            NKikimrPQ::TBroadcastPartitionError, EvBroadcastPartitionError> {
+        TBroadcastPartitionError() = default;
+
+        explicit TBroadcastPartitionError(TString message, NKikimrServices::EServiceKikimr service, TInstant timestamp) {
+            auto* defaultGroup = Record.AddMessageGroups();
+            auto* error = defaultGroup->AddErrors();
+            error->SetMessage(std::move(message));
+            error->SetService(service);
+            error->SetTimestamp(timestamp.Seconds());
         }
     };
 

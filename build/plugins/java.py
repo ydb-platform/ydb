@@ -14,23 +14,25 @@ def split_args(s):  # TODO quotes, escapes
 
 
 def extract_macro_calls(unit, macro_value_name, macro_calls_delim):
-    if not unit.get(macro_value_name):
+    value = unit.get(macro_value_name)  # TODO(dimdim11) replace by get_subst
+    if not value:
         return []
 
     return list(
         filter(
             None,
-            map(split_args, unit.get(macro_value_name).replace('$' + macro_value_name, '').split(macro_calls_delim)),
+            map(split_args, value.replace('$' + macro_value_name, '').split(macro_calls_delim)),
         )
     )
 
 
 def extract_macro_calls2(unit, macro_value_name):
-    if not unit.get(macro_value_name):
+    value = unit.get(macro_value_name)  # TODO(dimdim11) replace by get_subst
+    if not value:
         return []
 
     calls = []
-    for call_encoded_args in unit.get(macro_value_name).strip().split():
+    for call_encoded_args in value.strip().split():
         call_args = json.loads(base64.b64decode(call_encoded_args))
         calls.append(call_args)
 
@@ -372,11 +374,7 @@ def on_setup_project_coords_if_needed(unit, *args):
         return
 
     project_dir = args[0]
-    if project_dir.startswith(CONTRIB_JAVA_PREFIX):
-        value = '{}'.format(_get_classpath(unit, project_dir).rstrip(':'))
-    else:
-        value = 'project(\\":{}\\")'.format(project_dir.replace('/', ':'))
-    unit.set(['EXPORT_GRADLE_CLASSPATH', value])
+    unit.set(['EXPORT_GRADLE_CLASSPATH', _get_classpath(unit, project_dir)])
 
 
 def on_java_resource_tar_validate_extract_root(unit, extract_root):

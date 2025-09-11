@@ -53,7 +53,6 @@
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
-#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/compute/common/pinger.h>
 #include <ydb/core/fq/libs/compute/common/utils.h>
@@ -69,6 +68,7 @@
 #include <ydb/core/fq/libs/read_rule/read_rule_deleter.h>
 #include <ydb/core/fq/libs/tasks_packer/tasks_packer.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -2364,7 +2364,7 @@ private:
 
     const ui64 MaxTasksPerStage;
     const ui64 MaxTasksPerOperation;
-    const TCompressor Compressor;
+    const NKikimr::NKqp::TCompressor Compressor;
 
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     TMap<TString, TString> Statistics;

@@ -341,6 +341,7 @@ enum class TRateLimiterMode : ui8 {
     Ru = 2,
     RuOnProgress = 3,
     RuManual = 4,
+    RuTopic = 5,
 };
 
 #define RLSWITCH(mode) \
@@ -491,6 +492,10 @@ public:
     // Legacy, do not use for modern code
     virtual void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) = 0;
+};
+
+// A marker class to distinguish requests that are sent inside the system (not initialized by the user)
+class IInternalRequestCtx {
 };
 
 class IRequestNoOpCtx : public IRequestCtx {

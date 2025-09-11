@@ -7,7 +7,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/fetch_request_actor.h>
+#include <ydb/core/persqueue/public/fetcher/fetch_request_actor.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/services/persqueue_v1/actors/read_init_auth_actor.h>
 

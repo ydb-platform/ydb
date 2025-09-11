@@ -57,6 +57,13 @@ def build_nm_store_path(moddir: str) -> str:
     return build_path
 
 
+def build_traces_store_path(moddir: str) -> str:
+    nots_store_path = os.getenv("NOTS_STORE_PATH", os.path.join(home_dir(), ".nots"))
+    build_path = os.path.join(nots_store_path, "traces", moddir)
+
+    return build_path
+
+
 def extract_package_name_from_path(p):
     # if we have scope prefix then we are using the first two tokens, otherwise - only the first one
     parts = p.split("/", 2)

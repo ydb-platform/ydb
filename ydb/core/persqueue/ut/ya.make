@@ -23,7 +23,6 @@ PEERDIR(
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
-    ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
 
     ydb/core/tx/schemeshard/ut_helpers
 )
@@ -31,7 +30,6 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    blob_ut.cpp
     counters_ut.cpp
     pqtablet_mock.cpp
     internals_ut.cpp
@@ -44,14 +42,10 @@ SRCS(
     pqtablet_ut.cpp
     quota_tracker_ut.cpp
     sourceid_ut.cpp
-    type_codecs_ut.cpp
     user_info_ut.cpp
     pqrb_describes_ut.cpp
-    microseconds_sliding_window_ut.cpp
-    fetch_request_ut.cpp
+    partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
-    list_all_topics_ut.cpp
-    cache_eviction_ut.cpp
 )
 
 RESOURCE(

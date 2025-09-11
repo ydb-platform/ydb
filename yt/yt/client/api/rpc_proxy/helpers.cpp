@@ -699,6 +699,9 @@ void FromProto(
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
 
+#undef DESERIALIZE_I64_AND_MAYBE_FALLBACK
+#undef DESERIALIZE_DURATION_AND_MAYBE_FALLBACK
+
 void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operation)
 {
     protoOperation->Clear();
@@ -1396,6 +1399,9 @@ void ToProto(
     if (query.OtherAttributes) {
         ToProto(protoQuery->mutable_other_attributes(), *query.OtherAttributes);
     }
+    if (query.Secrets) {
+        protoQuery->set_secrets(ToProto(*query.Secrets));
+    }
 }
 
 void FromProto(
@@ -1434,6 +1440,11 @@ void FromProto(
         query->OtherAttributes = NYTree::FromProto(protoQuery.other_attributes());
     } else if (query->OtherAttributes) {
         query->OtherAttributes->Clear();
+    }
+    if (protoQuery.has_secrets()) {
+        query->Secrets = TYsonString(protoQuery.secrets());
+    } else if (query->Secrets) {
+        query->Secrets = TYsonString{};
     }
 }
 
@@ -2033,6 +2044,21 @@ void ParseRequest(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool IsChaosRetriableError(const TError& error)
+{
+    return static_cast<bool>(error.FindMatching([] (const TError& error) {
+        auto code = error.GetCode();
+        return
+            code == NTransactionClient::EErrorCode::ChaosCoordinatorsAreNotAvailable ||
+            code == NTabletClient::EErrorCode::SyncReplicaNotInSync ||
+            code == NTableClient::EErrorCode::UnableToSynchronizeReplicationCard ||
+            code == NTabletClient::EErrorCode::TabletReplicationEraMismatch ||
+            code == NChaosClient::EErrorCode::ShortcutNotFound ||
+            code == NChaosClient::EErrorCode::ShortcutHasDifferentEra ||
+            code == NChaosClient::EErrorCode::ShortcutRevoked;
+    }));
+}
+
 bool IsDynamicTableRetriableError(const TError& error)
 {
     return
@@ -2043,8 +2069,7 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoInSyncReplicas) ||
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
-        error.FindMatching(NTabletClient::EErrorCode::TabletReplicationEraMismatch) ||
-        error.FindMatching(NTableClient::EErrorCode::UnableToSynchronizeReplicationCard);
+        IsChaosRetriableError(error);
 }
 
 bool IsRetriableError(const TError& error, bool retryProxyBanned)

@@ -4,11 +4,14 @@ import subprocess
 import platform
 import argparse
 import re
+import struct
+import base64
 
 
 def parse_args(args):
     parser = argparse.ArgumentParser()
     parser.add_argument('--ap-classpath', nargs='*', type=str, dest='classpath')
+    parser.add_argument('--ap-options', nargs='*', type=str, dest='ap_options')
     cmd_start = args.index('--')
     return parser.parse_args(args[:cmd_start]), args[cmd_start + 1 :]
 
@@ -27,8 +30,48 @@ def get_ap_classpath(directory):
     return '-P', arg
 
 
+def get_ap_options(ap_options):
+    if not ap_options:
+        return []
+    # Format of apoptions https://kotlinlang.org/docs/kapt.html#ap-javac-options-encoding
+    # ObjectOutputStream https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/io/ObjectOutputStream.java
+
+    kvs = bytes()  # all key-values
+    for ap_option in ap_options:
+        try:
+            k, v = ap_option.split('=', 1)
+        except ValueError:
+            import logging
+
+            logging.error("Expect key=value format at '" + ap_option + "' in KAPT_ANNOTATION_PROCESSOR_OPTIONS")
+            continue
+        k = bytes(k)  # UTF-8 supported
+        kvs += struct.pack(">H", len(k))
+        kvs += k
+        v = bytes(v)  # UTF-8 supported
+        kvs += struct.pack(">H", len(v))
+        kvs += v
+
+    s = struct.pack(">H", 0xACED)  # STREAM_MAGIC
+    s += struct.pack(">H", 0x0005)  # STREAM_VERSION
+    data_len = 4 + len(kvs)  # sizeof(ui32) options count + length of all key-values
+    if data_len < 256:
+        s += struct.pack("B", 0x77)  # TC_BLOCKDATA
+        s += struct.pack("B", data_len)
+    else:
+        s += struct.pack("B", 0x7A)  # TC_BLOCKDATALONG
+        s += struct.pack(">I", data_len)
+    s += struct.pack(">I", len(ap_options))  # count of options
+    s += kvs  # key-values of all options
+
+    arg = 'plugin:org.jetbrains.kotlin.kapt3:apoptions=' + base64.b64encode(s).decode('utf-8')
+    return '-P', arg
+
+
 def create_extra_args(args):
-    cp_opts = [arg for d in args.classpath for arg in get_ap_classpath(d)]
+    cp_opts = [arg for d in args.classpath for arg in get_ap_classpath(d)] + [
+        arg for arg in get_ap_options(args.ap_options)
+    ]
     return cp_opts
 
 

@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(SlowTopicAutopartitioning) {
     }
 
     Y_UNIT_TEST(CDC_Write) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_ERROR);
         auto client = setup.MakeClient();
         auto tableClient = setup.MakeTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();

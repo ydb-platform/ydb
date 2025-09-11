@@ -45,15 +45,36 @@ std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType inde
 bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);
 
+namespace NKMeans {
+
 using TClusterId = ui64;
 inline constexpr auto ClusterIdType = Ydb::Type::UINT64;
 inline constexpr const char* ClusterIdTypeName = "Uint64";
 
-inline constexpr TClusterId PostingParentFlag = (1ull << 63ull);
+// Level and Posting tables
+inline constexpr const char* ParentColumn = "__ydb_parent";
 
+// Level table
+inline constexpr const char* LevelTable = "indexImplLevelTable";
+inline constexpr const char* IdColumn = "__ydb_id";
+inline constexpr const char* CentroidColumn = "__ydb_centroid";
+
+// Posting table
+inline constexpr const char* PostingTable = "indexImplPostingTable";
+
+inline constexpr const char* BuildSuffix0 = "0build";
+inline constexpr const char* BuildSuffix1 = "1build";
+
+// Prefix table
+inline constexpr const char* PrefixTable = "indexImplPrefixTable";
+
+inline constexpr const int DefaultKMeansRounds = 3;
+
+bool HasPostingParentFlag(TClusterId parent);
 void EnsureNoPostingParentFlag(TClusterId parent);
-
 TClusterId SetPostingParentFlag(TClusterId parent);
+
+}
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);
 TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansRequest& record);

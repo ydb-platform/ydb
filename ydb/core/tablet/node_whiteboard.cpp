@@ -16,6 +16,7 @@
 #include <ydb/core/util/tuples.h>
 
 #include <util/string/split.h>
+#include <util/system/getpid.h>
 #include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
 
 using namespace NActors;
@@ -65,6 +66,7 @@ public:
         }
 
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
+        SystemStateInfo.SetPID(GetPID());
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
 
         auto utils = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils");

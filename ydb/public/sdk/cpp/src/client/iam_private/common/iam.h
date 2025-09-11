@@ -17,7 +17,9 @@ private:
                     req.set_resource_id(params.ResourceId);
                     req.set_resource_type(params.ResourceType);
                     req.set_target_service_account_id(params.TargetServiceAccountId);
-                }, &TService::Stub::async_interface::CreateForService) {}
+                },
+                &TService::Stub::async_interface::CreateForService,
+                params.SystemServiceAccountCredentials->CreateProvider()) {}
     };
 
 public:

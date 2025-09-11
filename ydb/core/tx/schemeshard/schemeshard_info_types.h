@@ -20,11 +20,10 @@
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
@@ -593,6 +592,7 @@ public:
         bool EnableTablePgTypes;
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
+        bool EnableSetColumnConstraint = false; // This flag is used in alter table operation only
     };
 
     static TAlterDataPtr CreateAlterData(
@@ -1179,6 +1179,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     ui32 NextPartitionId = 0;
     THashSet<TPartitionToAdd, TPartitionToAdd::THash> PartitionsToAdd;
     THashSet<ui32> PartitionsToDelete;
+    THashMap<ui32, TMaybe<TTopicTabletInfo::TKeyRange>> KeyRangesToChange;
     ui32 MaxPartsPerTablet = 0;
     ui64 AlterVersion = 0;
     TString TabletConfig;
@@ -2789,6 +2790,8 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
     TString PeerName;  // required for making audit log records
+    TString SanitizedToken;  // required for making audit log records
+
     TVector<TItem> Items;
 
     TPathId ExportPathId = InvalidPathId;
@@ -2981,6 +2984,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
     TString PeerName;  // required for making audit log records
+    TString SanitizedToken;  // required for making audit log records
     TMaybe<NBackup::TEncryptionIV> ExportIV;
     TMaybe<NBackup::TSchemaMapping> SchemaMapping;
     TActorId SchemaMappingGetter;
@@ -3157,11 +3161,11 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         EState State = Sample;
 
-        NTableIndex::TClusterId ParentBegin = 0;  // included
-        NTableIndex::TClusterId Parent = ParentBegin;
+        NTableIndex::NKMeans::TClusterId ParentBegin = 0;  // included
+        NTableIndex::NKMeans::TClusterId Parent = ParentBegin;
 
-        NTableIndex::TClusterId ChildBegin = 1;  // included
-        NTableIndex::TClusterId Child = ChildBegin;
+        NTableIndex::NKMeans::TClusterId ChildBegin = 1;  // included
+        NTableIndex::NKMeans::TClusterId Child = ChildBegin;
 
         ui64 TableSize = 0;
 
@@ -3180,8 +3184,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         void PrefixIndexDone(ui64 shards);
 
         void Set(ui32 level,
-            NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
-            NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
+            NTableIndex::NKMeans::TClusterId parentBegin, NTableIndex::NKMeans::TClusterId parent,
+            NTableIndex::NKMeans::TClusterId childBegin, NTableIndex::NKMeans::TClusterId child,
             ui32 state, ui64 tableSize, ui32 round, bool isEmpty);
 
         NKikimrTxDataShard::EKMeansState GetUpload() const;
@@ -3189,7 +3193,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         TString WriteTo(bool needsBuildTable = false) const;
         TString ReadFrom() const;
 
-        std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId> RangeToBorders(const TSerializedTableRange& range) const;
+        std::pair<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId> RangeToBorders(const TSerializedTableRange& range) const;
 
         TString RangeToDebugStr(const TSerializedTableRange& range) const;
 
@@ -3389,10 +3393,10 @@ public:
     }
 
     struct TClusterShards {
-        NTableIndex::TClusterId From = std::numeric_limits<NTableIndex::TClusterId>::max();
+        NTableIndex::NKMeans::TClusterId From = std::numeric_limits<NTableIndex::NKMeans::TClusterId>::max();
         std::vector<TShardIdx> Shards;
     };
-    TMap<NTableIndex::TClusterId, TClusterShards> Cluster2Shards; // To => { From, Shards }
+    TMap<NTableIndex::NKMeans::TClusterId, TClusterShards> Cluster2Shards; // To => { From, Shards }
 
     void AddParent(const TSerializedTableRange& range, TShardIdx shard);
 
@@ -3579,10 +3583,11 @@ public:
             switch (creationConfig.GetSpecializedIndexDescriptionCase()) {
                 case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription: {
                     auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
-                    indexInfo->KMeans.K = std::max<ui32>(2, desc.settings().clusters());
-                    indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + std::max<ui32>(1, desc.settings().levels());
-                    indexInfo->KMeans.Rounds = NTableIndex::NTableVectorKmeansTreeIndex::DefaultKMeansRounds;
                     TString createError;
+                    Y_ENSURE(NKikimr::NKMeans::ValidateSettings(desc.settings(), createError), createError);
+                    indexInfo->KMeans.K = desc.settings().clusters();
+                    indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
+                    indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
                     Y_ENSURE(indexInfo->Clusters, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);
@@ -4009,6 +4014,54 @@ struct TIncrementalBackupInfo : public TSimpleRefCount<TIncrementalBackupInfo> {
         }
         return true;
     }
+};
+
+struct TSecretInfo : TSimpleRefCount<TSecretInfo> {
+    using TPtr = TIntrusivePtr<TSecretInfo>;
+
+    TSecretInfo(const ui64 alterVersion)
+        : AlterVersion(alterVersion)
+    {
+    }
+
+    TSecretInfo(const ui64 alterVersion, NKikimrSchemeOp::TSecretDescription&& desc)
+        : AlterVersion(alterVersion)
+        , Description(std::move(desc))
+    {
+    }
+
+    TPtr CreateNextVersion() {
+        Y_ENSURE(AlterData == nullptr);
+
+        TPtr result = new TSecretInfo(*this);
+        ++result->AlterVersion;
+        this->AlterData = result;
+
+        return result;
+    }
+
+    static TPtr New() {
+        return new TSecretInfo(0);
+    }
+
+    static TPtr Create(NKikimrSchemeOp::TSecretDescription&& desc) {
+        TPtr result = New();
+        TPtr alterData = result->CreateNextVersion();
+        alterData->Description = std::move(desc);
+
+        return result;
+    }
+
+    ui64 AlterVersion = 0;
+    TSecretInfo::TPtr AlterData = nullptr;
+    NKikimrSchemeOp::TSecretDescription Description;
+};
+
+struct TStreamingQueryInfo : TSimpleRefCount<TStreamingQueryInfo> {
+    using TPtr = TIntrusivePtr<TStreamingQueryInfo>;
+
+    ui64 AlterVersion = 0;
+    NKikimrSchemeOp::TStreamingQueryProperties Properties;
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

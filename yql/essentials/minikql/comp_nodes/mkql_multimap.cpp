@@ -94,6 +94,7 @@ private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow)) {
             Own(flow, Item);
+            std::for_each(NewItems.cbegin(), NewItems.cend(), std::bind(&TFlowMultiMapWrapper::DependsOn, flow, std::placeholders::_1));
         }
     }
 

@@ -213,6 +213,7 @@ BELONGS ya.make
         src/lib/ares_cancel.c [24:24]
         src/lib/ares_close_sockets.c [25:25]
         src/lib/ares_config-android.h [2:2]
+        src/lib/ares_config-freebsd-x86_64.h [2:2]
         src/lib/ares_config-linux.h [2:2]
         src/lib/ares_config-osx.h [2:2]
         src/lib/ares_conn.c [25:25]

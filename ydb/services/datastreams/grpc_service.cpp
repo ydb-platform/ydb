@@ -25,7 +25,7 @@ void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
     }
     if (!attributes.empty()) {
         //full list of permissions for compatibility. remove old permissions later.
-        checker->SetEntries({{NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::STREAM>::Get(), attributes}});
+        checker->SetEntries({{NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::DEFAULT>::Get(), attributes}});
     }
 }
 
@@ -58,9 +58,9 @@ void TGRpcDataStreamsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
     ADD_REQUEST(ListStreams, DoDataStreamsListStreamsRequest, nullptr, Off, TAuditMode::NonModifying())
     ADD_REQUEST(DeleteStream, DoDataStreamsDeleteStreamRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
     ADD_REQUEST(ListShards, DoDataStreamsListShardsRequest, nullptr, Off, TAuditMode::NonModifying())
-    ADD_REQUEST(PutRecord, DoDataStreamsPutRecordRequest, YdsProcessAttr, RuManual, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
-    ADD_REQUEST(PutRecords, DoDataStreamsPutRecordsRequest, YdsProcessAttr, RuManual, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
-    ADD_REQUEST(GetRecords, DoDataStreamsGetRecordsRequest, nullptr, RuManual, TAuditMode::NonModifying())
+    ADD_REQUEST(PutRecord, DoDataStreamsPutRecordRequest, YdsProcessAttr, RuTopic, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
+    ADD_REQUEST(PutRecords, DoDataStreamsPutRecordsRequest, YdsProcessAttr, RuTopic, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
+    ADD_REQUEST(GetRecords, DoDataStreamsGetRecordsRequest, nullptr, RuTopic, TAuditMode::NonModifying())
     ADD_REQUEST(GetShardIterator, DoDataStreamsGetShardIteratorRequest, nullptr, Off, TAuditMode::NonModifying())
     ADD_REQUEST(SubscribeToShard, DoDataStreamsSubscribeToShardRequest, nullptr, Off, TAuditMode::NonModifying())
     ADD_REQUEST(DescribeLimits, DoDataStreamsDescribeLimitsRequest, nullptr, Off, TAuditMode::NonModifying())

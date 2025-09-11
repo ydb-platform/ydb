@@ -2300,22 +2300,6 @@ const TTypeAnnotationNode* CompileTypeAnnotation(const TAstNode& node, TExprCont
     return compileCtx.CompileTypeAnnotationNode(node);
 }
 
-template<class Set>
-bool IsDependedImpl(const TExprNode& node, const Set& dependences, TNodeSet& visited) {
-    if (!visited.emplace(&node).second)
-        return false;
-
-    if (dependences.cend() != dependences.find(&node))
-        return true;
-
-    for (const auto& child : node.Children()) {
-        if (IsDependedImpl(*child, dependences, visited))
-            return true;
-    }
-
-    return false;
-}
-
 namespace {
 
 enum EChangeState : ui8 {
@@ -2651,11 +2635,6 @@ TExprNode::TListType TExprContext::ReplaceNodes(TExprNode::TListType&& starts, c
 template TExprNode::TListType TExprContext::ReplaceNodes<true>(TExprNode::TListType&& starts, const TNodeOnNodeOwnedMap& replaces);
 template TExprNode::TListType TExprContext::ReplaceNodes<false>(TExprNode::TListType&& starts, const TNodeOnNodeOwnedMap& replaces);
 
-bool IsDepended(const TExprNode& node, const TNodeSet& dependences) {
-    TNodeSet visited;
-    return !dependences.empty() && IsDependedImpl(node, dependences, visited);
-}
-
 void CheckArguments(const TExprNode& root) {
     try {
         TNodeMap<TNodeSetPtr> unresolvedArgsMap;
@@ -2866,7 +2845,7 @@ TExprNode::TPtr TExprContext::FuseLambdas(const TExprNode& outer, const TExprNod
         });
         newBody = ReplaceNodes(std::move(outerBody), outerReplaces);
     } else if (1U == outerArgs.ChildrenSize()) {
-        newBody.reserve(newBody.size() * body.size());
+        newBody.reserve(outerBody.size() * body.size());
         for (auto item : body) {
             for (auto root : outerBody) {
                 newBody.emplace_back(ReplaceNode(TExprNode::TPtr(root), outerArgs.Head(), TExprNode::TPtr(item)));

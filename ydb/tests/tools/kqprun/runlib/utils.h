@@ -85,7 +85,7 @@ public:
 
     static void PrintTimeline(const TString& plan, IOutputStream& output);
 
-    static void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, IOutputStream& output);
+    void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, const TString& plan, IOutputStream& output) const;
 
     // Function adds thousands separators
     // 123456789 -> 123.456.789
@@ -131,6 +131,29 @@ TValue GetValue(size_t index, const std::vector<TValue>& values, TValue defaultV
         return defaultValue;
     }
     return values[std::min(index, values.size() - 1)];
+}
+
+template <typename EVerbosity>
+std::optional<NActors::NLog::EPriority> DefaultLogPriorityFromVerbosity(EVerbosity verbosity) {
+    if (verbosity >= EVerbosity::LogDefaultTrace) {
+        return NActors::NLog::EPriority::PRI_TRACE;
+    }
+    if (verbosity >= EVerbosity::LogDefaultDebug) {
+        return NActors::NLog::EPriority::PRI_DEBUG;
+    }
+    if (verbosity >= EVerbosity::LogDefaultInfo) {
+        return NActors::NLog::EPriority::PRI_INFO;
+    }
+    if (verbosity >= EVerbosity::LogDefaultNotice) {
+        return NActors::NLog::EPriority::PRI_NOTICE;
+    }
+    if (verbosity >= EVerbosity::LogDefaultWarn) {
+        return NActors::NLog::EPriority::PRI_WARN;
+    }
+    if (verbosity >= EVerbosity::LogDefaultError) {
+        return NActors::NLog::EPriority::PRI_ERROR;
+    }
+    return std::nullopt;
 }
 
 }  // namespace NKikimrRun

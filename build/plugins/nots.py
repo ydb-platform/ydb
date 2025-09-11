@@ -541,6 +541,16 @@ def on_ts_configure(unit: NotsUnitType) -> None:
     _setup_stylelint(unit)
 
 
+def _should_setup_build_env(unit: NotsUnitType) -> bool:
+    build_env_for = unit.get("TS_BUILD_ENV_FOR")
+    if build_env_for is None:
+        return True
+
+    target = unit.get("MODDIR")
+
+    return target in build_env_for.split(":")
+
+
 @_with_report_configure_error
 def on_setup_build_env(unit: NotsUnitType) -> None:
     build_env_var = unit.get("TS_BUILD_ENV")
@@ -550,7 +560,7 @@ def on_setup_build_env(unit: NotsUnitType) -> None:
 
     options = []
     names = set()
-    if build_env_var:
+    if build_env_var and _should_setup_build_env(unit):
         for name in build_env_var.split(","):
             value = unit.get(f"TS_ENV_{name}")
             if value is None:
@@ -570,7 +580,6 @@ def on_setup_build_env(unit: NotsUnitType) -> None:
         options.append(f'"{name}={double_quote_escaped_value}"')
 
     unit.set(["NOTS_TOOL_BUILD_ENV", " ".join(options)])
-    logger.print_vars("NOTS_TOOL_BUILD_ENV")
 
 
 def __set_append(unit: NotsUnitType, var_name: str, value: UnitType.PluginArgs, delimiter: str = " ") -> None:
@@ -631,8 +640,6 @@ def _setup_eslint(unit: NotsUnitType) -> None:
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_type} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_type, "MODDIR")
@@ -703,8 +710,6 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_type} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_type,)
@@ -753,8 +758,6 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_type} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_type,)
@@ -976,8 +979,6 @@ def on_ts_test_for_configure(
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_runner} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_runner, "TS_TEST_FOR_PATH")
@@ -1067,7 +1068,6 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
     # ${BINDIR} prefix for input is important to resolve to result of LARGE_FILES and not to SOURCEDIR
     new_items = [f'$COPY_CMD {i} {o}' for (i, o) in zip(in_files, out_files)]
     __set_append(unit, "_TS_PROJECT_SETUP_CMD", new_items, " && ")
-    logger.print_vars("_TS_PROJECT_SETUP_CMD")
 
     __on_ts_files(unit, in_files, out_files)
 
@@ -1108,3 +1108,25 @@ def on_run_javascript_after_build_process_inputs(unit: NotsUnitType, js_script: 
         processed_inputs.append(_build_cmd_input_paths([js_script], hide=True))
 
     unit.set(["_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", " ".join(processed_inputs)])
+
+
+@_with_report_configure_error
+def on_ts_next_experimental_build_mode(unit: NotsUnitType) -> None:
+    from lib.nots.package_manager import BasePackageManager
+    from lib.nots.semver import Version
+
+    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+    erm_json = _create_erm_json(unit)
+    version = _select_matching_version(erm_json, "next", pj.get_dep_specifier("next"))
+
+    var_name = "TS_NEXT_COMMAND"
+
+    if version >= Version.from_str("14.1.2"):
+        # For Next >=v14: build --experimental-build-mode=compile
+        # https://github.com/vercel/next.js/commit/47f73cd8ec79d0a6c248139088aa536453b23ae1
+        unit.set([var_name, "build --experimental-build-mode=compile"])
+    elif version >= Version.from_str("13.5.3"):
+        # For Next <v14: experimental-compile
+        unit.set([var_name, "experimental-compile"])
+    else:
+        raise Exception(f"Unsupported Next.js version: {version} for TS_NEXT_EXPERIMENTAL_BUILD_MODE()")

@@ -258,20 +258,30 @@ void TSupportsPermissions::ValidatePermission(
     const std::string& /*user*/)
 { }
 
+void TSupportsPermissions::ValidateAdHocPermission(
+    EPermission permission,
+    const std::string& user)
+{
+    return ValidatePermission(
+        EPermissionCheckScope::This,
+        permission,
+        user);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
-TSupportsPermissions::TCachingPermissionValidator::TCachingPermissionValidator(
-    TSupportsPermissions* owner,
-    EPermissionCheckScope scope)
+TSupportsPermissions::TCachingAdHocPermissionValidator::TCachingAdHocPermissionValidator(
+    TSupportsPermissions* owner)
     : Owner_(owner)
-    , Scope_(scope)
 { }
 
-void TSupportsPermissions::TCachingPermissionValidator::Validate(EPermission permission, const std::string& user)
+void TSupportsPermissions::TCachingAdHocPermissionValidator::Validate(
+    EPermission permission,
+    const std::string& user)
 {
     auto& validatedPermissions = ValidatedPermissions_[user];
     if (None(validatedPermissions & permission)) {
-        Owner_->ValidatePermission(Scope_, permission, user);
+        Owner_->ValidateAdHocPermission(permission, user);
         validatedPermissions |= permission;
     }
 }
@@ -764,7 +774,7 @@ void TSupportsAttributes::ExistsAttribute(
 
 void TSupportsAttributes::DoSetAttribute(const TYPath& path, const TYsonString& newYson, bool force)
 {
-    TCachingPermissionValidator permissionValidator(this, EPermissionCheckScope::This);
+    TCachingAdHocPermissionValidator permissionValidator(this);
 
     auto* customAttributes = GetCustomAttributes();
     auto* builtinAttributeProvider = GetBuiltinAttributeProvider();
@@ -944,7 +954,7 @@ void TSupportsAttributes::SetAttribute(
 
 void TSupportsAttributes::DoRemoveAttribute(const TYPath& path, bool force)
 {
-    TCachingPermissionValidator permissionValidator(this, EPermissionCheckScope::This);
+    TCachingAdHocPermissionValidator permissionValidator(this);
 
     auto* customAttributes = GetCustomAttributes();
     auto* builtinAttributeProvider = GetBuiltinAttributeProvider();

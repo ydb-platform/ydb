@@ -20,6 +20,36 @@
 namespace NKikimr {
 namespace NKqp {
 
+namespace {
+
+void TerminateHandler() {
+    Cerr << "======= terminate() call stack ========" << Endl;
+    FormatBackTrace(&Cerr);
+    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
+        Cerr << "======== exception call stack =========" << Endl;
+        backtrace.PrintTo(Cerr);
+    }
+    Cerr << "=======================================" << Endl;
+
+    if (std::current_exception()) {
+        Cerr << "Uncaught exception: " << CurrentExceptionMessage() << Endl;
+    } else {
+        Cerr << "Terminate for unknown reason (no current exception)" << Endl;
+    }
+
+    abort();
+}
+
+void BackTraceSignalHandler(int signal) {
+    Cerr << "======= Signal " << signal << " call stack ========" << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << "===============================================" << Endl;
+
+    abort();
+}
+
+} // anonymous namespace
+
 using namespace NYdb::NTable;
 
 const TString EXPECTED_EIGHTSHARD_VALUE1 = R"(
@@ -102,6 +132,11 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     EnableYDBBacktraceFormat();
 
+    std::set_terminate(&TerminateHandler);
+    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
+        signal(sig, &BackTraceSignalHandler);
+    }
+
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
@@ -161,10 +196,13 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetEnableMockOnSingleNode(false);
     }
 
-    if (settings.LogStream)
+    if (settings.LogStream) {
         ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
+    }
 
-    if (settings.FederatedQuerySetupFactory) {
+    if (settings.InitFederatedQuerySetupFactory) {
+        ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
+    } else if (settings.FederatedQuerySetupFactory) {
         ServerSettings->SetFederatedQuerySetupFactory(settings.FederatedQuerySetupFactory);
     }
 
@@ -654,6 +692,8 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR);
     SetupLogLevelFromTestParam(NKikimrServices::STREAMS_STORAGE_SERVICE);
     SetupLogLevelFromTestParam(NKikimrServices::YDB_SDK);
+    SetupLogLevelFromTestParam(NKikimrServices::DISCOVERY);
+    SetupLogLevelFromTestParam(NKikimrServices::DISCOVERY_CACHE);
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);

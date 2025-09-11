@@ -299,7 +299,6 @@ bool IsCompatibleWithBlocks(TPositionHandle pos, const TStructExprType& type, TE
 bool CanPropagateWideBlockThroughChannel(
     const TDqOutput& output,
     const THashMap<ui64, TKqpProgram>& programs,
-    const TDqStageSettings& stageSettings,
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx)
 {
@@ -310,6 +309,8 @@ bool CanPropagateWideBlockThroughChannel(
         // stage has multiple outputs
         return false;
     }
+
+    auto stageSettings = TDqStageSettings::Parse(output.Stage());
 
     if (!stageSettings.WideChannels) {
         return false;
@@ -361,14 +362,26 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 
             YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
 
+            // TODO(#23895): workaround for https://github.com/ydb-platform/ydb/issues/20440
+            //      do not mix scalar and block HashShuffle connections,
+            //      if we find any scalar connection then don't propagate blocks through other connections.
+            ui32 scalarHashShuffleCount = 0;
+            for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+                auto connection = stage.Inputs().Item(i).Maybe<TDqCnHashShuffle>();
+                if (connection && connection.Cast().HashFunc().IsValid()) {
+                    auto hashFuncType = FromString<NDq::EHashShuffleFuncType>(connection.Cast().HashFunc().Cast().StringValue());
+                    scalarHashShuffleCount += (hashFuncType == NDq::EHashShuffleFuncType::HashV1) || (hashFuncType == NDq::EHashShuffleFuncType::HashV2);
+                }
+            }
+
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto oldArg = stage.Program().Args().Arg(i);
                 auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
                 newArgs.emplace_back(newArg);
 
-                if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); connection &&
-                    CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, TDqStageSettings::Parse(stage), ctx, typesCtx))
+                if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); scalarHashShuffleCount <= 1 && connection &&
+                    CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, ctx, typesCtx))
                 {
                     TExprNode::TPtr newArgNode = ctx.Builder(oldArg.Pos())
                         .Callable("WideFromBlocks")

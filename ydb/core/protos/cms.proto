@@ -716,9 +716,15 @@ message TConfigUpdaterState {
 }
 
 message TGetSentinelStateResponse {
+    message TNodeState {
+        optional uint32 NodeId = 1;
+        optional uint32 State = 2;
+    }
+
     optional TStatus Status = 1;
     optional TCmsConfig.TSentinelConfig SentinelConfig = 2;
     repeated TPDisk PDisks = 3;
     optional TStateUpdaterState StateUpdater = 4;
     optional TConfigUpdaterState ConfigUpdater = 5;
+    repeated TNodeState NodesState = 6;
 }

@@ -49,6 +49,15 @@ struct TRobinHoodMapImplBase
         }
     }
 
+    static void AggregateByExistingKey(TMapType& map, const K& key, const V& delta)
+    {
+        auto existingPtr = map.Lookup(key);
+        if (existingPtr == nullptr) {
+            return;
+        }
+        *(V*)map.GetMutablePayload(existingPtr) += delta;
+    }
+
     template<typename Callback>
     static void IteratePairs(const TMapType& map, Callback&& callback)
     {
@@ -106,6 +115,12 @@ struct TRobinHoodMapImpl<std::string, V>
     {
         NYql::NUdf::TUnboxedValuePod ub = NYql::NUdf::TUnboxedValuePod::Embedded(NYql::NUdf::TStringRef(key));
         TRealBase::AggregateByKey(map, ub, delta);
+    }
+
+    static void AggregateByExistingKey(TMapType& map, const std::string& key, const V& delta)
+    {
+        NYql::NUdf::TUnboxedValuePod ub = NYql::NUdf::TUnboxedValuePod::Embedded(NYql::NUdf::TStringRef(key));
+        TRealBase::AggregateByExistingKey(map, ub, delta);
     }
 
     template<typename Callback>

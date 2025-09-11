@@ -438,7 +438,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_NOTICE);
@@ -456,7 +456,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-            CREATE TABLE `/Root/Foo` (
+            CREATE TABLE `/Root/Dir/Foo` (
                 NameHash Uint32,
                 Name Utf8,
                 Version Uint32,
@@ -474,7 +474,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         { // prepare for split
             auto query = TStringBuilder() << R"(
             --!syntax_v1
-            ALTER TABLE  `/Root/Foo`
+            ALTER TABLE  `/Root/Dir/Foo`
             SET (
                 AUTO_PARTITIONING_BY_SIZE = ENABLED,
                 AUTO_PARTITIONING_PARTITION_SIZE_MB = 1,
@@ -495,7 +495,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
             testTimeProvider->AddShift(TDuration::Minutes(2));
             Sleep(TDuration::Seconds(3));
 
-            auto result = session.DescribeTable("/Root/Foo", NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).ExtractValueSync();
+            auto result = session.DescribeTable("/Root/Dir/Foo", NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         } while (partitions == 2);
 
         { //rename
-            auto result = session.RenameTables({{"/Root/Foo", "/Root/Bar"}}).ExtractValueSync();
+            auto result = session.RenameTables({{"/Root/Dir/Foo", "/Root/Dir/Bar"}}).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -529,7 +529,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 }
                 rows.EndList();
 
-                auto result = client.BulkUpsert("/Root/Bar", rows.Build()).ExtractValueSync();
+                auto result = client.BulkUpsert("/Root/Dir/Bar", rows.Build()).ExtractValueSync();
 
                 if (!result.IsSuccess() && result.GetStatus() != NYdb::EStatus::OVERLOADED) {
                     TString err = result.GetIssues().ToString();
@@ -548,7 +548,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
             testTimeProvider->AddShift(TDuration::Minutes(1));
             Sleep(TDuration::Seconds(3));
 
-            auto result = session.DescribeTable("/Root/Bar", NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).ExtractValueSync();
+            auto result = session.DescribeTable("/Root/Dir/Bar", NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
@@ -560,7 +560,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         { // fail if shema has been broken
             TString readQuery =
-                    "SELECT * FROM `/Root/Bar`;";
+                    "SELECT * FROM `/Root/Dir/Bar`;";
 
             TExecDataQuerySettings querySettings;
             querySettings.KeepInQueryCache(true);
@@ -580,23 +580,19 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         }
 
         {
-            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root");
+            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root/Dir");
             asyncDescDir.Wait();
             const auto& val = asyncDescDir.GetValue();
             auto entry = val.GetEntry();
-            UNIT_ASSERT_EQUAL(entry.Name, "Root");
+            UNIT_ASSERT_EQUAL(entry.Name, "Dir");
             UNIT_ASSERT_EQUAL(entry.Type, NYdb::NScheme::ESchemeEntryType::Directory);
 
             auto children = val.GetChildren();
-            UNIT_ASSERT_EQUAL_C(children.size(), 2, children.size());
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 1);
             for (const auto& child: children) {
-                if (child.Name == ".metadata") {
-                    continue;
-                }
-
                 UNIT_ASSERT_EQUAL(child.Type, NYdb::NScheme::ESchemeEntryType::Table);
 
-                auto result = session.DropTable(TStringBuilder() << "Root" << "/" <<  child.Name).ExtractValueSync();
+                auto result = session.DropTable(TStringBuilder() << "Root/Dir" << "/" <<  child.Name).ExtractValueSync();
                 UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
                 UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetStatus());
             }

@@ -16,6 +16,7 @@ using namespace NPageCollection;
 
 static const ui64 NO_QUEUE_COOKIE = 1;
 static const ui64 ASYNC_QUEUE_COOKIE = 2;
+static const ui64 TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE = 4;
 
 static const ui64 DefaultMemoryLimit = 4 * (sizeof(TPage) + 10);
 
@@ -1381,8 +1382,11 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), DefaultMemoryLimit);
 
-        sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3});
+        sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
         sharedCache.CheckFetches({});
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1, 2, 3}}
+        });
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 0);
@@ -1437,8 +1441,10 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckFetches({
             TFetch{40, sharedCache.Collection1, {0, 1, 2, 3}}
         });
-        sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3});
-        sharedCache.CheckResults({});
+        sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1, 2, 3}}
+        });
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 0);
@@ -1478,13 +1484,16 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         // only 4 pages should be in memory cache
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
         sharedCache.CheckFetches({
-            TFetch{60, sharedCache.Collection1, {0, 1, 2, 3, 4, 5}}
+            TFetch{40, sharedCache.Collection1, {0, 1, 2, 3}}
         });
-        sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3, 4, 5});
-        sharedCache.CheckResults({});
+        sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1, 2, 3}}
+        });
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), DefaultMemoryLimit);
 
@@ -1518,8 +1527,11 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckFetches({
             TFetch{30, sharedCache.Collection1, {0, 1, 3}}
         });
-        sharedCache.Provide(sharedCache.Collection1, {0, 1, 3});
-        sharedCache.CheckResults({});
+        sharedCache.Provide(sharedCache.Collection1, {0, 1, 3}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {2}},       // already in cache
+            TFetch{0, sharedCache.Collection1, {0, 1, 3}}, // preloaded
+        });
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 1);
@@ -1555,6 +1567,9 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), DefaultMemoryLimit);
 
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1, 2, 3}}
+        });
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 4);
@@ -1577,8 +1592,10 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckFetches({
             TFetch{40, sharedCache.Collection1, {0, 1, 2, 3}}
         });
-        sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3});
-        sharedCache.CheckResults({});
+        sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1, 2, 3}}
+        });
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 0);
@@ -1609,8 +1626,10 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckFetches({
             TFetch{40, sharedCache.Collection1, {0, 1, 2, 3}}
         });
-        sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3});
-        sharedCache.CheckResults({});
+        sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1, 2, 3}}
+        });
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
@@ -1618,6 +1637,9 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), DefaultMemoryLimit);
 
         sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1, 2, 3}}
+        });
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
@@ -1650,8 +1672,10 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckFetches({
             TFetch{40, sharedCache.Collection1, {0, 1, 2, 3}}
         });
-        sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3});
-        sharedCache.CheckResults({});
+        sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1, 2, 3}}
+        });
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
@@ -1659,6 +1683,9 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), DefaultMemoryLimit);
 
         sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1, 2, 3}}
+        });
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
@@ -1734,6 +1761,9 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
 
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
         sharedCache.CheckFetches({}); // all collection#1 pages already loaded
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1}}
+        });
         collection1Pages.clear(); // release refs and allow collection#1 pages eviction
 
         // request next 4 pages from collection#2 to try preempt collection#1 pages 
@@ -1763,8 +1793,10 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckFetches({
             TFetch{20, sharedCache.Collection1, {0, 1}}
         });
-        sharedCache.Provide(sharedCache.Collection1, {0, 1});
-        sharedCache.CheckResults({});
+        sharedCache.Provide(sharedCache.Collection1, {0, 1}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1}}
+        });
         sharedCache.CheckFetches({});
 
         sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {0, 1});
@@ -1784,7 +1816,10 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckFetches({
             TFetch{40, sharedCache.Collection2, {0, 1, 2, 3}}
         });
-        sharedCache.Provide(sharedCache.Collection2, {0, 1, 2, 3});
+        sharedCache.Provide(sharedCache.Collection2, {0, 1, 2, 3}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection2, {2, 3}}
+        });
 
         // collection#1 pages has reads and prioritized, read collection#2 again to evict their pages
         sharedCache.Request(sharedCache.Sender1, sharedCache.Collection2, {0, 1, 2, 3});

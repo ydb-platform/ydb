@@ -74,19 +74,8 @@ struct TEvGetScriptExecutionOperation : public TEventWithDatabaseId<TEvGetScript
 };
 
 struct TEvGetScriptExecutionOperationQueryResponse : public TEventLocal<TEvGetScriptExecutionOperationQueryResponse, TKqpScriptExecutionEvents::EvGetScriptExecutionOperationQueryResponse> {
-    TEvGetScriptExecutionOperationQueryResponse(bool ready, bool leaseExpired, std::optional<EFinalizationStatus> finalizationStatus, TActorId runScriptActorId,
-        const TString& executionId, Ydb::StatusIds::StatusCode status, NYql::TIssues issues, Ydb::Query::ExecuteScriptMetadata metadata,
-        bool retryRequired, i64 leaseGeneration)
-        : Ready(ready)
-        , LeaseExpired(leaseExpired)
-        , FinalizationStatus(finalizationStatus)
-        , RunScriptActorId(runScriptActorId)
-        , ExecutionId(executionId)
-        , Status(status)
-        , Issues(std::move(issues))
-        , Metadata(std::move(metadata))
-        , RetryRequired(retryRequired)
-        , LeaseGeneration(leaseGeneration)
+    explicit TEvGetScriptExecutionOperationQueryResponse(const TString& executionId)
+        : ExecutionId(executionId)
     {}
 
     bool Ready = false;
@@ -99,26 +88,34 @@ struct TEvGetScriptExecutionOperationQueryResponse : public TEventLocal<TEvGetSc
     Ydb::Query::ExecuteScriptMetadata Metadata;
     bool RetryRequired = false;
     i64 LeaseGeneration = 0;
+    bool StateSaved = false;
 };
 
 struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvGetScriptExecutionOperationResponse> {
-    TEvGetScriptExecutionOperationResponse(bool ready, Ydb::StatusIds::StatusCode status, NYql::TIssues issues, TMaybe<google::protobuf::Any> metadata)
-        : Ready(ready)
+    struct TInfo {
+        TMaybe<google::protobuf::Any> Metadata;
+        bool Ready = false;
+        bool StateSaved = false;
+    };
+
+    TEvGetScriptExecutionOperationResponse(Ydb::StatusIds::StatusCode status, TInfo&& info, NYql::TIssues issues)
+        : Ready(info.Ready)
         , Status(status)
         , Issues(std::move(issues))
-        , Metadata(std::move(metadata))
+        , Metadata(std::move(info.Metadata))
+        , StateSaved(info.StateSaved)
     {}
 
     TEvGetScriptExecutionOperationResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
-        : Ready(false)
-        , Status(status)
+        : Status(status)
         , Issues(std::move(issues))
     {}
 
-    bool Ready;
+    bool Ready = false;
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
     TMaybe<google::protobuf::Any> Metadata;
+    bool StateSaved = false;
 };
 
 struct TEvListScriptExecutionOperations : public TEventWithDatabaseId<TEvListScriptExecutionOperations, TKqpScriptExecutionEvents::EvListScriptExecutionOperations> {
@@ -181,6 +178,16 @@ struct TEvCancelScriptExecutionOperation : public TEventWithDatabaseId<TEvCancel
     {}
 
     NOperationId::TOperationId OperationId;
+};
+
+struct TEvResetScriptExecutionRetriesResponse : public TEventLocal<TEvResetScriptExecutionRetriesResponse, TKqpScriptExecutionEvents::EvResetScriptExecutionRetriesResponse> {
+    explicit TEvResetScriptExecutionRetriesResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
+        : Status(status)
+        , Issues(std::move(issues))
+    {}
+
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
 };
 
 struct TEvCancelScriptExecutionOperationResponse : public TEventLocal<TEvCancelScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvCancelScriptExecutionOperationResponse> {
@@ -353,6 +360,7 @@ struct TEvScriptFinalizeRequest : public TEventLocal<TEvScriptFinalizeRequest, T
         std::optional<TString> QueryPlan;
         std::optional<TString> QueryAst;
         i64 LeaseGeneration;
+        std::optional<TString> QueryPlanCompressionMethod;
         std::optional<TString> QueryAstCompressionMethod;
     };
 
@@ -435,17 +443,14 @@ struct TEvListExpiredLeasesResponse : public TEventLocal<TEvListExpiredLeasesRes
         TString ExecutionId;
     };
 
-    explicit TEvListExpiredLeasesResponse(std::vector<TLeaseInfo>&& leases)
-        : Leases(std::move(leases))
-    {}
-
-    TEvListExpiredLeasesResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+    TEvListExpiredLeasesResponse(Ydb::StatusIds::StatusCode status, std::vector<TLeaseInfo>&& leases, NYql::TIssues issues)
         : Status(status)
+        , Leases(std::move(leases))
         , Issues(std::move(issues))
     {}
 
+    Ydb::StatusIds::StatusCode Status;
     std::vector<TLeaseInfo> Leases;
-    std::optional<Ydb::StatusIds::StatusCode> Status;
     NYql::TIssues Issues;
 };
 
@@ -456,6 +461,18 @@ struct TEvRefreshScriptExecutionLeasesResponse : public TEventLocal<TEvRefreshSc
     {}
 
     bool Success;
+    NYql::TIssues Issues;
+};
+
+struct TEvSaveScriptProgressResponse : public TEventLocal<TEvSaveScriptProgressResponse, TKqpScriptExecutionEvents::EvSaveScriptProgressResponse> {
+    TEvSaveScriptProgressResponse(Ydb::StatusIds::StatusCode status, bool astSaved, NYql::TIssues issues)
+        : Status(status)
+        , AstSaved(astSaved)
+        , Issues(std::move(issues))
+    {}
+
+    Ydb::StatusIds::StatusCode Status;
+    bool AstSaved = false;
     NYql::TIssues Issues;
 };
 

@@ -820,7 +820,7 @@ namespace NSQLTranslationV1 {
 
     TWinSpecs CloneContainer(const TWinSpecs& specs);
 
-    void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
+    bool WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
         const TVector<TNodePtr>& groupByExprTerms);
     bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& nodes);
 
@@ -1209,11 +1209,9 @@ namespace NSQLTranslationV1 {
         std::optional<EDistance> Distance;
         std::optional<ESimilarity> Similarity;
         std::optional<EVectorType> VectorType;
-        ui32 VectorDimension = 0;
-        ui32 Clusters = 0;
-        ui32 Levels = 0;
-
-        bool Validate(TContext& ctx) const;
+        std::optional<ui32> VectorDimension;
+        std::optional<ui32> Clusters;
+        std::optional<ui32> Levels;
     };
 
     struct TIndexDescription {
@@ -1346,6 +1344,20 @@ namespace NSQLTranslationV1 {
         TMaybe<TDeferredAtom> Increment;
     };
 
+    class TSecretParameters {
+    public:
+        enum class TOperationMode {
+            Create,
+            Alter,
+        };
+
+        TMaybe<TDeferredAtom> Value;
+        TMaybe<TDeferredAtom> InheritPermissions;
+
+    public:
+        bool ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::TOperationMode mode);
+    };
+
     struct TTopicConsumerSettings {
         struct TLocalSinkSettings {
             // no special settings
@@ -1452,6 +1464,14 @@ namespace NSQLTranslationV1 {
         TString At;
     };
 
+    struct TStreamingQuerySettings {
+        inline static constexpr char RESERVED_FEATURE_PREFIX[] = "__";
+        inline static constexpr char QUERY_TEXT_FEATURE[] = "__query_text";
+        inline static constexpr char QUERY_AST_FEATURE[] = "__query_ast";
+
+        std::map<TString, TDeferredAtom> Features;
+    };
+
     TString IdContent(TContext& ctx, const TString& str);
     TString IdContentFromString(TContext& ctx, const TString& str);
     TTableHints GetContextHints(TContext& ctx);
@@ -1533,7 +1553,7 @@ namespace NSQLTranslationV1 {
 
     // Implemented in builtin.cpp
     TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
-        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig,
+        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr externalTypes, const TDeferredAtom& typeConfig, TNodePtr runConfig,
         TNodePtr options, const TVector<TNodePtr>& depends);
     TNodePtr BuildScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args,
         TNodePtr options);
@@ -1567,7 +1587,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
         bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
     TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-        std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context);
+        bool missingOk, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context);
     TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
         bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context);
     TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
@@ -1634,6 +1654,23 @@ namespace NSQLTranslationV1 {
         const TRestoreParameters& params,
         const TObjectOperatorContext& context);
 
+    TNodePtr BuildCreateSecret(
+        TPosition pos,
+        const TString& objectId,
+        const TSecretParameters& secretParams,
+        const TObjectOperatorContext& context,
+        TScopedStatePtr scoped);
+    TNodePtr BuildAlterSecret(
+        TPosition pos,
+        const TString& objectId,
+        const TSecretParameters& secretParams,
+        const TObjectOperatorContext& context,
+        TScopedStatePtr scoped);
+    TNodePtr BuildDropSecret(
+        TPosition pos,
+        const TString& objectId,
+        const TObjectOperatorContext& context,
+        TScopedStatePtr scoped);
 
     template<class TContainer>
     TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) {

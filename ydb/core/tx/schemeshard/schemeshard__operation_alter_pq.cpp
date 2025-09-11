@@ -7,8 +7,9 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range_sequence.h>
 #include <ydb/core/persqueue/partition_index_generator/partition_index_generator.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -30,6 +31,18 @@ bool ShouldCreateSiblingAtRootLevel(const ::NKikimrSchemeOp::TPersQueueGroupDesc
         existPartitions += topic->Partitions.contains(childId);
     }
     return (existPartitions > 0) && (existPartitions < split.ChildPartitionIdsSize());
+}
+
+std::expected<void, std::string> ValidateKeyRangeSequence(const auto& partitions) {
+    TVector<NKikimr::NPQ::TPartitionKeyRangeView> bounds(Reserve(partitions.size()));
+    for (const auto& partition : partitions) {
+        bounds.push_back({
+            .PartitionId = partition.GetPartition(),
+            .FromBound = partition.GetKeyRange().HasFromBound() ? MakeMaybe(partition.GetKeyRange().GetFromBound()) : Nothing(),
+            .ToBound = partition.GetKeyRange().HasToBound() ? MakeMaybe(partition.GetKeyRange().GetToBound()) : Nothing(),
+        });
+    }
+    return NKikimr::NPQ::ValidateKeyRangeSequence(bounds);
 }
 
 class TAlterPQ: public TSubOperation {
@@ -86,9 +99,26 @@ public:
         TTopicInfo::TPtr params = new TTopicInfo();
         const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize();
 
-        if (!splitMergeEnabled && (alter.MergeSize() || alter.SplitSize())) {
+        if (!splitMergeEnabled && (alter.MergeSize() || alter.SplitSize() || alter.RootPartitionBoundariesSize())) {
             errStr = "Split and merge operations disabled";
             return nullptr;
+        }
+
+        if (alter.RootPartitionBoundariesSize()) {
+            for (const auto& set : alter.GetRootPartitionBoundaries()) {
+                if (!set.HasPartition()) {
+                    errStr = "Partition id for root partition bounds must be specified";
+                    return nullptr;
+                }
+                if (!set.HasKeyRange() && alter.RootPartitionBoundariesSize() > 1) {
+                    errStr = "KeyRange must be specified for root partition bounds";
+                    return nullptr;
+                }
+            }
+            if (auto result = ValidateKeyRangeSequence(alter.GetRootPartitionBoundaries()); !result.has_value()) {
+                errStr = result.error();
+                return nullptr;
+            }
         }
 
         if (alter.SplitSize()) {
@@ -328,6 +358,8 @@ public:
                         partitionInfo->KeyRange.Clear();
                         partitionInfo->ParentPartitionIds.clear();
                         partitionInfo->ChildPartitionIds.clear();
+                    } else if (const auto* range = pqGroup->AlterData->KeyRangesToChange.FindPtr(partitionInfo->PqId)) {
+                        partitionInfo->KeyRange = *range;
                     }
                     context.SS->PersistPersQueue(db, item->PathId, shardIdx, *partitionInfo.Get());
                 }
@@ -610,6 +642,14 @@ public:
             };
 
             NKikimr::NPQ::TPartitionIndexGenerator indexGenerator(topic->NextPartitionId);
+            for (const auto& set : alter.GetRootPartitionBoundaries()) {
+                const auto reserve = indexGenerator.ReservePartitionIndex(set.GetPartition(), set.GetPartition(), !set.GetCreatePartition());
+                if (!reserve.has_value()) {
+                    errStr = TStringBuilder() << "Set root partition boundaries: " << reserve.error();
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                    return result;
+                }
+            }
             for (const auto& split : alter.GetSplit()) {
                 for (const ui32 childId : split.GetChildPartitionIds()) {
                     const auto reserve = indexGenerator.ReservePartitionIndex(childId, split.GetPartition(), ShouldCreateSiblingAtRootLevel(split, topic));
@@ -627,6 +667,67 @@ public:
                         errStr = TStringBuilder() << "Merge with prescribed partition id: " << reserve.error();
                         result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
+                    }
+                }
+            }
+            if (alter.RootPartitionBoundariesSize()) {
+                const size_t rootPartitionsCnt = std::ranges::count_if(topic->Partitions, [](const auto& pair) { return pair.second->ParentPartitionIds.empty();});
+                if (rootPartitionsCnt > alter.RootPartitionBoundariesSize()) {
+                    errStr = std::format("Only {} root partitions has new bounds, required: {}",  alter.RootPartitionBoundariesSize(), rootPartitionsCnt);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                    return result;
+                }
+                for (const auto& set : alter.GetRootPartitionBoundaries()) {
+                    const auto partitionId = set.GetPartition();
+                    if (!set.HasKeyRange() && alter.RootPartitionBoundariesSize() > 1) {
+                        errStr = std::format("Partition #{} doesn't have KeyRange", partitionId);
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                        return result;
+                    }
+                    const TMaybe<TTopicTabletInfo::TKeyRange> range = !set.HasKeyRange()
+                        ? Nothing()
+                        : MakeMaybe(TTopicTabletInfo::TKeyRange{
+                            .FromBound = set.GetKeyRange().HasFromBound() ? MakeMaybe(set.GetKeyRange().GetFromBound()) : Nothing(),
+                            .ToBound = set.GetKeyRange().HasToBound() ? MakeMaybe(set.GetKeyRange().GetToBound()) : Nothing(),
+                        });
+                    if (const TTopicTabletInfo::TTopicPartitionInfo* prevPart = topic->Partitions.Value(partitionId, nullptr)) {
+                        const auto partitionIdIndex = indexGenerator.GetNextReservedId(partitionId);
+                        if (!partitionIdIndex.has_value()) {
+                            errStr = TStringBuilder() << "Set partition bounds:  " << partitionIdIndex.error();
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            return result;
+                        }
+                        if (set.GetCreatePartition()) {
+                            errStr = TStringBuilder() << "Partition already exists: " << partitionId;
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            return result;
+                        }
+                        if (!prevPart->ParentPartitionIds.empty()) {
+                            errStr = TStringBuilder() << "Unable to change bounds of non-root partition: " << partitionId;
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            return result;
+                        }
+                        auto [_, unique] = alterData->KeyRangesToChange.emplace(prevPart->PqId, range);
+                        if (!unique) {
+                            errStr = std::format("Multiple bounds modifications for the partition {}", partitionId);
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            return result;
+                        }
+                    } else {
+                        if (!set.GetCreatePartition()) {
+                            errStr = TStringBuilder() << "Cannot set bounds of non-existing partition: " << partitionId;
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            return result;
+                        }
+                        const auto partitionIdIndex = indexGenerator.GetNextReservedId(partitionId);
+                        if (!partitionIdIndex.has_value()) {
+                            errStr = TStringBuilder() << "Create new partition with bounds:  " << partitionIdIndex.error();
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            return result;
+                        }
+                        alterData->PartitionsToAdd.emplace(partitionIdIndex.value(), partitionIdIndex.value() + 1, range);
+                        alterData->TotalGroupCount += 1;
+                        ++alterData->ActivePartitionCount;
                     }
                 }
             }

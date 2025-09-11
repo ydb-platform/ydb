@@ -28,7 +28,6 @@ void TManager::UnregisterGroup(const ui64 externalProcessId, const ui64 external
     if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
         auto g = BuildProcessOrderGuard(*process);
         process->UnregisterGroup(externalScopeId, externalGroupId);
-        UpdateWaitingProcesses(process);
     }
     RefreshSignals();
 }
@@ -42,8 +41,6 @@ void TManager::AllocationUpdated(const ui64 externalProcessId, const ui64 extern
         if (!updated) {
             g.Release();
         }
-
-        UpdateWaitingProcesses(&process);
     }
 
     if (updated) {
@@ -104,8 +101,6 @@ void TManager::UnregisterAllocation(const ui64 externalProcessId, const ui64 ext
             if (!unregistered) {
                 g.Release();
             }
-
-            UpdateWaitingProcesses(process);
         }
         if (unregistered) {
             TryAllocateWaiting();
@@ -168,7 +163,6 @@ void TManager::RegisterProcessScope(const ui64 externalProcessId, const ui64 ext
     auto& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
     auto g = BuildProcessOrderGuard(process);
     process.RegisterScope(externalProcessScopeId);
-    UpdateWaitingProcesses(&process);
     RefreshSignals();
 }
 
@@ -176,7 +170,6 @@ void TManager::UnregisterProcessScope(const ui64 externalProcessId, const ui64 e
     auto& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
     auto g = BuildProcessOrderGuard(process);
     process.UnregisterScope(externalProcessScopeId);
-    UpdateWaitingProcesses(&process);
     RefreshSignals();
 }
 

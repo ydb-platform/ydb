@@ -261,9 +261,9 @@ public:
         if (auto* scope = GetAllocationScopeOptional(externalScopeId)) {
             if (scope->UnregisterAllocation(allocationId)) {
                 RefreshMemoryUsage();
+                UpdateWaitingScopes(scope);
                 return true;
             }
-            UpdateWaitingScopes(scope);
         }
         return false;
     }
@@ -317,7 +317,24 @@ public:
     }
 
     bool TryAllocateWaiting(const ui32 allocationsCountLimit) {
+
         std::vector<NKikimr::NOlap::NGroupedMemoryManager::TProcessMemoryScope*> allocatedScopes;
+        bool allocated = false;
+        for (auto waitingIt = WaitingScopes.begin(); waitingIt != WaitingScopes.end();) {
+            auto it = AllocationScopes.find(*waitingIt);
+            AFL_VERIFY(it != AllocationScopes.end());
+            auto* scope = it->second.get();
+            if (scope->TryAllocateWaiting(IsPriorityProcess(), allocationsCountLimit)) {
+                allocated = true;
+            }
+
+            auto hasWaitingAllocations = scope->HasWaitingAllocations();
+            if (!hasWaitingAllocations) {
+                waitingIt = WaitingScopes.erase(waitingIt);
+            } else {
+                ++waitingIt;
+            }
+        }
         for (const auto& waitingScopeId : WaitingScopes) {
             auto it = AllocationScopes.find(waitingScopeId);
             AFL_VERIFY(it != AllocationScopes.end());
@@ -330,10 +347,10 @@ public:
         for (auto* allocatedScope : allocatedScopes) {
             UpdateWaitingScopes(allocatedScope);
         }
-        if (!allocatedScopes.empty()) {
+        if (allocated) {
             RefreshMemoryUsage();
         }
-        return !allocatedScopes.empty();
+        return allocated;
     }
 
     void Unregister() {

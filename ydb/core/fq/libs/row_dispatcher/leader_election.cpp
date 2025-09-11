@@ -19,8 +19,9 @@ using NYql::TIssues;
 
 namespace {
 
-const ui64 TimeoutDurationSec = 3;
-const TString SemaphoreName = "RowDispatcher";
+constexpr ui64 TimeoutDurationSec = 3;
+constexpr ui64 SessionTimeoutSec = 30;
+constexpr char SemaphoreName[] = "RowDispatcher";
 
 struct TEvPrivate {
     // Event ids
@@ -314,10 +315,11 @@ void TLeaderElection::StartSession() {
     YdbConnection->CoordinationClient
         .StartSession(
             CoordinationNodePath, 
-            NYdb::NCoordination::TSessionSettings().OnStopped(
-                [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()]() {
-                actorSystem->Send(actorId, new TEvPrivate::TEvSessionStopped());
-            }))
+            NYdb::NCoordination::TSessionSettings()
+                .Timeout(TDuration::Seconds(SessionTimeoutSec))
+                .OnStopped([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()]() {
+                    actorSystem->Send(actorId, new TEvPrivate::TEvSessionStopped());
+                }))
         .Subscribe([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncSessionResult& future) {
                 actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(future));
             });

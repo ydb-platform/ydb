@@ -217,7 +217,7 @@ private:
         };
 
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
-            auto currentReadResult = readResult.GetResult(i);
+            const auto& currentReadResult = readResult.GetResult(i);
             if (currentReadResult.GetData().empty()) { // This is empty parted removed by compactification
                 LastSkipOffset = currentReadResult.GetOffset();
                 continue; // Skip the empty part;
@@ -231,7 +231,7 @@ private:
                 if (partResp->ResultSize() == 0) {
                     makeErrorResponse("Internal error - got message part on followup read request with empty current response");
                     PQ_LOG_CRIT("Handle TEvRead got message part on followup read request with empty current response. Readed now "
-                                << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
+                                << currentReadResult.GetSeqNo() << ", " << currentReadResult.GetPartNo()
                                 << " full request(now): " << Request);
                     break;
                 }
@@ -240,8 +240,8 @@ private:
                     // This is fine, we can drop last message;
                     break;
                 }
-                auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
-                if (rr->GetSeqNo() != readResult.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != readResult.GetResult(i).GetPartNo()) {
+                const auto& lastReadResult = partResp->GetResult(partResp->ResultSize() - 1);
+                if (lastReadResult.GetSeqNo() != currentReadResult.GetSeqNo() || lastReadResult.GetPartNo() + 1 != currentReadResult.GetPartNo()) {
                     break;
                 }
             }
@@ -261,7 +261,7 @@ private:
                     if (back.GetPartNo() + 1 < back.GetTotalParts()) {
                         makeErrorResponse("Internal error - got message part from the middle when expecting first part");
                         PQ_LOG_CRIT("Handle TEvRead last read pos (seqno/parno): " << back.GetSeqNo() << "," << back.GetPartNo() << " readed now "
-                                    << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
+                                    << currentReadResult.GetSeqNo() << ", " << currentReadResult.GetPartNo()
                                     << " full request(now): " << Request);
                         break;
                     }
@@ -271,32 +271,32 @@ private:
                     continue;
                 }
                 // Create new message for first part;
-                partResp->AddResult()->CopyFrom(readResult.GetResult(i));
+                partResp->AddResult()->CopyFrom(currentReadResult);
             } else { // Glue next part to prevous otherwise
                 if(partResp->ResultSize() == 0) {
                     // This is error, Must have some data at this point;
                     PQ_LOG_CRIT("Handle TEvRead, have last read pos, readed now "
-                                    << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
+                                    << currentReadResult.GetSeqNo() << ", " << currentReadResult.GetPartNo()
                                     << " full request(now): " << Request);
                     makeErrorResponse("Internal error - got message part from the middle when current response if empty");
                     break;
 
                 }
-                auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
-                if (rr->GetSeqNo() != readResult.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != readResult.GetResult(i).GetPartNo()) {
+                auto* rr = partResp->MutableResult(partResp->ResultSize() - 1);
+                if (rr->GetSeqNo() != currentReadResult.GetSeqNo() || rr->GetPartNo() + 1 != currentReadResult.GetPartNo()) {
                     PQ_LOG_CRIT("Handle TEvRead last read pos (seqno/parno): " << rr->GetSeqNo() << "," << rr->GetPartNo() << " readed now "
-                                    << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
+                                    << currentReadResult.GetSeqNo() << ", " << currentReadResult.GetPartNo()
                                     << " full request(now): " << Request);
                     makeErrorResponse("Internal error - got message with wrong SeqNo/PartNo when expecting");
                     break;
                 }
-                Y_ABORT_UNLESS(rr->GetSeqNo() == readResult.GetResult(i).GetSeqNo());
-                (*rr->MutableData()) += readResult.GetResult(i).GetData();
-                rr->SetPartitionKey(readResult.GetResult(i).GetPartitionKey());
-                rr->SetExplicitHash(readResult.GetResult(i).GetExplicitHash());
-                rr->SetPartNo(readResult.GetResult(i).GetPartNo());
-                rr->SetUncompressedSize(rr->GetUncompressedSize() + readResult.GetResult(i).GetUncompressedSize());
-                if (readResult.GetResult(i).GetPartNo() + 1 == readResult.GetResult(i).GetTotalParts()) {
+                Y_ABORT_UNLESS(rr->GetSeqNo() == currentReadResult.GetSeqNo());
+                (*rr->MutableData()) += currentReadResult.GetData();
+                rr->SetPartitionKey(currentReadResult.GetPartitionKey());
+                rr->SetExplicitHash(currentReadResult.GetExplicitHash());
+                rr->SetPartNo(currentReadResult.GetPartNo());
+                rr->SetUncompressedSize(rr->GetUncompressedSize() + currentReadResult.GetUncompressedSize());
+                if (currentReadResult.GetPartNo() + 1 == currentReadResult.GetTotalParts()) {
                     // This is the last part, validate data size;
                     Y_ABORT_UNLESS((ui32)rr->GetTotalSize() == (ui32)rr->GetData().size());
                 }

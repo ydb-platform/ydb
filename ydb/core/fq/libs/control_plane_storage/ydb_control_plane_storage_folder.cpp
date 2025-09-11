@@ -46,7 +46,7 @@ void NFq::TYdbControlPlaneStorageActor::Handle(NFq::TEvControlPlaneStorage::TEvD
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DeleteFolderResources");
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddTimestamp("now", TInstant::Now());
-    // skip PENDING_SMALL_TABLE_NAME cleanup to due TLI
+    // skip PENDING_SMALL_TABLE_NAME cleanup due to TLI
     queryBuilder.AddText(
         "UPDATE `" JOBS_TABLE_NAME "` SET `" EXPIRE_AT_COLUMN_NAME "` = $now\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope;\n"

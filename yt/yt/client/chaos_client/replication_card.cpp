@@ -752,6 +752,7 @@ TReplicationProgress BuildMaxProgress(
     }
 
     TReplicationProgress result;
+    result.Segments.reserve(progress.Segments.size() + other.Segments.size());
 
     auto progressIt = progress.Segments.begin();
     auto otherIt = other.Segments.begin();

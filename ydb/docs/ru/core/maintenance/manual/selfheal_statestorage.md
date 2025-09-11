@@ -1,47 +1,47 @@
-# Работа с SelfHeal State Storage
+# Работа с Self Heal State Storage
 
 В процессе работы кластеров могут выходить из строя узлы целиком, на которых работает {{ ydb-short-name }}.
 
-SelfHeal используется для сохранения работоспособности и отказоустойчивости кластера, если невозможно быстро восстановить вышедшие из строя узлы. Также автоматически распределять нагрузку на большее количество реплик при добавлении новых узлов в кластер.
+Self Heal State Storage используется для сохранения работоспособности и отказоустойчивости подсистеи [StateStorage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), [SchemeBoard](../../../concepts/glossary.md#scheme-board) кластера, если невозможно быстро восстановить вышедшие из строя узлы, и автоматически увеличивать количество реплик этих подсистем при добавлении новых узлов в кластер.
 
-SelfHeal позволяет:
+Self Heal State Storage позволяет:
 
 * обнаружить неисправные узлы системы;
-* обнаружить увеличение нагрузки и перераспределять ее на большее количество реплик;
-* перенести реплики StateStorage, Board, SchemeBoard на другие узлы или добавить новые реплики.
+* перенести реплики [StateStorage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), [SchemeBoard](../../../concepts/glossary.md#scheme-board) на другие узлы или добавить новые реплики.
 
-State storage SelfHeal включен по умолчанию.
+Self Heal State Storage  включен по умолчанию.
 
-Компонент {{ ydb-short-name }}, отвечающий за State Storage SelfHeal, называется Sentinel.
+Компонент {{ ydb-short-name }}, отвечающий за Self Heal State Storage, называется [CMS Sentinel](../../../concepts/glossary.md#cms).
 
-## Включение и выключение State Storage SelfHeal и параметры {#on-off}
+## Включение и выключение Self Heal State Storage {#on-off}
 
-Вы можете включать и выключать SelfHeal с помощью изменения конфигурации.
-Для работы механизма требуется активация как CMS Sentinel, так и distconf.
+Вы можете включать и выключать Self Heal State Storage с помощью изменения конфигурации.
+Для работы механизма требуется активация как [CMS Sentinel](../../../concepts/glossary.md#cms), так и [распределённой конфигурации](../../../concepts/glossary.md#distributed-configuration).
 
-```yaml
-config:
-    self_management_config:
-        enabled: true # Включение distconf, он генерирует новую конфигурацию и рассылает узлам
-    cms_config:
-        sentinel_config:
-            enable: true # Включение Sentinel, он отслеживает доступность узлов и отдает команду self-heal в distconf
-            update_state_interval: 60000000 # Периодичность опроса состояния нод. По умолчанию 1 минута
-            state_storage_self_heal_config:
-                enable: true # Включение self-heal state storage
-                node_good_state_limit: 10 # Количество опросов в течении которых узел должен быть в хорошем состоянии (быть  доступен), чтобы использовать его в конфигурации
-                node_pretty_good_state_limit: 7 # Количество опросов в течении которых узел должен быть в хорошем состоянии, чтобы использовать его в конфигурации, но при этом команда SelfHeal в distconf не отдается
-                node_bad_state_limit: 10 # Количество циклов в течении которых узел должен быть недоступен, чтобы отдать команду self-heal в distconf
-                wait_for_config_step: 60000000 # Период между шагами изменения конфигурации. По умолчанию 1 минута.
-                relax_time: 360000000 # Минимальный период между командами SelfHeal. По умолчанию 10 минут
-                pileup_replicas: false # StateStorage, Board, SchemeBoard реплики располагать на одном узле. Если возможен откат кластера на старую верси конфига V1, это позволит привести к совместимому состоянию
+1. Получить текущую конфигурацию кластера с помощью команды [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md):
 
-```
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
+    ```
+2. Изменить конфигурационный файл `config.yaml`, поменяв значение параметра `state_storage_self_heal_config.enable` на `true` или на `false`:
 
-## Как это работает
+    ```yaml
+    config:
+        cms_config:
+            sentinel_config:
+                state_storage_self_heal_config:
+                    enable: true # Включение self heal state storage
+    ```
+    {% cut "Подробнее" %}
 
-BS_CONTROLLER держит связь со всеми NodeWarden'ами storage-узлов, которые работают в кластере.
-Каждый узел при запуске регистрируется в BSC и держит постоянное соединение, разрыв которого фиксируется.
-И собирается статус каждого узла - как долго он был недоступен, на основании чего принимается решение о запуске процедуры self heal.
-Self heal генерирует рекоммендуемый конфиг для данного кластера с учетом доступности узлов, и если он отличается от текущего - применяет его.
-Также отслеживается изменение состава узлов кластера - и при росте на каждую 1000 узлов добавляется по одной реплике в каждое кольцо. Это позволяет автоматически перераспределять нагрузку.
+    Для работы механизма требуется активация как [CMS Sentinel](../../../concepts/glossary.md#cms), так и [распределённой конфигурации](../../../concepts/glossary.md#distributed-configuration). Убедитесь что они включены.
+
+    Опция `state_storage_self_heal_config` отвечает за управление механизмом сохранения работоспособности и отказоустойчивости [StateStorage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), [SchemeBoard](../../../concepts/glossary.md#scheme-board)
+
+    {% endcut %}
+
+3. Загрузить обновлённый конфигурационный файл в кластер с помощью [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
+
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
+    ```

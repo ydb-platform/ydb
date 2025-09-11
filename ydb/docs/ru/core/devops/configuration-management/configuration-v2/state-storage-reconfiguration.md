@@ -1,114 +1,151 @@
 # Перемещение State Storage
 
-Если нужно изменить конфигурацию [State Storage](../../../reference/configuration/index.md#domains-state), на кластере {{ ydb-short-name }}, в связи с длительным отказом узлов на которых работают реплики, или увеличением размеров кластера и возрастанием нагрузки.
+Применяется если нужно изменить конфигурацию [домена кластера State Storage](../../../reference/configuration/index.md#domains-state) состоящую из [StateStorage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), [SchemeBoard](../../../concepts/glossary.md#scheme-board), на кластере {{ ydb-short-name }}.
 
 {% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
 
-При использовании Конфигурации V2 конфигурирование State Storage осуществляется автоматически. Но во время работы кластера возможны длительные отказы нод, или увеличение нагрузки в связи с чем может потребоваться изменение конфигурации.
+При использовании Конфигурации V2 конфигурирование [домена кластера State Storage](../../../reference/configuration/index.md#domains-state) осуществляется автоматически.
 
-Если на кластере необходимо поменять конфигурацию, то это можно сделать через distconf в ручную.
+## Изменение конфигурации StateStorage
 
-## GetStateStorageConfig
+1. Получить текущую конфигурацию кластера с помощью команды [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md):
 
-Возвращает текущую конфигурацию для StateStorage, Board, SchemeBoard
-    Recommended: true вернет рекоммендуемую конфигурацию для этого кластера - можно сравнить с текущей для принятия решения о необходимости ее применения
-    PileupReplicas - создавать рекоммендуемую конфигурацию с учетом возможности отката конфига на V1
-Пример запроса
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
+    ```
 
-```shell
-curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '{"GetStateStorageConfig": {"Recommended": true}}' | jq
+2. Изменить конфигурационный файл `config.yaml`, поменяв значение параметра `domains_config`:
+
+    Конфигурация может быть задана единая для всех компонент StateStorage, Board, SchemeBoard:
+    ```yaml
+    config:
+        domains_config:
+            state_storage:
+            - ring:
+                nto_select: 5
+                node: [1,2,3,4,5,6,7,8]
+            ssid: 1
+    ```
+
+    Либо раздельно для каждого типа:
+    ```yaml
+    config:
+        domains_config:
+            explicit_state_storage_config:
+                ring_groups:
+                - ring:
+                    nto_select: 5
+                    node: [1,2,3,4,5,6,7,8]
+            explicit_state_storage_board_config:
+                ring_groups:
+                - ring:
+                    nto_select: 5
+                    node: [10,20,30,40,50,60,70,80]
+            explicit_scheme_board_config:
+                ring_groups:
+                - ring:
+                    nto_select: 5
+                    node: [11,12,13,14,15,16,17,18]
+    ```
+
+3. Загрузить обновлённый конфигурационный файл в кластер с помощью [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
+
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
+    ```
+
+## Правила конфигурирования StateStorage
+    Неправильная конфигурация [домена кластера State Storage](../../../reference/configuration/index.md#domains-state) может привести к отказу кластера.
+    Данные правила применимы как для параметра `state_storage` так и для раздельной конфигурации `explicit_state_storage_config`, `explicit_state_storage_board_config`, `explicit_scheme_board_config`
+
+    1. Чтобы изменить конфигурацию StateStorage без отказов кластера необходимо производить это путем добавления и удаления групп колец.
+    1. Добавлять и удалять можно только группы колец с параметром `WriteOnly: true`.
+    1. В новой конфигурации всегда должна присутствовать хотябы одна группа колец из предыдущей конфигурации без параметра `WriteOnly`. Такая группа колец должна идти первой в списке.
+    1. Если в разных группах колец используются одни и те же узлы кластера, добавьте параметр `ring_group_actor_id_offset:42` к группе колец. Значение должно быть униальным среди групп колец.
+    1. Переход к новой конфигурации должен происходить в 4 шага через промежуточные конфигурации. Между шагами необходимо делать паузу `1 минута`.
+    1.1. Добавляем новую группу колец с параметром `WriteOnly: true` соответствующую целевой конфигурации.
+    1.1. Снимаем флаг `WriteOnly`.
+    1.1. Выставляем флаг `WriteOnly: true` на группу колец соответствующую старой конфигурации, новую группу колец переносим в начало списка групп колец.
+    1.1. Удаляем старую группу колец
+
+## Пример
+
+    Рассмотрим на примере текущей конфигурации `explicit_scheme_board_config: { nto_select: 5, node: [1,2,3,4,5,6,7,8] }` и целевой конфигурации `explicit_scheme_board_config: { nto_select: 5, node: [10,20,30,40,5,6,7,8] }`. Мы хотим перенести часть реплик на другие узлы кластера.
+
+**Шаг 0**
+Текущая конфигурация `explicit_scheme_board_config`
+```yaml
+config:
+  domains_config:
+    explicit_scheme_board_config:
+      ring:
+        nto_select: 5
+        node: [1,2,3,4,5,6,7,8]
 ```
-
-## SelfHealStateStorage
-
-Команда начать перевод конфигурации к рекоммендуемой. Выполняется в 4 шага, между шагами делается пауза WaitForConfigStep, чтобы новая конфигураия успела распространиться на узлы, примениться, новые реплики создались и наполнились данными.
-Пример:
-
-```shell
-curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
-{
-    "SelfHealStateStorage": {
-        "ForceHeal": true
-    }
-}' | jq
-```
-
-**WaitForConfigStep** - Период между шагами изменения конфигурации. По умолчанию 60сек.
-**ForceHeal** - Если distconf не может сгенерировать конфиг только из хороших узлов - он будет задействовать нерабочие. Это снижает отказоустойчивость. Применить такой конфиг можно выставив эту опцию в true.
-**PileupReplicas** - создавать рекоммендуемую конфигурацию с учетом возможности отката конфига на V1
-
-## ReconfigStateStorage
-
-Команда применить указанную конфигурацию. Отдельно указывается конфигурация StateStorageConfig, StateStorageBoardConfig, SchemeBoardConfig.
-Изменять конфигурацию напрямую нельзя - это приведет к отказу кластера. Поэтому изменение производится добавлением новых и удалением старых групп колец.
-При этом добавлять и удалять можно только группы колец с включенным флагом WriteOnly: true.
-Первая в списке группа колец должна быть WriteOnly: false или не иметь этого флага. Это условие гарантирует что всегда будет хотябы одна полностью рабочая группа колец.
-Между шгами применения новой конфигурации рекоммендуется ожидать время (1 мин) пока новая конфигурация распространится по узлам кластера, создадутся и наполнятся новые реплики.
-На примере SchemeBoardConfig (для остальных аналогично и можно выполнять одновременно)
 
 **Шаг 1**
-На первом шаге первая группа колец должна соответствовать текущей. Добавляем новую группу колец, которая соответствует целевой конфигурации и помечаем ее WriteOnly: true.
+На первом шаге первая группа колец должна соответствовать текущей конфигурации. Добавляем новую группу колец, которая соответствует целевой конфигурации и помечаем ее WriteOnly: true. Поскольку в новой конфигурации задействованы те же узлы кластера что и в старой необходимо добавить параметр `ring_group_actor_id_offset: 1`
 
-```shell
-curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
-{
-    ReconfigStateStorage: {
-        SchemeBoardConfig: {
-            RingGroups: [
-                { NToSelect: 5, Node: [1,2,3,4,5,6,7,8] },
-                { NToSelect: 5, Node: [10,20,30,40,5,6,7,8], WriteOnly: true }
-            ]
-        }
-    }
-}
+```yaml
+config:
+  domains_config:
+    explicit_scheme_board_config:
+      ring_groups:
+      - ring:
+        nto_select: 5
+        node: [1,2,3,4,5,6,7,8]
+      - ring:
+        nto_select: 5
+        node: [10,20,30,40,5,6,7,8]
+        write_only: true
+        ring_group_actor_id_offset: 1
 ```
 
 **Шаг 2**
-Снимаем флаг WriteOnly.
+Снимаем флаг `WriteOnly`.
 
-```shell
-curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
-{
-    ReconfigStateStorage: {
-        SchemeBoardConfig: {
-            RingGroups: [
-                { NToSelect: 5, Node: [1,2,3,4,5,6,7,8] },
-                { NToSelect: 5, Node: [10,20,30,40,5,6,7,8] }
-            ]
-        }
-    }
-}
+```yaml
+config:
+  domains_config:
+    explicit_scheme_board_config:
+      ring_groups:
+      - ring:
+        nto_select: 5
+        node: [1,2,3,4,5,6,7,8]
+      - ring:
+        nto_select: 5
+        node: [10,20,30,40,5,6,7,8]
+        ring_group_actor_id_offset: 1
 ```
 
 **Шаг 3**
-Делаем новую группу колец основной. Старую конфигурацию готовим к удалению выставляя флаг WriteOnly: true
+Делаем новую группу колец первой в списке. На старую конфигурацию выставляем флаг `WriteOnly: true`
 
-```shell
-curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
-{
-    ReconfigStateStorage: {
-        SchemeBoardConfig: {
-            RingGroups: [
-                { NToSelect: 5, Node: [10,20,30,40,5,6,7,8] },
-                { NToSelect: 5, Node: [1,2,3,4,5,6,7,8], WriteOnly: true }
-            ]
-        }
-    }
-}
+```yaml
+config:
+  domains_config:
+    explicit_scheme_board_config:
+      ring_groups:
+      - ring:
+        nto_select: 5
+        node: [10,20,30,40,5,6,7,8]
+        ring_group_actor_id_offset: 1
+      - ring:
+        nto_select: 5
+        node: [1,2,3,4,5,6,7,8]
+        write_only: true
 ```
 
 **Шаг 4**
-Остается одна новая конфигурация.
+Применяем на кластере целевую конфигурацию:
 
-```shell
-curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
-{
-    ReconfigStateStorage: {
-        SchemeBoardConfig: {
-            RingGroups: [
-                { NToSelect: 5, Node: [10,20,30,40,5,6,7,8] }
-            ]
-        }
-    }
-}
+```yaml
+config:
+  domains_config:
+    explicit_scheme_board_config:
+      ring_groups:
+      - ring:
+        nto_select: 5
+        node: [10,20,30,40,5,6,7,8]
+        ring_group_actor_id_offset: 1
 ```

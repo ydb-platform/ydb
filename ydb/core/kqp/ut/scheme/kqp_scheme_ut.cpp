@@ -4292,6 +4292,188 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Invalid vector_dimension*clusters: 2049*2048 should be less than 4194304");
     }
 
+    Y_UNIT_TEST(CreateTableVectorIndexInvalidSettingsPositions) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // vector_dimension=asdf --- invalid type
+            TString query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    Covered String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (
+                            similarity=inner_product,
+                            vector_type=float,
+                            vector_dimension=asdf,
+                            levels=3,
+                            clusters=10)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:14:46: Error: Invalid vector_dimension: asdf\n");
+        }
+
+        { // vector_dimension=16385 --- out of range
+            TString query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    Covered String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (
+                            similarity=inner_product,
+                            vector_type=float,
+                            vector_dimension=16385,
+                            levels=3,
+                            clusters=10)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:14:46: Error: Invalid vector_dimension: 16385 should be between 1 and 16384\n");
+        }
+
+        { // vector_dimension=16385 clusters=2048 --- post validation error
+            TString query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    Covered String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (
+                            similarity=inner_product,
+                            vector_type=float,
+                            vector_dimension=16384,
+                            levels=3,
+                            clusters=2048)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:10:29: Error: Invalid clusters^levels: 2048^3 should be less than 1073741824\n");
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableVectorIndexInvalidSettingsPositions) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            TString query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    Covered String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // vector_dimension=asdf --- invalid type
+            TString query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+                    WITH (
+                        similarity=inner_product,
+                        vector_type=float,
+                        vector_dimension=asdf,
+                        levels=3,
+                        clusters=10)
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:42: Error: Invalid vector_dimension: asdf\n");
+        }
+
+        { // vector_dimension=16385 --- out of range
+            TString query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+                    WITH (
+                        similarity=inner_product,
+                        vector_type=float,
+                        vector_dimension=16385,
+                        levels=3,
+                        clusters=10)
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:42: Error: Invalid vector_dimension: 16385 should be between 1 and 16384\n");
+        }
+
+        { // vector_dimension=16385 clusters=2048 --- post validation error
+            TString query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+                    WITH (
+                        similarity=inner_product,
+                        vector_type=float,
+                        vector_dimension=16384,
+                        levels=3,
+                        clusters=2048)
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:5:25: Error: Invalid clusters^levels: 2048^3 should be less than 1073741824\n");
+        }
+    }
+
     Y_UNIT_TEST(CreateTableWithVectorIndexPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);

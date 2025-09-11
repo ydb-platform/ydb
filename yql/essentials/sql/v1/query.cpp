@@ -9,6 +9,7 @@
 #include <library/cpp/charset/ci_string.h>
 
 #include <util/digest/fnv.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 using namespace NYql;
 
@@ -296,8 +297,10 @@ static INode::TPtr CreateIndexSettings(const TIndexDescription::TIndexSettings& 
 
     auto settings = Y();
 
-    for (const auto& [key, value] : indexSettings) {
-        settings = L(settings, Q(Y(Q(key), Q(value))));
+    for (const auto& [_, indexSetting] : indexSettings) {
+        settings = L(settings, Q(Y(
+            BuildQuotedAtom(indexSetting.NamePosition, indexSetting.Name), 
+            BuildQuotedAtom(indexSetting.ValuePosition, indexSetting.Value))));
     }
 
     return settings;

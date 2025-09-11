@@ -1,6 +1,7 @@
 #pragma once
 
 #include <google/protobuf/message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/resetable_setting.h>
 #include <yql/essentials/parser/proto_ast/common.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -1195,6 +1196,13 @@ namespace NSQLTranslationV1 {
             GlobalVectorKmeansTree,
         };
 
+        struct TIndexSetting {
+            TString Name;
+            TPosition NamePosition;
+            TString Value;
+            TPosition ValuePosition;
+        };
+
         TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)
             : Name(name)
             , Type(type)
@@ -1206,7 +1214,7 @@ namespace NSQLTranslationV1 {
         TVector<TIdentifier> DataColumns;
         TTableSettings TableSettings;
 
-        using TIndexSettings = TMap<TString, TString>;
+        using TIndexSettings = TMap<TString, TIndexSetting>;
         TIndexSettings IndexSettings;
     };
 

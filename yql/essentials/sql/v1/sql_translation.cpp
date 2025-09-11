@@ -862,12 +862,19 @@ bool TSqlTranslation::AddIndexSetting(const TIdentifier &id,
         const TRule_index_setting_value& node,
         TIndexDescription::TIndexSettings& indexSettings) {
 
-    auto key = to_lower(id.Name);
+    auto name = to_lower(id.Name);
     // FIXME: apply to_lower in KQP so not to break case-sensitive settings
     auto value = to_lower(GetIndexSettingStringValue(node));
 
-    if (!indexSettings.emplace(key, value).second) {
-        Ctx_.Error() << "Duplicated " << key;
+    TIndexDescription::TIndexSetting indexSetting {
+        .Name = name,
+        .NamePosition = id.Pos,
+        .Value = value,
+        .ValuePosition = Ctx_.Pos()
+    };
+
+    if (!indexSettings.emplace(name, indexSetting).second) {
+        Ctx_.Error() << "Duplicated " << name;
         return false;
     }
 

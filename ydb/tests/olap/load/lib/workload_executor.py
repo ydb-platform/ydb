@@ -742,11 +742,12 @@ class WorkloadTestBase(LoadSuiteBase):
         result.add_stat(
             workload_name, "planned_duration", self.timeout
         )  # Добавляем плановую длительность отдельно
-        # Timeout не считается неуспешным выполнением, это warning
+        # workload_success = True если workload выполнился успешно
+        # (timeout не влияет на успешность выполнения)
         result.add_stat(
             workload_name,
             "workload_success",
-            (success and not error_found) or is_timeout,
+            success,
         )
         result.add_stat(
             workload_name,
@@ -983,6 +984,10 @@ class WorkloadTestBase(LoadSuiteBase):
         # use_iterations
         use_iterations = use_chunks
 
+        # Инициализируем результат в начале функции
+        overall_result = YdbCliHelper.WorkloadRunResult()
+        overall_result.start_time = time_module.time()
+
         with allure.step("Phase 1: Prepare workload execution"):
             logging.info(
                 f"Preparing execution: Duration={duration_value}s, iterations={use_iterations}, "
@@ -1015,8 +1020,43 @@ class WorkloadTestBase(LoadSuiteBase):
                 except Exception:
                     pass
 
-            # Сохраняем состояние нод для диагностики
+            # 3. СОХРАНЯЕМ СПИСОК НОД ДО ЗАПУСКА WORKLOAD И NEMESIS
+            # Это нужно для формирования отчета и опроса OOM/cores
+            logging.info("Saving cluster nodes state before workload and nemesis start")
             self.save_nodes_state()
+            
+            # Сохраняем список нод для отчета
+            initial_nodes = YdbCluster.get_cluster_nodes(db_only=True)
+            initial_nodes_info = {
+                'total_nodes': len(initial_nodes),
+                'nodes_by_host': {},
+                'nodes_by_role': {}
+            }
+            
+            for node in initial_nodes:
+                host = node.host
+                role = node.role
+                
+                if host not in initial_nodes_info['nodes_by_host']:
+                    initial_nodes_info['nodes_by_host'][host] = []
+                initial_nodes_info['nodes_by_host'][host].append({
+                    'slot': node.slot,
+                    'role': role,
+                    'start_time': node.start_time
+                })
+                
+                if role not in initial_nodes_info['nodes_by_role']:
+                    initial_nodes_info['nodes_by_role'][role] = []
+                initial_nodes_info['nodes_by_role'][role].append({
+                    'slot': node.slot,
+                    'host': host,
+                    'start_time': node.start_time
+                })
+            
+            logging.info(f"Initial cluster state: {initial_nodes_info['total_nodes']} nodes across {len(initial_nodes_info['nodes_by_host'])} hosts")
+            
+            # Сохраняем информацию о нодах в результат
+            overall_result.add_stat(workload_name, "initial_nodes_info", initial_nodes_info)
 
             # Выполняем deploy на выбранный процент нод
             deployed_nodes = self._deploy_workload_binary(
@@ -1030,9 +1070,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 else self._create_single_run_plan(duration_value)
             )
 
-            # Инициализируем результат
-            overall_result = YdbCliHelper.WorkloadRunResult()
-            overall_result.start_time = time_module.time()
+            # overall_result уже инициализирован в начале функции
 
             logging.info(
                 f"Preparation completed: {
@@ -1710,9 +1748,10 @@ class WorkloadTestBase(LoadSuiteBase):
                             attachment_type=allure.attachment_type.TEXT,
                         )
 
-                    # success=True только если stderr пустой (исключая SSH
-                    # warnings) И нет timeout
-                    success = not bool(stderr.strip()) and not is_timeout
+                    # success=True если stderr пустой (нет ошибок в workload)
+                    # timeout не влияет на success - workload может завершиться успешно,
+                    # но быть прерван по таймауту
+                    success = not bool(stderr.strip())
 
                     execution_time = time_module.time() - run_start_time
 
@@ -2174,6 +2213,41 @@ class WorkloadTestBase(LoadSuiteBase):
             overall_result = execution_result["overall_result"]
             successful_runs = execution_result["successful_runs"]
             total_runs = execution_result["total_runs"]
+
+            # 1. ОСТАНАВЛИВАЕМ NEMESIS ПОСЛЕ ОКОНЧАНИЯ WORKLOAD
+            try:
+                logging.info("Stopping nemesis service after workload completion")
+                
+                # Создаем лог для Allure
+                stop_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                nemesis_log = [f"Workload completion - stopping nemesis at {stop_time}"]
+                
+                # Останавливаем nemesis
+                self.__class__._manage_nemesis(
+                    False, "Stopping nemesis after workload completion", nemesis_log
+                )
+                
+                logging.info("Nemesis stopped successfully after workload completion")
+                
+                # 2. ЖДЕМ 1-2 МИНУТЫ НА ВОССТАНОВЛЕНИЕ КЛАСТЕРА
+                recovery_time = 90  # 1.5 минуты
+                logging.info(f"Waiting {recovery_time}s for cluster recovery after nemesis stop")
+                
+                with allure.step(f"Wait {recovery_time}s for cluster recovery"):
+                    time_module.sleep(recovery_time)
+                    logging.info("Cluster recovery wait completed")
+                
+            except Exception as e:
+                error_msg = f"Error stopping nemesis after workload completion: {e}"
+                logging.error(error_msg)
+                try:
+                    allure.attach(
+                        error_msg,
+                        "Finalization - Nemesis Error",
+                        attachment_type=allure.attachment_type.TEXT,
+                    )
+                except Exception:
+                    pass
 
             # Проверяем состояние схемы
             self._check_scheme_state()

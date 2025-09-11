@@ -6,7 +6,7 @@ Self Heal State Storage используется для сохранения р�
 
 Self Heal State Storage позволяет:
 
-* обнаружить неисправные узлы системы;
+* обнаружить неисправные узлы кластера {{ ydb-short-name }};
 * перенести реплики [StateStorage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), [SchemeBoard](../../../concepts/glossary.md#scheme-board) на другие узлы или добавить новые реплики.
 
 Self Heal State Storage  включен по умолчанию.

@@ -450,7 +450,7 @@ public:
             }
         }
 
-        NSchemeShard::TPath dstPath = parentPath.Child(name);
+        NSchemeShard::TPath dstPath = parentPath.Child(name, TPath::TSplitChildTag{});
 
         {
             TPath::TChecker checks = dstPath.Check();

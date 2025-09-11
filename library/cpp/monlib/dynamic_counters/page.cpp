@@ -52,9 +52,10 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
 
     TVector<TStringBuf> parts;
     TMaybe<EFormat> format;
+    TString set;
     TStringBuf params = GetParams(request);
 
-    if (request.GetPathInfo().empty() && !params.empty()) {
+    if (!params.empty()) {
         StringSplitter(params).Split('&').SkipEmpty().Consume([&](TStringBuf part) {
             TStringBuf name;
             TStringBuf value;
@@ -66,13 +67,16 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
                     nameLabel = value;
                 } else if (name == "@private") {
                     visibility = TCountableBase::EVisibility::Private;
+                } else if (name == "@set") {
+                    set = value;
                 }
             } else {
                 parts.push_back(part);
             }
             return true;
         });
-    } else {
+    }
+    if (!request.GetPathInfo().empty()) {
         StringSplitter(request.GetPathInfo())
             .Split('/')
             .SkipEmpty()
@@ -138,6 +142,10 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     }
 
     auto encoder = CreateEncoder(&out, *format, nameLabel, visibility);
+    if (set && FilterCallback) {
+        encoder = FilterCallback(set, std::move(encoder));
+    }
+
     counters->Accept(TString(), TString(), *encoder);
     out.Flush();
 }

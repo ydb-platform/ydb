@@ -565,6 +565,10 @@ TFuture<NCypressClient::TNodeId> TClientBase::LinkNode(
     req->set_ignore_existing(options.IgnoreExisting);
     req->set_lock_existing(options.LockExisting);
 
+    if (options.Attributes) {
+        ToProto(req->mutable_attributes(), *options.Attributes);
+    }
+
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
@@ -1109,7 +1113,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
     req->set_expression_builder_version(options.ExpressionBuilderVersion);
     req->set_use_order_by_in_join_subqueries(options.UseOrderByInJoinSubqueries);
-    req->set_statistics_aggregation(ToProto(options.StatisticsAggregation));
+    YT_OPTIONAL_SET_PROTO(req, statistics_aggregation, options.StatisticsAggregation);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;

@@ -24,14 +24,21 @@ def tostring(selfdescribing):
 class StringDescription(BaseDescription):
     """A :py:class:`~hamcrest.core.description.Description` that is stored as a
     string.
+
     """
 
     def __init__(self):
-        self.__out_list = []
+        self.out = ''
 
     def __str__(self):
         """Returns the description."""
-        return ''.join(self.__out_list)
+        return self.out
 
     def append(self, string):
-        self.__out_list.append(six.text_type(string))
+        if six.PY3:
+            self.out += str(string)
+        else:
+            if isinstance(string, unicode):
+                self.out += string
+            else:
+                self.out += unicode(string, errors="ignore")

@@ -48,9 +48,9 @@ TVector<TUrlListEntry> DeserializeResult(const TString& inp) {
     return result;
 }
 
-class TUrlListerManager : public IUrlListerManager {
+class TQPlayerUrlListerManager : public IUrlListerManager {
 public:
-    TUrlListerManager(IUrlListerManagerPtr underlying, const TQContext& qContext)
+    TQPlayerUrlListerManager(IUrlListerManagerPtr underlying, TQContext qContext)
         : Underlying_(underlying)
         , QContext_(qContext)
         {}
@@ -100,7 +100,7 @@ public:
     }
 
     TIntrusivePtr<IUrlListerManager> Clone() const override {
-        return MakeIntrusive<TUrlListerManager>(Underlying_->Clone(), QContext_);
+        return MakeIntrusive<TQPlayerUrlListerManager>(Underlying_->Clone(), QContext_);
     }
 
     void SetCredentials(TCredentials::TPtr credentials) override {
@@ -126,12 +126,12 @@ public:
 
 private:
     IUrlListerManagerPtr Underlying_;
-    const TQContext& QContext_;
+    const TQContext QContext_;
 };
 }
 
 namespace NYql::NCommon {
 IUrlListerManagerPtr WrapUrlListerManagerWithQContext(IUrlListerManagerPtr underlying, const TQContext& qContext) {
-    return MakeIntrusive<TUrlListerManager>(underlying, qContext);
+    return MakeIntrusive<TQPlayerUrlListerManager>(underlying, qContext);
 }
 }

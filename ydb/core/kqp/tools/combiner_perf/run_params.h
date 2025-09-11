@@ -2,6 +2,7 @@
 
 #include <util/system/defaults.h>
 #include <optional>
+#include <string>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -40,7 +41,11 @@ struct TRunParams {
     bool MeasureReferenceMemory = false;
     bool AlwaysSubprocess = false;
     bool EnableVerification = true;
-    size_t JoinOverlap = 0;
+
+    // Specific test params
+    std::string CombineVsTestColumnSet; // key/value column configuration for DqHashCombineVsWideCombine
+
+    size_t JoinOverlap = 0; // Table generation params for joins
     size_t JoinRightRows = 0;
 };
 

@@ -1,3 +1,5 @@
+from cli_wrapper import *
+
 import collections
 import copy
 import json
@@ -9,8 +11,6 @@ import time
 
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple, Any
-
-from cli_wrapper import *
 
 # TODO: lower HEALTH_REPLY_TTL_SECONDS and YDB_HEALTHCHECK_TIMEOUT_MS with new
 # version of ydbd healthcheck
@@ -206,6 +206,17 @@ class PileWorldView:
 
     def __repr__(self):
         return self.__str__()
+
+
+def get_latest_generation_pile(pile_world_views: Dict[str, PileWorldView]) -> Tuple[Optional[int], Optional[str]]:
+    latest_generation = None
+    pile_with_latest_generation = None
+    for pile_name, view in pile_world_views.items():
+        if view.admin_states and view.admin_states.generation:
+            if not latest_generation or view.admin_states.generation > latest_generation:
+                latest_generation = view.admin_states.generation
+                pile_with_latest_generation = pile_name
+    return (latest_generation, pile_with_latest_generation,)
 
 
 # TODO: use public API instead

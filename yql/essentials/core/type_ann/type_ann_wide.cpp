@@ -173,7 +173,7 @@ IGraphTransformer::TStatus WideFilterWrapper(const TExprNode::TPtr& input, TExpr
 
     if (input->ChildrenSize() > 2U) {
         const auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-        const auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        const auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr, ctx.Types);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()),
                 TStringBuilder() << "Mismatch 'limit' type. Expected Uint64, got: " << *input->Tail().GetTypeAnn()));

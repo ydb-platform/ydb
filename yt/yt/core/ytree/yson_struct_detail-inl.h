@@ -994,6 +994,10 @@ void TYsonStructParameter<TValue>::Save(const TYsonStructBase* self, NYson::IYso
 template <class TValue>
 bool TYsonStructParameter<TValue>::CanOmitValue(const TYsonStructBase* self) const
 {
+    if (!Optional_) {
+        return false;
+    }
+
     const auto& value = FieldAccessor_->GetValue(self);
     if constexpr (NPrivate::CSupportsDontSerializeDefault<TValue>) {
         if (!SerializeDefault_ && value == (*DefaultCtor_)()) {
@@ -1002,7 +1006,7 @@ bool TYsonStructParameter<TValue>::CanOmitValue(const TYsonStructBase* self) con
     }
 
     if (!DefaultCtor_) {
-        return NYT::NYTree::NDetail::CanOmitValue(&value, nullptr);
+        return NYT::NYTree::NDetail::CanOmitValue(&value, static_cast<TValue*>(nullptr));
     }
 
     if (TriviallyInitializedIntrusivePtr_) {

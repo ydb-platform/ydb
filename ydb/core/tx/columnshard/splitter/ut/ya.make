@@ -14,7 +14,6 @@ PEERDIR(
     ydb/core/kqp/common
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf
-    ydb/core/persqueue
     ydb/core/kqp/session_actor
     ydb/core/tx/tx_proxy
     ydb/core/tx/columnshard/engines/storage/chunks

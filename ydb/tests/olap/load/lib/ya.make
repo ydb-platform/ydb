@@ -23,6 +23,7 @@ PY3_LIBRARY()
     PEERDIR (
         contrib/python/allure-pytest
         contrib/python/allure-python-commons
+        contrib/python/matplotlib
         ydb/public/sdk/python/enable_v3_new_behavior
         ydb/tests/olap/lib
         ydb/tests/olap/scenario/helpers

@@ -3,7 +3,6 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -21,68 +20,19 @@ using namespace NResourcePool;
 using TYqlConclusionStatus = TResourcePoolManager::TYqlConclusionStatus;
 using TAsyncStatus = TResourcePoolManager::TAsyncStatus;
 
-//// Async actions
-
-struct TFeatureFlagCheckResult {
-    NYql::EYqlIssueCode Status = NYql::TIssuesIds::SUCCESS;
-    NYql::TIssues Issues;
-
-    void SetStatus(NYql::EYqlIssueCode status) {
-        Status = status;
+struct TFeatureFlagExtractor : public IFeatureFlagExtractor {
+    bool IsEnabled(const NKikimrConfig::TFeatureFlags& flags) const override {
+        return flags.GetEnableResourcePools();
     }
 
-    void AddIssue(NYql::TIssue issue) {
-        Issues.AddIssue(std::move(issue));
+    bool IsEnabled(const TFeatureFlags& flags) const override {
+        return flags.GetEnableResourcePools();
     }
 
-    void AddIssues(NYql::TIssues issues) {
-        Issues.AddIssues(std::move(issues));
-    }
-
-    TFeatureFlagCheckResult& FromFeatureFlag(bool enableResourcePools) {
-        Issues.Clear();
-        if (enableResourcePools) {
-            Status = NYql::TIssuesIds::SUCCESS;
-        } else {
-            Status = NYql::TIssuesIds::KIKIMR_UNSUPPORTED;
-            Issues.AddIssue("Resource pools are disabled. Please contact your system administrator to enable it");
-        }
-        return *this;
+    TString GetMessageOnDisabled() const override {
+        return "Resource pools are disabled. Please contact your system administrator to enable it";
     }
 };
-
-TAsyncStatus CheckFeatureFlag(const TResourcePoolManager::TExternalModificationContext& context, ui32 nodeId) {
-    auto* actorSystem = context.GetActorSystem();
-    if (!actorSystem) {
-        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. RESOURCE_POOL creation and alter operations needs an actor system. Please contact internal support"));
-    }
-
-    using TRequest = NConsole::TEvConfigsDispatcher::TEvGetConfigRequest;
-    using TResponse = NConsole::TEvConfigsDispatcher::TEvGetConfigResponse;
-    auto event = std::make_unique<TRequest>((ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem);
-
-    auto promise = NThreading::NewPromise<TFeatureFlagCheckResult>();
-    actorSystem->Register(new TActorRequestHandler<TRequest, TResponse, TFeatureFlagCheckResult>(
-        NConsole::MakeConfigsDispatcherID(nodeId), event.release(), promise,
-        [](NThreading::TPromise<TFeatureFlagCheckResult> promise, TResponse&& response) {
-            promise.SetValue(TFeatureFlagCheckResult()
-                .FromFeatureFlag(response.Config->GetFeatureFlags().GetEnableResourcePools())
-            );
-        }
-    ));
-
-    return promise.GetFuture().Apply([actorSystem](const NThreading::TFuture<TFeatureFlagCheckResult>& f) {
-        auto result = f.GetValue();
-        if (result.Status == NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE) {
-            // Fallback if CMS is unavailable
-            result.FromFeatureFlag(AppData(actorSystem)->FeatureFlags.GetEnableResourcePools());
-        }
-        if (result.Status == NYql::TIssuesIds::SUCCESS) {
-            return TYqlConclusionStatus::Success();
-        }
-        return TYqlConclusionStatus::Fail(result.Status, result.Issues.ToString());
-    });
-}
 
 //// Sync actions
 
@@ -275,7 +225,7 @@ TAsyncStatus TResourcePoolManager::ExecuteSchemeRequest(const NKikimrSchemeOp::T
     TAsyncStatus validationFuture = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
     if (operationCase != NKqpProto::TKqpSchemeOperation::kDropResourcePool) {
         validationFuture = ChainFeatures(validationFuture, [context, nodeId] {
-            return CheckFeatureFlag(context, nodeId);
+            return CheckFeatureFlag(nodeId, MakeIntrusive<TFeatureFlagExtractor>(), context);
         });
     }
     return ChainFeatures(validationFuture, [schemeTx, context] {

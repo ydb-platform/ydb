@@ -26,16 +26,20 @@ public:
     //! where "<protocol>://" can be "grpc://" or "grpcs://" or be absent, "<hostname:port>" is endpoint,
     //! "/?database=<database-path>" is optional
     TDriverConfig(const std::string& connectionString = "");
+
     //! Endpoint to initiate connections with Ydb cluster,
     //! client will connect to others nodes according to client loadbalancing
     TDriverConfig& SetEndpoint(const std::string& endpoint);
+
     //! Set number of network threads, default: 2
     TDriverConfig& SetNetworkThreadsNum(size_t sz);
+
     //! Set number of client pool threads, if 0 adaptive thread pool will be used.
     //! NOTE: in case of no zero value it is possible to get deadlock if all threads
     //! of this pool is blocked somewhere in user code.
     //! default: 0
     TDriverConfig& SetClientThreadsNum(size_t sz);
+
     //! Warning: not recommended to change
     //! Set max number of queued responses. 0 - no limit
     //! There is a queue to perform async calls to user code,
@@ -46,29 +50,37 @@ public:
     //! This value doesn't make sense if SetClientThreadsNum is 0
     //! default: 0
     TDriverConfig& SetMaxClientQueueSize(size_t sz);
+
     //! Enable Ssl.
     //! caCerts  - The buffer containing the PEM encoded root certificates for SSL/TLS connections.
     //!            If this parameter is empty, the default roots will be used.
     TDriverConfig& UseSecureConnection(const std::string& caCerts = std::string());
     TDriverConfig& SetUsePerChannelTcpConnection(bool usePerChannel);
     TDriverConfig& UseClientCertificate(const std::string& clientCert, const std::string& clientPrivateKey);
+
     //! Set token, this option can be overridden for client by ClientSettings
     TDriverConfig& SetAuthToken(const std::string& token);
+
     //! Set database, this option can be overridden for client by ClientSettings
     TDriverConfig& SetDatabase(const std::string& database);
+
     //! Set credentials data, this option can be overridden for client by ClientSettings
     TDriverConfig& SetCredentialsProviderFactory(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
+
     //! Set behaviour of discovery routine
     //! See EDiscoveryMode enum comments
     //! default: EDiscoveryMode::Sync
     TDriverConfig& SetDiscoveryMode(EDiscoveryMode discoveryMode);
+
     //! Max number of requests in queue waiting for discovery if "Async" mode chosen
     //! default: 100
     TDriverConfig& SetMaxQueuedRequests(size_t sz);
+
     //! Limit using of memory for grpc buffer pool. 0 means disabled.
     //! If enabled the size must be greater than size of recieved message.
     //! default: 0
     TDriverConfig& SetGrpcMemoryQuota(uint64_t bytes);
+
     //! Specify tcp keep alive settings
     //! This option allows to adjust tcp keep alive settings, useful to work
     //! with balancers or to detect unexpected connectivity problem.
@@ -83,12 +95,20 @@ public:
     //! NOTE: Please read OS documentation and investigate your network topology before touching this option.
     //! default: true, 30, 5, 10 for linux, and true and OS default for others POSIX
     TDriverConfig& SetTcpKeepAliveSettings(bool enable, size_t idle, size_t count, size_t interval);
+
     //! Enable or disable drain of client logic (e.g. session pool drain) during dtor call
     TDriverConfig& SetDrainOnDtors(bool allowed);
+
+    //! Set policy for balancing
+    //! default: TBalancingPolicy::UsePreferableLocation()
+    TDriverConfig& SetBalancingPolicy(TBalancingPolicy&& policy);
+
+    //! DEPRECATED
     //! Set policy for balancing
     //! Params is a optionally field to set policy settings
     //! default: EBalancingPolicy::UsePreferableLocation
     TDriverConfig& SetBalancingPolicy(EBalancingPolicy policy, const std::string& params = std::string());
+
     //! Set grpc level keep alive. If keepalive ping was delayed more than given timeout
     //! internal grpc routine fails request with TRANSIENT_FAILURE or TRANSPORT_UNAVAILABLE error
     //! Note: this timeout should not be too small to prevent fail due to
@@ -97,6 +117,7 @@ public:
     //! default: enabled, 10 seconds
     TDriverConfig& SetGRpcKeepAliveTimeout(TDuration timeout);
     TDriverConfig& SetGRpcKeepAlivePermitWithoutCalls(bool permitWithoutCalls);
+
     //! Set inactive socket timeout.
     //! Used to close connections, that were inactive for given time.
     //! Closes unused connections every 1/10 of timeout, so deletion time is approximate.
@@ -107,11 +128,14 @@ public:
     //! Set maximum incoming message size.
     //! Note: this option overrides MaxMessageSize for incoming messages.
     //! default: 0
+
     TDriverConfig& SetMaxInboundMessageSize(uint64_t maxInboundMessageSize);
+
     //! Set maximum outgoing message size.
     //! Note: this option overrides MaxMessageSize for outgoing messages.
     //! default: 0
     TDriverConfig& SetMaxOutboundMessageSize(uint64_t maxOutboundMessageSize);
+
     //! Note: if this option is unset, default 64_MB message size will be used.
     //! default: 0
     TDriverConfig& SetMaxMessageSize(uint64_t maxMessageSize);

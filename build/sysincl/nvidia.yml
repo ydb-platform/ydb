@@ -44,6 +44,7 @@
   - cufft.h
   - cufftXt.h
   - cupti.h
+  - cupti_pmsampling.h
   - cupti_profiler_target.h
   - cupti_target.h
   - curand.h

@@ -260,51 +260,46 @@ namespace NKikimr::NStorage {
                 return TStringBuilder() << "peer storage config invalid: " << *error;
             } else if (auto error = ValidateClusterState(*StorageConfig)) {
                 return TStringBuilder() << "local storage config invalid: " << *error;
-            }
-
-            // local/peer side is returning from DISCONNECTED state, validate cluster histories to ensure there were no
-            // definite split brain
-            if (auto error = ValidateClusterStateDetails(config)) {
+            } else if (auto error = ValidateClusterStateDetails(config)) {
                 return TStringBuilder() << "peer cluster state history invalid: " << *error;
             } else if (auto error = ValidateClusterStateDetails(*StorageConfig)) {
                 return TStringBuilder() << "local cluster state history invalid: " << *error;
-            } else if (auto error = CheckHistoryCompatibility(*StorageConfig, config)) {
-                // histories are incompatible, connection won't ever be possible
-                return error;
             }
-
-            const auto *peerPile = BridgeInfo->GetPile(peerBridgePileId);
-            if (peerPile == BridgeInfo->SelfNodePile) {
-                // no extra checks when connecting nodes from the same pile
-                return std::nullopt;
-            }
-
-            if (StorageConfig->GetGeneration() == config.GetGeneration() && StorageConfig->GetFingerprint() != config.GetFingerprint()) {
-                return "config fingerprint mismatch";
-            }
-
-            const NKikimrBlobStorage::TStorageConfig& newerConfig =
-                StorageConfig->GetGeneration() < config.GetGeneration()
-                    ? config
-                    : *StorageConfig;
-
-            const auto& cs = newerConfig.GetClusterState();
 
             std::optional<TString> error;
 
-            if (!NBridge::PileStateTraits(cs.GetPerPileState(peerBridgePileId.GetPileIndex())).AllowsConnection) {
-                error = "peer is not allowed to connect";
-            } else if (!NBridge::PileStateTraits(cs.GetPerPileState(SelfBridgePileId.GetPileIndex())).AllowsConnection) {
-                error = "local node is not allowed to accept peer";
-            }
+            const auto *peerPile = BridgeInfo->GetPile(peerBridgePileId);
+            if (peerPile != BridgeInfo->SelfNodePile) { // extra checks when connecting between different piles
+                if (auto error = CheckHistoryCompatibility(*StorageConfig, config)) {
+                    // histories are incompatible, connection won't ever be possible
+                    return error;
+                }
 
-            if (!error) {
-                const auto& myClusterState = StorageConfig->GetClusterState();
-                const auto& peerClusterState = config.GetClusterState();
-                if (myClusterState.GetGeneration() < peerClusterState.GetGeneration()) {
-                    error = "local cluster state is obsolete";
-                } else if (peerClusterState.GetGeneration() < myClusterState.GetGeneration()) {
-                    error = "peer cluster state is obsolete";
+                if (StorageConfig->GetGeneration() == config.GetGeneration() && StorageConfig->GetFingerprint() != config.GetFingerprint()) {
+                    return "config fingerprint mismatch";
+                }
+
+                const NKikimrBlobStorage::TStorageConfig& newerConfig =
+                    StorageConfig->GetGeneration() < config.GetGeneration()
+                        ? config
+                        : *StorageConfig;
+
+                const auto& cs = newerConfig.GetClusterState();
+
+                if (!NBridge::PileStateTraits(cs.GetPerPileState(peerBridgePileId.GetPileIndex())).AllowsConnection) {
+                    error = "peer is not allowed to connect";
+                } else if (!NBridge::PileStateTraits(cs.GetPerPileState(SelfBridgePileId.GetPileIndex())).AllowsConnection) {
+                    error = "local node is not allowed to accept peer";
+                }
+
+                if (!error) {
+                    const auto& myClusterState = StorageConfig->GetClusterState();
+                    const auto& peerClusterState = config.GetClusterState();
+                    if (myClusterState.GetGeneration() < peerClusterState.GetGeneration()) {
+                        error = "local cluster state is obsolete";
+                    } else if (peerClusterState.GetGeneration() < myClusterState.GetGeneration()) {
+                        error = "peer cluster state is obsolete";
+                    }
                 }
             }
 

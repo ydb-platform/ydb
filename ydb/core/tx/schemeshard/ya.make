@@ -41,6 +41,8 @@ RECURSE_FOR_TESTS(
     ut_reboots
     ut_replication
     ut_replication_reboots
+    ut_resource_pool
+    ut_resource_pool_reboots
     ut_restore
     ut_rtmr
     ut_rtmr_reboots
@@ -54,6 +56,8 @@ RECURSE_FOR_TESTS(
     ut_secret
     ut_secret_reboots
     ut_stats
+    ut_streaming_query
+    ut_streaming_query_reboots
     ut_subdomain
     ut_subdomain_reboots
     ut_system_names
@@ -117,6 +121,7 @@ SRCS(
     schemeshard__operation_alter_secret.cpp
     schemeshard__operation_alter_sequence.cpp
     schemeshard__operation_alter_solomon.cpp
+    schemeshard__operation_alter_streaming_query.cpp
     schemeshard__operation_alter_subdomain.cpp
     schemeshard__operation_alter_table.cpp
     schemeshard__operation_alter_user_attrs.cpp
@@ -164,6 +169,7 @@ SRCS(
     schemeshard__operation_create_rtmr.cpp
     schemeshard__operation_create_sequence.cpp
     schemeshard__operation_create_solomon.cpp
+    schemeshard__operation_create_streaming_query.cpp
     schemeshard__operation_create_subdomain.cpp
     schemeshard__operation_create_sysview.cpp
     schemeshard__operation_create_table.cpp
@@ -187,6 +193,7 @@ SRCS(
     schemeshard__operation_drop_secret.cpp
     schemeshard__operation_drop_sequence.cpp
     schemeshard__operation_drop_solomon.cpp
+    schemeshard__operation_drop_streaming_query.cpp
     schemeshard__operation_drop_subdomain.cpp
     schemeshard__operation_drop_sysview.cpp
     schemeshard__operation_drop_table.cpp
@@ -338,9 +345,9 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/keyvalue/protos
     ydb/core/metering
-    ydb/core/persqueue
     ydb/core/persqueue/config
     ydb/core/persqueue/events
+    ydb/core/persqueue/public
     ydb/core/persqueue/partition_index_generator
     ydb/core/persqueue/writer
     ydb/core/protos

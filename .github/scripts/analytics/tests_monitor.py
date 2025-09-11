@@ -375,37 +375,19 @@ def main():
                     if result.result_set.rows and result.result_set.rows[0]['earliest_run']:
                         earliest_run = result.result_set.rows[0]['earliest_run']
                         
-                        # Convert timestamp to datetime
-                        if earliest_run > 1000000000000000:  # Microseconds
-                            timestamp_seconds = earliest_run / 1000000
-                            branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
-                            print(f"Converted from microseconds: {branch_creation_date}")
-                        else:  # Seconds or milliseconds
-                        if earliest_run > MICROSECONDS_THRESHOLD:  # Microseconds
-                            timestamp_seconds = earliest_run / 1000000
-                            branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
-                            print(f"Converted from microseconds: {branch_creation_date}")
-                        else:  # Seconds or milliseconds
-                            if earliest_run > MILLISECONDS_THRESHOLD:  # Milliseconds
-                                timestamp_seconds = earliest_run / 1000
-                                branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
-                                print(f"Converted from milliseconds: {branch_creation_date}")
-                            else:  # Seconds
-                                branch_creation_date = datetime.datetime.fromtimestamp(earliest_run).date()
                         # Convert timestamp to datetime with error handling
                         try:
                             if earliest_run > 1000000000000000:  # Microseconds
                                 timestamp_seconds = earliest_run / 1000000
                                 branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
                                 print(f"Converted from microseconds: {branch_creation_date}")
-                            else:  # Seconds or milliseconds
-                                if earliest_run > 1000000000000:  # Milliseconds
-                                    timestamp_seconds = earliest_run / 1000
-                                    branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
-                                    print(f"Converted from milliseconds: {branch_creation_date}")
-                                else:  # Seconds
-                                    branch_creation_date = datetime.datetime.fromtimestamp(earliest_run).date()
-                                    print(f"Converted from seconds: {branch_creation_date}")
+                            elif earliest_run > 1000000000000:  # Milliseconds
+                                timestamp_seconds = earliest_run / 1000
+                                branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
+                                print(f"Converted from milliseconds: {branch_creation_date}")
+                            else:  # Seconds
+                                branch_creation_date = datetime.datetime.fromtimestamp(earliest_run).date()
+                                print(f"Converted from seconds: {branch_creation_date}")
                         except (OSError, OverflowError, ValueError) as e:
                             print(f"Error converting timestamp {earliest_run} to datetime: {e}")
                             branch_creation_date = None
@@ -519,10 +501,10 @@ def main():
                     hist.history AS history,
                     hist.history_class AS history_class,
                     hist.mute_count AS mute_count,
-                    COALESCE(owners_t.owners, fallback_t.owners) AS owners,
+                    owners_t.owners AS owners,
                     hist.pass_count AS pass_count,
-                    COALESCE(owners_t.run_timestamp_last, NULL) AS run_timestamp_last,
-                    COALESCE(owners_t.is_muted, NULL) AS is_muted,
+                    owners_t.run_timestamp_last AS run_timestamp_last,
+                    owners_t.is_muted AS is_muted,
                     hist.skip_count AS skip_count,
                     hist.suite_folder AS suite_folder,
                     hist.test_name AS test_name
@@ -534,7 +516,7 @@ def main():
                     AND build_type = '{build_type}' 
                     AND branch = '{branch}'
                 ) AS hist 
-                LEFT JOIN (
+                INNER JOIN (
                     SELECT 
                         test_name,
                         suite_folder,
@@ -551,20 +533,7 @@ def main():
                 ON 
                     hist.test_name = owners_t.test_name
                     AND hist.suite_folder = owners_t.suite_folder
-                    AND hist.date_window = owners_t.date
-                LEFT JOIN (
-                    SELECT 
-                        test_name,
-                        suite_folder,
-                        owners
-                    FROM 
-                        `test_results/analytics/testowners`
-                ) AS fallback_t
-                ON 
-                    hist.test_name = fallback_t.test_name
-                    AND hist.suite_folder = fallback_t.suite_folder
-                WHERE
-                    owners_t.test_name IS NOT NULL OR fallback_t.test_name IS NOT NULL;
+                    AND hist.date_window = owners_t.date;
             """
             query = ydb.ScanQuery(query_get_history, {})
             # start transaction time

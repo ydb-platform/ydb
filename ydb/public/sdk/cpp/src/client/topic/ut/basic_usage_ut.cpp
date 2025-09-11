@@ -101,6 +101,12 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 }
 
 Y_UNIT_TEST_SUITE(BasicUsage) {
+    Y_UNIT_TEST(CreateTopicWithCustomName) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
+        setup.CreateTopic(name, TEST_CONSUMER, 1);
+    }
+
     Y_UNIT_TEST(ReadWithoutConsumerWithRestarts) {
         if (EnableDirectRead) {
             // TODO(qyryq) Enable the test when LOGBROKER-9364 is done.

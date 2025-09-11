@@ -210,11 +210,6 @@ void zstd_module_init(PyObject* m) {
 	   We detect this mismatch here and refuse to load the module if this
 	   scenario is detected.
 	*/
-	if (ZSTD_VERSION_NUMBER != 10507 || ZSTD_versionNumber() != 10507) {
-		PyErr_SetString(PyExc_ImportError, "zstd C API mismatch; Python bindings not compiled against expected zstd version");
-		return;
-	}
-
 	bufferutil_module_init(m);
 	compressionparams_module_init(m);
 	compressiondict_module_init(m);

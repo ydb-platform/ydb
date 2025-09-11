@@ -24,7 +24,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceshard/sequenceshard.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
-#include <ydb/core/persqueue/pq_l2_service.h>
+#include <ydb/core/persqueue/pqtablet/cache/pq_l2_service.h>
 #include <ydb/core/util/console.h>
 
 #include <google/protobuf/text_format.h>

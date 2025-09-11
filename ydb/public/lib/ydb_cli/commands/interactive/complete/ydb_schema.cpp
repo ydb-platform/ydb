@@ -123,6 +123,8 @@ namespace NYdb::NConsoleClient {
                     return "ResourcePool";
                 case NScheme::ESchemeEntryType::SysView:
                     return "SysView";
+                case NScheme::ESchemeEntryType::StreamingQuery:
+                    return "StreamingQuery";
                 case NScheme::ESchemeEntryType::Unknown:
                 default:
                     return "Unknown";

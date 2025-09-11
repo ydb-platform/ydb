@@ -177,11 +177,13 @@ class IOperator {
 
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) = 0;
 
+    bool IsSingleConsumer() { return Parents.size() <= 1; }
+
     const EOperator Kind;
     TExprNode::TPtr Node;
     TPhysicalOpProps Props;
     TVector<std::shared_ptr<IOperator>> Children;
-    TVector<std::weak_prt<IOperator>> Parents;
+    TVector<std::weak_ptr<IOperator>> Parents;
     TVector<TInfoUnit> OutputIUs;
 };
 

@@ -56,8 +56,8 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx
                             root.Children[0] = newRoot->Children[0];
                         }
 
-                        if (rule->RequiresParentsUpdate) {
-                            root->ComputeParents();
+                        if (rule->RequiresParentRecompute) {
+                            root.ComputeParents();
                         }
 
                         nMatches ++;

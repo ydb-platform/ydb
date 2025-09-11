@@ -483,6 +483,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
     auto status = OptimizeExpr(output, output, [this] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (TKqpOpRoot::Match(node.Get())) {
             auto root = TOpRoot(node);
+            root.ComputeParents();
             return RBO.Optimize(root, ctx);
         } else {
             return node;

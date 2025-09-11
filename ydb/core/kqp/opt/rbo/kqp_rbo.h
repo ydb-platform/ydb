@@ -11,7 +11,7 @@ using namespace NOpt;
 
 class IRule {
     public:
-    IRule(TString name) : RuleName(name) {}
+    IRule(TString name, bool parentRecompute = true) : RuleName(name), RequiresParentRecompute(parentRecompute) {}
 
     virtual bool TestAndApply(std::shared_ptr<IOperator>& input, 
         TExprContext& ctx,
@@ -23,12 +23,12 @@ class IRule {
     virtual ~IRule() = default;
 
     TString RuleName;
-    bool RequiresParentRecompute;
+    bool RequiresParentRecompute = true;
 };
 
 class TSimplifiedRule : public IRule {
     public:
-    TSimplifiedRule(TString name) : IRule(name) {}
+    TSimplifiedRule(TString name, bool parentRecompute = true) : IRule(name, parentRecompute) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator>& input, 
         TExprContext& ctx,

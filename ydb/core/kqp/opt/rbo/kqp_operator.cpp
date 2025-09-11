@@ -672,6 +672,24 @@ namespace NKikimr
             return std::make_shared<TOpRoot>(node);
         }
 
+        void TOpRoot::ComputeParents() {
+            for ( auto it : *this ) {
+                it.Current->Parents.clear();
+            }
+
+            for ( auto it : *this ) {
+                if (it.Parent) {
+                    auto f = std::find_if(it.Current->Parents.begin(), it.Current->Parents.end(), [&it](const std::weak_ptr<IOperator>& p) {
+                        return p.lock() == it.Parent;
+                    });
+                    if (f == it.Current->Parents.end())
+                    {
+                        it.Current->Parents.push_back(it.Parent);
+                    }
+                }
+            }
+        }
+
         TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right)
         {
             TVector<TInfoUnit> res;

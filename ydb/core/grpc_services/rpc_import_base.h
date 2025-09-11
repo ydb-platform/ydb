@@ -30,6 +30,14 @@ struct TImportConv: public TOperationConv<NKikimrImport::TImport> {
         return operationId;
     }
 
+    static Ydb::Import::ImportFromS3Settings ClearEncryptionKey(const Ydb::Import::ImportFromS3Settings& settings) {
+        auto copy = settings;
+        if (copy.encryption_settings().has_symmetric_key()) {
+            copy.mutable_encryption_settings()->clear_symmetric_key();
+        }
+        return copy;
+    }
+
     static Operation ToOperation(const NKikimrImport::TImport& in) {
         auto operation = TOperationConv::ToOperation(in);
 
@@ -44,7 +52,7 @@ struct TImportConv: public TOperationConv<NKikimrImport::TImport> {
         using namespace Ydb::Import;
         switch (in.GetSettingsCase()) {
         case NKikimrImport::TImport::kImportFromS3Settings:
-            Fill<ImportFromS3Metadata, ImportFromS3Result>(operation, in, in.GetImportFromS3Settings());
+            Fill<ImportFromS3Metadata, ImportFromS3Result>(operation, in, ClearEncryptionKey(in.GetImportFromS3Settings()));
             break;
         default:
             Y_DEBUG_ABORT("Unknown import kind");

@@ -46,7 +46,11 @@ void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams &params, TTestResultColle
 
     const TVector<const ui32> keyColumns{0};
 
-    TVector<std::pair<NYKQL::ETestedJoinAlgo, std::string_view>> cases = {{NYKQL::ETestedJoinAlgo::kScalarGrace, "ScalarGrace"}, {NYKQL::ETestedJoinAlgo::kBlockMap, "BlockMap"}};
+    TVector<std::pair<NYKQL::ETestedJoinAlgo, std::string_view>> cases = {
+        {NYKQL::ETestedJoinAlgo::kScalarGrace, "ScalarGrace"},
+        {NYKQL::ETestedJoinAlgo::kScalarMap, "ScalarkMap"},
+        {NYKQL::ETestedJoinAlgo::kBlockMap, "BlockMap"},
+    };
 
     for(auto [algo, name]: cases){
         NYKQL::TInnerJoinDescription descr = PrepareCommonDescription(&setup);

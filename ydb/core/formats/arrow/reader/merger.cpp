@@ -148,18 +148,27 @@ ui64 TMergePartialStream::SkipToBound(const TSortableBatchPosition& pos, const b
         if (cmpResult == std::partial_ordering::equivalent && lower) {
             break;
         }
+
         const ui64 currentPosIndex = SortHeap.Current().GetPositionIndex();
+        const ui64 sourceId = SortHeap.Current().GetSourceId();
         const TSortableBatchPosition::TFoundPosition skipPos = SortHeap.MutableCurrent().SkipToLower(pos);
+        AFL_VERIFY(SortHeap.Current().GetSourceId() == sourceId);
         recordsSkipped += SortHeap.Current().GetPositionIndex() - currentPosIndex;
         AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+
         if (skipPos.IsEqual()) {
-            if (!lower && !SortHeap.MutableCurrent().Next()) {
+            if (!lower) {
                 ++recordsSkipped;
-                SortHeap.RemoveTop();
+                if (!SortHeap.MutableCurrent().Next()) {
+                    SortHeap.RemoveTop();
+                } else {
+                    SortHeap.UpdateTop();
+                }
             } else {
                 SortHeap.UpdateTop();
             }
         } else if (skipPos.IsLess()) {
+            ++recordsSkipped;
             SortHeap.RemoveTop();
         } else {
             SortHeap.UpdateTop();

@@ -56,6 +56,14 @@ public:
             insert({TSchema::UserSID::ColumnId, [] (const TCompileCacheQuery& info, ui32) {   // 6
                 return TCell(info.GetUserSID().data(), info.GetUserSID().size());
             }});
+
+            insert({TSchema::LastAccessedAt::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 7
+                return TCell::Make<ui64>(info.GetLastAccessedAt());
+            }});
+
+            insert({TSchema::Warnings::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 8
+                return TCell(info.GetWarnings());
+            }});
         }
     };
 
@@ -162,7 +170,7 @@ private:
                 FreeSpace = 1_KB;
             }
 
-            req->Record.SetFreeSpace(FreeSpace);
+            req->Record.SetFreeSpace(FreeSpace); // anely-d: is this valid logic of FreeSpace or Freespace should be divided into numNodes?
 
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
                 "Send request to node, node_id="  << nodeId << ", request: " << req->Record.ShortDebugString());

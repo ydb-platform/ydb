@@ -326,7 +326,7 @@ Y_UNIT_TEST_TWIN(JoinWithSubquery, StreamLookup) {
         );
         SELECT j.lValue AS Value FROM $join AS j INNER JOIN `/Root/Kv` AS kv
             ON j.lKey = kv.Key
-        ORDER BY j.lValue;
+        ORDER BY Value;
         )",
         .Answer=R"([
             [["Value1"]];
@@ -619,7 +619,7 @@ Y_UNIT_TEST_TWIN(LeftJoinRightNullFilter, StreamLookup) {
             [["Value3"];#];
             [["Value6"];#];
             [["Value7"];#]
-        ])", 8, StreamLookup, 14, /* dqReplicate */ true);
+        ])", 4, StreamLookup, 7, /* dqReplicate */ false);
 }
 
 Y_UNIT_TEST_TWIN(LeftJoinSkipNullFilter, StreamLookup) {

@@ -120,7 +120,7 @@ TTopicSdkTestSetup CreateSetup() {
     return setup;
 }
 
-std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition, TString topic, bool useCodec) {
+std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition, TString topic, bool useCodec) {
     auto writeSettings = TWriteSessionSettings()
                     .Path(topic)
                     .ProducerId(producer);

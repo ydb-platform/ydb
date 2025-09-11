@@ -1758,17 +1758,14 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, T
         return TExprNode::TPtr();
     }
 
-    if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Void) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        auto res = MakeBool<false>(node->Pos(), ctx);
-        res = KeepWorld(res, *node, ctx, typeCtx);
-        return res;
-    }
-
     if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         auto res = MakeBool<false>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, typeCtx);
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
+        }
+
         return res;
     }
 
@@ -1776,6 +1773,10 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, T
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         auto res = MakeBool<true>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, typeCtx);
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
+        }
+
         return res;
     }
 
@@ -1791,6 +1792,10 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, T
         YQL_CLOG(DEBUG, Core) << node->Content() << " over non-optional";
         auto res = MakeBool<true>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, typeCtx);
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
+        }
+
         return res;
     }
 
@@ -2671,6 +2676,14 @@ TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprConte
     } else {
         return ctx.NewCallable(src.Pos(), "WithWorld", { node, syncLink});
     }
+}
+
+TExprNode::TPtr KeepSideEffects(TExprNode::TPtr node, TExprNode::TPtr src, TExprContext& ctx) {
+    if (!src->HasSideEffects()) {
+        return node;
+    }
+
+    return ctx.NewCallable(src->Pos(), "Seq", { src, node });
 }
 
 TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root) {

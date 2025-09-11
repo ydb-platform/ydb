@@ -76,6 +76,7 @@ llvm_openmp = CMakeNinjaNixProject(
         "libperfstat.h",
         "llvm/Support/TimeProfiler.h",
         "ompd-specific.h",
+        "OS.h",
         "procfs.h",
     ],
     platform_dispatchers=["kmp_config.h"],

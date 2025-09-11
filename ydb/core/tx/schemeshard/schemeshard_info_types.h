@@ -23,7 +23,7 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
@@ -3583,10 +3583,11 @@ public:
             switch (creationConfig.GetSpecializedIndexDescriptionCase()) {
                 case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription: {
                     auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
-                    indexInfo->KMeans.K = std::max<ui32>(2, desc.settings().clusters());
-                    indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + std::max<ui32>(1, desc.settings().levels());
-                    indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
                     TString createError;
+                    Y_ENSURE(NKikimr::NKMeans::ValidateSettings(desc.settings(), createError), createError);
+                    indexInfo->KMeans.K = desc.settings().clusters();
+                    indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
+                    indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
                     Y_ENSURE(indexInfo->Clusters, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);

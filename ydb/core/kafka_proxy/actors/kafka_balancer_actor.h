@@ -1,15 +1,15 @@
 #pragma once
 
 #include "actors.h"
-#include "../kafka_consumer_groups_metadata_initializers.h"
-#include "../kafka_consumer_members_metadata_initializers.h"
-#include "../kqp_helper.h"
+#include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.h>
+#include <ydb/core/kafka_proxy/kqp_helper.h>
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/fetch_request_actor.h>
+#include <ydb/core/persqueue/public/fetcher/fetch_request_actor.h>
 #include <ydb/core/protos/kafka.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -383,7 +383,6 @@ private:
     TMessagePtr<TSyncGroupRequestData> SyncGroupRequestData;
     TMessagePtr<THeartbeatRequestData> HeartbeatGroupRequestData;
     TMessagePtr<TLeaveGroupRequestData> LeaveGroupRequestData;
-
 };
 
 } // namespace NKafka

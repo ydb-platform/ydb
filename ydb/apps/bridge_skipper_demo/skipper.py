@@ -12,6 +12,10 @@
 #   |_/___\__|
 #
 
+import bridge
+import health
+import skipper_tui
+
 import argparse
 import atexit
 import logging
@@ -21,10 +25,6 @@ import shutil
 import sys
 import time
 import threading
-
-import bridge
-import health
-import skipper_tui
 
 
 logger = logging.getLogger(__name__)
@@ -203,6 +203,8 @@ def _parse_args():
     parser.add_argument("--endpoint", "-e", required=True,
                         help="Single endpoint used to resolve piles and their endpoints")
 
+    parser.add_argument("--state", "-s", required=True, help="Path to keeper state file (pickle format)")
+
     parser.add_argument("--ydb", required=False, help="Path to ydb cli")
     parser.add_argument("--disable-auto-failover", action="store_true", help="Disable automatical failover")
 
@@ -216,14 +218,14 @@ def _parse_args():
     return parser.parse_args()
 
 
-def _run_no_tui(path_to_cli, piles, use_https, auto_failover):
-    keeper = bridge.BridgeSkipper(path_to_cli, piles, use_https=use_https, auto_failover=auto_failover)
+def _run_no_tui(path_to_cli, piles, use_https, auto_failover, state_path):
+    keeper = bridge.BridgeSkipper(path_to_cli, piles, use_https=use_https, auto_failover=auto_failover, state_path=state_path)
     keeper.run()
 
 
 def _run_tui(args, path_to_cli, piles):
     auto_failover = not args.disable_auto_failover
-    keeper = bridge.BridgeSkipper(path_to_cli, piles, use_https=args.https, auto_failover=auto_failover)
+    keeper = bridge.BridgeSkipper(path_to_cli, piles, use_https=args.https, auto_failover=auto_failover, state_path=args.state)
     app = skipper_tui.KeeperApp(
         keeper=keeper,
         cluster_name=args.cluster,
@@ -264,6 +266,28 @@ def main():
         path_to_cli = found
         logger.debug(f"Found ydb CLI: {path_to_cli}")
 
+    # check state path
+    try:
+        state_path = args.state
+        # Last component might not exist; parent dir must exist and be writable/executable
+        state_dir = os.path.dirname(state_path) or "."
+        if not os.path.isdir(state_dir):
+            logger.error(f"State directory does not exist: {state_dir}")
+            sys.exit(2)
+        if not (os.access(state_dir, os.W_OK) and os.access(state_dir, os.X_OK)):
+            logger.error(f"Insufficient permissions on state directory: {state_dir}")
+            sys.exit(2)
+        if os.path.exists(state_path):
+            if not os.path.isfile(state_path):
+                logger.error(f"State path exists but is not a regular file: {state_path}")
+                sys.exit(2)
+            if not (os.access(state_path, os.R_OK) and os.access(state_path, os.W_OK)):
+                logger.error(f"Insufficient permissions on state file: {state_path}")
+                sys.exit(2)
+    except Exception as e:
+        logger.error(f"Failed to validate state path '{args.state}': {e}")
+        sys.exit(2)
+
     piles = None
     try:
         piles = bridge.resolve(args.endpoint, path_to_cli)
@@ -300,7 +324,7 @@ def main():
         _run_tui(args, path_to_cli, piles)
     else:
         auto_failover = not args.disable_auto_failover
-        _run_no_tui(path_to_cli, piles, args.https, auto_failover)
+        _run_no_tui(path_to_cli, piles, args.https, auto_failover, args.state)
 
 
 if __name__ == "__main__":

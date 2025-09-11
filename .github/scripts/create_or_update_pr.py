@@ -12,6 +12,7 @@ def read_body_from_file(file_path):
 def create_gist_for_large_content(content, github_token, title="PR Body Content"):
     """Creates a GitHub gist for large content and returns the gist URL."""
     from github import Github
+    from github.InputFileContent import InputFileContent
     
     g = Github(github_token)
     
@@ -19,9 +20,7 @@ def create_gist_for_large_content(content, github_token, title="PR Body Content"
     gist = g.get_user().create_gist(
         public=False,
         files={
-            f"{title}.md": {
-                "content": content
-            }
+            f"{title}.md": InputFileContent(content)
         },
         description=f"Large content for {title}"
     )

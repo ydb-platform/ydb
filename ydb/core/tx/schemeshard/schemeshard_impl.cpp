@@ -4446,10 +4446,8 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     Tables.erase(pathId);
     DecrementPathDbRefCount(pathId, "remove table");
 
-    if (AppData()->FeatureFlags.GetEnableSystemViews()) {
-        auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
-        Send(SysPartitionStatsCollector, ev.Release());
-    }
+    auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
+    Send(SysPartitionStatsCollector, ev.Release());
 }
 
 void TSchemeShard::PersistRemoveTableIndex(NIceDb::TNiceDb &db, TPathId pathId)
@@ -7081,10 +7079,7 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
             CachedTxIds.push_back(TTxId(txId));
         }
 
-        if (AppData()->FeatureFlags.GetEnableSystemViews() &&
-            AppData()->FeatureFlags.GetEnableRealSystemViewPaths() &&
-            !SysViewsRosterUpdateStarted)
-        {
+        if (AppData()->FeatureFlags.GetEnableRealSystemViewPaths() && !SysViewsRosterUpdateStarted) {
             SysViewsRosterUpdateStarted = true;
             CollectSysViewUpdates(ctx);
         }
@@ -7574,18 +7569,16 @@ bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 key
 }
 
 void TSchemeShard::SetPartitioning(TPathId pathId, const std::vector<TShardIdx>& partitioning) {
-    if (AppData()->FeatureFlags.GetEnableSystemViews()) {
-        TVector<std::pair<ui64, ui64>> shardIndices;
-        shardIndices.reserve(partitioning.size());
-        for (auto& shardIdx : partitioning) {
-            shardIndices.emplace_back(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()));
-        }
-
-        auto path = TPath::Init(pathId, this);
-        auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
-        ev->ShardIndices.swap(shardIndices);
-        Send(SysPartitionStatsCollector, ev.Release());
+    TVector<std::pair<ui64, ui64>> shardIndices;
+    shardIndices.reserve(partitioning.size());
+    for (auto& shardIdx : partitioning) {
+        shardIndices.emplace_back(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()));
     }
+
+    auto path = TPath::Init(pathId, this);
+    auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
+    ev->ShardIndices.swap(shardIndices);
+    Send(SysPartitionStatsCollector, ev.Release());
 }
 
 void TSchemeShard::SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo) {
@@ -7597,19 +7590,17 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableI
 }
 
 void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
-    if (AppData()->FeatureFlags.GetEnableSystemViews()) {
-        TVector<std::pair<ui64, ui64>> shardIndices;
-        shardIndices.reserve(newPartitioning.size());
-        for (auto& info : newPartitioning) {
-            shardIndices.push_back(
-                std::make_pair(ui64(info.ShardIdx.GetOwnerId()), ui64(info.ShardIdx.GetLocalId())));
-        }
-
-        auto path = TPath::Init(pathId, this);
-        auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
-        ev->ShardIndices.swap(shardIndices);
-        Send(SysPartitionStatsCollector, ev.Release());
+    TVector<std::pair<ui64, ui64>> shardIndices;
+    shardIndices.reserve(newPartitioning.size());
+    for (auto& info : newPartitioning) {
+        shardIndices.push_back(
+            std::make_pair(ui64(info.ShardIdx.GetOwnerId()), ui64(info.ShardIdx.GetLocalId())));
     }
+
+    auto path = TPath::Init(pathId, this);
+    auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
+    ev->ShardIndices.swap(shardIndices);
+    Send(SysPartitionStatsCollector, ev.Release());
 
     if (!tableInfo->IsBackup) {
         // partitions updated:

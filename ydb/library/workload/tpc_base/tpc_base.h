@@ -37,6 +37,7 @@ private:
     void FilterHeader(IOutputStream& result, TStringBuf header, const TString& query) const;
     TString GetHeader(const TString& query) const;
     TTpcBaseWorkloadParams::EFloatMode DetectFloatMode() const;
+    TString GetExpectedResult(const TString& name, const TString& resourcePrefix) const;
 };
 
 template<class T>

@@ -61,16 +61,16 @@ def deserialize_list(val):
 
 
 def get_unit_list_variable(unit, name):
-    items = unit.get(name)
-    if items:
-        items = items.split(' ')
-        assert items[0] == "${}".format(name), (items, name)
-        return items[1:]
-    return []
+    items = unit.get(name)  # TODO(dimdim11) replace by get_subst
+    if not items:
+        return []
+    return items.replace('$' + name, '').strip().split()
 
 
 def get_values_list(unit, key):
-    res = map(str.strip, (unit.get(key) or '').replace('$' + key, '').strip().split())
+    res = map(
+        str.strip, (unit.get(key) or '').replace('$' + key, '').strip().split()
+    )  # TODO(dimdim11) replace by get_subst
     return [r for r in res if r and r not in ['""', "''"]]
 
 
@@ -190,7 +190,7 @@ def get_canonical_test_resources(unit):
 
 def java_srcdirs_to_data(unit, var, serialize_result=True):
     extra_data = []
-    for srcdir in (unit.get(var) or '').replace('$' + var, '').split():
+    for srcdir in (unit.get(var) or '').replace('$' + var, '').split():  # TODO(dimdim11) replace by get_subst
         if srcdir == '.':
             srcdir = unit.get('MODDIR')
         if srcdir.startswith('${ARCADIA_ROOT}/') or srcdir.startswith('$ARCADIA_ROOT/'):
@@ -391,8 +391,7 @@ class CustomDependencies:
 
     @classmethod
     def depends_with_linter(cls, unit, flat_args, spec_args):
-        linter = Linter.value(unit, flat_args, spec_args)[Linter.KEY]
-        deps = spec_args.get('DEPENDS', []) + [os.path.dirname(linter)]
+        deps = spec_args.get('DEPENDS', [])
         for dep in deps:
             unit.ondepends(dep)
         return {cls.KEY: " ".join(deps)}
@@ -588,14 +587,6 @@ class KtlintBinary:
     def value(cls, unit, flat_args, spec_args):
         value = '$(KTLINT_OLD)/run.bat' if unit.get('_USE_KTLINT_OLD') == 'yes' else '$(KTLINT)/run.bat'
         return {cls.KEY: value}
-
-
-class Linter:
-    KEY = 'LINTER'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        return {cls.KEY: spec_args['LINTER'][0]}
 
 
 class LintWrapperScript:

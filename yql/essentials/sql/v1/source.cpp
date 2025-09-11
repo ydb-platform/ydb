@@ -111,6 +111,10 @@ void ISource::SetCompactGroupBy(bool compactGroupBy) {
     CompactGroupBy_ = compactGroupBy;
 }
 
+TStringBuf ISource::GetGroupBySuffix() const {
+    return GroupBySuffix_;
+}
+
 void ISource::SetGroupBySuffix(const TString& suffix) {
     GroupBySuffix_ = suffix;
 }

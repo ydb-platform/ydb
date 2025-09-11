@@ -9,7 +9,7 @@
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 

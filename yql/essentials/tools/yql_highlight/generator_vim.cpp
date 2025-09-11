@@ -144,7 +144,7 @@ namespace NSQLHighlight {
 
     } // namespace
 
-    void GenerateVim(IOutputStream& out, const THighlighting& highlighting) {
+    void GenerateVim(IOutputStream& out, const THighlighting& highlighting, bool /* ansi */) {
         out << "if exists(\"b:current_syntax\")" << '\n';
         out << "  finish" << '\n';
         out << "endif" << '\n';

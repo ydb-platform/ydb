@@ -79,7 +79,8 @@ public:
         : TCallableTransformerBase<TCallableConstraintTransformer>(types, instantOnly)
         , SubGraph_(subGraph)
     {
-        Functions_["FailMe"] = &TCallableConstraintTransformer::FailMe;
+        Functions_["FailMe"] = &TCallableConstraintTransformer::FailMeWrap;
+        Functions_["Seq"] = &TCallableConstraintTransformer::SeqWrap;
         Functions_["Unordered"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions_["UnorderedSubquery"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions_["Sort"] = &TCallableConstraintTransformer::SortWrap;
@@ -334,11 +335,17 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus FailMe(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+    TStatus FailMeWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
         if (input->Child(0)->Content() == "constraint") {
             input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
 
+        return TStatus::Ok;
+    }
+
+    TStatus SeqWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        Y_UNUSED(ctx);
+        input->CopyConstraints(*input->Child(input->ChildrenSize() - 1));
         return TStatus::Ok;
     }
 

@@ -701,7 +701,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
     }
 
     Y_UNIT_TEST(CreateAlterUpsertDrop) {
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
 
@@ -729,10 +729,15 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
             UNIT_ASSERT_EQUAL(entry.Name, "Root");
             UNIT_ASSERT_EQUAL(entry.Type, ESchemeEntryType::Directory);
             auto children = val.GetChildren();
-            UNIT_ASSERT_EQUAL(children.size(), 1);
-            UNIT_ASSERT_EQUAL(children[0].Name, "TheDir");
-            UNIT_ASSERT_EQUAL(children[0].Type, ESchemeEntryType::Directory);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
+            for (const auto& child : children) {
+                if (child.Name == ".sys" || child.Name == ".metadata") {
+                    continue;
+                }
 
+                UNIT_ASSERT_EQUAL(child.Name, "TheDir");
+                UNIT_ASSERT_EQUAL(child.Type, ESchemeEntryType::Directory);
+            }
         }
 
         auto client = NYdb::NTable::TTableClient(connection);
@@ -829,7 +834,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
     }
 
     Y_UNIT_TEST(InMemoryTables) {
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnablePublicApiKeepInMemory(true);
 
         ui16 grpc = server.GetPort();
@@ -935,7 +940,7 @@ void IncorrectConnectionStringPending(const std::string& incorrectLocation) {
 
 Y_UNIT_TEST_SUITE(GrpcConnectionStringParserTest) {
     Y_UNIT_TEST(NoDatabaseFlag) {
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
         bool done = false;
@@ -960,7 +965,7 @@ Y_UNIT_TEST_SUITE(GrpcConnectionStringParserTest) {
     }
 
     Y_UNIT_TEST(CommonClientSettingsFromConnectionString) {
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
         bool done = false;
@@ -1010,7 +1015,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
     }
 
     Y_UNIT_TEST(MakeListRemoveDirectory) {
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
         std::shared_ptr<grpc::Channel> Channel_;
@@ -1082,6 +1087,10 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
                 "children {\n"
                 "  name: \"TheDirectory\"\n"
                 "  owner: \"root@builtin\"\n"
+                "  type: DIRECTORY\n"
+                "}\n"
+                 "children {\n"
+                "  name: \".sys\"\n"
                 "  type: DIRECTORY\n"
                 "}\n";
             UNIT_ASSERT_NO_DIFF(tmp, expected);

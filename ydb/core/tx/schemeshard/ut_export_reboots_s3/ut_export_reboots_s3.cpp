@@ -532,8 +532,6 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             switch (pathType) {
             case EPathType::EPathTypeTable:
                 return RequestStringTable;
-            case EPathType::EPathTypePersQueueGroup:
-                return RequestStringTopic;
             default:
                 Y_ABORT("not supported");
             }
@@ -546,7 +544,6 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         static const TTypedScheme ChangefeedScheme;
         static const TTypedScheme TopicScheme;
         static const TString RequestStringTable;
-        static const TString RequestStringTopic;
         static const TTypedScheme IndexedTableScheme;
     };
 
@@ -575,20 +572,6 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )", TableName)
     };
 
-    const TTypedScheme TTestData::TopicScheme = TTypedScheme {
-        EPathTypePersQueueGroup,
-        R"(
-            Name: "Topic"
-            TotalGroupCount: 2
-            PartitionPerTablet: 1
-            PQTabletConfig {
-                PartitionConfig {
-                    LifetimeSeconds: 10
-                }
-            }
-        )"
-    };
-
     const TTypedScheme TTestData::IndexedTableScheme = TTypedScheme {
         EPathTypeTableIndex, // TODO: Replace with IndexedTable
         Sprintf(R"(
@@ -609,17 +592,6 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             scheme: HTTP
             items {
                 source_path: "/MyRoot/Table"
-                destination_prefix: ""
-            }
-        }
-    )";
-
-    const TString TTestData::RequestStringTopic = R"(
-        ExportToS3Settings {
-            endpoint: "localhost:%d"
-            scheme: HTTP
-            items {
-                source_path: "/MyRoot/Topic"
                 destination_prefix: ""
             }
         }
@@ -737,21 +709,30 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         });
     }
 
+    using S3Func = void (*)(const TVector<TTypedScheme>&, const TString&, const TTestEnvOptions&);
+
+    void TestSingleTopic(S3Func func) {
+        auto topic = NDescUT::TSimpleTopic(0, 2);
+        func(
+            {
+                {
+                    EPathTypePersQueueGroup,
+                    topic.GetPrivateProto().DebugString()
+                }
+            }
+            , topic.GetExportRequest()
+            , TTestWithReboots::GetDefaultTestEnvOptions());
+    }
+
     Y_UNIT_TEST(ShouldSucceedOnSingleTopic) {
-        RunS3({
-            TTestData::Topic()
-        }, TTestData::Request(EPathTypePersQueueGroup));
+        TestSingleTopic(&RunS3);
     }
 
     Y_UNIT_TEST(CancelOnOnSingleTopic) {
-        CancelS3({
-            TTestData::Topic()
-        }, TTestData::Request(EPathTypePersQueueGroup));
+        TestSingleTopic(&CancelS3);
     }
 
     Y_UNIT_TEST(ForgetShouldSucceedOnOnSingleTopic) {
-        ForgetS3({
-            TTestData::Topic()
-        }, TTestData::Request(EPathTypePersQueueGroup));
+        TestSingleTopic(&ForgetS3);
     }
 }

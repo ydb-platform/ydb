@@ -228,13 +228,10 @@ bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStrin
     if (mainTableImpl) {
         for (const auto& index: mainTableImpl->Metadata->Indexes) {
             if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                if (index.KeyColumns.size() > 1) {
-                    // prefixed index update is not supported yet
-                    return true;
-                }
                 const auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::LevelTable;
                 const auto postingTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::PostingTable;
-                if (path == levelTablePath || path == postingTablePath) {
+                const auto prefixTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable;
+                if (path == levelTablePath || path == postingTablePath || path == prefixTablePath) {
                     return true;
                 }
             }
@@ -928,39 +925,6 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
 void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op, TVector<NKqpProto::TKqpTableInfo>& infos) {
     TableDescriptionToTableInfoImpl(desc, op, std::back_inserter(infos));
 }
-
-Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::string_view distance) {
-    if (distance == "cosine")
-        return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
-    else if (distance == "manhattan")
-        return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
-    else if (distance == "euclidean")
-        return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
-    else
-        YQL_ENSURE(false, "Wrong index setting distance: " << distance);
-};
-
-Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity) {
-    if (similarity == "cosine")
-        return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
-    else if (similarity == "inner_product")
-        return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
-    else
-        YQL_ENSURE(false, "Wrong index setting similarity: " << similarity);
-};
-
-Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType) {
-    if (vectorType == "float")
-        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
-    else if (vectorType == "uint8")
-        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
-    else if (vectorType == "int8")
-        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
-    else if (vectorType == "bit")
-        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
-    else
-        YQL_ENSURE(false, "Wrong index setting vector_type: " << vectorType);
-};
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions() {
     return Singleton<TKikimrData>()->DataSourceNames;

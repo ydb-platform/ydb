@@ -5,6 +5,7 @@ import tempfile
 import os
 from hamcrest import assert_that
 import time
+import pytest
 
 from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
@@ -318,3 +319,32 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         replace_config_response = self.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
+
+
+class TestDistConfBootstrapValidation:
+
+    def test_bootstrap_selector_validation(self):
+        cfg = KikimrConfigGenerator(
+            Erasure.NONE,
+            nodes=1,
+            use_config_store=True,
+            metadata_section={
+                'kind': 'MainConfig',
+                'version': 0,
+                'cluster': ''
+            },
+            simple_config=True,
+            use_self_management=True,
+            extra_grpc_services=['config'],
+        )
+
+        cfg.full_config.setdefault('selector_config', []).append({
+            'config': None,
+            'description': 'test',
+            'selector': {'tenant': 'test'}
+        })
+
+        cluster = KiKiMR(configurator=cfg)
+        with pytest.raises(Exception) as ei:
+            cluster.start()
+        assert 'YAML validation failed' in str(ei.value)

@@ -8,6 +8,7 @@
 #include <ydb/core/client/flat_ut_client.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
+#include <ydb/core/kafka_proxy/kafka_metrics.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
@@ -4558,4 +4559,106 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto record2 = fetchResponse1->Responses[0].Partitions[0].Records->Records[1];
         UNIT_ASSERT_VALUES_EQUAL(TString(record2.Key.value().data(), record2.Key.value().size()), "key2");
     }
+
+    Y_UNIT_TEST(ProduceMetrics) {
+        TInsecureTestServer testServer("2");
+
+        TString topicName = "/Root/topic-0-test";
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, 1, {"consumer-0"});
+
+        auto settings = NTopic::TReadSessionSettings()
+                            .AppendTopics(NTopic::TTopicReadSettings(topicName))
+                            .ConsumerName("consumer-0");
+        auto topicReader = pqClient.CreateReadSession(settings);
+
+        TKafkaTestClient client(testServer.Port);
+
+        client.ApiVersions();
+        client.SaslHandshake();
+        client.SaslAuthenticate("ouruser@/Root", "ourUserPassword");
+        client.InitProducerId();
+
+
+        // send test message with bad topic name
+        {
+            TString key = "record-key";
+            TString value = "record-value";
+
+            TKafkaRecordBatch batch;
+            batch.BaseOffset = 3;
+            batch.BaseSequence = 5;
+            batch.Magic = 2; // Current supported
+            batch.Records.resize(1);
+            batch.Records[0].Key = TKafkaRawBytes(key.data(), key.size());
+            batch.Records[0].Value = TKafkaRawBytes(value.data(), value.size());
+
+            TProduceRequestData request;
+            request.Acks = -1;
+            request.TopicData.resize(2);
+
+            request.TopicData[0].Name = topicName;
+            request.TopicData[0].PartitionData.resize(1);
+            request.TopicData[0].PartitionData[0].Index = 0;
+            request.TopicData[0].PartitionData[0].Records = batch;
+
+            request.TopicData[1].Name = "/Root/topic-0-test-not-exists";
+            request.TopicData[1].PartitionData.resize(1);
+            request.TopicData[1].PartitionData[0].Index = 0;
+            request.TopicData[1].PartitionData[0].Records = batch;
+
+            TRequestHeaderData header = client.Header(NKafka::EApiKey::PRODUCE, 9);
+            auto msg = client.WriteAndRead<TProduceResponseData>(header, request);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode,
+                                     static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].PartitionResponses[0].ErrorCode,
+                                     static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION));
+        }
+
+        {
+            auto sender = testServer.KikimrServer->GetRuntime()->AllocateEdgeActor();
+            testServer.KikimrServer->GetRuntime()->Send(MakeKafkaMetricsServiceID(), sender, new TEvKafka::TEvGetCountersRequest());
+
+            TAutoPtr<IEventHandle> handle;
+            auto ev = testServer.KikimrServer->GetRuntime()->GrabEdgeEvents<TEvKafka::TEvGetCountersResponse>(handle, TDuration::Seconds(1));
+            auto* event = std::get<TEvKafka::TEvGetCountersResponse*>(ev);
+            UNIT_ASSERT_C(event, "No counters");
+
+            TStringStream sb;
+            event->Counters->OutputPlainText(sb, "  ");
+            Cerr << ">>>>> COUNTERS '" << sb.Str() << "'" << Endl;
+
+            auto getCounterValue = [&](auto& topic, auto& counter) {
+                return event->Counters->GetSubgroup("counters", "datastreams")
+                    ->GetSubgroup("database", "/Root")
+                    ->GetSubgroup("cloud_id", "somecloud")
+                    ->GetSubgroup("folder_id", "somefolder")
+                    ->GetSubgroup("database_id", "root")
+                    ->GetSubgroup("topic", topic)
+                    ->GetNamedCounter("name", counter, true)
+                    ->Val();
+            };
+
+            // expected:
+            //
+            // counters=datastreams:
+            //     database=/Root:
+            //         cloud_id=somecloud:
+            //             folder_id=somefolder:
+            //                 database_id=root:
+            //                     topic=topic-0-test:
+            //                         name=api.kafka.produce.successful_messages: 1
+            //                         name=api.kafka.produce.total_messages: 1
+            //                     topic=unknown:
+            //                         name=api.kafka.produce.failed_messages: 1
+            //                         name=api.kafka.produce.total_messages: 1
+            UNIT_ASSERT_VALUES_EQUAL(getCounterValue("topic-0-test", "api.kafka.produce.successful_messages"), 1);
+            UNIT_ASSERT_VALUES_EQUAL(getCounterValue("topic-0-test", "api.kafka.produce.total_messages"), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(getCounterValue("unknown", "api.kafka.produce.failed_messages"), 1);
+            UNIT_ASSERT_VALUES_EQUAL(getCounterValue("unknown", "api.kafka.produce.total_messages"), 1);
+        }
+    } // Y_UNIT_TEST(ProduceScenario)
 } // Y_UNIT_TEST_SUITE(KafkaProtocol)

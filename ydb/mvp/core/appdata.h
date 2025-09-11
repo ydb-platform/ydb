@@ -6,11 +6,18 @@ namespace NMVP {
     class TMvpTokenator;
 }
 
+namespace NYdbGrpc {
+    inline namespace Dev {
+        class TGRpcClientLow;
+    }
+}
+
 struct TMVPAppData {
     std::shared_ptr<NMonitoring::TMetricRegistry> MetricRegistry;
     NMVP::TMvpTokenator* Tokenator = nullptr;
+    std::shared_ptr<NYdbGrpc::TGRpcClientLow> GRpcClientLow;
+
+    TMVPAppData();
 };
 
-inline TMVPAppData* MVPAppData() {
-    return NActors::TActivationContext::ActorSystem()->template AppData<TMVPAppData>();
-}
+TMVPAppData* MVPAppData();

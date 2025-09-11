@@ -129,7 +129,7 @@ protected:
     }
 
     template <class TResponseType>
-    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, std::vector<NYdb::EStatus> status, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
+    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, const std::vector<NYdb::EStatus>& status, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
         if (res.Ready()) {
             UNIT_ASSERT_C(IsIn(status, res.Status().GetStatus()), comments << ". Status: " << res.Status().GetStatus() << ". Issues: " << res.Status().GetIssues().ToString());
             return res;
@@ -143,7 +143,8 @@ protected:
 
     template <class TResponseType>
     TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, NYdb::EStatus status, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
-        return WaitOpStatus(res, {status}, comments, timeout);
+        std::vector<NYdb::EStatus> statuses(1, status);
+        return WaitOpStatus(res, statuses, comments, timeout);
     }
 
     template <class TResponseType>

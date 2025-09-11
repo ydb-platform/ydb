@@ -2,7 +2,7 @@
 
 `DROP TOPIC` Deletes the specified [topic](../../../concepts/topic.md).
 
-## Syntax:
+## Syntax
 
 ```yql
 DROP TOPIC <topic_path>;

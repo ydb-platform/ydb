@@ -680,6 +680,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(resp.partition_session_status_response().committed_offset() == 13);
             UNIT_ASSERT(resp.partition_session_status_response().partition_offsets().end() == 16);
             UNIT_ASSERT(resp.partition_session_status_response().write_time_high_watermark().seconds() > 0);
+            UNIT_ASSERT_VALUES_EQUAL(resp.partition_session_status_response().read_offset(), 16);
         }
 
         // send update token request, await response
@@ -724,6 +725,263 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Cerr << "Got response " << resp << "\n";
         UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
     }
+
+    void StreamReadFromTimestampImpl(int baseMessageIndex, int offsetMilliSeconds) {
+        TPersQueueV1TestServer server(true, true);
+        SET_LOCALS;
+        MAKE_INSECURE_STUB(Ydb::Topic::V1::TopicService);
+        server.EnablePQLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY });
+        server.EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
+        server.EnablePQLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
+        server.Server->GetRuntime()->GetAppData().FeatureFlags.SetEnableSkipMessagesWithObsoleteTimestamp(true);
+
+        const TString topicPath = "/Root/acc/topic1";
+        const TString consumerName = "user";
+        //server.Server->AnnoyingClient->CreateConsumer(consumerName);
+
+        const int nMsg = 3000;
+        // write to partition in 1 session
+        auto driver = pqClient->GetDriver();
+        {
+            auto writer = CreateSimpleWriter(*driver, topicPath, "source");
+            for (int i = 1; i <= nMsg; ++i) {
+                bool res = writer->Write(ToString(i) + TString(40_KB, ' '), i);
+                UNIT_ASSERT(res);
+                Sleep(TDuration::MilliSeconds(3));
+            }
+            bool res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
+        // memoize write time of messages
+        TMap<ui64, TInstant> writeTime;
+        {
+            NYdb::NTopic::TTopicClient topicClient(*pqClient->GetDriver());
+            NYdb::NTopic::TReadSessionSettings rSettings;
+            rSettings.WithoutConsumer().AppendTopics(NYdb::NTopic::TTopicReadSettings(topicPath).AppendPartitionIds(0)).Decompress(true);
+            auto readSession = topicClient.CreateReadSession(rSettings);
+            for (int i = 1; i <= nMsg; ++i) {
+                TMaybe<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent> data = GetNextMessageSkipAssignment(readSession, TDuration::Seconds(10));
+                UNIT_ASSERT(data);
+                for (const auto& msg : data->GetMessages()) {
+                    writeTime[msg.GetOffset()] = msg.GetWriteTime();
+                }
+            }
+            UNIT_ASSERT(readSession->Close(TDuration::Seconds(10)));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(writeTime.size(), nMsg);
+
+        const size_t baseIndex = baseMessageIndex >= 0 ? baseMessageIndex : baseMessageIndex + writeTime.size();
+        const TInstant base = writeTime.at(baseIndex);
+        const TInstant readFrom = base + std::chrono::milliseconds(offsetMilliSeconds);
+
+        {
+                NYdb::NTopic::TTopicClient topicClient(*pqClient->GetDriver());
+                NYdb::NTopic::TAlterTopicSettings settings;
+                NYdb::NTopic::TAlterConsumerSettings consumerSettings(settings, consumerName);
+                consumerSettings.SetReadFrom(readFrom);
+                settings.AppendAlterConsumers(consumerSettings);
+                auto res = topicClient.AlterTopic(topicPath, settings);
+                res.Wait();
+                Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                UNIT_ASSERT(res.GetValue().IsSuccess());
+        }
+
+
+
+        auto readStream = StubP_->StreamRead(&rcontext);
+        UNIT_ASSERT(readStream);
+
+        // init read session
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            auto* topicSettings = req.mutable_init_request()->add_topics_read_settings();
+            topicSettings->set_path(topicPath);
+            //*topicSettings->mutable_read_from() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(readFrom.MilliSeconds());
+            req.mutable_init_request()->set_consumer("user");
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+            /*
+            //send some reads
+            req.Clear();
+            req.mutable_read_request()->set_bytes_size(256);
+            for (ui32 i = 0; i < 0; ++i) {
+                if (!readStream->Write(req)) {
+                    ythrow yexception() << "write fail";
+                }
+            }
+                */
+        }
+
+        // await and confirm CreatePartitionStreamRequest from server
+        i64 assignId = 0;
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            //lock partition
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+            //UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "acc/topic1");
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().partition_id() == 0);
+
+            assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+
+            req.Clear();
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+
+            //req.mutable_start_partition_session_response()->set_read_offset(10);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+
+
+/*
+        //check read results
+        Ydb::Topic::StreamReadMessage::FromServer resp;
+        for (ui32 i = 10; i < 16; ) {
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "Got read response " << resp << "\n";
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+            UNIT_ASSERT_VALUES_EQUAL(resp.read_response().partition_data_size(), 1);
+            UNIT_ASSERT_GE(resp.read_response().partition_data(0).batches_size(), 1);
+            for (const auto& batch : resp.read_response().partition_data(0).batches()) {
+                UNIT_ASSERT_GE(batch.message_data_size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(batch.message_data(0).offset(), i);
+                i += batch.message_data_size();
+            }
+        }
+
+        // send commit, await commitDone
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            auto commit = req.mutable_commit_offset_request()->add_commit_offsets();
+            commit->set_partition_session_id(assignId);
+
+            auto offsets = commit->add_offsets();
+            offsets->set_start(0);
+            offsets->set_end(13);
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kCommitOffsetResponse, resp);
+            UNIT_ASSERT(resp.commit_offset_response().partitions_committed_offsets_size() == 1);
+            UNIT_ASSERT(resp.commit_offset_response().partitions_committed_offsets(0).partition_session_id() == assignId);
+            UNIT_ASSERT(resp.commit_offset_response().partitions_committed_offsets(0).committed_offset() == 13);
+        }
+*/
+        // send status request, await status
+        if (1)
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            req.mutable_partition_session_status_request()->set_partition_session_id(assignId);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kPartitionSessionStatusResponse, resp);
+            UNIT_ASSERT_VALUES_EQUAL(resp.partition_session_status_response().partition_session_id(), assignId);
+            UNIT_ASSERT_VALUES_EQUAL(resp.partition_session_status_response().committed_offset(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(resp.partition_session_status_response().partition_offsets().end(), 16);
+            UNIT_ASSERT_GE(resp.partition_session_status_response().write_time_high_watermark().seconds(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(resp.partition_session_status_response().read_offset(), 0);
+        }
+/*
+        // send update token request, await response
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            const TString token = TString("test_user_0@") + BUILTIN_ACL_DOMAIN;;
+
+            req.mutable_update_token_request()->set_token(token);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Expect UpdateTokenResponse, got response: " << resp.ShortDebugString() << Endl;
+
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kUpdateTokenResponse, resp);
+        }
+*/
+        // write and read some more
+        //send some reads
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+
+            req.Clear();
+            req.mutable_read_request()->set_bytes_size(800_MB);
+            Y_ENSURE(readStream->Write(req));
+        }
+
+
+            // send status request, await status
+        if (1)
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            req.mutable_partition_session_status_request()->set_partition_session_id(assignId);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            do {
+                UNIT_ASSERT(readStream->Read(&resp));
+                // skip data read events
+            } while (resp.server_message_case() != Ydb::Topic::StreamReadMessage::FromServer::kPartitionSessionStatusResponse);
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kPartitionSessionStatusResponse, resp);
+            UNIT_ASSERT_VALUES_EQUAL(resp.partition_session_status_response().partition_session_id(), assignId);
+            UNIT_ASSERT_VALUES_EQUAL(resp.partition_session_status_response().committed_offset(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(resp.partition_session_status_response().partition_offsets().end(), 16);
+            UNIT_ASSERT_GE(resp.partition_session_status_response().write_time_high_watermark().seconds(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(resp.partition_session_status_response().read_offset(), 0);
+        }
+        /*
+        // expect answer to read
+        resp.Clear();
+        UNIT_ASSERT(readStream->Read(&resp));
+        Cerr << "Got response " << resp << "\n";
+        UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+        */
+    }
+
+    Y_UNIT_TEST(StreamReadFromPastTimestamp) {
+        StreamReadFromTimestampImpl(0, -1'000'000);
+    }
+
+    Y_UNIT_TEST(StreamReadFromFistTimestamp) {
+        StreamReadFromTimestampImpl(0, 0);
+    }
+
+    Y_UNIT_TEST(StreamReadFromMiddleTimestamp) {
+        StreamReadFromTimestampImpl(1500, 0);
+    }
+
+    Y_UNIT_TEST(StreamReadFromLastTimestamp) {
+        StreamReadFromTimestampImpl(-1, 0);
+    }
+
+    Y_UNIT_TEST(StreamReadFromFutureTimestamp) {
+        StreamReadFromTimestampImpl(-1, 1'000'000);
+    }
+
 
     Y_UNIT_TEST(UpdatePartitionLocation) {
         TPersQueueV1TestServer server;

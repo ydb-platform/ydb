@@ -1417,6 +1417,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
             result.mutable_partition_session_status_response()->mutable_partition_offsets()->set_end(ev->Get()->EndOffset);
             *result.mutable_partition_session_status_response()->mutable_write_time_high_watermark() =
                 ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(ev->Get()->WriteTimestampEstimateMs);
+            result.mutable_partition_session_status_response()->set_read_offset(ev->Get()->ReadOffset);
         }
     }
 

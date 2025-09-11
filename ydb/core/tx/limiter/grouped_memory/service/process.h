@@ -317,8 +317,6 @@ public:
     }
 
     bool TryAllocateWaiting(const ui32 allocationsCountLimit) {
-
-        std::vector<NKikimr::NOlap::NGroupedMemoryManager::TProcessMemoryScope*> allocatedScopes;
         bool allocated = false;
         for (auto waitingIt = WaitingScopes.begin(); waitingIt != WaitingScopes.end();) {
             auto it = AllocationScopes.find(*waitingIt);
@@ -334,18 +332,6 @@ public:
             } else {
                 ++waitingIt;
             }
-        }
-        for (const auto& waitingScopeId : WaitingScopes) {
-            auto it = AllocationScopes.find(waitingScopeId);
-            AFL_VERIFY(it != AllocationScopes.end());
-            auto* scope = it->second.get();
-            if (scope->TryAllocateWaiting(IsPriorityProcess(), allocationsCountLimit)) {
-                allocatedScopes.push_back(scope);
-            }
-
-        }
-        for (auto* allocatedScope : allocatedScopes) {
-            UpdateWaitingScopes(allocatedScope);
         }
         if (allocated) {
             RefreshMemoryUsage();

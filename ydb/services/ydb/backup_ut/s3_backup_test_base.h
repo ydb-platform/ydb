@@ -15,6 +15,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/scope.h>
+#include <util/generic/is_in.h>
 #include <util/system/env.h>
 #include <util/system/sanitizers.h>
 
@@ -128,16 +129,21 @@ protected:
     }
 
     template <class TResponseType>
-    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, NYdb::EStatus status, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
+    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, std::vector<NYdb::EStatus> status, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
         if (res.Ready()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), status, comments << ". Status: " << res.Status().GetStatus() << ". Issues: " << res.Status().GetIssues().ToString());
+            UNIT_ASSERT_C(IsIn(status, res.Status().GetStatus()), comments << ". Status: " << res.Status().GetStatus() << ". Issues: " << res.Status().GetIssues().ToString());
             return res;
         } else {
             TMaybe<NYdb::TOperation> op = res;
             WaitOp<TResponseType>(op, timeout);
-            UNIT_ASSERT_VALUES_EQUAL_C(op->Status().GetStatus(), status, comments << ". Status: " << op->Status().GetStatus() << ". Issues: " << op->Status().GetIssues().ToString());
+            UNIT_ASSERT_C(IsIn(status, op->Status().GetStatus()), comments << ". Status: " << op->Status().GetStatus() << ". Issues: " << op->Status().GetIssues().ToString());
             return op;
         }
+    }
+
+    template <class TResponseType>
+    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, NYdb::EStatus status, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
+        return WaitOpStatus(res, {status}, comments, timeout);
     }
 
     template <class TResponseType>

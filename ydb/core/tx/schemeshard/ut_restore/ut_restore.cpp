@@ -1644,7 +1644,7 @@ value {
                 source_path: "/MyRoot"
                 destination_prefix: "BackupPrefix"
                 items {
-                    source_path: "Table"
+                    source_path: "/MyRoot/Table"
                 }
             )";
             importItems = R"(
@@ -1794,10 +1794,10 @@ value {
               endpoint: "localhost:%d"
               scheme: HTTP
               source_path: "/MyRoot"
-                destination_prefix: "BackupPrefix"
-                items {
-                    source_path: "Table"
-                }
+              destination_prefix: "BackupPrefix"
+              items {
+                source_path: "/MyRoot/Table"
+              }
               encryption_settings {
                 encryption_algorithm: "ChaCha20-Poly1305"
                 symmetric_key {

@@ -25,6 +25,16 @@
 {%-     endif -%}
 {%- endmacro -%}
 
+{%- macro SomeSets(some_sets, module, reldir = "") -%}
+{%-     if some_sets|length -%}
+{%-         set dirs = some_sets|map(attribute='dir')|unique -%}
+{%-         for dir in dirs -%}
+{%-             set some_set = some_sets|selectattr('dir', 'eq', dir)|first -%}
+{{ SomeSet(some_set, module, reldir) }}
+{%-         endfor -%}
+{%-     endif -%}
+{%- endmacro -%}
+
 {%- macro TargetSets(current_target, target_subdir, reldir = "") -%}
 {%-     if current_target.source_sets|length -%}
 {%-         if auto_resource_sets -%}
@@ -35,11 +45,7 @@
 {%-     else -%}
 {%-         set source_sets = [] -%}
 {%-     endif -%}
-{%-     if source_sets|length -%}
-{%-         for source_set in source_sets -%}
-{{ SomeSet(source_set, "java", reldir) }}
-{%-         endfor -%}
-{%-     endif -%}
+{{ SomeSets(source_sets, "java", reldir) }}
 {%-     if current_target.resource_sets|length -%}
 {%-         set resource_sets = current_target.resource_sets -%}
 {%-     else -%}
@@ -51,11 +57,7 @@
 {%-             set resource_sets = resource_sets + source2resource_sets -%}
 {%-         endif -%}
 {%-     endif -%}
-{%-     if resource_sets|length -%}
-{%-         for resource_set in resource_sets -%}
-{{ SomeSet(resource_set, "resources", reldir) }}
-{%-         endfor -%}
-{%-     endif -%}
+{{ SomeSets(resource_sets, "resources", reldir) }}
 {%- endmacro %}
 
 sourceSets {

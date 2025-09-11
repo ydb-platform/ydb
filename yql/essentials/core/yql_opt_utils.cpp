@@ -2841,4 +2841,10 @@ bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeA
     }
 }
 
+bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char optName[] = "ExtractMembersForPartitionsByKeys";
+    return IsOptimizerEnabled<optName>(*types) && !IsOptimizerDisabled<optName>(*types);
+}
+
 }

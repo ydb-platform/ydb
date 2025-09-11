@@ -629,7 +629,7 @@ def _setup_eslint(unit: NotsUnitType) -> None:
         return
 
     unit.on_peerdir_ts_resource("eslint")
-    user_recipes = unit.get("TEST_RECIPES_VALUE")
+    user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
 
     test_type = TsTestType.ESLINT
@@ -699,7 +699,7 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
         raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
 
     unit.on_peerdir_ts_resource("typescript")
-    user_recipes = unit.get("TEST_RECIPES_VALUE")
+    user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
 
     test_type = TsTestType.TSC_TYPECHECK
@@ -749,7 +749,7 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     from lib.nots.package_manager import constants
 
-    recipes_value = unit.get("TEST_RECIPES_VALUE")
+    recipes_value = unit.get_subst("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
 
     test_type = TsTestType.TS_STYLELINT
@@ -954,7 +954,7 @@ def on_ts_test_for_configure(
     unit.onpeerdir([for_mod_path])
 
     # user-defined recipes should be in the end
-    user_recipes = unit.get("TEST_RECIPES_VALUE").replace("$TEST_RECIPES_VALUE", "").strip()
+    user_recipes = unit.get_subst("TEST_RECIPES_VALUE").strip()
     unit.set(["TEST_RECIPES_VALUE", ""])
     unit.on_setup_extract_node_modules_recipe([for_mod_path])
     unit.on_setup_extract_output_tars_recipe([for_mod_path])

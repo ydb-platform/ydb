@@ -61,16 +61,14 @@ def deserialize_list(val):
 
 
 def get_unit_list_variable(unit, name):
-    items = unit.get(name)  # TODO(dimdim11) replace by get_subst
+    items = unit.get_subst(name)
     if not items:
         return []
-    return items.replace('$' + name, '').strip().split()
+    return items.strip().split()
 
 
 def get_values_list(unit, key):
-    res = map(
-        str.strip, (unit.get(key) or '').replace('$' + key, '').strip().split()
-    )  # TODO(dimdim11) replace by get_subst
+    res = map(str.strip, (unit.get_subst(key) or '').strip().split())
     return [r for r in res if r and r not in ['""', "''"]]
 
 
@@ -94,7 +92,6 @@ def format_recipes(data: str | None) -> str:
         return ""
 
     data = data.replace('"USE_RECIPE_DELIM"', "\n")
-    data = data.replace("$TEST_RECIPES_VALUE", "")
     return data
 
 
@@ -104,7 +101,6 @@ def prepare_recipes(data: str | None) -> bytes:
 
 
 def prepare_env(data):
-    data = data.replace("$TEST_ENV_VALUE", "")
     return serialize_list(shlex.split(data))
 
 
@@ -190,7 +186,7 @@ def get_canonical_test_resources(unit):
 
 def java_srcdirs_to_data(unit, var, serialize_result=True):
     extra_data = []
-    for srcdir in (unit.get(var) or '').replace('$' + var, '').split():  # TODO(dimdim11) replace by get_subst
+    for srcdir in (unit.get_subst(var) or '').split():
         if srcdir == '.':
             srcdir = unit.get('MODDIR')
         if srcdir.startswith('${ARCADIA_ROOT}/') or srcdir.startswith('$ARCADIA_ROOT/'):
@@ -399,7 +395,7 @@ class CustomDependencies:
     @classmethod
     def nots_with_recipies(cls, unit, flat_args, spec_args):
         deps = flat_args[0]
-        recipes_lines = format_recipes(unit.get("TEST_RECIPES_VALUE")).strip().splitlines()
+        recipes_lines = format_recipes(unit.get_subst("TEST_RECIPES_VALUE")).strip().splitlines()
         if recipes_lines:
             deps = deps or []
             deps.extend([os.path.dirname(r.strip().split(" ")[0]) for r in recipes_lines])
@@ -921,9 +917,9 @@ class TestCwd:
 
     @classmethod
     def keywords_replaced(cls, unit, flat_args, spec_args):
-        test_cwd = unit.get('TEST_CWD_VALUE') or ''
+        test_cwd = unit.get_subst('TEST_CWD_VALUE') or ''
         if test_cwd:
-            test_cwd = test_cwd.replace("$TEST_CWD_VALUE", "").replace('"MACRO_CALLS_DELIM"', "").strip()
+            test_cwd = test_cwd.replace('"MACRO_CALLS_DELIM"', "").strip()
         return {cls.KEY: test_cwd}
 
     @classmethod
@@ -1329,7 +1325,7 @@ class TestEnv:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        return {cls.KEY: prepare_env(unit.get("TEST_ENV_VALUE"))}
+        return {cls.KEY: prepare_env(unit.get_subst("TEST_ENV_VALUE"))}
 
 
 class TestIosDeviceType:
@@ -1423,7 +1419,7 @@ class TestRecipes:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        return {cls.KEY: prepare_recipes(unit.get("TEST_RECIPES_VALUE"))}
+        return {cls.KEY: prepare_recipes(unit.get_subst("TEST_RECIPES_VALUE"))}
 
 
 class TestRunnerBin:

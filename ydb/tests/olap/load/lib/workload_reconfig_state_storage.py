@@ -44,6 +44,7 @@ class WorkloadReconfigStateStorageBase(WorkloadTestBase):
             nodes_percentage=100
         )
 
+
 @pytest.mark.skip(reason="Does not support custom configs")
 class TestWorkloadReconfigStateStorage(WorkloadReconfigStateStorageBase):
     timeout = int(get_external_param('workload_duration', 120))

@@ -23,6 +23,7 @@ PY3_LIBRARY()
         workload_node_broker.py
         workload_reconfig_state_storage.py
         workload_show_create.py
+        workload_cdc.py
         upload.py
 
     )

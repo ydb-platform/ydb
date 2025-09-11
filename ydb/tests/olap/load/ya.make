@@ -19,6 +19,7 @@ PY3TEST()
     ENV(TRANSFER_WORKLOAD_BINARY="ydb/tests/stress/transfer/transfer")
     ENV(RECONFIG_STATE_STORAGE_WORKLOAD_BINARY="ydb/tests/stress/reconfig_state_storage_workload/reconfig_state_storage_workload")
     ENV(SHOW_CREATE_WORKLOAD_BINARY="ydb/tests/stress/show_create/view/show_create_view")
+    ENV(CDC_WORKLOAD_BINARY="ydb/tests/stress/cdc/cdc")
     ENV(NEMESIS_BINARY="ydb/tests/tools/nemesis/driver/nemesis")
 
     TEST_SRCS (
@@ -43,6 +44,7 @@ PY3TEST()
         test_workload_transfer.py
         test_workload_reconfig_state_storage.py
         test_workload_show_create.py
+        test_workload_cdc.py
     )
 
     PEERDIR (
@@ -66,6 +68,7 @@ PY3TEST()
             ydb/tests/stress/transfer
             ydb/tests/stress/reconfig_state_storage_workload
             ydb/tests/stress/show_create/view
+            ydb/tests/stress/cdc
             ydb/tests/tools/nemesis/driver
         )
     ENDIF()

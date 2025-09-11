@@ -74,6 +74,10 @@ TString ReadAsyncReplicationQuery(const TFsPath& fsDirPath, const TLog* log) {
     return ReadFromFile(fsDirPath, log, NFiles::CreateAsyncReplication());
 }
 
+TString ReadTransferQuery(const TFsPath& fsDirPath, const TLog* log) {
+    return ReadFromFile(fsDirPath, log, NFiles::CreateTransfer());
+}
+
 TString ReadExternalDataSourceQuery(const TFsPath& fsDirPath, const TLog* log) {
     return ReadFromFile(fsDirPath, log, NFiles::CreateExternalDataSource());
 }
@@ -418,6 +422,10 @@ TRestoreResult TDelayedRestoreManager::Restore(const TDelayedRestoreCall& call) 
             const auto& [dbRestoreRoot, dbPathRelativeToRestoreRoot] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
             return Client->RestoreReplication(call.FsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, call.Settings);
         }
+        case ESchemeEntryType::Transfer: {
+            const auto& [dbRestoreRoot, dbPathRelativeToRestoreRoot] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
+            return Client->RestoreTransfer(call.FsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, call.Settings);
+        }
         default:
             ythrow TBadArgumentException() << "Attempting to restore an unexpected object from: " << call.FsPath;
     }
@@ -484,7 +492,7 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
     , RateLimiterClient(driver)
     , QueryClient(driver)
     , CmsClient(driver)
-    , ReplicationClient(driver)
+    , ReplicationClient(driver)    
     , Log(log)
     , DriverConfig(driver.GetConfig())
 {
@@ -984,6 +992,10 @@ namespace {
             types.emplace_back(ESchemeEntryType::Replication);
         }
 
+        if (IsFileExists(path.Child(NFiles::CreateTransfer().FileName))) {
+            types.emplace_back(ESchemeEntryType::Transfer);
+        }
+
         if (IsFileExists(path.Child(NFiles::CreateExternalDataSource().FileName))) {
             types.emplace_back(ESchemeEntryType::ExternalDataSource);
         }
@@ -1196,6 +1208,12 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
                 return Result<TRestoreResult>();
             }
             return RestoreReplication(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+        case ESchemeEntryType::Transfer:
+            if (delay) {
+                DelayedRestoreManager.Add(ESchemeEntryType::Transfer, fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+                return Result<TRestoreResult>();
+            }
+            return RestoreTransfer(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
         case ESchemeEntryType::SysView:
             return RestoreSysView(fsPath, dbPath, settings);
         default:
@@ -1540,6 +1558,49 @@ TRestoreResult TRestoreClient::RestoreReplication(
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
     if (!RewriteCreateQuery(query, "CREATE ASYNC REPLICATION `{}`", dbPath, issues)) {
+        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
+    }
+
+    auto result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
+        return session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    });
+
+    if (result.IsSuccess()) {
+        LOG_D("Created " << dbPath.Quote());
+        return RestorePermissions(fsPath, dbPath, settings, ExistingEntries.contains(dbPath), false);
+    }
+
+    LOG_E("Failed to create " << dbPath.Quote());
+    return Result<TRestoreResult>(dbPath, std::move(result));
+}
+
+TRestoreResult TRestoreClient::RestoreTransfer(
+    const TFsPath& fsPath,
+    const TString& dbRestoreRoot,
+    const TString& dbPathRelativeToRestoreRoot,
+    const TRestoreSettings& settings)
+{
+    LOG_D("Process " << fsPath.GetPath().Quote());
+
+    const TString dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
+    LOG_I("Restore transfer " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
+
+    if (settings.DryRun_) {
+        return CheckExistenceAndType(dbPath, ESchemeEntryType::Transfer);
+    }
+
+    auto query = ReadTransferQuery(fsPath, Log.get());
+    if (const auto secretName = GetSecretName(query)) {
+        if (auto result = CheckSecretExistence(secretName); !result.IsSuccess()) {
+            return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
+        }
+    }
+
+    NYql::TIssues issues;
+    if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
+        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
+    }
+    if (!RewriteCreateQuery(query, "CREATE TRANSFER `{}`", dbPath, issues)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 

@@ -197,6 +197,7 @@ class TRestoreClient {
     TRestoreResult RestoreView(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings);
     TRestoreResult RestoreTopic(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
     TRestoreResult RestoreReplication(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings);
+    TRestoreResult RestoreTransfer(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings);
     TRestoreResult RestoreCoordinationNode(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
     TRestoreResult RestoreDependentResources(const TFsPath& fsPath, const TString& dbPath);
     TRestoreResult RestoreRateLimiter(const TFsPath& fsPath, const TString& coordinationNodePath, const TString& resourcePath);
@@ -256,7 +257,7 @@ private:
     NRateLimiter::TRateLimiterClient RateLimiterClient;
     NQuery::TQueryClient QueryClient;
     NCms::TCmsClient CmsClient;
-    NReplication::TReplicationClient ReplicationClient;
+    NReplication::TReplicationClient ReplicationClient;    
     std::shared_ptr<TLog> Log;
     // Used to creating child drivers with different database settings.
     TDriverConfig DriverConfig;

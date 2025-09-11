@@ -1,0 +1,36 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config '"OptimizerFlags" '"ExtractMembersForPartitionsByKeys"))
+
+(let res_sink (DataSink 'result))
+
+(let list (AsList
+(AsStruct '('key (Uint32 '1)) '('subkey (Uint32 '2)) '('value (String 'a)) '('unused (Int32 '1)))
+(AsStruct '('key (Uint32 '1)) '('subkey (Uint32 '1)) '('value (String 'b)) '('unused (Int32 '1)))
+(AsStruct '('key (Uint32 '2)) '('subkey (Uint32 '4)) '('value (String 'c)) '('unused (Int32 '1)))
+(AsStruct '('key (Uint32 '1)) '('subkey (Uint32 '3)) '('value (String 'd)) '('unused (Int32 '1)))
+(AsStruct '('key (Uint32 '2)) '('subkey (Uint32 '6)) '('value (String 'e)) '('unused (Int32 '1)))
+(AsStruct '('key (Uint32 '3)) '('subkey (Uint32 '5)) '('value (String 'f)) '('unused (Int32 '1)))
+))
+
+
+(let keyExtractor (lambda '(x) (Member x 'key)))
+(let sortKeyExtractor (lambda '(x) (Member x 'subkey)))
+(let direction (Bool 'true))
+
+(let handler (lambda '(x) (Condense1 x
+    (lambda '(row) (AsStruct '('key (Member row 'key)) 
+        '('group (Concat (String '"values:") (Member row 'value)))))
+    (lambda '(row state) (AggrNotEquals (Member row 'key) (Member state 'key)))
+    (lambda '(row state) (AsStruct '('key (Member state 'key)) '('group 
+    (Concat (Concat (Member state 'group) (String '" ")) (Member row 'value)))))
+)))
+(let data (PartitionsByKeys (Iterator list) keyExtractor direction sortKeyExtractor handler))
+(let data (Collect data))
+(let data (ExtractMembers data '('group)))
+
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

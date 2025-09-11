@@ -14,20 +14,20 @@ def split_args(s):  # TODO quotes, escapes
 
 
 def extract_macro_calls(unit, macro_value_name, macro_calls_delim):
-    value = unit.get(macro_value_name)  # TODO(dimdim11) replace by get_subst
+    value = unit.get_subst(macro_value_name)
     if not value:
         return []
 
     return list(
         filter(
             None,
-            map(split_args, value.replace('$' + macro_value_name, '').split(macro_calls_delim)),
+            map(split_args, value.strip().split(macro_calls_delim)),
         )
     )
 
 
 def extract_macro_calls2(unit, macro_value_name):
-    value = unit.get(macro_value_name)  # TODO(dimdim11) replace by get_subst
+    value = unit.get_subst(macro_value_name)
     if not value:
         return []
 
@@ -197,7 +197,7 @@ def on_fill_jar_copy_resources_cmd(unit, *args):
     else:
         varname, srcdir, base_classes_dir, package, reslist = tuple(args)
     dest_dir = os.path.join(base_classes_dir, *package.split('.')) if package else base_classes_dir
-    var = unit.get(varname)
+    var = unit.get_nosubst(varname)
     var += ' && $FS_TOOLS copy_files {} {} {}'.format(
         srcdir if srcdir.startswith('"$') else '${CURDIR}/' + srcdir, dest_dir, reslist
     )
@@ -216,7 +216,7 @@ def on_fill_jar_gen_srcs(unit, *args):
     exclude_pos = args.index('EXCLUDE')
     globs = ' '.join(args[7:exclude_pos])
     excludes = ' '.join(args[exclude_pos + 1 :])
-    var = unit.get(varname)
+    var = unit.get_nosubst(varname)
     var += f' {args_delim} --append -d {srcdir} -s {java_list} -k {kt_list} -r {res_list} --include-patterns {globs}'
     if jar_type == 'SRC_JAR':
         var += ' --all-resources'

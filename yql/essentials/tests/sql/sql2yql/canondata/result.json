@@ -5137,6 +5137,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_optimizers-or_distributive_/sql.yql"
         }
     ],
+    "test_sql2yql.test[optimizers-pull_just_logical]": [
+        {
+            "checksum": "9ee16de5f0fc933ed4346d1805bb84ce",
+            "size": 2913,
+            "uri": "https://{canondata_backend}/995452/8dc1748517ba413680d0620ee72b2fd3c164bc2f/resource.tar.gz#test_sql2yql.test_optimizers-pull_just_logical_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[optimizers-total_order]": [
         {
             "checksum": "e48707d4dbc8b31bb61d14997ce3319d",
@@ -5226,6 +5233,13 @@
             "checksum": "10f7b89cfe882ce905570ef7b94040f2",
             "size": 1370,
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_optimizers-yql-20199_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[optimizers-yql-20363]": [
+        {
+            "checksum": "a06f31337a30b3a48d1cdb05a29e65f4",
+            "size": 2696,
+            "uri": "https://{canondata_backend}/1773845/fe7e8179b00c40d0490e546deadfa69d3c898235/resource.tar.gz#test_sql2yql.test_optimizers-yql-20363_/sql.yql"
         }
     ],
     "test_sql2yql.test[optimizers-yson_dup_serialize]": [
@@ -12062,6 +12076,11 @@
             "uri": "file://test_sql_format.test_optimizers-or_distributive_/formatted.sql"
         }
     ],
+    "test_sql_format.test[optimizers-pull_just_logical]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-pull_just_logical_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[optimizers-total_order]": [
         {
             "uri": "file://test_sql_format.test_optimizers-total_order_/formatted.sql"
@@ -12125,6 +12144,11 @@
     "test_sql_format.test[optimizers-yql-20199]": [
         {
             "uri": "file://test_sql_format.test_optimizers-yql-20199_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-yql-20363]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-yql-20363_/formatted.sql"
         }
     ],
     "test_sql_format.test[optimizers-yson_dup_serialize]": [

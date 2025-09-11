@@ -82,6 +82,12 @@ enum class ERuntimeClusterSelectionMode {
     Force    /* "force" */,
 };
 
+enum class EConvertDynamicTablesToStatic {
+    Disable         /* "disable" */,
+    Join            /* "join" */,
+    All             /* "all" */,
+};
+
 struct TYtSettings {
 private:
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
@@ -265,6 +271,8 @@ public:
     NCommon::TConfSetting<bool, Static> BlockMapJoin;
     NCommon::TConfSetting<NSize::TSize, Static> LookupJoinLimit;
     NCommon::TConfSetting<ui64, Static> LookupJoinMaxRows;
+    NCommon::TConfSetting<EConvertDynamicTablesToStatic, Static> ConvertDynamicTablesToStatic;
+    NCommon::TConfSetting<bool, Static> KeepMergeWithDynamicInput;
     NCommon::TConfSetting<NSize::TSize, Static> EvaluationTableSizeLimit;
     NCommon::TConfSetting<TSet<TString>, Static> DisableOptimizers;
     NCommon::TConfSetting<ui32, Static> MaxInputTables;

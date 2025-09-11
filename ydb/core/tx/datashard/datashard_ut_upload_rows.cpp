@@ -746,14 +746,13 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
-        //runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::RPC_REQUEST, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 2, false);
+        auto [shards, _] = CreateShardedTable(server, sender, "/Root", "table-1", 2, false);
 
         TVector<THolder<IEventHandle>> blockedEnqueueRecords;
         TVector<TActorId> requestedTablets;
@@ -775,13 +774,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         auto splitShard = [&](size_t shardId, size_t splitKey) {
             auto senderSplit = runtime.AllocateEdgeActor();
-            auto tablets = GetTableShards(server, senderSplit, "/Root/table-1");
-            UNIT_ASSERT(tablets.size() > shardId);
-            size_t wasTablets = tablets.size();
-            ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets.at(shardId), splitKey);
+            ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", shards.at(shardId), splitKey);
             WaitTxNotification(server, senderSplit, txId);
-            tablets = GetTableShards(server, senderSplit, "/Root/table-1");
-            UNIT_ASSERT(tablets.size() == wasTablets + 1);
+            auto tablets = GetTableShards(server, senderSplit, "/Root/table-1");
+            UNIT_ASSERT(tablets.size() == shards.size() + 1);
         };
 
 
@@ -790,11 +786,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         splitShard(0, 5);
 
         for (auto& ev : blockedEnqueueRecords) {
-            TEvDataShard::TEvUploadRowsRequest::TPtr* e = reinterpret_cast<TEvDataShard::TEvUploadRowsRequest::TPtr*>(&ev);
-
             auto response = MakeHolder<TEvDataShard::TEvUploadRowsResponse>();
             response->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
-            response->Record.SetTabletID(e->Get()->Get()->Record.GetTableId());
+            response->Record.SetTabletID(shards[0]);
             runtime.Send(ev->Sender, ev->Recipient, response.Release());
         }
         blockedEnqueueRecords.clear();

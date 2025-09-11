@@ -464,10 +464,6 @@ void CopyInfo(TDstMap& dst, TDeletedSet& deleted, const TSrcMap& src, TChangedSe
 }
 
 void TBlobStorageController::UpdateSystemViews() {
-    if (!AppData()->FeatureFlags.GetEnableSystemViews()) {
-        return;
-    }
-
     const TMonotonic now = TActivationContext::Monotonic();
     const TDuration expiration = TDuration::Seconds(15);
     for (auto& [key, value] : VSlots) {

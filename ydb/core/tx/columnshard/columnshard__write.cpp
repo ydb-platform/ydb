@@ -399,11 +399,17 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                 sendError("haven't lock for commit: " + ::ToString(commitOperation->GetLockId()),
                     NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
             } else {
+                THashSet<TSchemeShardLocalPathId> schemeShardLocalPathIds;
                 for (const auto& op : lockInfo->GetWriteOperations()) {
-                    const auto& opPathId = op->GetPathId();
-                    if (!TablesManager.ResolveInternalPathId(opPathId.GetSchemeShardLocalPathId(), false)) {
-                        //Table renamed or dropped
-                        sendError("unknown table: " + ::ToString(opPathId.GetSchemeShardLocalPathId()),
+                    schemeShardLocalPathIds.insert(op->GetPathId().GetSchemeShardLocalPathId());
+                }
+                for (const auto& ev: lockInfo->GetEvents()) {
+                    schemeShardLocalPathIds.insert(ev->GetPathId().GetSchemeShardLocalPathId());
+                }
+                for (const auto& p: schemeShardLocalPathIds) {
+                    if (!TablesManager.ResolveInternalPathId(p, false)) {
+                        //Table is renamed or dropped
+                        sendError("unknown table: " + ::ToString(p),
                             NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED);
                         return;
                     }

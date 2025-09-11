@@ -98,4 +98,16 @@ namespace NKikimr {
         }
     }
 
+    TString TBlobStorageGroupProxy::UnconfiguredStateReasonStr(EUnconfiguredStateReason reason) {
+        switch (reason) {
+            case EUnconfiguredStateReason::UnknownGroup:
+                return "UnknownGroup";
+            case EUnconfiguredStateReason::GenerationChanged:
+                return "GenerationChanged";
+            default:
+                Y_DEBUG_ABORT_S("Unknown EUnconfiguredStateReason value# " << static_cast<ui32>(reason));
+                return "UnknownReason";
+        }
+    }
+
 }//NKikimr

@@ -1,5 +1,7 @@
 #include "acl.h"
 
+#include <yt/yt/core/phoenix/type_def.h>
+
 #include <yt/yt/core/yson/pull_parser_deserialize.h>
 
 #include <yt/yt/core/ytree/fluent.h>
@@ -176,6 +178,16 @@ void Deserialize(TSerializableAccessControlList& acl, NYson::TYsonPullParserCurs
 {
     Deserialize(acl.Entries, cursor);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRowLevelAccessControlEntry::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, Expression);
+    PHOENIX_REGISTER_FIELD(2, InapplicableExpressionMode);
+}
+
+PHOENIX_DEFINE_TYPE(TRowLevelAccessControlEntry);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -97,6 +97,8 @@ public:
     std::shared_ptr<TSingleMetric> InputRows;
     std::vector<std::string> KeyColumns;
     std::vector<std::string> SortColumns;
+    TString HashFunc;
+    bool Parallel = false;
     bool CteConnection = false;
     ui32 CteIndentX = 0;
     ui32 CteOffsetY = 0;
@@ -111,9 +113,12 @@ public:
 class TOperatorInput {
 
 public:
+    // Internal
     ui32 OperatorId = 0;
+    // External
     ui32 PlanNodeId = 0;
     std::optional<ui32> StageId;
+    // CTE Ref
     TString PrecomputeRef;
     std::shared_ptr<TSingleMetric> Rows;
 
@@ -132,8 +137,7 @@ public:
     TString Info;
     std::shared_ptr<TSingleMetric> OutputRows;
     std::shared_ptr<TSingleMetric> OutputThroughput;
-    TOperatorInput Input1;
-    TOperatorInput Input2;
+    std::vector<TOperatorInput> Inputs;
     std::shared_ptr<TSingleMetric> InputThroughput;
     TString Estimations;
     bool Blocks = false;

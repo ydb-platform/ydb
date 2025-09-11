@@ -4,6 +4,9 @@
 
 #include <yt/yt/core/misc/arithmetic_formula.h>
 
+#include <yt/yt/core/phoenix/context.h>
+#include <yt/yt/core/phoenix/type_decl.h>
+
 #include <yt/yt/core/yson/consumer.h>
 
 #include <yt/yt/core/ytree/permission.h>
@@ -72,6 +75,11 @@ struct TRowLevelAccessControlEntry
 {
     std::string Expression;
     EInapplicableExpressionMode InapplicableExpressionMode;
+
+    using TLoadContext = NPhoenix::TLoadContext;
+    using TSaveContext = NPhoenix::TSaveContext;
+
+    PHOENIX_DECLARE_TYPE(TRowLevelAccessControlEntry, 0x01201ace);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

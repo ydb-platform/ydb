@@ -20,7 +20,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/grpc_services
     ydb/core/kqp
-    ydb/core/persqueue
+    ydb/core/persqueue/events
     ydb/core/persqueue/public/codecs
     ydb/core/persqueue/writer
     ydb/core/protos

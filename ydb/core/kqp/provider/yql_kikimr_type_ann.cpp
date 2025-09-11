@@ -13,6 +13,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
+#include <ydb/services/metadata/optimization/abstract.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/is_in.h>
@@ -2072,22 +2073,51 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleUpsertObject(TKiUpsertObject node, TExprContext& /*ctx*/) override {
+    template <typename TNode>
+    TStatus ValidateObjectNodeAnnotation(const TNode& node, TExprContext& ctx) {
+        const auto typeId = node.TypeId().Value();
+        NKikimr::NMetadata::IClassBehaviour::TPtr cBehaviour(NKikimr::NMetadata::IClassBehaviour::TFactory::Construct(typeId));
+        YQL_ENSURE(cBehaviour, "Unsupported object type: \"" << typeId << "\"");
+
+        if (const auto optimizationManager = cBehaviour->ConstructOptimizationManager()) {
+            return optimizationManager->ValidateObjectNodeAnnotation(node.Ptr(), ctx);
+        }
+
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleUpsertObject(TKiUpsertObject node, TExprContext& ctx) override {
+        if (const auto status = ValidateObjectNodeAnnotation(node, ctx); status != TStatus::Ok) {
+            return status;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleCreateObject(TKiCreateObject node, TExprContext& /*ctx*/) override {
+    virtual TStatus HandleCreateObject(TKiCreateObject node, TExprContext& ctx) override {
+        if (const auto status = ValidateObjectNodeAnnotation(node, ctx); status != TStatus::Ok) {
+            return status;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleAlterObject(TKiAlterObject node, TExprContext& /*ctx*/) override {
+    virtual TStatus HandleAlterObject(TKiAlterObject node, TExprContext& ctx) override {
+        if (const auto status = ValidateObjectNodeAnnotation(node, ctx); status != TStatus::Ok) {
+            return status;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleDropObject(TKiDropObject node, TExprContext& /*ctx*/) override {
+    virtual TStatus HandleDropObject(TKiDropObject node, TExprContext& ctx) override {
+        if (const auto status = ValidateObjectNodeAnnotation(node, ctx); status != TStatus::Ok) {
+            return status;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
         Middle,
     };
 
-    void TimestampReadImpl(const bool topicsAreFirstClassCitizen, const bool enableSkipMessagesWithObsoleteTimestamp, const TTimestampReadOptions options, const std::span<const ETimestampFnKind> timestampKinds, const bool check) {
+    void TimestampReadImpl(const bool topicsAreFirstClassCitizen, const bool enableSkipMessagesWithObsoleteTimestamp, const TTimestampReadOptions options, const std::span<const ETimestampFnKind> timestampKinds, const bool checkEarly, const ui32 maxHeadSkip) {
         auto createSetup = [=]() {
             NKikimrConfig::TFeatureFlags ff;
             ff.SetEnableTopicSplitMerge(true);
@@ -203,29 +203,32 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
                 << "CASE " << testCase.TimestampFn << " " << testCase.SessionId << ": " << stats.Size << " messages; " << stats.Early << " early messages" << "\n") << Flush;
         }
 
-        if (!check) {
+        for (const auto& [testCase, stats] : result) {
+            const auto [timestampFn, sessionId] = testCase;
+            const size_t expected = messages.size() - sessionId;
+            UNIT_ASSERT_GE_C(stats.Size + maxHeadSkip, expected, LabeledOutput(timestampFn, sessionId, stats.Size, expected, maxHeadSkip));
+        }
+        if (!checkEarly) {
             Cerr << "Test case skipped\n";
             return;
         }
         for (const auto& [testCase, stats] : result) {
             const auto [timestampFn, sessionId] = testCase;
-            UNIT_ASSERT_GE_C(stats.Size, messages.size() - sessionId, LabeledOutput(timestampFn, sessionId, stats.Size, messages.size() - sessionId));
-        }
-        for (const auto& [testCase, stats] : result) {
-            const auto [timestampFn, sessionId] = testCase;
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.Early, 0, LabeledOutput(timestampFn, sessionId));
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.Size, messages.size() - sessionId, LabeledOutput(timestampFn, sessionId));
+            const size_t expected = messages.size() - sessionId;
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.Early, 0, LabeledOutput(timestampFn, sessionId, stats.Size, expected));
+            UNIT_ASSERT_LE_C(stats.Size, expected, LabeledOutput(timestampFn, sessionId, stats.Size, expected));
         }
     }
 
     struct TTestRegistration {
         TTestRegistration() {
-            constexpr bool xfail = false; // TODO: change behaviour and replace with true
+            constexpr bool xfail = 0; // TODO: change behaviour and replace with true
+            constexpr ui64 xfailTimestampPositionMaxError = 1;
 
             const std::tuple<bool, TString, TTimestampReadOptions> options[]{
                 {true, "1MB", TTimestampReadOptions{.MessageSize = 1_MB,}},
-                {xfail, "6MB", TTimestampReadOptions{.MessageSize = 6_MB,}},
-                {xfail, "40MB", TTimestampReadOptions{.MessageSize = 40_MB, .MessageCount = 2,}},
+                {true, "6MB", TTimestampReadOptions{.MessageSize = 6_MB,}},
+                {true, "40MB", TTimestampReadOptions{.MessageSize = 40_MB, .MessageCount = 2,}},
             };
 
             const std::tuple<bool, TString, bool, bool> flags[]{
@@ -234,17 +237,17 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
                 {xfail, "LB", false, true},
             };
 
-            const std::tuple<bool, TString, std::vector<ETimestampFnKind>> readTimestampKinds[]{
-                {xfail, "exact", {ETimestampFnKind::Exact,}},
-                {true, "offset+middle", {ETimestampFnKind::Offset, ETimestampFnKind::Middle,}},
+            const std::tuple<bool, ui32, TString, std::vector<ETimestampFnKind>> readTimestampKinds[]{
+                {true, xfailTimestampPositionMaxError, "exact", {ETimestampFnKind::Exact,}},
+                {true, 0, "offset+middle", {ETimestampFnKind::Offset, ETimestampFnKind::Middle,}},
             };
 
             for (const auto& [optEnabled, optName, opt]: options) {
                 for (const auto& [flagsEnabled, flagsName, topicsAreFirstClassCitizen, enableSkipMessagesWithObsoleteTimestamp] : flags) {
-                    for (const auto& [tsEnabled, tsName, tsKinds]: readTimestampKinds) {
+                    for (const auto& [tsEnabled, tsMaxPositionError, tsName, tsKinds]: readTimestampKinds) {
                         Names.push_back(TStringBuilder() << "TimestampRead_" << optName << "_" << flagsName << "_" << tsName);
                         TCurrentTest::AddTest(Names.back().c_str(), [=](NUnitTest::TTestContext&) {
-                            TimestampReadImpl(topicsAreFirstClassCitizen, enableSkipMessagesWithObsoleteTimestamp, opt, tsKinds, optEnabled && flagsEnabled && tsEnabled);
+                            TimestampReadImpl(topicsAreFirstClassCitizen, enableSkipMessagesWithObsoleteTimestamp, opt, tsKinds, optEnabled && flagsEnabled && tsEnabled, tsMaxPositionError);
                         }, false);
                     }
                 }

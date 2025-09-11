@@ -5,21 +5,19 @@
 
 namespace NKikimr {
 
-class TMetadataActor : public TActorBootstrapped<TMetadataActor> {
+class TMetadataActor : public TActor<TMetadataActor> {
     TIntrusivePtr<TMetadataContext> MetadataCtx;
     NKikimrVDiskData::TMetadataEntryPoint MetadataEntryPoint;
 
     ui64 CurEntryPointLsn = 0;
     TActorId CommitNotifyId;
+    bool CommitInFlight = false;
 
-    friend class TActorBootstrapped<TMetadataActor>;
+    void WriteEntryPoint() {
+        if (CommitInFlight) {
+            return;
+        }
 
-    void Bootstrap(const TActorContext& ctx) {
-        Y_UNUSED(ctx);
-        TThis::Become(&TThis::StateFunc);
-    }
-
-    void WriteEntryPoint(const TActorContext& ctx) {
         NPDisk::TCommitRecord commitRecord;
         commitRecord.IsStartingPoint = true;
 
@@ -34,42 +32,45 @@ class TMetadataActor : public TActorBootstrapped<TMetadataActor> {
             MetadataCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureMetadata,
             commitRecord, data, seg, nullptr);
 
-        ctx.Send(MetadataCtx->LoggerId, msg.release());
+        Send(MetadataCtx->LoggerId, msg.release());
+
+        CommitInFlight = true;
     }
 
-    void Handle(TEvCommitMetadata::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvCommitVDiskMetadata::TPtr& ev) {
         CommitNotifyId = ev->Sender;
-        WriteEntryPoint(ctx);
+        WriteEntryPoint();
     }
 
-    void Handle(NPDisk::TEvLogResult::TPtr& ev, const TActorContext& ctx) {
-        CHECK_PDISK_RESPONSE(MetadataCtx->VCtx, ev, ctx);
+    void Handle(NPDisk::TEvLogResult::TPtr& ev) {
+        CHECK_PDISK_RESPONSE(MetadataCtx->VCtx, ev, TActivationContext::AsActorContext());
+
+        CommitInFlight = false;
 
         if (ev->Get()->Status == NKikimrProto::OK) {
             CurEntryPointLsn = ev->Get()->Results.back().Lsn;
             if (CommitNotifyId) {
-                ctx.Send(CommitNotifyId, new TEvCommitMetadataDone);
+                Send(CommitNotifyId, new TEvCommitVDiskMetadataDone);
                 CommitNotifyId = {};
             }
-            ctx.Send(MetadataCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::Metadata, CurEntryPointLsn));
+            Send(MetadataCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::Metadata, CurEntryPointLsn));
         }
     }
 
-    void Handle(NPDisk::TEvCutLog::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NPDisk::TEvCutLog::TPtr& ev) {
         if (CurEntryPointLsn < ev->Get()->FreeUpToLsn) {
-            WriteEntryPoint(ctx);
+            WriteEntryPoint();
         }
     }
 
-    void HandlePoison(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        Die(ctx);
+    void HandlePoison(TEvents::TEvPoisonPill::TPtr& /*ev*/, const TActorContext& /*ctx*/) {
+        PassAway();
     }
 
     STRICT_STFUNC(StateFunc,
-        HFunc(TEvCommitMetadata, Handle)
-        HFunc(NPDisk::TEvLogResult, Handle)
-        HFunc(NPDisk::TEvCutLog, Handle)
+        hFunc(TEvCommitVDiskMetadata, Handle)
+        hFunc(NPDisk::TEvLogResult, Handle)
+        hFunc(NPDisk::TEvCutLog, Handle)
         HFunc(TEvents::TEvPoisonPill, HandlePoison)
     )
 
@@ -82,7 +83,7 @@ public:
 
     TMetadataActor(TIntrusivePtr<TMetadataContext> metadataCtx,
             NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint)
-        : TActorBootstrapped<TMetadataActor>()
+        : TActor(&TThis::StateFunc)
         , MetadataCtx(std::move(metadataCtx))
         , MetadataEntryPoint(std::move(metadataEntryPoint))
     {}

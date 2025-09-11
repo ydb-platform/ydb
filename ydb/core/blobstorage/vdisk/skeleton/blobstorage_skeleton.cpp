@@ -1978,10 +1978,10 @@ namespace NKikimr {
 
             LocalRecoveryDoneEvent = std::move(ev);
 
-            ctx.Send(MetadataActorId, new TEvCommitMetadata);
+            ctx.Send(MetadataActorId, new TEvCommitVDiskMetadata);
         }
 
-        void HandleMetadata(TEvCommitMetadataDone::TPtr& /*ev*/, const TActorContext& ctx) {
+        void HandleMetadata(TEvCommitVDiskMetadataDone::TPtr& /*ev*/, const TActorContext& ctx) {
             auto& ev = LocalRecoveryDoneEvent;
 
             // run HugeBlobKeeper
@@ -2860,7 +2860,7 @@ namespace NKikimr {
             hFunc(NPDisk::TEvPreShredCompactVDisk, HandleShredEnqueue)
             hFunc(NPDisk::TEvShredVDisk, HandleShredEnqueue)
             hFunc(TEvNotifyChunksDeleted, Handle)
-            HFunc(TEvCommitMetadataDone, HandleMetadata)
+            HFunc(TEvCommitVDiskMetadataDone, HandleMetadata)
         )
 
         COUNTED_STRICT_STFUNC(StateSyncGuidRecovery,

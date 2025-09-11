@@ -116,8 +116,6 @@
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
-#include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
@@ -707,7 +705,7 @@ namespace Tests {
         // Setup discovery for typically used services on the node
         {
             TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
-            desc->Address = options.Host;
+            desc->Address = Settings->GrpcHost ? Settings->GrpcHost : options.Host;
             desc->Port = options.Port;
             desc->Ssl = !options.SslData.Empty();
 
@@ -1299,7 +1297,7 @@ namespace Tests {
             }
 
             NKikimr::NKqp::IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory = Settings->FederatedQuerySetupFactory;
-            if (Settings->InitializeFederatedQuerySetupFactory) {
+            if (Settings->InitializeFederatedQuerySetupFactory && GetRuntime()->GetAppData(nodeIdx).FeatureFlags.GetEnableScriptExecutionOperations()) {
                 const auto& queryServiceConfig = Settings->AppConfig->GetQueryServiceConfig();
 
                 NYql::NConnector::IClient::TPtr connectorClient;

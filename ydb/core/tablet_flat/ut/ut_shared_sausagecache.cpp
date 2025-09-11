@@ -30,9 +30,10 @@ void Increment(TRetriedCounters& retried, ui32 attempts) {
 
 struct TTxInitSchema : public ITransaction {
     
-    TTxInitSchema(ui32 tableId = NSharedCache::TableId, bool tryKeepInMemory = false)
+    TTxInitSchema(ui32 tableId = NSharedCache::TableId, bool tryKeepInMemory = false, std::optional<ui32> channel = {})
         : TableId(tableId)
         , TryKeepInMemory(tryKeepInMemory)
+        , Channel(channel)
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -50,8 +51,13 @@ struct TTxInitSchema : public ITransaction {
 
         if (TryKeepInMemory) {
             txc.DB.Alter()
-                .SetFamilyCacheMode(TableId, 0, NTable::NPage::ECacheMode::TryKeepInMemory)
-                .SetFamilyCache(TableId, 0, NTable::NPage::ECache::Once);
+                .SetFamilyCacheMode(TableId, NTable::TColumn::LeaderFamily, NTable::NPage::ECacheMode::TryKeepInMemory);
+        }
+
+        if (Channel) {
+            txc.DB.Alter()
+                .SetRoom(TableId, 1, *Channel, {*Channel}, *Channel)
+                .AddFamily(TableId, NTable::TColumn::LeaderFamily, 1);
         }
 
         return true;
@@ -64,6 +70,7 @@ struct TTxInitSchema : public ITransaction {
     NLocalDb::TCompactionPolicyPtr CompactionPolicy = NLocalDb::CreateDefaultUserTablePolicy();
     ui32 TableId;
     bool TryKeepInMemory;
+    std::optional<ui32> Channel;
 };
 
 struct TTxWriteRow : public ITransaction {
@@ -178,8 +185,7 @@ struct TTxTryKeepInMemory : public ITransaction {
         using namespace NTable::NPage;
 
         txc.DB.Alter()
-            .SetFamilyCacheMode(TableId, 0, TryKeepInMemory ? ECacheMode::TryKeepInMemory : ECacheMode::Regular)
-            .SetFamilyCache(TableId, 0, ECache::Once);
+            .SetFamilyCacheMode(TableId, 0, TryKeepInMemory ? ECacheMode::TryKeepInMemory : ECacheMode::Regular);
 
         return true;
     }
@@ -922,7 +928,7 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Basics) {
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    
+
     // make second table to try to preempt first table from cache
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(Table2Id, false) });
     // write 100 rows, each ~100KB (~10MB)
@@ -934,7 +940,6 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Basics) {
     env.SendSync(new NFake::TEvCompact(Table2Id));
     Cerr << "...waiting until second table compacted" << Endl;
     env.WaitFor<NFake::TEvCompacted>();
-
 
     TRetriedCounters retried;
     for (i64 key = 99; key >= 0; --key) {
@@ -1239,6 +1244,147 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Disabling) {
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(29_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 348);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+}
+
+Y_UNIT_TEST(TryKeepInMemoryMode_AfterCompaction) {
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    // x2 mem of in-mem table to prevent eviction during compaction
+    SetupSharedCache(env, 20_MB, true);
+
+    // count shared cache fetches of data pages of in-mem table
+    ui64 inMemFetchesCount = 0;
+    auto inMemFetchesObserver = env.Env.AddObserver<NBlockIO::TEvFetch>([&inMemFetchesCount] (const auto& ev) {
+        // in-mem table will be created with channel 2
+        if (ev->Get()->PageCollection->Label().Channel() == 2) {
+            ++inMemFetchesCount;
+        }
+    });
+
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, true, 2) });
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
+    }
+    Cerr << "...compacting first table" << Endl;
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until first table gen 0 compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until first table gen 1 compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+    // generations 2+ are not preserved in memory in the default user table compaction policy
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until first table gen 2 compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(20_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 249);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(20'000_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 234);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    // make second table to try to preempt first table from cache
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(Table2Id, false, 3) });
+    // write 100 rows, each ~200KB (~20MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(200 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(Table2Id, key, std::move(value)) });
+    }
+    Cerr << "...compacting second table" << Endl;
+    env.SendSync(new NFake::TEvCompact(Table2Id));
+    Cerr << "...waiting until second table compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(Table2Id, key, retried), true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 49, 6}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(20_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 183);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(26_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 275);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(23'000_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 129);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    // read from in-memory table, should be no more cache misses
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+    }
+
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(20_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 183);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(26_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 275);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(23'000_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 129);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    // should not be fetches for in-mem table
+    UNIT_ASSERT_VALUES_EQUAL(inMemFetchesCount, 0);
+
+    RestartAndClearCache(env, 10_MB);
+
+    // there are some fetches after restart and cache cleaning
+    UNIT_ASSERT_VALUES_EQUAL(inMemFetchesCount, 2);
+
+    // read from regular table, sould be some cache misses
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(Table2Id, key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 137);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(26_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 275);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(42_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 249);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    // read from in-memory table, should be no more cache misses and all read should be from private cache (no more CacheHit*)
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(TableId, key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 137);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(26_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 275);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(42_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 249);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    // no more fetches
+    UNIT_ASSERT_VALUES_EQUAL(inMemFetchesCount, 2);
 }
 
 }

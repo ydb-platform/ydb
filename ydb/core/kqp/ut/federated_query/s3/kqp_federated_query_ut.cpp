@@ -2989,6 +2989,55 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(GetObjectKeys(BUCKET).size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(BUCKET), 0);
     }
+
+    Y_UNIT_TEST(TestScriptExecutionsDisabled) {
+        const TString bucket = "test_bucket1";
+        CreateBucket(bucket);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableScriptExecutionOperations(false);
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+
+        auto kikimr = std::make_shared<TKikimrRunner>(NKqp::TKikimrSettings(appConfig)
+            .SetEnableExternalDataSources(true)
+            .SetEnableScriptExecutionOperations(false)
+            .SetInitFederatedQuerySetupFactory(true));
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+
+        constexpr char externalDataSourceName[] = "testSource";
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "location"_a = GetBucketLocation(bucket)
+            );
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+
+        {
+            const TString query = fmt::format(R"(
+                SELECT * FROM `{external_source}`.`/` WITH (
+                    FORMAT="raw",
+                    SCHEMA (
+                        Data String
+                    )
+                );)",
+                "external_source"_a = externalDataSourceName
+            );
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/testSource.[/] (external source factory is doesn't set), please contact internal support");
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

@@ -1186,17 +1186,18 @@ public:
             return;
         }
 
+        const auto& reattachState = TxManager->GetReattachState(ev->Get()->TabletId);
+
         const auto state = TxManager->GetState(ev->Get()->TabletId);
         if ((state == IKqpTransactionManager::PREPARED
                     || state == IKqpTransactionManager::EXECUTING)
                 && TxManager->ShouldReattach(ev->Get()->TabletId, TlsActivationContext->Now())) {
             // Disconnected while waiting for other shards to prepare
-            auto& reattachState = TxManager->GetReattachState(ev->Get()->TabletId);
             CA_LOG_N("Shard " << ev->Get()->TabletId << " delivery problem (reattaching in "
                         << reattachState.ReattachInfo.Delay << ")");
 
             Schedule(reattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(ev->Get()->TabletId));
-        } else if (state == IKqpTransactionManager::EXECUTING && !ev->Get()->NotDelivered) {
+        } else if (state == IKqpTransactionManager::EXECUTING && (!ev->Get()->NotDelivered || reattachState.Cookie != 0)) {
             TxManager->SetError(ev->Get()->TabletId);
             RuntimeError(
                 NYql::NDqProto::StatusIds::UNDETERMINED,
@@ -1209,7 +1210,7 @@ public:
         } else if (state == IKqpTransactionManager::PROCESSING
                 || state == IKqpTransactionManager::PREPARING
                 || state == IKqpTransactionManager::PREPARED
-                || (state == IKqpTransactionManager::EXECUTING && ev->Get()->NotDelivered)) {
+                || (state == IKqpTransactionManager::EXECUTING && (ev->Get()->NotDelivered && reattachState.Cookie == 0))) {
             TxManager->SetError(ev->Get()->TabletId);
             RuntimeError(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
@@ -1228,7 +1229,7 @@ public:
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletId();
 
-        auto& reattachState = TxManager->GetReattachState(shardId);
+        const auto& reattachState = TxManager->GetReattachState(shardId);
         if (reattachState.Cookie != ev->Cookie) {
             return;
         }
@@ -2948,6 +2949,13 @@ public:
         }
     }
 
+    static TString GetPQErrorMessage(const NKikimrPQ::TEvProposeTransactionResult& event, TStringBuf default_) {
+        if (event.ErrorsSize()) {
+            return event.GetErrors(0).GetReason();
+        }
+        return {default_.begin(), default_.end()};
+    }
+
     void HandleError(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
         auto& event = ev->Get()->Record;
         switch (event.GetStatus()) {
@@ -2962,7 +2970,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
-                TStringBuilder() << "Aborted proposal status for PQ. ",
+                GetPQErrorMessage(event, "Aborted proposal status for PQ. "),
                 {});
             return;
         case NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST:
@@ -2972,7 +2980,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::BAD_REQUEST,
                 NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-                TStringBuilder() << "Bad request proposal status for PQ. ",
+                GetPQErrorMessage(event, "Bad request proposal status for PQ. "),
                 {});
             return;
         case NKikimrPQ::TEvProposeTransactionResult::OVERLOADED:
@@ -2982,7 +2990,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::OVERLOADED,
                 NYql::TIssuesIds::KIKIMR_OVERLOADED,
-                TStringBuilder() << "Overloaded proposal status for PQ. ",
+                GetPQErrorMessage(event, "Overloaded proposal status for PQ. "),
                 {});
             return;
         case NKikimrPQ::TEvProposeTransactionResult::CANCELLED:
@@ -2992,7 +3000,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::CANCELLED,
                 NYql::TIssuesIds::KIKIMR_OPERATION_CANCELLED,
-                TStringBuilder() << "Cancelled proposal status for PQ. ",
+                GetPQErrorMessage(event, "Cancelled proposal status for PQ. "),
                 {});
             return;
         default:
@@ -3002,7 +3010,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                 NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                TStringBuilder() << "Undefined proposal status for PQ. ",
+                GetPQErrorMessage(event, "Undefined proposal status for PQ. "),
                 {});
             return;
         }

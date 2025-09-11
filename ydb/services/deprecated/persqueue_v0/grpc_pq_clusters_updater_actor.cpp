@@ -1,7 +1,7 @@
 #include "grpc_pq_clusters_updater_actor.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/persqueue/pq_database.h>
+#include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 

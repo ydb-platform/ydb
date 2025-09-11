@@ -189,14 +189,14 @@ void InitLogger(const NProto::TLoggingConfig& loggingConfig, bool startAsDaemon 
  *
  * @param backend - logger backend
  */
-void InitLogger(TAutoPtr<TLogBackend> backend, TFormatter formatter = LegacyFormat);
+void InitLogger(TAutoPtr<TLogBackend> backend, TFormatter formatter = LegacyFormat, bool isStrictFormatting = true);
 
 /**
  * @brief Initialize logger with concrete output stream.
  *
  * @param out - output stream
  */
-void InitLogger(IOutputStream* out, TFormatter formatter = LegacyFormat);
+void InitLogger(IOutputStream* out, TFormatter formatter = LegacyFormat, bool isStrictFormatting = true);
 
 void CleanupLogger();
 
@@ -205,8 +205,14 @@ void ReopenLog();
 class YqlLoggerScope {
 public:
     YqlLoggerScope(const TString& log, bool startAsDaemon = false) { InitLogger(log, startAsDaemon); }
-    YqlLoggerScope(TAutoPtr<TLogBackend> backend, TFormatter formatter = LegacyFormat) { InitLogger(backend, std::move(formatter)); }
-    YqlLoggerScope(IOutputStream* out, TFormatter formatter = LegacyFormat) { InitLogger(out, std::move(formatter)); }
+
+    YqlLoggerScope(TAutoPtr<TLogBackend> backend, TFormatter formatter = LegacyFormat, bool isStrictFormatting = true) {
+        InitLogger(backend, std::move(formatter), isStrictFormatting);
+    }
+
+    YqlLoggerScope(IOutputStream* out, TFormatter formatter = LegacyFormat, bool isStrictFormatting = true) {
+        InitLogger(out, std::move(formatter), isStrictFormatting);
+    }
 
     ~YqlLoggerScope() { CleanupLogger(); }
 };

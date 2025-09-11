@@ -12,8 +12,6 @@ from ydb.tests.library.compatibility.fixtures import MixedClusterFixture
 class TestStress(MixedClusterFixture):
     @pytest.fixture(autouse=True)
     def setup(self):
-        output_path = yatest.common.test_output_path()
-        self.output_f = open(os.path.join(output_path, "out.log"), "w")
         yield from self.setup_cluster(
             # uncomment for 64 datetime in tpc-h/tpc-ds
             # extra_feature_flags={"enable_table_datetime64": True},
@@ -68,14 +66,10 @@ class TestStress(MixedClusterFixture):
                 "--ttl",
                 "10",
             ],
-            stdout=self.output_f,
-            stderr=self.output_f,
         )
 
         yatest.common.execute(
             self.get_command_prefix_log(subcmds=["import", "--bulk-size", "1000", "-t", "1", "generator"], path=store_type),
-            stdout=self.output_f,
-            stderr=self.output_f,
             wait=True,
         )
         select = yatest.common.execute(
@@ -89,16 +83,12 @@ class TestStress(MixedClusterFixture):
                 str(timeout_scale * len(upload_commands)),
             ],
             wait=False,
-            stdout=self.output_f,
-            stderr=self.output_f,
         )
 
         for i, command in enumerate(upload_commands):
             yatest.common.execute(
                 command,
                 wait=True,
-                stdout=self.output_f,
-                stderr=self.output_f,
             )
 
         select.wait()
@@ -176,8 +166,8 @@ class TestStress(MixedClusterFixture):
                 store_type,
             ]
         )
-        yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(init_command, wait=True)
+        yatest.common.execute(run_command, wait=True)
 
     @pytest.mark.parametrize("store_type, date64", [
         pytest.param("row",    False, id="row"),
@@ -238,9 +228,9 @@ class TestStress(MixedClusterFixture):
             "5",  # in row tables we have to retry query by design
         ]
 
-        yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-        yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(init_command, wait=True)
+        yatest.common.execute(import_command, wait=True)
+        yatest.common.execute(run_command, wait=True)
 
     @pytest.mark.skip(reason="Not stabilized yet")
     @pytest.mark.parametrize("store_type, date64", [
@@ -305,6 +295,6 @@ class TestStress(MixedClusterFixture):
             "5",  # in row tables we have to retry query by design
         ]
 
-        yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-        yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(init_command, wait=True)
+        yatest.common.execute(import_command, wait=True)
+        yatest.common.execute(run_command, wait=True)

@@ -32,12 +32,10 @@ constexpr ui32 TypicalDisksInSubring = 8;
 
 constexpr ui32 MaxBatchedPutSize = 64 * 1024 - 512 - 5; // (MinHugeBlobInBytes - 1 - TDiskBlob::HugeBlobOverhead) for ssd and nvme
 
-const TDuration ProxyConfigurationTimeout = TDuration::Seconds(20);
-const ui32 ProxyRetryConfigurationInitialTimeout = 200;
-const ui32 ProxyRetryConfigurationMaxTimeout = 5000;
+const TDuration ProxyConfigurationTimeout = TDuration::Seconds(10);
 const ui64 UnconfiguredBufferSizeLimit = 32 << 20;
 
-const TDuration ProxyEstablishSessionsTimeout = TDuration::Seconds(100);
+const TDuration ProxyEstablishSessionsTimeout = TDuration::Seconds(5);
 
 const ui64 DsPutWakeupMs = 60000;
 

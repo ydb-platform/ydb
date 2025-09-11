@@ -3,8 +3,8 @@
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
 
-#include <ydb/core/persqueue/pq_database.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/pq_database.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>

@@ -9,6 +9,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/ut_backup_restore_common.h>
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -652,72 +653,43 @@ namespace {
             Run(Runtime(), Env(), tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
         }
 
-        void TestTopic(bool enablePermissions = false) {
-          EnvOptions().EnablePermissionsExport(enablePermissions);
-          Env();
-          ui64 txId = 100;
+        void TestTopic(bool enablePermissions = false, ui64 topicsCount = 1, ui64 consumersCount = 0) {
+            EnvOptions().EnablePermissionsExport(enablePermissions);
+            Env();
+            ui64 txId = 100;
+            
+            TVector<TString> requestItems;
+            TVector<NDescUT::TSimpleTopic> expected;
+            
+            for (ui64 i = 0; i < topicsCount; ++i) {
+                auto topic = NDescUT::TSimpleTopic(i, (topicsCount == 1 || i > 0) ? consumersCount : 0);
+                TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetPrivateProto().DebugString());
+                Env().TestWaitNotification(Runtime(), txId);
+                requestItems.push_back(topic.GetExportRequestItem());
+                expected.push_back(topic);
+            }
 
-          TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", R"(
-              Name: "Topic"
-              TotalGroupCount: 2
-              PartitionPerTablet: 1
-              PQTabletConfig {
-                  PartitionConfig {
-                      LifetimeSeconds: 10
-                  }
-              }
-          )");
-          Env().TestWaitNotification(Runtime(), txId);
+            auto exportRequest = NDescUT::TExportRequest(S3Port(), requestItems);
+      
+            auto schemeshardId = TTestTxConfig::SchemeShard;
+            TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", exportRequest.GetRequest(), "", "", Ydb::StatusIds::SUCCESS);
+            Env().TestWaitNotification(Runtime(), txId, schemeshardId);
 
-          auto request = Sprintf(R"(
-              ExportToS3Settings {
-                endpoint: "localhost:%d"
-                scheme: HTTP
-                items {
-                  source_path: "/MyRoot/Topic"
-                  destination_prefix: ""
+            TestGetExport(Runtime(), schemeshardId, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            for (ui64 i = 0; i < topicsCount; ++i) {
+                const auto& topicExpected = expected.at(i);
+                const auto& topicPath = topicExpected.GetPath();
+                UNIT_ASSERT(HasS3File(topicPath));
+                UNIT_ASSERT(topicExpected.CompareWithString(GetS3FileContent(topicPath)));
+
+                if (enablePermissions) {
+                    auto permissionsPath = topicExpected.GetPermissions().GetPath();
+                    UNIT_ASSERT(HasS3File(permissionsPath));
+                    UNIT_ASSERT(topicExpected.GetPermissions().CompareWithString(GetS3FileContent(permissionsPath)));
                 }
-              }
-          )", S3Port());
-
-          auto schemeshardId = TTestTxConfig::SchemeShard;
-          TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::SUCCESS);
-          Env().TestWaitNotification(Runtime(), txId, schemeshardId);
-
-          TestGetExport(Runtime(), schemeshardId, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-          UNIT_ASSERT(HasS3File("/create_topic.pb"));
-          UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/create_topic.pb"), R"(partitioning_settings {
-  min_active_partitions: 2
-  max_active_partitions: 1
-  auto_partitioning_settings {
-    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
-    partition_write_speed {
-      stabilization_window {
-        seconds: 300
-      }
-      up_utilization_percent: 80
-      down_utilization_percent: 20
-    }
-  }
-}
-retention_period {
-  seconds: 10
-}
-supported_codecs {
-}
-partition_write_speed_bytes_per_second: 50000000
-partition_write_burst_bytes: 50000000
-)");
-
-          if (enablePermissions) {
-            UNIT_ASSERT(HasS3File("/permissions.pb"));
-            UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/permissions.pb"), R"(actions {
-  change_owner: "root@builtin"
-}
-)");
-          }
-
-        };
+            }
+        }
 
     protected:
         TS3Mock::TSettings& S3Settings() {
@@ -2916,11 +2888,57 @@ attributes {
         }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", {}, true);
     }
 
-    Y_UNIT_TEST(Topics) {
+    Y_UNIT_TEST(TopicExport) {
       TestTopic();
     }
 
-    Y_UNIT_TEST(TopicsWithPermissions) {
+    Y_UNIT_TEST(TopicWithPermissionsExport) {
       TestTopic(true);
+    }
+
+    Y_UNIT_TEST(TopicsExport) {
+      TestTopic(false, 5, 4);
+    }
+
+    Y_UNIT_TEST(TopicsWithPermissionsExport) {
+      TestTopic(true, 5, 4);
+    }
+
+    Y_UNIT_TEST(ExportTableWithUniqueIndex) {
+      Env();
+      ui64 txId = 100;
+
+      TestCreateIndexedTable(Runtime(), ++txId, "/MyRoot", R"(
+          TableDescription {
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+          }
+          IndexDescription {
+            Name: "ByValue"
+            KeyColumnNames: ["value"]
+            Type: EIndexTypeGlobalUnique
+          }
+      )");
+      Env().TestWaitNotification(Runtime(), txId);
+
+      TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+          ExportToS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+              source_path: "/MyRoot/Table"
+              destination_prefix: ""
+            }
+          }
+      )", S3Port()));
+      Env().TestWaitNotification(Runtime(), txId);
+
+      TestDescribeResult(DescribePrivatePath(Runtime(), "/MyRoot/Table/ByValue"),
+            {NLs::PathExist,
+             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+             NLs::IndexKeys({"value"})});
     }
 }

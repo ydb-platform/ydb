@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(ArgonishTest) {
     };
 
     constexpr NArgonish::EInstructionSet MaxArch =
-#if !defined(_arm64_)
+#if defined(_x86_64_)
         NArgonish::EInstructionSet::AVX2
 #else
         NArgonish::EInstructionSet::REF

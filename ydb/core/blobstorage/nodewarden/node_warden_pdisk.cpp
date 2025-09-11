@@ -576,7 +576,7 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(PDiskKey.NodeId == SelfId().NodeId());
             Send(MakeBlobStoragePDiskID(PDiskKey.NodeId, PDiskKey.PDiskId), ConvertedEv.release(),
                 IEventHandle::FlagTrackDelivery);
-            Become(&TThis::StateFunc, TDuration::Seconds(10), new TEvents::TEvWakeup);
+            Become(&TThis::StateFunc, TDuration::Seconds(30), new TEvents::TEvWakeup);
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr /*ev*/) {

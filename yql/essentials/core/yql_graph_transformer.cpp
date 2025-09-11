@@ -2,6 +2,7 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/public/issue/yql_issue_manager.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -38,6 +39,7 @@ private:
 };
 
 class TCompositeGraphTransformer : public TGraphTransformerBase {
+    static constexpr ui64 MinAllocationDelta = 1000;
 public:
     TCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes, bool doCheckArguments)
         : Stages_(stages)
@@ -74,6 +76,7 @@ public:
             return TStatus::Ok;
         }
 
+        auto prevUniqueId = ctx.NextUniqueId;
         auto status = WithScope(ctx, [&]() {
             return Stages_[Index_].GetTransformer().Transform(input, output, ctx);
         });
@@ -92,6 +95,10 @@ public:
         Y_UNUSED(DoCheckArguments_);
         Y_UNUSED(CheckArgumentsCount_);
 #endif
+        if (ctx.NextUniqueId >= prevUniqueId + MinAllocationDelta) {
+            YQL_CLOG(DEBUG, Perf) << "Allocated " << (ctx.NextUniqueId - prevUniqueId) << " nodes after Transform, stage: " << Stages_[Index_].Name;
+        }
+
         status = HandleStatus(status);
         return status;
     }
@@ -103,9 +110,14 @@ public:
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         YQL_ENSURE(Index_ < Stages_.size());
+        auto prevUniqueId = ctx.NextUniqueId;
         auto status = WithScope(ctx, [&]() {
             return Stages_[Index_].GetTransformer().ApplyAsyncChanges(input, output, ctx);
         });
+
+        if (ctx.NextUniqueId >= prevUniqueId + MinAllocationDelta) {
+            YQL_CLOG(DEBUG, Perf) << "Allocated " << (ctx.NextUniqueId - prevUniqueId) << " nodes after ApplyAsyncChanges, stage: " << Stages_[Index_].Name;
+        }
 
         status = HandleStatus(status);
         return status;

@@ -169,13 +169,13 @@ void ValidateStats(const auto& result, bool isIdxLookupJoinEnabled, size_t right
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
         for (const auto& tableStat : stats.query_phases(0).table_access()) {
             if (tableStat.name() == "/Root/Left") {
-                UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), 7);
+                UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), leftTableReads);
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(tableStat.name(), "/Root/Right");
                 UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), rightTableReads);
             }
         }
-    } else if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+    } else if (true) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);

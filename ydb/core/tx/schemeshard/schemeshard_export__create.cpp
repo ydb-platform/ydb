@@ -1273,13 +1273,6 @@ private:
         }
 
         TExportInfo::TPtr exportInfo = Self->Exports.at(id);
-
-        if (exportInfo->State == EState::Cancellation) {
-            // Process the race:
-            // We were trying to cancel transaction, but it had been finished one moment before
-            return Self->Execute(Self->CreateTxCancelExportAck(id, CompletedTxId), ctx);
-        }
-
         NIceDb::TNiceDb db(txc.DB);
 
         switch (exportInfo->State) {

@@ -1495,10 +1495,8 @@ private:
 
         TImportInfo::TPtr importInfo = Self->Imports.at(id);
 
-        if (importInfo->State == EState::Cancellation) {
-            // Process the race:
-            // We were trying to cancel transaction, but it had been finished one moment before
-            return Self->Execute(Self->CreateTxCancelImportAck(id, CompletedTxId), ctx);
+        if (importInfo->State != EState::Waiting) {
+            return;
         }
 
         NIceDb::TNiceDb db(txc.DB);
@@ -1510,10 +1508,6 @@ private:
         Self->PersistImportItemState(db, *importInfo, itemIdx);
 
         Self->TxIdToImport.erase(txId);
-
-        if (importInfo->State != EState::Waiting) {
-            return;
-        }
 
         switch (item.State) {
         case EState::CreateSchemeObject:

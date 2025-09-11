@@ -203,9 +203,5 @@ ITransaction* TSchemeShard::CreateTxCancelExportAck(TEvSchemeShard::TEvCancelTxR
     return new TExport::TTxCancelAck(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxCancelExportAck(ui64 exportId, TTxId txId) {
-    return new TExport::TTxCancelAck(this, exportId, txId);
-}
-
 } // NSchemeShard
 } // NKikimr

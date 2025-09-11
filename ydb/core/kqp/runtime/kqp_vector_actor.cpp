@@ -1,5 +1,6 @@
 #include "kqp_vector_actor.h"
 #include "kqp_read_actor.h"
+#include "kqp_vector_level_cache_manager.h"
 
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/kmeans_clusters.h>
@@ -249,6 +250,15 @@ private:
         if (ReadingChildClusters) {
             return;
         }
+        
+        // Try to get data from cache first
+        if (TryGetFromCache(parent)) {
+            // Cache hit - continue processing without reading from level table
+            ContinueResolveClusters();
+            return;
+        }
+        
+        // Cache miss - read from level table
         ReadingChildClusters = true;
         ReadingChildClustersOf = parent;
         ReadUsingActor(parent);
@@ -382,13 +392,17 @@ private:
         TVector<TString> clusterRows;
         for (auto & pp: FetchedClusters) {
             clusterIds.push_back(pp.first);
-            clusterRows.push_back(std::move(pp.second));
+            clusterRows.push_back(pp.second); // Don't move - we need a copy for cache
         }
-        if (!clusters->SetClusters(std::move(clusterRows))) {
+        if (!clusters->SetClusters(TVector<TString>(clusterRows))) {
             // Clusters are invalid for some reason
             RuntimeError("Child clusters of "+std::to_string(ReadingChildClustersOf)+" are invalid", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
+        
+        // Store in cache before moving the data
+        StoreInCache(ReadingChildClustersOf, clusterIds, clusterRows);
+        
         FetchedClusters.clear();
         if (!ReadingChildClustersOf) {
             // Cache root clusters in RootClusters for future batches
@@ -494,6 +508,87 @@ private:
         ColumnTypeInfos.reserve(Settings.InputColumnTypesSize());
         for (size_t i = 0; i < Settings.InputColumnTypesSize(); i++) {
             ColumnTypeInfos.push_back(NScheme::TypeInfoFromProto(Settings.GetInputColumnTypes(i), Settings.GetInputColumnTypeInfos(i)));
+        }
+    }
+
+    /**
+     * Create cache key for level table data.
+     */
+    TKqpVectorLevelCache::TCacheKey CreateCacheKey(NTableIndex::NKMeans::TClusterId parent) {
+        return TKqpVectorLevelCache::TCacheKey(
+            Settings.GetLevelTable().GetTablePath(),
+            Settings.GetLevelTable().GetSchemaVersion(),
+            parent
+        );
+    }
+
+    /**
+     * Try to get cluster data from cache.
+     * Returns true if cache hit, false if cache miss.
+     */
+    bool TryGetFromCache(NTableIndex::NKMeans::TClusterId parent) {
+        try {
+            auto& cache = TKqpVectorLevelCacheManager::Instance().GetCache();
+            auto cacheKey = CreateCacheKey(parent);
+            
+            auto cachedData = cache.Get(cacheKey);
+            if (!cachedData) {
+                return false; // Cache miss
+            }
+            
+            // Recreate clusters from cached data
+            TString error;
+            auto clusters = cachedData->CreateClusters(error);
+            if (!clusters) {
+                CA_LOG_D("Failed to recreate clusters from cache: " << error);
+                return false;
+            }
+            
+            // Use cached data
+            if (!ReadingChildClustersOf) {
+                // Cache root clusters for future batches
+                RootClusters = std::move(clusters);
+                RootClusterIds = cachedData->ClusterIds;
+            } else {
+                CurClusters = std::move(clusters);
+                CurClusterIds = cachedData->ClusterIds;
+            }
+            
+            CA_LOG_D("Cache hit for parent cluster " << parent);
+            return true; // Cache hit
+        } catch (const std::exception& e) {
+            CA_LOG_D("Cache error: " << e.what());
+            return false; // Treat as cache miss on error
+        } catch (...) {
+            CA_LOG_D("Unknown cache error");
+            return false; // Treat as cache miss on error
+        }
+    }
+
+    /**
+     * Store cluster data in cache.
+     */
+    void StoreInCache(NTableIndex::NKMeans::TClusterId parent, 
+                     const TVector<ui64>& clusterIds,
+                     const TVector<TString>& clusterData) {
+        try {
+            auto& cache = TKqpVectorLevelCacheManager::Instance().GetCache();
+            auto cacheKey = CreateCacheKey(parent);
+            
+            auto cachedValue = std::make_shared<TKqpVectorLevelCache::TCacheValue>(
+                clusterIds, 
+                clusterData, 
+                Settings.GetIndexSettings()
+            );
+            
+            cache.Put(cacheKey, cachedValue);
+            CA_LOG_D("Stored in cache for parent cluster " << parent << ", " << clusterIds.size() << " clusters");
+        } catch (const std::exception& e) {
+            CA_LOG_D("Failed to store in cache: " << e.what());
+            // Continue execution - cache failure should not break the query
+        } catch (...) {
+            CA_LOG_D("Unknown error storing in cache");
+            // Continue execution - cache failure should not break the query
         }
     }
 

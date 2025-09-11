@@ -107,7 +107,8 @@ namespace NSQLTranslationV1 {
 
         IOutputStream& Error(NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
         IOutputStream& Error(NYql::TPosition pos, NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
-        bool Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function<void(IOutputStream&)> message);
+        bool Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function<void(IOutputStream&)> message,
+            bool forceError = false);
         IOutputStream& Info(NYql::TPosition pos);
 
         void SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action);
@@ -252,6 +253,7 @@ namespace NSQLTranslationV1 {
             NYql::ESeverity severity,
             NYql::TIssueCode code,
             NYql::TPosition pos,
+            bool forceError,
             bool& isError);
 
     public:
@@ -386,6 +388,7 @@ namespace NSQLTranslationV1 {
         bool EmitUnionMerge = false;
         bool OptimizeSimpleIlike = false;
         bool PersistableFlattenAndAggrExprs = false;
+        bool DisableLegacyNotNull = false;
         bool DebugPositions = false;
         bool StrictWarningAsError = false;
         TVector<size_t> ForAllStatementsParts;

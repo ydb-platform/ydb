@@ -191,7 +191,7 @@ struct TSelectRowsOptions
     //! Tune join row batch size.
     std::optional<i64> MaxJoinBatchSize;
     //! Determines the way statistics are aggregated across subqueries.
-    NQueryClient::EStatisticsAggregation StatisticsAggregation = NQueryClient::EStatisticsAggregation::None;
+    std::optional<NQueryClient::EStatisticsAggregation> StatisticsAggregation;
     //! Allow queries without any condition on key columns.
     bool AllowFullScan = true;
     //! Allow queries with join condition which implies foreign query with IN operator.

@@ -121,6 +121,10 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
         PersistableFlattenAndAggrExprs = true;
     }
 
+    if (settings.LangVer >= MakeLangVersion(2025, 4)) {
+        DisableLegacyNotNull = true;
+    }
+
     for (auto lib : settings.Libraries) {
         Libraries.emplace(lib, TLibraryStuff());
     }
@@ -193,19 +197,20 @@ IOutputStream& TContext::Error(NYql::TIssueCode code) {
 IOutputStream& TContext::Error(NYql::TPosition pos, NYql::TIssueCode code) {
     HasPendingErrors = true;
     bool isError;
-    return MakeIssue(TSeverityIds::S_ERROR, code, pos, isError);
+    return MakeIssue(TSeverityIds::S_ERROR, code, pos, false, isError);
 }
 
-bool TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function<void(IOutputStream&)> message) {
+bool TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function<void(IOutputStream&)> message,
+    bool forceError) {
     bool isError;
-    IOutputStream& out = MakeIssue(TSeverityIds::S_WARNING, code, pos, isError);
+    IOutputStream& out = MakeIssue(TSeverityIds::S_WARNING, code, pos, forceError, isError);
     message(out);
     return !StrictWarningAsError || !isError;
 }
 
 IOutputStream& TContext::Info(NYql::TPosition pos) {
     bool isError;
-    return MakeIssue(TSeverityIds::S_INFO, TIssuesIds::INFO, pos, isError);
+    return MakeIssue(TSeverityIds::S_INFO, TIssuesIds::INFO, pos, false, isError);
 }
 
 void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action) {
@@ -243,17 +248,24 @@ bool TContext::WarnUnusedHints() {
     });
 }
 
-IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TPosition pos, bool& isError) {
+IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TPosition pos,
+    bool forceError, bool& isError) {
     isError = (severity == TSeverityIds::S_ERROR);
 
     if (severity == TSeverityIds::S_WARNING) {
-        auto action = WarningPolicy.GetAction(code);
-        if (action == EWarningAction::ERROR) {
+        if (forceError) {
             severity = TSeverityIds::S_ERROR;
             HasPendingErrors = true;
             isError = true;
-        } else if (action == EWarningAction::DISABLE) {
-            return Cnull;
+        } else {
+            auto action = WarningPolicy.GetAction(code);
+            if (action == EWarningAction::ERROR) {
+                severity = TSeverityIds::S_ERROR;
+                HasPendingErrors = true;
+                isError = true;
+            } else if (action == EWarningAction::DISABLE) {
+                return Cnull;
+            }
         }
     }
 

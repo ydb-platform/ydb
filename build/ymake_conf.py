@@ -1434,6 +1434,18 @@ class GnuCompiler(Compiler):
         self.target = self.build.target
         self.tc = tc
 
+        self.debug_info_flags = [
+            '-g'
+        ]
+        if self.tc.is_clang and self.tc.version_at_least(14):
+            # DTCC-1231: Clang 14 has switched to DWARFv5 by defaulg
+            self.debug_info_flags.append('-fdebug-default-version=4')
+        if self.tc.is_clang and self.target.is_linux:
+            self.debug_info_flags.append('-ggnu-pubnames')
+            if self.build.is_release:
+                # Clang's more accurate debug info for sampling-PGO purposes. PGO only makes sense in release builds
+                self.debug_info_flags.append('-fdebug-info-for-profiling')
+
         self.c_foptions = [
             # Enable standard-conforming behavior and generate duplicate symbol error in case of duplicated global constants.
             # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85678#c0
@@ -1465,15 +1477,14 @@ class GnuCompiler(Compiler):
             self.c_foptions.append('-mlongcalls')
 
         if self.tc.is_clang:
-            self.c_foptions += [
-                # Set up output colorization
-                '-fcolor-diagnostics',
+            # Set up output colorization
+            self.c_foptions.append('-fcolor-diagnostics')
+            if self.tc.version_at_least(4):
                 # Enable aligned allocation
-                '-faligned-allocation',
-            ]
+                self.c_foptions.append('-faligned-allocation')
         elif self.tc.is_gcc:
-            if self.target.is_xtensa or self.target.is_tc32:
-                # Xtensa and tc32 toolchains does not support this flag
+            if self.target.is_tc32:
+                # tc32 toolchain does not support this flag
                 pass
             else:
                 self.c_foptions += [
@@ -1571,12 +1582,8 @@ class GnuCompiler(Compiler):
             ]
 
         elif self.tc.is_gcc:
-            if self.target.is_xtensa:
-                # Xtensa toolchain does not support this flags
-                pass
-            else:
-                self.c_foptions.append('-fno-delete-null-pointer-checks')
-                self.c_foptions.append('-fabi-version=8')
+            self.c_foptions.append('-fno-delete-null-pointer-checks')
+            self.c_foptions.append('-fabi-version=8')
 
     def configure_build_type(self):
         if self.build.is_valgrind:
@@ -1616,6 +1623,7 @@ class GnuCompiler(Compiler):
 
         emit('C_COMPILER', '"{}"'.format(self.tc.c_compiler))
         emit('OPTIMIZE', self.optimize)
+        emit('_DEBUG_INFO_FLAGS', self.debug_info_flags)
         emit('_C_FLAGS', self.c_flags)
         emit('_C_FOPTIONS', self.c_foptions)
         emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)

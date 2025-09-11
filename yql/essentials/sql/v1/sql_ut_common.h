@@ -1768,6 +1768,28 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
     }
 
+    Y_UNIT_TEST(LegacyNotNull2025_03) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2025, 3);
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(
+            R"sql(SELECT 1 NOT NULL)sql",
+            settings);
+
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(LegacyNotNull2025_04) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(
+            R"sql(SELECT 1 NOT NULL)sql",
+            settings);
+
+        UNIT_ASSERT(!res.Root);
+    }
+
     Y_UNIT_TEST(UnionAggregationTest) {
         NYql::TAstParseResult res = SqlToYql(R"(
             PRAGMA DisableEmitUnionMerge;

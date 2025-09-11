@@ -656,7 +656,9 @@ private:
         Y_ABORT_UNLESS(request.ResultSet.size() == 1);
         const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request.ResultSet.front();
 
-        if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable) {
+        if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable ||
+            entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied ||
+            entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
             return ReplyWithError(entry.Status, ctx);
         }
 

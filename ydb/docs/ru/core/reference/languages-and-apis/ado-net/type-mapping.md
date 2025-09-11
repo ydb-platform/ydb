@@ -37,7 +37,14 @@
 
 Чтобы передать значение с заданной точностью и масштабом (отличными от значений по умолчанию), укажите `Precision` и `Scale` у параметра YdbParameter. По умолчанию используется `Decimal(22, 9)`.
 
-Например для `Decimal(5, 3)`, нужно передать параметр `new YdbParameter { Value = 1.5m, Precision = 5, Scale = 3 }`.
+Пример кода ниже добавляет в базу данных запись со значением 1.5 и типом Decimal (с заданными параметрами Precision = 5, Scale = 3)
+```c#
+await new YdbCommand(ydbConnection)
+{
+    CommandText = $"INSERT INTO {tableName}(Id, Decimal) VALUES (1, @Decimal);",
+    Parameters = new YdbParameter { Name = "Decimal", Value = 1.5m, Precision = 5, Scale = 3 }
+}.ExecuteNonQueryAsync();
+```
 
 ## Таблица сопоставления типов на запись
 

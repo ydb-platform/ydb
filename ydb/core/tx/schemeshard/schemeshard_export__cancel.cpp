@@ -78,8 +78,8 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
                     continue;
                 }
 
-                exportInfo->State = TExportInfo::EState::Cancellation;
                 if (item.WaitTxId != InvalidTxId) {
+                    exportInfo->State = TExportInfo::EState::Cancellation;
                     Send(Self->SelfId(), CancelPropose(*exportInfo, item.WaitTxId), 0, exportInfo->Id);
                 }
             }

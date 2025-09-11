@@ -108,8 +108,8 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 }; // TTxCancel
 
 struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase {
-    ui64 ExportId;
-    TTxId TxId;
+    const ui64 ExportId;
+    const TTxId TxId;
 
     explicit TTxCancelAck(TSelf* self, ui64 exportId, TTxId txId)
         : TXxport::TTxBase(self)

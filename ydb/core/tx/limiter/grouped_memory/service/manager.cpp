@@ -68,6 +68,7 @@ void TManager::TryAllocateWaiting() {
             break;
         }
         auto it = ProcessesOrdered.find(*waitingIt);
+        AFL_VERIFY(it != ProcessesOrdered.end());
         TProcessMemory* process = it->second;
         if (!process->TryAllocateWaiting(1)) {
             ++waitingIt;
@@ -152,8 +153,8 @@ void TManager::UnregisterProcess(const ui64 externalProcessId) {
     Y_UNUSED(ProcessIds.ExtractInternalIdVerified(externalProcessId));
     auto processUsageAddress = it->second.BuildUsageAddress();
     AFL_VERIFY(ProcessesOrdered.erase(processUsageAddress));
+    WaitingProcesses.erase(processUsageAddress);
     it->second.Unregister();
-    UpdateWaitingProcesses(&it->second);
     Processes.erase(it);
     const ui64 nextInternalProcessId = ProcessIds.GetMinInternalIdDef(internalProcessId);
     if (internalProcessId < nextInternalProcessId) {

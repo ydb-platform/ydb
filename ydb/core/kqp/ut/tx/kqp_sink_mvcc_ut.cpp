@@ -425,14 +425,14 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
                                         .ExecuteQuery(R"(
                             INSERT INTO `/Root/KV` (Key) VALUES (100)
                     )",
-                                            NQuery::TTxControl::Tx(*tx1).CommitTx())
+                                            NQuery::TTxControl::Tx(tx1->GetId()).CommitTx())
                                         .GetValueSync();
                 UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, insertResult1.GetStatus(), insertResult1.GetIssues().ToString());
                 auto insertResult2 = session2
                                         .ExecuteQuery(R"(
                             INSERT INTO `/Root/KV` (Key) VALUES (100)
                     )",
-                                            NQuery::TTxControl::Tx(*tx2).CommitTx())
+                                            NQuery::TTxControl::Tx(tx2->GetId()).CommitTx())
                                         .GetValueSync();
                 UNIT_ASSERT_EQUAL_C(insertResult2.GetStatus(), NYdb::EStatus::ABORTED, insertResult2.GetIssues().ToString());
             } else {
@@ -441,14 +441,14 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
                                         .ExecuteQuery(R"(
                             INSERT INTO `/Root/KV` (Key) VALUES (100)
                     )",
-                                            NQuery::TTxControl::Tx(*tx1))
+                                            NQuery::TTxControl::Tx(tx1->GetId()))
                                         .GetValueSync();
                 UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, insertResult1.GetStatus(), insertResult1.GetIssues().ToString());
                 auto insertResult2 = session2
                                         .ExecuteQuery(R"(
                             INSERT INTO `/Root/KV` (Key) VALUES (100)
                     )",
-                                            NQuery::TTxControl::Tx(*tx2))
+                                            NQuery::TTxControl::Tx(tx2->GetId()))
                                         .GetValueSync();
                 UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, insertResult2.GetStatus(), insertResult2.GetIssues().ToString());
                 auto commitResult1 = tx1->Commit().GetValueSync();

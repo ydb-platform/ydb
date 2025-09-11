@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/api/client/nc_private/iam/v1/profile_service.grpc.pb.h>
+#include <util/datetime/base.h>
 
 class TProfileServiceMock : public nebius::iam::v1::ProfileService::Service {
 public:
@@ -15,6 +16,7 @@ public:
 
     THashSet<TString> AllowedTokens = { BEARER_VALID_USER_TOKEN, BEARER_VALID_SERVICE_TOKEN };
     TString UserAccountId = TString(USER_ACCOUNT_ID);
+    TDuration ResponseDelay = TDuration::Zero();
 
     grpc::Status Get(
         grpc::ServerContext* context,

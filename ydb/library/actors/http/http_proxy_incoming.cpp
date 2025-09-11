@@ -51,6 +51,9 @@ public:
     void CleanupRequest(THttpIncomingRequestPtr& request) {
         if (RecycleRequests) {
             request->Clear();
+            request->Content.clear();
+            TString().swap(request->Content);
+            static_cast<TBuffer&>(*request).Reset();
             RecycledRequests.push_back(std::move(request));
         } else {
             request = nullptr;
@@ -58,6 +61,11 @@ public:
     }
 
     void CleanupResponse(THttpOutgoingResponsePtr& response) {
+        response->Content.clear();
+        TString().swap(response->Content);
+        static_cast<TBuffer&>(*response).Reset();
+        response->DataChunks.clear();
+        response->Sensors.reset();
         CleanupRequest(response->Request);
         // TODO: maybe recycle too?
         response = nullptr;

@@ -1515,6 +1515,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TString WhoamiResponse;
         TString ExpectedStatus;
         NMvp::EAccessServiceType AccessServiceType = NMvp::nebius_v1;
+        TDuration ProfileResponseDelay = TDuration::Zero();
 
         TWhoamiContext(TStringBuf token, TString whoamiResponse, TStringBuf expectedStatus)
             : Token(token)
@@ -1566,6 +1567,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
         static TString GetViewerResponse307() {
             return MakeHttpResponse("307 Temporary Redirect", "", "text/plain", {{"Location", "/viewer/whoami"}});
         }
+
+        static TString GetViewerResponse404() {
+            return MakeHttpResponse("404 Not Found", "Not Found");
+        }
     };
 
     NJson::TJsonValue OidcWhoamiExtendedInfoTest(const TWhoamiContext& context) {
@@ -1585,6 +1590,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         auto profileMock = std::make_unique<TProfileServiceMock>();
+        profileMock->ResponseDelay = context.ProfileResponseDelay;
         auto grpcServer = CreateProfileServiceMock(profileMock.get(), settings.WhoamiExtendedInfoEndpoint);
 
         // oidc extends whoami
@@ -1715,6 +1721,16 @@ Y_UNIT_TEST_SUITE(Mvp) {
     Y_UNIT_TEST(OidcWhoamiForward307) {
         auto json = OidcWhoamiExtendedInfoTest(
             TWhoamiContext(TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse307(), "307"));
+        UNIT_ASSERT(!json.Has(USER_SID));
+        UNIT_ASSERT(!json.Has(ORIGINAL_USER_TOKEN));
+        UNIT_ASSERT(!json.Has(EXTENDED_INFO));
+        UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
+    }
+
+    Y_UNIT_TEST(OidcWhoamiDelayedIam404) {
+        TWhoamiContext ctx(TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse404(), "404");
+        ctx.ProfileResponseDelay = TDuration::Seconds(1);
+        auto json = OidcWhoamiExtendedInfoTest(ctx);
         UNIT_ASSERT(!json.Has(USER_SID));
         UNIT_ASSERT(!json.Has(ORIGINAL_USER_TOKEN));
         UNIT_ASSERT(!json.Has(EXTENDED_INFO));

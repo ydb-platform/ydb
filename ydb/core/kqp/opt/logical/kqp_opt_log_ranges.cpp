@@ -269,11 +269,13 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
                     .Index(indexName.Cast())
                     .Done();
             } else {
+                TKqpStreamLookupSettings settings;
+                settings.Strategy = EStreamLookupStrategyType::LookupRows;
                 readInput = Build<TKqlStreamLookupTable>(ctx, read.Pos())
                     .Table(read.Table())
                     .LookupKeys(lookupKeys)
                     .Columns(read.Columns())
-                    .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+                    .Settings(settings.BuildNode(ctx, read.Pos()))
                     .Done();
             }
         } else {
@@ -480,11 +482,13 @@ TExprBase KqpRewriteLookupTable(const TExprBase& node, TExprContext& ctx, const 
         return node;
     }
 
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
     return Build<TKqlStreamLookupTable>(ctx, lookup.Pos())
         .Table(lookup.Table())
         .LookupKeys(lookup.LookupKeys())
         .Columns(lookup.Columns())
-        .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+        .Settings(settings.BuildNode(ctx, lookup.Pos()))
         .Done();
 }
 

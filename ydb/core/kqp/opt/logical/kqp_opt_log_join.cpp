@@ -187,6 +187,8 @@ TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos,
 {
     if (kqpCtx.IsScanQuery()) {
         YQL_ENSURE(kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin, "Stream lookup is not enabled for index lookup join");
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
         return Build<TKqlStreamLookupIndex>(ctx, pos)
             .Table(table)
             .LookupKeys<TCoSkipNullMembers>()
@@ -198,7 +200,7 @@ TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos,
             .Columns(columns)
             .Index()
                 .Build(indexName)
-            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+            .Settings(settings.BuildNode(ctx, pos))
             .Done();
     }
 
@@ -222,6 +224,8 @@ TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos,
 {
     if (kqpCtx.IsScanQuery()) {
         YQL_ENSURE(kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin, "Stream lookup is not enabled for index lookup join");
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
         return Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(table)
             .LookupKeys<TCoSkipNullMembers>()
@@ -231,11 +235,13 @@ TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos,
                     .Build()
                 .Build()
             .Columns(columns)
-            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+            .Settings(settings.BuildNode(ctx, pos))
             .Done();
     }
 
     if (kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
         return Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(table)
             .LookupKeys<TCoSkipNullMembers>()
@@ -245,7 +251,7 @@ TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos,
                     .Build()
                 .Build()
             .Columns(columns)
-            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+            .Settings(settings.BuildNode(ctx, pos))
             .Done();
     }
 
@@ -340,6 +346,7 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
     const TString& indexName,
     const TPrefixLookup& rightLookup,
     const TKqpMatchReadResult& rightReadMatch,
+    const THashMap<TString, TString> rightTableUnmatchedJoinKeys,
     TExprContext& ctx)
 {
     TString leftLabel = join.LeftLabel().Maybe<TCoAtom>() ? TString(join.LeftLabel().Cast<TCoAtom>().Value()) : "";
@@ -397,9 +404,11 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
         }
     }
 
-    auto strategy = join.JoinType().Value() == "LeftSemi"
-        ? TKqpStreamLookupSemiJoinStrategyName
-        : TKqpStreamLookupJoinStrategyName;
+    TKqpStreamLookupSettings settings;
+    settings.AllowNullKeysPrefixSize = rightLookup.PrefixSize;
+    settings.Strategy = join.JoinType().Value() == "LeftSemi"
+        ? EStreamLookupStrategyType::LookupSemiJoinRows
+        : EStreamLookupStrategyType::LookupJoinRows;
 
     TMaybeNode<TExprBase> lookupJoin;
     if (indexName) {
@@ -408,136 +417,102 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
             .LookupKeys(leftInput)
             .Columns(lookupColumns.Cast())
             .Index().Build(indexName)
-            .LookupStrategy().Build(strategy)
+            .Settings(settings.BuildNode(ctx, join.Pos()))
             .Done();
     } else {
         lookupJoin = Build<TKqlStreamLookupTable>(ctx, join.Pos())
             .Table(rightLookup.MainTable)
             .LookupKeys(leftInput)
             .Columns(lookupColumns.Cast())
-            .LookupStrategy().Build(strategy)
+            .Settings(settings.BuildNode(ctx, join.Pos()))
             .Done();
     }
 
-    // Stream lookup join output: stream<tuple<left_row_struct, optional<right_row_struct>>>
+    // Stream lookup join output: stream<tuple<left_row_struct, optional<right_row_struct>, ui64>>
     // so we should apply filters to second element of tuple for each row
+    auto arg = Build<TCoArgument>(ctx, join.Pos()).Name("_join_tuple_argument").Done();
+    TExprBase maybeLeftRow = Build<TCoNth>(ctx, join.Pos())
+        .Tuple(arg)
+        .Index().Value("0").Build()
+        .Done();
+
+    TExprBase maybeRightRow = Build<TCoNth>(ctx, join.Pos())
+        .Tuple(arg)
+        .Index().Value("1").Build()
+        .Done();
+
+    TExprBase newSecondElement = maybeRightRow;
+
+    if (!rightTableUnmatchedJoinKeys.empty()) {
+        TVector<TExprBase> onConditions;
+
+        for(auto [rightJoinKey, leftJoinKey] : rightTableUnmatchedJoinKeys) {
+            onConditions.push_back(
+                Build<TCoCmpEqual>(ctx, join.Pos())
+                    .Left<TCoMember>()
+                        .Struct(maybeLeftRow)
+                        .Name<TCoAtom>().Build(leftJoinKey)
+                        .Build()
+                    .Right<TCoMember>()
+                        .Struct(maybeRightRow)
+                        .Name<TCoAtom>().Build(rightJoinKey)
+                        .Build()
+                    .Done()
+            );
+        }
+
+        newSecondElement = Build<TCoOptionalIf>(ctx, join.Pos())
+            .Predicate<TCoCoalesce>()
+                .Predicate<TCoAnd>()
+                    .Add(onConditions)
+                    .Build()
+                .Value<TCoBool>()
+                    .Literal().Build("false")
+                    .Build()
+                .Build()
+            .Value<TCoUnwrap>()
+                .Optional(newSecondElement)
+                .Build()
+            .Done();
+    }
 
     if (extraRightFilter.IsValid()) {
-        lookupJoin = Build<TCoMap>(ctx, join.Pos())
-            .Input(lookupJoin.Cast())
-            .Lambda()
-                .Args({"tuple"})
-                .Body<TExprList>()
-                    .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("0").Build()
-                        .Build()
-                    .Add<TCoFlatMap>()
-                        .Input<TCoNth>()
-                            .Tuple("tuple")
-                            .Index().Value("1").Build()
-                            .Build()
-                        .Lambda(ctx.DeepCopyLambda(extraRightFilter.Cast().Ref()))
-                        .Build()    
-                    .Build()  
-                .Build()    
+        newSecondElement = Build<TCoFlatMap>(ctx, join.Pos())
+            .Input(newSecondElement)
+            .Lambda(ctx.DeepCopyLambda(extraRightFilter.Cast().Ref()))
             .Done();
     }
 
-    if (rightReadMatch.ExtractMembers) {
-        lookupJoin = Build<TCoMap>(ctx, join.Pos())
-            .Input(lookupJoin.Cast())
-            .Lambda()
-                .Args({"tuple"})
-                .Body<TExprList>()
-                    .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("0").Build()
-                        .Build()
-                    .Add<TCoExtractMembers>()
-                        .Input<TCoNth>()
-                            .Tuple("tuple")
-                            .Index().Value("1").Build()
-                            .Build()
-                        .Members(rightReadMatch.ExtractMembers.Cast().Members())
-                        .Build()    
-                    .Build()
-                .Build()
-            .Done();
-    }    
+    newSecondElement = rightReadMatch.BuildProcessNodes(newSecondElement, ctx);
 
-    if (rightReadMatch.FilterNullMembers) {
+    if (newSecondElement.Raw() != maybeRightRow.Raw()) {
         lookupJoin = Build<TCoMap>(ctx, join.Pos())
             .Input(lookupJoin.Cast())
             .Lambda()
-                .Args({"tuple"})
+                .Args({arg})
                 .Body<TExprList>()
                     .Add<TCoNth>()
-                        .Tuple("tuple")
+                        .Tuple(arg)
                         .Index().Value("0").Build()
                         .Build()
-                    .Add<TCoFilterNullMembers>()
-                        .Input<TCoNth>()
-                            .Tuple("tuple")
-                            .Index().Value("1").Build()
-                            .Build()
-                        .Members(rightReadMatch.FilterNullMembers.Cast().Members())
-                        .Build()    
-                    .Build()
-                .Build()
-            .Done();
-    }
-    
-    if (rightReadMatch.SkipNullMembers) {
-        lookupJoin = Build<TCoMap>(ctx, join.Pos())
-            .Input(lookupJoin.Cast())
-            .Lambda()
-                .Args({"tuple"})
-                .Body<TExprList>()
+                    .Add(newSecondElement)
                     .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("0").Build()
+                        .Tuple(arg)
+                        .Index().Value("2").Build()
                         .Build()
-                    .Add<TCoSkipNullMembers>()
-                        .Input<TCoNth>()
-                            .Tuple("tuple")
-                            .Index().Value("1").Build()
-                            .Build()
-                        .Members(rightReadMatch.SkipNullMembers.Cast().Members())
-                        .Build()    
                     .Build()
                 .Build()
             .Done();
     }
 
-    if (rightReadMatch.FlatMap) {
-        lookupJoin = Build<TCoMap>(ctx, join.Pos())
-            .Input(lookupJoin.Cast())
-            .Lambda()
-                .Args({"tuple"})
-                .Body<TExprList>()
-                    .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("0").Build()
-                        .Build()
-                    .Add<TCoFlatMap>()
-                        .Input<TCoNth>()
-                            .Tuple("tuple")
-                            .Index().Value("1").Build()
-                            .Build()
-                        .Lambda(rightReadMatch.FlatMap.Cast().Lambda())
-                        .Build()    
-                    .Build()  
-                .Build()    
-            .Done();
-    }
-
-    return Build<TKqlIndexLookupJoin>(ctx, join.Pos())
+    auto builtJoin = Build<TKqlIndexLookupJoin>(ctx, join.Pos())
         .Input(lookupJoin.Cast())
         .LeftLabel().Build(leftLabel)
         .RightLabel().Build(rightLabel)
         .JoinType(join.JoinType())
         .Done();
+
+    return builtJoin;
 }
 
 
@@ -591,6 +566,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     }
 
     TMap<std::string_view, TString> rightJoinKeyToLeft;
+    THashMap<TString, TString> rightTableUnmatchedJoinKeys;
     TVector<TCoAtom> rightKeyColumns;
     rightKeyColumns.reserve(join.JoinKeys().Size());
     TSet<TString> leftJoinKeys;
@@ -604,6 +580,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
             : keyTuple.LeftColumn().StringValue();
 
         rightKeyColumns.emplace_back(keyTuple.RightColumn()); // unique elements
+        rightTableUnmatchedJoinKeys.emplace(TString(keyTuple.RightColumn().Value()), TString(leftKey));
 
         auto [iter, newValue] = rightJoinKeyToLeft.emplace(keyTuple.RightColumn().Value(), leftKey);
         if (!newValue) {
@@ -629,6 +606,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     ui32 fixedPrefix = 0;
     TSet<TString> deduplicateLeftColumns;
     TVector<TExprBase> prefixFilters;
+
     for (auto& rightColumnName : rightTableDesc.Metadata->KeyColumnNames) {
         TExprNode::TPtr member;
 
@@ -715,6 +693,8 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                 }
             }
         }
+
+        rightTableUnmatchedJoinKeys.erase(rightColumnName);
 
         lookupMembers.emplace_back(
             Build<TExprList>(ctx, join.Pos())
@@ -804,14 +784,16 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     if (useStreamIndexLookupJoin && join.JoinType().Value() != "RightSemi") {
         TMaybeNode<TExprBase> joinKeyPredicate;
 
-        if (!equalLeftKeysConditions.empty()) {
+        TVector<TExprBase> preJoinConditions = prefixFilters;
+        if (!equalLeftKeysConditions.empty() || !preJoinConditions.empty()) {
             for (auto& cond : equalLeftKeysConditions) {
                 cond = TExprBase(ctx.ReplaceNode(std::move(cond.Ptr()), row.Ref(), leftRowArg.Ptr()));
+                preJoinConditions.push_back(cond);
             }
 
             joinKeyPredicate = Build<TCoCoalesce>(ctx, join.Pos())
                 .Predicate<TCoAnd>()
-                    .Add(equalLeftKeysConditions)
+                    .Add(preJoinConditions)
                     .Build()
                 .Value<TCoBool>()
                     .Literal().Build("false")
@@ -839,17 +821,17 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
             .Input(leftData)
             .Lambda()
                 .Args({leftRowArg})
-                .Body<TCoFlatMap>()
+                .Body<TCoMap>()
                     .Input(rightPrefixExpr.Cast())
                     .Lambda()
                         .Args({prefixRowArg})
-                        .Body(wrapWithPrefixFilters(leftRowTuple))
+                        .Body(leftRowTuple)
                         .Build()
                     .Build()
                 .Build()
             .Done();
 
-        return BuildKqpStreamIndexLookupJoin(join, leftInput, indexName, *prefixLookup, *rightReadMatch, ctx);
+        return BuildKqpStreamIndexLookupJoin(join, leftInput, indexName, *prefixLookup, *rightReadMatch, rightTableUnmatchedJoinKeys, ctx);
     }
 
     auto leftDataDeduplicated = DeduplicateByMembers(leftData, filter, deduplicateLeftColumns, ctx, join.Pos());

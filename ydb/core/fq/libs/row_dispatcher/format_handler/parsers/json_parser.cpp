@@ -78,8 +78,8 @@ private:
 
 class TColumnParser {
 public:
-    const std::string Name;  // Used for column index by std::string_view
-    const TString TypeYson;
+    std::string Name;  // Used for column index by std::string_view
+    TString TypeYson;
 
 public:
     TColumnParser(const TString& name, const TString& typeYson, ui64 maxNumberRows)
@@ -91,6 +91,7 @@ public:
     }
 
     TStatus InitParser(const NKikimr::NMiniKQL::TType* typeMkql) {
+        IsOptional = false;
         return Status = ExtractDataSlot(typeMkql);
     }
 
@@ -326,10 +327,10 @@ public:
 
 public:
     TJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters)
-        : TBase(std::move(consumer), __LOCATION__, counters)
+        : TBase(std::move(consumer), __LOCATION__, config.FunctionRegistry, counters)
         , Config(config)
         , NumberColumns(Consumer->GetColumns().size())
-        , MaxNumberRows((config.BufferCellCount - 1) / NumberColumns + 1)
+        , MaxNumberRows(GetMaxNumberRows(config, NumberColumns))
         , LogPrefix("TJsonParser: ")
         , ParsedValues(NumberColumns)
     {
@@ -339,9 +340,7 @@ public:
         }
 
         ColumnsIndex.reserve(NumberColumns);
-        for (size_t i = 0; i < NumberColumns; i++) {
-            ColumnsIndex.emplace(std::string_view(Columns[i].Name), i);
-        }
+        FillColumnsIndex();
 
         for (size_t i = 0; i < NumberColumns; i++) {
             ParsedValues[i].resize(MaxNumberRows);
@@ -400,6 +399,46 @@ public:
         } else {
             LOG_ROW_DISPATCHER_TRACE("Refresh, skip parsing, buffer creation duration: " << creationDuration);
         }
+    }
+
+    TStatus ChangeConsumer(IParsedDataConsumer::TPtr consumer) override {
+        Refresh(true);
+
+        if (auto status = TBase::ChangeConsumer(std::move(consumer)); status.IsFail()) {
+            return status;
+        }
+
+        NumberColumns = Consumer->GetColumns().size();
+        MaxNumberRows = GetMaxNumberRows(Config, NumberColumns);
+
+        LOG_ROW_DISPATCHER_DEBUG("Parser columns count changed from " << Columns.size() << " to " << NumberColumns);
+        if (Columns.size() > NumberColumns) {
+            Columns.erase(Columns.begin() + NumberColumns, Columns.end());
+            ParsedValues.resize(NumberColumns);
+        }
+
+        const auto& columns = Consumer->GetColumns();
+        for (size_t i = 0; i < columns.size(); i++) {
+            const auto& column = columns[i];
+            if (Columns.size() <= i) {
+                Columns.emplace_back(column.Name, column.TypeYson, MaxNumberRows);
+            } else {
+                Columns[i].Name = column.Name;
+                Columns[i].TypeYson = column.TypeYson;
+            }
+        }
+
+        ColumnsIndex.clear();
+        FillColumnsIndex();
+
+        for (size_t i = 0; i < NumberColumns; i++) {
+            if (ParsedValues.size() <= i) {
+                ParsedValues.emplace_back();
+            }
+            ParsedValues[i].resize(MaxNumberRows);
+        }
+
+        return InitColumnsParsers();
     }
 
     const TVector<ui64>& GetOffsets() const override {
@@ -487,10 +526,20 @@ protected:
         Buffer.Clear();
     }
 
+    void FillColumnsIndex() {
+        for (size_t i = 0; i < NumberColumns; i++) {
+            ColumnsIndex.emplace(std::string_view(Columns[i].Name), i);
+        }
+    }
+
+    static ui64 GetMaxNumberRows(const TJsonParserConfig& config, ui64 numberColumns) {
+        return (config.BufferCellCount - 1) / numberColumns + 1;
+    }
+
 private:
     const TJsonParserConfig Config;
-    const ui64 NumberColumns;
-    const ui64 MaxNumberRows;
+    ui64 NumberColumns = 0;
+    ui64 MaxNumberRows = 0;
     const TString LogPrefix;
 
     TVector<TColumnParser> Columns;
@@ -512,8 +561,8 @@ TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr cons
     return ITopicParser::TPtr(parser);
 }
 
-TJsonParserConfig CreateJsonParserConfig(const NConfig::TJsonParserConfig& parserConfig) {
-    TJsonParserConfig result;
+TJsonParserConfig CreateJsonParserConfig(const NConfig::TJsonParserConfig& parserConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) {
+    TJsonParserConfig result = {.FunctionRegistry = functionRegistry};
     if (const auto batchSize = parserConfig.GetBatchSizeBytes()) {
         result.BatchSize = batchSize;
     }

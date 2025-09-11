@@ -7,6 +7,8 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/util/rope.h>
 
+#include <yql/essentials/minikql/mkql_function_registry.h>
+
 namespace NFq::NConfig {
     class TRowDispatcherConfig;
 } // namespace NFq::NConfig
@@ -75,12 +77,13 @@ protected:
 
 // Static properties for all format handlers
 struct TFormatHandlerConfig {
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TJsonParserConfig JsonParserConfig;
     TTopicFiltersConfig FiltersConfig;
 };
 
 ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters);
-TFormatHandlerConfig CreateFormatHandlerConfig(const NConfig::TRowDispatcherConfig& rowDispatcherConfig, NActors::TActorId compileServiceId);
+TFormatHandlerConfig CreateFormatHandlerConfig(const NConfig::TRowDispatcherConfig& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId);
 
 namespace NTests {
 

@@ -9,14 +9,14 @@ namespace NFq::NRowDispatcher {
 
 class TTypeParser {
 public:
-    explicit TTypeParser(const TSourceLocation& location, const TCountersDesc& counters);
+    TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters);
     virtual ~TTypeParser();
 
     TValueStatus<NKikimr::NMiniKQL::TType*> ParseTypeYson(const TString& typeYson) const;
 
 protected:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
-    NKikimr::NMiniKQL::IFunctionRegistry::TPtr FunctionRegistry;
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     std::unique_ptr<NKikimr::NMiniKQL::TTypeEnvironment> TypeEnv;
     std::unique_ptr<NKikimr::NMiniKQL::TProgramBuilder> ProgramBuilder;
 };
@@ -36,11 +36,12 @@ public:
     using TPtr = TIntrusivePtr<TTopicParserBase>;
 
 public:
-    TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const TCountersDesc& counters);
+    TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters);
     virtual ~TTopicParserBase() = default;
 
 public:
     virtual void Refresh(bool force = false) override;
+    virtual TStatus ChangeConsumer(IParsedDataConsumer::TPtr consumer) override;
     virtual void FillStatistics(TFormatHandlerStatistic& statistic) override;
 
 protected:
@@ -52,7 +53,7 @@ protected:
     void ParseBuffer();
 
 protected:
-    const IParsedDataConsumer::TPtr Consumer;
+    IParsedDataConsumer::TPtr Consumer;
 
 private:
     TStats Stats;

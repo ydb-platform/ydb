@@ -15,6 +15,8 @@ PEERDIR(
     ydb/library/actors/util
 
     ydb/library/yql/dq/common
+
+    yql/essentials/minikql
 )
 
 YQL_LAST_ABI_VERSION()

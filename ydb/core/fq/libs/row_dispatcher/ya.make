@@ -32,6 +32,8 @@ PEERDIR(
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
+
+    yql/essentials/minikql
 )
 
 YQL_LAST_ABI_VERSION()

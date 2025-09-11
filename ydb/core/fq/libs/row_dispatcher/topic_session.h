@@ -11,6 +11,8 @@
 
 #include <ydb/library/actors/core/actor.h>
 
+#include <yql/essentials/minikql/mkql_function_registry.h>
+
 #include <memory>
 
 namespace NFq {
@@ -21,6 +23,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     const TString& endpoint,
     const TString& database,
     const NConfig::TRowDispatcherConfig& config,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     NActors::TActorId rowDispatcherActorId,
     NActors::TActorId compileServiceActorId,
     ui32 partitionId,

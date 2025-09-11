@@ -2106,6 +2106,8 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
         }
     }
 
+    YQL_ENSURE(stats);
+
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
     const auto& keyTypes = tableInfo->KeyColumnTypes;
     for (auto& op : stage.GetTableOps()) {
@@ -2133,7 +2135,7 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
             nodeShards[nodeId].emplace_back(TShardInfoWithId(i.first, std::move(i.second)));
         }
 
-        if (stats) {
+        if (stats && CollectProfileStats(stats->StatsMode)) {
             for (auto&& i : nodeShards) {
                 stats->AddNodeShardsCount(stageInfo.Id.StageId, i.first, i.second.size());
             }
@@ -2809,7 +2811,7 @@ size_t TKqpTasksGraph::BuildAllTasks(bool isScan, bool limitTasksPerNode, std::o
                 for (auto& taskId : stageInfo.Tasks) {
                     GetTask(taskId).SetUseLlvm(useLlvm);
                 }
-                if (stats) {
+                if (stats && CollectProfileStats(stats->StatsMode)) {
                     stats->SetUseLlvm(stageInfo.Id.StageId, useLlvm);
                 }
             }

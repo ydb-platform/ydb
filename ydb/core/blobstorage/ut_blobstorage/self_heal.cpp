@@ -242,8 +242,8 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
 
         env.UpdateSettings(false, true, false); // disable self-heal
         
-        // set PDisk (9,1000) to ACTIVE + NO_NEW_ALLOCATIONS
-        ChangeDiskStatus(env, { 9, 1000 }, NKikimrBlobStorage::EDriveStatus::ACTIVE, NKikimrBlobStorage::TMaintenanceStatus::NO_NEW_ALLOCATIONS);
+        // set PDisk (9,1000) to ACTIVE + NO_NEW_VDISKS
+        ChangeDiskStatus(env, { 9, 1000 }, NKikimrBlobStorage::EDriveStatus::ACTIVE, NKikimrBlobStorage::TMaintenanceStatus::NO_NEW_VDISKS);
     
         // set PDisk (1,1000) to ACTIVE + LONG_TERM_MAINTENANCE_PLANNED
         ChangeDiskStatus(env, { 1, 1000 }, NKikimrBlobStorage::EDriveStatus::ACTIVE, NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED);

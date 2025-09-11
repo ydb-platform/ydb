@@ -529,7 +529,7 @@ public:
         bool AcceptsNewSlots() const {
             return Status == NKikimrBlobStorage::EDriveStatus::ACTIVE
                 && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED
-                && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::NO_NEW_ALLOCATIONS;
+                && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::NO_NEW_VDISKS;
         }
 
         bool Decommitted() const {

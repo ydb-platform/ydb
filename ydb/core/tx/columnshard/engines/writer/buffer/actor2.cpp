@@ -52,7 +52,7 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
     SumSize += evBase->GetWriteData()->GetSize();
     const auto& pathId = evBase->GetWriteData()->GetWriteMeta().GetPathId().InternalPathId;
     const ui64 schemaVersion = evBase->GetContext()->GetActualSchema()->GetVersion();
-    TAggregationId aggrId(pathId, schemaVersion, evBase->GetWriteData()->GetWriteMeta().GetModificationType());
+    TAggregationId aggrId(pathId, schemaVersion, evBase->GetWriteData()->GetWriteMeta().GetModificationType(), isBulkUpsert);
     auto it = Aggregations.find(aggrId);
     if (it == Aggregations.end()) {
         it = Aggregations

@@ -11,12 +11,12 @@ namespace NKikimr::NBsController {
                 throw TExError() << "TUpdateDriveStatus.Path and PDiskId are mutually exclusive";
             }
             pdiskId = TPDiskId(host.GetNodeId(), cmd.GetPDiskId());
-            if (!PDisks.Find(pdiskId) || PDisksToRemove.count(pdiskId)) {
+            if (!PDisks.Find(pdiskId) || PDisksToRemove.contains(pdiskId)) {
                 throw TExPDiskNotFound(host, cmd.GetPDiskId(), TString());
             }
         } else {
             const std::optional<TPDiskId> found = FindPDiskByLocation(host.GetNodeId(), cmd.GetPath());
-            if (found && !PDisksToRemove.count(*found)) {
+            if (found && !PDisksToRemove.contains(*found)) {
                 pdiskId = *found;
             } else {
                 throw TExPDiskNotFound(host, 0, cmd.GetPath());

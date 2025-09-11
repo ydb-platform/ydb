@@ -97,7 +97,7 @@ std::vector<TPartitionScaleManager::TPartitionsToSplitMap::const_iterator> TPart
                 return std::make_tuple(minChildPartitionId, info.PartitionId);
             }
         }
-        return std::make_tuple(info.PartitionId, info.PartitionId)
+        return std::make_tuple(info.PartitionId, info.PartitionId);
     };
     std::vector<TPartitionScaleManager::TPartitionsToSplitMap::const_iterator> result;
     result.reserve(PartitionsToSplit.size());

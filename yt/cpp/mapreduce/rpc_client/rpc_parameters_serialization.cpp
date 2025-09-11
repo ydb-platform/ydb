@@ -72,6 +72,8 @@ NObjectClient::EObjectType ToApiObjectType(ENodeType type)
             return NObjectClient::EObjectType::PortalEntrance;
         case NT_CHAOS_TABLE_REPLICA:
             return NObjectClient::EObjectType::ChaosTableReplica;
+        case NT_TABLE_COLLOCATION:
+            return NObjectClient::EObjectType::TableCollocation;
     }
     YT_ABORT();
 }

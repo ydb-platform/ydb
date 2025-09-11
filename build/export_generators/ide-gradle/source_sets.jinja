@@ -12,11 +12,15 @@
 {%-     if module == 'resources' -%}
 {%-         if not('**/*' in some_set.globs) -%}
 {{ IncludeGlobs(some_set, dir) }}
+{%-         else -%}
+.include("**/*")
 {%-         endif -%}
 {%-     else -%}
 {%-         if some_set.globs|join('')|replace('*', '') == some_set.globs|join('') -%}
 {#- Use single source file from each glob -#}
 {{ IncludeGlobs(some_set, dir) }}
+{%-         else -%}
+.include("**/*")
 {%-         endif -%}
 {%-     endif -%}
 {%- endmacro -%}
@@ -61,14 +65,14 @@ sourceSets {
 {{ TargetSets(target, "main") }}
 
 {%-     if proto_template and symlinks_to_generated %}
-        java.srcDir("generated/source/proto/main/java")
+        java.srcDir("generated/source/proto/main/java").include("**/*")
 {%-         if target.proto_grpc %}
-        java.srcDir("generated/source/proto/main/grpc")
+        java.srcDir("generated/source/proto/main/grpc").include("**/*")
 {%-         endif -%}
 {%-     elif proto_template %}
-        java.srcDir("$buildDir/generated/source/proto/main/java")
+        java.srcDir("$buildDir/generated/source/proto/main/java").include("**/*")
 {%-         if target.proto_grpc %}
-        java.srcDir("$buildDir/generated/source/proto/main/grpc")
+        java.srcDir("$buildDir/generated/source/proto/main/grpc").include("**/*")
 {%-         endif -%}
 {%-     endif %}
     }

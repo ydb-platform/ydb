@@ -1,15 +1,20 @@
 # DROP TOPIC
 
-Deletes the specified [topic](../../../concepts/topic.md).
+`DROP TOPIC` Deletes the specified [topic](../../../concepts/topic.md).
 
-The general form of the command:
+## Syntax:
 
 ```yql
 DROP TOPIC <topic_path>;
 ```
 
+## Examples
 The following command will delete the topic named `my_topic`:
 
 ```yql
 DROP TOPIC my_topic;
 ```
+## See also
+* [CREATE TOPIC](create-topic.md)
+* [ALTER TOPIC](alter-topic.md)
+

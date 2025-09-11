@@ -486,6 +486,24 @@ public:
                 break;
             }
 
+            case NKqpProto::TKqpSchemeOperation::kCreateSecret: {
+                const auto& modifyScheme = schemeOp.GetCreateSecret();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterSecret: {
+                const auto& modifyScheme = schemeOp.GetAlterSecret();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropSecret: {
+                const auto& modifyScheme = schemeOp.GetDropSecret();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());

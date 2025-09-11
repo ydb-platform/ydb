@@ -862,9 +862,8 @@ bool TSqlTranslation::AddIndexSetting(const TIdentifier &id,
         const TRule_index_setting_value& node,
         TIndexDescription::TIndexSettings& indexSettings) {
 
-    auto name = to_lower(id.Name);
-    // FIXME: apply to_lower in KQP so not to break case-sensitive settings
-    auto value = to_lower(GetIndexSettingStringValue(node));
+    const auto name = id.Name;
+    const auto value = GetIndexSettingStringValue(node);
 
     TIndexDescription::TIndexSetting indexSetting {
         .Name = name,

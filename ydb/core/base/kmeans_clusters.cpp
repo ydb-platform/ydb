@@ -32,7 +32,9 @@ namespace {
         return false;
     };
 
-    Ydb::Table::VectorIndexSettings_Metric ParseDistance(const TString& distance, TString& error) {
+    Ydb::Table::VectorIndexSettings_Metric ParseDistance(const TString& distance_, TString& error) {
+        
+        const TString distance = to_lower(distance_);
         if (distance == "cosine")
             return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
         else if (distance == "manhattan")
@@ -40,23 +42,25 @@ namespace {
         else if (distance == "euclidean")
             return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
         else {
-            error = TStringBuilder() << "Invalid distance: " << distance;
+            error = TStringBuilder() << "Invalid distance: " << distance_;
             return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
         }
     };
     
-    Ydb::Table::VectorIndexSettings_Metric ParseSimilarity(const TString& similarity, TString& error) {
+    Ydb::Table::VectorIndexSettings_Metric ParseSimilarity(const TString& similarity_, TString& error) {
+        const TString similarity = to_lower(similarity_);
         if (similarity == "cosine")
             return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
         else if (similarity == "inner_product")
             return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
         else {
-            error = TStringBuilder() << "Invalid similarity: " << similarity;
+            error = TStringBuilder() << "Invalid similarity: " << similarity_;
             return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
         }
     };
     
-    Ydb::Table::VectorIndexSettings_VectorType ParseVectorType(const TString& vectorType, TString& error) {
+    Ydb::Table::VectorIndexSettings_VectorType ParseVectorType(const TString& vectorType_, TString& error) {
+        const TString vectorType = to_lower(vectorType_);
         if (vectorType == "float")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
         else if (vectorType == "uint8")
@@ -66,7 +70,7 @@ namespace {
         else if (vectorType == "bit")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
         else {
-            error = TStringBuilder() << "Invalid vector_type: " << vectorType;
+            error = TStringBuilder() << "Invalid vector_type: " << vectorType_;
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
         }
     };
@@ -523,26 +527,27 @@ bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& 
 bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, const TString& value, TString& error) {
     error = "";
 
-    if (name == "distance") {
+    const TString nameLower = to_lower(name);
+    if (nameLower == "distance") {
         if (settings.mutable_settings()->has_metric()) {
             error = "only one of distance or similarity should be set, not both";
             return false;
         }
         settings.mutable_settings()->set_metric(ParseDistance(value, error));
-    } else if (name == "similarity") {
+    } else if (nameLower == "similarity") {
         if (settings.mutable_settings()->has_metric()) {
             error = "only one of distance or similarity should be set, not both";
             return false;
         }
         settings.mutable_settings()->set_metric(ParseSimilarity(value, error));
-    } else if (name =="vector_type") {
+    } else if (nameLower =="vector_type") {
         settings.mutable_settings()->set_vector_type(ParseVectorType(value, error));
-    } else if (name =="vector_dimension") {
+    } else if (nameLower =="vector_dimension") {
         settings.mutable_settings()->set_vector_dimension(ParseUInt32(name, value, MinVectorDimension, MaxVectorDimension, error));
 
-    } else if (name =="clusters") {
+    } else if (nameLower =="clusters") {
         settings.set_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
-    } else if (name =="levels") {
+    } else if (nameLower =="levels") {
         settings.set_levels(ParseUInt32(name, value, MinLevels, MaxLevels, error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << name;

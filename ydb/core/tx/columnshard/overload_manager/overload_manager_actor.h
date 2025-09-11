@@ -12,17 +12,14 @@ namespace NKikimr::NColumnShard::NOverload {
 class TOverloadManager: public NActors::TActor<TOverloadManager> {
     TOverloadSubscribers OverloadSubscribers;
 
-    STATEFN(StateMain) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NOverload::TEvOverloadSubscribe, Handle);
-            hFunc(NOverload::TEvOverloadUnsubscribe, Handle);
-            hFunc(NOverload::TEvOverloadPipeServerDisconnected, Handle);
-            hFunc(NOverload::TEvOverloadResourcesReleased, Handle);
-            hFunc(NOverload::TEvOverloadColumnShardDied, Handle);
-            default:
-                AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
-        }
-    }
+    STRICT_STFUNC(
+        StateMain,
+        hFunc(NOverload::TEvOverloadSubscribe, Handle)
+        hFunc(NOverload::TEvOverloadUnsubscribe, Handle)
+        hFunc(NOverload::TEvOverloadPipeServerDisconnected, Handle)
+        hFunc(NOverload::TEvOverloadResourcesReleased, Handle)
+        hFunc(NOverload::TEvOverloadColumnShardDied, Handle)
+    )
 
     void Handle(const NOverload::TEvOverloadSubscribe::TPtr& ev);
     void Handle(const NOverload::TEvOverloadUnsubscribe::TPtr& ev);

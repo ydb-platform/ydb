@@ -80,12 +80,6 @@ struct TEvPrivate {
         EvFilterRequestResourcesAllocated,
         EvFilterConstructionResult,
 
-        EvOverloadSubscribe,
-        EvOverloadUnsubscribe,
-        EvOverloadColumnShardDied,
-        EvOverloadPipeServerDisconnected,
-        EvOverloadResourcesReleased,
-
         EvEnd
     };
 

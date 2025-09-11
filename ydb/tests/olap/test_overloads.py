@@ -170,7 +170,7 @@ class TestLogScenario(object):
         )
         ydb_workload.create_table()
 
-        ydb_workload.bulk_upsert(seconds=wait_time, threads=1, rows=10, wait=True)
+        ydb_workload.bulk_upsert(seconds=wait_time, threads=10, rows=10, wait=True)
 
         output_stdout.close()
         keys = None

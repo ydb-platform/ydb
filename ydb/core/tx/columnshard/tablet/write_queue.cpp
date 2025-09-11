@@ -39,20 +39,10 @@ void TWriteTask::Abort(TColumnShard* owner, const TString& reason, const TActorC
     ctx.Send(SourceId, result.release(), 0, Cookie);
     if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED && OverloadSubscribeSeqNo) {
         result->Record.SetOverloadSubscribed(*OverloadSubscribeSeqNo);
-        // TODO: get here pipe server id
-
-        // Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), new NOverload::TEvOverloadSubscribe(
-        //     {.ColumnShardId = owner->SelfId(), .TabletId = owner->TabletID()},
-        //     {.PipeServerId = SourceId, .InterconnectSessionId = PipeServersInterconnectSessions[ev->Recipient]},
-        //     {.PipeServerId = SourceId, .OverloadSubscriberId = ev->Sender, .SeqNo = *OverloadSubscribeSeqNo}));
-
-        // Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), new NOverload::TEvOverloadSubscribe(
-        // {.ColumnShardId = SelfId(), .TabletId = TabletID()},
-        // {.PipeServerId = ev->Recipient, .InterconnectSessionId = PipeServersInterconnectSessions[ev->Recipient]},
-        // {.PipeServerId = ev->Recipient, .OverloadSubscriberId = ev->Sender, .SeqNo = seqNo}));
-        // const auto rejectReasons = NOverload::MakeRejectReasons(EOverloadStatus::ShardWritesInFly);
-        // owner->OverloadSubscribers.SetOverloadSubscribed(*OverloadSubscribeSeqNo, owner->SelfId(), SourceId, rejectReasons, result->Record);
-        // owner->OverloadSubscribers.ScheduleNotification(owner->SelfId());
+        ctx.Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+            std::make_unique<NOverload::TEvOverloadSubscribe>(NOverload::TColumnShardInfo{.ColumnShardId = owner->SelfId(), .TabletId = owner->TabletID()},
+                NOverload::TPipeServerInfo{.PipeServerId = RecipientId, .InterconnectSessionId = owner->PipeServersInterconnectSessions[RecipientId]},
+                NOverload::TOverloadSubscriberInfo{.PipeServerId = RecipientId, .OverloadSubscriberId = SourceId, .SeqNo = *OverloadSubscribeSeqNo}));
     }
 }
 

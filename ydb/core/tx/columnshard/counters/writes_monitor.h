@@ -3,6 +3,7 @@
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -22,7 +23,7 @@ public:
         OnFinishWrite(WritesSizeInFlightLocal, WritesInFlightLocal, true);
     }
 
-    bool OnStartWrite(const ui64 dataSize);
+    NOverload::EResourcesStatus OnStartWrite(const ui64 dataSize);
 
     void OnFinishWrite(const ui64 dataSize, const ui32 writesCount = 1, const bool onDestroy = false);
 

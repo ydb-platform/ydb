@@ -15,11 +15,7 @@ std::atomic_uint64_t DEFAULT_WRITES_SIZE_IN_FLY_LIMIT{0};
 
 TPositiveControlInteger TOverloadManagerServiceOperator::WritesInFlight;
 TPositiveControlInteger TOverloadManagerServiceOperator::WritesSizeInFlight;
-std::atomic_bool TOverloadManagerServiceOperator::LimitReached = false;
-// ui64 TOverloadManagerServiceOperator::WritesInFlight = 0;
-// ui64 TOverloadManagerServiceOperator::WritesSizeInFlight = 0;
-// bool TOverloadManagerServiceOperator::LimitReached = false;
-// std::mutex TOverloadManagerServiceOperator::Mutex;
+std::atomic<EResourcesStatus> TOverloadManagerServiceOperator::ResourcesStatus{EResourcesStatus::Ok};
 
 ui64 TOverloadManagerServiceOperator::GetShardWritesInFlyLimit() {
     if (DEFAULT_WRITES_IN_FLY_LIMIT.load() == 0) {
@@ -27,7 +23,9 @@ ui64 TOverloadManagerServiceOperator::GetShardWritesInFlyLimit() {
         const ui64 newValue = std::max(NKqp::TStagePredictor::GetUsableThreads() * 200, ui32(1000));
         DEFAULT_WRITES_IN_FLY_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
-    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit() : DEFAULT_WRITES_IN_FLY_LIMIT.load();
+    return (HasAppData() && AppDataVerified().ColumnShardConfig.HasWritingInFlightRequestsCountLimit()) ? 
+            AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit() : 
+            DEFAULT_WRITES_IN_FLY_LIMIT.load();
 }
 
 ui64 TOverloadManagerServiceOperator::GetShardWritesSizeInFlyLimit() {
@@ -36,7 +34,9 @@ ui64 TOverloadManagerServiceOperator::GetShardWritesSizeInFlyLimit() {
         const ui64 newValue = NKqp::TStagePredictor::GetUsableThreads() * 20_MB;
         DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
-    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestBytesLimit() : DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.load();
+    return (HasAppData() && AppDataVerified().ColumnShardConfig.HasWritingInFlightRequestBytesLimit()) ?
+            AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestBytesLimit() :
+            DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.load();
 }
 
 NActors::TActorId TOverloadManagerServiceOperator::MakeServiceId() {
@@ -48,65 +48,33 @@ NActors::IActor* TOverloadManagerServiceOperator::CreateService() {
 }
 
 void TOverloadManagerServiceOperator::NotifyIfResourcesAvailable(bool force) {
-    bool send = false;
-    {
-        // std::lock_guard<std::mutex> guard(Mutex);
-        send = (force || LimitReached) &&
-            WritesInFlight.Val() <= GetShardWritesInFlyLimit() * WritesInFlightSoftLimitCoefficient &&
-            WritesSizeInFlight.Val() <= GetShardWritesSizeInFlyLimit() * WritesInFlightSizeSoftLimitCoefficient;
-        if (send) {
-            LimitReached = false;
-        }
-    }
-    if (send) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Limit Ok, releasing");
+    if ((force || ResourcesStatus.load() != EResourcesStatus::Ok) && WritesInFlight.Val() <= GetShardWritesInFlyLimit() * WritesInFlightSoftLimitCoefficient &&
+        WritesSizeInFlight.Val() <= GetShardWritesSizeInFlyLimit() * WritesInFlightSizeSoftLimitCoefficient) {
+        ResourcesStatus = EResourcesStatus::Ok;
         auto& context = NActors::TActorContext::AsActorContext();
         context.Send(MakeServiceId(), new NOverload::TEvOverloadResourcesReleased());
     }
 }
 
-bool TOverloadManagerServiceOperator::RequestResources(ui64 writesCount, ui64 writesSize) {
-    bool already = false;
-    bool limitReached = false;
-    do {
-        // std::lock_guard<std::mutex> guard(Mutex);
-        if (LimitReached) {
-            already = true;
-            break;
-        }
-
-        auto resWritesInFlight = WritesInFlight.Add(writesCount);
-        auto resWriteSizeInFlight = WritesSizeInFlight.Add(writesSize);
-        if (resWritesInFlight >= GetShardWritesInFlyLimit() || resWriteSizeInFlight >= GetShardWritesSizeInFlyLimit()) {
-            // WritesInFlight += writesCount;
-            // WritesSizeInFlight += writesSize;
-            // if (WritesInFlight >= GetShardWritesInFlyLimit() || WritesSizeInFlight >= GetShardWritesSizeInFlyLimit()) {
-            LimitReached = true;
-            limitReached = true;
-        }
-    } while (false);
-
-    if (already) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Limit already reached");
-    } else if (limitReached) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Limit is reached now, locking new");
-    } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Requesting resources without limit");
+EResourcesStatus TOverloadManagerServiceOperator::RequestResources(ui64 writesCount, ui64 writesSize) {
+    if (auto status = ResourcesStatus.load(); status != EResourcesStatus::Ok) {
+        return status;
     }
 
-    return !already;
+    auto resWritesInFlight = WritesInFlight.Add(writesCount);
+    auto resWriteSizeInFlight = WritesSizeInFlight.Add(writesSize);
+    if (resWritesInFlight >= GetShardWritesInFlyLimit()) {
+        ResourcesStatus = EResourcesStatus::WritesInFlyLimitReached;
+    } else if (resWriteSizeInFlight >= GetShardWritesSizeInFlyLimit()) {
+        ResourcesStatus = EResourcesStatus::WritesSizeInFlyLimitReached;
+    }
+
+    return EResourcesStatus::Ok;
 }
 
 void TOverloadManagerServiceOperator::ReleaseResources(ui64 writesCount, ui64 writesSize) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Releasing resources");
-    {
-        // std::lock_guard<std::mutex> guard(Mutex);
-
-        WritesInFlight.Sub(writesCount);
-        WritesSizeInFlight.Sub(writesSize);
-        // WritesInFlight -= writesCount;
-        // WritesSizeInFlight -= writesSize;
-    }
+    WritesInFlight.Sub(writesCount);
+    WritesSizeInFlight.Sub(writesSize);
 
     NotifyIfResourcesAvailable(false);
 }

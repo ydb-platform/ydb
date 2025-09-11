@@ -1,13 +1,13 @@
 #include "writes_monitor.h"
 
 #include <ydb/library/actors/core/log.h>
-#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 
 namespace NKikimr::NColumnShard {
 
-bool TWritesMonitor::OnStartWrite(const ui64 dataSize) {
-    if (!NOverload::TOverloadManagerServiceOperator::RequestResources(1, dataSize)) {
-        return false;
+NOverload::EResourcesStatus TWritesMonitor::OnStartWrite(const ui64 dataSize) {
+    auto status = NOverload::TOverloadManagerServiceOperator::RequestResources(1, dataSize);
+    if (status != NOverload::EResourcesStatus::Ok) {
+        return status;
     }
 
     ++WritesInFlightLocal;
@@ -15,7 +15,7 @@ bool TWritesMonitor::OnStartWrite(const ui64 dataSize) {
 
     UpdateTabletCounters();
 
-    return true;
+    return status;
 }
 
 void TWritesMonitor::OnFinishWrite(const ui64 dataSize, const ui32 writesCount /*= 1*/, const bool onDestroy /*= false*/) {
@@ -30,7 +30,10 @@ void TWritesMonitor::OnFinishWrite(const ui64 dataSize, const ui32 writesCount /
 }
 
 TString TWritesMonitor::DebugString() const {
-    return TStringBuilder() << "{object=write_monitor;count_local=" << WritesInFlightLocal << ";size_local=" << WritesSizeInFlightLocal << "}";
+    return TStringBuilder() << "{object=write_monitor;count_local=" << WritesInFlightLocal 
+                            << ";size_local=" << WritesSizeInFlightLocal
+                            << ";count_node=" << NOverload::TOverloadManagerServiceOperator::GetShardWritesInFly()
+                            << ";size_node=" << NOverload::TOverloadManagerServiceOperator::GetShardWritesSizeInFly() << "}";
 }
 
 }   // namespace NKikimr::NColumnShard

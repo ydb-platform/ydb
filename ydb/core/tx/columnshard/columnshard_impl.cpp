@@ -990,7 +990,8 @@ void TColumnShard::Die(const TActorContext& ctx) {
     } else {
         Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
     }
-    Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), new NOverload::TEvOverloadColumnShardDied({.ColumnShardId = SelfId(), .TabletId = TabletID()}));
+    Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+        std::make_unique<NOverload::TEvOverloadColumnShardDied>(NOverload::TColumnShardInfo{.ColumnShardId = SelfId(), .TabletId = TabletID()}));
     IActor::Die(ctx);
 }
 

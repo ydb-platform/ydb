@@ -193,7 +193,9 @@ void TColumnShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TAc
 
 void TColumnShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
     PipeServersInterconnectSessions.erase(ev->Get()->ServerId);
-    ctx.Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), new NOverload::TEvOverloadPipeServerDisconnected({.ColumnShardId = SelfId(), .TabletId = TabletID()}, {.PipeServerId = ev->Get()->ServerId, .InterconnectSessionId = {}}));
+    ctx.Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+        std::make_unique<NOverload::TEvOverloadPipeServerDisconnected>(
+            NOverload::TColumnShardInfo{.ColumnShardId = SelfId(), .TabletId = TabletID()}, NOverload::TPipeServerInfo{.PipeServerId = ev->Get()->ServerId, .InterconnectSessionId = {}}));
     LOG_S_DEBUG("Server pipe reset at tablet " << TabletID());
 }
 

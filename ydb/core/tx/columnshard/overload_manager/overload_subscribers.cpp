@@ -21,8 +21,6 @@ namespace {
         ev->Rewrite(TEvInterconnect::EvForward, sessionId);
     }
 
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Send overload ready");
-
     TActivationContext::Send(ev.Release());
 }
 

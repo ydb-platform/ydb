@@ -321,8 +321,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
     void Die(const TActorContext& ctx) override;
 
-    void OnYellowChannelsChanged() override;
-
     void CleanupActors(const TActorContext& ctx);
     void BecomeBroken(const TActorContext& ctx);
     void TrySwitchToWork(const TActorContext& ctx);
@@ -383,6 +381,7 @@ public:
 private:
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
+    EOverloadStatus ResourcesStatusToOverloadStatus(const NOverload::EResourcesStatus status) const;
     EOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
     EOverloadStatus CheckOverloadedWait(const TInternalPathId tableId) const;
 

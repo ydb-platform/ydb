@@ -2,9 +2,14 @@
 
 namespace NKikimr::NColumnShard {
 
-void TColumnShard::OnYellowChannelsChanged() {
-    if (!IsAnyChannelYellowStop()) {
-        // TODO: notify overload subscribers
+TColumnShard::EOverloadStatus TColumnShard::ResourcesStatusToOverloadStatus(const NOverload::EResourcesStatus status) const {
+    switch (status) {
+        case NOverload::EResourcesStatus::Ok:
+            return EOverloadStatus::None;
+        case NOverload::EResourcesStatus::WritesInFlyLimitReached:
+            return EOverloadStatus::ShardWritesInFly;
+        case NOverload::EResourcesStatus::WritesSizeInFlyLimitReached:
+            return EOverloadStatus::ShardWritesSizeInFly;
     }
 }
 
@@ -23,7 +28,9 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInte
 }
 
 void TColumnShard::Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext&) {
-    Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), new NOverload::TEvOverloadUnsubscribe({.ColumnShardId = SelfId(), .TabletId = TabletID()}, {.PipeServerId = ev->Recipient, .OverloadSubscriberId = ev->Sender, .SeqNo = ev->Get()->Record.GetSeqNo()}));
+    Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+        std::make_unique<NOverload::TEvOverloadUnsubscribe>(NOverload::TColumnShardInfo{.ColumnShardId = SelfId(), .TabletId = TabletID()},
+            NOverload::TOverloadSubscriberInfo{.PipeServerId = ev->Recipient, .OverloadSubscriberId = ev->Sender, .SeqNo = ev->Get()->Record.GetSeqNo()}));
 }
 
 } // namespace NKikimr::NColumnShard

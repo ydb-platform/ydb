@@ -50,6 +50,8 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<ui64> IncrementalBackups;
 
+    TDeque<TPathId> StreamingQueries;
+
     //PQ part
     TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
     TDeque<std::pair<TPathId, TTopicInfo::TPtr>> PersQueueGroup;
@@ -156,6 +158,10 @@ public:
 
     void PersistLongIncrementalBackupOp(ui64 id) {
         IncrementalBackups.emplace_back(id);
+    }
+
+    void PersistStreamingQuery(const TPathId& pathId) {
+        StreamingQueries.emplace_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

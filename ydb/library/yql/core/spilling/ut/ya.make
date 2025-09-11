@@ -4,11 +4,6 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
-# https://github.com/ydb-platform/ydb/issues/12513
-IF (SANITIZER_TYPE == "address")
-    TAG(ya:not_autocheck)
-ENDIF()
-
 IF (SANITIZER_TYPE OR NOT OPENSOURCE)
     REQUIREMENTS(ram:10)
 ENDIF()
@@ -20,9 +15,12 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-SRCS(
-    spilling_ut.cpp
- )
+# https://github.com/ydb-platform/ydb/issues/12513
+IF (SANITIZER_TYPE != "address")
+    SRCS(
+        spilling_ut.cpp
+    )
+ENDIF()
 
 PEERDIR(
     yql/essentials/public/udf

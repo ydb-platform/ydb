@@ -2,10 +2,9 @@
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/base/ticket_parser.h>
 #include "ydb/core/kafka_proxy/kafka_metrics.h"
-#include <ydb/core/persqueue/fetch_request_actor.h>
+#include <ydb/core/persqueue/public/fetcher/fetch_request_actor.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/user_info.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>

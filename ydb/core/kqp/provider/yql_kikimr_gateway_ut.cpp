@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 
 #include <util/generic/maybe.h>
 
@@ -263,12 +264,59 @@ void TestDropResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGatew
     TestDropObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.metadata/workload_manager/pools/" << poolId);
 }
 
+void TestCreateStreamingQuery(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {
+    TCreateObjectSettings settings("STREAMING_QUERY", queryName, {
+        {"run", "false"},
+        {"__query_text", "SELECT 42"},
+    });
+    const auto& streamingQuery = TestCreateObjectCommon(runtime, gateway, settings, queryName);
+
+    UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
+    UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
+    const auto& properties = streamingQuery.StreamingQueryInfo->Description.GetProperties().GetProperties();
+    UNIT_ASSERT_GE(properties.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("run"), "false");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("__query_text"), "SELECT 42");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("resource_pool"), NResourcePool::DEFAULT_POOL_ID);
+}
+
+void TestAlterStreamingQuery(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {
+    TCreateObjectSettings settings("STREAMING_QUERY", queryName, {
+        {"force", "true"},
+        {"__query_text", "SELECT 84"},
+        {"resource_pool", "my_pool"},
+    });
+    const auto& streamingQuery = TestAlterObjectCommon(runtime, gateway, settings, queryName);
+
+    UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
+    UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
+    const auto& properties = streamingQuery.StreamingQueryInfo->Description.GetProperties().GetProperties();
+    UNIT_ASSERT_GE(properties.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("run"), "false");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("__query_text"), "SELECT 84");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("resource_pool"), "my_pool");
+}
+
+void TestDropStreamingQuery(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {
+    TDropObjectSettings settings("STREAMING_QUERY", queryName, {});
+    TestDropObjectCommon(runtime, gateway, settings, queryName);
+}
+
 TKikimrRunner GetKikimrRunnerWithResourcePools() {
     NKikimrConfig::TAppConfig config;
     config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
     return TKikimrRunner(NKqp::TKikimrSettings(config)
         .SetEnableResourcePools(true)
+        .SetWithSampleTables(false));
+}
+
+TKikimrRunner GetKikimrRunnerWithStreamingQuerys() {
+    NKikimrConfig::TAppConfig config;
+    config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
+
+    return TKikimrRunner(NKqp::TKikimrSettings(config)
+        .SetEnableStreamingQueries(true)
         .SetWithSampleTables(false));
 }
 
@@ -635,7 +683,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TestCreateResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
     }
 
-    Y_UNIT_TEST(TestALterResourcePool) {
+    Y_UNIT_TEST(TestAlterResourcePool) {
         TKikimrRunner kikimr = GetKikimrRunnerWithResourcePools();
         TestCreateResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
         TestAlterResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
@@ -645,6 +693,23 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TKikimrRunner kikimr = GetKikimrRunnerWithResourcePools();
         TestCreateResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
         TestDropResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
+    }
+
+    Y_UNIT_TEST(TestCreateStreamingQuery) {
+        TKikimrRunner kikimr = GetKikimrRunnerWithStreamingQuerys();
+        TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
+    }
+
+    Y_UNIT_TEST(TestAlterStreamingQuery) {
+        TKikimrRunner kikimr = GetKikimrRunnerWithStreamingQuerys();
+        TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
+        TestAlterStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
+    }
+
+    Y_UNIT_TEST(TestDropStreamingQuery) {
+        TKikimrRunner kikimr = GetKikimrRunnerWithStreamingQuerys();
+        TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
+        TestDropStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
     }
 }
 

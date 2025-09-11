@@ -580,7 +580,6 @@ def on_setup_build_env(unit: NotsUnitType) -> None:
         options.append(f'"{name}={double_quote_escaped_value}"')
 
     unit.set(["NOTS_TOOL_BUILD_ENV", " ".join(options)])
-    logger.print_vars("NOTS_TOOL_BUILD_ENV")
 
 
 def __set_append(unit: NotsUnitType, var_name: str, value: UnitType.PluginArgs, delimiter: str = " ") -> None:
@@ -641,8 +640,6 @@ def _setup_eslint(unit: NotsUnitType) -> None:
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_type} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_type, "MODDIR")
@@ -713,8 +710,6 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_type} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_type,)
@@ -763,8 +758,6 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_type} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_type,)
@@ -986,8 +979,6 @@ def on_ts_test_for_configure(
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_runner} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_runner, "TS_TEST_FOR_PATH")
@@ -1077,7 +1068,6 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
     # ${BINDIR} prefix for input is important to resolve to result of LARGE_FILES and not to SOURCEDIR
     new_items = [f'$COPY_CMD {i} {o}' for (i, o) in zip(in_files, out_files)]
     __set_append(unit, "_TS_PROJECT_SETUP_CMD", new_items, " && ")
-    logger.print_vars("_TS_PROJECT_SETUP_CMD")
 
     __on_ts_files(unit, in_files, out_files)
 

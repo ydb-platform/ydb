@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/tools/combiner_perf/simple.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple_block.h>
 #include <ydb/core/kqp/tools/combiner_perf/dq_combine_vs.h>
+#include <ydb/core/kqp/tools/combiner_perf/joins.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
@@ -107,11 +108,13 @@ public:
         out["refTime"] = result.ReferenceTime.MilliSeconds();
         out["maxRssDelta"] = result.MaxRSSDelta;
         out["referenceMaxRssDelta"] = result.ReferenceMaxRSSDelta;
+        out["dqTestColumns"] = runParams.CombineVsTestColumnSet;
 
         Cout << NJson::WriteJson(out, false, false, false) << Endl;
         Cout.Flush();
     }
 };
+
 
 void DoFullPass(TRunParams runParams, bool withSpilling)
 {
@@ -160,11 +163,16 @@ void DoFullPass(TRunParams runParams, bool withSpilling)
         }
     };
 
+    auto doJoins = [&](const TRunParams& params){
+        RunJoinsBench(params, printout);
+    };
+
     Y_UNUSED(doBlockHashed, doSimple, doSimpleLast);
 
     doSimple(runParams);
     doSimpleLast(runParams);
     doBlockHashed(runParams);
+    doJoins(runParams);
 }
 
 enum class ETestType {
@@ -174,6 +182,7 @@ enum class ETestType {
     BlockCombiner,
     DqHashCombinerVs,
     SimpleGraceJoin,
+    AllJoins
 };
 
 void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spilling)
@@ -217,6 +226,8 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
             params.NumRuns = 1;
         }
         NKikimr::NMiniKQL::RunTestGraceJoinSimple(params, printout);
+    } else if (testType == ETestType::AllJoins){
+        NKikimr::NMiniKQL::RunJoinsBench(params, printout);
     }
 }
 
@@ -297,7 +308,7 @@ int main(int argc, const char* argv[])
 
     options
         .AddLongOption('t', "test")
-        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "grace-join"})
+        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "grace-join", "all-join"})
         .RequiredArgument("TEST_TYPE")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
@@ -311,6 +322,8 @@ int main(int argc, const char* argv[])
                 testType = ETestType::DqHashCombinerVs;
             } else if (val == "grace-join") {
                 testType = ETestType::SimpleGraceJoin;
+            } else if (val == "all-join") {
+                testType = ETestType::AllJoins;
             } else {
                 ythrow yexception() << "Unknown test type: " << val;
             }
@@ -353,6 +366,15 @@ int main(int argc, const char* argv[])
         .StoreResult(&runParams.JoinRightRows)
         .Help("Size for the right table in the join; defaults to num-keys");
 
+    auto colConfigs = NKikimr::NMiniKQL::GetColumnConfigurationNames();
+    options
+        .AddLongOption("dq-test-columns")
+        .Choices(THashSet<TString>(colConfigs.begin(), colConfigs.end()))
+        .DefaultValue(colConfigs.front())
+        .StoreResult(&runParams.CombineVsTestColumnSet)
+        .Help("Select the set of columns for the dq-hash-combiner test from a list of named configurations");
+
+
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 
     Y_ENSURE(runParams.NumKeys >= 1);
@@ -365,7 +387,7 @@ int main(int argc, const char* argv[])
     joinOverlap /= 100.0;
     runParams.JoinOverlap = std::min(static_cast<size_t>(runParams.NumKeys * joinOverlap), runParams.NumKeys);
 
-    Y_ENSURE(runParams.JoinRightRows > 0);
+    runParams.JoinRightRows = runParams.NumKeys;
 
     runParams.WideCombinerMemLimit <<= 20;
 

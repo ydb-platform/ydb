@@ -1,7 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/partition.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/security/ticket_parser.h>
 
@@ -2738,5 +2738,46 @@ Y_UNIT_TEST(IncompleteProxyResponse) {
     CmdRead(0, 5, 10, 20_MB, 4, false, tc, {6, 7, 8});
     CmdRead(0, 7, 10, 20_MB, 3, false, tc, {7, 8, 9});
 }
+
+Y_UNIT_TEST(SmallMsgComactificationWithRebootsTest) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+        tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicCompactificationByKey(true);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(1);
+
+        tc.Runtime->SetScheduledLimit(3000);
+        TString s{300_KB, 'c'};
+        ui64 currentOffset = 0;
+        auto writeData = [&](ui32 count) {
+            TVector<std::pair<ui64, TString>> data;
+            for (auto i = 0u; i < count; ++i) {
+                data.push_back({i + 1, s});
+            }
+            CmdWrite(0, "sourceid0", std::move(data), tc, false, {}, false, "", -1, currentOffset, false, false, true);
+            currentOffset += count;
+        };
+        PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=10'000, .lowWatermark=100, .enableCompactificationByKey = true}, {}, tc);
+        activeZone = PlainOrSoSlow(true, false);
+
+        writeData(50);
+        writeData(11);
+        writeData(6);
+
+        i64 expectedOffset = 61;
+        i64 consumerOffset = -1;
+        while(consumerOffset < expectedOffset) {
+            consumerOffset = CmdGetOffset(0, CLIENTID_COMPACTION_CONSUMER, Nothing(), tc);
+        }
+        UNIT_ASSERT(consumerOffset >= expectedOffset);
+        PQGetPartInfo([](ui64 offset) { return offset >= 25; }, currentOffset, tc);
+    });
+}
+
 } // Y_UNIT_TEST_SUITE(TPQTest)
 } // namespace NKikimr::NPQ

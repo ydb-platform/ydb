@@ -32,6 +32,7 @@ void TServiceDiscoveryConfig::Register(TRegistrar registrar)
         config->ExpireAfterSuccessfulUpdateTime = TDuration::Days(1);
         config->ExpireAfterFailedUpdateTime = TDuration::Seconds(5);
         config->RefreshTime = TDuration::Seconds(5);
+        config->ExpirationPeriod = TDuration::Seconds(5);
     });
 }
 

@@ -1,5 +1,5 @@
 #include "pqrb/partition_scale_manager_graph_cmp.h"
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 #include <library/cpp/testing/unittest/registar.h>
 

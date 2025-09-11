@@ -38,7 +38,7 @@ def _parse_selectors(selectors):
             return (result, False)
 
         key = selector[:eq_pos].strip()
-        value = selector[eq_pos + 1:].strip().strip('"')
+        value = selector[eq_pos + 1:].strip('=').strip().strip('"')
         result[key] = value
 
     return (result, True)

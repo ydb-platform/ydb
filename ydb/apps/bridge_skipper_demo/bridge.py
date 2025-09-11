@@ -1,3 +1,9 @@
+import health
+import json
+import pickle
+import os
+from cli_wrapper import *
+
 import collections
 import copy
 import logging
@@ -8,15 +14,11 @@ import yaml
 
 from typing import Dict, List, Optional, Tuple
 
-from cli_wrapper import *
-from health import AsyncHealthcheckRunner, PileWorldView, HEALTH_REPLY_TTL_SECONDS
-
-
 logger = logging.getLogger(__name__)
 
 # Currently when pile goes from 'NOT SYNCHRONIZED -> SYNCHRONIZED' there might be
 # healthchecks reporting it bad, we should ignore them for some time.
-TO_SYNC_TRANSITION_GRACE_PERIOD = HEALTH_REPLY_TTL_SECONDS * 2
+TO_SYNC_TRANSITION_GRACE_PERIOD = health.HEALTH_REPLY_TTL_SECONDS * 2
 
 # Emit an info-level "All is good" / "There are bad piles" at most once per this period (seconds)
 STATUS_INFO_PERIOD_SECONDS = 60.0
@@ -116,40 +118,55 @@ class PileState:
 
 
 class GlobalState:
-    def __init__(self, pile_world_views: Dict[str, PileWorldView], prev_state: "GlobalState"):
+    def __init__(self, pile_world_views: Dict[str, health.PileWorldView], prev_state: "GlobalState"):
         self.wall_ts = time.time()
         self.monotonic_ts = time.monotonic()
 
         self.piles = {} # pile name -> PileState
         self.generation = None # latest known generation
+        self.wait_for_generation = None # don't do anything until we see this generation or newer
         self.primary_name = None # primary according latest generation
 
         # pile_name -> number of piles reporting it bad including itself
         # Not part of state, just aggregation over self.piles.
         self._bad_piles = collections.defaultdict(int)
 
-        pile_with_latest_generation = None
-
         # step 1: find the latest admin state. Here we assume that no configuration
         # mistakes done and latest generation is good and the latest one.
-        for pile_name, view in pile_world_views.items():
-            if view.admin_states and view.admin_states.generation:
-                if not self.generation or view.admin_states.generation > self.generation:
-                    self.generation = view.admin_states.generation
-                    pile_with_latest_generation = pile_name
 
-        if not self.generation:
+        latest_generation, pile_with_latest_generation = health.get_latest_generation_pile(pile_world_views)
+
+        # step 2: get pile state from the latest generation (either new one or previously known)
+
+        has_previous_generation = prev_state and prev_state.generation
+
+        # there should be either just obtained generation or previous one
+        if not (latest_generation or has_previous_generation):
             logger.error(f"healthcheck failed, no admin config found: {pile_world_views}")
             return
 
-        # step 2: get pile state from the latest generation
+        if latest_generation and (not has_previous_generation or latest_generation >= prev_state.generation):
+            # new generation available
+            logger.debug(f"New config generation: {latest_generation}")
+            admin_items = pile_world_views[pile_with_latest_generation].admin_states.piles
+            self.generation = latest_generation
+            for pile_name, admin_item in admin_items.items():
+                self.piles[pile_name] = PileState()
+                self.piles[pile_name].admin_reported_state = admin_item.admin_reported_state
+                if admin_item.admin_reported_state == "PRIMARY":
+                    self.primary_name = pile_name
+        else:
+            # we have seen more recent generation, fall back to it
+            logger.debug(f"Fall back to previous known generation: {prev_state.generation}")
+            self.generation = prev_state.generation
+            for pile_name, pile in prev_state.piles.items():
+                self.piles[pile_name] = PileState()
+                self.piles[pile_name].admin_reported_state = pile.admin_reported_state
+                if pile.admin_reported_state == "PRIMARY":
+                    self.primary_name = pile_name
 
-        admin_items = pile_world_views[pile_with_latest_generation].admin_states.piles
-        for pile_name, admin_item in admin_items.items():
-            self.piles[pile_name] = PileState()
-            self.piles[pile_name].admin_reported_state = admin_item.admin_reported_state
-            if admin_item.admin_reported_state == "PRIMARY":
-                self.primary_name = pile_name
+        if prev_state and prev_state.wait_for_generation and prev_state.wait_for_generation > self.generation:
+            self.wait_for_generation = prev_state.wait_for_generation
 
         # step 3: process pile health part
 
@@ -212,6 +229,9 @@ class GlobalState:
             return NotImplemented
         if self.generation != other.generation:
             return False
+
+        # we intentionally ignore wait_for_generation
+
         if self.primary_name != other.primary_name:
             return False
         if set(self.piles.keys()) != set(other.piles.keys()):
@@ -233,8 +253,13 @@ class GlobalState:
             details_parts.append(f"{name}={pile}")
         piles_str = ", ".join(piles_parts)
         details_str = ", ".join(details_parts)
-        return (f"GlobalState(ts={self.wall_ts}, gen={self.generation}, primary={self.primary_name}, "
-            f"piles=[{piles_str}], details=[{details_str}])")
+
+        s = f"GlobalState(ts={self.wall_ts}, gen={self.generation}"
+        if self.wait_for_generation:
+            s += f", wait_generation={self.wait_for_generation}"
+
+        s += f", primary={self.primary_name}, piles=[{piles_str}], details=[{details_str}])"
+        return s
 
     def has_responsive_piles(self):
         for pile in self.piles.values():
@@ -414,20 +439,27 @@ class TransitionHistory:
 
 
 class BridgeSkipper:
-    def __init__(self, path_to_cli: str, initial_piles: Dict[str, List[str]], use_https: bool = False, auto_failover: bool = True):
+    def __init__(self, path_to_cli: str, initial_piles: Dict[str, List[str]], use_https: bool = False, auto_failover: bool = True, state_path: Optional[str] = None):
         self.path_to_cli = path_to_cli
         self.initial_piles = initial_piles
         self.use_https = use_https
         self.auto_failover = auto_failover
+        self.state_path = state_path
 
-        self.async_checker = AsyncHealthcheckRunner(path_to_cli, initial_piles, use_https=use_https)
+        self.async_checker = health.AsyncHealthcheckRunner(path_to_cli, initial_piles, use_https=use_https)
         self.async_checker.start()
 
         # TODO: avoid hack, sleep to give async_checker time to get data
-        time.sleep(HEALTH_REPLY_TTL_SECONDS)
+        time.sleep(health.HEALTH_REPLY_TTL_SECONDS)
 
         self.current_state = None
         self.state_history = TransitionHistory()
+
+        # Attempt to load previous state if provided
+        try:
+            self._load_state()
+        except Exception as e:
+            logger.debug(f"Failed to load saved state: {e}")
 
         self._state_lock = threading.Lock()
         self._run_thread = None
@@ -454,6 +486,10 @@ class BridgeSkipper:
         with self._state_lock:
             self.current_state = new_state
             self.state_history.add_state(self.current_state)
+        try:
+            self._save_state()
+        except Exception as e:
+            logger.error(f"Failed to save state: {e}")
 
     def _decide(self) -> Optional[Tuple[str, List[List[str]]]]:
         # decide is called within the same thread as do_healthcheck,
@@ -466,6 +502,11 @@ class BridgeSkipper:
 
         if not self.current_state.has_responsive_piles():
             logger.critical(f"All piles are unresponsive: {self.current_state}")
+            return None
+
+        if (self.current_state.wait_for_generation and
+                self.current_state.generation < self.current_state.wait_for_generation):
+            logger.debug(f"Current generation {self.current_state}, waiting >= {self.current_state.wait_for_generation}")
             return None
 
         bad_piles = [pile for pile, state in self.current_state.piles.items() if not state.is_good()]
@@ -531,6 +572,7 @@ class BridgeSkipper:
 
         if commands and len(commands) > 0:
             some_failed = False
+            succeeded_count = 0
             for command in commands:
                 command_str = f"{self.path_to_cli} -e grpc://{endpoints[0]}:2135 " + " ".join(command)
                 if self.auto_failover:
@@ -539,13 +581,23 @@ class BridgeSkipper:
                     if result is None:
                         some_failed = True
                         logger.error(f"Failed to apply command {command}")
+                    else:
+                        succeeded_count += 1
                 else:
                     logger.warning(f"Autofailover disabled, please execute the command: {command_str}")
             if some_failed:
                 logger.critical("Failover failed: cluster might be down!")
             else:
                 if self.auto_failover:
-                    logger.info("Failover commands executed successfully")
+                    commands_s = "command" if succeeded_count == 1 else "commands"
+                    new_min_gen = self.current_state.generation + succeeded_count
+                    logger.info(f"{succeeded_count} failover {commands_s} executed successfully, expecting gen >= {new_min_gen}")
+                    with self._state_lock:
+                        self.current_state.wait_for_generation = new_min_gen
+                    try:
+                        self._save_state()
+                    except Exception as e:
+                        logger.error(f"Failed to save state: {e}")
 
     def _maintain_once(self):
         self._do_healthcheck()
@@ -597,6 +649,40 @@ class BridgeSkipper:
             state_copy = copy.deepcopy(self.current_state) if self.current_state is not None else None
             transitions_copy = list(self.state_history.get_transitions())
         return (state_copy, transitions_copy)
+
+    def _save_state(self):
+        if not self.state_path:
+            return
+        state_path = self.state_path
+        # Truncate and write binary pickle, fsync for durability
+        fd = None
+        try:
+            fd = os.open(state_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+            with os.fdopen(fd, "wb") as f:
+                pickle.dump((self.current_state, self.state_history), f, protocol=pickle.HIGHEST_PROTOCOL)
+                f.flush()
+                os.fsync(f.fileno())
+            fd = None
+        finally:
+            try:
+                if fd is not None:
+                    os.close(fd)
+            except Exception:
+                pass
+
+    def _load_state(self):
+        if not self.state_path:
+            return
+        if not os.path.exists(self.state_path):
+            return
+        try:
+            with open(self.state_path, "rb") as f:
+                state, history = pickle.load(f)
+            # Assign loaded objects as-is
+            self.current_state = state
+            self.state_history = history
+        except Exception as e:
+            logger.debug(f"Failed to read state file: {e}")
 
 
 def get_max_status_length():

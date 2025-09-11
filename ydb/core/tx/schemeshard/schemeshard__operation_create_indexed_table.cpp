@@ -252,16 +252,22 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 // no feature flag, everything is fine
                 break;
-            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
                 if (!context.SS->EnableInitialUniqueIndex) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique constraint feature is disabled")};
                 }
                 break;
-            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            }
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
                 if (!context.SS->EnableVectorIndex) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
                 }
+                TString msg;
+                if (!NKikimr::NKMeans::ValidateSettings(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+                }
                 break;
+            }
         }
 
         {

@@ -259,9 +259,10 @@ class YdbCliHelper:
             return self.result.success
 
     class WorkloadResultParser:
-        def __init__(self, runner: YdbCliHelper.WorkloadRunner, query_name: str):
+        def __init__(self, runner: YdbCliHelper.WorkloadRunner, query_name: str, queries: list[str]):
             self.result = YdbCliHelper.WorkloadRunResult()
             self.result.start_time = runner.result.start_time
+            self.__queries = queries
             self.__query_name = query_name
             self.__runner = runner
             self.__process()
@@ -277,7 +278,12 @@ class YdbCliHelper:
             iter_str = 'iteration '
             begin_pos = self.result.stderr.find(begin_str)
             if begin_pos >= 0:
-                while True:
+                query_end_pos = -1
+                for q in self.__queries:
+                    end_pos = self.result.stderr.find(q, begin_pos + len(begin_str))
+                    if end_pos >= 0 and (query_end_pos < 0 or query_end_pos > end_pos):
+                        query_end_pos = end_pos
+                while begin_pos < query_end_pos or query_end_pos < 0:
                     begin_pos = self.result.stderr.find(iter_str, begin_pos)
                     if begin_pos < 0:
                         break
@@ -290,14 +296,12 @@ class YdbCliHelper:
                         iter = int(self.result.stderr[begin_pos:end_pos])
                         begin_pos = end_pos + 1
                     end_pos = self.result.stderr.find(end_str, begin_pos)
+                    if query_end_pos >= 0:
+                        end_pos = query_end_pos if end_pos < 0 else min(query_end_pos, end_pos)
                     msg = (self.result.stderr[begin_pos:] if end_pos < 0 else self.result.stderr[begin_pos:end_pos]).strip()
                     self.__init_iter(iter)
                     self.result.iterations[iter].error_message = msg
                     self.result.add_error(f'Iteration {iter}: {msg}')
-
-        def __process_returncode(self) -> None:
-            if self.__runner.returncode != 0 and not self.result.error_message and not self.result.warning_message:
-                self.result.add_error(f'Invalid return code: {self.__runner.returncode} instead 0. stderr: {self.result.stderr}')
 
         def __load_plan(self, name: Any) -> YdbCliHelper.QueryPlan:
             result = YdbCliHelper.QueryPlan()
@@ -369,7 +373,6 @@ class YdbCliHelper:
             self.__load_stats()
             self.__load_query_out()
             self.__load_plans()
-            self.__process_returncode()
 
     @staticmethod
     def workload_run(workload_type: WorkloadType, path: str, query_names: list[str], iterations: int = 5,
@@ -394,7 +397,7 @@ class YdbCliHelper:
 
         def __get_result(runner: YdbCliHelper.WorkloadRunner):
             if runner.run():
-                return {q: YdbCliHelper.WorkloadResultParser(runner, q).result for q in extended_query_names}
+                return {q: YdbCliHelper.WorkloadResultParser(runner, q, extended_query_names).result for q in extended_query_names}
             return {q: runner.result for q in extended_query_names}
 
         with ThreadPoolExecutor(max_workers=len(runners)) as executor:

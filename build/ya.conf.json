@@ -294,6 +294,15 @@
             },
             "formula": "build/platform/python/ymake_python3/resources.json"
         },
+        "ruff": {
+            "executable": {
+                "ruff": [
+                    "bin",
+                    "ruff"
+                ]
+            },
+            "formula": "build/external_resources/ruff/resources.json"
+        },
         "ya-tc": {
             "executable": {
                 "ya-tc": [
@@ -2337,6 +2346,35 @@
                 }
             }
         },
+        "ruff": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "ruff": {
+                    "bottle": "ruff",
+                    "executable": "ruff"
+                }
+            }
+        },
         "ya-tc": {
             "platforms": [
                 {
@@ -2548,6 +2586,9 @@
         "python3": {
             "description": "Run Python 3",
             "visible": false
+        },
+        "ruff": {
+            "description": "An extremely fast Python linter, written in Rust."
         },
         "strip": {
             "description": "Run strip utility"

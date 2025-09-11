@@ -220,6 +220,7 @@ struct TColumnFamily {
     TMaybe<TString> Data;
     TMaybe<TString> Compression;
     TMaybe<i32> CompressionLevel;
+    TMaybe<TString> CacheMode;
 };
 
 struct TTtlSettings {

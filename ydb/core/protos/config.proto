@@ -11,6 +11,7 @@ import "ydb/core/protos/blobstorage_vdisk_config.proto";
 import "ydb/core/protos/bootstrap.proto";
 import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/compaction.proto";
+import "ydb/core/protos/config_metrics.proto";
 import "ydb/core/protos/config_units.proto";
 import "ydb/core/protos/counters_schemeshard.proto";
 import "ydb/core/protos/data_integrity_trails.proto";
@@ -690,6 +691,7 @@ message TCompositeConveyorConfig {
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
         optional string Name = 4;
+        optional uint64 MaxBatchSize = 5;
     }
 
     optional bool Enabled = 1 [default = true];
@@ -1175,7 +1177,7 @@ message TCheckpointsConfig {
     message TLocalStorage {
         optional string TablePrefix = 1;
     }
-    
+
     optional bool Enabled = 1;
     oneof Storage {
         TExternalStorage ExternalStorage = 2;
@@ -1186,6 +1188,11 @@ message TCheckpointsConfig {
     optional uint64 CheckpointingPeriodMillis = 6;
     optional uint64 MaxInflight = 7;
     optional uint64 CheckpointingSnapshotRotationPeriod = 8; // 0 - All checkpoints are snapshots, 1 - 1 increment/ 1 snapshot, 20 - 20 increment / 1 snapshot.
+}
+
+message TStreamingQueriesConfig {
+    optional uint64 MaxQueryExecutions = 1 [default = 30];
+    optional bool PrivateSystemTables = 2 [default = true];
 }
 
 message TQueryServiceConfig {
@@ -1209,11 +1216,12 @@ message TQueryServiceConfig {
     optional NYql.TGenericGatewayConfig Generic = 11;
     optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
-    optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
+    optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 7200];
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
     optional TCheckpointsConfig CheckpointsConfig = 24;
+    optional TStreamingQueriesConfig StreamingQueries = 25;
 }
 
 // Config describes immediate controls and allows
@@ -1849,6 +1857,7 @@ message TAuditConfig {
             Operations = 7; // Operations API. See ydb/public/api/grpc/ydb_operation_v1.proto
             ExportImport = 8;
             Acl = 9;
+            AuditHeartbeat = 10;
             Default = 1000; // For default settings for all other nonconfigured log classes
         }
 
@@ -1870,10 +1879,20 @@ message TAuditConfig {
         repeated ELogPhase LogPhase = 4; // The phases of requests execution where audit log records are written
     }
 
+    // Settings for heartbeat audit messages
+    // Heartbeat messages are messages that are written in
+    // a time interval that is set up in this config.
+    // Audit messages are written from AuditHeartbeat log class
+    // and Anonymous account type and also can be set up using its setting
+    message THeartbeatSettings {
+        optional uint32 IntervalSeconds = 5; // Make heartbeat records to audit log every HeartbeatInterval seconds. 0 means that heartbeat is disabled
+    }
+
     optional TStderrBackend StderrBackend = 1;
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
     repeated TLogClassConfig LogClassConfig = 4;
+    optional THeartbeatSettings Heartbeat = 5;
 };
 
 message THiveTabletLimit {
@@ -2105,8 +2124,8 @@ message TColumnShardConfig {
     optional bool UseSlicesFilter = 31 [default = true];
     optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
     optional uint64 WritingBufferVolumeMb = 33 [default = 32];
-    optional uint64 WritingInFlightRequestsCountLimit = 34 [default = 1000000];
-    optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 2147483648];
+    optional uint64 WritingInFlightRequestsCountLimit = 34;
+    optional uint64 WritingInFlightRequestBytesLimit = 35;
     optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36;
     optional int32 DefaultCompressionLevel = 37;
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
@@ -2119,6 +2138,7 @@ message TColumnShardConfig {
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
     optional bool DeduplicationEnabled = 46 [default = true];
     optional bool BulkUpsertRequireAllColumns = 47 [default = true];
+    optional uint64 ProxyMemoryInFlightLimit = 48;
 }
 
 message TSchemeShardConfig {
@@ -2489,6 +2509,16 @@ message TStatisticsConfig {
     optional uint32 BaseStatsPropagateIntervalSecondsServerless = 4 [default = 180];
 };
 
+message TSystemTabletBackupConfig {
+    message TFilesystemBackend {
+        optional string Path = 1;
+    }
+
+    oneof Backend {
+        TFilesystemBackend Filesystem = 1;
+    }
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -2594,6 +2624,8 @@ message TAppConfig {
     optional TGeneralCacheConfig ColumnDataCache = 111;
     optional TGroupedMemoryLimiterConfig DeduplicationGroupedMemoryLimiterConfig = 112;
     optional TStatisticsConfig StatisticsConfig = 113;
+    optional TMetricsConfig MetricsConfig = 114;
+    optional TSystemTabletBackupConfig SystemTabletBackupConfig = 115;
 }
 
 message TYdbVersion {

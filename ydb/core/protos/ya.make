@@ -37,6 +37,7 @@ SRCS(
     compaction.proto
     compile_service_config.proto
     config.proto
+    config_metrics.proto
     config_units.proto
     console.proto
     console_base.proto

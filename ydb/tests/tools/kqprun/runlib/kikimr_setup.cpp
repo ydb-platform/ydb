@@ -1,7 +1,10 @@
 #include "kikimr_setup.h"
 #include "utils.h"
 
+#include <util/system/hostname.h>
+
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/grpc/server/actors/logger.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
 #include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
@@ -103,9 +106,18 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
 
     if (settings.GrpcEnabled) {
         serverSettings.SetGrpcPort(grpcPort);
+        serverSettings.SetGrpcHost(HostName());
     }
 
     return serverSettings;
+}
+
+NYdbGrpc::TServerOptions TKikimrSetupBase::GetGrpcSettings(ui32 grpcPort, ui32 nodeIdx, TDuration shutdownDeadline) const {
+    return NYdbGrpc::TServerOptions()
+        .SetHost("[::]")
+        .SetPort(grpcPort)
+        .SetGRpcShutdownDeadline(shutdownDeadline)
+        .SetLogger(NYdbGrpc::CreateActorSystemLogger(*GetRuntime()->GetActorSystem(nodeIdx), NKikimrServices::GRPC_SERVER));
 }
 
 std::optional<NKikimrWhiteboard::TSystemStateInfo> TKikimrSetupBase::GetSystemStateInfo(TIntrusivePtr<NKikimr::NMemory::IProcessMemoryInfoProvider> memoryInfoProvider) {
@@ -123,6 +135,14 @@ std::optional<NKikimrWhiteboard::TSystemStateInfo> TKikimrSetupBase::GetSystemSt
     }
 
     return systemStateInfo;
+}
+
+TString TKikimrSetupBase::FormatMonitoringLink(ui16 port, const TString& uri) {
+    return TStringBuilder() << port << " (view link: http://" << HostName() << ":" << port << "/" << uri << ")";
+}
+
+TString TKikimrSetupBase::FormatGrpcLink(ui16 port) {
+    return TStringBuilder() << port << " (connection: grpc://" << HostName() << ":" << port << ")";
 }
 
 void TKikimrSetupBase::SetLoggerSettings(const TServerSettings& settings, NKikimr::Tests::TServerSettings& serverSettings) const {

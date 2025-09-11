@@ -107,7 +107,6 @@ LINTER_FIELDS_BASE = (
     df.TestEnv.value,
     df.UseArcadiaPython.value,
     df.LintFileProcessingTime.from_macro_args,
-    df.Linter.value,
     df.CustomDependencies.depends_with_linter,
 )
 
@@ -1035,7 +1034,6 @@ def on_add_cpp_linter_check(fields, unit, *args):
     unlimited = -1
     keywords = {
         "NAME": 1,
-        "LINTER": 1,
         "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
         "CONFIGS": 1,
@@ -1081,7 +1079,6 @@ def on_add_py_linter_check(fields, unit, *args):
     unlimited = -1
     keywords = {
         "NAME": 1,
-        "LINTER": 1,
         "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
         "CONFIGS": 1,

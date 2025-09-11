@@ -1019,6 +1019,24 @@ private:
         VisitAllFields(TRule_show_create_table_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateSecret(const TRule_create_secret_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_create_secret_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterSecret(const TRule_alter_secret_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_alter_secret_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropSecret(const TRule_drop_secret_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_drop_secret_stmt::GetDescriptor(), msg);
+    }
+
     void VisitIntoTable(const TRule_into_table_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_into_table_stmt::GetDescriptor(), msg);
@@ -3140,6 +3158,9 @@ TStaticData::TStaticData()
         {TRule_create_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateStreamingQuery)},
         {TRule_alter_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterStreamingQuery)},
         {TRule_drop_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropStreamingQuery)},
+        {TRule_create_secret_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateSecret)},
+        {TRule_alter_secret_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSecret)},
+        {TRule_drop_secret_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropSecret)},
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},

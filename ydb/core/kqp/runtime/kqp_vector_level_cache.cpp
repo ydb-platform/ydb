@@ -1,6 +1,7 @@
 #include "kqp_vector_level_cache.h"
 
 #include <ydb/library/actors/core/log.h>
+#include <util/string/cast.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -21,6 +22,11 @@ std::unique_ptr<NKikimr::NKMeans::IClusters> TCachedClusterLevel::CreateClusters
 
 std::shared_ptr<TKqpVectorLevelCache::TCacheValue> TKqpVectorLevelCache::Get(const TCacheKey& key) {
     TGuard<TAdaptiveLock> guard(Lock);
+    
+    if (!CacheEnabled) {
+        ++Misses;
+        return nullptr;
+    }
     
     auto keyStr = key.ToString();
     auto it = Cache.find(keyStr);
@@ -47,6 +53,10 @@ void TKqpVectorLevelCache::Put(const TCacheKey& key, std::shared_ptr<TCacheValue
     
     TGuard<TAdaptiveLock> guard(Lock);
     
+    if (!CacheEnabled) {
+        return; // Don't store if caching is disabled
+    }
+    
     // Cleanup expired entries if cache is getting full
     if (Cache.size() >= MaxSize) {
         CleanupExpired();
@@ -67,12 +77,41 @@ void TKqpVectorLevelCache::Put(const TCacheKey& key, std::shared_ptr<TCacheValue
     Cache.emplace(keyStr, TCacheEntry(std::move(value), expiredAt));
 }
 
+void TKqpVectorLevelCache::SetEnabled(bool enabled) {
+    TGuard<TAdaptiveLock> guard(Lock);
+    CacheEnabled = enabled;
+    if (!enabled) {
+        Cache.clear();
+        Hits = 0;
+        Misses = 0;
+    }
+}
+
+bool TKqpVectorLevelCache::IsEnabled() const {
+    TGuard<TAdaptiveLock> guard(Lock);
+    return CacheEnabled;
+}
+
 void TKqpVectorLevelCache::InvalidateTable(const TString& tablePath) {
     TGuard<TAdaptiveLock> guard(Lock);
     
     auto it = Cache.begin();
     while (it != Cache.end()) {
         if (it->first.StartsWith(tablePath + ":")) {
+            it = Cache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void TKqpVectorLevelCache::InvalidateTableVersion(const TString& tablePath, ui64 schemaVersion) {
+    TGuard<TAdaptiveLock> guard(Lock);
+    
+    auto prefix = tablePath + ":" + ToString(schemaVersion) + ":";
+    auto it = Cache.begin();
+    while (it != Cache.end()) {
+        if (it->first.StartsWith(prefix)) {
             it = Cache.erase(it);
         } else {
             ++it;

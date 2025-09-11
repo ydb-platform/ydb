@@ -86,6 +86,45 @@ Y_UNIT_TEST_SUITE(KqpVectorLevelCacheTests) {
         UNIT_ASSERT_STRING_CONTAINS(key1.ToString(), "0");
     }
 
+    Y_UNIT_TEST(CacheEnableDisable) {
+        TKqpVectorLevelCache cache(100, TDuration::Seconds(10));
+        
+        TVector<ui64> clusterIds = {1, 2};
+        TVector<TString> clusterData = {"cluster1", "cluster2"};
+        
+        Ydb::Table::VectorIndexSettings indexSettings;
+        auto value = std::make_shared<TCachedClusterLevel>(
+            clusterIds, clusterData, indexSettings);
+        
+        TLevelTableCacheKey key("test_table", 1, 0);
+        
+        // Cache should be enabled by default
+        UNIT_ASSERT(cache.IsEnabled());
+        
+        // Put and get should work when enabled
+        cache.Put(key, value);
+        UNIT_ASSERT(cache.Get(key) != nullptr);
+        
+        // Disable cache
+        cache.SetEnabled(false);
+        UNIT_ASSERT(!cache.IsEnabled());
+        
+        // Cache should be cleared and Get should return null
+        UNIT_ASSERT(cache.Get(key) == nullptr);
+        
+        // Put should be ignored when disabled
+        cache.Put(key, value);
+        UNIT_ASSERT(cache.Get(key) == nullptr);
+        
+        // Re-enable cache
+        cache.SetEnabled(true);
+        UNIT_ASSERT(cache.IsEnabled());
+        
+        // Put and get should work again
+        cache.Put(key, value);
+        UNIT_ASSERT(cache.Get(key) != nullptr);
+    }
+
 } // Y_UNIT_TEST_SUITE
 
 } // namespace NKqp

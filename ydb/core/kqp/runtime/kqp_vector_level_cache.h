@@ -11,6 +11,7 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
+#include <util/string/builder.h>
 
 #include <memory>
 
@@ -86,8 +87,19 @@ public:
     explicit TKqpVectorLevelCache(size_t maxSize = 1000, TDuration ttl = TDuration::Hours(1))
         : MaxSize(maxSize)
         , Ttl(ttl)
+        , CacheEnabled(true)
     {
     }
+
+    /**
+     * Enable or disable caching.
+     */
+    void SetEnabled(bool enabled);
+    
+    /**
+     * Check if caching is enabled.
+     */
+    bool IsEnabled() const;
 
     /**
      * Try to get cached cluster data for the specified key.
@@ -105,6 +117,13 @@ public:
      * Should be called when the vector index is rebuilt.
      */
     void InvalidateTable(const TString& tablePath);
+    
+    /**
+     * Invalidate cache entry for a specific table and schema version.
+     * This is more precise than InvalidateTable and should be preferred
+     * when schema version is known.
+     */
+    void InvalidateTableVersion(const TString& tablePath, ui64 schemaVersion);
 
     /**
      * Clear all cached data.
@@ -140,6 +159,7 @@ private:
     
     size_t MaxSize;
     TDuration Ttl;
+    bool CacheEnabled;
     
     // Statistics
     mutable size_t Hits = 0;

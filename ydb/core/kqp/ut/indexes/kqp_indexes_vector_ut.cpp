@@ -1064,39 +1064,64 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             LIMIT 3
         )");
 
-        // First execution - should populate cache
-        auto result1 = ExecuteDataQuery(session, vectorQuery);
-        UNIT_ASSERT_C(result1.IsSuccess(), result1.GetIssues().ToString());
-        
-        auto resultSet1 = result1.GetResultSets();
-        UNIT_ASSERT_EQUAL(resultSet1.size(), 1);
-        
-        // Second execution - should use cache
-        auto result2 = ExecuteDataQuery(session, vectorQuery);
-        UNIT_ASSERT_C(result2.IsSuccess(), result2.GetIssues().ToString());
-        
-        auto resultSet2 = result2.GetResultSets();
-        UNIT_ASSERT_EQUAL(resultSet2.size(), 1);
-        
-        // Results should be identical
-        TResultSetParser parser1{resultSet1[0]};
-        TResultSetParser parser2{resultSet2[0]};
-        
-        TVector<i64> results1, results2;
-        while (parser1.TryNextRow()) {
-            results1.push_back(parser1.GetValue("pk").GetProto().int64_value());
-        }
-        while (parser2.TryNextRow()) {
-            results2.push_back(parser2.GetValue("pk").GetProto().int64_value());
+        // Execute multiple times to ensure cache is populated and used
+        TVector<TVector<i64>> allResults;
+        for (int i = 0; i < 3; ++i) {
+            auto result = ExecuteDataQuery(session, vectorQuery);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            
+            auto resultSet = result.GetResultSets();
+            UNIT_ASSERT_EQUAL(resultSet.size(), 1);
+            
+            TResultSetParser parser{resultSet[0]};
+            TVector<i64> results;
+            while (parser.TryNextRow()) {
+                results.push_back(parser.GetValue("pk").GetProto().int64_value());
+            }
+            allResults.push_back(results);
         }
         
-        UNIT_ASSERT_EQUAL(results1.size(), results2.size());
-        for (size_t i = 0; i < results1.size(); ++i) {
-            UNIT_ASSERT_EQUAL(results1[i], results2[i]);
+        // All executions should return the same results
+        UNIT_ASSERT_EQUAL(allResults.size(), 3);
+        for (size_t i = 1; i < allResults.size(); ++i) {
+            UNIT_ASSERT_EQUAL(allResults[0].size(), allResults[i].size());
+            for (size_t j = 0; j < allResults[0].size(); ++j) {
+                UNIT_ASSERT_EQUAL(allResults[0][j], allResults[i][j]);
+            }
         }
         
         // Verify we got the expected number of results
-        UNIT_ASSERT_EQUAL(results1.size(), 3);
+        UNIT_ASSERT_EQUAL(allResults[0].size(), 3);
+    }
+
+    Y_UNIT_TEST(VectorIndexCachePerformanceTest) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableAndVectorIndex(db, true);
+
+        const TString vectorQuery = Q_(R"(
+            SELECT pk FROM `/Root/TestTable`
+            ORDER BY distance(emb, AsVector("\x01\x01\x01"))
+            LIMIT 3
+        )");
+
+        // Execute the query several times to populate cache
+        for (int i = 0; i < 5; ++i) {
+            auto result = ExecuteDataQuery(session, vectorQuery);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        
+        // This test primarily validates that multiple executions work correctly
+        // In a real performance test, we would measure execution times
+        // but that's not suitable for a unit test environment
     }
 
 }

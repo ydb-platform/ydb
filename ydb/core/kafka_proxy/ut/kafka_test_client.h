@@ -141,10 +141,11 @@ class TKafkaTestClient {
 
         TRequestHeaderData Header(NKafka::EApiKey apiKey, TKafkaVersion version);
 
-    protected:
-        ui32 NextCorrelation();
         template <std::derived_from<TApiMessage> T>
         TMessagePtr<T> WriteAndRead(TRequestHeaderData& header, TApiMessage& request, bool silent = false);
+
+    protected:
+        ui32 NextCorrelation();
         void Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version, bool silent = false);
         void Write(TSocketOutput& so, TRequestHeaderData* header, TApiMessage* request, bool silent = false);
         template <std::derived_from<TApiMessage> T>

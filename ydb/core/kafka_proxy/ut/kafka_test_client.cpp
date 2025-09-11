@@ -826,3 +826,6 @@ void TKafkaTestClient::FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, TH
         }
     }
 }
+
+template
+TMessagePtr<TProduceResponseData> TKafkaTestClient::WriteAndRead<TProduceResponseData>(TRequestHeaderData& header, TApiMessage& request, bool silent = false);

@@ -152,6 +152,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 if (!context.SS->EnableFulltextIndex) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
                 }
+                TString msg;
+                if (!NKikimr::NFulltext::ValidateSettings(indexDescription.GetFulltextIndexDescription().GetSettings(), msg)) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+                }
                 break;
             }
             default:

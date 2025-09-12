@@ -7,11 +7,16 @@ from .constants import (
     PNPM_PRE_LOCKFILE_FILENAME,
     LOCAL_PNPM_INSTALL_HASH_FILENAME,
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
-    CA_STORE_DIRNAME,
     VIRTUAL_STORE_DIRNAME,
 )
 from .lockfile import PnpmLockfile
-from .utils import build_lockfile_path, build_build_backup_lockfile_path, build_pre_lockfile_path, build_ws_config_path
+from .utils import (
+    build_lockfile_path,
+    build_build_backup_lockfile_path,
+    build_pre_lockfile_path,
+    build_ws_config_path,
+    build_pnpm_store_path,
+)
 from .workspace import PnpmWorkspace
 from ..base import BasePackageManager, PackageManagerError
 from ..base.constants import (
@@ -28,7 +33,7 @@ from ..base.utils import (
     build_nm_path,
     build_nm_store_path,
     build_pj_path,
-    home_dir,
+    init_nots_path,
     s_rooted,
 )
 
@@ -157,8 +162,8 @@ class PnpmPackageManager(BasePackageManager):
         return cls.load_lockfile(build_lockfile_path(dir_path))
 
     @staticmethod
-    def get_local_pnpm_store():
-        return os.path.join(os.getenv("NOTS_STORE_PATH", home_dir()), ".cache", "pnpm-9-store")
+    def get_pnpm_store():
+        return build_pnpm_store_path()
 
     @timeit
     def _get_file_hash(self, path: str):
@@ -215,19 +220,18 @@ class PnpmPackageManager(BasePackageManager):
         """
         Creates node_modules directory according to the lockfile.
         """
+        init_nots_path(self.build_root, local_cli)
+
         ws = self._prepare_workspace(local_cli)
 
         self._copy_pnpm_patches()
 
         # Pure `tier 0` logic - isolated stores in the `build_root` (works in `distbuild` and `CI autocheck`)
-        store_dir = os.path.join(self.build_root, CA_STORE_DIRNAME)
+        store_dir = self.get_pnpm_store()
         virtual_store_dir = self._nm_path(VIRTUAL_STORE_DIRNAME)
 
         # Local mode optimizations (run from the `ya tool nots`)
         if local_cli:
-            # Use single CAS for all the projects built locally
-            store_dir = self.get_local_pnpm_store()
-
             nm_store_path = build_nm_store_path(self.module_path)
             # Use single virtual-store location in ~/.nots/nm_store/$MODDIR/node_modules/.pnpm
             virtual_store_dir = os.path.join(build_nm_path(nm_store_path), VIRTUAL_STORE_DIRNAME)

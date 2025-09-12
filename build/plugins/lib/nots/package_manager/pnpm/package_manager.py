@@ -250,6 +250,7 @@ class PnpmPackageManager(BasePackageManager):
             paths_to_exist = [build_nm_path(cwd)]
             hash_file = os.path.join(build_nm_store_path(self.module_path), LOCAL_PNPM_INSTALL_HASH_FILENAME)
             mutex_file = os.path.join(build_nm_store_path(self.module_path), LOCAL_PNPM_INSTALL_MUTEX_FILENAME)
+            os.makedirs(os.path.dirname(mutex_file), exist_ok=True)
             execute_cmd_hashed = hashed_by_files(files_to_hash, paths_to_exist, hash_file)(execute_install_cmd)
             execute_hashed_cmd_exclusively = sync_mutex_file(mutex_file)(execute_cmd_hashed)
             execute_hashed_cmd_exclusively()

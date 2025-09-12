@@ -808,19 +808,7 @@ TMessagePtr<T> TKafkaTestClient::Read(TSocketInput& si, TRequestHeaderData* requ
 }
 
 void TKafkaTestClient::Print(const TBuffer& buffer) {
-    TStringBuilder sb;
-    for (size_t i = 0; i < buffer.Size(); ++i) {
-        char c = buffer.Data()[i];
-        if (i > 0) {
-            sb << ", ";
-        }
-        sb << "0x" << Hex0((c & 0xF0) >> 4) << Hex0(c & 0x0F);
-    }
-    Cerr << ">>>>> Packet sent: " << sb << Endl;
-}
-
-char TKafkaTestClient::Hex0(const unsigned char c) {
-    return c < 10 ? '0' + c : 'A' + c - 10;
+    Cerr << ">>>>> Packet sent: " << Hex(buffer.Begin(), buffer.End()) << Endl;
 }
 
 void TKafkaTestClient::FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics) {
@@ -838,3 +826,6 @@ void TKafkaTestClient::FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, TH
         }
     }
 }
+
+template
+TMessagePtr<TProduceResponseData> TKafkaTestClient::WriteAndRead<TProduceResponseData>(TRequestHeaderData& header, TApiMessage& request, bool silent = false);

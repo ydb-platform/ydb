@@ -29,7 +29,7 @@ struct TMPMCRingQueue {
 #define OBSERVE(ENTRY_POINT) \
     OBSERVE_WITH_CONDITION(ENTRY_POINT, true)
 // OBSERVE
- 
+
     static constexpr ui32 MaxSize = 1 << MaxSizeBits;
 
     enum class EPopMode {
@@ -119,24 +119,35 @@ struct TMPMCRingQueue {
     }
 
     bool TryPush(ui32 val) {
-        ui64 currentTail = Tail.fetch_add(1, std::memory_order_relaxed);
-        OBSERVE(AfterReserveSlotInFastPush);
-        ui32 generation = currentTail / MaxSize;
+        while (true) {
+            ui64 currentTail = Tail.fetch_add(1, std::memory_order_relaxed);
+            OBSERVE(AfterReserveSlotInFastPush);
+            ui32 generation = currentTail / MaxSize;
 
-        std::atomic<ui64> &currentSlot = Buffer[ConvertIdx(currentTail)];
-        TSlot slot;
-        ui64 expected = TSlot::MakeEmpty(generation);
-        do {
-            if (currentSlot.compare_exchange_weak(expected, val)) {
-                OBSERVE(SuccessFastPush);
-                OBSERVE_WITH_CONDITION(FoundOldSlotInFastPush, (slot = TSlot::Recognise(expected), slot.Generation < generation));
-                return true;
+            std::atomic<ui64> &currentSlot = Buffer[ConvertIdx(currentTail)];
+            TSlot slot;
+            ui64 expected = TSlot::MakeEmpty(generation);
+            do {
+                if (currentSlot.compare_exchange_weak(expected, val)) {
+                    OBSERVE(SuccessFastPush);
+                    OBSERVE_WITH_CONDITION(FoundOldSlotInFastPush, (slot = TSlot::Recognise(expected), slot.Generation < generation));
+                    return true;
+                }
+                slot = TSlot::Recognise(expected);
+            } while (slot.Generation <= generation && slot.IsEmpty);
+
+            if (!slot.IsEmpty) {
+                ui64 currentHead = Head.load(std::memory_order_acquire);
+                if (currentHead + MaxSize <= currentTail + std::min<ui64>(64, MaxSize - 1)) {
+                    OBSERVE(FailedPush);
+                    return false;
+                }
+                continue;
             }
-            slot = TSlot::Recognise(expected);
-        } while (slot.Generation <= generation && slot.IsEmpty);
 
-        OBSERVE(ChangeFastPushToSlowPush);
-        return TryPushSlow(val);
+            OBSERVE(ChangeFastPushToSlowPush);
+            return TryPushSlow(val);
+        }
     }
 
     void ShiftLocalHead() {
@@ -289,7 +300,7 @@ struct TMPMCRingQueue {
                 return std::nullopt;
             }
 
-            OBSERVE_WITH_CONDITION(FoundOldSlotInSlowPop, slot.Generation < generation); 
+            OBSERVE_WITH_CONDITION(FoundOldSlotInSlowPop, slot.Generation < generation);
             while (slot.Generation <= generation && slot.IsEmpty) {
                 if (currentSlot.compare_exchange_weak(expected, TSlot::MakeEmpty(generation + 1))) {
                     Head.compare_exchange_strong(currentHead, currentHead + 1);
@@ -349,8 +360,8 @@ struct TMPMCRingQueue {
                 continue;
             }
 
-            OBSERVE_WITH_CONDITION(FoundOldSlotInFastPop, slot.Generation < generation); 
-            OBSERVE_WITH_CONDITION(InvalidatedSlotInFastPop, slot.Generation <= generation); 
+            OBSERVE_WITH_CONDITION(FoundOldSlotInFastPop, slot.Generation < generation);
+            OBSERVE_WITH_CONDITION(InvalidatedSlotInFastPop, slot.Generation <= generation);
 
             ui64 currentTail = Tail.load(std::memory_order_acquire);
             if (currentTail > currentHead) {
@@ -409,8 +420,8 @@ struct TMPMCRingQueue {
                 continue;
             }
 
-            OBSERVE_WITH_CONDITION(FoundOldSlotInReallyFastPop, slot.Generation < generation); 
-            OBSERVE_WITH_CONDITION(InvalidatedSlotInReallyFastPop, slot.Generation <= generation); 
+            OBSERVE_WITH_CONDITION(FoundOldSlotInReallyFastPop, slot.Generation < generation);
+            OBSERVE_WITH_CONDITION(InvalidatedSlotInReallyFastPop, slot.Generation <= generation);
 
             if (slot.Generation > generation) {
                 OBSERVE(FailedReallyFastPopAttempt);

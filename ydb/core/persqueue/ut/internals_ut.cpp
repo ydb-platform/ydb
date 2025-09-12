@@ -1,8 +1,8 @@
-#include "blob.h"
-#include "header.h"
+#include <ydb/core/persqueue/pqtablet/blob/blob.h>
+#include <ydb/core/persqueue/pqtablet/blob/header.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/format.h>

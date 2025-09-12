@@ -4,7 +4,7 @@
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 #include <util/string/join.h>
@@ -43,7 +43,14 @@ void TKafkaProduceActor::LogEvent(IEventHandle& ev) {
 }
 
 void TKafkaProduceActor::SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx) {
-    auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, topicName);
+    TString topic = "unknown";
+
+    auto it = Topics.find(topicName);
+    if (it != Topics.end() && it->second.Status != ETopicStatus::NOT_FOUND) {
+        topic = it->first;
+    }
+
+    auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, topic);
     ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicWithoutDb, TStringBuilder() << "api.kafka.produce." << name, "")));
     ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicWithoutDb, "api.kafka.produce.total_messages", "")));
 }
@@ -315,7 +322,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         Y_ABORT_UNLESS(res);
 
         auto w = partitionRequest->AddCmdWrite();
-        w->SetSourceId(sourceId);
+        w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
 
         bool enableKafkaDeduplication = batch->ProducerId >= 0;
         w->SetEnableKafkaDeduplication(enableKafkaDeduplication);

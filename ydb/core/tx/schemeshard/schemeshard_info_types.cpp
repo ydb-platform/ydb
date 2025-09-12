@@ -2087,23 +2087,34 @@ bool TTableInfo::CheckSplitByLoad(
         const TTableInfo* mainTableForIndex, TString& reason) const
 {
     // Don't split/merge backup tables
-    if (IsBackup)
+    if (IsBackup) {
+        reason = "IsBackup";
         return false;
+    }
 
     // Don't split/merge restore tables
-    if (IsRestore)
+    if (IsRestore) {
+        reason = "IsRestore";
         return false;
+    }
 
-    if (!splitSettings.SplitByLoadEnabled)
+    if (!splitSettings.SplitByLoadEnabled) {
+        reason = "SplitByLoadDisabled";
         return false;
+    }
 
     // Ignore stats from unknown datashard (it could have been split)
-    if (!Stats.PartitionStats.contains(shardIdx))
+    if (!Stats.PartitionStats.contains(shardIdx)) {
+        reason = "UnknownDataShard";
         return false;
-    if (!Shard2PartitionIdx.contains(shardIdx))
+    }
+    if (!Shard2PartitionIdx.contains(shardIdx)) {
+        reason = "ShardNotInIndex";
         return false;
+    }
 
     if (!IsSplitByLoadEnabled(mainTableForIndex)) {
+        reason = "SplitByLoadNotEnabledForTable";
         return false;
     }
 
@@ -2135,6 +2146,11 @@ bool TTableInfo::CheckSplitByLoad(
         Stats.PartitionStats.size() >= maxShards ||
         stats.GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000)
     {
+        reason = TStringBuilder() << "ConditionsNotMet"
+            << " rowCount: " << rowCount << " minRows: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
+            << " dataSize: " << dataSize << " minSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
+            << " shardCount: " << Stats.PartitionStats.size() << " maxShards: " << maxShards
+            << " cpuUsage: " << stats.GetCurrentRawCpuUsage() << " threshold: " << cpuUsageThreshold * 1000000;
         return false;
     }
 
@@ -2350,8 +2366,8 @@ void TIndexBuildInfo::TKMeans::PrefixIndexDone(ui64 shards) {
 }
 
 void TIndexBuildInfo::TKMeans::Set(ui32 level,
-    NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
-    NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
+    NTableIndex::NKMeans::TClusterId parentBegin, NTableIndex::NKMeans::TClusterId parent,
+    NTableIndex::NKMeans::TClusterId childBegin, NTableIndex::NKMeans::TClusterId child,
     ui32 state, ui64 tableSize, ui32 round, bool isEmpty) {
     Level = level;
     Round = round;
@@ -2381,7 +2397,7 @@ NKikimrTxDataShard::EKMeansState TIndexBuildInfo::TKMeans::GetUpload() const {
 }
 
 TString TIndexBuildInfo::TKMeans::WriteTo(bool needsBuildTable) const {
-    using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+    using namespace NTableIndex::NKMeans;
     TString name = PostingTable;
     if (needsBuildTable || NeedsAnotherLevel()) {
         name += Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
@@ -2391,27 +2407,27 @@ TString TIndexBuildInfo::TKMeans::WriteTo(bool needsBuildTable) const {
 
 TString TIndexBuildInfo::TKMeans::ReadFrom() const {
     Y_ENSURE(Level > 1);
-    using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+    using namespace NTableIndex::NKMeans;
     TString name = PostingTable;
     name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
     return name;
 }
 
-std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId> TIndexBuildInfo::TKMeans::RangeToBorders(const TSerializedTableRange& range) const {
-    const NTableIndex::TClusterId minParent = ParentBegin;
-    const NTableIndex::TClusterId maxParent = ParentEnd();
-    const NTableIndex::TClusterId parentFrom = [&, from = range.From.GetCells()] {
+std::pair<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId> TIndexBuildInfo::TKMeans::RangeToBorders(const TSerializedTableRange& range) const {
+    const NTableIndex::NKMeans::TClusterId minParent = ParentBegin;
+    const NTableIndex::NKMeans::TClusterId maxParent = ParentEnd();
+    const NTableIndex::NKMeans::TClusterId parentFrom = [&, from = range.From.GetCells()] {
         if (!from.empty()) {
             if (!from[0].IsNull()) {
-                return from[0].AsValue<NTableIndex::TClusterId>() + static_cast<NTableIndex::TClusterId>(from.size() == 1);
+                return from[0].AsValue<NTableIndex::NKMeans::TClusterId>() + static_cast<NTableIndex::NKMeans::TClusterId>(from.size() == 1);
             }
         }
         return minParent;
     }();
-    const NTableIndex::TClusterId parentTo = [&, to = range.To.GetCells()] {
+    const NTableIndex::NKMeans::TClusterId parentTo = [&, to = range.To.GetCells()] {
         if (!to.empty()) {
             if (!to[0].IsNull()) {
-                return to[0].AsValue<NTableIndex::TClusterId>() - static_cast<NTableIndex::TClusterId>(to.size() != 1 && to[1].IsNull());
+                return to[0].AsValue<NTableIndex::NKMeans::TClusterId>() - static_cast<NTableIndex::NKMeans::TClusterId>(to.size() != 1 && to[1].IsNull());
             }
         }
         return maxParent;
@@ -2433,7 +2449,7 @@ TString TIndexBuildInfo::TKMeans::RangeToDebugStr(const TSerializedTableRange& r
         }
         auto str = TStringBuilder{} << "{ count: " << cells.size();
         if (Level > 1) {
-            str << ", parent: " << cells[0].AsValue<NTableIndex::TClusterId>();
+            str << ", parent: " << cells[0].AsValue<NTableIndex::NKMeans::TClusterId>();
             if (cells.size() != 1 && cells[1].IsNull()) {
                 str << ", pk: null";
             }
@@ -2456,7 +2472,7 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
     // 1. It fits entirely in the single shard => local kmeans for single shard
     // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
     auto [parentFrom, parentTo] = KMeans.Parent == 0
-        ? std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId>{0, 0}
+        ? std::pair<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId>{0, 0}
         : KMeans.RangeToBorders(range);
 
     auto itFrom = Cluster2Shards.lower_bound(parentFrom);

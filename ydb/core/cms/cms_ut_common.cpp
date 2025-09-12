@@ -595,6 +595,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
                 runtime.GetAppData(nodeIndex).BridgeConfig.AddPiles()->SetName("r" + ToString(pileId));
             }
             runtime.GetAppData(nodeIndex).BridgeModeEnabled = true;
+            runtime.GetAppData(nodeIndex).SuppressBridgeModeBootstrapperLogic = true;
         }
     }
 

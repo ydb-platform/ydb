@@ -349,7 +349,7 @@ namespace NKikimr {
 
         bool THullHugeKeeperPersState::WouldNewEntryPointAdvanceLog(ui64 freeUpToLsn, ui64 minInFlightLsn,
                 ui32 itemsAfterCommit) const {
-            return freeUpToLsn < minInFlightLsn && (PersistentLsn <= freeUpToLsn || itemsAfterCommit > 10000);
+            return freeUpToLsn <= minInFlightLsn && (!PersistentLsn || PersistentLsn < freeUpToLsn || itemsAfterCommit > 10000);
         }
 
         // initiate commit

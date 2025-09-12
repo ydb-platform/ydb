@@ -25,7 +25,7 @@ struct TTestInfo {
 
     TDuration CompilationMin;
     TDuration CompilationMax;
-    double CompilationMean;
+    double CompilationMean = 1;
 
     double Mean = 0;
     double Median = 0;

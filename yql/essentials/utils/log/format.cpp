@@ -9,6 +9,9 @@
 #include <library/cpp/json/json_writer.h>
 
 #include <util/string/builder.h>
+#include <util/generic/algorithm.h>
+
+#include <ranges>
 
 namespace NYql::NLog {
 
@@ -41,54 +44,84 @@ namespace NYql::NLog {
             };
         }
 
-        template <std::invocable<EContextKey> Action>
-        void ForEachRequiredContextKey(Action&& action) {
-            const size_t min = static_cast<size_t>(EContextKey::DateTime);
-            for (size_t i = min; i <= MaxRequiredContextKey; ++i) {
-                action(static_cast<EContextKey>(i));
+        void PrintBody(TStringBuilder& out, const TLogRecord& rec, size_t flagBegin) {
+            out << TStringBuf(rec.Data, rec.Len);
+
+            if (flagBegin < rec.MetaFlags.size()) {
+                out << ". Extra context: ";
             }
+
+            for (size_t i = flagBegin; i < rec.MetaFlags.size(); ++i) {
+                const auto& [key, value] = rec.MetaFlags[i];
+                out << key << " = " << value;
+                if (i + 1 != rec.MetaFlags.size()) {
+                    out << ", ";
+                }
+            }
+        }
+
+        TString FallbackFormat(const TLogRecord& rec) {
+            TStringBuilder out;
+            PrintBody(out, rec, /*flagBegin=*/0);
+            return out;
         }
 
         class TFormattingLogBackend final: public TForwardingLogBackend {
         public:
-            explicit TFormattingLogBackend(TFormatter formatter, TAutoPtr<TLogBackend> child)
+            explicit TFormattingLogBackend(TFormatter formatter, bool isStrict, TAutoPtr<TLogBackend> child)
                 : TForwardingLogBackend(std::move(child))
                 , Formatter_(std::move(formatter))
+                , IsStrict_(isStrict)
             {
             }
 
             void WriteData(const TLogRecord& rec) final {
-                Validate(rec);
+                if (rec.MetaFlags.empty()) {
+                    // NB. For signal handler.
+                    return TForwardingLogBackend::WriteData(rec);
+                }
 
-                TString message = Formatter_(rec);
+                TString message;
+                if (IsSupported(rec.MetaFlags)) {
+                    message = Formatter_(rec);
+                } else if (IsStrict_) {
+                    TStringBuilder message;
+                    message << "LogRecord is not supported: ";
+                    PrintBody(message, rec, /* flagBegin = */ 0);
+                    ythrow yexception() << std::move(message);
+                } else {
+                    message = FallbackFormat(rec);
+                }
                 message.append('\n');
 
                 const TLogRecord formatted(rec.Priority, message.data(), message.size());
-
                 return TForwardingLogBackend::WriteData(formatted);
             }
 
         protected:
-            void Validate(const TLogRecord& rec) const {
-                const TLogRecord::TMetaFlags& flags = rec.MetaFlags;
-
-                ForEachRequiredContextKey([&](EContextKey key) {
-                    size_t i = static_cast<int>(key);
+            static bool IsSupported(const TLogRecord::TMetaFlags& flags) {
+                const auto isSupported = [&](size_t i) -> bool {
+                    const EContextKey key = static_cast<EContextKey>(i);
 
                     const TStringBuf expected = ToStringBuf(key);
-                    YQL_ENSURE(
-                        i < flags.size(),
-                        "ContextKey #" << i << " named'" << expected << "' is out of range " << flags.size());
+                    if (flags.size() <= i) {
+                        return false;
+                    }
 
-                    const TStringBuf actual = rec.MetaFlags[i].first;
-                    YQL_ENSURE(
-                        actual == expected,
-                        "MetaFlag #" << i << " key was expected to be '" << expected << "', but got '" << actual << "'");
-                });
+                    const TStringBuf actual = flags[i].first;
+                    if (actual != expected) {
+                        return false;
+                    }
+
+                    return true;
+                };
+
+                return AllOf(std::views::iota(Min<size_t>(), MaxRequiredContextKey), isSupported);
             }
 
         private:
             TFormatter Formatter_;
+            bool IsStrict_;
         };
 
     } // namespace
@@ -107,11 +140,14 @@ namespace NYql::NLog {
             << get(EContextKey::FileName)
             << ':' << get(EContextKey::Line) << ": ";
 
+        size_t unknownContextBegin = MaxRequiredContextKey + 1;
         if (auto path = opt(ToStringBuf(EContextKey::Path))) {
             out << "{" << *path << "} ";
+            unknownContextBegin += 1;
         }
 
-        return out << TStringBuf(rec.Data, rec.Len);
+        PrintBody(out, rec, unknownContextBegin);
+        return out;
     }
 
     TString JsonFormat(const TLogRecord& rec) {
@@ -131,8 +167,8 @@ namespace NYql::NLog {
         return std::move(out.Str());
     }
 
-    TAutoPtr<TLogBackend> MakeFormattingLogBackend(TFormatter formatter, TAutoPtr<TLogBackend> child) {
-        return new TFormattingLogBackend(std::move(formatter), std::move(child));
+    TAutoPtr<TLogBackend> MakeFormattingLogBackend(TFormatter formatter, bool isStrict, TAutoPtr<TLogBackend> child) {
+        return new TFormattingLogBackend(std::move(formatter), isStrict, std::move(child));
     }
 
 } // namespace NYql::NLog

@@ -4370,7 +4370,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().contains("Write transactions that use both row-based and column-based tables are disabled at current time."),
+                insertResult.GetIssues().ToString().contains("Write transactions that use both row-oriented and column-oriented tables are disabled at current time."),
                 insertResult.GetIssues().ToString());
         }
 
@@ -4383,7 +4383,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().contains("Write transactions that use both row-based and column-based tables are disabled at current time."),
+                insertResult.GetIssues().ToString().contains("Write transactions that use both row-oriented and column-oriented tables are disabled at current time."),
                 insertResult.GetIssues().ToString());
         }
 
@@ -4398,7 +4398,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().contains("Write transactions that use both row-based and column-based tables are disabled at current time."),
+                insertResult.GetIssues().ToString().contains("Write transactions that use both row-oriented and column-oriented tables are disabled at current time."),
                 insertResult.GetIssues().ToString());
         }
 
@@ -4412,7 +4412,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().contains("Write transactions that use both row-based and column-based tables are disabled at current time."),
+                insertResult.GetIssues().ToString().contains("Write transactions that use both row-oriented and column-oriented tables are disabled at current time."),
                 insertResult.GetIssues().ToString());
         }
 
@@ -4426,7 +4426,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().contains("Write transactions that use both row-based and column-based tables are disabled at current time."),
+                insertResult.GetIssues().ToString().contains("Write transactions that use both row-oriented and column-oriented tables are disabled at current time."),
                 insertResult.GetIssues().ToString());
         }
 

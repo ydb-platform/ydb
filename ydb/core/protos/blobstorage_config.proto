@@ -236,6 +236,7 @@ message TMaintenanceStatus {
         NOT_SET = 0;                        // unset status, default value
         NO_REQUEST = 1;                     // no active maintenance request
         LONG_TERM_MAINTENANCE_PLANNED = 2;  // maintence requested, VDisks should be moved asynchronously from PDisk
+        NO_NEW_VDISKS = 3;                  // no new VDisks should be allocated on this PDisk, but existing ones are not moved
     }
 }
 

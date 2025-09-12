@@ -2,7 +2,7 @@
 #include "read_balancer_log.h"
 #include "partition_scale_manager_graph_cmp.h"
 
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <fmt/format.h>
 #include <algorithm>
 #include <ranges>
@@ -90,9 +90,14 @@ std::vector<TPartitionScaleManager::TPartitionsToSplitMap::const_iterator> TPart
     // try to avoid gaps by using partitions with smaller children id
     auto proj = [](const auto& it) {
         const TPartitionScaleOperationInfo& info = it->second;
-        const auto& childPartitionIds = info.PartitionScaleParticipants->GetChildPartitionIds();
-        ui32 minChildPartitionId = childPartitionIds.empty() ? info.PartitionId : std::ranges::min(childPartitionIds);
-        return std::make_tuple(minChildPartitionId, info.PartitionId);
+        if (info.PartitionScaleParticipants.Defined()) {
+            const auto& childPartitionIds = info.PartitionScaleParticipants->GetChildPartitionIds();
+            if (!childPartitionIds.empty()) {
+                ui32 minChildPartitionId = std::ranges::min(childPartitionIds);
+                return std::make_tuple(minChildPartitionId, info.PartitionId);
+            }
+        }
+        return std::make_tuple(info.PartitionId, info.PartitionId);
     };
     std::vector<TPartitionScaleManager::TPartitionsToSplitMap::const_iterator> result;
     result.reserve(PartitionsToSplit.size());

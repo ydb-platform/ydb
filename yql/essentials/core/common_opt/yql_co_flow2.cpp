@@ -304,7 +304,7 @@ TExprNode::TPtr LMapSubsetFields(const TCoMapBase& node, TExprContext& ctx, TOpt
 
 TExprNode::TPtr OptimizeLMap(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     const TCoMapBase self(node);
-    if (!optCtx.IsSingleUsage(self.Input().Ref())) {
+    if (!AllowSubsetFieldsForNode(self.Input().Ref(), optCtx)) {
         return node;
     }
     auto ret = LMapSubsetFields(self, ctx, optCtx);
@@ -2461,7 +2461,11 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
-        if (self.Input().Maybe<TCoPartitionByKey>()) {
+        if (self.Input().Maybe<TCoPartitionByKeyBase>()) {
+            if (self.Input().Maybe<TCoPartitionsByKeys>() && !CanApplyExtractMembersToPartitionsByKeys(optCtx.Types)) {
+                return node;
+            }
+
             if (auto res = ApplyExtractMembersToPartitionByKey(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
                 return res;
             }

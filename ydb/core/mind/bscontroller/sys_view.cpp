@@ -464,10 +464,6 @@ void CopyInfo(TDstMap& dst, TDeletedSet& deleted, const TSrcMap& src, TChangedSe
 }
 
 void TBlobStorageController::UpdateSystemViews() {
-    if (!AppData()->FeatureFlags.GetEnableSystemViews()) {
-        return;
-    }
-
     const TMonotonic now = TActivationContext::Monotonic();
     const TDuration expiration = TDuration::Seconds(15);
     for (auto& [key, value] : VSlots) {
@@ -655,6 +651,60 @@ void TBlobStorageController::UpdateSystemViews() {
                 }));
             } else if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end()) {
                 aggr(g, it->second.Info->GetBridgeGroupIds());
+            }
+        }
+
+        for (auto& [groupId, g] : state.Groups) {
+            if (const auto it = BridgeSyncState.find(groupId); it != BridgeSyncState.end()) {
+                TBridgeSyncState& state = it->second;
+                g.SetBridgeSyncLastError(state.LastError);
+                g.SetBridgeSyncLastErrorTimestamp(state.LastErrorTimestamp.GetValue());
+                g.SetBridgeSyncFirstErrorTimestamp(state.FirstErrorTimestamp.GetValue());
+                g.SetBridgeSyncErrorCount(state.ErrorCount);
+            }
+            if (const TGroupInfo *group = FindGroup(groupId); group && group->BridgeProxyGroupId && group->BridgePileId) {
+                if (const TGroupInfo *proxyGroup = FindGroup(*group->BridgeProxyGroupId); proxyGroup && proxyGroup->BridgeGroupInfo) {
+                    const auto& bridgeGroupState = proxyGroup->BridgeGroupInfo->GetBridgeGroupState();
+                    if (group->BridgePileId.GetPileIndex() < bridgeGroupState.PileSize()) {
+                        const auto& pile = bridgeGroupState.GetPile(group->BridgePileId.GetPileIndex());
+                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile.GetStage()));
+                    }
+                }
+            } else if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end() &&
+                    it->second.Info &&
+                    it->second.Info->Group &&
+                    it->second.Info->Group->HasBridgeProxyGroupId() &&
+                    it->second.Info->Group->HasBridgePileId()) {
+                if (const auto proxyIt = StaticGroups.find(TGroupId::FromProto(&it->second.Info->Group.value(),
+                            &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId));
+                        proxyIt != StaticGroups.end() &&
+                        proxyIt->second.Info &&
+                        proxyIt->second.Info->Group &&
+                        proxyIt->second.Info->Group->HasBridgeGroupState()) {
+                    const auto& bridgeGroupState = proxyIt->second.Info->Group->GetBridgeGroupState();
+                    const auto bridgePileId = TBridgePileId::FromProto(&it->second.Info->Group.value(),
+                        &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
+                    if (bridgePileId.GetPileIndex() < bridgeGroupState.PileSize()) {
+                        const auto& pile = bridgeGroupState.GetPile(bridgePileId.GetPileIndex());
+                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile.GetStage()));
+                    }
+                }
+            }
+            if (const auto it = TargetGroupToSyncerState.find(groupId); it != TargetGroupToSyncerState.end()) {
+                TSyncerState& syncerState = it->second;
+                for (const auto& perNodeInfo : syncerState.NodeIds | std::views::values) {
+                    if (perNodeInfo.Progress.BytesTotal) {
+                        const double progress = intmax_t(perNodeInfo.Progress.BytesDone) * 1'000'000 /
+                            perNodeInfo.Progress.BytesTotal * 1e-6;
+                        if (!g.HasBridgeDataSyncProgress() || g.GetBridgeDataSyncProgress() < progress) {
+                            g.SetBridgeDataSyncProgress(progress);
+                        }
+                    }
+                    if (perNodeInfo.Progress.BlobsError) {
+                        g.SetBridgeDataSyncErrors(true);
+                    }
+                }
+                g.SetBridgeSyncRunning(static_cast<bool>(syncerState.NodeIds));
             }
         }
 

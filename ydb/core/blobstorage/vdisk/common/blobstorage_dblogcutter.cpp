@@ -119,7 +119,7 @@ namespace NKikimr {
 
             // only issue command if there is a progress in FreeUpToLsn queue
             bool progress = false;
-            for (; FreeUpToLsn && FreeUpToLsn.front() < curLsn; FreeUpToLsn.pop_front()) {
+            for (; FreeUpToLsn && FreeUpToLsn.front() <= curLsn; FreeUpToLsn.pop_front()) {
                 progress = true;
             }
 

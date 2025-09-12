@@ -1047,9 +1047,28 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropSysView, NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropSysView, NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView)
 
+    // secret
+    GENERIC_HELPERS(CreateSecret, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret, &NKikimrSchemeOp::TModifyScheme::MutableCreateSecret)
+    GENERIC_HELPERS(AlterSecret, NKikimrSchemeOp::EOperationType::ESchemeOpAlterSecret, &NKikimrSchemeOp::TModifyScheme::MutableAlterSecret)
+    GENERIC_HELPERS(DropSecret, NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropSecret, NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret)
+
+    // streaming query
+    GENERIC_HELPERS(CreateStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableCreateStreamingQuery)
+    GENERIC_HELPERS(AlterStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableCreateStreamingQuery)
+    GENERIC_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
+
+    void TestCreateStreamingQueryOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
+        auto* ev = CreateStreamingQueryRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
+        ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
 
     ui64 TestCreateSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme,
             const NKikimrSchemeOp::TAlterUserAttributes& userAttrs)

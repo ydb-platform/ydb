@@ -81,6 +81,7 @@ public:
     class TTxUpdateShred;
     class TTxCheckUnsynced;
     class TTxUpdateBridgeGroupInfo;
+    class TTxUpdateBridgeSyncState;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -527,7 +528,8 @@ public:
 
         bool AcceptsNewSlots() const {
             return Status == NKikimrBlobStorage::EDriveStatus::ACTIVE
-                && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
+                && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED
+                && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::NO_NEW_VDISKS;
         }
 
         bool Decommitted() const {
@@ -1602,7 +1604,7 @@ private:
     void CommitStoragePoolStatUpdates(TConfigState& state);
     void CommitSysViewUpdates(TConfigState& state);
     void CommitShredUpdates(TConfigState& state);
-    void CommitSyncerUpdates(TConfigState& state);
+    void CommitSyncerUpdates(TConfigState& state, TTransactionContext& txc);
 
     void InitializeSelfHealState();
     void FillInSelfHealGroups(TEvControllerUpdateSelfHealInfo& msg, TConfigState *state);
@@ -2028,7 +2030,7 @@ private:
     void CheckUnsyncedBridgePiles();
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
-        TSet<ui32>& groupIdsToRead);
+        TSet<ui32>& groupIdsToRead, bool comprehensive);
 
     void CheckSyncerDisconnectedNodes();
 
@@ -2040,6 +2042,15 @@ private:
     void Handle(TEvBlobStorage::TEvControllerUpdateSyncerState::TPtr ev);
 
     void ApplyStaticGroupUpdateForSyncers(std::map<TGroupId, TStaticGroupInfo>& prevStaticGroups);
+
+    struct TBridgeSyncState {
+        NKikimrBridge::TGroupState::EStage Stage;
+        TString LastError;
+        TInstant LastErrorTimestamp;
+        TInstant FirstErrorTimestamp;
+        ui32 ErrorCount = 0;
+    };
+    THashMap<TGroupId, TBridgeSyncState> BridgeSyncState;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Node warden interoperation

@@ -47,6 +47,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/config_metrics.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/nameservice.h>
@@ -58,6 +59,7 @@
 #include <ydb/core/protos/alloc.pb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/protos/config_metrics.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
@@ -78,6 +80,8 @@
 #include <ydb/core/tablet/tablet_list_renderer.h>
 #include <ydb/core/tablet/tablet_monitoring_proxy.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
+
+#include <ydb/core/transfer/transfer_writer.h>
 
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -542,7 +546,7 @@ void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
     if (runConfig.ServicesMask.EnableKqp) {
         auto& tableServiceConfig = runConfig.AppConfig.GetTableServiceConfig();
         auto& featureFlags = runConfig.AppConfig.GetFeatureFlags();
-        KqpShutdownController.Reset(new NKqp::TKqpShutdownController(NKqp::MakeKqpProxyID(runConfig.NodeId), tableServiceConfig, featureFlags.GetEnableGracefulShutdown()));
+        KqpShutdownController.Reset(new NKqp::TKqpShutdownController(runConfig.NodeId, tableServiceConfig, featureFlags.GetEnableGracefulShutdown()));
         KqpShutdownController->Initialize(ActorSystem.Get());
     }
 }
@@ -1161,9 +1165,9 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
     AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
 
-    AppData->TransferWriterFactory = ModuleFactories
+    AppData->TransferWriterFactory = ModuleFactories && ModuleFactories->TransferWriterFactory
         ? ModuleFactories->TransferWriterFactory
-        : nullptr;
+        : std::make_shared<NKikimr::NReplication::NTransfer::TTransferWriterFactory>();
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
@@ -1198,7 +1202,6 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     if (runConfig.AppConfig.HasKafkaProxyConfig()) {
         AppData->KafkaProxyConfig.CopyFrom(runConfig.AppConfig.GetKafkaProxyConfig());
     }
-
 
     if (runConfig.AppConfig.HasNetClassifierConfig()) {
         AppData->NetClassifierConfig.CopyFrom(runConfig.AppConfig.GetNetClassifierConfig());
@@ -1301,6 +1304,14 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasStatisticsConfig()) {
         AppData->StatisticsConfig = runConfig.AppConfig.GetStatisticsConfig();
+    }
+
+    if (runConfig.AppConfig.HasMetricsConfig()) {
+        AppData->MetricsConfig.InitializeFromProto(runConfig.AppConfig.GetMetricsConfig());
+    }
+
+    if (runConfig.AppConfig.HasSystemTabletBackupConfig()) {
+        AppData->SystemTabletBackupConfig = runConfig.AppConfig.GetSystemTabletBackupConfig();
     }
 
     // setup resource profiles

@@ -402,10 +402,11 @@ void ToProto(
     const TReplicationCardFetchOptions& options)
 {
     protoReplicationCard->mutable_replicas()->Reserve(replicationCard.Replicas.size());
-    for (const auto& [replicaId, replicaInfo] : SortHashMapByKeys(replicationCard.Replicas)) {
+    auto sortedIterators = GetSortedIterators(replicationCard.Replicas);
+    for (const auto& iterator : sortedIterators) {
         auto* protoReplicaEntry = protoReplicationCard->add_replicas();
-        ToProto(protoReplicaEntry->mutable_id(), replicaId);
-        ToProto(protoReplicaEntry->mutable_info(), replicaInfo, options);
+        ToProto(protoReplicaEntry->mutable_id(), iterator->first);
+        ToProto(protoReplicaEntry->mutable_info(), iterator->second, options);
     }
 
     if (options.IncludeCoordinators) {

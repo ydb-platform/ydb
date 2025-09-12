@@ -48,6 +48,7 @@
                                                         "TopSortBy": "[$5.EventTime,$5.SearchPhrase]"
                                                     },
                                                     {
+                                                        "Blocks": "True",
                                                         "Inputs": [
                                                             {
                                                                 "InternalOperatorId": 2

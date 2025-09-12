@@ -32,6 +32,7 @@ function main() {
     initCmsLogTab();
     initConsoleLogTab();
     initCmsSentinelTab();
+    initStateStorageTab();
 
     $('#popup').on('click', function(e) {
         if (e.target !== this)

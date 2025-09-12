@@ -666,6 +666,7 @@ message TReqSelectRows
     //optional NYT.NProto.TGuid transaction_id = 2;
     optional uint64 timestamp = 3 [default = 0x3fffffffffffff01];
     optional uint64 retention_timestamp = 16 [default = 0];
+    optional int32 read_from = 34; // NHydra::EPeerKind
 
     optional uint64 input_row_limit = 4;
     optional uint64 output_row_limit = 5;
@@ -1788,6 +1789,7 @@ message TReqLinkNode
     optional bool force = 4 [default = false];
     optional bool ignore_existing = 5 [default = false];
     optional bool lock_existing = 6 [default = false];
+    optional NYT.NYTree.NProto.TAttributeDictionary attributes = 7;
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -3541,6 +3543,7 @@ message TQuery
     optional bytes annotations = 14; // YSON
     optional NYT.NYTree.NProto.TAttributeDictionary other_attributes = 15;
     optional bytes access_control_objects = 16; // YSON
+    optional bytes secrets = 17; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////

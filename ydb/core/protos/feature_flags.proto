@@ -34,7 +34,7 @@ message TFeatureFlags {
     optional bool AllowHugeKeyValueDeletes = 13 [default = true]; // delete when all clients limit deletes per request
     optional bool SendSchemaVersionToDatashard = 14 [default = true]; // deprecated: always true
     optional bool EnableSchemeBoardCache = 15 [default = true]; // deprecated: always true
-    optional bool EnableSystemViews = 16 [default = true, (RequireRestart) = true];
+    optional bool EnableSystemViews = 16 [default = true]; // deprecated: always true
     optional bool EnableExternalHive = 17 [default = true];
     optional bool UseSchemeBoardCacheForSchemeRequests = 18 [default = true]; // deprecated: always true
     optional bool CompileMinikqlWithVersion = 19 [default = true]; // deprecated: always true
@@ -193,11 +193,11 @@ message TFeatureFlags {
     // deny non-administrators the privilege of administering local users and groups
     optional bool EnableStrictUserManagement = 168 [default = false];
     optional bool EnableDatabaseAdmin = 169 [default = false];
-    optional bool EnableChangefeedsImport = 170 [default = false];
+    optional bool EnableChangefeedsImport = 170 [default = true];
     optional bool EnablePermissionsExport = 171 [default = false];
     optional bool EnableDataErasure = 172 [default = false];
     optional bool EnableShowCreate = 173 [default = false];
-    optional bool EnableChangefeedsExport = 174 [default = false];
+    optional bool EnableChangefeedsExport = 174 [default = true];
     optional bool EnableKafkaNativeBalancing = 175 [default = true];
     optional bool EnableTabletRestartOnUnhandledExceptions = 176 [default = true];
     optional bool EnableKafkaTransactions = 177 [default = true];
@@ -206,7 +206,7 @@ message TFeatureFlags {
     optional bool SwitchToConfigV1 = 180 [default = false];
     optional bool EnableEncryptedExport = 181 [default = false];
     optional bool EnableAlterDatabase = 182 [default = false];
-    optional bool EnableExportAutoDropping = 183 [default = false];
+    optional bool EnableExportAutoDropping = 183 [default = true];
     optional bool EnableThrottlingReport = 184 [default = true];
     optional bool EnableNodeBrokerDeltaProtocol = 185 [default = false];
     optional bool EnableAccessToIndexImplTables = 186 [default = true];
@@ -216,7 +216,7 @@ message TFeatureFlags {
     optional bool EnableSystemNamesProtection = 190 [default = false];
     optional bool EnableRealSystemViewPaths = 191 [default = false, (RequireRestart) = true];
     optional bool EnableCSSchemasCollapsing = 192 [default = true];
-    optional bool EnableMoveColumnTable = 193 [default = false];
+    optional bool EnableMoveColumnTable = 193 [default = true];
     optional bool EnableArrowResultSetFormat = 194 [default = false];
     optional bool EnableCSOverloadsSubscriptionRetries = 195 [default = false];
     optional bool EnableTopicCompactificationByKey = 196 [default = false];
@@ -226,4 +226,8 @@ message TFeatureFlags {
     optional bool EnableMirroredTopicSplitMerge = 200 [default = false];
     optional bool EnableFulltextIndex = 201 [default = false];
     optional bool EnableSetColumnConstraint = 202 [default = false];
+    optional bool EnableSchemaSecrets = 203 [default = false];
+    optional bool EnableTableCacheModes = 204 [default = false];
+    optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = false];
+    optional bool EnableStreamingQueries = 206 [default = false];
 }

@@ -1758,17 +1758,14 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, T
         return TExprNode::TPtr();
     }
 
-    if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Void) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        auto res = MakeBool<false>(node->Pos(), ctx);
-        res = KeepWorld(res, *node, ctx, typeCtx);
-        return res;
-    }
-
     if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         auto res = MakeBool<false>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, typeCtx);
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
+        }
+
         return res;
     }
 
@@ -1776,6 +1773,10 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, T
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         auto res = MakeBool<true>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, typeCtx);
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
+        }
+
         return res;
     }
 
@@ -1791,6 +1792,10 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, T
         YQL_CLOG(DEBUG, Core) << node->Content() << " over non-optional";
         auto res = MakeBool<true>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, typeCtx);
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
+        }
+
         return res;
     }
 
@@ -2673,6 +2678,14 @@ TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprConte
     }
 }
 
+TExprNode::TPtr KeepSideEffects(TExprNode::TPtr node, TExprNode::TPtr src, TExprContext& ctx) {
+    if (!src->HasSideEffects()) {
+        return node;
+    }
+
+    return ctx.NewCallable(src->Pos(), "Seq", { src, node });
+}
+
 TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root) {
     auto pRoot = &root;
 
@@ -2826,6 +2839,12 @@ bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeA
     } else {
         YQL_ENSURE(false, "Incompatible lambdas for fuse");
     }
+}
+
+bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char optName[] = "ExtractMembersForPartitionsByKeys";
+    return IsOptimizerEnabled<optName>(*types) && !IsOptimizerDisabled<optName>(*types);
 }
 
 }

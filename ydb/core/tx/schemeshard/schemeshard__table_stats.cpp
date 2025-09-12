@@ -298,20 +298,18 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     TPartitionStats newAggrStats;
     bool updateSubdomainInfo = false;
 
-    if (AppData(ctx)->FeatureFlags.GetEnableSystemViews()) {
-        TMaybe<ui32> nodeId;
-        if (rec.HasNodeId()) {
-            nodeId = rec.GetNodeId();
-        }
-        TMaybe<ui64> startTime;
-        if (rec.HasStartTime()) {
-            startTime = rec.GetStartTime();
-        }
-
-        PendingMessages.emplace_back(
-            Self->SysPartitionStatsCollector,
-            Self->BuildStatsForCollector(pathId, shardIdx, datashardId, followerId, nodeId, startTime, newStats, ctx).Release());
+    TMaybe<ui32> nodeId;
+    if (rec.HasNodeId()) {
+        nodeId = rec.GetNodeId();
     }
+    TMaybe<ui64> startTime;
+    if (rec.HasStartTime()) {
+        startTime = rec.GetStartTime();
+    }
+
+    PendingMessages.emplace_back(
+        Self->SysPartitionStatsCollector,
+        Self->BuildStatsForCollector(pathId, shardIdx, datashardId, followerId, nodeId, startTime, newStats, ctx).Release());
 
     // Skip statistics from follower
     if (followerId) {
@@ -482,7 +480,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         collectKeySample = true;
     } else {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Do not want to split tablet " << datashardId);
+            "Do not want to split tablet " << datashardId << " " << reason);
         return true;
     }
 

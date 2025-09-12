@@ -1125,7 +1125,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             buildIndexOperation.DebugString()
         );
 
-        using namespace NKikimr::NTableIndex::NTableVectorKmeansTreeIndex;
+        using namespace NKikimr::NTableIndex::NKMeans;
         TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", LevelTable), true, true), {
             NLs::IsTable,
             NLs::PartitionCount(3),

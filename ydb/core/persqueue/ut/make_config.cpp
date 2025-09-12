@@ -3,7 +3,7 @@
 #include <util/datetime/base.h>
 #include <util/string/printf.h>
 
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 namespace NKikimr::NPQ::NHelpers {
 

@@ -75,7 +75,7 @@ namespace NActors {
         , ThreadsAffinity(affinity)
     {
         if (useRingQueue) {
-            Activations.emplace<TRingActivationQueue>(threads == 1);
+            Activations.emplace<TRingActivationQueueV6>(threads);
         } else {
             Activations.emplace<TUnorderedCacheActivationQueue>();
         }

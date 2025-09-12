@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/audit)
 
 PEERDIR(
     ydb/library/actors/testlib
+    ydb/core/audit/heartbeat_actor
 )
 
 SRCS(

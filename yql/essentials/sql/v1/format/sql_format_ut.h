@@ -155,6 +155,30 @@ Y_UNIT_TEST(ShowCreateTable) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(SecretOperations) {
+    TCases cases = {
+        { // create with one setting
+            "use plato; create secret `secret-name` with (value=\"secret_value\");\n",
+            "USE plato;\n\nCREATE SECRET `secret-name` WITH (value = 'secret_value');\n"
+        },
+        { // create with more than one setting
+            "use plato; create secret `secret-name` with (value=\"secret_value\",inherit_permissions=fALSe);\n",
+            "USE plato;\n\nCREATE SECRET `secret-name` WITH (value = 'secret_value', inherit_permissions = FALSE);\n"
+        },
+        { // alter
+            "use plato; alter secret `secret-name` with (value=\"secret_value\");\n",
+            "USE plato;\n\nALTER SECRET `secret-name` WITH (value = 'secret_value');\n"
+        },
+        { // drop
+            "use plato; drop secret `secret-name`;\n",
+            "USE plato;\n\nDROP SECRET `secret-name`;\n"
+        },
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(ShowCreateView) {
     TCases cases = {
         {"use plato;show create view user;","USE plato;\n\nSHOW CREATE VIEW user;\n"},

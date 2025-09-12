@@ -151,13 +151,13 @@ The behavior of the {{ ydb-short-name }} Spark Connector is configured using opt
     - Cloud database instance with a token:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?tokenFile=~/my_token`
     - Cloud database instance with a service account key:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?saKeyFile=~/sa_key.json`
 
+* `ca.text` — specifies the [certificate](../../concepts/connect.md#tls-cert) value for establishing a TLS connection.
+* `ca.file` — specifies the path to the [certificate](../../concepts/connect.md#tls-cert) for establishing a TLS connection. You can specify it directly in `url` as the `secureConnectionCertificate` option.
 * `auth.use_env` —  if set to `true`, authentication based on [environment variables](../../reference/ydb-sdk/auth.md#env) will be used.
 * `auth.use_metadata` —  if set to `true`, [metadata-based](../../security/authentication.md#iam) authentication mode will be used. You can specify it directly in `url` as the `useMetadata` option.
 * `auth.login` and `auth.password` — login and password for [static authentication](../../security/authentication.md#static-credentials).
 * `auth.token` — authentication using the specified [Access Token](../../security/authentication.md#iam).
 * `auth.token.file` — authentication using [Access Token](../../security/authentication.md#iam) from the specified file. You can specify it directly in `url` as the `tokenFile` option.
-* `auth.ca.text` — specifies the [certificate](../../concepts/connect.md#tls-cert) value for establishing a TLS connection.
-* `auth.ca.file` — specifies the path to the [certificate](../../concepts/connect.md#tls-cert) for establishing a TLS connection. You can specify it directly in `url` as the `secureConnectionCertificate` option.
 * `auth.sakey.text` — used to specify the key content for authentication with [a service account key](../../security/authentication.md#iam).
 * `auth.sakey.file` — used to specify the path to the key file for authentication with [a service account key](../../security/authentication.md#iam). You can specify it directly in `url` as the `saKeyFile` option.
 

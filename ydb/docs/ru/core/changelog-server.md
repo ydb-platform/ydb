@@ -9,9 +9,9 @@
 #### Функциональность
 
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/21119) возможность использовать привычные инструменты потоковой обработки данных –  Kafka Connect, Confluent Schema Registry, Kafka Streams, Apache Flink, AKH через [Kafka API](../reference/kafka-api/) при работе с YDB Topics. Теперь YDB Topics Kafka API поддерживает:
-  * клиентскую балансировку читателей – включается установкой флага `enable_kafka_native_balancing` в [конфигурации кластера](./reference/configuration/index.md),
-  * компактифицированные топики – включается установкой флага `enable_topic_compactification_by_key`,
-  * транзакции – включается установкой флага `enable_kafka_transactions`.
+  * клиентскую балансировку читателей – включается установкой флага `enable_kafka_native_balancing` в [конфигурации кластера](./reference/configuration/index.md). [Как работает балансировка читателей в Apache Kafka](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb). Теперь балансировка читателей в Kafka API YDB Topics будет работать точно так же,
+  * [компактифицированные топики](https://docs.confluent.io/kafka/design/log_compaction.html) – включается установкой флага `enable_topic_compactification_by_key`,
+  * [транзакции](https://www.confluent.io/blog/transactions-apache-kafka) – включается установкой флага `enable_kafka_transactions`.
 * [Добавлен](https://github.com/ydb-platform/ydb/pull/20982) [новый протокол](https://github.com/ydb-platform/ydb/issues/11064) в [Node Broker](./concepts/glossary#node-broker.md), устраняющий всплески сетевого трафика на больших кластерах (более 1000 серверов), связанного с рассылкой информации об узлах.
 
 #### YDB UI

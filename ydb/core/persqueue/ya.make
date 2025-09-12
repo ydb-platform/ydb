@@ -18,7 +18,6 @@ END()
 
 RECURSE(
     common
-    config
     events
     pqrb
     pqtablet

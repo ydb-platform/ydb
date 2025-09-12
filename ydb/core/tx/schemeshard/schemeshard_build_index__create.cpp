@@ -280,6 +280,12 @@ private:
             }
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext;
+            NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
+            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_index().fulltext_settings();
+            if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), explain)) {
+                return false;
+            }
+            buildInfo.SpecializedIndexDescription = fulltextIndexDescription;
             break;
         }
         };

@@ -2,7 +2,7 @@
 
 Применяется если нужно изменить конфигурацию [домена кластера State Storage](../../../reference/configuration/index.md#domains-state) состоящую из [StateStorage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), [SchemeBoard](../../../concepts/glossary.md#scheme-board), на кластере {{ ydb-short-name }}.
 
-При использовании Конфигурации V2 конфигурирование [домена кластера State Storage](../../../reference/configuration/index.md#domains-state) осуществляется автоматически. Как отключить или включить автоматическое конфигурирование описано в разделе [Self Heal State Storage](../../../maintenance/manual/selfheal_statestorage.md)
+{% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
 
 ## Изменение конфигурации StateStorage
 

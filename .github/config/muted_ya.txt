@@ -1,3 +1,4 @@
+ydb/core/persqueue/ut TPQTest.TestCompactifiedWithRetention 
 ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_1_1_VdiskErrors
 ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_2_0_VdiskErrors
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob

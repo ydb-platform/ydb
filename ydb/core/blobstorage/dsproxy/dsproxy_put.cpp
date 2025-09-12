@@ -652,7 +652,7 @@ public:
         TInstant now = TActivationContext::Now();
 
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            TInstant deadline = std::max(now + DsMaximumPutTimeout, PutImpl.Blobs[blobIdx].Deadline);
+            TInstant deadline = std::min(now + DsMaximumPutTimeout, PutImpl.Blobs[blobIdx].Deadline);
             PutDeadlineMasks[deadline].set(blobIdx);
             LWTRACK(DSProxyPutBootstrapStart, PutImpl.Blobs[blobIdx].Orbit);
         }

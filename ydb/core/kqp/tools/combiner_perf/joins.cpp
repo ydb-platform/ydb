@@ -2,6 +2,7 @@
 #include "construct_join_graph.h"
 #include "factories.h"
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
+
 namespace {
 TVector<ui64> GenerateKeyColumn(i32 size, i32 seed) {
     std::default_random_engine eng;
@@ -14,7 +15,7 @@ TVector<ui64> GenerateKeyColumn(i32 size, i32 seed) {
 }
 
 NKikimr::NMiniKQL::TInnerJoinDescription
-PrepareCommonDescription(NKikimr::NMiniKQL::TDqSetup<false> *setup) {
+PrepareCommonDescription(NKikimr::NMiniKQL::TDqSetup<false>* setup) {
     NKikimr::NMiniKQL::TInnerJoinDescription descr;
     descr.Setup = setup;
     const int size = 1 << 14;
@@ -29,13 +30,15 @@ PrepareCommonDescription(NKikimr::NMiniKQL::TDqSetup<false> *setup) {
                                              TVector<TString>(size, "woo"));
     return descr;
 }
+
 struct TTestResult {
     TRunResult Run;
     TString TestName;
 };
 } // namespace
-void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams &params,
-                                      TTestResultCollector &printout) {
+
+void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams& params,
+                                      TTestResultCollector& printout) {
     Y_UNUSED(params);
     namespace NYKQL = NKikimr::NMiniKQL;
     TRunResult finalResult;

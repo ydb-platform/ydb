@@ -12,7 +12,7 @@ enum class ETestedJoinAlgo {
 };
 
 struct TJoinSourceData {
-    TArrayRef<TType *const> ColumnTypes;
+    TArrayRef<TType* const> ColumnTypes;
     TArrayRef<const ui32> KeyColumnIndexes;
     NYql::NUdf::TUnboxedValue ValuesList;
 };
@@ -20,7 +20,7 @@ struct TJoinSourceData {
 struct TInnerJoinDescription {
     TJoinSourceData LeftSource;
     TJoinSourceData RightSource;
-    TDqSetup<false> *Setup;
+    TDqSetup<false>* Setup;
 };
 
 THolder<IComputationGraph>

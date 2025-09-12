@@ -2,17 +2,18 @@
 #include <algorithm>
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
 
-TRuntimeNode BuildBlockJoin(TProgramBuilder &pgmBuilder, EJoinKind joinKind,
+TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
                             TRuntimeNode leftList,
                             TArrayRef<const ui32> leftKeyColumns,
-                            const TVector<ui32> &leftKeyDrops,
+                            const TVector<ui32>& leftKeyDrops,
                             TRuntimeNode rightList,
                             TArrayRef<const ui32> rightKeyColumns,
-                            const TVector<ui32> &rightKeyDrops, bool rightAny) {
+                            const TVector<ui32>& rightKeyDrops, bool rightAny) {
     const auto leftStream = ToWideStream(pgmBuilder, leftList);
     const auto rightBlockList = ToBlockList(pgmBuilder, rightList);
 
@@ -54,18 +55,20 @@ TRenames MakeScalarMapJoinRenames(int leftSize, int rightDictValueSize) {
     return ret;
 }
 
-void SetEntryPointValues(IComputationGraph &g, NYql::NUdf::TUnboxedValue left,
+void SetEntryPointValues(IComputationGraph& g, NYql::NUdf::TUnboxedValue left,
                          NYql::NUdf::TUnboxedValue right) {
-    TComputationContext &ctx = g.GetContext();
+    TComputationContext& ctx = g.GetContext();
     g.GetEntryPoint(0, false)->SetValue(ctx, std::move(left));
     g.GetEntryPoint(1, false)->SetValue(ctx, std::move(right));
 }
+
 bool IsBlockJoin(ETestedJoinAlgo kind) {
     return kind == ETestedJoinAlgo::kBlockHash ||
            kind == ETestedJoinAlgo::kBlockMap;
 }
 
 } // namespace
+
 THolder<IComputationGraph>
 ConstructInnerJoinGraphStream(ETestedJoinAlgo algo,
                               TInnerJoinDescription descr) {
@@ -74,10 +77,10 @@ ConstructInnerJoinGraphStream(ETestedJoinAlgo algo,
                "{Block,Scalar}HashJoin bench is not implemented");
 
     const EJoinKind kInnerJoin = EJoinKind::Inner;
-    TDqProgramBuilder &dqPb = descr.Setup->GetDqProgramBuilder();
-    TProgramBuilder &pb = static_cast<TProgramBuilder &>(dqPb);
+    TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
+    TProgramBuilder& pb = static_cast<TProgramBuilder&>(dqPb);
 
-    TVector<TType *const> resultTypesArr;
+    TVector<TType* const> resultTypesArr;
     TVector<const ui32> leftRenames, rightRenames;
     for (ui32 idx = 0; idx < std::ssize(descr.LeftSource.ColumnTypes); ++idx) {
         resultTypesArr.push_back(descr.LeftSource.ColumnTypes[idx]);
@@ -97,14 +100,15 @@ ConstructInnerJoinGraphStream(ETestedJoinAlgo algo,
     struct TJoinArgs {
         TRuntimeNode Left;
         TRuntimeNode Right;
-        std::vector<TNode *> Entrypoints;
+        std::vector<TNode*> Entrypoints;
     };
+
     const bool kNotScalar = false;
 
-    auto asTupleListArg = [&dqPb](TArrayRef<TType *const> columns) {
+    auto asTupleListArg = [&dqPb](TArrayRef<TType* const> columns) {
         return dqPb.Arg(dqPb.NewListType(dqPb.NewTupleType(columns)));
     };
-    auto asBlockTupleListArg = [&pb](TArrayRef<TType *const> columns) {
+    auto asBlockTupleListArg = [&pb](TArrayRef<TType* const> columns) {
         return pb.Arg(pb.NewListType(
             MakeBlockTupleType(pb, pb.NewTupleType(columns), kNotScalar)));
     };
@@ -122,7 +126,7 @@ ConstructInnerJoinGraphStream(ETestedJoinAlgo algo,
     };
     TJoinArgs args = makeArgs(algo);
 
-    TType *multiResultType = dqPb.NewMultiType(resultTypesArr);
+    TType* multiResultType = dqPb.NewMultiType(resultTypesArr);
 
     switch (algo) {
 
@@ -211,7 +215,7 @@ ConstructInnerJoinGraphStream(ETestedJoinAlgo algo,
             kRightDroppedColumns, false);
         THolder<IComputationGraph> graph =
             descr.Setup->BuildGraph(wideStream, args.Entrypoints);
-        TComputationContext &ctx = graph->GetContext();
+        TComputationContext& ctx = graph->GetContext();
         const int kBlockSize = 128;
         SetEntryPointValues(
             *graph,

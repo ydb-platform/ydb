@@ -1,0 +1,4 @@
+fmt () {
+        file=${1}
+        ya tool clang-format  -i -style="{BreakBeforeBraces: Attach, SpaceBeforeParens: ControlStatements, IndentWidth: 4, DerivePointerAlignment: false, PointerAlignment: Left, MaxEmptyLinesToKeep: 1, SeparateDefinitionBlocks : Always}" $file
+}

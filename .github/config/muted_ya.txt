@@ -1,3 +1,4 @@
+ydb/core/persqueue/ut TPQTest.TestComactifiedWithRetention
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Init_Clean
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
 ydb/apps/ydb/ut sole chunk chunk

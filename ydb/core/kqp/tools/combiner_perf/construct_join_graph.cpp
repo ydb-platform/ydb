@@ -53,11 +53,11 @@ void SetEntryPointValues(IComputationGraph& g, NYql::NUdf::TUnboxedValue left, N
     g.GetEntryPoint(1, false)->SetValue(ctx, std::move(right));
 }
 
+} // namespace
+
 bool IsBlockJoin(ETestedJoinAlgo kind) {
     return kind == ETestedJoinAlgo::kBlockHash || kind == ETestedJoinAlgo::kBlockMap;
 }
-
-} // namespace
 
 THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, TInnerJoinDescription descr) {
     Y_ABORT_IF(algo == ETestedJoinAlgo::kBlockHash || algo == ETestedJoinAlgo::kScalarHash,
@@ -157,10 +157,9 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, T
                            scalarMapRenames.Right, pb.NewFlowType(pb.NewTupleType(resultTypesArr)));
 
         TRuntimeNode wideStream = ToWideStream(
-            pb, pb.Collect(pb.NarrowMap(mapJoinSomething,
-                                        [&pb](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }
-
-                                        )));
+            pb, pb.Collect(pb.NarrowMap(mapJoinSomething, [&pb](TRuntimeNode::TList items) -> TRuntimeNode {
+                return pb.NewTuple(items);
+            })));
 
         THolder<IComputationGraph> graph = descr.Setup->BuildGraph(wideStream, args.Entrypoints);
         SetEntryPointValues(*graph, descr.LeftSource.ValuesList, descr.RightSource.ValuesList);

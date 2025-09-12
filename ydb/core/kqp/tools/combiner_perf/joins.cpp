@@ -2,6 +2,7 @@
 #include "construct_join_graph.h"
 #include "factories.h"
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 namespace {
 TVector<ui64> GenerateKeyColumn(i32 size, i32 seed) {
@@ -13,10 +14,10 @@ TVector<ui64> GenerateKeyColumn(i32 size, i32 seed) {
     return keyCoumn;
 }
 
-NKikimr::NMiniKQL::TInnerJoinDescription PrepareCommonDescription(NKikimr::NMiniKQL::TDqSetup<false>* setup) {
+NKikimr::NMiniKQL::TInnerJoinDescription PrepareSameSizeTables(NKikimr::NMiniKQL::TDqSetup<false>* setup) {
     NKikimr::NMiniKQL::TInnerJoinDescription descr;
     descr.Setup = setup;
-    const int size = 1 << 14;
+    const int size = 1 << 16;
 
     std::tie(descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList) = ConvertVectorsToRuntimeTypesAndValue(
         *setup, GenerateKeyColumn(size, 123), TVector<ui64>(size, 111), TVector<TString>(size, "meow"));
@@ -25,10 +26,31 @@ NKikimr::NMiniKQL::TInnerJoinDescription PrepareCommonDescription(NKikimr::NMini
     return descr;
 }
 
+NKikimr::NMiniKQL::TInnerJoinDescription PrepareSmallRightTable(NKikimr::NMiniKQL::TDqSetup<false>* setup) {
+    NKikimr::NMiniKQL::TInnerJoinDescription descr;
+    descr.Setup = setup;
+    const int leftSize = 1 << 16;
+    const int rightSize = leftSize >> 7;
+    std::tie(descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList) = ConvertVectorsToRuntimeTypesAndValue(
+        *setup, GenerateKeyColumn(leftSize, 123), TVector<ui64>(leftSize, 111), TVector<TString>(leftSize, "meow"));
+    std::tie(descr.RightSource.ColumnTypes, descr.RightSource.ValuesList) = ConvertVectorsToRuntimeTypesAndValue(
+        *setup, GenerateKeyColumn(rightSize, 111), TVector<TString>(rightSize, "woo"));
+    return descr;
+}
+
 struct TTestResult {
     TRunResult Run;
     TString TestName;
 };
+
+int LineSize(NKikimr::NMiniKQL::ETestedJoinAlgo algo, std::span<const NYql::NUdf::TUnboxedValue> line) {
+    if (NKikimr::NMiniKQL::IsBlockJoin(algo)) {
+        return NKikimr::NMiniKQL::TArrowBlock::From(line.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+    } else {
+        return 1;
+    }
+}
+
 } // namespace
 
 void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams& params, TTestResultCollector& printout) {
@@ -44,31 +66,38 @@ void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams& params, TTestResultColle
         {NYKQL::ETestedJoinAlgo::kScalarMap, "ScalarMap"},
         {NYKQL::ETestedJoinAlgo::kBlockMap, "BlockMap"},
     };
+    TVector<std::pair<NYKQL::TInnerJoinDescription, std::string_view>> inputs = {
+        {PrepareSameSizeTables(&setup), "SameSizeTables"},
+        {PrepareSmallRightTable(&setup), "SmallRight"},
+    };
 
-    for (auto [algo, name] : cases) {
-        NYKQL::TInnerJoinDescription descr = PrepareCommonDescription(&setup);
-        descr.LeftSource.KeyColumnIndexes = keyColumns;
-        descr.RightSource.KeyColumnIndexes = keyColumns;
-        THolder<NKikimr::NMiniKQL::IComputationGraph> wideStreamGraph = ConstructInnerJoinGraphStream(algo, descr);
-        NYql::NUdf::TUnboxedValue wideStream = wideStreamGraph->GetValue();
-        std::vector<NYql::NUdf::TUnboxedValue> fetchBuff;
-        i32 cols = NKikimr::NMiniKQL::ResultColumnCount(algo, descr);
-        fetchBuff.resize(cols);
-        Cerr << "Compute graph result for algorithm '" << name << "'";
+    for (auto [algo, algo_name] : cases) {
+        for (auto [descr, descr_name] : inputs) {
+            descr.LeftSource.KeyColumnIndexes = keyColumns;
+            descr.RightSource.KeyColumnIndexes = keyColumns;
 
-        NYql::NUdf::EFetchStatus fetchStatus;
-        i64 lineCount = 0;
-        const auto graphTimeStart = GetThreadCPUTime();
+            THolder<NKikimr::NMiniKQL::IComputationGraph> wideStreamGraph = ConstructInnerJoinGraphStream(algo, descr);
+            NYql::NUdf::TUnboxedValue wideStream = wideStreamGraph->GetValue();
+            std::vector<NYql::NUdf::TUnboxedValue> fetchBuff;
+            ui32 cols = NKikimr::NMiniKQL::ResultColumnCount(algo, descr);
+            fetchBuff.resize(cols);
+            Cerr << "Compute graph result for algorithm '" << algo_name << "' and input data '" << descr_name << "'";
 
-        while ((fetchStatus = wideStream.WideFetch(fetchBuff.data(), cols)) != NYql::NUdf::EFetchStatus::Finish) {
-            if (fetchStatus == NYql::NUdf::EFetchStatus::Ok) {
-                ++lineCount;
+            NYql::NUdf::EFetchStatus fetchStatus;
+            i64 lineCount = 0;
+            const auto graphTimeStart = GetThreadCPUTime();
+
+            while ((fetchStatus = wideStream.WideFetch(fetchBuff.data(), cols)) != NYql::NUdf::EFetchStatus::Finish) {
+                if (fetchStatus == NYql::NUdf::EFetchStatus::Ok) {
+                    lineCount += LineSize(algo, {fetchBuff.data(), cols});
+                }
             }
-        }
-        TRunResult thisNodeResult;
+            TRunResult thisNodeResult;
 
-        thisNodeResult.ResultTime = GetThreadCPUTimeDelta(graphTimeStart);
-        Cerr << ". Output line count(block considered to be 1 line): " << lineCount << Endl;
-        printout.SubmitMetrics(params, thisNodeResult, name.data(), false, false);
+            thisNodeResult.ResultTime = GetThreadCPUTimeDelta(graphTimeStart);
+            Cerr << ". Output line count(block considered to be 1 line): " << lineCount << Endl;
+            std::string testname = std::string{algo_name} + "_" + std::string{descr_name};
+            printout.SubmitMetrics(params, thisNodeResult, testname.data(), false, false);
+        }
     }
 }

@@ -792,6 +792,10 @@ namespace NKikimr {
             return EDispatchStatus::Success;
         }
 
+        EDispatchStatus HandleMetadata(const TActorContext& /*ctx*/, const NPDisk::TLogRecord& /*record*/) {
+            return EDispatchStatus::Success;
+        }
+
         void Handle(TEvBulkSstEssenceLoaded::TPtr &ev, const TActorContext &ctx) {
             // BulkSstEssence is loaded into memory, apply it
             TEvBulkSstEssenceLoaded *msg = ev->Get();
@@ -878,6 +882,9 @@ namespace NKikimr {
                 case TLogSignature::SignatureScrub:
                     LocRecCtx->RecovInfo->DispatchSignatureScrub(record);
                     return HandleScrub(ctx, record);
+                case TLogSignature::SignatureMetadata:
+                    LocRecCtx->RecovInfo->DispatchSignatureMetadata(record);
+                    return HandleMetadata(ctx, record);
                 case TLogSignature::Max:
                     break;
             }

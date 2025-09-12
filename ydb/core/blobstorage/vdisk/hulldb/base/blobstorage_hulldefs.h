@@ -136,6 +136,7 @@ namespace NKikimr {
         const TDuration HullCompStorageRatioCalcPeriod;
         const TDuration HullCompStorageRatioMaxCalcDuration;
         const bool AddHeader;
+
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
 

@@ -9,7 +9,7 @@ items:
   href: scrubbing.md
 - name: Working with SelfHeal
   href: selfheal.md
-- name: Working with State Storage SelfHeal
+- name: Working with Self Heal State Storage
   href: selfheal_statestorage.md
 - name: Decommissioning a cluster part
   href: ../../devops/deployment-options/manual/decommissioning.md

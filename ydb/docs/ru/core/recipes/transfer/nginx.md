@@ -84,14 +84,14 @@ $transformation_lambda = ($msg) -> {
         $info_parts = String::SplitToList($parts[0], " ");
         $request_parts = String::SplitToList($parts[1], " ");
         $response_parts = String::SplitToList($parts[2], " ");
-        -- Преобразуем дату в Datetime тип
+        -- Преобразуем дату в тип Datetime
         $dateParser = DateTime::Parse("%d/%b/%Y:%H:%M:%S");
         $date = $dateParser(SUBSTRING($info_parts[3], 1));
 
         -- Возвращаем структуру, каждое именованное поле которой соответствует столбцу таблицы.
-        -- Важно: типы значений именованных полей должны соответствовать типам столбцов таблицы, например, если столбец имеет тип Uint32,
-        -- то значение именованного поля должно быть Uint32. Иначе потребуется явное преобразование с помощью CAST.
-        -- Значение NOT NULL колонок должно быть преобразовано из опционального типа с помощью функции Unwrap.
+        -- Важно: типы значений именованных полей должны соответствовать типам столбцов таблицы. Например, если столбец имеет тип Uint32,
+        -- значение именованного поля должно быть типа Uint32. В противном случае требуется явное преобразование с помощью CAST.
+        -- Значения колонок NOT NULL должны быть извлечены из опционального типа с помощью функции Unwrap.
         return <|
             partition: $msg._partition,
             offset: $msg._offset,
@@ -105,12 +105,12 @@ $transformation_lambda = ($msg) -> {
             status: CAST($response_parts[1] AS Uint32),
             body_bytes_sent: CAST($response_parts[2] AS Uint64),
             http_referer: $parts[3],
-            http_user_agent: CAST($parts[5] AS Utf8) -- явно преобразовываем в Utf8 т.к. колонка http_user_agent имеет типа Utf8, а не String
+            http_user_agent: CAST($parts[5] AS Utf8) -- Явно преобразуем в Utf8, так как столбец http_user_agent имеет тип Utf8, а не String
         |>;
     };
 
 
-    $split = String::SplitToList($msg._data, "\n"); -- Если одно сообщение содержит несколько строк из лога, то разделяем сообщение на отельные строки
+    $split = String::SplitToList($msg._data, "\n"); -- Если одно сообщение содержит несколько строк лога, разделяем его на отдельные строки
     $lines = ListFilter($split, ($line) -> { -- Фильтруем пустые строки, которые, например, могут появится после последнего символа \n 
         return LENGTH($line) > 0;
     });

@@ -3,3 +3,5 @@ items:
   href: tls.md
 - name: client_certificate_authorization
   href: client_certificate_authorization.md
+- name: table_service_config
+  href: table_service_config.md

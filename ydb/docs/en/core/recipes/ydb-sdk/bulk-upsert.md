@@ -2,6 +2,12 @@
 
 {{ ydb-short-name }} supports bulk upsert of many records without atomicity guarantees. The upsert process is split into multiple independent parallel transactions, each covering a single partition. For that reason, this approach is more effective than using YQL. If successful, the `BulkUpsert` method guarantees inserting all the data transmitted by the query.
 
+{% note warning %}
+
+When you load data to [column-oriented tables](../../concepts/datamodel/table.md#column-oriented-tables) using `BulkUpsert`, you must provide values for **all** columns, even `NULL` values.
+
+{% endnote %}
+
 Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for bulk upsert:
 
 {% list tabs %}

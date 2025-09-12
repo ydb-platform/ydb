@@ -16,8 +16,14 @@
 
 #include <util/generic/scope.h>
 #include <util/system/env.h>
+#include <util/system/sanitizers.h>
 
 class TS3BackupTestFixture : public NUnitTest::TBaseFixture {
+public:
+    static constexpr TDuration DEFAULT_OPERATION_WAIT_TIME = NSan::PlainOrUnderSanitizer(TDuration::Seconds(60), TDuration::Seconds(300));
+    static constexpr TDuration START_OPERATION_WAIT_TIME = NSan::PlainOrUnderSanitizer(TDuration::MilliSeconds(100), TDuration::Seconds(1));
+    static constexpr TDuration MAX_OPERATION_WAIT_TIME = NSan::PlainOrUnderSanitizer(TDuration::Seconds(2), TDuration::Seconds(30));
+
 protected:
     TS3BackupTestFixture() = default;
 
@@ -99,27 +105,30 @@ protected:
     }
 
     template<typename TOp>
-    void WaitOp(TMaybe<NYdb::TOperation>& op, TDuration timeout = TDuration::Seconds(30)) {
+    void WaitOp(TMaybe<NYdb::TOperation>& op, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
         const TInstant start = TInstant::Now();
         bool ok = false;
+        TDuration waitTime = START_OPERATION_WAIT_TIME;
         while (TInstant::Now() - start <= timeout) {
             op = YdbOperationClient().Get<TOp>(op->Id()).GetValueSync();
             if (op->Ready()) {
                 ok = true;
                 break;
             }
-            Sleep(TDuration::MilliSeconds(100));
+            Sleep(waitTime);
+            waitTime *= 1.3;
+            waitTime = Min(waitTime, MAX_OPERATION_WAIT_TIME);
         }
         UNIT_ASSERT_C(ok, "Unable to wait completion of operation");
     }
 
     template <class TResponseType>
-    TMaybe<NYdb::TOperation> WaitOpSuccess(const TResponseType& res, const TString& comments = {}, TDuration timeout = TDuration::Seconds(30)) {
+    TMaybe<NYdb::TOperation> WaitOpSuccess(const TResponseType& res, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
         return WaitOpStatus<TResponseType>(res, NYdb::EStatus::SUCCESS, comments, timeout);
     }
 
     template <class TResponseType>
-    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, NYdb::EStatus status, const TString& comments = {}, TDuration timeout = TDuration::Seconds(30)) {
+    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, NYdb::EStatus status, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
         if (res.Ready()) {
             UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), status, comments << ". Status: " << res.Status().GetStatus() << ". Issues: " << res.Status().GetIssues().ToString());
             return res;

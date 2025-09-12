@@ -613,7 +613,8 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
     THolder<TPartitionLabeledCounters> labeledCounters;
     using TConsumerLabeledCounters = TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>;
     THolder<TConsumerLabeledCounters> labeledConsumerCounters;
-
+    using TPartitionKeyCompactionCounters = TProtobufTabletLabeledCounters<EPartitionCompactionLabeledCounters_descriptor>;
+    THolder<TPartitionKeyCompactionCounters> compactionCounters;
     labeledCounters.Reset(new TPartitionLabeledCounters("topic", 0, DatabasePath));
     labeledConsumerCounters.Reset(new TConsumerLabeledCounters("topic|x|consumer", 0, DatabasePath));
 
@@ -626,7 +627,17 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
             AggregatedCounters.push_back(name.empty() ? nullptr : DynamicCounters->GetExpiringNamedCounter("name", name, false));
         }
     }
-
+    if (TabletConfig.GetEnableCompactification()) {
+        if (AggregatedCompactionCounters.empty()) {
+            for (ui32 i = 0; i < compactionCounters->GetCounters().Size(); ++i) {
+                TString name = compactionCounters->GetNames()[i];
+                TStringBuf nameBuf = name;
+                nameBuf.SkipPrefix("PQ/");
+                name = nameBuf;
+                AggregatedCompactionCounters.push_back(name.empty() ? nullptr : DynamicCounters->GetExpiringNamedCounter("name", name, false));
+            }
+        }
+    }
     for (auto& [consumer, info]: Consumers) {
         info.Aggr.Reset(new TTabletLabeledCountersBase{});
         if (info.AggregatedCounters.empty()) {
@@ -646,6 +657,7 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
     ui64 milliSeconds = TAppData::TimeProvider->Now().MilliSeconds();
 
     THolder<TTabletLabeledCountersBase> aggr(new TTabletLabeledCountersBase);
+    THolder<TTabletLabeledCountersBase> compactionAggr(new TTabletLabeledCountersBase);
 
     for (auto it = AggregatedStats.Stats.begin(); it != AggregatedStats.Stats.end(); ++it) {
         if (!it->second.HasCounters)
@@ -654,6 +666,13 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
             labeledCounters->GetCounters()[i] = it->second.Counters.GetValues(i);
         }
         aggr->AggregateWith(*labeledCounters);
+
+        if (TabletConfig.GetEnableCompactification()) {
+            for (ui32 i = 0; i < it->second.Counters.GetCompactionCounters().ValuesSize() && i < compactionCounters->GetCounters().Size(); ++i) {
+                compactionCounters->GetCounters()[i] = it->second.Counters.GetCompactionCounters().GetValues(i);
+            }
+            compactionAggr->AggregateWith(*compactionCounters);
+        }
 
         for (const auto& consumerStats : it->second.Counters.GetConsumerAggregatedCounters()) {
             auto jt = Consumers.find(consumerStats.GetConsumer());
@@ -677,6 +696,14 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
             val = val <= milliSeconds ? milliSeconds - val : 0;
         }
         AggregatedCounters[i]->Set(val);
+    }
+
+    for (ui32 i = 0; compactionAggr->HasCounters() && i < compactionAggr->GetCounters().Size(); ++i) {
+        if (!AggregatedCompactionCounters[i]) {
+            continue;
+        }
+        auto val = compactionAggr->GetCounters()[i].Get();
+        AggregatedCompactionCounters[i]->Set(val);
     }
 
     for (auto& [consumer, info] : Consumers) {

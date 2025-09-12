@@ -5,6 +5,9 @@
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
+
+#include <ydb/core/protos/counters_pq.pb.h>
 
 namespace NKikimr::NPQ {
 
@@ -23,6 +26,20 @@ struct TBlobInfo {
 
 };
 
+using TPartitionCompactionCounters = TProtobufTabletLabeledCounters<EPartitionCompactionLabeledCounters_descriptor>;
+
+struct TKeyCompactionCounters {
+    ui64 UncompactedSize = 0;
+    ui64 CompactedSize = 0;
+    ui64 UncompactedCount = 0;
+    ui64 CompactedCount = 0;
+    float UncompactedRatio = 1.0;
+    TDuration CurrReadCycleDuration = TDuration::Zero();
+    ui64 CurrentReadCycleKeys = 0;
+    ui64 ReadCyclesCount = 0;
+    ui64 WriteCyclesCount = 0;
+};
+
 class TPartitionCompaction {
 public:
     TPartitionCompaction(ui64 lastCompactedOffset, ui64 partReqestCookie, TPartition* partitionActor);
@@ -32,6 +49,7 @@ public:
         READING,
         COMPACTING,
     };
+
 
     struct TReadState {
         friend TPartitionCompaction;
@@ -94,9 +112,11 @@ public:
         TMaybe<ui64> SkipOffset;
         TMap<ui64, TKey> EmptyBlobs;
 
+        ui64 TotalMessagesWritten = 0;
+
         TCompactState(THashMap<TString, ui64>&& data, ui64 firstUncompactedOffset, ui64 maxOffset, TPartition* partitionActor);
 
-        bool ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev);
+        bool ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev, TKeyCompactionCounters& counters);
         bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
 
         EStep ContinueIfPossible(ui64 nextCookie);
@@ -105,7 +125,7 @@ public:
         void AddDeleteRange(const TKey& key);
         void SendCommit(ui64 cookie);
         void SaveLastBatch();
-        void UpdateDataKeysBody();
+        void UpdateDataKeysBody(TKeyCompactionCounters& counters);
     };
 
     EStep Step = EStep::PENDING;
@@ -117,10 +137,17 @@ public:
     TMaybe<TCompactState> CompactState;
     TPartition* PartitionActor;
 
+    mutable TKeyCompactionCounters Counters;
+    TInstant ReadCycleStart = TInstant::Zero();
+
+public:
     void TryCompactionIfPossible();
     void ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
     void ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev);
     void ProcessResponse(TEvPQ::TEvError::TPtr& ev);
+
+    TKeyCompactionCounters GetCounters() const;
+    void RecalcBodySize();
 };
 
 } // namespace NKikimr::NPQ

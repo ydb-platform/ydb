@@ -1242,6 +1242,26 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         false // not expiring
     };
 
+    KeyCompactionReadCyclesTotal = TMultiCounter{
+        NPersQueue::GetCountersForTopic(counters, IsServerless),
+        {},
+        subgroups,
+        {"topic.key_compaction.read_cycles_complete_total"},
+        true, // deriv
+        "name",
+        true // expiring
+    };
+
+    KeyCompactionWriteCyclesTotal = TMultiCounter{
+        NPersQueue::GetCountersForTopic(counters, IsServerless),
+        {},
+        subgroups,
+        {"topic.key_compaction.write_cycles_complete_total"},
+        true, // deriv
+        "name",
+        true // expiring
+    };
+
     TVector<NPersQueue::TPQLabelsInfo> aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
     ui32 border = AppData(ctx)->PQConfig.GetWriteLatencyBigMs();
     auto subGroup = GetServiceCounters(counters, "pqproxy|SLI");
@@ -1282,22 +1302,34 @@ void TPartition::InitSplitMergeSlidingWindow() {
     SplitMergeAvgWriteBytes = std::make_unique<Tui64SumSlidingWindow>(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), 1000);
 }
 
+bool TPartition::IsKeyCompactionEnabled() const {
+    return Config.GetEnableCompactification() && AppData()->FeatureFlags.GetEnableTopicCompactificationByKey() && !IsSupportive();
+}
+
 void TPartition::CreateCompacter() {
-    if (!Config.GetEnableCompactification() || !AppData()->FeatureFlags.GetEnableTopicCompactificationByKey() || IsSupportive()) {
+    if (!IsKeyCompactionEnabled()) {
         if (!IsSupportive()) {
             Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         }
         Compacter.Reset();
+        PartitionCompactionCounters.Reset();
         return;
     }
-    if (Compacter) {
-        Compacter->TryCompactionIfPossible();
-        return;
+    if (!Compacter) {
+        auto& userInfo = UsersInfoStorage->GetOrCreate(CLIENTID_COMPACTION_CONSUMER, ActorContext());
+        ui64 compStartOffset = userInfo.Offset;
+        Compacter = MakeHolder<TPartitionCompaction>(compStartOffset, ++CompacterCookie, this);
     }
-
-    auto& userInfo = UsersInfoStorage->GetOrCreate(CLIENTID_COMPACTION_CONSUMER, ActorContext()); //ToDo: Fix!
-    ui64 compStartOffset = userInfo.Offset;
-    Compacter = MakeHolder<TPartitionCompaction>(compStartOffset, ++CompacterCookie, this);
+    if (!PartitionCompactionCounters) {
+        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            PartitionCompactionCounters.Reset(new TPartitionCompactionCounters(EscapeBadChars(TopicName()),
+                                                                                Partition.InternalPartitionId,
+                                                                                Config.GetYdbDatabasePath()));
+        } else {
+            PartitionCompactionCounters.Reset(new TPartitionCompactionCounters(TopicName(),
+                                                                            Partition.InternalPartitionId));
+        }
+    }
     Compacter->TryCompactionIfPossible();
 }
 

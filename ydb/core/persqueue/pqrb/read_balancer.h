@@ -204,6 +204,7 @@ private:
     std::unordered_set<ui64> PipesRequested;
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
+    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCompactionCounters;
 
     NMonitoring::TDynamicCounterPtr DynamicCounters;
     NMonitoring::TDynamicCounters::TCounterPtr ActivePartitionCountCounter;
@@ -230,6 +231,20 @@ private:
         ui64 MaxAvgWriteSpeedPerHour = 0;
         ui64 TotalAvgWriteSpeedPerDay = 0;
         ui64 MaxAvgWriteSpeedPerDay = 0;
+    };
+
+    struct TPartitionKeyCompactionMetrics {
+        ui64 TotalUncompactedSize = 0;
+        ui64 MaxUncompactedSize = 0;
+        ui64 TotalCompactedSize = 0;
+        ui64 MaxCompactedSize = 0;
+        ui64 MaxUncompactedRatio = 0;
+
+        ui64 TotalCompactedKeys = 0;
+        ui64 TotalUncompactedMesssages = 0;
+        ui64 MaxTimeSinceCycleStart = 0;
+        ui64 MaxNewKeysCountInLastCycle = 0;
+
     };
 
     struct TAggregatedStats {

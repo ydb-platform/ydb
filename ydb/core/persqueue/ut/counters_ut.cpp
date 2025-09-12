@@ -664,6 +664,102 @@ Y_UNIT_TEST(NewConsumersCountersAppear) {
     }
 }
 
+Y_UNIT_TEST(PartitionKeyCompaction) {
+    SetEnv("FAST_UT", "1");
+    TTestContext tc;
+    bool dbRegistered{false};
+    bool labeledCountersReceived = false ;
+    bool az = false;
+    tc.Prepare("", [](auto&){}, az, true, true, true);
+    tc.Runtime->SetScheduledLimit(10000);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicCompactificationByKey(true);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(1);
+
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == NSysView::TEvSysView::EvRegisterDbCounters) {
+            auto database = event.Get()->Get<NSysView::TEvSysView::TEvRegisterDbCounters>()->Database;
+            UNIT_ASSERT_VALUES_EQUAL(database, "/Root/PQ");
+            dbRegistered = true;
+        } else if (event->GetTypeRewrite() == TEvTabletCounters::EvTabletAddLabeledCounters) {
+            labeledCountersReceived = true;
+        }
+        return TTestActorRuntime::DefaultObserverFunc(event);
+    });
+    PQTabletPrepare({.deleteTime=3600, .writeSpeed = 2_MB, .enableCompactificationByKey = true},
+                    {{"client", true}}, tc);
+    TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
+    ui64 ssId = 325;
+    BootFakeSchemeShard(*tc.Runtime, ssId, state);
+
+    PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, ssId, tc);
+
+    IActor* actor = CreateTabletCountersAggregator(false);
+    auto aggregatorId = tc.Runtime->Register(actor);
+    tc.Runtime->EnableScheduleForActor(aggregatorId);
+
+    TString s{5_MB, 'c'};
+    ui64 currentOffset = 0;
+    auto writeData = [&](ui32 count) {
+        TVector<std::pair<ui64, TString>> data;
+        for (auto i = 0u; i < count; ++i) {
+            data.push_back({i + 1, s});
+        }
+        CmdWrite(0, "sourceid0", std::move(data), tc, false, {}, false, "", -1, currentOffset, false, false, true);
+        currentOffset += count;
+    };
+    writeData(3);
+    Cerr << "Write 1 done\n";
+
+    writeData(3);
+    Cerr << "Write 2 done\n";
+
+    writeData(3);
+    writeData(3);
+    writeData(3);
+    Cerr << "Write 3 done\n";
+
+
+    i64 expectedOffset = 4;
+    i64 consumerOffset = -1;
+    while (consumerOffset < expectedOffset) {
+        Cerr << "Got compacter offset = " << consumerOffset << Endl;
+        consumerOffset = CmdGetOffset(0, CLIENTID_COMPACTION_CONSUMER, Nothing(), tc);
+    }
+    UNIT_ASSERT(consumerOffset >= expectedOffset);
+
+    if (!labeledCountersReceived) {
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
+        tc.Runtime->DispatchEvents(options);
+    }
+
+    {
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
+
+        return; //ToDo: !! Add proper canonical values;
+        auto group = dbGroup->GetSubgroup("host", "")
+                            ->GetSubgroup("database", "/Root")
+                            ->GetSubgroup("cloud_id", "cloud_id")
+                            ->GetSubgroup("folder_id", "folder_id")
+                            ->GetSubgroup("database_id", "database_id")->GetSubgroup("topic", "topic");
+        group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
+        group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
+        group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
+        group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
+        group = group->GetSubgroup("consumer", "client");
+        group->GetNamedCounter("name", "topic.partition.end_to_end_lag_milliseconds_max", false)->Set(30000);
+        group->GetNamedCounter("name", "topic.partition.read.idle_milliseconds_max", false)->Set(30000);
+        group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(200);
+
+        TStringStream countersStr;
+        dbGroup->OutputHtml(countersStr);
+        const TString referenceCounters = NResource::Find(TStringBuf("counters_topics.html"));
+        Cerr << "REF: " << referenceCounters << "\n";
+        Cerr << "COUNTERS: " << countersStr.Str() << "\n";
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
+    }
+}
 } // Y_UNIT_TEST_SUITE(PQCountersLabeled)
 
 Y_UNIT_TEST_SUITE(TMultiBucketCounter) {

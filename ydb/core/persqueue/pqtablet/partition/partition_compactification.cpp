@@ -31,6 +31,7 @@ TPartitionCompaction::TPartitionCompaction(ui64 firstUncompactedOffset, ui64 par
     , PartRequestCookie(partRequestCookie)
     , PartitionActor(partitionActor)
 {
+    RecalcBodySize();
 }
 
 void TPartitionCompaction::TryCompactionIfPossible() {
@@ -43,6 +44,7 @@ void TPartitionCompaction::TryCompactionIfPossible() {
     switch (Step) {
     case EStep::PENDING:
         ReadState = TReadState(FirstUncompactedOffset, PartitionActor);
+        ReadCycleStart = PartitionActor->ActorContext().Now();
         Step = EStep::READING;
         [[fallthrough]];
     case EStep::READING: {
@@ -56,7 +58,12 @@ void TPartitionCompaction::TryCompactionIfPossible() {
             CompactState.ConstructInPlace(std::move(ReadState->GetData()), FirstUncompactedOffset, ReadState->GetLastOffset(), PartitionActor);
             Y_ENSURE(FirstUncompactedOffset < ReadState->GetLastOffset());
             FirstUncompactedOffset = ReadState->GetLastOffset();
+            Counters.CurrentReadCycleKeys = CompactState->TopicData.size();
+            if (Counters.CurrentReadCycleKeys) {
+                Counters.ReadCyclesCount += 1;
+            }
             ReadState.Clear();
+            ReadCycleStart = TInstant::Zero();
         } else {
             break;
         }
@@ -68,6 +75,7 @@ void TPartitionCompaction::TryCompactionIfPossible() {
         if (step == EStep::COMPACTING) {
             break;
         } else {
+            Counters.WriteCyclesCount += 1;
             CompactState.Clear();
         }
     }
@@ -118,7 +126,7 @@ void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
     PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
               << PartitionActor->Partition << " Process KV response");
     if (CompactState) {
-        if (!CompactState->ProcessKVResponse(ev)) {
+        if (!CompactState->ProcessKVResponse(ev, Counters)) {
             PQ_LOG_ERROR("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
                                               << PartitionActor->Partition << " Process KV response: BAD Status");
 
@@ -126,11 +134,38 @@ void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
         }
     }
 }
+
+void TPartitionCompaction::RecalcBodySize() {
+    for (const auto& k : PartitionActor->CompactionBlobEncoder.DataKeysBody) {
+        if (k.Key.GetOffset() >= FirstUncompactedOffset) {
+            const auto& last = PartitionActor->CompactionBlobEncoder.DataKeysBody.back();
+            Counters.CompactedSize = k.CumulativeSize;
+            Counters.UncompactedSize = last.CumulativeSize + last.Size - k.CumulativeSize;
+            break;
+        }
+    }
+    if (Counters.UncompactedSize > 0) {
+        Counters.UncompactedRatio = 1.0 * Counters.CompactedSize / Counters.UncompactedSize;
+    } else {
+        Counters.UncompactedRatio = 0.0;
+    }
+
+}
+
+TKeyCompactionCounters TPartitionCompaction::GetCounters() const {
+    if (ReadCycleStart != TInstant::Zero()) {
+        Counters.CurrReadCycleDuration = PartitionActor->ActorContext().Now() - ReadCycleStart;
+    } else {
+        Counters.CurrReadCycleDuration = TDuration::Zero();
+    };
+    return Counters;
+}
+
 TPartitionCompaction::TReadState::TReadState(ui64 firstOffset, TPartition* partitionActor)
     : OffsetToRead(firstOffset)
     , LastOffset(partitionActor->BlobEncoder.DataKeysBody.empty()
-        ? partitionActor->BlobEncoder.Head.Offset
-        : partitionActor->BlobEncoder.DataKeysBody.front().Key.GetOffset())
+            ? partitionActor->BlobEncoder.Head.Offset
+            : partitionActor->BlobEncoder.DataKeysBody.front().Key.GetOffset())
     , PartitionActor(partitionActor)
 {
     if(partitionActor->CompactionBlobEncoder.DataKeysBody.empty()) {
@@ -536,6 +571,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
                     ClearBlob(blob);
                 }
             }
+            TotalMessagesWritten += static_cast<ui32>(keepMessage);
             CurrMsgMiggleBlobKeys.clear();
             for (auto& blob: currentMessageBlobs) {
                 currentBatch->AddBlob(std::move(blob));
@@ -619,7 +655,7 @@ void TPartitionCompaction::TCompactState::RunKvRequest() {
 }
 
 
-bool TPartitionCompaction::TCompactState::ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
+bool TPartitionCompaction::TCompactState::ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev, TKeyCompactionCounters& counters) {
     Y_ABORT_UNLESS(!PartitionActor->CompacterKvRequestInflight);
     auto& response = ev->Get()->Record;
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
@@ -644,7 +680,7 @@ bool TPartitionCompaction::TCompactState::ProcessKVResponse(TEvKeyValue::TEvResp
         }
     }
 
-    UpdateDataKeysBody();
+    UpdateDataKeysBody(counters);
     return true;
 }
 
@@ -658,7 +694,7 @@ void TPartitionCompaction::TCompactState::SendCommit(ui64 cookie) {
     PartitionActor->Send(PartitionActor->SelfId(), ev.Release());
 }
 
-void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
+void TPartitionCompaction::TCompactState::UpdateDataKeysBody(TKeyCompactionCounters& counters) {
     Y_ABORT_UNLESS(UpdatedKeys || DeletedKeys);
 
     auto itUpdated = UpdatedKeys.begin();
@@ -672,10 +708,18 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
     ui64 zeroedKeys = 0;
     ui64 sizeDiff = 0;
 
+    counters.CompactedSize = 0;
+    counters.UncompactedSize = 0;
     auto addCurrentKey = [&]() {
         itExisting->CumulativeSize = currCumulSize;
         currCumulSize += itExisting->Size;
+        if (itExisting->Key.GetOffset() <= LastProcessedOffset.GetOrElse(0)) {
+            counters.CompactedSize += itExisting->Size;
+        } else {
+            counters.UncompactedSize += itExisting->Size;
+        }
         PartitionActor->CompactionBlobEncoder.DataKeysBody.emplace_back(std::move(*itExisting));
+        counters.CompactedSize = currCumulSize;
     };
 
     while (itExisting != oldDataKeys.end()) {
@@ -710,6 +754,14 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
 
     UpdatedKeys.clear();
     DeletedKeys.clear();
+
+    if (counters.UncompactedSize > 0) {
+        counters.UncompactedRatio = 1.0 * counters.CompactedSize / counters.UncompactedSize;
+    } else {
+        counters.UncompactedRatio = 0.0;
+    }
+    counters.CompactedCount = TotalMessagesWritten;
+    counters.UncompactedCount = MaxOffset - LastProcessedOffset.GetOrElse(0);
 }
 
 } // namespace NKikimr::NPQ

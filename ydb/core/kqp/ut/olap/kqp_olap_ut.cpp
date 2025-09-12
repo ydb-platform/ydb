@@ -351,6 +351,136 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(WideTableExport) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto status = queryClient.ExecuteQuery(R"(
+CREATE TABLE `/Root/olap_table` (
+	col1 int64 NOT NULL,
+	col2 int64,
+	col3 int64,
+	col4 int64,
+	col5 int64,
+	col6 int64,
+	col7 int64,
+	col8 int64,
+	col9 int64,
+	col10 int64,
+	col11 int64,
+	col12 int64,
+	col13 int64,
+	col14 int64,
+	col15 int64,
+	col16 int64,
+	col17 int64,
+	col18 int64,
+	col19 int64,
+	col20 int64,
+	col21 int64,
+	col22 int64,
+	col23 int64,
+	col24 int64,
+	col25 int64,
+	col26 int64,
+	col27 int64,
+	col28 int64,
+	col29 int64,
+	col30 int64,
+	col31 int64,
+	col32 int64,
+	col33 int64,
+	col34 int64,
+	col35 int64,
+	col36 int64,
+	col37 int64,
+	col38 int64,
+	col39 int64,
+	col40 int64,
+	col41 int64,
+	col42 int64,
+	col43 int64,
+	col44 int64,
+	col45 int64,
+	col46 int64,
+	col47 int64,
+	col48 int64,
+	col49 int64,
+	col50 int64,
+	col51 int64,
+	col52 int64,
+	col53 int64,
+	col54 int64,
+	col55 int64,
+	col56 int64,
+	col57 int64,
+	col58 int64,
+	col59 int64,
+	col60 int64,
+	col61 int64,
+	col62 int64,
+	col63 int64,
+	col64 int64,
+	col65 int64,
+	col66 int64,
+	col67 int64,
+	col68 int64,
+	col69 int64,
+	col70 int64,
+	col71 int64,
+	col72 int64,
+	col73 int64,
+	col74 int64,
+	col75 int64,
+	col76 int64,
+	col77 int64,
+	col78 int64,
+	col79 int64,
+	col80 int64,
+	col81 int64,
+	col82 int64,
+	col83 int64,
+	col84 int64,
+	col85 int64,
+	col86 int64,
+	col87 int64,
+	col88 int64,
+	col89 int64,
+	col90 int64,
+	col91 int64,
+	col92 int64,
+	col93 int64,
+	col94 int64,
+	col95 int64,
+	col96 int64,
+	col97 int64,
+	col98 int64,
+	col99 int64,
+	col100 int64,
+	primary key(col1))
+PARTITION BY HASH(col1)
+WITH (STORE = COLUMN);            
+            )",  NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        sleep(5);
+        queryClient = kikimr.GetQueryClient();
+        status = queryClient.ExecuteQuery(R"(
+                --!syntax_v1
+    CREATE TABLE olap_table2 (
+        PRIMARY KEY (col1)
+    ) WITH (STORE = COLUMN) AS SELECT
+        *
+    FROM
+        `/Root/olap_table`;
+        )", NYdb::NQuery::TTxControl::NoTx()
+        ).GetValueSync();
+
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(SimpleQueryOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

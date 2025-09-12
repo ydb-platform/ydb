@@ -899,13 +899,6 @@ void TPQTabletFixture::CommitKafkaTransaction(NKafka::TProducerInstanceId produc
     for (const ui32& partitionId : partitionIds) {
         params.TxOps.push_back({.Partition=partitionId, .Path="/topic", .KafkaTransaction=true});
     }
-    // SendProposeTransactionRequest({.TxId=txId,
-    //                               .Senders={Ctx->TabletId}, .Receivers={Ctx->TabletId},
-    //                               .TxOps={
-    //                                 {.Partition=0, .Path="/topic", .KafkaTransaction=true},
-    //                               },
-    //                               .WriteId=TWriteId(producerInstanceId)
-    //                               });
     SendProposeTransactionRequest(params);
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});

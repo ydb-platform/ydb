@@ -23,7 +23,7 @@ Release date: September , 2025.
 
 ### Performance
 
-* Added the new mode of operating [actor system] (../concepts/glossary#actor-system), which allows for more efficient use of computing resources. It is enabled by setting the `use_shared_threads` flag in the [actor-system configuration](../devops/configuration-management/configuration-v1/change_actorsystem_configs).
+* Added the new mode of operating [actor system](./concepts/glossary#actor-system), which allows for more efficient use of computing resources. It is enabled by setting the `use_shared_threads` flag in the [actor-system configuration](./devops/configuration-management/configuration-v1/change_actorsystem_configs).
 * [Optimized](https://github.com/ydb-platform/ydb/pull/20197 ) processing of empty inputs when performing JOIN operations.
 
 #### Bug fixes

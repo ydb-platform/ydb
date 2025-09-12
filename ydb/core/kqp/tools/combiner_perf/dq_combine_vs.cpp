@@ -206,13 +206,13 @@ THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM>& setup, THolder<NUdf::TBox
     TRuntimeNode pgmReturn;
 
     if (useDqImpl) {
-        pgmReturn = pb.DqHashCombine(
-            TRuntimeNode(streamCallable, false),
+        pgmReturn = pb.FromFlow(pb.DqHashCombine(
+            pb.ToFlow(TRuntimeNode(streamCallable, false)),
             memLimit,
             lambdaKey,
             lambdaInit,
             lambdaUpdate,
-            lambdaFinalize);
+            lambdaFinalize));
     } else {
         pgmReturn = pb.FromFlow(pb.WideCombiner(
             pb.ToFlow(TRuntimeNode(streamCallable, false)),

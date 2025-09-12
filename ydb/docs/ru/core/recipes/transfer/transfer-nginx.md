@@ -1,8 +1,8 @@
-# Трансфер — поставка access логов NGINX в таблицу
+# Трансфер — поставка access-логов NGINX в таблицу
 
-Эта статья поможет настроить поставку access логов NGINX в [таблицу](../../concepts/datamodel/table.md) для дальнейшего анализа. В этой статье будет рассматриваться формат access логов NGINX, который используется по умолчанию. Более подробно о формате логов NGINX и его настройке можно прочитать в [документации](https://docs.nginx.com/nginx/admin-guide/monitoring/logging/#set-up-the-access-log) NGINX.
+Эта статья поможет настроить поставку access-логов NGINX в [таблицу](../../concepts/datamodel/table.md) {{ ydb-short-name }} для дальнейшего анализа. В статье рассматривается формат access-логов NGINX, используемый по умолчанию. Более подробно о формате логов NGINX и его настройке можно прочитать в [документации NGINX](https://docs.nginx.com/nginx/admin-guide/monitoring/logging/#set-up-the-access-log).
 
-Формат access лога NGINX по умолчанию имеет вид:
+Формат access-лога NGINX по умолчанию имеет вид:
 
 ```txt
 $remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"
@@ -16,9 +16,9 @@ $remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$
 ::1 - - [01/Sep/2025:15:02:51 +0500] "GET /favicon.ico HTTP/1.1" 404 181 "http://localhost/" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 YaBrowser/25.6.0.0 Safari/537.36"
 ```
 
-В статье будут рассмотрены следующие шаги:
+В статье рассматриваются следующие шаги:
 
-* [создание таблицы](#step1) в которую будут записываться данные;
+* [создание таблицы](#step1), в которую будут записываться данные;
 * [создание трансфера](#step2);
 * [проверка содержимого таблицы](#step3).
 

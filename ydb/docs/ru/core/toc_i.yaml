@@ -23,6 +23,11 @@ items:
   include:
     mode: link
     path: analyst/toc_p.yaml
+- name: Для инженеров данных
+  href: dataeng/index.md
+  include:
+    mode: link
+    path: dataeng/toc_p.yaml
 - name: Для инженеров безопасности
   href: security/index.md
   include:

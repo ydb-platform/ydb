@@ -17,15 +17,15 @@ ALTER TRANSFER <name> [SET USING lambda | SET (option = value [, ...])]
 ### Параметры {#params}
 
 * `STATE` — [состояние](../../../concepts/transfer.md#pause-and-resume) трансфера. Возможные значения:
+
   * `PAUSED` — остановка трансфера.
   * `ACTIVE` — возобновление работы трансфера после приостановки.
 
 * {% include [x](../_includes/transfer_flush.md) %}
 
-
 ## Разрешения
 
-Для изменения трансфера требуются [право](grant.md#permissions-list) изменять схемные объекты (`ALTER SCHEMA`).
+Для изменения трансфера требуется [право](grant.md#permissions-list) изменять схемные объекты (`ALTER SCHEMA`).
 
 ## Примеры {#examples}
 
@@ -35,8 +35,8 @@ ALTER TRANSFER <name> [SET USING lambda | SET (option = value [, ...])]
 $new_lambda = ($msg) -> {
     return [
         <|
-            partition: CAST($msg._partition AS Uint32),
-            offset: CAST($msg._offset AS Uint64),
+            partition:$msg._partition,
+            offset: $msg._offset,
             message: CAST($msg._data || ' altered' AS Utf8)
         |>
     ];

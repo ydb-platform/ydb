@@ -1,6 +1,6 @@
 # CREATE TRANSFER
 
-Создает [трансфер данных](../../../concepts/transfer.md) из [топика](../../../concepts/topic.md) в [таблицу](../../../concepts/datamodel/table.md).
+Создает [трансфер](../../../concepts/transfer.md) из [топика](../../../concepts/topic.md) в [таблицу](../../../concepts/datamodel/table.md).
 
 Синтаксис:
 
@@ -15,6 +15,7 @@ WITH (option = value[, ...])
 * `table_name` — имя таблицы, в которую будут записываться данные.
 * `lambda` — [lambda-функция](#lambda) преобразования сообщений.
 * `option` — опция команды:
+
   * `CONNECTION_STRING` — [строка соединения](../../../concepts/connect.md#connection_string) с базой данных, содержащей топик. Указывается только если топик находится в другой базе {{ ydb-short-name }}.
   * Настройки для аутентификации в базе топика одним из способов (обязательно, если топик находится в другой базе):
 
@@ -27,13 +28,18 @@ WITH (option = value[, ...])
       * `USER` — имя пользователя.
       * `PASSWORD_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего пароль.
 
-  * `CONSUMER` — имя читателя топика-источника. Если имя задано, то в топике уже должен [существовать](alter-topic.md#add-consumer) читатель с указанным именем, и трансфер начнёт обрабатывать сообщения, начиная с первого незакоммиченного сообщения в топике. Если имя не задано, то читатель будет добавлен в топик автоматически, и трансфер начнёт обрабатывать сообщения, начиная с первого хранящегося сообщения в топике. Имя автоматически созданного читателя можно получить из [описания](../../../reference/ydb-cli/commands/scheme-describe.md) экземпляра трансфера.
+  * `CONSUMER` — имя [читателя](../../../concepts/topic.md#consumer) топика-источника. Если имя задано, то в топике уже должен [существовать](alter-topic.md#add-consumer) читатель с указанным именем, и трансфер начнёт обрабатывать сообщения, начиная с первого незакоммиченного сообщения в топике. Если имя не задано, то читатель будет добавлен в топик автоматически, и трансфер начнёт обрабатывать сообщения, начиная с первого хранящегося сообщения в топике. Имя автоматически созданного читателя можно получить из [описания](../../../reference/ydb-cli/commands/scheme-describe.md) экземпляра трансфера.
 
   * {% include [x](../_includes/transfer_flush.md) %}
 
 ## Разрешения
 
-Для создания трансфера требуются [права](grant.md#permissions-list) изменять схемные объекты (`ALTER SCHEMA`), обновлять строки в таблице (`UPDATE ROW`), в которую будут записываться данные, и читать сообщения из топика (`SELECT ROW`), содержащего исходные сообщения. Если читатель добавляется в топик автомаически, то у пользователя должно быть право изменять топик (`ALTER SCHEMA`).
+Для создания трансфера требуются следующие [права](grant.md#permissions-list):
+
+* `CREATE TABLE` — для создания экземпляра трансфера;
+* `ALTER SCHEMA` — для автоматического создания читателя топика (если применимо);
+* `SELECT ROW` — для чтения сообщений из топика, содержащего исходные сообщения;
+* `UPDATE ROW` — для обновления строк в таблице, в которую будут записываться данные.
 
 ## Примеры {#examples}
 
@@ -52,8 +58,8 @@ CREATE TOPIC example_topic;
 $transformation_lambda = ($msg) -> {
     return [
         <|
-            partition: CAST($msg._partition AS Uint32),
-            offset: CAST($msg._offset AS Uint32),
+            partition: $msg._partition,
+            offset: $msg._offset,
             message: CAST($msg._data AS Utf8)
         |>
     ];
@@ -76,8 +82,8 @@ CREATE TRANSFER example_transfer
 $transformation_lambda = ($msg) -> {
     return [
         <|
-            partition: CAST($msg._partition AS Uint32),
-            offset: CAST($msg._offset AS Uint32),
+            partition: $msg._partition,
+            offset: $msg._offset,
             message: CAST($msg._data AS Utf8)
         |>
     ];
@@ -97,8 +103,8 @@ WITH (
 $transformation_lambda = ($msg) -> {
     return [
         <|
-            partition: CAST($msg._partition AS Uint32),
-            offset: CAST($msg._offset AS Uint32),
+            partition: $msg._partition,
+            offset: $msg._offset,
             message: CAST($msg._data AS Utf8)
         |>
     ];
@@ -145,8 +151,8 @@ CREATE TRANSFER example_transfer
 $transformation_lambda = ($msg) -> {
     return [
         <|
-            partition: CAST($msg._partition AS Uint32),
-            offset: CAST($msg._offset AS Uint32),
+            partition: $msg._partition,
+            offset: $msg._offset,
             message: CAST($msg._data AS Utf8)
         |>
     ];

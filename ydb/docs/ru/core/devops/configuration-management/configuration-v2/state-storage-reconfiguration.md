@@ -55,6 +55,7 @@
     ```
 
 ## Правила конфигурирования StateStorage
+
     Неправильная конфигурация [домена кластера State Storage](../../../reference/configuration/index.md#domains-state) может привести к отказу кластера.
     Данные правила применимы как для параметра `state_storage` так и для раздельной конфигурации `explicit_state_storage_config`, `explicit_state_storage_board_config`, `explicit_scheme_board_config`
 

@@ -10,8 +10,9 @@ Release date: September , 2025.
 
 * [Added](https://github.com/ydb-platform/ydb/pull/21119) support for the Kafka frameworks like Kafka Connect, Kafka Streams, Confluent Schema Registry, Kafka Streams, Apache Flink, etc. Now [YDB Topics Kafka API](https://ydb.tech/docs/en/reference/kafka-api/) supports
   * client-side consumer balancing – enabled by setting the `enable_kafka_native_balancing` flag in the [cluster configuration](./reference/configuration/index.md),
-  * compacted topics, and transactions – enabled via the enable_kafka_transactions flag.
-* [Added](https://github.com/ydb-platform/ydb/pull/20982) [new protocol to Node Broker](https://github.com/ydb-platform/ydb/issues/11064), eliminating the long startup of nodes on large clusters.
+  * compacted topics – enabled via the `enable_topic_compactification_by_key` flag,
+  * transactions – enabled via the `enable_kafka_transactions` flag.
+* [Added](https://github.com/ydb-platform/ydb/pull/20982) [new protocol to Node Broker](https://github.com/ydb-platform/ydb/issues/11064), eliminating the long startup of nodes on large clusters (more than 1000 servers).
 
 #### YDB UI
 

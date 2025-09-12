@@ -9,26 +9,26 @@
 
 ### Основные концепции и типы данных
 
-- [Колоночные таблицы](../../../concepts/datamodel/table.md#column-oriented-tables): Архитектура хранения, оптимизированная для OLAP.
-- [Типы данных](../../../yql/reference/types/index.md): Полный справочник по поддерживаемым типам.
+- [Колоночные таблицы](../../../concepts/datamodel/table.md#column-oriented-tables): архитектура хранения, оптимизированная для OLAP.
+- [Типы данных](../../../yql/reference/types/index.md): полный справочник по поддерживаемым типам.
 
 ### Масштабирование и производительность
 
-- [Проектирование ключей для максимальной производительности](../../../dev/primary-key/column-oriented.md): Как выбирать `PRIMARY KEY` и `PARTITION BY`.
-- [Партиционирование таблиц](../../../concepts/datamodel/table.md#olap-tables-partitioning): Механизм распределения данных по узлам.
+- [Проектирование ключей для максимальной производительности](../../../dev/primary-key/column-oriented.md): как выбирать `PRIMARY KEY` и `PARTITION BY`.
+- [Партиционирование таблиц](../../../concepts/datamodel/table.md#olap-tables-partitioning): механизм распределения данных по узлам.
 
 ### Управление жизненным циклом данных
 
-  - [TTL (Time-to-Live)](../../../concepts/ttl.md): Автоматическое удаление устаревших данных по истечении срока.
+- [TTL (Time-to-Live)](../../../concepts/ttl.md): автоматическое удаление устаревших данных по истечении срока.
 
 ## Загрузка и выгрузка данных (Ingestion & Egress)
 
-Инструменты и API для перемещения данных в {{ydb-short-name}} и из нее.
+Инструменты и API для перемещения данных в {{ydb-short-name}} и из неё.
 
 ### Потоковая загрузка (Streaming Ingestion)
 
-- [Topics (Kafka API)](../../../concepts/datamodel/topic.md): Нативная работа с потоками данных через протокол Kafka.
-- [Transfer](../../../concepts/transfer.md): Управляемый сервис для переноса данных между топиками и таблицами.
+- [Topics (Kafka API)](../../../concepts/datamodel/topic.md): нативная работа с потоками данных через протокол Kafka.
+- [Transfer](../../../concepts/transfer.md): управляемый сервис для переноса данных между топиками и таблицами.
 - [Коннектор Fluent Bit](../../../integrations/ingestion/fluent-bit.md): Прямая загрузка логов.
 
 ### Пакетная загрузка (Batch Ingestion)

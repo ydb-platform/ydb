@@ -986,6 +986,12 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         for (ui32 i = 0; i < PartitionCountersLabeled->GetCounters().Size(); ++i) {
             ac->AddValues(PartitionCountersLabeled->GetCounters()[i].Get());
         }
+        if (IsKeyCompactionEnabled()) {
+            for (ui32 i = 0; i < PartitionCompactionCounters->GetCounters().Size(); ++i) {
+                ac->MutableCompactionCounters()->AddValues(PartitionCompactionCounters->GetCounters()[i].Get());
+            }
+        }
+
         for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
             auto& userInfo = userInfoPair.second;
             if (!userInfo.LabeledCounters)
@@ -1742,6 +1748,9 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
         CompacterPartitionRequestInflight = false;
         if (Compacter) {
             Compacter->ProcessResponse(ev);
+            auto compacterCounters = Compacter->GetCounters();
+            KeyCompactionReadCyclesTotal.Set(compacterCounters.ReadCyclesCount);
+            KeyCompactionWriteCyclesTotal.Set(compacterCounters.WriteCyclesCount);
         }
     }
     ReadingTimestamp = false;
@@ -2010,6 +2019,38 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             haveChanges = true;
             PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE].Set(quotaUsage);
         }
+    }
+    if (PartitionCompactionCounters && Compacter) {
+        auto counters = Compacter->GetCounters();
+        if (counters.UncompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE].Set(counters.UncompactedSize);
+            haveChanges = true;
+        }
+        if (counters.CompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE].Set(counters.CompactedSize);
+            haveChanges = true;
+        }
+        if (counters.UncompactedCount != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_COUNT].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_COUNT].Set(counters.UncompactedCount);
+            haveChanges = true;
+        }
+        if (counters.CompactedCount != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_COUNT].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_COUNT].Set(counters.CompactedCount);
+            haveChanges = true;
+        }
+        if (abs(counters.UncompactedRatio - PartitionCompactionCounters->GetCounters()[METRIC_COMPACTION_RATIO].Get()) > 1e-5) {
+            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTION_RATIO].Set(counters.UncompactedRatio);
+            haveChanges = true;
+        }
+        if (counters.CurrReadCycleDuration.Seconds() != PartitionCompactionCounters->GetCounters()[METRIC_CURR_CYCLE_DURATION].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_CURR_CYCLE_DURATION].Set(counters.CurrReadCycleDuration.Seconds());
+            haveChanges = true;
+        }
+        if (counters.CurrentReadCycleKeys != PartitionCompactionCounters->GetCounters()[METRIC_CURR_READ_CYCLE_KEYS].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_CURR_READ_CYCLE_KEYS].Set(counters.CurrentReadCycleKeys);
+            haveChanges = true;
+        }
+        //ToDo: !! 2 more counters!
     }
     return haveChanges;
 }
@@ -4268,7 +4309,7 @@ void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
 IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration,
     const TActorId& blobCache, const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace,
-               ui32 numChannels, const TActorId& writeQuoterActorId, 
+               ui32 numChannels, const TActorId& writeQuoterActorId,
                TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition) {
 
     return new TPartition(tabletId, partition, tablet, tabletGeneration, blobCache, topicConverter, dcId, isServerless,

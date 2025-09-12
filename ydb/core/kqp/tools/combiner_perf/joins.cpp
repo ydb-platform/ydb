@@ -41,7 +41,7 @@ void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams& params, TTestResultColle
 
     TVector<std::pair<NYKQL::ETestedJoinAlgo, std::string_view>> cases = {
         {NYKQL::ETestedJoinAlgo::kScalarGrace, "ScalarGrace"},
-        {NYKQL::ETestedJoinAlgo::kScalarMap, "ScalarkMap"},
+        {NYKQL::ETestedJoinAlgo::kScalarMap, "ScalarMap"},
         {NYKQL::ETestedJoinAlgo::kBlockMap, "BlockMap"},
     };
 

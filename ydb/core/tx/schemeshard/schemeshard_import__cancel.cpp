@@ -111,23 +111,18 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 }; // TTxCancel
 
 struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase {
-    const ui64 ImportId;
-    const TTxId TxId;
-
-    explicit TTxCancelAck(TSelf *self, ui64 importId, TTxId txId)
-        : TXxport::TTxBase(self)
-        , ImportId(importId)
-        , TxId(txId)
-    {
-    }
+    TEvSchemeShard::TEvCancelTxResult::TPtr CancelTxResult = nullptr;
+    TEvIndexBuilder::TEvCancelResponse::TPtr CancelIndexBuildResult = nullptr;
 
     explicit TTxCancelAck(TSelf *self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
-        : TTxCancelAck(self, ev->Cookie, TTxId(ev->Get()->Record.GetTargetTxId()))
+        : TXxport::TTxBase(self)
+        , CancelTxResult(ev)
     {
     }
 
     explicit TTxCancelAck(TSelf *self, TEvIndexBuilder::TEvCancelResponse::TPtr& ev)
-        : TTxCancelAck(self, ev->Cookie, TTxId(ev->Get()->Record.GetTxId()))
+        : TXxport::TTxBase(self)
+        , CancelIndexBuildResult(ev)
     {
     }
 
@@ -136,11 +131,23 @@ struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
-        if (!Self->Imports.contains(ImportId)) {
+        TTxId txId;
+        ui64 id;
+        if (CancelTxResult) {
+            txId = TTxId(CancelTxResult->Get()->Record.GetTargetTxId());
+            id = CancelTxResult->Cookie;
+        } else if (CancelIndexBuildResult) {
+            txId = TTxId(CancelIndexBuildResult->Get()->Record.GetTxId());
+            id = CancelIndexBuildResult->Cookie;
+        } else {
+            Y_ABORT("unreachable");
+        }
+
+        if (!Self->Imports.contains(id)) {
             return true;
         }
 
-        TImportInfo::TPtr importInfo = Self->Imports.at(ImportId);
+        TImportInfo::TPtr importInfo = Self->Imports.at(id);
         NIceDb::TNiceDb db(txc.DB);
 
         if (importInfo->State != TImportInfo::EState::Cancellation) {
@@ -163,7 +170,7 @@ struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
                 ++cancellableItems;
             }
 
-            if (item.WaitTxId == TxId) {
+            if (item.WaitTxId == txId) {
                 found = true;
 
                 item.State = TImportInfo::EState::Cancelled;
@@ -179,7 +186,7 @@ struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
             return true;
         }
 
-        Self->TxIdToImport.erase(TxId);
+        Self->TxIdToImport.erase(txId);
         Self->PersistImportItemState(db, *importInfo, itemIdx);
 
         if (cancelledItems != cancellableItems) {

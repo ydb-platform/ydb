@@ -108,18 +108,11 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 }; // TTxCancel
 
 struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase {
-    const ui64 ExportId;
-    const TTxId TxId;
+    TEvSchemeShard::TEvCancelTxResult::TPtr CancelResult;
 
-    explicit TTxCancelAck(TSelf* self, ui64 exportId, TTxId txId)
+    explicit TTxCancelAck(TSelf *self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
         : TXxport::TTxBase(self)
-        , ExportId(exportId)
-        , TxId(txId)
-    {
-    }
-
-    explicit TTxCancelAck(TSelf* self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
-        : TTxCancelAck(self, ev->Cookie, TTxId(ev->Get()->Record.GetTargetTxId()))
+        , CancelResult(ev)
     {
     }
 
@@ -128,11 +121,14 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
-        if (!Self->Exports.contains(ExportId)) {
+        const ui64 id = CancelResult->Cookie;
+        const auto backupTxId = TTxId(CancelResult->Get()->Record.GetTargetTxId());
+
+        if (!Self->Exports.contains(id)) {
             return true;
         }
 
-        TExportInfo::TPtr exportInfo = Self->Exports.at(ExportId);
+        TExportInfo::TPtr exportInfo = Self->Exports.at(id);
 
         if (exportInfo->State != TExportInfo::EState::Cancellation) {
             return true;
@@ -154,7 +150,7 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
                 ++cancellableItems;
             }
 
-            if (item.WaitTxId == TxId) {
+            if (item.WaitTxId == backupTxId) {
                 found = true;
 
                 item.State = TExportInfo::EState::Cancelled;
@@ -170,7 +166,7 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
             return true;
         }
 
-        Self->TxIdToExport.erase(TxId);
+        Self->TxIdToExport.erase(backupTxId);
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistExportItemState(db, *exportInfo, itemIdx);

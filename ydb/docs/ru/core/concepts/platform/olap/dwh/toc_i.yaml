@@ -7,7 +7,7 @@ items:
     href: execution.md
   - name: Федеративные запросы
     href: federated.md
-  - name: ТТрансформация и подготовка данных (ETL/ELT)
+  - name: Трансформация и подготовка данных (ETL/ELT)
     href: etl.md
   - name: BI-аналитика и визуализация данных
     href: bi.md

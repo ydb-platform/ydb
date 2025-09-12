@@ -182,8 +182,10 @@ namespace NKikimr {
             const bool success = Writer->PushIndexOnly(record.Id, memRec, &Merger, &preallocatedLocation);
             if (success) {
                 Y_VERIFY_DEBUG_S(Merger.GetCollectTask().Reads.empty(), ReplCtx->VCtx->VDiskLogPrefix);
-                const TDiskPart writtenLocation = Writer->PushDataOnly(std::move(record.Data));
-                Y_VERIFY_S(writtenLocation == preallocatedLocation, ReplCtx->VCtx->VDiskLogPrefix);
+                if (record.Data) {
+                    const TDiskPart writtenLocation = Writer->PushDataOnly(std::move(record.Data));
+                    Y_VERIFY_S(writtenLocation == preallocatedLocation, ReplCtx->VCtx->VDiskLogPrefix);
+                }
 
                 if (auto msg = Writer->GetPendingMessage()) {
                     IssueWriteCmd(std::move(msg), EOutputState::INTERMEDIATE_CHUNK);

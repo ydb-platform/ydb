@@ -8,28 +8,44 @@
 
 Возвращаемый тип при использовании `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()` и подобных методов.
 
-| {{ ydb-short-name }} тип   | .NET тип   |
-|----------------------------|------------|
-| `Bool`                     | `bool`     |
-| `Text` (синоним `Utf8`)    | `string`   |
-| `Bytes` (синоним `String`) | `byte[]`   |
-| `Uint8`                    | `byte`     |
-| `Uint16`                   | `ushort`   |
-| `Uint32`                   | `uint`     |
-| `Uint64`                   | `ulong`    |
-| `Int8`                     | `sbyte`    |
-| `Int16`                    | `short`    |
-| `Int32`                    | `int`      |
-| `Int64`                    | `long`     |
-| `Float`                    | `float`    |
-| `Double`                   | `double`   |
-| `Date`                     | `DateTime` |
-| `Datetime`                 | `DateTime` |
-| `Timestamp`                | `DateTime` |
-| `Decimal(22,9)`            | `Decimal`  |
-| `Json`                     | `string`   |
-| `JsonDocument`             | `string`   |
-| `Yson`                     | `byte[]`   |
+| {{ ydb-short-name }} тип   | .NET тип                       |
+|----------------------------|--------------------------------|
+| `Bool`                     | `bool`                         |
+| `Text` (синоним `Utf8`)    | `string`                       |
+| `Bytes` (синоним `String`) | `byte[]`                       |
+| `Uint8`                    | `byte`                         |
+| `Uint16`                   | `ushort`                       |
+| `Uint32`                   | `uint`                         |
+| `Uint64`                   | `ulong`                        |
+| `Int8`                     | `sbyte`                        |
+| `Int16`                    | `short`                        |
+| `Int32`                    | `int`                          |
+| `Int64`                    | `long`                         |
+| `Float`                    | `float`                        |
+| `Double`                   | `double`                       |
+| `Date`                     | `DateTime`                     |
+| `Datetime`                 | `DateTime`                     |
+| `Timestamp`                | `DateTime`                     |
+| `Decimal`                  | [cм. раздел Decimal](#decimal) |
+| `Json`                     | `string`                       |
+| `JsonDocument`             | `string`                       |
+| `Yson`                     | `byte[]`                       |
+
+## Decimal {#decimal}
+
+`Decimal (Precision, Scale)` — параметризованный тип {{ ydb-short-name }}, поддерживающий указание заданной точности (общее количество значащих цифр) - параметр `Precision` и масштаба (количество цифр после десятичной точки) - параметр `Scale`
+(подробнее см. [документацию](../../../yql/reference/types/primitive.md#numeric))
+
+По умолчанию используется Decimal(22, 9). Если вам необходимо передать значение, с точностью и масштабом отличным от значений по умолчанию вы можете сделать это кодом из примера
+
+Пример кода ниже добавляет в базу данных запись со значением 1.5 и типом Decimal (с заданными параметрами Precision = 5, Scale = 3)
+```c#
+await new YdbCommand(ydbConnection)
+{
+    CommandText = $"INSERT INTO {tableName}(Id, Decimal) VALUES (1, @Decimal);",
+    Parameters = new YdbParameter { Name = "Decimal", Value = 1.5m, Precision = 5, Scale = 3 }
+}.ExecuteNonQueryAsync();
+```
 
 ## Таблица сопоставления типов на запись
 
@@ -51,7 +67,7 @@
 | `Date`                     | `Date`                                                                                    | `DateTime`                   |
 | `Datetime`                 | `DateTime`                                                                                | `DateTime`                   |
 | `Timestamp`                | `DateTime2` (для .NET типа `DateTime`), `DateTimeOffset` (для .NET типа `DateTimeOffset`) | `DateTime`, `DateTimeOffset` |
-| `Decimal(22,9)`            | `Decimal`, `Currency`                                                                     | `decimal`                    |
+| `Decimal`                  | `Decimal`, `Currency`                                                                     | `decimal`                    |
 
 {% note info %}
 

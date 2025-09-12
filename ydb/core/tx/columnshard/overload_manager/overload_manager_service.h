@@ -4,6 +4,7 @@
 #include <ydb/library/accessor/positive_integer.h>
 
 #include <atomic>
+#include <memory>
 
 namespace NKikimr::NColumnShard::NOverload {
 
@@ -25,7 +26,7 @@ private:
 
 public:
     static NActors::TActorId MakeServiceId();
-    static NActors::IActor* CreateService(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup);
+    static std::unique_ptr<NActors::IActor> CreateService(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup);
 
     static ui64 GetShardWritesInFlyLimit();
     static ui64 GetShardWritesSizeInFlyLimit();

@@ -42,8 +42,8 @@ NActors::TActorId TOverloadManagerServiceOperator::MakeServiceId() {
     return NActors::TActorId(0, "OverloadMng");
 }
 
-NActors::IActor* TOverloadManagerServiceOperator::CreateService(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup) {
-    return new TOverloadManager(countersGroup);
+std::unique_ptr<NActors::IActor> TOverloadManagerServiceOperator::CreateService(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup) {
+    return std::make_unique<TOverloadManager>(countersGroup);
 }
 
 void TOverloadManagerServiceOperator::NotifyIfResourcesAvailable(bool force) {

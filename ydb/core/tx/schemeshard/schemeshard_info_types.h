@@ -19,6 +19,7 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/table_index.h>

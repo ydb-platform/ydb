@@ -51,11 +51,11 @@
 
 [Подробнее о федеративных запросах](dwh/federated.md)
 
-## Анализ и визуализация (BI & ML) {#bi-ml}
+## Анализ и визуализация (BI и ML) {#bi-ml}
 
 Для анализа данных можно использовать стандартные инструменты индустрии:
 
 - BI-инструменты: [Yandex DataLens](../../../integrations/visualization/datalens.md), [Apache Superset](../../../integrations/visualization/superset.md), [Grafana](../../../integrations/visualization/grafana.md), [Polymatica](https://wiki.polymatica.ru/display/PDTNUG1343/YDB+Server).
-- ML-инструменты: используйте [Jupyter Notebooks](../../../integrations/gui/jupyter.md) и [Apache Spark](../../../integrations/ingestion/spark.md) для подготовки данных и обучения ML-моделей.
+- ML-инструменты: используйте [Jupyter Notebook](../../../integrations/gui/jupyter.md) и [Apache Spark](../../../integrations/ingestion/spark.md) для подготовки данных и обучения моделей машинного обучения.
 
-[Подробнее о BI](dwh/bi.md), [Подробнее о ML](dwh/ml.md)
+[Подробнее о BI](dwh/bi.md); [Подробнее о ML](dwh/ml.md)

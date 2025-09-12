@@ -12,6 +12,30 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
+TString InterruptInheritanceExceptDescribe(const TString& parentAcl, const bool inheritPermissions) {
+    if (inheritPermissions) { // don't change parent ACL
+        return parentAcl;
+    }
+
+    NACLib::TACL secObj(parentAcl);
+    NACLib::TACL resultSecObj;
+    resultSecObj.SetInterruptInheritance(true);
+    for (auto& ace : *secObj.MutableACE()) {
+        if (ace.GetAccessRight() & NACLib::EAccessRights::DescribeSchema) {
+            resultSecObj.AddAccess(
+                static_cast<NACLib::EAccessType>(ace.GetAccessType()),
+                NACLib::EAccessRights::DescribeSchema,
+                ace.GetSID(),
+                ace.GetInheritanceType()
+            );
+        }
+    }
+
+    TString resultAcl;
+    Y_ABORT_UNLESS(resultSecObj.SerializeToString(&resultAcl));
+    return resultAcl;
+}
+
 class TPropose : public TSubOperationState {
 private:
     const TOperationId OperationId;
@@ -160,7 +184,6 @@ public:
             }
         }
 
-        // TODO(yurikiselev): Support inherit_permissions mode [issue:23460]
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
         NSchemeShard::TPath dstPath = parentPath.Child(secretName);
@@ -223,8 +246,11 @@ public:
         secretPath->PathType = TPathElement::EPathType::EPathTypeSecret;
         secretPath->CreateTxId = OperationId.GetTxId();
         secretPath->LastTxId = OperationId.GetTxId();
+
         if (!acl.empty()) {
             secretPath->ApplyACL(acl);
+        } else {
+            secretPath->ACL = InterruptInheritanceExceptDescribe(parentPath.GetEffectiveACL(), createSecretProto.GetInheritPermissions());
         }
 
         NKikimrSchemeOp::TSecretDescription secretDescription;

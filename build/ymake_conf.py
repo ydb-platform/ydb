@@ -1479,8 +1479,8 @@ class GnuCompiler(Compiler):
         if self.tc.is_clang:
             # Set up output colorization
             self.c_foptions.append('-fcolor-diagnostics')
-            if self.tc.version_at_least(4):
-                # Enable aligned allocation
+            if not is_positive('NO_CXX_ALIGNED_ALLOCATION') and self.tc.version_at_least(4):
+                # Enable aligned allocation, unless explicitly disabled
                 self.c_foptions.append('-faligned-allocation')
         elif self.tc.is_gcc:
             if self.target.is_tc32:

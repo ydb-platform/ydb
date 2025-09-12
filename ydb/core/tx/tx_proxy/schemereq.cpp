@@ -772,13 +772,19 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
         case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
-        case NKikimrSchemeOp::ESchemeOpAlterSecret:
-        case NKikimrSchemeOp::ESchemeOpCreateSecret:
+        case NKikimrSchemeOp::ESchemeOpAlterSecret: // TODO(yurikiselev): Change grants according to discussed [issue:23460]
         case NKikimrSchemeOp::ESchemeOpAlterStreamingQuery:
         {
-            // TODO(yurikiselev): Change grants according to discussed [issue:23460]
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpCreateSecret: // TODO(yurikiselev): Change grants according to discussed [issue:23460]
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;

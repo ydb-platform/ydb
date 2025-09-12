@@ -437,6 +437,27 @@ namespace {
         return alterSequenceSettings;
     }
 
+    TSecretSettings ParseSecretSettings(TKiCreateSecret createSecret) {
+        TSecretSettings settings;
+        settings.Name = TString(createSecret.Secret());
+        settings.Value = TString(createSecret.Value());
+        settings.InheritPermissions = FromString<bool>(TString(createSecret.InheritPermissions()));
+        return settings;
+    }
+
+    TSecretSettings ParseSecretSettings(TKiAlterSecret alterSecret) {
+        TSecretSettings settings;
+        settings.Name = TString(alterSecret.Secret());
+        settings.Value = TString(alterSecret.Value());
+        return settings;
+    }
+
+    TSecretSettings ParseSecretSettings(TKiDropSecret dropSecret) {
+        TSecretSettings settings;
+        settings.Name = TString(dropSecret.Secret());
+        return settings;
+    }
+
     [[nodiscard]] TString AddConsumerToTopicRequest(
             Ydb::Topic::Consumer* protoConsumer, const TCoTopicConsumer& consumer
     ) {
@@ -1334,6 +1355,79 @@ private:
 protected:
     virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TDropObjectSettings& settings) override {
         return GetGateway()->DropObject(cluster, settings);
+    }
+public:
+    using TBase::TBase;
+};
+
+
+template <class TKiObject>
+class TSecretTransformer {
+private:
+    TIntrusivePtr<IKikimrGateway> Gateway;
+    TString ActionInfo;
+protected:
+    TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TSecretSettings& settings) = 0;
+    TIntrusivePtr<IKikimrGateway> GetGateway() const {
+        return Gateway;
+    }
+public:
+    TSecretTransformer(const TString& actionInfo, TIntrusivePtr<IKikimrGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+        : Gateway(gateway)
+        , ActionInfo(actionInfo)
+        , SessionCtx(sessionCtx)
+    {
+    }
+
+    std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Execute(const TKiObject& kiObject, const TExprNode::TPtr& input) {
+        auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != IGraphTransformer::TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(kiObject.DataSink().Cluster());
+            auto settings = ParseSecretSettings(kiObject);
+
+            auto future = DoExecute(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing " + ActionInfo);
+    }
+};
+
+class TCreateSecretTransformer: public TSecretTransformer<TKiCreateSecret> {
+private:
+    using TBase = TSecretTransformer<TKiCreateSecret>;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TSecretSettings& settings) override {
+        return GetGateway()->CreateSecret(cluster, settings);
+    }
+public:
+    using TBase::TBase;
+};
+
+class TAlterSecretTransformer: public TSecretTransformer<TKiAlterSecret> {
+private:
+    using TBase = TSecretTransformer<TKiAlterSecret>;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TSecretSettings& settings) override {
+        return GetGateway()->AlterSecret(cluster, settings);
+    }
+public:
+    using TBase::TBase;
+};
+
+class TDropSecretTransformer: public TSecretTransformer<TKiDropSecret> {
+private:
+    using TBase = TSecretTransformer<TKiDropSecret>;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TSecretSettings& settings) override {
+        return GetGateway()->DropSecret(cluster, settings);
     }
 public:
     using TBase::TBase;
@@ -2961,6 +3055,16 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing RESTORE");
+        }
+
+        if (auto kiObject = TMaybeNode<TKiCreateSecret>(input)) {
+            return TCreateSecretTransformer("CREATE SECRET", Gateway, SessionCtx).Execute(kiObject.Cast(), input);
+        }
+        if (auto kiObject = TMaybeNode<TKiAlterSecret>(input)) {
+            return TAlterSecretTransformer("ALTER SECRET", Gateway, SessionCtx).Execute(kiObject.Cast(), input);
+        }
+        if (auto kiObject = TMaybeNode<TKiDropSecret>(input)) {
+            return TDropSecretTransformer("DROP SECRET", Gateway, SessionCtx).Execute(kiObject.Cast(), input);
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()

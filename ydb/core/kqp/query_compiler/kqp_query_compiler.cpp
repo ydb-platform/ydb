@@ -530,6 +530,7 @@ TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpPro
         ui32 txId = 0;
         ui32 stageId = 0;
         std::optional<ui32> tasks;
+        bool optional = false;
         for (const auto& [key, value] : stageOverride.GetMap()) {
             ui32* result = nullptr;
             if (key == "tx") {
@@ -539,6 +540,9 @@ TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpPro
             } else if (key == "tasks") {
                 tasks = 0;
                 result = &(*tasks);
+            } else if (key == "optional") {
+                optional = value.GetBooleanRobust();
+                continue;
             } else {
                 issues.AddIssue(TStringBuilder() << "Unknown key '" << key << "' in stage override " << i);
                 continue;
@@ -562,13 +566,17 @@ TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpPro
 
         auto& txs = *queryProto.MutableTransactions();
         if (txId >= static_cast<ui32>(txs.size())) {
-            issues.AddIssue(TStringBuilder() << "Invalid tx id: " << txId << " in stage override " << i << ", number of transactions in query: " << txs.size());
+            if (!optional) {
+                issues.AddIssue(TStringBuilder() << "Invalid tx id: " << txId << " in stage override " << i << ", number of transactions in query: " << txs.size());
+            }
             continue;
         }
 
         auto& stages = *txs[txId].MutableStages();
         if (stageId >= static_cast<ui32>(stages.size())) {
-            issues.AddIssue(TStringBuilder() << "Invalid stage id: " << stageId << " in stage override " << i << ", number of stages in transaction " << txId << ": " << stages.size());
+            if (!optional) {
+                issues.AddIssue(TStringBuilder() << "Invalid stage id: " << stageId << " in stage override " << i << ", number of stages in transaction " << txId << ": " << stages.size());
+            }
             continue;
         }
 

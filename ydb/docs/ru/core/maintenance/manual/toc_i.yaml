@@ -11,6 +11,8 @@ items:
   href: ../../devops/deployment-options/manual/decommissioning.md
 - name: Перевоз VDisk'ов
   href: moving_vdisks.md
+- name: Операции с коллекциями резервных копий
+  href: backup-collections.md
 - name: Предотвращение выхода за модель отказа
   href: failure_model.md
 - name: Балансировка нагрузки на диски

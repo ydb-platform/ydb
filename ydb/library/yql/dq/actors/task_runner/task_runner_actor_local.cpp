@@ -284,6 +284,8 @@ private:
                     LOG_E("Failed to save state: " << e.what());
                     mkqlProgramState = nullptr;
                 }
+                Y_ENSURE(UnsentCheckpoints == 0);
+                UnsentCheckpoints = Sinks.size() + Outputs.size();
                 HasActiveCheckpoint = false;
                 if (!WatermarkRequests.empty()) {
                     auto nextWatermarkRequest = WatermarkRequests.front();
@@ -480,7 +482,12 @@ private:
             checkpoint = hasCheckpoint ? std::move(poppedCheckpoint) : TMaybe<NDqProto::TCheckpoint>();
 
             if (hasCheckpoint) {
-                ResumeByCheckpoint();
+                Y_ENSURE(UnsentCheckpoints > 0);
+                if (--UnsentCheckpoints == 0) {
+                    ResumeByCheckpoint();
+                } else {
+                    LOG_T("Pending " << UnsentCheckpoints << " checkpoints to be sent");
+                }
                 break;
             }
 
@@ -539,7 +546,12 @@ private:
         if (hasCheckpoint) {
             checkpointSize = checkpoint.ByteSize();
             maybeCheckpoint.ConstructInPlace(std::move(checkpoint));
-            ResumeByCheckpoint();
+            Y_ENSURE(UnsentCheckpoints > 0);
+            if (--UnsentCheckpoints == 0) {
+                ResumeByCheckpoint();
+            } else {
+                LOG_T("Pending " << UnsentCheckpoints << " checkpoints to be sent");
+            }
         }
         const bool finished = sink->IsFinished();
         const bool changed = finished || size > 0 || hasCheckpoint;
@@ -702,6 +714,7 @@ private:
     TMaybe<TInstant> LastWatermark;
     std::deque<TInstant> WatermarkRequests;
     bool HasActiveCheckpoint = false;
+    ui32 UnsentCheckpoints = 0;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {

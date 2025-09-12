@@ -284,8 +284,7 @@ private:
                     LOG_E("Failed to save state: " << e.what());
                     mkqlProgramState = nullptr;
                 }
-                Y_ENSURE(UnsentCheckpoints == 0);
-                UnsentCheckpoints = Sinks.size() + Outputs.size();
+                StartResumeByCheckpoint();
                 HasActiveCheckpoint = false;
                 if (!WatermarkRequests.empty()) {
                     auto nextWatermarkRequest = WatermarkRequests.front();
@@ -482,12 +481,7 @@ private:
             checkpoint = hasCheckpoint ? std::move(poppedCheckpoint) : TMaybe<NDqProto::TCheckpoint>();
 
             if (hasCheckpoint) {
-                Y_ENSURE(UnsentCheckpoints > 0);
-                if (--UnsentCheckpoints == 0) {
-                    ResumeByCheckpoint();
-                } else {
-                    LOG_T("Pending " << UnsentCheckpoints << " checkpoints to be sent");
-                }
+                AdvanceResumeByCheckpoint();
                 break;
             }
 
@@ -511,10 +505,26 @@ private:
             ev->Cookie);
     }
 
-    void ResumeByCheckpoint() {
+    void MaybeResumeByCheckpoint() {
+        if (UnsentCheckpoints > 0) {
+            LOG_T("Pending " << UnsentCheckpoints << " checkpoints to be sent");
+            return;
+        }
         for (const auto& inputId : InputsWithCheckpoints) {
             TaskRunner->GetInputChannel(inputId)->ResumeByCheckpoint();
         }
+    }
+
+    void StartResumeByCheckpoint() {
+        Y_ENSURE(UnsentCheckpoints == 0);
+        UnsentCheckpoints = Sinks.size() + Outputs.size();
+        MaybeResumeByCheckpoint();
+    }
+
+    void AdvanceResumeByCheckpoint() {
+        Y_ENSURE(UnsentCheckpoints > 0);
+        --UnsentCheckpoints;
+        MaybeResumeByCheckpoint();
     }
 
     void ResumeByWatermark(TInstant watermark) {
@@ -546,12 +556,7 @@ private:
         if (hasCheckpoint) {
             checkpointSize = checkpoint.ByteSize();
             maybeCheckpoint.ConstructInPlace(std::move(checkpoint));
-            Y_ENSURE(UnsentCheckpoints > 0);
-            if (--UnsentCheckpoints == 0) {
-                ResumeByCheckpoint();
-            } else {
-                LOG_T("Pending " << UnsentCheckpoints << " checkpoints to be sent");
-            }
+            AdvanceResumeByCheckpoint();
         }
         const bool finished = sink->IsFinished();
         const bool changed = finished || size > 0 || hasCheckpoint;

@@ -258,7 +258,7 @@ void CompareCompressedAndDefaultBatches(TQueryClient& client, std::optional<TArr
 
 void ValidateOptionalColumn(const std::shared_ptr<arrow::Array>& array, int depth, bool isVariant) {
     if (depth == 0 && isVariant) {
-        UNIT_ASSERT_C(array->type()->id() == arrow::Type::DENSE_UNION, "Column type must be DENSE_UNION");
+        UNIT_ASSERT_C(array->type()->id() == arrow::Type::DENSE_UNION, "Column type must be arrow::Type::DENSE_UNION");
         return;
     }
 
@@ -266,7 +266,7 @@ void ValidateOptionalColumn(const std::shared_ptr<arrow::Array>& array, int dept
         return;
     }
 
-    UNIT_ASSERT_C(array->type()->id() == arrow::Type::STRUCT, "Column type must be STRUCT");
+    UNIT_ASSERT_C(array->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
 
     auto structArray = static_pointer_cast<arrow::StructArray>(array);
     UNIT_ASSERT_C(structArray->num_fields() == 1, "Struct array must have 1 field");
@@ -1444,6 +1444,11 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         }
     }
 
+    /**
+     * More tests for different types with correctness and convertations between Arrow and UV :
+     * ydb/library/yql/dq/runtime/dq_arrow_helpers_ut.cpp
+    */
+
     // Optional<T>
     Y_UNIT_TEST(ArrowFormat_Types_Optional_1) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
@@ -1674,7 +1679,7 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be list");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
             const TString expected =
 R"(column0:   [
@@ -1705,7 +1710,7 @@ R"(column0:   [
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be list");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
             const TString expected =
 R"(column0:   [
@@ -1738,7 +1743,7 @@ R"(column0:   [
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 9);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be list");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
             const TString expected =
 R"(column0:   [
@@ -1784,6 +1789,7 @@ R"(column0:   [
         }
     }
 
+    // List<>
     Y_UNIT_TEST(ArrowFormat_Types_EmptyList) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
@@ -1799,7 +1805,7 @@ R"(column0:   [
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be STRUCT");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
@@ -1808,9 +1814,7 @@ R"(column0:   -- is_valid: all not null
         }
     }
 
-    /**
-     * Arrow format is supported for tuple types.
-     */
+    // Tuple<T, F>
     Y_UNIT_TEST(ArrowFormat_Types_Tuple) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
@@ -1826,7 +1830,7 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be struct");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
@@ -1843,6 +1847,7 @@ R"(column0:   -- is_valid: all not null
         }
     }
 
+    // Dict<K, V>
     Y_UNIT_TEST(ArrowFormat_Types_Dict_1) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
@@ -1858,7 +1863,7 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be STRUCT");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
 
             const TString expected = 
 R"(column0:   -- is_valid: all not null
@@ -1887,6 +1892,7 @@ R"(column0:   -- is_valid: all not null
         }
     }
 
+    // Dict<Optional<K>, V>
     Y_UNIT_TEST(ArrowFormat_Types_Dict_2) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
@@ -1902,7 +1908,7 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be STRUCT");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
@@ -1932,6 +1938,7 @@ R"(column0:   -- is_valid: all not null
         }
     }
 
+    // Dict<>
     Y_UNIT_TEST(ArrowFormat_Types_EmptyDict) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
@@ -1947,7 +1954,7 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be STRUCT");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
@@ -1956,6 +1963,7 @@ R"(column0:   -- is_valid: all not null
         }
     }
 
+    // Struct<first:T, second:F>
     Y_UNIT_TEST(ArrowFormat_Types_Struct) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
@@ -1971,7 +1979,7 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be STRUCT");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
@@ -1988,6 +1996,7 @@ R"(column0:   -- is_valid: all not null
         }
     }
 
+    // Variant<T, F>
     Y_UNIT_TEST(ArrowFormat_Types_Variant) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
@@ -2003,7 +2012,7 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::DENSE_UNION, "Column type must be DENSE_UNION");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::DENSE_UNION, "Column type must be arrow::Type::DENSE_UNION");
 
             const TString expected =
 R"(column0:   -- is_valid: all not null

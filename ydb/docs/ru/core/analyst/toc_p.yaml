@@ -1,0 +1,6 @@
+items:
+  - name: Импорт датасетов
+    href: datasets/index.md
+    include:
+      mode: link
+      path: datasets/toc_p.yaml

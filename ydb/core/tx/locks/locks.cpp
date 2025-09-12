@@ -1317,7 +1317,6 @@ void TSysLocks::BreakLocks(const TTableId& tableId, const TArrayRef<const TCell>
             // Note: avoid copying the key, find all locks here
             table->Ranges.EachIntersection(key, [update = Update](const TRangeTreapTraits::TRange&, TLockInfo* lock) {
                 update->AddBreakLock(lock);
-                return true;
             });
         }
         if (table->HasShardLocks()) {
@@ -1357,7 +1356,6 @@ void TSysLocks::AddWriteConflict(const TTableId& tableId, const TArrayRef<const 
                 if (lock->GetLockId() != update->LockTxId) {
                     update->AddWriteConflictLock(lock);
                 }
-                return true;
             });
         }
         if (table->HasShardLocks()) {

@@ -175,31 +175,29 @@ public:
       * Order is sorted by (range.Left, value, range.Right) tuples.
       */
     template <class TCallback>
-    bool EachRange(TCallback&& callback) const {
+    void EachRange(TCallback&& callback) const {
         if (Root) {
-            return DoEachRange(Root.Get(), callback);
+            DoEachRange(Root.Get(), callback);
         }
-        return true;
     }
 
     /**
       * Calls callback for each range with the given point
       */
     template <class TCallback>
-    bool EachIntersection(TKeyView point, TCallback&& callback) const {
-        return EachIntersection(TRange(point, true, point, true), callback);
+    void EachIntersection(TKeyView point, TCallback&& callback) const {
+        EachIntersection(TRange(point, true, point, true), callback);
     }
 
     /**
       * Calls callback for each range intersecting with the query
       */
     template <class TCallback>
-    bool EachIntersection(const TRange& range, TCallback&& callback) const {
+    void EachIntersection(const TRange& range, TCallback&& callback) const {
         if (Root) {
-            return DoEachIntersection(Root.Get(), TBorder::MakeLeft(range.LeftKey, range.LeftInclusive),
+            DoEachIntersection(Root.Get(), TBorder::MakeLeft(range.LeftKey, range.LeftInclusive),
                 TBorder::MakeRight(range.RightKey, range.RightInclusive), callback);
         }
-        return true;
     }
 
 private:
@@ -464,25 +462,18 @@ private:
 
 private:
     template <class TCallback>
-    bool DoEachRange(const TNode* t, TCallback&& callback) const {
+    void DoEachRange(const TNode* t, TCallback&& callback) const {
         if (t->Left) {
-            if (!DoEachRange(t->Left.Get(), callback)) {
-                return false;
-            }
+            DoEachRange(t->Left.Get(), callback);
         }
-        if (!callback(t->ToRange(), t->Value)) {
-            return false;
-        }
+        { callback(t->ToRange(), t->Value); }
         if (t->Right) {
-            if (!DoEachRange(t->Right.Get(), callback)) {
-                return false;
-            }
+            DoEachRange(t->Right.Get(), callback);
         }
-        return true;
     }
 
     template <class TCallback>
-    bool DoEachIntersection(
+    void DoEachIntersection(
         const TNode* t, const TBorder& leftBorder, const TBorder& rightBorder, TCallback&& callback, bool wentLeft = false) const {
         int cmp;
 
@@ -490,40 +481,32 @@ private:
             int cmp = CompareBorders(t->MaxRightBorder(), leftBorder);
             if (cmp < 0) {
                 // There is no intersection with this whole subtree
-                return true;
+                return;
             }
         }
 
         if (t->Left) {
             // Descend into the left subtree
             // Note it will terminate on subtrees that have small MaxRightBorder
-            if (!DoEachIntersection(t->Left.Get(), leftBorder, rightBorder, callback, true)) {
-                return false;
-            }
+            DoEachIntersection(t->Left.Get(), leftBorder, rightBorder, callback, true);
         }
 
         cmp = CompareBorders(rightBorder, t->LeftBorder());
         if (cmp < 0) {
             // There is no intersection with this node or the right subtree
-            return true;
+            return;
         }
 
         // N.B. we avoid comparison with RightKey when it is equal to MaxRightKey.
         if ((wentLeft && t->MaxRightTrivial) || CompareBorders(leftBorder, t->RightBorder()) <= 0)
         {
-            if (!callback(t->ToRange(), t->Value)) {
-                return false;
-            }
+            callback(t->ToRange(), t->Value);
         }
 
         if (t->Right) {
             // Descend into the right subtree
-            if (!DoEachIntersection(t->Right.Get(), leftBorder, rightBorder, callback)) {
-                return false;
-            }
+            DoEachIntersection(t->Right.Get(), leftBorder, rightBorder, callback);
         }
-
-        return true;
     }
 
 public:

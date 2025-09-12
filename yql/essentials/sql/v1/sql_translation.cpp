@@ -862,8 +862,9 @@ bool TSqlTranslation::AddIndexSetting(const TIdentifier &id,
         const TRule_index_setting_value& node,
         TIndexDescription::TIndexSettings& indexSettings) {
 
-    const auto name = id.Name;
-    const auto value = GetIndexSettingStringValue(node);
+    // TODO: transform to_lower on backend to make case-sensitive settings work
+    const auto name = to_lower(id.Name);
+    const auto value = to_lower(GetIndexSettingStringValue(node));
 
     TIndexDescription::TIndexSetting indexSetting {
         .Name = name,

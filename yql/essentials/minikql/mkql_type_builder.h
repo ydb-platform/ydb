@@ -318,6 +318,8 @@ public:
     TType* BuildBlockStructType(const TStructType* structType) const;
     TType* ValidateBlockStructType(const TStructType* structType) const;
 
+    TType* NewLinearType(TType* itemType, bool isDynamic) const;
+
 protected:
     const TTypeEnvironment& Env_;
     //FIXME Remove

@@ -238,6 +238,11 @@
                 "ColumnType": "Byte"
             },
             {
+                "ColumnId": 20,
+                "ColumnName": "MaintenanceStatus",
+                "ColumnType": "Byte"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "NodeID",
                 "ColumnType": "Uint32"
@@ -314,6 +319,7 @@
                 "Columns": [
                     17,
                     18,
+                    20,
                     1,
                     2,
                     3,

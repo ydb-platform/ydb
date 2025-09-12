@@ -5,6 +5,7 @@
 namespace NKikimr::NMiniKQL{
 enum class ETestedJoinAlgo{
     kScalarGrace,
+    kScalarMap,
     kBlockMap,
     kBlockHash,
     kScalarHash

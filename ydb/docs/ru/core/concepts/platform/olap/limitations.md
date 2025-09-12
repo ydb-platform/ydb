@@ -266,7 +266,7 @@ WHERE e.user_id = p.user_id
 На данный момент резервное копирование (backup) и восстановление (restore) колоночных таблиц выполняется с помощью паттерна «Экспорт/Импорт» через внешнее S3-совместимое хранилище.
 
 
-**Решение**
+### Решение
 
 Используйте экспорт-импорт данных через Object Storage.
 
@@ -300,6 +300,20 @@ WITH (
 
 -- 3) Экспорт
 INSERT INTO s3_processed_backup
+SELECT * FROM my_columnstore_table;
+```
+
+```sql
+-- 4) Импорт (восстановление)
+INSERT INTO my_columnstore_table
+SELECT * FROM s3_processed_backup;
+```
+
+{% note info %}
+
+Для выполнения операций экспорта и импорта убедитесь, что у вас настроены права доступа к Object Storage и указаны корректные учётные данные.
+
+{% endnote %}
 SELECT *
 FROM processed_data;  -- ваша колоночная таблица
 

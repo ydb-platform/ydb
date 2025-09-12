@@ -3,13 +3,7 @@
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/dq_setup.h>
 
 namespace NKikimr::NMiniKQL {
-enum class ETestedJoinAlgo {
-    kScalarGrace,
-    kScalarMap,
-    kBlockMap,
-    kBlockHash,
-    kScalarHash
-};
+enum class ETestedJoinAlgo { kScalarGrace, kScalarMap, kBlockMap, kBlockHash, kScalarHash };
 
 struct TJoinSourceData {
     TArrayRef<TType* const> ColumnTypes;
@@ -23,8 +17,6 @@ struct TInnerJoinDescription {
     TDqSetup<false>* Setup;
 };
 
-THolder<IComputationGraph>
-ConstructInnerJoinGraphStream(ETestedJoinAlgo algo,
-                              TInnerJoinDescription descr);
+THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, TInnerJoinDescription descr);
 i32 ResultColumnCount(ETestedJoinAlgo algo, TInnerJoinDescription descr);
 } // namespace NKikimr::NMiniKQL

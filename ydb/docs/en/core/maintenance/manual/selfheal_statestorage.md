@@ -1,4 +1,4 @@
-# Working with SelfHeal State Storage
+# Working with Self Heal State Storage
 
 
 During cluster operation, the entire nodes on which {{ydb-short-name }} is running may fail.

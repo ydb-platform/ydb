@@ -66,14 +66,14 @@ The partition count increase algorithm works as follows: if the write speed for 
 
 Autopartitioning is paused for this topic, meaning that the number of partitions does not increase automatically. If needed, you can re-enable autopartitioning for this topic.
 
-Examples of YQL queries for switching between different autopartitioning strategies can be found [here](../yql/reference/syntax/alter-topic.md#autopartitioning).
+Examples of YQL queries for switching between different autopartitioning strategies can be found [here](../../yql/reference/syntax/alter-topic.md#autopartitioning).
 
 ### Autopartitioning Constraints {#autopartitioning_constraints}
 
 The following constraints apply when using autopartitioning:
 
 1. Once autopartitioning is enabled for a topic, it cannot be stopped, only paused.
-2. When autopartitioning is enabled for a topic, it is impossible to read from or write to it using the [Kafka API](../reference/kafka-api/index.md).
+2. When autopartitioning is enabled for a topic, it is impossible to read from or write to it using the [Kafka API](../../reference/kafka-api/index.md).
 3. Autopartitioning can only be enabled on topics that use the reserved capacity mode.
 
 ## Message Sources {#producer-id}
@@ -96,7 +96,7 @@ Let's consider a finance application that calculates the balance on a user's acc
 
 For such tasks, you can use a [message queue](https://en.wikipedia.org/wiki/Message_queue). When you top up your account, debit funds, or make a purchase, a message with the account ID, amount, and transaction type is registered in the queue. The application processes incoming messages and calculates the balance.
 
-![basic-design](../_assets/example-basic-design.svg)
+![basic-design](../../_assets/example-basic-design.svg)
 
 To accurately calculate the balance, the message processing order is crucial. If a user first tops up their account and then makes a purchase, messages with details about these transactions must be processed by the app in the same order. Otherwise, there may be an error in the business logic and the app will reject the purchase as a result of insufficient funds. There are guaranteed delivery order mechanisms, but they cannot ensure a message order within a single queue on an arbitrary data amount.
 
@@ -106,7 +106,7 @@ When several application instances read messages from a stream, a message about 
 
 Below is an example when all transactions on accounts with even IDs are transferred to the first instance of the application, and with odd ones — to the second.
 
-![topic-design](../_assets/example-topic-design.svg)
+![topic-design](../../_assets/example-topic-design.svg)
 
 ### When the Processing Order Is Not Important {#no-dedup}
 
@@ -168,13 +168,13 @@ As a long timeout of an important consumer may result in full use of all availab
 
 ## Topic Protocols {#topic-protocols}
 
-To work with topics, the {{ ydb-short-name }} SDK is used (see also [Reference](../reference/ydb-sdk/topic.md)).
+To work with topics, the {{ ydb-short-name }} SDK is used (see also [Reference](../../reference/ydb-sdk/topic.md)).
 
-Kafka API version 3.4.0 is also supported with some restrictions (see [Work with Kafka API](../reference/kafka-api/index.md)).
+Kafka API version 3.4.0 is also supported with some restrictions (see [Work with Kafka API](../../reference/kafka-api/index.md)).
 
 ## Transactions with Topics {#topic-transactions}
 
-{{ ydb-short-name }} supports working with topics within [transactions](./transactions.md).
+{{ ydb-short-name }} supports working with topics within [transactions](../transactions.md).
 
 ### Read from a Topic Within a Transaction {#topic-transactions-read}
 

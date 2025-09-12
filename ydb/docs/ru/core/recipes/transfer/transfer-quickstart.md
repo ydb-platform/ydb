@@ -41,7 +41,7 @@ CREATE TABLE `transfer_recipe/target_table` (
 
 ## Шаг 3. Создание трансфера {#step3}
 
-После создания топика и таблицы следует добавить [трансфер](../../concepts/transfer.md) данных, который будет перекладывать сообщения из топика в таблицу. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-transfer.md):
+После создания топика и таблицы нужно добавить [трансфер](../../concepts/transfer.md) данных, который будет переносить сообщения из топика в таблицу. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-transfer.md):
 
 ```yql
 $transformation_lambda = ($msg) -> {
@@ -61,19 +61,19 @@ CREATE TRANSFER `transfer_recipe/example_transfer`
 
 В этом примере:
 
-* `$transformation_lambda` - это правило преобразования сообщения из топика в колонки таблицы. В данном примере сообщение топика переносится в таблицу без преобразований;
-* `$msg` - переменная, которая содержит обрабатываемое сообщение из топика.
+* `$transformation_lambda` — это правило преобразования сообщения из топика в колонки таблицы. В данном случае сообщение из топика переносится в таблицу без изменений;
+* `$msg` — переменная, содержащая обрабатываемое сообщение из топика.
 
 ## Шаг 4. Заполнение топика данными {#step4}
 
-После создания трансфера можно записать в топик сообщение, например, используя [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md).
+После создания трансфера можно записать в топик сообщения, например, с помощью [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md).
 
 {% include [x](../../_includes/ydb-cli-profile.md) %}
 
 ```bash
-echo "Message 1" |  ydb --profile quickstart topic write source_topic
-echo "Message 2" |  ydb --profile quickstart topic write source_topic
-echo "Message 3" |  ydb --profile quickstart topic write source_topic
+echo "Message 1" | ydb --profile quickstart topic write source_topic
+echo "Message 2" | ydb --profile quickstart topic write source_topic
+echo "Message 3" | ydb --profile quickstart topic write source_topic
 ```
 
 ## Шаг 5. Проверка содержимого таблицы {#step5}

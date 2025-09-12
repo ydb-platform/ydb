@@ -93,6 +93,8 @@ private:
         return std::make_shared<TPortionStore>(std::move(portions));
     }
 
+    bool IsExclusiveInterval(const NArrow::TSimpleRow& begin, const NArrow::TSimpleRow& end) const;
+
 private:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {

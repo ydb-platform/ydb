@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/persqueue/partition_index_generator)
+UNITTEST_FOR(ydb/core/persqueue/public/partition_index_generator)
 
 SRCS(
     partition_index_generator_ut.cpp

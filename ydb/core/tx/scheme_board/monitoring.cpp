@@ -8,6 +8,7 @@
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/tx/tx.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -1113,16 +1114,154 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         bool backupStarted = false,
         const TString& errorMessage = ""
     ) {
-        Y_UNUSED(backupProgress, backupStarted, errorMessage);
         TStringStream str;
 
         HTML(str) {
             Navbar(str, ERequestType::Backup);
             Header(str, "Backup", "Backup path descriptions locally, see <a href='https://ydb.tech/docs' target='_blank'>docs</a>");
 
-            DIV_CLASS("alert alert-info") {
-                str << "Backup functionality is not implemented yet";
+            if (backupStarted) {
+                DIV_CLASS("alert alert-info") {
+                    str << "Backup started successfully!";
+                }
             }
+
+            if (!errorMessage.empty()) {
+                DIV_CLASS("alert alert-danger") {
+                    str << errorMessage;
+                }
+            }
+
+            SimplePanel(str, "Backup Configuration", [&backupProgress](IOutputStream& str) {
+                HTML(str) {
+                    str << "<form id='backupForm' method='GET'>";
+
+                    DIV_CLASS("form-group") {
+                        LABEL_CLASS_FOR("control-label", "backupPath") {
+                            str << "File Path";
+                        }
+                        str << "<input type='text' id='backupPath' name='backupPath' class='form-control' "
+                            << "placeholder='/tmp/scheme_board_backup.jsonl' required>";
+                    }
+
+                    DIV_CLASS("form-group") {
+                        LABEL_CLASS_FOR("control-label", "inFlightLimit") {
+                            str << "In-Flight Limit";
+                        }
+                        str << "<input type='number' id='inFlightLimit' name='inFlightLimit' class='form-control' "
+                            << "value='" << BackupLimits.DefaultInFlight << "'>";
+                        str << "<small class='form-text text-muted'>Recommended range: "
+                            << BackupLimits.MinInFlight << " - " << BackupLimits.MaxInFlight
+                            << ". You can enter any value, but values outside this range may cause performance issues.</small>";
+                    }
+
+                    DIV_CLASS("form-group") {
+                        str << "<button type='submit' name='startBackup' value='1' class='btn btn-primary' "
+                            << (backupProgress.IsRunning() ? "disabled" : "")
+                            << ">Start Backup</button>";
+                    }
+
+                    str << "</form>";
+
+                    // status, progress, details – explicit HTML (no macro)
+                    str << "<div id='backupStatus' class='alert alert-info'>"
+                        << "Status: " << backupProgress.StatusToString()
+                        << "</div>";
+
+                    double p = backupProgress.GetProgress();
+                    str << "<div id='backupProgress' class='progress'>"
+                        << "<div class='progress-bar' role='progressbar' "
+                        << "style='width:" << p << "%;' aria-valuenow='" << p
+                        << "' aria-valuemin='0' aria-valuemax='100'>"
+                        << p << "%</div></div>";
+
+                    str << "<div id='backupDetails'>"
+                        << "Processed: " << backupProgress.ProcessedPaths
+                        << " / Total: " << backupProgress.TotalPaths
+                        << "</div>";
+
+                    str << R"(
+                    <script>
+                    $(document).ready(function() {
+                        $('#backupForm').on('submit', function(e) {
+                            e.preventDefault();
+
+                            var inFlightLimit = parseInt($('#inFlightLimit').val());
+                            var minLimit = )" << BackupLimits.MinInFlight << R"(;
+                            var maxLimit = )" << BackupLimits.MaxInFlight << R"(;
+
+                            if (inFlightLimit < minLimit || inFlightLimit > maxLimit) {
+                                var warningMessage = 'Warning: The in-flight limit (' + inFlightLimit +
+                                    ') is outside the recommended range (' + minLimit + ' - ' + maxLimit +
+                                    '). This may cause performance issues. Are you sure you want to continue?';
+
+                                if (!confirm(warningMessage)) {
+                                    return;
+                                }
+                            }
+
+                            var formData = $(this).serialize();
+                            var $btn = $('button[name="startBackup"]');
+                            $btn.prop('disabled', true);
+
+                            $.ajax({
+                                url: window.location.pathname + '?startBackup=1&' + formData,
+                                method: 'GET',
+                                complete: function() {
+                                    if (window.history && window.history.replaceState) {
+                                        window.history.replaceState(null, '', window.location.pathname);
+                                    }
+                                    $('#backupStatus').text('Status: starting')
+                                        .removeClass('alert-danger alert-success')
+                                        .addClass('alert-info');
+                                    updateBackupProgress();
+                                }
+                            });
+                        });
+
+                        )" << (backupProgress.IsRunning() ? "updateBackupProgress();" : "") << R"(
+                    });
+
+                    function updateBackupProgress() {
+                        $.ajax({
+                            url: window.location.pathname + '?backupProgress=1',
+                            dataType: 'json',
+                            success: function(data) {
+                                var status = data.status.toLowerCase();
+                                var progress = data.progress;
+                                var processed = data.processed;
+                                var total = data.total;
+
+                                if (status === 'running' || status === 'starting') {
+                                    $('#backupProgress .progress-bar').css('width', progress + '%')
+                                        .attr('aria-valuenow', progress)
+                                        .text(progress.toFixed(1) + '%');
+                                    $('#backupStatus').text('Status: ' + status);
+                                    $('#backupDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                    setTimeout(updateBackupProgress, 1000);
+                                } else if (status === 'completed') {
+                                    $('#backupProgress .progress-bar').css('width', '100%')
+                                        .attr('aria-valuenow', 100)
+                                        .text('100%');
+                                    $('#backupStatus').text('Status: backup completed successfully')
+                                        .removeClass('alert-info alert-danger').addClass('alert-success');
+                                    $('#backupDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                    $('button[name="startBackup"]').prop('disabled', false);
+                                } else if (status.startsWith('error:')) {
+                                    $('#backupStatus').text('Status: ' + status)
+                                        .removeClass('alert-info alert-success').addClass('alert-danger');
+                                    $('button[name="startBackup"]').prop('disabled', false);
+                                }
+                            },
+                            error: function() {
+                                setTimeout(updateBackupProgress, 1000);
+                            }
+                        });
+                    }
+                    </script>
+                    )";
+                }
+            });
         }
 
         return str.Str();
@@ -1133,16 +1272,157 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         bool restoreStarted = false,
         const TString& errorMessage = ""
     ) {
-        Y_UNUSED(restoreProgress, restoreStarted, errorMessage);
         TStringStream str;
 
         HTML(str) {
             Navbar(str, ERequestType::Restore);
             Header(str, "Restore", "Restore path descriptions saved locally, see <a href='https://ydb.tech/docs' target='_blank'>docs</a>");
 
-            DIV_CLASS("alert alert-info") {
-                str << "Restore functionality is not implemented yet";
+            DIV_CLASS("alert alert-danger") {
+                STRONG() { str << "Warning:"; }
+                str << " Emergency restore will override existing scheme board data."
+                    << " Use only when the Scheme Shard is unavailable!";
             }
+
+            if (restoreStarted) {
+                DIV_CLASS("alert alert-info") {
+                    str << "Restore started successfully!";
+                }
+            }
+
+            if (!errorMessage.empty()) {
+                DIV_CLASS("alert alert-danger") {
+                    str << errorMessage;
+                }
+            }
+
+            SimplePanel(str, "Restore Configuration", [&restoreProgress](IOutputStream& str) {
+                HTML(str) {
+                    str << "<form id='restoreForm' method='GET'>";
+
+                    DIV_CLASS("form-group") {
+                        LABEL_CLASS_FOR("control-label", "restorePath") {
+                            str << "Backup File Path";
+                        }
+                        str << "<input type='text' id='restorePath' name='restorePath' class='form-control' "
+                            << "placeholder='/tmp/scheme_board_backup.jsonl' required>";
+                    }
+
+                    DIV_CLASS("form-group") {
+                        LABEL_CLASS_FOR("control-label", "schemeShardId") {
+                            str << "Scheme Shard Tablet ID";
+                        }
+                        str << "<input type='number' id='schemeShardId' name='schemeShardId' class='form-control' "
+                            << "placeholder='" << TTestTxConfig::SchemeShard << "' required>";
+                        str << "<small class='form-text text-muted'>"
+                            << "Only paths owned by this specific SchemeShard will be restored from the backup file"
+                            << "</small>";
+                    }
+
+                    DIV_CLASS("form-group") {
+                        LABEL_CLASS_FOR("control-label", "generation") {
+                            str << "Generation";
+                        }
+                        str << "<input type='number' id='generation' name='generation' class='form-control' "
+                            << "value='1' min='1' required>";
+                    }
+
+                    DIV_CLASS("form-group") {
+                        str << "<button type='submit' name='startRestore' value='1' class='btn btn-danger' "
+                            << (restoreProgress.IsRunning() ? "disabled" : "")
+                            << ">Start Emergency Restore</button>";
+                    }
+
+                    str << "</form>";
+
+                    // status, progress, details – explicit HTML (no macro)
+                    str << "<div id='restoreStatus' class='alert alert-warning'>"
+                        << "Status: " << restoreProgress.StatusToString()
+                        << "</div>";
+
+                    double p = restoreProgress.GetProgress();
+                    str << "<div id='restoreProgress' class='progress'>"
+                        << "<div class='progress-bar progress-bar-danger' role='progressbar' "
+                        << "style='width:" << p << "%;' aria-valuenow='" << p
+                        << "' aria-valuemin='0' aria-valuemax='100'>"
+                        << p << "%</div></div>";
+
+                    str << "<div id='restoreDetails'>"
+                        << "Processed: " << restoreProgress.ProcessedPaths
+                        << " / Total: " << restoreProgress.TotalPaths
+                        << "</div>";
+
+                    str << R"(
+                    <script>
+                    $(document).ready(function() {
+                        $('#restoreForm').on('submit', function(e) {
+                            e.preventDefault();
+
+                            if (!confirm('Are you sure you want to start emergency restore? This will override existing data!')) {
+                                return;
+                            }
+
+                            var formData = $(this).serialize();
+                            var $btn = $('button[name="startRestore"]');
+                            $btn.prop('disabled', true);
+
+                            $.ajax({
+                                url: window.location.pathname + '?startRestore=1&' + formData,
+                                method: 'GET',
+                                complete: function() {
+                                    $('#restoreStatus').text('Status: starting')
+                                        .removeClass('alert-success')
+                                        .addClass('alert-warning');
+                                    updateRestoreProgress();
+                                }
+                            });
+                        });
+
+                        )" << (restoreProgress.IsRunning() ? "updateRestoreProgress();" : "") << R"(
+                    });
+
+                    function updateRestoreProgress() {
+                        $.ajax({
+                            url: window.location.pathname + '?restoreProgress=1',
+                            dataType: 'json',
+                            success: function(data) {
+                                var status = data.status.toLowerCase();
+                                var progress = data.progress;
+                                var processed = data.processed;
+                                var total = data.total;
+
+                                if (status === 'running' || status === 'starting') {
+                                    $('#restoreProgress .progress-bar').css('width', progress + '%')
+                                        .attr('aria-valuenow', progress)
+                                        .text(progress.toFixed(1) + '%');
+                                    $('#restoreStatus').text('Status: ' + status);
+                                    $('#restoreDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                    setTimeout(updateRestoreProgress, 1000);
+                                } else if (status === 'completed') {
+                                    $('#restoreProgress .progress-bar').css('width', '100%')
+                                        .attr('aria-valuenow', 100)
+                                        .text('100%')
+                                        .removeClass('progress-bar-danger')
+                                        .addClass('progress-bar-success');
+                                    $('#restoreStatus').text('Status: restore completed successfully')
+                                        .removeClass('alert-warning').addClass('alert-success');
+                                    $('#restoreDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                    $('button[name="startRestore"]').prop('disabled', false);
+                                } else if (status.startsWith('error:')) {
+                                    $('#restoreStatus').text('Status: ' + status)
+                                        .removeClass('alert-warning').addClass('alert-danger');
+                                    $('button[name="startRestore"]').prop('disabled', false);
+                                }
+                            },
+                            error: function() {
+                                setTimeout(updateRestoreProgress, 1000);
+                            }
+                        });
+                    }
+                    </script>
+                    )";
+                }
+            });
         }
 
         return str.Str();

@@ -8,7 +8,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/config/config.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
 
 #include <ydb/services/lib/sharding/sharding.h>

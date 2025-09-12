@@ -6,8 +6,8 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/config/config.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range_sequence.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range_sequence.h>
 #include <ydb/core/persqueue/partition_index_generator/partition_index_generator.h>
 #include <ydb/core/persqueue/public/utils.h>
 

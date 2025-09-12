@@ -9,7 +9,6 @@ PEERDIR(
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/fetcher
     ydb/core/persqueue/public/list_topics
-    ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/pqrb
     ydb/core/persqueue/pqtablet
     ydb/core/persqueue/writer
@@ -22,7 +21,6 @@ RECURSE(
     config
     events
     partition_index_generator
-    partition_key_range
     pqrb
     pqtablet
     public

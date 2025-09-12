@@ -24,8 +24,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 column: "text"
                 analyzers: {
                     tokenizer: STANDARD
-                    use_filter_ngram: true
-                    filter_ngram_max_length: 42
+                    use_filter_lowercase: true
                 }
             }
         )";
@@ -71,8 +70,8 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
             TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext/indexImplTable"),{
                 NLs::PathExist,
                 NLs::CheckColumns("indexImplTable", 
-                        { NFulltext::TokenColumn, "id", "covered" }, {}, 
-                        { NFulltext::TokenColumn, "id" }, true) });
+                        { NTableIndex::NFulltext::TokenColumn, "id", "covered" }, {}, 
+                        { NTableIndex::NFulltext::TokenColumn, "id" }, true) });
 
             Cerr << "Reboot SchemeShard.." << Endl;
             TActorId sender = runtime.AllocateEdgeActor();
@@ -91,8 +90,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 column: "text"
                 analyzers: {
                     tokenizer: STANDARD
-                    use_filter_ngram: true
-                    filter_ngram_max_length: 42
+                    use_filter_lowercase: true
                 }
             }
         )";
@@ -135,16 +133,14 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 column: "text1"
                 analyzers: {
                     tokenizer: STANDARD
-                    use_filter_ngram: true
-                    filter_ngram_max_length: 42
+                    use_filter_lowercase: true
                 }
             }
             columns: {
                 column: "text2"
                 analyzers: {
                     tokenizer: STANDARD
-                    use_filter_ngram: true
-                    filter_ngram_max_length: 42
+                    use_filter_lowercase: true
                 }
             }
         )";
@@ -188,8 +184,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 column: "text"
                 analyzers: {
                     tokenizer: STANDARD
-                    use_filter_ngram: true
-                    filter_ngram_max_length: 42
+                    use_filter_lowercase: true
                 }
             }
         )";
@@ -232,8 +227,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 column: "text_wrong"
                 analyzers: {
                     tokenizer: STANDARD
-                    use_filter_ngram: true
-                    filter_ngram_max_length: 42
+                    use_filter_lowercase: true
                 }
             }
         )";
@@ -272,6 +266,49 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
 
         TString fulltextSettings = R"(
             layout: FLAT
+        )";
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "text" Type: "String" }
+                Columns { Name: "covered" Type: "String" }
+                Columns { Name: "another" Type: "Uint64" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx_fulltext"
+                KeyColumnNames: ["text"]
+                DataColumnNames: ["covered"]
+                Type: EIndexTypeGlobalFulltext
+                FulltextIndexDescription: { 
+                    Settings: { 
+                        %s
+                    }
+                }
+            }
+        )", fulltextSettings.c_str()), {NKikimrScheme::StatusInvalidParameter});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"),{ 
+            NLs::PathNotExist,
+        });
+    }
+
+    Y_UNIT_TEST(CreateTableUnsupportedSettings) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TString fulltextSettings = R"(
+            layout: FLAT
+            columns: {
+                column: "text"
+                analyzers: {
+                    tokenizer: STANDARD
+                    use_filter_edge_ngram: true
+                }
+            }
         )";
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {

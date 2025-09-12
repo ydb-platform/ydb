@@ -48,13 +48,13 @@ void AuditLog(std::optional<ui32> status, const TAuditLogParts& parts)
         }
 
         if (status) {
-            AUDIT_PART("status", (*status == Ydb::StatusIds::SUCCESS ? TString("SUCCESS") : TString("ERROR")))
+            AUDIT_PART("status", (*status == Ydb::StatusIds::SUCCESS ? "SUCCESS" : "ERROR"))
             AUDIT_PART("detailed_status", (Ydb::StatusIds::StatusCode_IsValid(*status)
                 ? TString(Ydb::StatusIds::StatusCode_Name(*status))
                 : ToString(*status)
             ))
         } else {
-            AUDIT_PART("status", TString("IN-PROCESS"))
+            AUDIT_PART("status", "IN-PROCESS")
         }
     );
 }

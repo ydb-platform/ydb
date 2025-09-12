@@ -53,6 +53,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/audit/audit_config
+    ydb/core/audit/heartbeat_actor
     ydb/core/base
     ydb/core/backup/controller
     ydb/core/blob_depot

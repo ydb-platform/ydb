@@ -388,7 +388,7 @@ protected:
         }
         static const TString EmptyValue = "{none}";
         AUDIT_LOG(
-            AUDIT_PART("component", TString("ymq"))
+            AUDIT_PART("component", "ymq")
             AUDIT_PART("request_id", requestId)
             AUDIT_PART("subject", (UserSID_ ? UserSID_ : EmptyValue))
             AUDIT_PART("account", UserName_)
@@ -397,7 +397,7 @@ protected:
             AUDIT_PART("resource_id", GetQueueName(), Cfg().GetYandexCloudMode())
             AUDIT_PART("operation", ActionToCloudConvMethod(Action_))
             AUDIT_PART("queue", GetQueueName())
-            AUDIT_PART("status", TString(error ? "ERROR": "SUCCESS"))
+            AUDIT_PART("status", error ? "ERROR": "SUCCESS")
             AUDIT_PART("reason", error->GetMessage(), error)
             AUDIT_PART("detailed_status", error->GetErrorCode(), error)
         );

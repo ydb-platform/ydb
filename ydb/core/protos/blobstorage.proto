@@ -1000,9 +1000,11 @@ message TNodeWardenServiceSet {
         optional bool ReadOnly = 14;
         optional bool Stop = 15;
 
-        // If not zero, NodeWarded infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits (if unset)
-        // from drive size and this value
+        // If not zero, NodeWarded infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits (if unset) by the formula
+        // ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize
+        // where SlotSizeInUnits = 2^N is chosen to meet ExpectedSlotCount <= InferPDiskSlotCountMax
         optional uint64 InferPDiskSlotCountFromUnitSize = 16;
+        optional uint32 InferPDiskSlotCountMax = 17;
     }
 
     message TVDisk {

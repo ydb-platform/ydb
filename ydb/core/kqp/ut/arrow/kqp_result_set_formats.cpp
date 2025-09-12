@@ -933,10 +933,10 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 std::make_pair("UuidNotNullValue", TTypeInfo(NTypeIds::Uuid))
             }));
 
-            builder.AddRow().AddNull().Add("[4]").AddNull().AddNull().AddNull().Add("Maria").Add("[5]").Add(SerializeToBinaryJsonString("[6]")).Add(NDyNumber::ParseDyNumberString("7.0")->c_str()).Add("5b99a33004ef4f1a9b64ba6d5f44eafe");
-            builder.AddRow().Add("John").Add("[1]").Add(NDyNumber::ParseDyNumberString("1.0")->c_str()).Add(SerializeToBinaryJsonString("{\"a\": 1}")).Add("5b99a33004ef4f1a9b64ba6d5f44eafe").Add("Mark").Add("[2]").Add(SerializeToBinaryJsonString("{\"b\": 2}")).Add(NDyNumber::ParseDyNumberString("4.0")->c_str()).Add("5b99a33004ef4f1a9b64ba6d5f44eafe");
-            builder.AddRow().Add("Leo").Add("[10]").Add(NDyNumber::ParseDyNumberString("11.0")->c_str()).Add(SerializeToBinaryJsonString("[12]")).Add("5b99a33004ef4f1a9b64ba6d5f44eafe").Add("Maria").Add("[13]").Add(SerializeToBinaryJsonString("[14]")).Add(NDyNumber::ParseDyNumberString("15.0")->c_str()).Add("5b99a33004ef4f1a9b64ba6d5f44eafe");
-            builder.AddRow().Add("Mark").AddNull().AddNull().AddNull().AddNull().Add("Michael").Add("[7]").Add(SerializeToBinaryJsonString("[8]")).Add(NDyNumber::ParseDyNumberString("9.0")->c_str()).Add("5b99a33004ef4f1a9b64ba6d5f44eafe");
+            builder.AddRow().AddNull().Add("[4]").AddNull().AddNull().AddNull().Add("Maria").Add("[5]").Add(SerializeToBinaryJsonString("[6]")).Add(NDyNumber::ParseDyNumberString("7.0")->c_str()).Add<NYdb::TUuidValue>(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"));
+            builder.AddRow().Add("John").Add("[1]").Add(NDyNumber::ParseDyNumberString("1.0")->c_str()).Add(SerializeToBinaryJsonString("{\"a\": 1}")).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe")).Add("Mark").Add("[2]").Add(SerializeToBinaryJsonString("{\"b\": 2}")).Add(NDyNumber::ParseDyNumberString("4.0")->c_str()).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"));
+            builder.AddRow().Add("Leo").Add("[10]").Add(NDyNumber::ParseDyNumberString("11.0")->c_str()).Add(SerializeToBinaryJsonString("[12]")).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe")).Add("Maria").Add("[13]").Add(SerializeToBinaryJsonString("[14]")).Add(NDyNumber::ParseDyNumberString("15.0")->c_str()).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"));
+            builder.AddRow().Add("Mark").AddNull().AddNull().AddNull().AddNull().Add("Michael").Add("[7]").Add(SerializeToBinaryJsonString("[8]")).Add(NDyNumber::ParseDyNumberString("9.0")->c_str()).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"));
 
 
             auto expected = builder.BuildArrow();

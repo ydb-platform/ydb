@@ -532,36 +532,6 @@ public:
                         Y_ABORT_UNLESS(typedBuilder.Append(data.data(), data.size()).ok());
                         return true;
                     }
-
-                    if constexpr (std::is_same<T, arrow::FixedSizeBinaryType>::value) {
-                        // For UUID convert hex string to binary data using YDB UUID format
-                        Y_ABORT_UNLESS(data.size() == 32);
-
-                        auto hexStr = data;
-                        ui16 dw[8];
-                        for (int i = 0; i < 8; ++i) {
-                            dw[i] = std::stoul(hexStr.substr(i * 4, 4), nullptr, 16);
-                        }
-
-                        char uuidBytes[16];
-                        ui16* out = reinterpret_cast<ui16*>(uuidBytes);
-                        out[0] = dw[1];
-                        out[1] = dw[0];
-                        out[2] = dw[2];
-                        out[3] = dw[3];
-
-                        auto reverseBytes = [](ui16 val) -> ui16 {
-                            return ((val & 0xFF) << 8) | ((val >> 8) & 0xFF);
-                        };
-
-                        out[4] = reverseBytes(dw[4]);
-                        out[5] = reverseBytes(dw[5]);
-                        out[6] = reverseBytes(dw[6]);
-                        out[7] = reverseBytes(dw[7]);
-
-                        Y_ABORT_UNLESS(typedBuilder.Append(uuidBytes).ok());
-                        return true;
-                    }
                 }
 
                 if constexpr (std::is_same<TData, NYdb::TDecimalValue>::value) {
@@ -573,6 +543,13 @@ public:
                         }
 
                         Y_ABORT_UNLESS(typedBuilder.Append(bytes).ok());
+                        return true;
+                    }
+                }
+
+                if constexpr (std::is_same<TData, NYdb::TUuidValue>::value) {
+                    if constexpr (std::is_same<T, arrow::FixedSizeBinaryType>::value) {
+                        Y_ABORT_UNLESS(typedBuilder.Append(data.Buf_.Bytes).ok());
                         return true;
                     }
                 }

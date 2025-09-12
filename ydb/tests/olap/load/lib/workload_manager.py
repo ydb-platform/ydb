@@ -233,7 +233,7 @@ class WorkloadManagerConcurrentQueryLimit(WorkloadManagerBase):
 
 
 class WorkloadManagerComputeScheduler(WorkloadManagerBase):
-    threads = 10
+    threads = 3
     metrics: list[(float, dict[str, float])] = []
     metrics_keys = set()
 
@@ -328,3 +328,4 @@ class TestWorkloadManagerClickbenchConcurrentQueryLimit(WorkloadManagerClickbenc
 class TestWorkloadManagerTpchComputeSchedulerS100(WorkloadManagerTpchBase, WorkloadManagerComputeScheduler):
     tables_size = tpch.TestTpch100.tables_size
     scale = tpch.TestTpch100.scale
+    timeout = tpch.TestTpch100.timeout * len(WorkloadManagerComputeScheduler.get_resource_pools())

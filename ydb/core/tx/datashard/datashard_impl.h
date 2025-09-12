@@ -1479,7 +1479,7 @@ class TDataShard
     bool CheckMediatorAuthorisation(ui64 mediatorId);
 
     NTabletFlatExecutor::ITransaction* CreateTxInit();
-    NTabletFlatExecutor::ITransaction* CreateTxInitRestored();
+    NTabletFlatExecutor::ITransaction* CreateTxInitRestored(THashMap<ui64, TOperation::TPtr> migratedTxs);
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchemaDefaults();
     NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
@@ -1526,6 +1526,8 @@ public:
     void GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies);
     void SendConfirmedReplies(TMonotonic ts, std::vector<std::unique_ptr<IEventHandle>>&& replies);
     void SendCommittedReplies(std::vector<std::unique_ptr<IEventHandle>>&& replies);
+
+    void SendRestartNotification(TOperation* op);
 
     void WaitVolatileDependenciesThenSend(
             const absl::flat_hash_set<ui64>& dependencies,
@@ -2756,7 +2758,7 @@ private:
     ui64 InMemoryStatePrevGeneration = 0;
 
     void StartInMemoryRestoreActor();
-    void OnInMemoryStateRestored();
+    void OnInMemoryStateRestored(THashMap<ui64, TOperation::TPtr> migratedTxs);
     bool StartInMemoryStateActor();
 
     struct TPreservedInMemoryState {

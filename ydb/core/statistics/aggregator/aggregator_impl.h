@@ -248,7 +248,12 @@ private:
 
     static constexpr TDuration FastCheckInterval = TDuration::MilliSeconds(50);
 
-    std::unordered_map<TSSId, TString> BaseStatistics; // schemeshard id -> serialized stats for all paths
+    // Serialized stats for all paths from a single SchemeShard.
+    struct TSerializedBaseStats {
+        std::shared_ptr<TString> Committed; // Value that is safely persisted in local DB. Can be nullptr.
+        std::shared_ptr<TString> Latest; // Value from the latest update.
+    };
+    std::unordered_map<TSSId, TSerializedBaseStats> BaseStatistics;
 
     std::unordered_map<TSSId, size_t> SchemeShards; // all connected schemeshards
     std::unordered_map<TActorId, TSSId> SchemeShardPipes; // schemeshard pipe servers

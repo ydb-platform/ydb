@@ -173,6 +173,7 @@ std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::Create
     settings.Codec((NYdb::NTopic::ECodec) Params.Codec);
     settings.Path(Params.TopicName);
     settings.ProducerId(producerId);
+    settings.MaxMemoryUsage(Params.MaxMemoryUsageBytes);
 
     NYdb::NTopic::TWriteSessionSettings::TEventHandlers eventHandlers;
     eventHandlers.AcksHandler(

@@ -56,8 +56,8 @@ TStatus ExecuteGeneric(NYdb::NQuery::TQueryClient& queryClient, TSession& sessio
 
 Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(UseUnauthorizedTable) {
-        TKikimrRunner kikimr("test_user@builtin");
-        auto db = kikimr.GetTableClient();
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken("test_user@builtin"));
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
@@ -5427,16 +5427,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(ModifySysViewDirPermissions) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableRealSystemViewPaths(true);
-        TKikimrRunner kikimr(featureFlags);
-        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.SetFeatureFlags(featureFlags);
+        settings.SetAuthToken("root@builtin");  // root@builtin becomes cluster admin
+        TKikimrRunner kikimr(settings);
 
-        auto adminSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
-            .AuthToken("root@builtin")).CreateSession().GetValueSync().GetSession();
+        auto adminSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         {
             auto query = TStringBuilder() << R"(
                 --!syntax_v1
-                GRANT 'ydb.granular.describe_schema' ON `/Root` TO `root@builtin`;
                 GRANT 'ydb.database.connect' ON `/Root` TO `user@builtin`;
                 )";
             auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
@@ -5514,7 +5515,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = TStringBuilder() << R"(
                 --!syntax_v1
-                GRANT 'ydb.granular.alter_schema' ON `/Root/.sys` TO `root@builtin`;
+                GRANT 'ydb.granular.alter_schema' ON `/Root/.sys` TO `other-user@builtin`;
                 )";
             auto result = userSession.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -5524,35 +5525,49 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(ModifySysViewPermissions) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableRealSystemViewPaths(true);
-        TKikimrRunner kikimr(featureFlags, "root@builtin");
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.SetFeatureFlags(featureFlags);
+        settings.SetAuthToken("root@builtin");  // root@builtin becomes cluster admin
+        TKikimrRunner kikimr(settings);
 
-        auto userSchemeClient = kikimr.GetSchemeClient();
-        auto db = kikimr.GetTableClient();
-        auto userSession = db.CreateSession().GetValueSync().GetSession();
+        auto adminSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                GRANT 'ydb.database.connect', 'ydb.granular.describe_schema' ON `/Root` TO `user@builtin`;
+                )";
+            auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto userSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken("user@builtin"))
+            .CreateSession().GetValueSync().GetSession();
         auto querySelect = TStringBuilder() << R"(
             --!syntax_v1
-            SELECT * FROM `/Root/.sys/partition_stats`;
+            SELECT * FROM `/Root/.sys/nodes`;
             )";
 
         {
             auto result = userSession.ExecuteDataQuery(querySelect, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "it does not exist or you do not have access permissions",
+                "Failed to resolve table `/Root/.sys/nodes` status: AccessDenied., code: 2028",
                 result.GetIssues().ToString()
             );
         }
         {
             auto query = TStringBuilder() << R"(
                 --!syntax_v1
-                GRANT 'ydb.generic.read' ON `/Root/.sys/partition_stats` TO `root@builtin`;
+                GRANT 'ydb.generic.read' ON `/Root/.sys/nodes` TO `user@builtin`;
                 )";
-            auto result = userSession.ExecuteSchemeQuery(query).GetValueSync();
+            auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CheckPermissions(userSession, {
-                                            {.Path = "/Root/.sys/partition_stats",
+                                            {.Path = "/Root/.sys/nodes",
                                                 .Permissions = {
-                                                    {"root@builtin", {"ydb.generic.read"}}
+                                                    {"user@builtin", {"ydb.generic.read"}}
                                                 }
                                             },
                                         });
@@ -5563,8 +5578,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
 
             auto rs = result.GetResultSet(0);
-            UNIT_ASSERT_VALUES_EQUAL(rs.RowsCount(), 39);
-            UNIT_ASSERT_VALUES_EQUAL(rs.ColumnsCount(), 30);
+            UNIT_ASSERT_VALUES_EQUAL(rs.RowsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rs.ColumnsCount(), 9);
         }
     }
 

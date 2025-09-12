@@ -2756,8 +2756,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
 
     const TWriteId writeId = GetWriteId(req);
     ui32 originalPartitionId = req.GetPartition();
-
-    if (writeId.KafkaApiTransaction && TxWrites.contains(writeId) && !TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
+    if (writeId.KafkaApiTransaction && TxWrites.contains(writeId) && !TxWrites.at(writeId).Partitions.contains(originalPartitionId) && TxWrites.at(writeId).PartitionsProcessed.contains(originalPartitionId)) {
         // This branch happens when previous Kafka transaction has committed and we recieve write for next one
         // after PQ has deleted supportive partition and before it has deleted writeId from TxWrites (tx has not transaitioned to DELETED state)
         PQ_LOG_D("GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%01");
@@ -2832,6 +2831,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         PQ_LOG_TX_I("partition " << partitionId << " for WriteId " << writeId);
 
         writeInfo.Partitions.emplace(originalPartitionId, partitionId);
+        writeInfo.PartitionsProcessed.emplace(originalPartitionId);
         TxWritesChanged = true;
         AddSupportivePartition(partitionId);
 

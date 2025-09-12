@@ -211,6 +211,7 @@ private:
         bool Deleting = false;
         bool KafkaTransaction = false;
         TInstant CreatedAt;
+        TSet<ui32> PartitionsProcessed;
     };
 
     THashMap<TWriteId, TTxWriteInfo> TxWrites;

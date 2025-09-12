@@ -4,12 +4,14 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/events.h>
 
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_counters.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_subscribers.h>
 
 namespace NKikimr::NColumnShard::NOverload {
 
 class TOverloadManager: public NActors::TActor<TOverloadManager> {
+    TCSOverloadManagerCounters Counters;
     TOverloadSubscribers OverloadSubscribers;
 
     STRICT_STFUNC(
@@ -28,7 +30,7 @@ class TOverloadManager: public NActors::TActor<TOverloadManager> {
     void Handle(const NOverload::TEvOverloadColumnShardDied::TPtr& ev);
 
 public:
-    TOverloadManager();
+    TOverloadManager(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup);
 };
 
 } // namespace NKikimr::NColumnShard::NOverload

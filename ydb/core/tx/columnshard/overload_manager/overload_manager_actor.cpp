@@ -4,19 +4,23 @@
 
 namespace NKikimr::NColumnShard::NOverload {
 
-TOverloadManager::TOverloadManager()
-    : TActor(&TThis::StateMain) {
+TOverloadManager::TOverloadManager(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup)
+    : TActor(&TThis::StateMain)
+    , Counters(countersGroup)
+    , OverloadSubscribers(Counters) {
 }
 
 void TOverloadManager::Handle(const NOverload::TEvOverloadSubscribe::TPtr& ev) {
     auto record = ev->Get();
     OverloadSubscribers.AddOverloadSubscriber(record->GetColumnShardInfo(), record->GetPipeServerInfo(), record->GetOverloadSubscriberInfo());
     TOverloadManagerServiceOperator::NotifyIfResourcesAvailable(true);
+    Counters.OnOverloadSubscribe();
 }
 
 void TOverloadManager::Handle(const NOverload::TEvOverloadUnsubscribe::TPtr& ev) {
     auto record = ev->Get();
     OverloadSubscribers.RemoveOverloadSubscriber(record->GetColumnShardInfo(), record->GetOverloadSubscriberInfo());
+    Counters.OnOverloadUnsubscribe();
 }
 
 void TOverloadManager::Handle(const NOverload::TEvOverloadPipeServerDisconnected::TPtr& ev) {

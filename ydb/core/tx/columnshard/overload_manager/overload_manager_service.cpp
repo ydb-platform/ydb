@@ -23,9 +23,8 @@ ui64 TOverloadManagerServiceOperator::GetShardWritesInFlyLimit() {
         const ui64 newValue = std::max(NKqp::TStagePredictor::GetUsableThreads() * 200, ui32(1000));
         DEFAULT_WRITES_IN_FLY_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
-    return (HasAppData() && AppDataVerified().ColumnShardConfig.HasWritingInFlightRequestsCountLimit()) ? 
-            AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit() : 
-            DEFAULT_WRITES_IN_FLY_LIMIT.load();
+    return (HasAppData() && AppDataVerified().ColumnShardConfig.HasWritingInFlightRequestsCountLimit()) ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit()
+                                                                                                        : DEFAULT_WRITES_IN_FLY_LIMIT.load();
 }
 
 ui64 TOverloadManagerServiceOperator::GetShardWritesSizeInFlyLimit() {
@@ -43,8 +42,8 @@ NActors::TActorId TOverloadManagerServiceOperator::MakeServiceId() {
     return NActors::TActorId(0, "OverloadMng");
 }
 
-NActors::IActor* TOverloadManagerServiceOperator::CreateService() {
-    return new TOverloadManager();
+NActors::IActor* TOverloadManagerServiceOperator::CreateService(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup) {
+    return new TOverloadManager(countersGroup);
 }
 
 void TOverloadManagerServiceOperator::NotifyIfResourcesAvailable(bool force) {

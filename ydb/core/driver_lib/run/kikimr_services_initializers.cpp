@@ -3088,9 +3088,11 @@ TOverloadManagerInitializer::TOverloadManagerInitializer(const TKikimrRunConfig&
 }
 
 void TOverloadManagerInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    setup->LocalServices.push_back(std::make_pair(
-        NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
-        TActorSetupCmd(NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(), TMailboxType::HTSwap, appData->UserPoolId)));
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "CS_OVERLOAD_MANAGER");
+
+    setup->LocalServices.push_back(std::make_pair(NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+        TActorSetupCmd(NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(countersGroup), TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
 } // namespace NKikimr::NKikimrServicesInitializers

@@ -25,7 +25,7 @@ private:
 
 public:
     static NActors::TActorId MakeServiceId();
-    static NActors::IActor* CreateService();
+    static NActors::IActor* CreateService(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup);
 
     static ui64 GetShardWritesInFlyLimit();
     static ui64 GetShardWritesSizeInFlyLimit();

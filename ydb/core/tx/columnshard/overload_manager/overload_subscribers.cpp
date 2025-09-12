@@ -93,6 +93,7 @@ void TOverloadSubscribers::NotifyAllOverloadSubscribers() {
                     target,
                     source,
                     new TEvColumnShard::TEvOverloadReady(subscriptionInfo.ColumnShardTabletId, seqNo));
+                Counters.OnOverloadReady();
             }
         }
     }
@@ -114,6 +115,7 @@ void TOverloadSubscribers::NotifyColumnShardSubscribers(const TColumnShardInfo& 
                 target,
                 columnShardInfo.ColumnShardId,
                 new TEvColumnShard::TEvOverloadReady(subscriptionInfo.ColumnShardTabletId, seqNo));
+            Counters.OnOverloadReady();
         }
     }
 

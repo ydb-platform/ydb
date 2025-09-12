@@ -39,5 +39,11 @@
 
 {#- Flags -#}
 {%- set hasResources = all_targets|selectattr('resource_sets')|map(attribute='resource_sets')|sum|length -%}
+{%- if auto_resource_sets and not hasResources -%}
+{%-    set all_source_dirs = all_targets|selectattr('source_sets')|map(attribute='source_sets')|sum|selectattr('dir')|map(attribute='dir') -%}
+{%-    if all_source_dirs|select('eq', 'src/main/resources')|length or all_source_dirs|select('eq', 'src/test/resources')|length or all_source_dirs|select('eq', 'resources')|length -%}
+{%-        set hasResources = true -%}
+{%-    endif -%}
+{%- endif -%}
 
 {%- include "[generator]/jdk.jinja" -%}

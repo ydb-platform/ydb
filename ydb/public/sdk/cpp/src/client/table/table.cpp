@@ -1,17 +1,17 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/table_helpers/helpers.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_async.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_sync.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/table_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_async.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_sync.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_stats/stats.h>
+#include <ydb/public/sdk/cpp/src/client/impl/stats/stats.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/public/sdk/cpp/src/client/table/impl/client_session.h>
@@ -148,6 +148,17 @@ std::optional<EColumnFamilyCompression> TColumnFamilyDescription::GetCompression
             return EColumnFamilyCompression::None;
         case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
             return EColumnFamilyCompression::LZ4;
+        default:
+            return { };
+    }
+}
+
+std::optional<EColumnFamilyCacheMode> TColumnFamilyDescription::GetCacheMode() const {
+    switch (GetProto().cache_mode()) {
+        case Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR:
+            return EColumnFamilyCacheMode::Regular;
+        case Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY:
+            return EColumnFamilyCacheMode::InMemory;
         default:
             return { };
     }
@@ -1083,6 +1094,18 @@ TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompress
             break;
         case EColumnFamilyCompression::LZ4:
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+            break;
+    }
+    return *this;
+}
+
+TColumnFamilyBuilder& TColumnFamilyBuilder::SetCacheMode(EColumnFamilyCacheMode cacheMode) {
+    switch (cacheMode) {
+        case EColumnFamilyCacheMode::Regular:
+            Impl_->Proto.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR);
+            break;
+        case EColumnFamilyCacheMode::InMemory:
+            Impl_->Proto.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY);
             break;
     }
     return *this;

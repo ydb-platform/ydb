@@ -5,7 +5,7 @@
 #include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
 
 #include <ydb/core/testlib/test_pq_client.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 

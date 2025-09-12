@@ -109,15 +109,9 @@ public:
         return Nothing();
     }
 
-    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
         if (const auto& maybeSoReadObject = TMaybeNode<TSoReadObject>(read)) {
             const auto& soReadObject = maybeSoReadObject.Cast();
-
-            if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
-                ctx.AddError(TIssue(ctx.GetPosition(soReadObject.Pos()), "Cannot use watermarks in Solomon"));
-                return {};
-            }
-
             YQL_ENSURE(soReadObject.Ref().GetTypeAnn(), "No type annotation for node " << soReadObject.Ref().Content());
 
             const auto& clusterName = soReadObject.DataSource().Cluster().StringValue();
@@ -304,11 +298,11 @@ public:
 
         auto selectors = settings.Selectors().StringValue();
         if (!selectors.empty()) {
-            std::map<TString, TString> selectorValues;
+            NSo::TSelectors selectorValues;
             if (auto error = NSo::BuildSelectorValues(source, selectors, selectorValues)) {
                 throw yexception() << *error;
             }
-            source.MutableSelectors()->insert(selectorValues.begin(), selectorValues.end());
+            NSo::SelectorsToProto(selectorValues, *source.MutableSelectors());
         }
 
         auto program = settings.Program().StringValue();

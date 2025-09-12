@@ -77,7 +77,7 @@ Y_FORCE_INLINE ELogLevel TLogger::GetEffectiveLoggingLevel(ELogLevel level, cons
 
 Y_FORCE_INLINE bool TLogger::IsLevelEnabled(ELogLevel level) const
 {
-    if (!Category_) {
+    if (!Category_ || level < MinLevel_) {
         return false;
     }
 

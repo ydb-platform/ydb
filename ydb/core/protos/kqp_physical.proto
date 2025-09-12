@@ -528,6 +528,12 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
         NKikimrSchemeOp.TModifyScheme AlterDatabase = 54;
         NKikimrSchemeOp.TModifyScheme SetConstraint = 55;
+        NKikimrSchemeOp.TModifyScheme CreateStreamingQuery = 56;
+        NKikimrSchemeOp.TModifyScheme AlterStreamingQuery = 57;
+        NKikimrSchemeOp.TModifyScheme DropStreamingQuery = 58;
+        NKikimrSchemeOp.TModifyScheme CreateSecret = 59;
+        NKikimrSchemeOp.TModifyScheme AlterSecret = 60;
+        NKikimrSchemeOp.TModifyScheme DropSecret = 61;
     }
 }
 

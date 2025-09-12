@@ -47,6 +47,7 @@ namespace NSQLTranslationV1 {
         virtual bool AddFilter(TContext& ctx, TNodePtr filter);
         virtual bool AddGroupKey(TContext& ctx, const TString& column);
         virtual void SetCompactGroupBy(bool compactGroupBy);
+        virtual TStringBuf GetGroupBySuffix() const;
         virtual void SetGroupBySuffix(const TString& suffix);
         virtual TString MakeLocalName(const TString& name);
         virtual bool AddAggregation(TContext& ctx, TAggregationPtr aggr);

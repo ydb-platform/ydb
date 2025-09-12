@@ -6,8 +6,6 @@
 
 {% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
 
-{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
-
 {% endnote %}
 
 {% endif %}
@@ -35,6 +33,12 @@ SELECT ...
 Векторный индекс поддерживает функцию расстояния или сходства [расширения Knn](../../udf/list/knn#functions-distance), выбранную при создании индекса.
 
 Векторный индекс не будет автоматически выбран [оптимизатором](../../../../concepts/glossary.md#optimizer), поэтому его нужно указывать явно с помощью выражения `VIEW IndexName`.
+
+{% endnote %}
+
+{% note warning %}
+
+{% include [limitations](../../../../_includes/vector-index-update-limitations.md) %}
 
 {% endnote %}
 

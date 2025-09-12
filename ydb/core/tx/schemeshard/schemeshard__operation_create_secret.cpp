@@ -151,7 +151,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsDirectory();
+                .IsLikeDirectory()
+                .FailOnRestrictedCreateInTempZone();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

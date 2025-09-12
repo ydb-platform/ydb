@@ -176,11 +176,17 @@ public:
                 .AddPostTypeAnnotation(/* forSubgraph */ true)
                 .Add(CreateKqpTxHashFuncPropagateTransformer(config), "Peephole")
             .Build(false);
+        ShuffleEliminationEnabled = config->OptShuffleElimination.Get().GetOrElse(config->DefaultEnableShuffleElimination);
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         if (!TKqpPhysicalQuery::Match(input.Get())) {
             return TStatus::Error;
+        }
+
+        if (!ShuffleEliminationEnabled){
+            output = input;
+            return TStatus::Ok;
         }
 
         TKqpPhysicalQuery query(input);
@@ -228,6 +234,7 @@ private:
 
     TAutoPtr<IGraphTransformer> TxTransformer;
     TAutoPtr<NYql::IGraphTransformer> TypeAnnTransformer;
+    bool ShuffleEliminationEnabled = false;
 };
 
 TAutoPtr<IGraphTransformer>  NKikimr::NKqp::CreateKqpTxsHashFuncPropagateTransformer(

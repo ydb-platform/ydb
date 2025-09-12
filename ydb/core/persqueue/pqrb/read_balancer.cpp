@@ -1034,3 +1034,11 @@ void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, con
 
 } // NPQ
 } // NKikimr
+
+namespace NKikimr {
+
+IActor* CreatePersQueueReadBalancer(const TActorId& tablet, TTabletStorageInfo *info) {
+    return new NPQ::TPersQueueReadBalancer(tablet, info);
+}
+
+} // NKikimr

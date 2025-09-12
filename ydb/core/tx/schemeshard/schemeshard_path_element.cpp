@@ -247,6 +247,10 @@ bool TPathElement::IsSecret() const {
     return PathType == EPathType::EPathTypeSecret;
 }
 
+bool TPathElement::IsStreamingQuery() const {
+    return PathType == EPathType::EPathTypeStreamingQuery;
+}
+
 void TPathElement::SetDropped(TStepId step, TTxId txId) {
     PathState = EPathState::EPathStateNotExist;
     StepDropped = step;
@@ -481,7 +485,8 @@ void TPathElement::SerializeRuntimeAttrs(
     process(FileStoreSpaceHDD, "__filestore_space_allocated_hdd");
     process(FileStoreSpaceSSDSystem, "__filestore_space_allocated_ssd_system");
 
-    if (IsAsyncReplica) {
+    // Set __async_replica attribute only for true async replica tables, not for incremental backup tables
+    if (IsAsyncReplica && !IsIncrementalRestoreTable) {
         auto* attr = userAttrs->Add();
         attr->SetKey(ToString(ATTR_ASYNC_REPLICA));
         attr->SetValue("true");

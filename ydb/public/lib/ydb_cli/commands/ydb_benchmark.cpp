@@ -330,7 +330,9 @@ public:
         }
         auto t1 = TInstant::Now();
         if (t1 >= Owner.GlobalDeadline) {
-            Cerr << "Global timeout (" << Owner.GlobalTimeout << ") expiried, global deadline was " << Owner.GlobalDeadline << Endl;
+            TStringBuilder msg;
+            msg  << "Global timeout (" << Owner.GlobalTimeout << ") expiried, global deadline was " << Owner.GlobalDeadline << Endl;
+            Result = TQueryBenchmarkResult::Error(msg, "", "", "");
             return;
         }
         try {

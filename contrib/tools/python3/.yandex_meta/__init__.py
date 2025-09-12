@@ -156,16 +156,6 @@ def post_install(self):
     self.yamakes["."].after(
         "CFLAGS",
         Switch(
-            {
-                'BUILD_TYPE == "RELEASE"': Linkable(CFLAGS=['-DABIFLAGS=""']),
-                "default": Linkable(CFLAGS=['-DABIFLAGS="d"']),
-            }
-        ),
-    )
-
-    self.yamakes["."].after(
-        "CFLAGS",
-        Switch(
             CLANG_CL=Linkable(CFLAGS=["-Wno-invalid-token-paste"]),
         ),
     )

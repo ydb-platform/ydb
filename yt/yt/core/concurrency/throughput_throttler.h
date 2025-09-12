@@ -74,6 +74,8 @@ struct IThroughputThrottler
     virtual i64 GetQueueTotalAmount() const = 0;
 
     //! Returns estimated duration to drain current request queue.
+    //! Can return TDuration::Max() in cases when the wait is expected
+    //! to be infinitely long.
     /*!
      *  \note Thread affinity: any
      */

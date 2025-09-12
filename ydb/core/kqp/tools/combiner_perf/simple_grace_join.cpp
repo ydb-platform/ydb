@@ -253,6 +253,7 @@ THolder<IComputationGraph> BuildGraph(TSetup<LLVM, Spilling>& setup, std::shared
         pb.NewDataType(NUdf::TDataType<ui64>::Id),
         pb.NewDataType(NUdf::TDataType<ui64>::Id)
     });
+
     const auto resultFlowType = pb.NewFlowType(resultType);
 
     /*

@@ -301,6 +301,13 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER SECRET";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:
         return "DROP SECRET";
+    // streaming query
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery:
+        return "CREATE STREAMING QUERY";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery:
+        return "DROP STREAMING QUERY";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
+        return "ALTER STREAMING QUERY";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -688,6 +695,15 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery:
+        result.emplace_back(tx.GetCreateStreamingQuery().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery:
+        result.emplace_back(tx.GetDrop().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
+        result.emplace_back(tx.GetCreateStreamingQuery().GetName());
         break;
     }
 

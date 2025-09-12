@@ -1,5 +1,6 @@
 #include "viewer_topic_data.h"
 #include <library/cpp/protobuf/json/proto2json.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 #include <ydb/services/lib/auth/auth_helpers.h>
 

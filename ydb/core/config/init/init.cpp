@@ -898,9 +898,9 @@ NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& re
     return appConfig;
 }
 
-NKikimrConfig::TAppConfig GetActualDynConfig(
+TMaybe<NKikimrConfig::TAppConfig> GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
-    const NKikimrConfig::TAppConfig& regularConfig,
+    const TMaybe<NKikimrConfig::TAppConfig>& regularConfig,
     IConfigUpdateTracer& ConfigUpdateTracer)
 {
     if (yamlConfig.GetYamlConfigEnabled()) {

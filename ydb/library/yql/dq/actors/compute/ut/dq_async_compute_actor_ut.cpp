@@ -496,10 +496,10 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 });
         TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 1_MB;
-        memoryLimits.MkqlLightProgramMemoryLimit = 20_MB;
-        memoryLimits.MkqlHeavyProgramMemoryLimit = 30_MB;
-        memoryLimits.MkqlProgramHardMemoryLimit = 40_MB;
-        memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(64_MB, 32_MB);
+        memoryLimits.MkqlLightProgramMemoryLimit = 40_MB;
+        memoryLimits.MkqlHeavyProgramMemoryLimit = 60_MB;
+        memoryLimits.MkqlProgramHardMemoryLimit = 80_MB;
+        memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(64_MB, 40_MB);
         TComputeRuntimeSettings runtimeSettings;
         runtimeSettings.StatsMode = statsMode;
         auto actor = CreateDqAsyncComputeActor(

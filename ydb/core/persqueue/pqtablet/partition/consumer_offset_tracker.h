@@ -6,14 +6,14 @@
 
 namespace NKikimr::NPQ {
 
-    class TImportantCunsumerOffsetTracker {
+    class TImportantConsumerOffsetTracker {
     public:
         struct TConsumerOffset {
             TDuration RetentionPeriod = TDuration::Max();
             ui64 Offset = 0;
         };
 
-        explicit TImportantCunsumerOffsetTracker(std::vector<TConsumerOffset> consumers);
+        explicit TImportantConsumerOffsetTracker(std::vector<TConsumerOffset> consumers);
 
         bool ShouldKeepCurrentKey(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now) const;
 

@@ -1,16 +1,14 @@
-#pragma once
-
 #include "consumer_offset_tracker.h"
 
 namespace NKikimr::NPQ {
 
 
-TImportantCunsumerOffsetTracker::TImportantCunsumerOffsetTracker(std::vector<TImportantCunsumerOffsetTracker::TConsumerOffset> consumersToCheck)
+TImportantConsumerOffsetTracker::TImportantConsumerOffsetTracker(std::vector<TImportantConsumerOffsetTracker::TConsumerOffset> consumersToCheck)
     : Consumers_(std::move(consumersToCheck))
 {
 }
 
-bool TImportantCunsumerOffsetTracker::ShouldKeep(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now, const TConsumerOffset& consumer) {
+bool TImportantConsumerOffsetTracker::ShouldKeep(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now, const TConsumerOffset& consumer) {
     const TInstant endOfLife = currentKey.Timestamp + consumer.RetentionPeriod; // note: sum with saturation
     if (endOfLife < now) {
         // The current key is too old. It doesn't matter whether the consumer has read it or not. It can be retired.
@@ -28,7 +26,7 @@ bool TImportantCunsumerOffsetTracker::ShouldKeep(const TDataKey& currentKey, con
     return false;
 }
 
-bool TImportantCunsumerOffsetTracker::ShouldKeepCurrentKey(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now) const {
+bool TImportantConsumerOffsetTracker::ShouldKeepCurrentKey(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now) const {
     for (const auto& consumer : Consumers_) {
         if (ShouldKeep(currentKey, nextKey, now, consumer)) {
             return true;

@@ -401,8 +401,8 @@ ui64 TPartition::GetUsedStorage(const TInstant& now) {
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 
-TImportantCunsumerOffsetTracker TPartition::ImportantClientsMinOffset() const {
-    std::vector<TImportantCunsumerOffsetTracker::TConsumerOffset> consumersToCheck;
+TImportantConsumerOffsetTracker TPartition::ImportantClientsMinOffset() const {
+    std::vector<TImportantConsumerOffsetTracker::TConsumerOffset> consumersToCheck;
     for (size_t consumerIdx = 0; consumerIdx < Config.ConsumersSize(); ++consumerIdx) {
         const auto& consumer = Config.GetConsumers(consumerIdx);
         if (!consumer.GetImportant()) {
@@ -420,12 +420,12 @@ TImportantCunsumerOffsetTracker TPartition::ImportantClientsMinOffset() const {
         if (consumersToCheck.empty()) {
             consumersToCheck.reserve(Config.ConsumersSize() - consumerIdx);
         }
-        consumersToCheck.push_back(TImportantCunsumerOffsetTracker::TConsumerOffset{
+        consumersToCheck.push_back(TImportantConsumerOffsetTracker::TConsumerOffset{
             .RetentionPeriod = retentionPeriod,
             .Offset = curOffset,
         });
     }
-    return TImportantCunsumerOffsetTracker(std::move(consumersToCheck));
+    return TImportantConsumerOffsetTracker(std::move(consumersToCheck));
 }
 
 
@@ -545,7 +545,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
 
     bool hasDrop = false;
     while (CompactionBlobEncoder.DataKeysBody.size() > 1) {
-        const auto& nextKey = CompactionBlobEncoder.DataKeysBody[1].Key;
+        const auto& nextKey = CompactionBlobEncoder.DataKeysBody[1];
         const auto& firstKey = CompactionBlobEncoder.DataKeysBody.front();
         if (importantConsumerOffsetTracker.ShouldKeepCurrentKey(firstKey, nextKey, now)) {
             break;
@@ -565,7 +565,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         CompactionBlobEncoder.BodySize -= firstKey.Size;
         CompactionBlobEncoder.DataKeysBody.pop_front();
 
-        if (!GapOffsets.empty() && nextKey.GetOffset() == GapOffsets.front().second) {
+        if (!GapOffsets.empty() && nextKey.Key.GetOffset() == GapOffsets.front().second) {
             GapSize -= GapOffsets.front().second - GapOffsets.front().first;
             GapOffsets.pop_front();
         }

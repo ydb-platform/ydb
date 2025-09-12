@@ -535,7 +535,7 @@ public:
     ui64 StorageSize(const TActorContext& ctx) const;
     ui64 UsedReserveSize(const TActorContext& ctx) const;
     // Minimal offsets, the data from which cannot be deleted, because it is required by an important consumers
-    TImportantCunsumerOffsetTracker ImportantClientsMinOffset() const;
+    TImportantConsumerOffsetTracker ImportantClientsMinOffset() const;
 
     TInstant GetEndWriteTimestamp() const; // For tests only
 

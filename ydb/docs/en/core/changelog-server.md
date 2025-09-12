@@ -12,7 +12,7 @@ Release date: September , 2025.
   * client-side consumer balancing – enabled by setting the `enable_kafka_native_balancing` flag in the [cluster configuration](./reference/configuration/index.md),
   * compacted topics – enabled via the `enable_topic_compactification_by_key` flag,
   * transactions – enabled via the `enable_kafka_transactions` flag.
-* [Added](https://github.com/ydb-platform/ydb/pull/20982) [new protocol to Node Broker](https://github.com/ydb-platform/ydb/issues/11064), eliminating the long startup of nodes on large clusters (more than 1000 servers).
+* [Added](https://github.com/ydb-platform/ydb/pull/20982) [new protocol](https://github.com/ydb-platform/ydb/issues/11064) to [Node Broker](./concepts/glossary#node-broker.md), eliminating the long startup of nodes on large clusters (more than 1000 servers).
 
 #### YDB UI
 

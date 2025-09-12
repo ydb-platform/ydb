@@ -20,7 +20,6 @@ RECURSE(
     common
     config
     events
-    partition_index_generator
     pqrb
     pqtablet
     public

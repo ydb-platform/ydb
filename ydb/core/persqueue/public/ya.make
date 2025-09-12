@@ -20,6 +20,7 @@ RECURSE(
     counters
     fetcher
     list_topics
+    partition_index_generator
     partition_key_range
     write_meta
 )

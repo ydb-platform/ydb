@@ -29,7 +29,6 @@ items:
 - { name: DROP TOPIC,                   href: drop-topic.md,                 when: feature_topic_control_plane }
 - { name: DROP VIEW,                    href: drop-view.md,                  when: feature_view }
 - { name: DROP USER,                    href: drop-user.md,                  when: feature_user_and_group }
-- { name: DROP TOPIC,                   href: drop-topic.md,                 when: feature_topic_control_plane }
 - { name: GRANT,                        href: grant.md,                      when: feature_user_and_group }
 - { name: EXPORT and IMPORT,            href: export_import.md,              when: feature_mapreduce }
 - { name: INSERT,                       href: insert_into.md }

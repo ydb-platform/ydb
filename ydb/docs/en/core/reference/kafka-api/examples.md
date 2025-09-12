@@ -20,7 +20,8 @@ Run Docker following [the quickstart guide](../../quickstart.md#install), and th
 
 ### Reading
 
-YDB Topics Kafka API lacks support for the [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs) option. Therefore, the following parameter must always be specified in the reader configuration: `check.crcs=false`
+{{ ydb-short-name }} Topics Kafka API lacks support for the [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs) option. Therefore, the following parameter must always be specified in the reader configuration: `check.crcs=false`.
+
 
 Below are examples of reading using the Kafka protocol for various applications, programming languages, and frameworks without authentication.
 For examples of how to set up authentication, see [Authentication examples](#authentication-examples).

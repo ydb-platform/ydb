@@ -311,7 +311,7 @@ namespace NKikimr::NStorage {
         if (!cmd.HasStateStorageConfig() && !cmd.HasStateStorageBoardConfig() && !cmd.HasSchemeBoardConfig()) {
             throw TExError() << "New configuration is not defined";
         }
-        auto process = [&](const char *name, auto buildInfo, auto hasFunc, auto func, auto configHasFunc, auto configMutableFunc) {
+        auto process = [&](const char *name, auto hasFunc, auto func, auto configHasFunc, auto configMutableFunc) {
             if (!(cmd.*hasFunc)()) {
                 return;
             }
@@ -323,88 +323,11 @@ namespace NKikimr::NStorage {
             if (newSSConfig.HasRing()) {
                 throw TExError() << "New " << name << " configuration Ring option is not allowed, use RingGroups";
             }
-            if (newSSConfig.RingGroupsSize() < 1) {
-                throw TExError() << "New " << name << " configuration RingGroups is not filled in";
+            const auto error = VerifyConfigCompatibility(name, *(config.*configMutableFunc)(), newSSConfig);
+            if(!error.empty()) {
+                throw TExError() << error;
             }
-            if (newSSConfig.GetRingGroups(0).GetWriteOnly()) {
-                throw TExError() << "New " << name << " configuration first RingGroup is writeOnly";
-            }
-            for (auto& rg : newSSConfig.GetRingGroups()) {
-                if (rg.RingSize() && rg.NodeSize()) {
-                    throw TExError() << name << " Ring and Node are defined, use the one of them";
-                }
-                const size_t numItems = Max(rg.RingSize(), rg.NodeSize());
-                if (!rg.HasNToSelect() || numItems < 1 || rg.GetNToSelect() < 1 || rg.GetNToSelect() > numItems) {
-                    throw TExError() << name << " invalid ring group selection";
-                }
-                for (auto &ring : rg.GetRing()) {
-                    if (ring.RingSize() > 0) {
-                        throw TExError() << name << " too deep nested ring declaration";
-                    }
-                    if (ring.HasRingGroupActorIdOffset()) {
-                        throw TExError() << name << " RingGroupActorIdOffset should be used in ring group level, not ring";
-                    }
-                    if (ring.NodeSize() < 1) {
-                        throw TExError() << name << " empty ring";
-                    }
-                }
-            }
-            try {
-                TIntrusivePtr<TStateStorageInfo> newSSInfo;
-                TIntrusivePtr<TStateStorageInfo> oldSSInfo;
-                newSSInfo = (*buildInfo)(newSSConfig);
-                oldSSInfo = (*buildInfo)(*(config.*configMutableFunc)());
-                THashSet<TActorId> replicas;
-                for (auto& ringGroup : newSSInfo->RingGroups) {
-                    for (auto& ring : ringGroup.Rings) {
-                        for (auto& node : ring.Replicas) {
-                            if (!replicas.insert(node).second) {
-                                throw TExError() << name << " replicas ActorId intersection, specify"
-                                    " RingGroupActorIdOffset if you run multiple replicas on one node";
-                            }
-                        }
-                    }
-                }
 
-                Y_ABORT_UNLESS(newSSInfo->RingGroups.size() > 0 && oldSSInfo->RingGroups.size() > 0);
-
-                for (auto& newGroup : newSSInfo->RingGroups) {
-                    if (newGroup.WriteOnly) {
-                        continue;
-                    }
-                    bool found = false;
-                    for (auto& rg : oldSSInfo->RingGroups) {
-                        if (newGroup.SameConfiguration(rg)) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        throw TExError() << "New introduced ring group should be WriteOnly old: " << oldSSInfo->ToString()
-                            << " new: " << newSSInfo->ToString();
-                    }
-                }
-                for (auto& oldGroup : oldSSInfo->RingGroups) {
-                    if (oldGroup.WriteOnly) {
-                        continue;
-                    }
-                    bool found = false;
-                    for (auto& rg : newSSInfo->RingGroups) {
-                        if (oldGroup.SameConfiguration(rg)) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        throw TExError() << "Can not delete not WriteOnly ring group. Make it WriteOnly before deletion old: "
-                            << oldSSInfo->ToString() << " new: " << newSSInfo->ToString();
-                    }
-                }
-            } catch (const TExError& e) {
-                throw e;
-            } catch (const std::exception& e) {
-                throw TExError() << "Can not build " << name << " info from config. " << e.what();
-            }
             auto* ssConfig = (config.*configMutableFunc)();
             if (newSSConfig.RingGroupsSize() == 1) {
                 ssConfig->MutableRing()->CopyFrom(newSSConfig.GetRingGroups(0));
@@ -415,7 +338,7 @@ namespace NKikimr::NStorage {
         };
 
 #define PROCESS(NAME) \
-        process(#NAME, &NKikimr::Build##NAME##Info, \
+        process(#NAME, \
                 &NKikimrBlobStorage::TStateStorageConfig::Has##NAME##Config, \
                 &NKikimrBlobStorage::TStateStorageConfig::Get##NAME##Config, \
                 &NKikimrBlobStorage::TStorageConfig::Has##NAME##Config, \
@@ -499,7 +422,7 @@ namespace NKikimr::NStorage {
                 throw TExError() << name << " From node not found";
             }
         };
-        
+
 #define F(NAME) \
         if (cmd.Get##NAME()) { \
             process(#NAME, &NKikimrBlobStorage::TStorageConfig::Has##NAME##Config, \

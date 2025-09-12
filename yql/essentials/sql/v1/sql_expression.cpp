@@ -1968,7 +1968,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                 {
                     if (!Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_MISSING_IS_BEFORE_NOT_NULL, [](auto& out) {
                         out << "Missing IS keyword before NOT NULL";
-                    })) {
+                    }, Ctx_.DisableLegacyNotNull)) {
                         return {};
                     }
                 }

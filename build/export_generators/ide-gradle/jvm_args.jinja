@@ -83,8 +83,12 @@ tasks.withType<Test> {
 {%  endif -%}
 {%- if test_envs|length -%}
 {%-     for test_env in test_envs -%}
-{%-         set key_and_value = split(test_env, '=', 2) %}
+{%-         set key_and_value = split(test_env, '=', 2) -%}
+{%-         if not(key_and_value[1] is defined) %}
+    environment("{{ key_and_value[0] }}", true)
+{%-         else %}
     environment("{{ key_and_value[0] }}", "{{ key_and_value[1] }}")
+{%-         endif -%}
 {%-     endfor %}
 {%  endif -%}
 }

@@ -33,6 +33,12 @@ struct THistogramCounter {
 
 using THistogramVector = TVector<THolder<THistogramCounter>>;
 
+struct TTabletCounterValue {
+    TStringBuf Name;
+    ui64 TabletId;
+    ui64 Value;
+};
+
 class TAggregatedSimpleCounters {
 public:
     //
@@ -52,6 +58,8 @@ public:
     void ForgetTablet(ui64 tabletId);
     void RecalcAll();
 
+    TVector<TTabletCounterValue> Find(const TString& name) const;
+
 private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
 
@@ -63,6 +71,7 @@ private:
     TCountersByTabletIdMap CountersByTabletId;
 
     TVector<bool> ChangedCounters;
+    TVector<TStringBuf> CounterNames;
 };
 
 class TAggregatedCumulativeCounters {
@@ -81,6 +90,8 @@ public:
     void ForgetTablet(ui64 tabletId);
     void RecalcAll();
 
+    TVector<TTabletCounterValue> Find(const TString& name) const;
+
 private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
 
@@ -91,6 +102,7 @@ private:
     TCountersByTabletIdMap CountersByTabletId;
 
     TVector<bool> ChangedCounters;
+    TVector<TStringBuf> CounterNames;
 };
 
 class TAggregatedHistogramCounters {

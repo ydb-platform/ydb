@@ -1857,6 +1857,7 @@ message TAuditConfig {
             Operations = 7; // Operations API. See ydb/public/api/grpc/ydb_operation_v1.proto
             ExportImport = 8;
             Acl = 9;
+            AuditHeartbeat = 10;
             Default = 1000; // For default settings for all other nonconfigured log classes
         }
 
@@ -1878,10 +1879,20 @@ message TAuditConfig {
         repeated ELogPhase LogPhase = 4; // The phases of requests execution where audit log records are written
     }
 
+    // Settings for heartbeat audit messages
+    // Heartbeat messages are messages that are written in
+    // a time interval that is set up in this config.
+    // Audit messages are written from AuditHeartbeat log class
+    // and Anonymous account type and also can be set up using its setting
+    message THeartbeatSettings {
+        optional uint32 IntervalSeconds = 5; // Make heartbeat records to audit log every HeartbeatInterval seconds. 0 means that heartbeat is disabled
+    }
+
     optional TStderrBackend StderrBackend = 1;
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
     repeated TLogClassConfig LogClassConfig = 4;
+    optional THeartbeatSettings Heartbeat = 5;
 };
 
 message THiveTabletLimit {
@@ -2034,6 +2045,7 @@ message THiveConfig {
     repeated TBootPriority TabletTypeToBootPriority = 87;
     optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
     optional bool LockedTabletsSendMetrics = 89 [default = false]; // if true then hive will process metrics from locked tablets
+    optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
 }
 
 message THealthCheckConfig {
@@ -2071,7 +2083,7 @@ message TColumnShardConfig {
     optional bool CompactionEnabled = 5 [default = true];
     optional bool TTLEnabled = 6 [default = true];
     optional bool WritingEnabled = 7 [default = true];
-    optional uint32 WritingBufferDurationMs = 8 [default = 0];
+    optional uint32 WritingBufferDurationMs = 8 [default = 1000];
     optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
     optional uint64 TieringsMemoryLimit = 11 [default = 536870912];
     message TIndexMetadataMemoryLimit {
@@ -2112,7 +2124,7 @@ message TColumnShardConfig {
     optional uint32 RestoreDataOnWriteTimeoutSeconds = 30;
     optional bool UseSlicesFilter = 31 [default = true];
     optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
-    optional uint64 WritingBufferVolumeMb = 33 [default = 32];
+    optional uint64 WritingBufferVolumeMb = 33 [default = 32, deprecated = true];
     optional uint64 WritingInFlightRequestsCountLimit = 34;
     optional uint64 WritingInFlightRequestBytesLimit = 35;
     optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36;
@@ -2128,6 +2140,10 @@ message TColumnShardConfig {
     optional bool DeduplicationEnabled = 46 [default = true];
     optional bool BulkUpsertRequireAllColumns = 47 [default = true];
     optional uint64 ProxyMemoryInFlightLimit = 48;
+    optional uint64 WritingBufferVolumeBytes = 49 [default = 524288];
+    optional bool OnlyBulkUpsertWritingBuffer = 50 [default = true];
+    optional uint64 BadPortionSizeLimit = 51 [default = 524288];
+    optional uint64 BadPortionsLimit = 52;
 }
 
 message TSchemeShardConfig {

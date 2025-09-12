@@ -4006,6 +4006,67 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    template <typename TPrepareFunc>
+    void ShouldBreakLocksOnFinalizingIndex(TPrepareFunc prepare) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+                {"value2", "Uint32", false, false}});
+        CreateShardedTable(server, edgeActor, "/Root", "Table", opts);
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> blockProgress(runtime);
+        ui64 buildIndexId = prepare(server);
+        runtime.WaitFor("Progress", [&]{ return blockProgress.size(); });
+
+        TString sessionId;
+        TString txId;
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+        KqpSimpleBegin(runtime, sessionId, txId, "UPDATE `/Root/Table` ON (key, value2) VALUES (1, 11);");
+        KqpSimpleContinue(runtime, sessionId, txId, "SELECT key, value FROM `/Root/Table`;");
+
+        blockProgress.Unblock().Stop();
+        WaitTxNotification(server, edgeActor, buildIndexId);
+
+        auto commitResult = KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1;");
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            commitResult,
+            Sprintf("ERROR: %s", Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::ABORTED).c_str()));
+    }
+
+    Y_UNIT_TEST(ShouldBreakLocksOnConcurrentFinalizeBuildSyncIndex) {
+        auto addSyncIndexWithBlock = [](TServer::TPtr server) {
+            return AsyncAlterAddIndex(server, "/Root", "/Root/Table", TShardedTableOptions::TIndex{"Index", {"value"}});
+        };
+        ShouldBreakLocksOnFinalizingIndex(addSyncIndexWithBlock);
+    }
+
+    Y_UNIT_TEST(ShouldBreakLocksOnConcurrentFinalizeBuildAsyncIndex) {
+        auto addAsyncIndexWithBlock = [](TServer::TPtr server) {
+            return AsyncAlterAddIndex(server, "/Root", "/Root/Table", TShardedTableOptions::TIndex{"Index", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync});
+        };
+        ShouldBreakLocksOnFinalizingIndex(addAsyncIndexWithBlock);
+    }
+
     Y_UNIT_TEST(ResolvedTimestampsContinueAfterMerge) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

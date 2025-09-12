@@ -203,6 +203,42 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT(event.has_value());
         }
     }
+
+    Y_UNIT_TEST(Read_WithConsumer_WithBadPartitions) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        TReadSessionSettings settings;
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC)
+            .AppendPartitionIds(0)
+            .AppendPartitionIds(101)
+            .AppendPartitionIds(113));
+        settings.ConsumerName(TEST_CONSUMER);
+        auto session = client.CreateReadSession(settings);
+        auto event = session->GetEvent(true);
+        // check that verify didn`t happened
+        UNIT_ASSERT(event.has_value());
+    }
+
+    Y_UNIT_TEST(Read_WithoutConsumer_WithBadPartitions) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        TReadSessionSettings settings;
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC)
+            .AppendPartitionIds(0)
+            .AppendPartitionIds(101)
+            .AppendPartitionIds(113));
+        settings.WithoutConsumer();
+        auto session = client.CreateReadSession(settings);
+        auto event = session->GetEvent(true);
+        // check that verify didn`t happened
+        UNIT_ASSERT(event.has_value());
+    }
 }
 
 } // namespace NKikimr

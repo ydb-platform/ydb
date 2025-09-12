@@ -40,6 +40,8 @@ struct TEvKafka {
         EvTxnOffsetCommitRequest,
         EvEndTxnRequest,
         EvTransactionActorDied,
+        EvGetCountersRequest,
+        EvGetCountersResponse,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -404,6 +406,20 @@ struct TEvTransactionActorDied : public NActors::TEventLocal<TEvTransactionActor
     const TString TransactionalId;
     const TProducerInstanceId ProducerState;
 };
+
+// Only for tests
+struct TEvGetCountersRequest : public NActors::TEventLocal<TEvGetCountersRequest, EvGetCountersRequest> {
+};
+
+// Only for tests
+struct TEvGetCountersResponse : public NActors::TEventLocal<TEvGetCountersResponse, EvGetCountersResponse> {
+    TEvGetCountersResponse(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) :
+        Counters(counters)
+    {}
+
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+};
+
 }; // struct TEvKafka
 
 } // namespace NKafka

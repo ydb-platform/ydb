@@ -125,6 +125,24 @@ static const ui32 MAX_KEYS = 10000;
 static const ui32 MAX_TXS = 1000;
 static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB;
 
+TStringBuilder MakeTxWriteErrorMessage(TMaybe<ui64> txId,
+                                       TStringBuf topicName, const TPartitionId& partitionId,
+                                       TStringBuf sourceId, ui64 seqNo)
+{
+    TStringBuilder ss;
+    ss << "[TxId: " << txId << ", Topic: '" << topicName << "', Partition " << partitionId << ", SourceId '" << sourceId << ", SeqNo " << seqNo << "] ";
+    return ss;
+}
+
+TStringBuilder MakeTxReadErrorMessage(TMaybe<ui64> txId,
+                                      TStringBuf topicName, const TPartitionId& partitionId,
+                                      TStringBuf consumer)
+{
+    TStringBuilder ss;
+    ss << "[TxId: " << txId << ", Topic: '" << topicName << "', Partition " << partitionId << ", Consumer '" << consumer << "] ";
+    return ss;
+}
+
 auto GetStepAndTxId(ui64 step, ui64 txId)
 {
     return std::make_pair(step, txId);
@@ -1270,7 +1288,8 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCalcPredicate> 
                  MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(ev->Step,
                                                              ev->TxId,
                                                              Partition,
-                                                             Nothing()).Release());
+                                                             Nothing(),
+                                                             TString()).Release());
             return;
         }
     }
@@ -1514,8 +1533,14 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
 
         if (auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first); !inFlightIter.IsEnd()) {
             if (SeqnoViolation(inFlightIter->second.KafkaProducerEpoch, inFlightIter->second.SeqNo, s.second.ProducerEpoch, s.second.MinSeqNo)) {
+                PQ_LOG_W("MinSeqNo violation failure. " <<
+                         "TxId=" << tx.GetTxId() <<
+                         ", SourceId=" << s.first <<
+                         ", SeqNo=" << inFlightIter->second.SeqNo <<
+                         ", MinSeqNo=" << s.second.MinSeqNo);
                 tx.Predicate = false;
-                tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
+                tx.Message = (MakeTxWriteErrorMessage(tx.GetTxId(), TopicName(), Partition, s.first, inFlightIter->second.SeqNo) << "MinSeqNo violation failure. " <<
+                              "SeqNo " << s.second.MinSeqNo);
                 tx.WriteInfoApplied = true;
                 break;
             }
@@ -1523,8 +1548,14 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
 
         if (auto existing = knownSourceIds.find(s.first); !existing.IsEnd()) {
             if (SeqnoViolation(existing->second.ProducerEpoch, existing->second.SeqNo, s.second.ProducerEpoch, s.second.MinSeqNo)) {
+                PQ_LOG_W("MinSeqNo violation failure. " <<
+                         "TxId=" << tx.GetTxId() <<
+                         ", SourceId=" << s.first <<
+                         ", SeqNo=" << existing->second.SeqNo <<
+                         ", MinSeqNo=" << s.second.MinSeqNo);
                 tx.Predicate = false;
-                tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
+                tx.Message = (MakeTxWriteErrorMessage(tx.GetTxId(), TopicName(), Partition, s.first, existing->second.SeqNo) << "MinSeqNo violation failure. " <<
+                              "SeqNo " << s.second.MinSeqNo);
                 tx.WriteInfoApplied = true;
                 break;
             }
@@ -1592,7 +1623,8 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
              MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx->Tx->Step,
                                                          tx->Tx->TxId,
                                                          Partition,
-                                                         *tx->Predicate).Release());
+                                                         *tx->Predicate,
+                                                         tx->Message).Release());
     } else {
         auto insRes = TransactionsInflight.emplace(tx->ProposeConfig->TxId, tx);
         Y_ABORT_UNLESS(insRes.second);
@@ -2542,7 +2574,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
             ReplyToProposeOrPredicate(t, true);
             return EProcessResult::Continue;
         }
-        result = BeginTransaction(*t->Tx, t->Predicate);
+        result = BeginTransaction(*t->Tx, t->Predicate, t->Message);
         if (t->Predicate.Defined()) {
             ReplyToProposeOrPredicate(t, true);
         }
@@ -2610,7 +2642,8 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
     return true;
 }
 
-TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicateOut)
+TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
+                                                        TMaybe<bool>& predicateOut, TString& issueMsg)
 {
     if (tx.ForcePredicateFalse) {
         predicateOut = false;
@@ -2631,15 +2664,17 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
         }
 
         if (AffectedUsers.contains(consumer) && !GetPendingUserIfExists(consumer)) {
-            PQ_LOG_D("Partition " << Partition <<
+            PQ_LOG_W("Partition " << Partition <<
                      " Consumer '" << consumer << "' has been removed");
+            issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Consumer has been removed");
             result = false;
             break;
         }
 
         if (!UsersInfoStorage->GetIfExists(consumer)) {
-            PQ_LOG_D("Partition " << Partition <<
+            PQ_LOG_W("Partition " << Partition <<
                      " Unknown consumer '" << consumer << "'");
+            issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Unknown consumer");
             result = false;
             break;
         }
@@ -2653,35 +2688,46 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             }
         } else if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != userInfo.Session) {
             if (IsActive() || operation.GetCommitOffsetsEnd() < BlobEncoder.EndOffset || userInfo.Offset != i64(BlobEncoder.EndOffset)) {
-                PQ_LOG_D("Partition " << Partition <<
+                PQ_LOG_W("Partition " << Partition <<
                          " Consumer '" << consumer << "'" <<
                          " Bad request (session already dead) " <<
                          " RequestSessionId '" << operation.GetReadSessionId() <<
-                         " CurrentSessionId '" << userInfo.Session <<
-                         "'");
+                         " CurrentSessionId '" << userInfo.Session << "'");
+                issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Session already dead. " <<
+                            "Request session id '" << operation.GetReadSessionId() << "'" <<
+                            ", current session id '" << userInfo.Session << "'");
                 result = false;
             }
         } else {
             if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
-                PQ_LOG_D("Partition " << Partition <<
+                PQ_LOG_W("Partition " << Partition <<
                          " Consumer '" << consumer << "'" <<
                          " Bad request (invalid range) " <<
                          " Begin " << operation.GetCommitOffsetsBegin() <<
                          " End " << operation.GetCommitOffsetsEnd());
+                issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Invalid range. " <<
+                            "Range begin " << operation.GetCommitOffsetsBegin() <<
+                            ", range end " << operation.GetCommitOffsetsEnd());
                 result = false;
             } else if (!operation.GetForceCommit() && userInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
-                PQ_LOG_D("Partition " << Partition <<
+                PQ_LOG_W("Partition " << Partition <<
                          " Consumer '" << consumer << "'" <<
                          " Bad request (gap) " <<
                          " Offset " << userInfo.Offset <<
                          " Begin " << operation.GetCommitOffsetsBegin());
+                issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Gap. " <<
+                            "Offset " << userInfo.Offset <<
+                            ", range begin " << operation.GetCommitOffsetsBegin());
                 result = false;
             } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > BlobEncoder.EndOffset) {
-                PQ_LOG_D("Partition " << Partition <<
+                PQ_LOG_W("Partition " << Partition <<
                          " Consumer '" << consumer << "'" <<
                          " Bad request (behind the last offset) " <<
                          " EndOffset " << BlobEncoder.EndOffset <<
                          " End " << operation.GetCommitOffsetsEnd());
+                issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Behind the last offset. " <<
+                            "Partition end offset " << BlobEncoder.EndOffset <<
+                            ", range end " << operation.GetCommitOffsetsBegin());
                 result = false;
             }
 

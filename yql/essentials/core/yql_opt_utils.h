@@ -226,4 +226,6 @@ bool IsNormalizedDependsOn(const TExprNode& node);
 
 bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types);
 
+bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types);
+
 }

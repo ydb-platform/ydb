@@ -157,4 +157,4 @@ FROM `transfer_recipe/access_log`;
 ## Смотрите также
 
 * [{#T}](../../concepts/transfer.md)
-* [{#T}](transfer-quickstart.md)
+* [{#T}](quickstart.md)

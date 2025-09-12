@@ -95,8 +95,20 @@ namespace NKikimr {
 
         // returns true if allocated, false -- if no free slots
         bool TChain::Allocate(NPrivate::TChunkSlot *id) {
-            if (FreeSpace.empty())
-                return false;
+            if (FreeSpace.empty()) {
+                if (!ChunksSoftLocking) {
+                    return false; // strict mode, we can't steal a chunk from LockedChunks
+                }
+                auto it = LockedChunks.begin();
+                while (it != LockedChunks.end() && it->second.Empty()) {
+                    ++it;
+                }
+                if (it == LockedChunks.end()) {
+                    return false;
+                }
+                FreeSpace.emplace(it->first, it->second);
+                LockedChunks.erase(it);
+            }
 
             TFreeSpace::iterator it = FreeSpace.begin();
             TMask &mask = it->second;
@@ -330,7 +342,7 @@ namespace NKikimr {
         // TChainDelegator
         ////////////////////////////////////////////////////////////////////////////
         TChainDelegator::TChainDelegator(const TString &vdiskLogPrefix, ui32 valBlocks, ui32 shiftBlocks,
-                ui32 chunkSize, ui32 appendBlockSize)
+                ui32 chunkSize, ui32 appendBlockSize, TControlWrapper chunksSoftLocking)
             : VDiskLogPrefix(vdiskLogPrefix)
             , Blocks(valBlocks)
             , ShiftInBlocks(shiftBlocks)
@@ -346,7 +358,7 @@ namespace NKikimr {
             SlotsInChunk = blocksInChunk / slotSizeInBlocks;
             SlotSize = slotSizeInBlocks * appendBlockSize;
 
-            ChainPtr = MakeIntrusive<TChain>(vdiskLogPrefix, SlotsInChunk);
+            ChainPtr = MakeIntrusive<TChain>(vdiskLogPrefix, SlotsInChunk, chunksSoftLocking);
         }
 
         THugeSlot TChainDelegator::Convert(const NPrivate::TChunkSlot &id) const {
@@ -414,7 +426,8 @@ namespace NKikimr {
                 ui32 oldMinHugeBlobSizeInBytes,
                 ui32 milestoneBlobInBytes,
                 ui32 maxBlobInBytes,
-                ui32 overhead)
+                ui32 overhead,
+                TControlWrapper chunksSoftLocking)
             : VDiskLogPrefix(vdiskLogPrefix)
             , ChunkSize(chunkSize)
             , AppendBlockSize(appendBlockSize)
@@ -423,6 +436,7 @@ namespace NKikimr {
             , MilestoneBlobInBytes(milestoneBlobInBytes)
             , MaxBlobInBytes(maxBlobInBytes)
             , Overhead(overhead)
+            , ChunksSoftLocking(chunksSoftLocking)
         {
             Y_VERIFY_S(MinHugeBlobInBytes != 0 &&
                     MinHugeBlobInBytes >= AppendBlockSize &&
@@ -518,7 +532,7 @@ namespace NKikimr {
                 TIt loadedEnd = ChainDelegators.end();
 
                 for (ui32 i = 0; i < size; ++i) {
-                    TChainDelegator c(VDiskLogPrefix, 1, 1, ChunkSize, AppendBlockSize);
+                    TChainDelegator c(VDiskLogPrefix, 1, 1, ChunkSize, AppendBlockSize, ChunksSoftLocking);
                     ::Load(s, c);
 
                     bool inserted = false;
@@ -639,7 +653,7 @@ namespace NKikimr {
             TAllChainDelegators result;
             for (auto x : builder.GetLayout()) {
                 result.emplace_back(VDiskLogPrefix, x.Left, x.Right - x.Left,
-                    ChunkSize, AppendBlockSize);
+                    ChunkSize, AppendBlockSize, ChunksSoftLocking);
             }
             return result;
         }
@@ -696,12 +710,13 @@ namespace NKikimr {
                 ui32 mileStoneBlobInBytes,
                 ui32 maxBlobInBytes,
                 ui32 overhead,
-                ui32 freeChunksReservation)
+                ui32 freeChunksReservation,
+                TControlWrapper chunksSoftLocking)
             : VDiskLogPrefix(vdiskLogPrefix)
             , FreeChunksReservation(freeChunksReservation)
             , FreeChunks()
             , Chains(vdiskLogPrefix, chunkSize, appendBlockSize, minHugeBlobInBytes, oldMinHugeBlobSizeInBytes,
-                    mileStoneBlobInBytes, maxBlobInBytes, overhead)
+                    mileStoneBlobInBytes, maxBlobInBytes, overhead, chunksSoftLocking)
         {}
 
         //////////////////////////////////////////////////////////////////////////////////////////

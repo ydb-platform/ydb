@@ -86,7 +86,7 @@ $transformation_lambda = ($msg) -> {
         $response_parts = String::SplitToList($parts[2], " ");
         -- Преобразуем дату в Datetime тип
         $dateParser = DateTime::Parse("%d/%b/%Y:%H:%M:%S");
-        $date = $dateParser(Substring($info_parts[3], 1));
+        $date = $dateParser(SUBSTRING($info_parts[3], 1));
 
         -- Возвращаем структуру, каждое именованное поле которой соответствует столбцу таблицы.
         -- Важно: типы значений именованных полей должны соответствовать типам столбцов таблицы, например, если столбец имеет тип Uint32,

@@ -12,11 +12,11 @@
   * клиентскую балансировку читателей – включается установкой флага `enable_kafka_native_balancing` в [конфигурации кластера](./reference/configuration/index.md),
   * компактифицированные топики – включается установкой флага `enable_topic_compactification_by_key`,
   * транзакции – включается установкой флага `enable_kafka_transactions`.
-* [Добавлен](https://github.com/ydb-platform/ydb/pull/20982) новый протокол в Node Broker, устраняющий всплески сетевого трафика на больших кластерах (более 1000 серверов), связанного с рассылкой информации об узлах.
+* [Добавлен](https://github.com/ydb-platform/ydb/pull/20982) [новый протокол](https://github.com/ydb-platform/ydb/issues/11064) в [Node Broker](./concepts/glossary#node-broker.md), устраняющий всплески сетевого трафика на больших кластерах (более 1000 серверов), связанного с рассылкой информации об узлах.
 
 #### YDB UI
 
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/17839) [ошибка](https://github.com/ydb-platform/ydb-embedded-ui/issues/18615), из-за которой не все таблетки отображались на вкладке Tablets в разделе диагностики.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/17839) [ошибка](https://github.com/ydb-platform/ydb/issues/15230), из-за которой не все таблетки отображались на вкладке Tablets в разделе диагностики.
 * Исправлена [ошибка](https://github.com/ydb-platform/ydb/issues/18735), из-за которой на вкладке Storage в разделе диагностики базы данных отображались не только узлы хранения.
 * Исправлена [ошибка сериализации](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164), которая могла приводить к падению при открытии статистики выполнения запроса.
 * Изменена логика перехода узлов в критическое состояние (например, заполненный CPU pool теперь вызывает предупреждение, а не критическое состояние).

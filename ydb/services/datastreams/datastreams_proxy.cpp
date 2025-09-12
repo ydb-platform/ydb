@@ -8,16 +8,16 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
-#include <ydb/core/persqueue/partition.h>
-#include <ydb/core/persqueue/pq_rl_helpers.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/events/internal.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
-#include <ydb/core/persqueue/list_all_topics_actor.h>
+#include <ydb/core/persqueue/public/list_topics/list_all_topics_actor.h>
 
 #include <util/folder/path.h>
 
@@ -953,7 +953,7 @@ namespace NKikimr::NDataStreams::V1 {
             Request_->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
             return Die(ctx);
         }
-        ctx.Register(NPersQueue::MakeListAllTopicsActor(SelfId(), Request_->GetDatabaseName().GetOrElse(""),
+        ctx.Register(NPQ::MakeListAllTopicsActor(SelfId(), Request_->GetDatabaseName().GetOrElse(""),
                                                         this->Request_->GetSerializedToken(), GetProtoRequest()->recurse(),
                                                         GetProtoRequest()->exclusive_start_stream_name(), limit));
         Become(&TListStreamsActor::StateWork);

@@ -13,7 +13,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -2798,8 +2798,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 };
 
                 NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
-                if (AppData()->FeatureFlags.GetEnableSystemViews() &&
-                    SystemViewResolver->IsSystemViewPath(entry.Path, sysViewPath)) {
+                if (SystemViewResolver->IsSystemViewPath(entry.Path, sysViewPath)) {
                     auto& fallbackEntryInfo = context->EntriesFallbackInfo[i];
                     context->HasSysViewEntries = true;
                     if (fallbackEntryInfo.IsImplicit) {

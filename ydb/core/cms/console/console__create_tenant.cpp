@@ -127,7 +127,7 @@ public:
 
         Tenant->IsExternalSubdomain = Self->FeatureFlags.GetEnableExternalSubdomains();
         Tenant->IsExternalHive = Self->FeatureFlags.GetEnableExternalHive();
-        Tenant->IsExternalSysViewProcessor = Self->FeatureFlags.GetEnableSystemViews();
+        Tenant->IsExternalSysViewProcessor = true;
         Tenant->IsExternalStatisticsAggregator = Self->FeatureFlags.GetEnableStatistics();
         Tenant->IsExternalBackupController = Self->FeatureFlags.GetEnableBackupService();
         Tenant->IsGraphShardEnabled = Self->FeatureFlags.GetEnableGraphShard();

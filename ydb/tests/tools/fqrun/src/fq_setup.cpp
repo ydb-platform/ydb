@@ -48,12 +48,7 @@ private:
         Server = MakeIntrusive<NKikimr::Tests::TServer>(serverSettings);
         Server->GetRuntime()->SetDispatchTimeout(TDuration::Max());
 
-        Server->EnableGRpc(NYdbGrpc::TServerOptions()
-            .SetHost("localhost")
-            .SetPort(grpcPort)
-            .SetLogger(NYdbGrpc::CreateActorSystemLogger(*GetRuntime()->GetActorSystem(0), NKikimrServices::GRPC_SERVER))
-            .SetGRpcShutdownDeadline(TDuration::Zero())
-        );
+        Server->EnableGRpc(GetGrpcSettings(grpcPort, 0, TDuration::Zero()));
 
         Client = std::make_unique<NKikimr::Tests::TClient>(serverSettings);
         Client->InitRootScheme();
@@ -192,7 +187,7 @@ public:
     {
         const ui32 grpcPort = Settings.FirstGrpcPort ? Settings.FirstGrpcPort : PortManager.GetPort();
         if (Settings.GrpcEnabled && Settings.VerbosityLevel >= EVerbosity::Info) {
-            Cout << CoutColors.Cyan() << "Domain gRPC port: " << CoutColors.Default() << grpcPort << Endl;
+            Cout << CoutColors.Cyan() << "Domain gRPC port: " << CoutColors.Default() << FormatGrpcLink(grpcPort) << Endl;
         }
 
         Settings.GrpcEnabled = true;
@@ -203,7 +198,7 @@ public:
         InitializeTenantNodes();
 
         if (Settings.MonitoringEnabled && Settings.VerbosityLevel >= EVerbosity::Info) {
-            Cout << CoutColors.Cyan() << "Monitoring port: " << CoutColors.Default() << GetRuntime()->GetMonPort() << Endl;
+            Cout << CoutColors.Cyan() << "Monitoring port: " << CoutColors.Default() << FormatMonitoringLink(GetRuntime()->GetMonPort(), "internal") << Endl;
         }
     }
 
@@ -288,7 +283,7 @@ public:
     }
 
 private:
-    NActors::TTestActorRuntime* GetRuntime() const {
+    NActors::TTestActorRuntime* GetRuntime() const override {
         return Server->GetRuntime();
     }
 

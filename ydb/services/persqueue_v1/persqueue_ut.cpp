@@ -12,7 +12,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
@@ -2575,7 +2575,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
     Y_UNIT_TEST(SetupWriteSession) {
         NPersQueue::TTestServer server{PQSettings(0, 2), false};
-        server.ServerSettings.SetEnableSystemViews(false);
         server.StartServer();
 
         server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_INFO);

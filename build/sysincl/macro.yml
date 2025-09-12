@@ -1207,3 +1207,7 @@
 - source_filter: "^contrib/libs/openthread"
   includes:
     - OPENTHREAD_CONFIG_FILE
+
+- source_filter: "^contrib/libs/llvm/flang-rt"
+  includes:
+    - BACKTRACE_HEADER: $U/execinfo.h

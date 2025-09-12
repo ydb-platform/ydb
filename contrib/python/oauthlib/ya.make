@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.2.2)
+VERSION(3.3.1)
 
 LICENSE(BSD-3-Clause)
 
@@ -60,6 +60,13 @@ PY_SRCS(
     oauthlib/oauth2/rfc8628/__init__.py
     oauthlib/oauth2/rfc8628/clients/__init__.py
     oauthlib/oauth2/rfc8628/clients/device.py
+    oauthlib/oauth2/rfc8628/endpoints/__init__.py
+    oauthlib/oauth2/rfc8628/endpoints/device_authorization.py
+    oauthlib/oauth2/rfc8628/endpoints/pre_configured.py
+    oauthlib/oauth2/rfc8628/errors.py
+    oauthlib/oauth2/rfc8628/grant_types/__init__.py
+    oauthlib/oauth2/rfc8628/grant_types/device_code.py
+    oauthlib/oauth2/rfc8628/request_validator.py
     oauthlib/openid/__init__.py
     oauthlib/openid/connect/__init__.py
     oauthlib/openid/connect/core/__init__.py

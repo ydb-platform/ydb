@@ -28,7 +28,8 @@ class OpenIDConnectEndpointTest(TestCase):
             'redirect_uri': 'https://a.b/cb',
             'response_type': 'code',
             'client_id': 'abcdef',
-            'scope': 'hello openid'
+            'scope': 'hello openid',
+            'ui_locales': 'en-US'
         }
         self.url = 'http://a.b/path?' + urlencode(params)
 
@@ -76,3 +77,4 @@ class OpenIDConnectEndpointTest(TestCase):
         self.assertEqual(creds['prompt'], {'consent'})
         self.assertEqual(creds['nonce'], 'abcd')
         self.assertEqual(creds['display'], 'touch')
+        self.assertEqual(creds['ui_locales'], ['en-US'])

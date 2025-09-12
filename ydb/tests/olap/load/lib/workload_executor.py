@@ -532,7 +532,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
         # Копируем cluster.yaml (если указан cluster_path)
         cluster_result = cls._copy_single_config(
-            host, cls.cluster_path, "/Berkanavt/kikimr/cfg/config.yaml",
+            host, cls.cluster_path, "/Berkanavt/nemesis/cfg/config.yaml",
             "cluster config", None, host_log
         )
         if not cluster_result["success"]:

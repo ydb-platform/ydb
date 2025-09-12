@@ -13,6 +13,7 @@ PEERDIR(
 )
 
 SRCS(
+    backup.cpp
     cache.cpp
     events.cpp
     helpers.cpp

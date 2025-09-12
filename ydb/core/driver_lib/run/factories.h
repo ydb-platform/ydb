@@ -4,7 +4,7 @@
 #include <ydb/core/tx/datashard/export_iface.h>
 #include <ydb/core/tx/replication/service/transfer_writer_factory.h>
 #include <ydb/core/tx/schemeshard/schemeshard_operation_factory.h>
-#include <ydb/core/persqueue/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/base/grpc_service_factory.h>
 

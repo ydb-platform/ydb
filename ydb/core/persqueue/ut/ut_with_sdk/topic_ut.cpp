@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             auto& c = p.GetPartitionConsumerStats();
             UNIT_ASSERT_VALUES_EQUAL(true, c.has_value());
             UNIT_ASSERT_VALUES_EQUAL(0, c->GetCommittedOffset());
-            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(7), c->GetMaxWriteTimeLag()); // 
+            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(7), c->GetMaxWriteTimeLag()); //
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxReadTimeLag());
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxCommittedTimeLag());
             UNIT_ASSERT_TIME_EQUAL(TInstant::Now(), c->GetLastReadTime(), TDuration::Seconds(3)); // why not zero?
@@ -161,6 +161,83 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_TIME_EQUAL(TInstant::Now(), c->GetLastReadTime(), TDuration::Seconds(3));
             UNIT_ASSERT_VALUES_EQUAL(2, c->GetLastReadOffset());
         }
+    }
+
+    Y_UNIT_TEST(ReadWithBadTopic) {
+        TTopicSdkTestSetup setup = CreateSetup();
+
+        TTopicClient client(setup.MakeDriver());
+
+        std::vector<std::string> topics = { "//", "==", "--", "**", "@@", "!!", "##", "$$", "\%\%", "^^", "::", "&&", "??",
+             "\\\\", "||", "++", "--", ",,", "..", "``", "~~", ";;", "::", "((", "))", "[[", "]]", "{{", "}}", ""};
+        for (auto& topic : topics) {
+            Cerr << "Checking topic: '" << topic << "'" << Endl;
+
+            TReadSessionSettings settings;
+            settings.AppendTopics(TTopicReadSettings().Path(topic));
+            settings.ConsumerName(TEST_CONSUMER);
+            auto session = client.CreateReadSession(settings);
+            auto event = session->GetEvent(true);
+            // check that verify didn`t happened
+            UNIT_ASSERT(event.has_value());
+        }
+    }
+
+    Y_UNIT_TEST(ReadWithBadConsumer) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        std::vector<std::string> consumers = { "//", "==", "--", "**", "@@", "!!", "##", "$$", "\%\%", "^^", "::", "&&", "??",
+             "\\\\", "||", "++", "--", ",,", "..", "``", "~~", ";;", "::", "((", "))", "[[", "]]", "{{", "}}", ""};
+        for (auto& consumer : consumers) {
+            Cerr << "Checking consumer: '" << consumer << "'" << Endl;
+
+            TReadSessionSettings settings;
+            settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC));
+            settings.ConsumerName(consumer);
+            auto session = client.CreateReadSession(settings);
+            auto event = session->GetEvent(true);
+            // check that verify didn`t happened
+            UNIT_ASSERT(event.has_value());
+        }
+    }
+
+    Y_UNIT_TEST(Read_WithConsumer_WithBadPartitions) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        TReadSessionSettings settings;
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC)
+            .AppendPartitionIds(0)
+            .AppendPartitionIds(101)
+            .AppendPartitionIds(113));
+        settings.ConsumerName(TEST_CONSUMER);
+        auto session = client.CreateReadSession(settings);
+        auto event = session->GetEvent(true);
+        // check that verify didn`t happened
+        UNIT_ASSERT(event.has_value());
+    }
+
+    Y_UNIT_TEST(Read_WithoutConsumer_WithBadPartitions) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        TReadSessionSettings settings;
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC)
+            .AppendPartitionIds(0)
+            .AppendPartitionIds(101)
+            .AppendPartitionIds(113));
+        settings.WithoutConsumer();
+        auto session = client.CreateReadSession(settings);
+        auto event = session->GetEvent(true);
+        // check that verify didn`t happened
+        UNIT_ASSERT(event.has_value());
     }
 }
 

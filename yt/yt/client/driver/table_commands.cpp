@@ -87,16 +87,24 @@ void TReadTableCommand::Register(TRegistrar registrar)
             return command->Options.OmitInaccessibleColumns;
         })
         .Default(false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "omit_inaccessible_rows",
+        [] (TThis* command) -> auto& {
+            return command->Options.OmitInaccessibleRows;
+        })
+        .Default(false);
 }
 
 void TReadTableCommand::DoExecute(ICommandContextPtr context)
 {
     YT_LOG_DEBUG("Executing \"read_table\" command (Path: %v, Unordered: %v, StartRowIndexOnly: %v, "
-        "OmitInaccessibleColumns: %v)",
+        "OmitInaccessibleColumns: %v, OmitInaccessibleRows: %v)",
         Path,
         Unordered,
         StartRowIndexOnly,
-        Options.OmitInaccessibleColumns);
+        Options.OmitInaccessibleColumns,
+        Options.OmitInaccessibleRows);
     Options.Ping = true;
     Options.EnableTableIndex = ControlAttributes->EnableTableIndex;
     Options.EnableRowIndex = ControlAttributes->EnableRowIndex;
@@ -952,7 +960,7 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<EStatisticsAggregation>(
+    registrar.ParameterWithUniversalAccessor<std::optional<EStatisticsAggregation>>(
         "statistics_aggregation",
         [] (TThis* command) -> auto& {
             return command->Options.StatisticsAggregation;

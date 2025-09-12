@@ -4,7 +4,7 @@
 #include "actors/direct_read_actor.h"
 
 #include <ydb/core/client/server/grpc_base.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 
 #include <ydb/library/actors/core/actorid.h>

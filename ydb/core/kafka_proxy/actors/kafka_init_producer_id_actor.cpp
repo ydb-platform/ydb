@@ -11,7 +11,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/fetch_request_actor.h>
+#include <ydb/core/persqueue/public/fetcher/fetch_request_actor.h>
 #include <ydb/core/protos/kafka.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -59,9 +59,13 @@ namespace NKafka {
                 Die(ctx);
                 return;
             }
-            Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
+            Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
             KAFKA_LOG_D("Bootstrapping actor for transactional producer. Sending init table request to KQP.");
-            Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
+            if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
+                Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
+            } else {
+                Kqp->SendCreateSessionRequest(ctx);
+            }
             Become(&TKafkaInitProducerIdActor::StateWork);
         } else {
             TInitProducerIdResponseData::TPtr response = CreateResponseWithRandomProducerId(ctx);
@@ -243,7 +247,7 @@ namespace NKafka {
     // params builders
     NYdb::TParams TKafkaInitProducerIdActor::BuildSelectOrDeleteByTransactionalIdParams() {
         NYdb::TParamsBuilder params;
-        params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+        params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
         params.AddParam("$TransactionalId").Utf8(*TransactionalId).Build();
 
         return params.Build();
@@ -251,7 +255,7 @@ namespace NKafka {
 
     NYdb::TParams TKafkaInitProducerIdActor::BuildInsertNewProducerStateParams() {
         NYdb::TParamsBuilder params;
-        params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+        params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
         params.AddParam("$TransactionalId").Utf8(*TransactionalId).Build();
         params.AddParam("$ProducerEpoch").Int16(0).Build();
         params.AddParam("$UpdatedAt").Datetime(TInstant::Now()).Build();
@@ -261,7 +265,7 @@ namespace NKafka {
 
     NYdb::TParams TKafkaInitProducerIdActor::BuildUpdateProducerStateParams(ui16 newProducerEpoch) {
         NYdb::TParamsBuilder params;
-        params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+        params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
         params.AddParam("$TransactionalId").Utf8(*TransactionalId).Build();
         params.AddParam("$ProducerEpoch").Int16(newProducerEpoch).Build();
         params.AddParam("$UpdatedAt").Datetime(TInstant::Now()).Build();
@@ -362,7 +366,7 @@ namespace NKafka {
         return std::regex_replace(
             templateStr.c_str(),
             std::regex("<table_name>"),
-            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->GetStorageTablePath().c_str()
+            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
         );
     }
 

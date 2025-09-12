@@ -6,7 +6,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/parser.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/common/parser.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
@@ -2972,6 +2972,177 @@ public:
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
+    }
+
+    template<class TSecretSchemaOp>
+    class TSecretSchemaModifier {
+    public:
+        TSecretSchemaModifier(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+            : Gateway_(gateway)
+            , SessionCtx_(sessionCtx)
+        {
+        }
+
+        TFuture<TGenericResult> StartModification(const TString& cluster, const NYql::TSecretSettings& settings) {
+            if (!SessionCtx_->Config().FeatureFlags.GetEnableSchemaSecrets()) {
+                return MakeErrorFuture<IKikimrGateway::TGenericResult>(
+                    std::make_exception_ptr(yexception() << "Secrets are disabled. Please contact your system administrator to enable it")
+                );
+            }
+
+            try {
+                if (cluster != SessionCtx_->GetCluster()) {
+                    return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+                }
+
+                TString error;
+                std::pair<TString, TString> pathPair;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, SessionCtx_->GetDatabase(), pathPair, error, /* createDir */ false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+
+                NKikimrSchemeOp::TModifyScheme tx;
+                tx.SetWorkingDir(pathPair.first);
+                tx.SetOperationType(GetOperationType());
+
+                TSecretSchemaOp& op = GetSecretSchemaOp(tx);
+                op.SetName(pathPair.second);
+                FillSchemaOperation(settings, op);
+
+                if (SessionCtx_->Query().PrepareOnly) {
+                    auto& phyQuery = *SessionCtx_->Query().PreparingQuery->MutablePhysicalQuery();
+                    auto& phyTx = *phyQuery.AddTransactions();
+                    phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                    FillKqpSchemeOperation(*phyTx.MutableSchemeOperation(), std::move(tx));
+
+                    TGenericResult result;
+                    result.SetSuccess();
+                    return MakeFuture(result);
+                } else {
+                    return Gateway_->ModifyScheme(std::move(tx));
+                }
+            } catch (yexception& e) {
+                return MakeFuture(ResultFromException<TGenericResult>(e));
+            }
+        }
+
+    protected:
+        virtual NKikimrSchemeOp::EOperationType GetOperationType() const = 0;
+        virtual void FillKqpSchemeOperation(NKqpProto::TKqpSchemeOperation& op, NKikimrSchemeOp::TModifyScheme&& tx) const = 0;
+        virtual TSecretSchemaOp& GetSecretSchemaOp(NKikimrSchemeOp::TModifyScheme& tx) const = 0;
+        virtual void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const = 0;
+
+    private:
+        TIntrusivePtr<IKqpGateway> Gateway_;
+        TIntrusivePtr<TKikimrSessionContext> SessionCtx_;
+    };
+
+    template<class TSecretSchemaOp>
+    class TCreateSecretSchemaModifier : public TSecretSchemaModifier<TSecretSchemaOp> {
+    public:
+        TCreateSecretSchemaModifier(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+            : TSecretSchemaModifier<TSecretSchemaOp>(gateway, sessionCtx)
+        {
+        }
+
+    protected:
+        NKikimrSchemeOp::EOperationType GetOperationType() const override {
+            return NKikimrSchemeOp::ESchemeOpCreateSecret;
+        }
+
+        void FillKqpSchemeOperation(NKqpProto::TKqpSchemeOperation& op, NKikimrSchemeOp::TModifyScheme&& tx) const override {
+            op.MutableCreateSecret()->Swap(&tx);
+        }
+
+        TSecretSchemaOp& GetSecretSchemaOp(NKikimrSchemeOp::TModifyScheme& tx) const override {
+            return *tx.MutableCreateSecret();
+        }
+
+        void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
+            op.SetValue(settings.Value);
+            op.SetInheritPermissions(settings.InheritPermissions);
+        }
+
+    private:
+        TIntrusivePtr<IKqpGateway> Gateway_;
+        TIntrusivePtr<TKikimrSessionContext> SessionCtx_;
+    };
+
+    template<class TSecretSchemaOp>
+    class TAlterSecretSchemaModifier : public TSecretSchemaModifier<TSecretSchemaOp> {
+    public:
+        TAlterSecretSchemaModifier(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+            : TSecretSchemaModifier<TSecretSchemaOp>(gateway, sessionCtx)
+        {
+        }
+
+    protected:
+        NKikimrSchemeOp::EOperationType GetOperationType() const override {
+            return NKikimrSchemeOp::ESchemeOpAlterSecret;
+        }
+
+        void FillKqpSchemeOperation(NKqpProto::TKqpSchemeOperation& op, NKikimrSchemeOp::TModifyScheme&& tx) const override {
+            op.MutableAlterSecret()->Swap(&tx);
+        }
+
+        TSecretSchemaOp& GetSecretSchemaOp(NKikimrSchemeOp::TModifyScheme& tx) const override {
+            return *tx.MutableAlterSecret();
+        }
+
+        void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
+            op.SetValue(settings.Value);
+        }
+
+    private:
+        TIntrusivePtr<IKqpGateway> Gateway_;
+        TIntrusivePtr<TKikimrSessionContext> SessionCtx_;
+    };
+
+    template<class TSecretSchemaOp>
+    class TDropSecretSchemaModifier : public TSecretSchemaModifier<TSecretSchemaOp> {
+    public:
+        TDropSecretSchemaModifier(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+            : TSecretSchemaModifier<TSecretSchemaOp>(gateway, sessionCtx)
+        {
+        }
+
+    protected:
+        NKikimrSchemeOp::EOperationType GetOperationType() const override {
+            return NKikimrSchemeOp::ESchemeOpDropSecret;
+        }
+
+        void FillKqpSchemeOperation(NKqpProto::TKqpSchemeOperation& op, NKikimrSchemeOp::TModifyScheme&& tx) const override {
+            op.MutableDropSecret()->Swap(&tx);
+        }
+
+        TSecretSchemaOp& GetSecretSchemaOp(NKikimrSchemeOp::TModifyScheme& tx) const override {
+            return *tx.MutableDrop();
+        }
+
+        void FillSchemaOperation(const NYql::TSecretSettings&, TSecretSchemaOp&) const override {
+        }
+
+    private:
+        TIntrusivePtr<IKqpGateway> Gateway_;
+        TIntrusivePtr<TKikimrSessionContext> SessionCtx_;
+    };
+
+    TFuture<TGenericResult> CreateSecret(const TString& cluster, const NYql::TSecretSettings& settings) override {
+        CHECK_PREPARED_DDL(CreateSecret);
+
+        return TCreateSecretSchemaModifier<NKikimrSchemeOp::TSecretSchemaOp>(Gateway, SessionCtx).StartModification(cluster, settings);
+    }
+
+    TFuture<TGenericResult> AlterSecret(const TString& cluster, const NYql::TSecretSettings& settings) override {
+        CHECK_PREPARED_DDL(AlterSecret);
+
+        return TAlterSecretSchemaModifier<NKikimrSchemeOp::TSecretSchemaOp>(Gateway, SessionCtx).StartModification(cluster, settings);
+    }
+
+    TFuture<TGenericResult> DropSecret(const TString& cluster, const NYql::TSecretSettings& settings) override {
+        CHECK_PREPARED_DDL(DropSecret);
+
+        return TDropSecretSchemaModifier<NKikimrSchemeOp::TDrop>(Gateway, SessionCtx).StartModification(cluster, settings);
     }
 
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {

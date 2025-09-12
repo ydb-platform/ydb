@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/random/random.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 #include "partition_chooser_impl__old_chooser_actor.h"
 #include "partition_chooser_impl__sm_chooser_actor.h"

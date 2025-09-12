@@ -12,8 +12,8 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/persqueue/pq_database.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/public/pq_database.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 
 #include <ydb/library/actors/protos/actors.pb.h>
 #include <ydb/library/actors/core/mon.h>

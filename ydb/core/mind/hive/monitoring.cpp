@@ -2588,13 +2588,11 @@ public:
 
 class TTxMonEvent_SetDown : public TTxSetDown, public TLoggedMonTransaction {
 public:
-    const TActorId Source;
     TString Response;
 
     TTxMonEvent_SetDown(const TActorId& source, TNodeId nodeId, bool down, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
-        : TTxSetDown(nodeId, down, hive)
+        : TTxSetDown(nodeId, down, hive, source)
         , TLoggedMonTransaction(ev, hive)
-        , Source(source)
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOWN; }

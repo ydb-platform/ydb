@@ -374,7 +374,6 @@ public:
     }
 
     void Handle(TEvCms::TEvPermissionResponse::TPtr& ev) {
-        Cerr << "Handle PermissionResponse\n";
         const auto& record = ev->Get()->Record;
 
         switch (record.GetStatus().GetCode()) {
@@ -625,19 +624,19 @@ class TCreateMaintenanceTask
         for (const auto& group : request.action_groups()) {
             Y_ABORT_UNLESS(HasSingleCompositeActionGroup || group.actions().size() == 1);
             for (const auto& action : group.actions()) {
+                const int actionNo = cmsRequest.ActionsSize();
                 if (action.has_lock_action()) {
                     ConvertAction(action.lock_action(), *cmsRequest.AddActions());
                 } else if (action.has_drain_action()) {
-                    const int actionNo = cmsRequest.ActionsSize();
                     ConvertAction(action.drain_action(), *cmsRequest.AddActions());
                     const auto nodeId = action.drain_action().scope().node_id();
-                    Cerr << "Send DrainNode\n";
                     NTabletPipe::SendData(SelfId(), HivePipe(SelfId()), new TEvHive::TEvDrainNode(nodeId), actionNo);
-                    PendingDrainActions.insert(actionNo);
+                    PendingHiveActions.insert(actionNo);
                 } else if (action.has_cordon_action()) {
                     ConvertAction(action.cordon_action(), *cmsRequest.AddActions());
                     const auto nodeId = action.cordon_action().scope().node_id();
                     NTabletPipe::SendData(SelfId(), HivePipe(SelfId()), new TEvHive::TEvSetDown(nodeId));
+                    PendingHiveActions.insert(actionNo);
                 } else {
                     Y_ABORT("unreachable");
                 }
@@ -645,22 +644,21 @@ class TCreateMaintenanceTask
         }
     }
 
-    void CheckPendingDrainActions() {
-        if (PendingDrainActions.empty()) {
+    void CheckPendingHiveActions() {
+        if (PendingHiveActions.empty()) {
             Send(CmsActorId, std::move(CmsRequest));
             Become(&TThis::StateWork);
         }
     }
 
     void Handle(TEvHive::TEvDrainNodeAck::TPtr& ev) {
-        Cerr << "Handle DrainNodeAck\n";
         int actionNo = ev->Cookie;
-        if (!PendingDrainActions.erase(actionNo)) {
+        if (!PendingHiveActions.erase(actionNo)) {
             return;
         }
         ui64 drainSeqNo = ev->Get()->Record.GetSeqNo();
         CmsRequest->Record.MutableActions(actionNo)->SetMaintenanceTaskContext(ToString(drainSeqNo));
-        CheckPendingDrainActions();
+        CheckPendingHiveActions();
     }
 
     void Handle(TEvHive::TEvDrainNodeResult::TPtr& ev) {
@@ -670,20 +668,34 @@ class TCreateMaintenanceTask
         }
     }
 
+    void Handle(TEvHive::TEvSetDownReply::TPtr& ev) {
+        int actionNo = ev->Cookie;
+        if (!PendingHiveActions.erase(actionNo)) {
+            return;
+        }
+        auto status = ev->Get()->Record.GetStatus();
+        if (status != NKikimrProto::OK) {
+            Reply(Ydb::StatusIds::GENERIC_ERROR, "Cordon failed");
+        }
+        CheckPendingHiveActions();
+    }
+
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
         THiveInteractor::Close(SelfId());
+        Reply(Ydb::StatusIds::UNAVAILABLE, "Hive request failed");
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) {
         TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
             THiveInteractor::Close(SelfId());
+            Reply(Ydb::StatusIds::UNAVAILABLE, "Hive request failed");
         }
     }
 
 private:
     THolder<TEvCms::TEvPermissionRequest> CmsRequest = MakeHolder<TEvCms::TEvPermissionRequest>();
-    std::unordered_set<int> PendingDrainActions;
+    std::unordered_set<int> PendingHiveActions;
 
 public:
     TCreateMaintenanceTask(TEvCms::TEvCreateMaintenanceTaskRequest::TPtr& ev, const TActorId& cmsActorId, TCmsStatePtr cmsState = nullptr)
@@ -704,7 +716,7 @@ public:
 
         Become(&TThis::StateWaitHive);
 
-        CheckPendingDrainActions();
+        CheckPendingHiveActions();
     }
 
     const TString& GetTaskUid() const {
@@ -722,6 +734,7 @@ public:
             hFunc(TEvHive::TEvDrainNodeResult, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            hFunc(TEvHive::TEvSetDownReply, Handle);
         }
     }
 
@@ -959,12 +972,14 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
         THiveInteractor::Close(SelfId());
+        Reply(Ydb::StatusIds::UNAVAILABLE, "Hive request failed");
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) {
         TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
             THiveInteractor::Close(SelfId());
+            Reply(Ydb::StatusIds::UNAVAILABLE, "Hive request failed");
         }
     }
 
@@ -1020,6 +1035,7 @@ class TDropMaintenanceTask
         cmsRequest->Record.SetCommand(NKikimrCms::TManageRequestRequest::REJECT);
 
         Send(CmsActorId, std::move(cmsRequest));
+        ++Requests;
     }
 
     void DropPermissions(const TTaskInfo& task) {
@@ -1035,10 +1051,12 @@ class TDropMaintenanceTask
             {
                 const ui32 nodeId = FromString(permission.Action.GetHost());
                 NTabletPipe::SendData(SelfId(), HivePipe(SelfId()), new TEvHive::TEvSetDown(nodeId, false));
+                ++Requests;
             }
         }
 
         Send(CmsActorId, std::move(cmsRequest));
+        ++Requests;
     }
 
 public:
@@ -1074,6 +1092,9 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvCms::TEvManageRequestResponse, HandleDropRequest);
             hFunc(TEvCms::TEvManagePermissionResponse, Handle<TEvCms::TEvManagePermissionResponse>);
+            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            hFunc(TEvHive::TEvSetDownReply, Handle);
         }
     }
 
@@ -1092,7 +1113,7 @@ public:
 
         switch (record.GetStatus().GetCode()) {
         case NKikimrCms::TStatus::OK:
-            return Reply(Ydb::StatusIds::SUCCESS);
+            return MaybeReply();
         case NKikimrCms::TStatus::WRONG_REQUEST:
             return Reply(Ydb::StatusIds::BAD_REQUEST, record.GetStatus().GetReason());
         default:
@@ -1101,6 +1122,7 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
+        Reply(Ydb::StatusIds::UNAVAILABLE, "Hive request failed");
         THiveInteractor::Close(SelfId());
     }
 
@@ -1108,6 +1130,21 @@ public:
         TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
             THiveInteractor::Close(SelfId());
+            Reply(Ydb::StatusIds::UNAVAILABLE, "Hive request failed");
+        }
+    }
+
+    void Handle(TEvHive::TEvSetDownReply::TPtr &ev) {
+        if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
+            return MaybeReply();
+        } else {
+            return Reply(Ydb::StatusIds::GENERIC_ERROR, "Node not found");
+        }
+    }
+
+    void MaybeReply() {
+        if (--Requests == 0) {
+            return Reply(Ydb::StatusIds::SUCCESS);
         }
     }
 
@@ -1115,6 +1152,9 @@ public:
         THiveInteractor::Shutdown(TActivationContext::AsActorContext());
         TBase::PassAway();
     }
+
+private:
+    i64 Requests = 0;
 
 }; // TDropMaintenanceTask
 

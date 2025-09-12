@@ -658,3 +658,7 @@ message TEvSetDown {
     optional uint32 NodeId = 1;
     optional bool Down = 2;
 }
+
+message TEvSetDownReply {
+    optional NKikimrProto.EReplyStatus Status = 1;
+}

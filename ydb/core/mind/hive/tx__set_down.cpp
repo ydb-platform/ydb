@@ -8,12 +8,16 @@ public:
     const bool Down;
     TSideEffects SideEffects;
     bool Forward;
+    const TActorId Source;
+    const ui64 Cookie;
 
-    TTxSetDown(TNodeId nodeId, bool down, TSelf* hive, bool forward = false)
+    TTxSetDown(TNodeId nodeId, bool down, TSelf* hive, TActorId source, ui64 cookie = 0, bool forward = false)
         : TBase(hive)
         , NodeId(nodeId)
         , Down(down)
         , Forward(forward)
+        , Source(source)
+        , Cookie(cookie)
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOWN; }
@@ -29,6 +33,8 @@ public:
                     SideEffects.Callback([self = Self->SelfId(), tablet = *tenantHive, node = NodeId] {
                         NTabletPipe::SendData(self, tablet, new TEvHive::TEvSetDown(node));
                     });
+                } else {
+                    SideEffects.Send(Source, new TEvHive::TEvSetDownReply(), 0, Cookie);
                 }
             }
             return true;
@@ -39,7 +45,11 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
-        SetDown(db);
+        if (!SetDown(db)) {
+            auto reply = std::make_unique<TEvHive::TEvSetDownReply>();
+            reply->Record.SetStatus(NKikimrProto::ERROR);
+            SideEffects.Send(Source, reply.release());
+        }
         return true;
     }
 
@@ -51,7 +61,7 @@ public:
 
 ITransaction* THive::CreateSetDown(TEvHive::TEvSetDown::TPtr& ev) {
     const auto& record = ev->Get()->Record;
-    return new TTxSetDown(record.GetNodeId(), record.GetDown(), this, true);
+    return new TTxSetDown(record.GetNodeId(), record.GetDown(), this, ev->Sender, ev->Cookie, true);
 }
 
 } // NKikimr::NHive

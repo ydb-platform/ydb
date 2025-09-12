@@ -326,7 +326,6 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         ui64 requestDrainCount = 0;
         auto observer = env.AddObserver([&](auto&& ev) {
             if (ev->Type == TEvHive::EvDrainNode) {
-                Cerr << "Observe\n";
                 env.Send(new IEventHandle(ev->Sender, env.GetSender(), new TEvHive::TEvDrainNodeAck(), 0, ev->Cookie), 0);
             }
             if (ev->Type == TEvHive::EvRequestDrainInfo) {
@@ -338,14 +337,12 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
             }
         });
 
-        Cerr << env.GetCurrentTime() << ": CheckCreate\n";
         env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
             MakeActionGroup(
                 MakeDrainAction(env.GetNodeId(1))
             )
         );
 
-        Cerr << env.GetCurrentTime() << ": CheckGet\n";
         auto getResult1 = env.CheckMaintenanceTaskGet("task-1", Ydb::StatusIds::SUCCESS);
         auto status1 = getResult1.action_group_states(0).action_states(0).status();
         UNIT_ASSERT(status1 == ActionState::ACTION_STATUS_IN_PROGRESS);
@@ -356,6 +353,12 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
 
     Y_UNIT_TEST(TestCordonAction) {
         TCmsTestEnv env(8);
+
+        auto observer = env.AddObserver([&](auto&& ev) {
+            if (ev->Type == TEvHive::EvSetDown) {
+                env.Send(new IEventHandle(ev->Sender, env.GetSender(), new TEvHive::TEvSetDownReply(), 0, ev->Cookie), 0);
+            }
+        });
 
         env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
             MakeActionGroup(

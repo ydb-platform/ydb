@@ -92,6 +92,7 @@ namespace NKikimr {
             EvConfigureScaleRecommenderReply,
             EvDrainNodeAck,
             EvResponseDrainInfo,
+            EvSetDownReply,
 
             EvEnd
         };
@@ -944,6 +945,7 @@ namespace NKikimr {
                 Record.SetDown(down);
             }
         };
+        struct TEvSetDownReply : TEventPB<TEvSetDownReply, NKikimrHive::TEvSetDownReply, EvSetDownReply> {};
     };
 
     IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info);

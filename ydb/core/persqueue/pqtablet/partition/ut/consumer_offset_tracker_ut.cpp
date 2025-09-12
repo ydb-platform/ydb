@@ -153,3 +153,60 @@ TEST(TImportantConsumerOffsetTrackerTest, Waiting400AndRead500) {
     EXPECT_FALSE(tracker.ShouldKeepCurrentKey(KEYS[2], KEYS[3], NOW));
     EXPECT_TRUE(tracker.ShouldKeepCurrentKey(KEYS[3], KEYS[4], NOW));
 }
+
+TEST(TImportantConsumerOffsetTrackerTest, ExactMatchSingleConsumerMaxRetention) {
+    std::vector<TImportantConsumerOffsetTracker::TConsumerOffset> consumers{
+        {.RetentionPeriod = TDuration::Max(), .Offset = 30},
+    };
+    TImportantConsumerOffsetTracker tracker(std::move(consumers));
+    EXPECT_FALSE(tracker.ShouldKeepCurrentKey(KEYS[0], KEYS[1], NOW));
+    EXPECT_FALSE(tracker.ShouldKeepCurrentKey(KEYS[1], KEYS[2], NOW));
+    EXPECT_TRUE(tracker.ShouldKeepCurrentKey(KEYS[2], KEYS[3], NOW));
+    EXPECT_TRUE(tracker.ShouldKeepCurrentKey(KEYS[3], KEYS[4], NOW));
+}
+
+TEST(TImportantConsumerOffsetTrackerTest, ExactMatchSingleConsumerFiniteRetention) {
+    std::vector<TImportantConsumerOffsetTracker::TConsumerOffset> consumers{
+        {.RetentionPeriod = TDuration::Seconds(500), .Offset = 30},
+    };
+    TImportantConsumerOffsetTracker tracker(std::move(consumers));
+    EXPECT_FALSE(tracker.ShouldKeepCurrentKey(KEYS[0], KEYS[1], NOW));
+    EXPECT_FALSE(tracker.ShouldKeepCurrentKey(KEYS[1], KEYS[2], NOW));
+    EXPECT_TRUE(tracker.ShouldKeepCurrentKey(KEYS[2], KEYS[3], NOW));
+    EXPECT_TRUE(tracker.ShouldKeepCurrentKey(KEYS[3], KEYS[4], NOW));
+}
+
+TEST(TImportantConsumerOffsetTrackerTest, ExactMatchMultipleConsumers) {
+    std::vector<TImportantConsumerOffsetTracker::TConsumerOffset> consumers{
+        {.RetentionPeriod = TDuration::Seconds(400), .Offset = 20},
+        {.RetentionPeriod = TDuration::Max(), .Offset = 30},
+    };
+    TImportantConsumerOffsetTracker tracker(std::move(consumers));
+    EXPECT_FALSE(tracker.ShouldKeepCurrentKey(KEYS[0], KEYS[1], NOW));
+    EXPECT_FALSE(tracker.ShouldKeepCurrentKey(KEYS[1], KEYS[2], NOW));
+    EXPECT_TRUE(tracker.ShouldKeepCurrentKey(KEYS[2], KEYS[3], NOW));
+    EXPECT_TRUE(tracker.ShouldKeepCurrentKey(KEYS[3], KEYS[4], NOW));
+}
+
+TEST(TImportantConsumerOffsetTrackerTest, MultipleExactMatches) {
+    std::vector<TImportantConsumerOffsetTracker::TConsumerOffset> consumers{
+        {.RetentionPeriod = TDuration::Seconds(500), .Offset = 20},
+        {.RetentionPeriod = TDuration::Max(), .Offset = 30},
+    };
+    TImportantConsumerOffsetTracker tracker(std::move(consumers));
+    EXPECT_FALSE(tracker.ShouldKeepCurrentKey(KEYS[0], KEYS[1], NOW));
+    EXPECT_FALSE(tracker.ShouldKeepCurrentKey(KEYS[1], KEYS[2], NOW));
+    EXPECT_TRUE(tracker.ShouldKeepCurrentKey(KEYS[2], KEYS[3], NOW));
+    EXPECT_TRUE(tracker.ShouldKeepCurrentKey(KEYS[3], KEYS[4], NOW));
+}
+
+TEST(TImportantConsumerOffsetTrackerTest, UnboundKeepNextBlob) {
+    std::vector<TImportantConsumerOffsetTracker::TConsumerOffset> consumers{
+        {.RetentionPeriod = TDuration::Max(), .Offset = 40},
+    };
+    TImportantConsumerOffsetTracker tracker(std::move(consumers));
+    EXPECT_FALSE(tracker.ShouldKeepCurrentKey(KEYS[0], KEYS[1], NOW));
+    EXPECT_FALSE(tracker.ShouldKeepCurrentKey(KEYS[1], KEYS[2], NOW));
+    EXPECT_TRUE(tracker.ShouldKeepCurrentKey(KEYS[2], KEYS[3], NOW));
+    EXPECT_TRUE(tracker.ShouldKeepCurrentKey(KEYS[3], KEYS[4], NOW));
+}

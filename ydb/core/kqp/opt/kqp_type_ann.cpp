@@ -2003,12 +2003,10 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
             return TStatus::Error;
         }
     }
-    for (const auto& keyColumn : indexDesc->KeyColumns) {
-        if (!inputColSet.contains(keyColumn)) {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_InputType)->Pos()),
-                TStringBuilder() << "Input must contain all vector index key columns"));
-            return TStatus::Error;
-        }
+    if (!inputColSet.contains(indexDesc->KeyColumns.back())) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_InputType)->Pos()),
+            TStringBuilder() << "Input must contain the embedding column: " << indexDesc->KeyColumns.back()));
+        return TStatus::Error;
     }
 
     // Generate output type

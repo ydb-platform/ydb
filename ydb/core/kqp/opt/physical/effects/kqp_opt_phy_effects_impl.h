@@ -82,9 +82,8 @@ NYql::NNodes::TMaybeNode<NYql::NNodes::TExprList> KqpPhyUpsertIndexEffectsImpl(T
     const NYql::NNodes::TCoAtomList& inputColumns,
     const NYql::NNodes::TCoAtomList& returningColumns,
     const NYql::NNodes::TCoAtomList& columnsWithDefaults,
-
     const NYql::TKikimrTableDescription& table, const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings,
-    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx);
 
 
 struct TDictAndKeysResult {
@@ -109,5 +108,9 @@ NYql::NNodes::TExprBase BuildVectorIndexPostingRows(const NYql::TKikimrTableDesc
 
 TVector<TStringBuf> BuildVectorIndexPostingColumns(const NYql::TKikimrTableDescription& table,
     const NYql::TIndexDescription* indexDesc);
+
+NYql::NNodes::TExprBase BuildVectorIndexPrefixRows(const NYql::TKikimrTableDescription& table, const NYql::TKikimrTableDescription& prefixTable,
+    bool withData, const NYql::TIndexDescription* indexDesc, const NYql::NNodes::TExprBase& inputRows,
+    TVector<TStringBuf>& indexTableColumns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 } // NKikimr::NKqp::NOpt

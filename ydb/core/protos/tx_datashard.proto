@@ -303,6 +303,9 @@ message TKqpVectorResolveSettings {
 
     // Output position of the cluster column
     optional uint32 ClusterColumnOutPos = 15;
+
+    // Input root cluster ID column (for the prefixed index)
+    optional uint32 RootClusterColumnIndex = 16;
 }
 
 message TKqpTaskInfo {

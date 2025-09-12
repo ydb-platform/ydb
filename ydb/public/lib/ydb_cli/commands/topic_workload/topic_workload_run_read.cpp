@@ -56,10 +56,9 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config)
     config.Opts->AddLongOption('t', "threads", "Number of consumer threads.")
         .DefaultValue(1)
         .StoreResult(&Scenario.ConsumerThreadCount);
-    config.Opts->AddLongOption("max-memory-usage-per-consumer", "Max memory usage per consumer in bytes.")
-        .DefaultValue(Scenario.ConsumerMaxMemoryUsageBytes)
-        .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NSize::ParseSize)
-        .Hidden();
+    config.Opts->AddLongOption("max-memory-usage-per-consumer", "Max memory usage per consumer in bytes. Should be more than '1M'.")
+        .DefaultValue(15_MB)
+        .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NSize::ParseSize);
 
     config.IsNetworkIntensive = true;
 }

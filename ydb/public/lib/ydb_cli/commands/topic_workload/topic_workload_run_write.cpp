@@ -106,9 +106,8 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .DefaultValue(1'000'000)
         .StoreResult(&Scenario.CommitMessages);
     config.Opts->AddLongOption("max-memory-usage-per-producer", "Max memory usage per producer in bytes.")
-        .DefaultValue(Scenario.ProducerMaxMemoryUsageBytes)
-        .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NSize::ParseSize)
-        .Hidden();
+        .DefaultValue(15_MB)
+        .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NSize::ParseSize);
     config.IsNetworkIntensive = true;
 }
 

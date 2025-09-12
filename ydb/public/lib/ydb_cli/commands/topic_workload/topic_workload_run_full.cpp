@@ -114,14 +114,12 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .DefaultValue(false)
         .Hidden()
         .StoreTrue(&Scenario.UseTableSelect);
-    config.Opts->AddLongOption("max-memory-usage-per-consumer", "Max memory usage per consumer in bytes.")
-        .DefaultValue(Scenario.ConsumerMaxMemoryUsageBytes)
-        .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NSize::ParseSize)
-        .Hidden();
+    config.Opts->AddLongOption("max-memory-usage-per-consumer", "Max memory usage per consumer in bytes. Should be more than '1M'.")
+        .DefaultValue(15_MB)
+        .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NSize::ParseSize);
     config.Opts->AddLongOption("max-memory-usage-per-producer", "Max memory usage per producer in bytes.")
-        .DefaultValue(Scenario.ProducerMaxMemoryUsageBytes)
-        .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NSize::ParseSize)
-        .Hidden();
+        .DefaultValue(15_MB)
+        .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NSize::ParseSize);
     config.IsNetworkIntensive = true;
 }
 

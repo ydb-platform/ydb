@@ -3,6 +3,7 @@
 #include "topic_workload_params.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
+#include <library/cpp/string_utils/parse_size/parse_size.h>
 
 using namespace NYdb::NConsoleClient;
 
@@ -113,7 +114,14 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .DefaultValue(false)
         .Hidden()
         .StoreTrue(&Scenario.UseTableSelect);
-
+    config.Opts->AddLongOption("max-memory-usage-per-consumer", "Max memory usage per consumer in bytes.")
+        .DefaultValue(Scenario.ConsumerMaxMemoryUsageBytes)
+        .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NSize::ParseSize)
+        .Hidden();
+    config.Opts->AddLongOption("max-memory-usage-per-producer", "Max memory usage per producer in bytes.")
+        .DefaultValue(Scenario.ProducerMaxMemoryUsageBytes)
+        .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NSize::ParseSize)
+        .Hidden();
     config.IsNetworkIntensive = true;
 }
 

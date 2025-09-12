@@ -3,6 +3,7 @@
 #include "topic_workload_params.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
+#include <library/cpp/string_utils/parse_size/parse_size.h>
 
 using namespace NYdb::NConsoleClient;
 
@@ -104,7 +105,10 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
                                                             " Both tx-commit-messages and tx-commit-interval can trigger transaction commit.")
         .DefaultValue(1'000'000)
         .StoreResult(&Scenario.CommitMessages);
-
+    config.Opts->AddLongOption("max-memory-usage-per-producer", "Max memory usage per producer in bytes.")
+        .DefaultValue(Scenario.ProducerMaxMemoryUsageBytes)
+        .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NSize::ParseSize)
+        .Hidden();
     config.IsNetworkIntensive = true;
 }
 

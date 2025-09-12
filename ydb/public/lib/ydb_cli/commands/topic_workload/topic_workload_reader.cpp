@@ -28,6 +28,7 @@ void TTopicWorkloadReader::ReaderLoop(const TTopicWorkloadReaderParams& params, 
     auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(params.Database, params.TopicName, params.Driver);
     NYdb::NTopic::TReadSessionSettings settings;
     settings.AutoPartitioningSupport(true);
+    settings.MaxMemoryUsageBytes(params.MaxMemoryUsageBytes);
     //settings.MaxLag(TDuration::Seconds(30));
 
     if (!params.ReadWithoutConsumer) {

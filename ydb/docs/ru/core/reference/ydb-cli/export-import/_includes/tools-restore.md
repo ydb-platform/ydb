@@ -6,6 +6,8 @@
 {{ ydb-cli }} [connection options] tools restore -p PATH -i PATH [options]
 ```
 
+{% include [limitation](./limitation-restore-column-tables.md) %}
+
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
 Если таблица или директория уже существует в базе данных, изменения в её схему или ACL внесены не будут. Это может привести к тому, что операция загрузки данных окажется невозможной, если не все колонки из загружаемых файлов присутствуют в таблице или если есть несоответствия по типам данных.

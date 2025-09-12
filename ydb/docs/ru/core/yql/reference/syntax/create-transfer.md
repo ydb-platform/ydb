@@ -72,11 +72,7 @@ CREATE TRANSFER example_transfer
 
 Создание экземпляра трансфера из топика `example_topic` базы данных `/Root/another_database` в таблицу `example_table` текущей базы данных. Перед созданием трансфера необходимо в текущей базе создать таблицу в которую будут записываться данные; в базе данных `/Root/another_database` создать топик, из которого будут обрабатываться сообщения:
 
-{% note tip %}
-
-Перед созданием трансфера [создайте секрет](create-object-type-secret.md) с аутентификационными данными для подключения.
-
-{% endnote %}
+{% include [x](../_includes/secret_tip.md) %}
 
 ```yql
 $transformation_lambda = ($msg) -> {

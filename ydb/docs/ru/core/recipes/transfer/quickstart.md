@@ -87,12 +87,11 @@ FROM `transfer_recipe/target_table`;
 
 Результат выполнения запроса:
 
-```bash
-partition offset  data
-0         0       "Message 1"
-0         1       "Message 2"
-0         2       "Message 3"
-```
+| partition | offset | data |
+|-----------|--------|------|
+| 0         | 0      | Message 1 |
+| 0         | 1      | Message 2 |
+| 0         | 2      | Message 3 |
 
 {% include [x](_includes/batching.md) %}
 

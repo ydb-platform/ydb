@@ -1172,6 +1172,7 @@ class TestFiles:
         'maps/renderer/libs/gltf',
         'maps/renderer/libs/golden',
         'maps/renderer/libs/hd3d',
+        'maps/renderer/libs/icongen',
         'maps/renderer/libs/image',
         'maps/renderer/libs/kv_storage',
         'maps/renderer/libs/mapreduce',

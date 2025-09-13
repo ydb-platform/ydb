@@ -193,7 +193,7 @@ struct TTupleLayout {
         ui32 dstCount,
         const ui8 *src, const ui8 *srcOverflow, ui32 srcCount, ui32 srcOverflowSize) const;
 
-        ui32 GetTupleVarSize(const ui8* inTuple) const;
+    ui32 GetTupleVarSize(const ui8* inTuple) const;
 
     bool KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
     bool KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
@@ -218,6 +218,49 @@ struct TTupleLayoutFallback : public TTupleLayout {
     std::vector<TColumnDesc> FixedNPOTColumns_; // Remaining fixed-size columns
 };
 
+
+template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallback {
+
+    explicit TTupleLayoutSIMD(const std::vector<TColumnDesc> &columns);
+
+    void Pack(const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
+        std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+        ui32 count) const override;
+
+    void Unpack(ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
+            const std::vector<ui8, TMKQLAllocator<ui8>> &overflow,
+            ui32 start, ui32 count) const override;
+
+  private:
+    using TSimdI8 = typename TTraits::TSimdI8;
+    template <class T> using TSimd = typename TTraits::template TSimd8<T>;
+
+    static constexpr ui8 kSIMDMaxCols = 4;
+    static constexpr ui8 kSIMDMaxInnerLoopSize = 4;
+
+    size_t BlockRows_; // Estimated rows per cache block
+    std::vector<size_t> BlockColsOffsets_;
+    std::vector<size_t> BlockFixedColsSizes_;
+    std::vector<size_t> BlockColumnsOrigInds_;
+
+    struct SIMDSmallTupleDesc {
+        ui8 Cols = 0;
+        ui8 InnerLoopIters;
+        size_t SmallTupleSize;
+        size_t RowOffset;
+    };
+    SIMDSmallTupleDesc SIMDSmallTuple_;
+    std::vector<TSimd<ui8>> SIMDPermMasks_; // small tuple precomputed masks
+
+    struct SIMDTransposeDesc {
+        ui8 Cols = 0;
+        size_t RowOffset;
+    };
+    // [1, 2, 4, 8] bytes x [Key, Payload]
+    std::array<SIMDTransposeDesc, 8> SIMDTranspositions_;
+    static constexpr std::array<size_t, 4> SIMDTranspositionsColSizes_ = {1, 2,
+                                                                          4, 8};
+};
 
 bool TupleKeysEqual(const TTupleLayout *layout,
     const ui8 *lhsRow, const ui8 *lhsOverflow,

@@ -7,8 +7,6 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/util/rope.h>
 
-#include <yql/essentials/minikql/mkql_function_registry.h>
-
 namespace NFq::NConfig {
     class TRowDispatcherConfig;
 } // namespace NFq::NConfig

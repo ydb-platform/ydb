@@ -2,7 +2,6 @@
 
 #include "parser_abstract.h"
 
-#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
 namespace NFq::NRowDispatcher {

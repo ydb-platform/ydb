@@ -2,7 +2,9 @@
 
 #include "parser_abstract.h"
 
-#include <yql/essentials/minikql/mkql_function_registry.h>
+namespace NKikimr::NMiniKQL {
+    class IFunctionRegistry;
+} // namespace NKikimr::NMiniKQL
 
 namespace NFq::NRowDispatcher {
 

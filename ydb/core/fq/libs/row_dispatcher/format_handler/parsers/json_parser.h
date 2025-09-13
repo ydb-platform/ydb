@@ -4,11 +4,13 @@
 
 #include <util/generic/size_literals.h>
 
+namespace NKikimr::NMiniKQL {
+    class IFunctionRegistry;
+} // namespace NKikimr::NMiniKQL
+
 namespace NFq::NConfig {
     class TJsonParserConfig;
 } // namespace NFq::NConfig
-
-#include <yql/essentials/minikql/mkql_function_registry.h>
 
 namespace NFq::NRowDispatcher {
 

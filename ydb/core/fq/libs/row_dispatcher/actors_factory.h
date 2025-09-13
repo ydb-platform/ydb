@@ -5,8 +5,6 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
-
 
 namespace NFq::NRowDispatcher {
 

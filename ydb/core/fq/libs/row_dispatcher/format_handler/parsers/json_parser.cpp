@@ -82,16 +82,16 @@ public:
     TString TypeYson;
 
 public:
-    TColumnParser(const TString& name, const TString& typeYson, ui64 maxNumberRows)
-        : Name(name)
-        , TypeYson(typeYson)
-        , Status(TStatus::Success())
-    {
-        ParsedRows.reserve(maxNumberRows);
-    }
-
-    TStatus InitParser(const NKikimr::NMiniKQL::TType* typeMkql) {
+    TStatus InitParser(const TString& name, const TString& typeYson, ui64 maxNumberRows, const NKikimr::NMiniKQL::TType* typeMkql) {
+        Name = name;
+        TypeYson = typeYson;
         IsOptional = false;
+        Status = TStatus::Success();
+
+        if (2 * ParsedRows.capacity() < maxNumberRows) {
+            ParsedRows.reserve(maxNumberRows);
+        }
+
         return Status = ExtractDataSlot(typeMkql);
     }
 
@@ -329,23 +329,10 @@ public:
     TJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters)
         : TBase(std::move(consumer), __LOCATION__, config.FunctionRegistry, counters)
         , Config(config)
-        , NumberColumns(Consumer->GetColumns().size())
-        , MaxNumberRows(GetMaxNumberRows(config, NumberColumns))
+        , MaxNumberRows(GetMaxNumberRows(config))
         , LogPrefix("TJsonParser: ")
-        , ParsedValues(NumberColumns)
     {
-        Columns.reserve(NumberColumns);
-        for (const auto& column : Consumer->GetColumns()) {
-            Columns.emplace_back(column.Name, column.TypeYson, MaxNumberRows);
-        }
-
-        ColumnsIndex.reserve(NumberColumns);
-        FillColumnsIndex();
-
-        for (size_t i = 0; i < NumberColumns; i++) {
-            ParsedValues[i].resize(MaxNumberRows);
-        }
-
+        FillColumnsBuffers();
         Buffer.Reserve(Config.BatchSize, MaxNumberRows);
 
         LOG_ROW_DISPATCHER_INFO("Simdjson active implementation " << simdjson::get_active_implementation()->name());
@@ -353,13 +340,18 @@ public:
     }
 
     TStatus InitColumnsParsers() {
-        for (auto& column : Columns) {
-            auto typeStatus = ParseTypeYson(column.TypeYson);
+        const auto& consumerColumns = Consumer->GetColumns();
+        Columns.resize(consumerColumns.size());
+        for (ui64 i = 0; const auto& consumerColumn : consumerColumns) {
+            const auto& name = consumerColumn.Name;
+            const auto& typeYson = consumerColumn.TypeYson;
+            auto typeStatus = ParseTypeYson(typeYson);
             if (typeStatus.IsFail()) {
-                return TStatus(typeStatus).AddParentIssue(TStringBuilder() << "Failed to parse column '" << column.Name << "' type " << column.TypeYson);
+                return TStatus(typeStatus).AddParentIssue(TStringBuilder() << "Failed to parse column '" << name << "' type " << typeYson);
             }
-            if (auto status = column.InitParser(typeStatus.DetachResult()); status.IsFail()) {
-                return status.AddParentIssue(TStringBuilder() << "Failed to create parser for column '" << column.Name << "' with type " << column.TypeYson);
+
+            if (auto status = Columns[i++].InitParser(name, typeYson, MaxNumberRows, typeStatus.DetachResult()); status.IsFail()) {
+                return status.AddParentIssue(TStringBuilder() << "Failed to create parser for column '" << name << "' with type " << typeYson);
             }
         }
         return TStatus::Success();
@@ -408,35 +400,9 @@ public:
             return status;
         }
 
-        NumberColumns = Consumer->GetColumns().size();
-        MaxNumberRows = GetMaxNumberRows(Config, NumberColumns);
-
-        LOG_ROW_DISPATCHER_DEBUG("Parser columns count changed from " << Columns.size() << " to " << NumberColumns);
-        if (Columns.size() > NumberColumns) {
-            Columns.erase(Columns.begin() + NumberColumns, Columns.end());
-            ParsedValues.resize(NumberColumns);
-        }
-
-        const auto& columns = Consumer->GetColumns();
-        for (size_t i = 0; i < columns.size(); i++) {
-            const auto& column = columns[i];
-            if (Columns.size() <= i) {
-                Columns.emplace_back(column.Name, column.TypeYson, MaxNumberRows);
-            } else {
-                Columns[i].Name = column.Name;
-                Columns[i].TypeYson = column.TypeYson;
-            }
-        }
-
-        ColumnsIndex.clear();
-        FillColumnsIndex();
-
-        for (size_t i = 0; i < NumberColumns; i++) {
-            if (ParsedValues.size() <= i) {
-                ParsedValues.emplace_back();
-            }
-            ParsedValues[i].resize(MaxNumberRows);
-        }
+        MaxNumberRows = GetMaxNumberRows(Config);
+        FillColumnsBuffers();
+        LOG_ROW_DISPATCHER_DEBUG("Parser columns count changed from " << Columns.size() << " to " << Consumer->GetColumns().size());
 
         return InitColumnsParsers();
     }
@@ -526,19 +492,30 @@ protected:
         Buffer.Clear();
     }
 
-    void FillColumnsIndex() {
-        for (size_t i = 0; i < NumberColumns; i++) {
-            ColumnsIndex.emplace(std::string_view(Columns[i].Name), i);
+    void FillColumnsBuffers() {
+        const auto& consumerColumns = Consumer->GetColumns();
+
+        ColumnsIndex.clear();
+        if (2 * ColumnsIndex.capacity() < consumerColumns.size()) {
+            ColumnsIndex.reserve(consumerColumns.size());
+        }
+
+        for (ui64 i = 0; const auto& column : consumerColumns) {
+            ColumnsIndex.emplace(std::string_view(column.Name), i++);
+        }
+
+        ParsedValues.resize(consumerColumns.size());
+        for (auto& parseBuffer : ParsedValues) {
+            parseBuffer.resize(MaxNumberRows);
         }
     }
 
-    static ui64 GetMaxNumberRows(const TJsonParserConfig& config, ui64 numberColumns) {
-        return (config.BufferCellCount - 1) / numberColumns + 1;
+    ui64 GetMaxNumberRows(const TJsonParserConfig& config) {
+        return (config.BufferCellCount - 1) / Consumer->GetColumns().size() + 1;
     }
 
 private:
     const TJsonParserConfig Config;
-    ui64 NumberColumns = 0;
     ui64 MaxNumberRows = 0;
     const TString LogPrefix;
 

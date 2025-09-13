@@ -1,12 +1,11 @@
-#include "coordinator.h"
+#include "leader_election.h"
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/core/fq/libs/ydb/schema.h>
-#include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-
+#include <ydb/core/fq/libs/ydb/schema.h>
+#include <ydb/core/fq/libs/ydb/util.h>
+#include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/protos/actors.pb.h>
@@ -15,12 +14,11 @@ namespace NFq {
 
 using namespace NActors;
 using namespace NThreading;
-using NYql::TIssues;
 
 namespace {
 
-constexpr ui64 TimeoutDurationSec = 3;
-constexpr ui64 SessionTimeoutSec = 30;
+constexpr TDuration RestartDuration = TDuration::Seconds(3); // Delay before next restart after fatal error
+constexpr TDuration CoordinationSessionTimeout = TDuration::Seconds(30);
 constexpr char SemaphoreName[] = "RowDispatcher";
 
 struct TEvPrivate {
@@ -51,11 +49,7 @@ struct TEvPrivate {
             : Result(std::move(future)) {}
     };
 
-    struct TEvOnChangedResult : NActors::TEventLocal<TEvOnChangedResult, EvOnChangedResult> {
-        bool Result;
-        explicit TEvOnChangedResult(bool result)
-            : Result(result) {}
-    };
+    struct TEvOnChangedResult : NActors::TEventLocal<TEvOnChangedResult, EvOnChangedResult> {};
 
     struct TEvDescribeSemaphoreResult : NActors::TEventLocal<TEvDescribeSemaphoreResult, EvDescribeSemaphoreResult> {
         NYdb::NCoordination::TAsyncDescribeSemaphoreResult Result;
@@ -69,7 +63,7 @@ struct TEvPrivate {
             : Result(std::move(future)) {}
     };
     struct TEvSessionStopped : NActors::TEventLocal<TEvSessionStopped, EvSessionStopped> {};
-    struct TEvTimeout : NActors::TEventLocal<TEvTimeout, EvTimeout> {};
+    struct TEvRestart : NActors::TEventLocal<TEvRestart, EvTimeout> {};
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -109,7 +103,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
     EState State = EState::Init;
     bool CoordinationNodeCreated = false;
     bool SemaphoreCreated = false;
-    bool TimeoutScheduled = false;
+    bool RestartScheduled = false;
     bool PendingDescribe = false;
     bool PendingAcquire = false;
 
@@ -134,14 +128,14 @@ public:
     void Bootstrap();
     void PassAway() override;
 
-    static constexpr char ActorName[] = "YQ_LEADER_EL";
+    [[maybe_unused]] static constexpr char ActorName[] = "YQ_LEADER_EL";
 
     void Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev);
     void Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev);
     void Handle(TEvPrivate::TEvCreateSemaphoreResult::TPtr& ev);
     void Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev);
     void Handle(TEvPrivate::TEvSessionStopped::TPtr& ev);
-    void Handle(TEvPrivate::TEvTimeout::TPtr&);
+    void Handle(TEvPrivate::TEvRestart::TPtr&);
     void Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev);
     void Handle(TEvPrivate::TEvOnChangedResult::TPtr& ev);
     void HandleException(const std::exception& e);
@@ -153,7 +147,7 @@ public:
         hFunc(TEvPrivate::TEvAcquireSemaphoreResult, Handle);
         hFunc(TEvPrivate::TEvOnChangedResult, Handle);
         hFunc(TEvPrivate::TEvSessionStopped, Handle);
-        hFunc(TEvPrivate::TEvTimeout, Handle);
+        hFunc(TEvPrivate::TEvRestart, Handle);
         hFunc(TEvPrivate::TEvDescribeSemaphoreResult, Handle);
         cFunc(NActors::TEvents::TSystem::Poison, PassAway);,
         ExceptionFunc(std::exception, HandleException)
@@ -316,7 +310,7 @@ void TLeaderElection::StartSession() {
         .StartSession(
             CoordinationNodePath, 
             NYdb::NCoordination::TSessionSettings()
-                .Timeout(TDuration::Seconds(SessionTimeoutSec))
+                .Timeout(CoordinationSessionTimeout)
                 .OnStopped([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()]() {
                     actorSystem->Send(actorId, new TEvPrivate::TEvSessionStopped());
                 }))
@@ -390,16 +384,16 @@ void TLeaderElection::Handle(TEvPrivate::TEvSessionStopped::TPtr&) {
 }
 
 void TLeaderElection::SetTimeout() {
-    if (TimeoutScheduled) {
+    if (RestartScheduled) {
         return;
     }
-    TimeoutScheduled = true;
-    Schedule(TDuration::Seconds(TimeoutDurationSec), new TEvPrivate::TEvTimeout());
+    RestartScheduled = true;
+    Schedule(RestartDuration, new TEvPrivate::TEvRestart());
 }
 
-void TLeaderElection::Handle(TEvPrivate::TEvTimeout::TPtr&) {
-    TimeoutScheduled = false;
-    LOG_ROW_DISPATCHER_DEBUG("TEvTimeout");
+void TLeaderElection::Handle(TEvPrivate::TEvRestart::TPtr&) {
+    RestartScheduled = false;
+    LOG_ROW_DISPATCHER_DEBUG("TEvRestart");
     ProcessState(); 
 }
 
@@ -415,8 +409,8 @@ void TLeaderElection::DescribeSemaphore() {
             .WatchData()
             .WatchOwners()
             .IncludeOwners()
-            .OnChanged([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](bool isChanged) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvOnChangedResult(isChanged));
+            .OnChanged([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](bool /* isChanged */) {
+                actorSystem->Send(actorId, new TEvPrivate::TEvOnChangedResult());
             }))
         .Subscribe(
             [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncDescribeSemaphoreResult& future) {
@@ -471,7 +465,7 @@ void TLeaderElection::HandleException(const std::exception& e) {
     ResetState();
 }
 
-} // namespace
+} // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 

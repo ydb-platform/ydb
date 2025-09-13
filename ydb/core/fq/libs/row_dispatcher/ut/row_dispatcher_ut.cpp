@@ -56,8 +56,9 @@ class TFixture : public NUnitTest::TBaseFixture {
     const ui64 NodesCount = 2;
 public:
     TFixture()
-    : Runtime(NodesCount)
-    , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {})) {}
+        : Runtime(NodesCount)
+        , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {}))
+    {}
 
     void SetUp(NUnitTest::TTestContext&) override {
         TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());

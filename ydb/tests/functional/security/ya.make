@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 TEST_SRCS(
     conftest.py
     test_grants.py
+    test_paths_lookup.py
 )
 
 SPLIT_FACTOR(20)

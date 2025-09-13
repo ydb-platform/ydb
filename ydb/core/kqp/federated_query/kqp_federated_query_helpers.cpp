@@ -17,6 +17,7 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extensions/discovery_mutator/discovery_mutator.h>
 #include <yql/essentials/public/issue/yql_issue_utils.h>
 
@@ -41,14 +42,6 @@ namespace {
         sink.GetSettings().UnpackTo(&sinkSettings);
 
         return sinkSettings.GetAtomicUploadCommit();
-    }
-
-    NYql::TIssue YdbIssueToYqlIssue(const NYdb::NIssue::TIssue& issue) {
-        NYql::TIssue yqlIssue(issue.GetMessage());
-        for (const auto& issue : issue.GetSubIssues()) {
-            yqlIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(YdbIssueToYqlIssue(*issue)));
-        }
-        return yqlIssue;
     }
 
 }  // anonymous namespace
@@ -117,16 +110,15 @@ namespace {
 
         auto driver = std::make_shared<NYdb::TDriver>(cfg);
 
-        if (config.GetUseUnderlayNetwork()) {
-            driver->AddExtension<NDiscoveryMutator::TDiscoveryMutator>(NDiscoveryMutator::TDiscoveryMutator::TParams([](Ydb::Discovery::ListEndpointsResult* proto, NYdb::TStatus status, const NYdb::IDiscoveryMutatorApi::TAuxInfo& aux) {
-                constexpr char underlayPrefix[] = "u-";
-                if (!aux.DiscoveryEndpoint.starts_with(underlayPrefix) || !proto) {
+        if (const auto& patchPrefix = config.GetDiscoveryCommonHostnamePrefixPatch()) {
+            driver->AddExtension<NDiscoveryMutator::TDiscoveryMutator>(NDiscoveryMutator::TDiscoveryMutator::TParams([patchPrefix](Ydb::Discovery::ListEndpointsResult* proto, NYdb::TStatus status, const NYdb::IDiscoveryMutatorApi::TAuxInfo& aux) {
+                if (!aux.DiscoveryEndpoint.starts_with(patchPrefix) || !proto) {
                     return status;
                 }
 
                 for (auto& endpointInfo : *proto->Mutableendpoints()) {
-                    if (const auto& address = endpointInfo.address(); !address.StartsWith(underlayPrefix)) {
-                        endpointInfo.set_address(underlayPrefix + address);
+                    if (const auto& address = endpointInfo.address(); !address.StartsWith(patchPrefix)) {
+                        endpointInfo.set_address(patchPrefix + address);
                     }
                 }
 
@@ -411,7 +403,7 @@ namespace {
 
                     auto rootIssue = NYql::TIssue(message);
                     for (const auto& issue : describePathResult.GetIssues()) {
-                        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(YdbIssueToYqlIssue(issue)));
+                        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYdb::NAdapters::ToYqlIssue(issue)));
                     }
                     res.Issues.AddIssue(rootIssue);
                 } else {

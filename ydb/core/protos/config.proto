@@ -1227,7 +1227,7 @@ message TExternalYdbTopicsConfig {
         optional uint64 NetworkThreadsNum = 1 [default = 2];
         optional uint64 ClientThreadsNum = 2 [default = 0]; // 0 means adaptive thread pool
         optional uint64 GrpcMemoryQuota = 3 [default = 0]; // 0 means unlimited
-        optional bool UseUnderlayNetwork = 4 [default = false];
+        optional string DiscoveryCommonHostnamePrefixPatch = 4; // Added to discovered hostnames if original hostname starts with this prefix
     }
 
     message TSetting {

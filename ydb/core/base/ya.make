@@ -28,6 +28,8 @@ SRCS(
     feature_flags.h
     feature_flags_service.cpp
     feature_flags_service.h
+    fulltext.cpp
+    fulltext.h
     group_stat.cpp
     group_stat.h
     hive.h

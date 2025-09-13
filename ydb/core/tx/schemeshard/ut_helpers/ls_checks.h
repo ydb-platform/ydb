@@ -175,6 +175,8 @@ namespace NLs {
                                      ui32 levels
                                   );
 
+    TCheckFunc SpecializedIndexDescription(const TString& proto);
+
     TCheckFunc SequenceName(const TString& name);
     TCheckFunc SequenceIncrement(i64 increment);
     TCheckFunc SequenceMaxValue(i64 maxValue);

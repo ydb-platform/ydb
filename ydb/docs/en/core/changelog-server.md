@@ -19,11 +19,11 @@ Release date: September , 2025.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/17839) an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/18615) where not all tablets are shown for pers queue group on the tablets tab in diagnostics.
 * Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18735) where the storage tab on the diagnostics page was displaying nodes of other types in addition to storage nodes.
 * Fixed an [serialization issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164) that caused an error to occur when opening query execution statistics.
-* Changed the logic for nodes transitioning to critical state (e.g., a full CPU pool now triggers a warning instead of a critical state).
+* Changed the logic for nodes transitioning to critical state – the CPU pool, which is 75-99% full, now triggers a warning, not a critical state.
 
 ### Performance
 
-* Added the new mode of operating [actor system](./concepts/glossary#actor-system), which allows for more efficient use of computing resources. It is enabled by setting the `use_shared_threads` flag in the [actor-system configuration](./devops/configuration-management/configuration-v1/change_actorsystem_configs).
+* Added the new mode of operating [actor system](./concepts/glossary#actor-system), which allows for more efficient use of computing resources – the performance of a 4-core node is increased by 40%, now the performance per core is the same as that of a 10-core node; the performance of a 2-core node is increased by 110%, the performance per core is only 5% less than that of a 10-core node (previously it was 50% less). It is enabled by setting the `use_shared_threads` flag in the [actor-system configuration](./devops/configuration-management/configuration-v1/change_actorsystem_configs).
 * [Optimized](https://github.com/ydb-platform/ydb/pull/20197 ) processing of empty inputs when performing JOIN operations.
 
 #### Bug fixes

@@ -281,6 +281,10 @@ class PluginLogger(object):
 logger = PluginLogger()
 
 
+def _wrap_file_path(s: str) -> str:
+    return f"'{s}'" if " " in s else s
+
+
 def _parse_list_var(unit: UnitType, var_name: str, sep: str) -> list[str]:
     return [x.strip() for x in unit.get(var_name).removeprefix(f"${var_name}").split(sep) if x.strip()]
 
@@ -613,7 +617,7 @@ def _filter_inputs_by_rules_from_tsconfig(unit: NotsUnitType, tsconfig: 'TsConfi
         # https://st.yandex-team.ru/DEVTOOLSSUPPORT-69193
         all_files = __strip_prefix(target_path, unit.get(from_var)).split(f" {target_path}")
         filtered_files = tsconfig.filter_files(all_files)
-        __set_append(unit, to_var, filtered_files)
+        __set_append(unit, to_var, [_wrap_file_path(f) for f in filtered_files])
 
 
 def _is_tests_enabled(unit: NotsUnitType) -> bool:

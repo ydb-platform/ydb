@@ -149,7 +149,8 @@ class TTypeEnvironment;
     XX(Tagged, 48 + 7)      \
     XX(Block, 16 + 13)      \
     XX(Pg, 16 + 3)          \
-    XX(Multi, 16 + 11)
+    XX(Multi, 16 + 11)      \
+    XX(Linear, 16 + 7)
 
 class TTypeBase : public TNode {
 public:
@@ -864,6 +865,37 @@ private:
 
 private:
     TRuntimeNode Item_;
+};
+
+class TLinearType : public TType {
+friend class TType;
+public:
+    static TLinearType* Create(TType* itemType, bool isDynamic, const TTypeEnvironment& env);
+
+    using TType::IsSameType;
+    bool IsSameType(const TLinearType& typeToCompare) const;
+    size_t CalcHash() const;
+
+    using TType::IsConvertableTo;
+    bool IsConvertableTo(const TLinearType& typeToCompare, bool ignoreTagged = false) const;
+
+    TType* GetItemType() const {
+        return Data_;
+    }
+
+    bool IsDynamic() const {
+        return IsDynamic_;
+    }
+
+private:
+    TLinearType(TType* itemType, bool isDynamic, const TTypeEnvironment& env, bool validate = true);
+
+    TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
+    void DoFreeze(const TTypeEnvironment& env);
+
+private:
+    TType* Data_;
+    bool IsDynamic_;
 };
 
 class TDictType : public TType {

@@ -1019,15 +1019,22 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
             TIndexDescription::TSpecializedIndexDescription specializedIndexDescription;
             if (indexType == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                TVector<std::pair<TString, TString>> settings(::Reserve(index.IndexSettings().Size()));
-                for (const auto& indexSetting : index.IndexSettings()) {
-                    settings.emplace_back(indexSetting.Name().Value(), indexSetting.Value().Cast<TCoAtom>().StringValue());
-                }
+                Ydb::Table::KMeansTreeSettings& settings = *specializedIndexDescription.emplace<NKikimrKqp::TVectorIndexKmeansTreeDescription>().MutableSettings();
                 TString error;
-                *specializedIndexDescription.emplace<NKikimrKqp::TVectorIndexKmeansTreeDescription>()
-                     .MutableSettings() = NKikimr::NKMeans::FillSettings(settings, error);
-                if (error) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), error));
+
+                for (const auto& indexSetting : index.IndexSettings()) {
+                    const auto& name = indexSetting.Name();
+                    const auto& value = indexSetting.Value().Cast<TCoAtom>();
+
+                    if (!NKikimr::NKMeans::FillSetting(settings, name.StringValue(), value.StringValue(), error))
+                    {
+                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                }
+
+                if (!NKikimr::NKMeans::ValidateSettings(settings, error)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
                     return IGraphTransformer::TStatus::Error;
                 }
             }

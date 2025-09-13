@@ -2025,17 +2025,21 @@ public:
                             }
                         } else if (name == "indexSettings") {
                             YQL_ENSURE(add_index->type_case() == Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex);
-                            auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
-                            TVector<std::pair<TString, TString>> settings(::Reserve(indexSettings.Size()));
-                            for (const auto& vectorSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
-                                YQL_ENSURE(vectorSetting.Value().Maybe<TCoAtom>());
-                                settings.emplace_back(vectorSetting.Name().Value(), vectorSetting.Value().Cast<TCoAtom>().StringValue());
-                            }
+                            
+                            Ydb::Table::KMeansTreeSettings& settings = *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
                             TString error;
-                            *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = NKikimr::NKMeans::FillSettings(settings, error);
-                            if (error) {
-                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), error));
-                                return SyncError();
+                            
+                            auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (const auto& indexSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
+                                YQL_ENSURE(indexSetting.Value().Maybe<TCoAtom>());
+                                const auto& name = indexSetting.Name();
+                                const auto& value = indexSetting.Value().Cast<TCoAtom>();
+
+                                if (!NKikimr::NKMeans::FillSetting(settings, name.StringValue(), value.StringValue(), error))
+                                {
+                                    ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
+                                    return SyncError();
+                                }
                             }
                         }
                         else {
@@ -2046,6 +2050,14 @@ public:
                     YQL_ENSURE(add_index->name());
                     YQL_ENSURE(add_index->type_case() != Ydb::Table::TableIndex::TYPE_NOT_SET);
                     YQL_ENSURE(add_index->index_columns_size());
+
+                    if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex) {
+                        TString error;
+                        if (!NKikimr::NKMeans::ValidateSettings(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                            return SyncError();
+                        }
+                    }
                 } else if (name == "alterIndex") {
                     if (maybeAlter.Cast().Actions().Size() > 1) {
                         ctx.AddError(

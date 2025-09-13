@@ -34,7 +34,8 @@ FROM
 WITH(
   FORMAT = "<file_format>",
   COMPRESSION = "<compression>",
-  SCHEMA = (<schema_definition>))
+  SCHEMA = (<schema_definition>),
+  <format_settings>)
 WHERE
   <filter>;
 ```
@@ -46,6 +47,7 @@ Where:
 * `file_format` — the [data format](formats.md#formats) in the files.
 * `compression` — the [compression format](formats.md#compression_formats) of the files.
 * `schema_definition` — the [schema definition](#schema) of the data stored in the files.
+* `format_settings` — optional [format settings](#format_settings)
 
 ### Data schema description {#schema}
 
@@ -97,11 +99,21 @@ Where:
 
 As a result of executing such a query, the names and types of fields will be inferred.
 
-### Data path formats {#path_format}
+### Data path formats specified in `file_path` {#path_format}
 
-In {{ ydb-full-name }}, the following data paths are supported:
+In {{ ydb-full-name }}, the followingdata paths are supported:
 
 {% include [!](_includes/path_format.md) %}
+
+### Format settings {#format_settings}
+
+In {{ ydb-full-name }}, the following format settings are supported:
+
+{% include [!](_includes/format_settings.md) %}
+
+You can only specify `file_pattern` setting if `file_path` is a path to a directory. Any conversion specifiers supported by [`strftime`(C99)](https://en.cppreference.com/w/c/chrono/strftime) function can be used in formatting strings. In {{ ydb-full-name }}, the following `Datetime` and `Timestamp` formats are supported:
+
+{% include [!](_includes/date_formats.md) %}
 
 ## Example {#read_example}
 
@@ -111,21 +123,28 @@ Example query to read data from S3 ({{ objstorage-full-name }}):
 SELECT
   *
 FROM
-  connection.`folder/filename.csv`
+  connection.`folder/`
 WITH(
   FORMAT = "csv_with_names",
+  COMPRESSION="gzip"
   SCHEMA =
   (
-    Year Int32,
-    Manufacturer Utf8,
-    Model Utf8,
-    Price Double
-  )
+    Id Int32 NOT NULL,
+    UserId Int32 NOT NULL,
+    TripDate Date NOT NULL,
+    TripDistance Double NOT NULL,
+    UserComment Utf8
+  ),
+  FILE_PATTERN="*.csv.gz",
+  `DATA.DATE.FORMAT`="%Y-%m-%d",
+  CSV_DELIMITER='/'
 );
 ```
 
 Where:
 
 * `connection` — the name of the external data source leading to the S3 bucket ({{ objstorage-full-name }}).
-* `folder/filename.csv` — the path to the file in the S3 bucket ({{ objstorage-full-name }}).
+* `folder/filename.csv` — the path to the directory in the S3 bucket ({{ objstorage-full-name }}).
 * `SCHEMA` — the data schema description in the file.
+* `*.csv.gz` — file name template.
+* `%Y-%m-%d` — format in which `Date` type is stored in S3.

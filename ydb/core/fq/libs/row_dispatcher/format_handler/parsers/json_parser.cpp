@@ -342,15 +342,15 @@ public:
     TStatus InitColumnsParsers() {
         const auto& consumerColumns = Consumer->GetColumns();
         Columns.resize(consumerColumns.size());
-        for (ui64 i = 0; const auto& consumerColumn : consumerColumns) {
-            const auto& name = consumerColumn.Name;
-            const auto& typeYson = consumerColumn.TypeYson;
+        for (ui64 i = 0; i < consumerColumns.size(); ++i) {
+            const auto& name = consumerColumns[i].Name;
+            const auto& typeYson = consumerColumns[i].TypeYson;
             auto typeStatus = ParseTypeYson(typeYson);
             if (typeStatus.IsFail()) {
                 return TStatus(typeStatus).AddParentIssue(TStringBuilder() << "Failed to parse column '" << name << "' type " << typeYson);
             }
 
-            if (auto status = Columns[i++].InitParser(name, typeYson, MaxNumberRows, typeStatus.DetachResult()); status.IsFail()) {
+            if (auto status = Columns[i].InitParser(name, typeYson, MaxNumberRows, typeStatus.DetachResult()); status.IsFail()) {
                 return status.AddParentIssue(TStringBuilder() << "Failed to create parser for column '" << name << "' with type " << typeYson);
             }
         }
@@ -500,8 +500,8 @@ protected:
             ColumnsIndex.reserve(consumerColumns.size());
         }
 
-        for (ui64 i = 0; const auto& column : consumerColumns) {
-            ColumnsIndex.emplace(std::string_view(column.Name), i++);
+        for (ui64 i = 0; i < consumerColumns.size(); ++i) {
+            ColumnsIndex.emplace(std::string_view(consumerColumns[i].Name), i);
         }
 
         ParsedValues.resize(consumerColumns.size());

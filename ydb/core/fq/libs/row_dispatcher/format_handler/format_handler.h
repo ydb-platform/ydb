@@ -7,9 +7,9 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/util/rope.h>
 
-namespace NFq::NConfig {
-    class TRowDispatcherConfig;
-} // namespace NFq::NConfig
+namespace NKikimrConfig {
+class TSharedReadingConfig;
+} // namespace NKikimrConfig
 
 namespace NFq::NRowDispatcher {
 
@@ -80,7 +80,7 @@ struct TFormatHandlerConfig {
 };
 
 ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters);
-TFormatHandlerConfig CreateFormatHandlerConfig(const NConfig::TRowDispatcherConfig& rowDispatcherConfig, NActors::TActorId compileServiceId);
+TFormatHandlerConfig CreateFormatHandlerConfig(const NKikimrConfig::TSharedReadingConfig& rowDispatcherConfig, NActors::TActorId compileServiceId);
 
 namespace NTests {
 

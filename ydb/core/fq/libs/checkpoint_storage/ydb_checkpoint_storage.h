@@ -15,7 +15,7 @@ namespace NFq {
 ////////////////////////////////////////////////////////////////////////////////
 
 TCheckpointStoragePtr NewYdbCheckpointStorage(
-    const NKikimrConfig::TCheckpointsConfig::TExternalStorage& config,
+    const NKikimrConfig::TExternalStorage& config,
     const IEntityIdGenerator::TPtr& entityIdGenerator,
     const TYdbConnectionPtr& ydbConnection);
 

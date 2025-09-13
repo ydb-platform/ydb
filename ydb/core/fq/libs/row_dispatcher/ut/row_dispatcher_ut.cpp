@@ -8,6 +8,7 @@
 #include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 
 namespace {
 
@@ -31,7 +32,7 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         const TString& /*topicPath*/,
         const TString& /*endpoint*/,
         const TString& /*database*/,
-        const NConfig::TRowDispatcherConfig& /*config*/,
+        const NKikimrConfig::TSharedReadingConfig& /*config*/,
         NActors::TActorId /*rowDispatcherActorId*/,
         NActors::TActorId /*compileServiceActorId*/,
         ui32 /*partitionId*/,
@@ -71,10 +72,10 @@ public:
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
-        NConfig::TRowDispatcherConfig config;
+        NKikimrConfig::TSharedReadingConfig config;
         config.SetEnabled(true);
         config.SetSendStatusPeriodSec(1);
-        NConfig::TRowDispatcherCoordinatorConfig& coordinatorConfig = *config.MutableCoordinator();
+        NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& coordinatorConfig = *config.MutableCoordinator();
         coordinatorConfig.SetCoordinationNodePath("RowDispatcher");
         auto& database = *coordinatorConfig.MutableDatabase();
         database.SetEndpoint("YDB_ENDPOINT");
@@ -92,7 +93,7 @@ public:
         ReadActorId2 = Runtime.AllocateEdgeActor();
         ReadActorId3 = Runtime.AllocateEdgeActor(1);
         TestActorFactory = MakeIntrusive<TTestActorFactory>(Runtime);
-        
+
         NYql::TPqGatewayServices pqServices(
             yqSharedResources->UserSpaceYdbDriver,
             nullptr,
@@ -103,14 +104,13 @@ public:
         RowDispatcher = Runtime.Register(NewRowDispatcher(
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            yqSharedResources,
             credentialsFactory,
             "Tenant",
             TestActorFactory,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(pqServices),
-            NActors::TActorId()
+            yqSharedResources->UserSpaceYdbDriver
             ).release());
 
         Runtime.EnableScheduleForActor(RowDispatcher);

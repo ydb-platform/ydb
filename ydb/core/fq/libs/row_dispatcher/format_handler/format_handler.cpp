@@ -14,6 +14,8 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NFq::NRowDispatcher {
 
 namespace {
@@ -664,7 +666,7 @@ ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext&
     return ITopicFormatHandler::TPtr(handler);
 }
 
-TFormatHandlerConfig CreateFormatHandlerConfig(const NConfig::TRowDispatcherConfig& rowDispatcherConfig, NActors::TActorId compileServiceId) {
+TFormatHandlerConfig CreateFormatHandlerConfig(const NKikimrConfig::TSharedReadingConfig& rowDispatcherConfig, NActors::TActorId compileServiceId) {
     return {
         .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser()),
         .FiltersConfig = {

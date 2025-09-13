@@ -114,6 +114,7 @@ union TBasicKikimrServicesMask {
         EnableViewerService = true;
         EnableMeteringWriter = true;
         EnableProfiler = true;
+        EnableStateStorageService = true;
     }
 
     void SetTinyMode() {

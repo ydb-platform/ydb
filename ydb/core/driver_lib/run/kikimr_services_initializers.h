@@ -394,13 +394,12 @@ public:
 class TKqpServiceInitializer : public IKikimrServicesInitializer {
 public:
     TKqpServiceInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories,
-        IGlobalObjectStorage& globalObjects, NFq::IYqSharedResources::TPtr yqSharedResources);
+        IGlobalObjectStorage& globalObjects);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 private:
     std::shared_ptr<TModuleFactories> Factories;
     IGlobalObjectStorage& GlobalObjects;
-    NFq::IYqSharedResources::TPtr YqSharedResources;
 };
 
 class TCompDiskLimiterInitializer: public IKikimrServicesInitializer {

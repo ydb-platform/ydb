@@ -13,7 +13,7 @@ struct TActorFactory : public IActorFactory {
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
-        const NConfig::TRowDispatcherConfig& config,
+        const NKikimrConfig::TSharedReadingConfig& config,
         NActors::TActorId rowDispatcherActorId,
         NActors::TActorId compileServiceActorId,
         ui32 partitionId,

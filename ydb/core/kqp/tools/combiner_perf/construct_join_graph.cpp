@@ -129,7 +129,7 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, T
                    "composite key types are not supported yet for ScalarMapJoin "
                    "benchmark");
         TRuntimeNode rightDict = pb.ToSortedDict(
-            args.Right, false, [&](TRuntimeNode tuple) { return pb.Nth(tuple, descr.RightSource.KeyColumnIndexes[0]); },
+            args.Right, true, [&](TRuntimeNode tuple) { return pb.Nth(tuple, descr.RightSource.KeyColumnIndexes[0]); },
             [&](TRuntimeNode tuple) {
                 auto types = AS_TYPE(TTupleType, tuple.GetStaticType())->GetElements();
                 TVector<TRuntimeNode> valueTupleElements;

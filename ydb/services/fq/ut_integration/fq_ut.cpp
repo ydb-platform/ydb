@@ -72,6 +72,7 @@ namespace {
             auto result = client.GetQueryStatus(
                 request, CreateFqSettings<TGetQueryStatusSettings>(folderId))
                 .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             return result.GetResult().status() == expectedStatusResult;
         }, TRetryOptions(Retries));
         UNIT_ASSERT_C(result, "the execution of the query did not end within the time limit");

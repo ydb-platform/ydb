@@ -304,7 +304,7 @@ TExprNode::TPtr LMapSubsetFields(const TCoMapBase& node, TExprContext& ctx, TOpt
 
 TExprNode::TPtr OptimizeLMap(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     const TCoMapBase self(node);
-    if (!optCtx.IsSingleUsage(self.Input().Ref())) {
+    if (!AllowSubsetFieldsForNode(self.Input().Ref(), optCtx)) {
         return node;
     }
     auto ret = LMapSubsetFields(self, ctx, optCtx);

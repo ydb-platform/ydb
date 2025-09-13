@@ -135,8 +135,10 @@ namespace NDataShard {
             // Operation was blocked and is waiting for explicit unblock
             BlockFailPointWaiting = 1ULL << 48,
             BlockFailPointUnblocked = 1ULL << 49,
+            // Operation sent a TEvProposeTransactionRestart notification
+            RestartNotificationSent = 1ULL << 50,
 
-            LastFlag = BlockFailPointUnblocked,
+            LastFlag = RestartNotificationSent,
 
             PrivateFlagsMask = 0xFFFFFFFFFFFF0000ULL,
             PreservedPrivateFlagsMask = ReadOnly | ProposeBlocker | NeedDiagnostics | GlobalReader

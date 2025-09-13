@@ -317,7 +317,7 @@ private:
     bool IsOptional = false;
 
     TVector<ui64> ParsedRows;
-    TStatus Status;
+    TStatus Status = TStatus::Success();
 };
 
 class TJsonParser : public TTopicParserBase {
@@ -329,7 +329,7 @@ public:
     TJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters)
         : TBase(std::move(consumer), __LOCATION__, config.FunctionRegistry, counters)
         , Config(config)
-        , MaxNumberRows(GetMaxNumberRows(config))
+        , MaxNumberRows(GetMaxNumberRows())
         , LogPrefix("TJsonParser: ")
     {
         FillColumnsBuffers();
@@ -400,7 +400,7 @@ public:
             return status;
         }
 
-        MaxNumberRows = GetMaxNumberRows(Config);
+        MaxNumberRows = GetMaxNumberRows();
         FillColumnsBuffers();
         LOG_ROW_DISPATCHER_DEBUG("Parser columns count changed from " << Columns.size() << " to " << Consumer->GetColumns().size());
 
@@ -510,8 +510,8 @@ protected:
         }
     }
 
-    ui64 GetMaxNumberRows(const TJsonParserConfig& config) {
-        return (config.BufferCellCount - 1) / Consumer->GetColumns().size() + 1;
+    ui64 GetMaxNumberRows() const {
+        return (Config.BufferCellCount - 1) / Consumer->GetColumns().size() + 1;
     }
 
 private:

@@ -4,6 +4,8 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
+#define PQ_ENSURE(condition) AFL_ENSURE(condition)("topic", TopicName)
+
 using namespace NPersQueue;
 
 namespace NKikimr {
@@ -80,7 +82,7 @@ void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
     }
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
-    Y_ABORT_UNLESS(factory);
+    PQ_ENSURE(factory);
     auto future = factory->GetTopicDescription(Config, CredentialsProvider);
     future.Subscribe(
         [
@@ -114,7 +116,7 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*
     CredentialsProvider = nullptr;
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
-    Y_ABORT_UNLESS(factory);
+    PQ_ENSURE(factory);
     auto future = factory->GetCredentialsProvider(Config.GetCredentials());
     future.Subscribe(
         [
@@ -172,6 +174,24 @@ TString TMirrorDescriber::GetCurrentState() const {
         return "StateWork";
     }
     return "UNKNOWN";
+}
+
+ bool TMirrorDescriber::OnUnhandledException(const std::exception& exc) {
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::PQ_MIRROR_DESCRIBER,
+        LogDescription() << "unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+            << TBackTrace::FromCurrentException().PrintToString());
+
+    Send(ReadBalancerActorId, new TEvents::TEvPoison());
+    PassAway();
+    return true;
+}
+
+NActors::IActor* CreateMirrorDescriber(
+    const NActors::TActorId& readBalancerActorId,
+    const TString& topicName,
+    const NKikimrPQ::TMirrorPartitionConfig& config
+) {
+    return new TMirrorDescriber(readBalancerActorId, topicName, config);
 }
 
 

@@ -3,7 +3,7 @@
 #include "read_balancer__txpreinit.h"
 #include "read_balancer__txwrite.h"
 #include "read_balancer_log.h"
-#include "mirror_describer.h"
+#include "mirror_describer_factory.h"
 
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
@@ -12,6 +12,8 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/random_provider/random_provider.h>
+
+#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletID())("path", Path)("topic", Topic)
 
 namespace NKikimr {
 namespace NPQ {
@@ -289,7 +291,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         if (MirrorTopicDescriberActorId) {
             ctx.Send(MirrorTopicDescriberActorId, new TEvPQ::TEvChangePartitionConfig(nullptr, TabletConfig));
         } else {
-            MirrorTopicDescriberActorId = ctx.Register(new TMirrorDescriber(SelfId(), Topic, TabletConfig.GetPartitionConfig().GetMirrorFrom()));
+            MirrorTopicDescriberActorId = ctx.Register(CreateMirrorDescriber(SelfId(), Topic, TabletConfig.GetPartitionConfig().GetMirrorFrom()));
         }
     } else {
         if (MirrorTopicDescriberActorId) {
@@ -320,7 +322,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     for (auto& p : record.GetPartitions()) {
         auto it = PartitionsInfo.find(p.GetPartition());
         if (it == PartitionsInfo.end()) {
-            Y_ABORT_UNLESS(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
+            PQ_ENSURE(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
 
             partitionsInfo[p.GetPartition()] = {p.GetTabletId()};
 
@@ -422,7 +424,7 @@ TActorId TPersQueueReadBalancer::GetPipeClient(const ui64 tabletId, const TActor
         pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
         TabletPipes[tabletId].PipeActor = pipeClient;
         auto res = PipesRequested.insert(tabletId);
-        Y_ABORT_UNLESS(res.second);
+        PQ_ENSURE(res.second);
     } else {
         pipeClient = it->second.PipeActor;
     }

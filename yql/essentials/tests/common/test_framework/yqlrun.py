@@ -85,8 +85,8 @@ class YQLRun(object):
 
     def yql_exec(self, program=None, program_file=None, files=None, urls=None,
                  run_sql=False, verbose=False, check_error=True, tables=None, pretty_plan=True,
-                 wait=True, parameters={}, extra_env={}, require_udf_resolver=False, scan_udfs=True, langver=None):
-        del pretty_plan
+                 wait=True, parameters={}, extra_env={}, require_udf_resolver=False, scan_udfs=True, langver=None, attrs={}):
+        del pretty_plan, attrs
 
         res_dir = self.res_dir
 

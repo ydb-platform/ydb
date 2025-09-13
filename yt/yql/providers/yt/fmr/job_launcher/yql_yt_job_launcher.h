@@ -4,13 +4,18 @@
 
 namespace NYql::NFmr {
 
+struct TFmrUserJobLauncherOptions {
+    bool RunInSeparateProcess;
+    TString FmrJobBinaryPath;
+};
+
 class TFmrUserJobLauncher: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TFmrUserJobLauncher>;
 
     virtual ~TFmrUserJobLauncher() = default;
 
-    TFmrUserJobLauncher(bool runInSeparateProcess, const TString& fmrJobBinaryPath = TString());
+    TFmrUserJobLauncher(const TFmrUserJobLauncherOptions& jobLauncherOptions);
 
     std::variant<TError, TStatistics> LaunchJob(TFmrUserJob& job);
 

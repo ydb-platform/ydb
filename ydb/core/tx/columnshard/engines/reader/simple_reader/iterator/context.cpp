@@ -94,8 +94,10 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (preventDuplicates) {
             acc.AddStep(std::make_shared<TDuplicateFilter>());
         }
-        const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
-        acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
+        if (const auto& program = GetReadMetadata()->GetProgram(); program.HasProgram()) {
+            const auto& chainProgram = program.GetChainVerified();
+            acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
+        }
         if (GetSourcesAggregationScript()) {
             acc.AddStep(std::make_shared<TUpdateAggregatedMemoryStep>());
         }

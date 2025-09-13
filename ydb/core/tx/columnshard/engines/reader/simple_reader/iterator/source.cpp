@@ -40,8 +40,9 @@ void IDataSource::StartProcessing(const std::shared_ptr<NCommon::IDataSource>& s
 void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
     if (!ProcessingStarted) {
         AFL_VERIFY(FetchingPlan);
-        InitStageData(std::make_unique<TFetchedData>(
-            GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCountOptional()));
+        const bool hasAggregations = GetContext()->GetReadMetadata()->GetProgram().HasProgram() &&
+            GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations();
+        InitStageData(std::make_unique<TFetchedData>(hasAggregations, sourcePtr->GetRecordsCountOptional()));
         if (HasPortionAccessor()) {
             InitUsedRawBytes();
         }

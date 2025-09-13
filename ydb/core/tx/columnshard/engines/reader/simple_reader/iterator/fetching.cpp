@@ -93,6 +93,9 @@ TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
     if (source->HasSourceInMemoryFlag()) {
         return true;
     }
+    if (!source->GetContext()->GetReadMetadata()->GetProgram().HasProgram()) {
+        return true;
+    }
     const auto& chainProgram = source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified();
     if (Columns.GetColumnsCount() && !chainProgram->HasAggregations()) {
         source->SetSourceInMemory(

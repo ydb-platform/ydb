@@ -183,6 +183,11 @@ class TLoggingTest
     , public ILogWriterHost
 {
 protected:
+    void SetUp() override
+    {
+        SetThreadMinLogLevel(ELogLevel::Minimum);
+    }
+
     IInvokerPtr GetCompressionInvoker() override
     {
         return GetCurrentInvoker();
@@ -928,6 +933,64 @@ TEST_F(TLoggingTest, StructuredLoggingDisableSystemFields)
     EXPECT_EQ(message->FindChild("instant"), nullptr);
     EXPECT_EQ(message->FindChild("level"), nullptr);
     EXPECT_EQ(message->FindChild("category"), nullptr);
+}
+
+TEST_F(TLoggingTest, WithMinLevel)
+{
+    TTempFile debugFile(GenerateLogFileName());
+
+    Configure(Format(R"({
+        rules = [
+            {
+                min_level = trace;
+                writers = [ trace ];
+            };
+        ];
+        writers = {
+            trace = {
+                file_name = "%v";
+                type = file;
+            };
+        };
+    })", debugFile.Name()));
+
+    int readLoglinesCount = 0;
+
+    auto getNewLogLinesCount = [&] {
+        TLogManager::Get()->Synchronize();
+        int logLinesCount = std::ssize(ReadPlainTextEvents(debugFile.Name()));
+        YT_VERIFY(logLinesCount >= readLoglinesCount);
+        int newLogLinesCount = logLinesCount - readLoglinesCount;
+        readLoglinesCount = logLinesCount;
+        return newLogLinesCount;
+    };
+
+    {
+        auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Trace);
+
+        YT_LOG_TRACE("Message 1");
+        YT_LOG_DEBUG("Message 2");
+        YT_LOG_INFO("Message 3");
+        ASSERT_EQ(getNewLogLinesCount(), 3);
+    }
+
+    {
+        auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Debug);
+
+        YT_LOG_TRACE("Message 4");
+        YT_LOG_DEBUG("Message 5");
+        YT_LOG_INFO("Message 6");
+        ASSERT_EQ(getNewLogLinesCount(), 2);
+    }
+
+    {
+        auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Info);
+
+        YT_LOG_TRACE("Message 7");
+        YT_LOG_DEBUG("Message 8");
+        YT_LOG_INFO("Message 9");
+        ASSERT_EQ(getNewLogLinesCount(), 1);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

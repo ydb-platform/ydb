@@ -177,6 +177,7 @@ struct TGetQueryTrackerInfoResult
     std::vector<std::string> AccessControlObjects;
     std::vector<std::string> Clusters;
     std::optional<NYson::TYsonString> EnginesInfo;
+    std::optional<int> ExpectedTablesVersion;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

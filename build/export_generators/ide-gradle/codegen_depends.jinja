@@ -21,3 +21,9 @@
 {{ ObjDepends(move) }}
 {%-     endfor -%}
 {%- endif -%}
+
+{%- if current_target.from_sandboxes|length -%}
+{%-     for from_sandbox in current_target.from_sandboxes -%}
+{{ ObjDepends(from_sandbox) }}
+{%-     endfor -%}
+{%- endif -%}

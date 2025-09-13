@@ -3622,6 +3622,7 @@ message TRspGetQueryTrackerInfo
     optional string query_tracker_stage = 4;
     repeated string clusters = 5;
     optional bytes engines_info = 6; // YSON
+    optional int32 expected_tables_version = 7;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

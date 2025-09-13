@@ -5,6 +5,7 @@
 * 21917:Support in asynchronous replication new kind of change record — `reset` record (in addition to `update` & `erase` records). [#21917](https://github.com/ydb-platform/ydb/pull/21917) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
 * 21835:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/21814) where a replication instance with an unspecified `COMMIT_INTERVAL` option caused the process to crash. [#21835](https://github.com/ydb-platform/ydb/pull/21835) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
 * 21651:Fixed rare errors when reading using the pqv0 protocol from a topic during partition balancing. [#21651](https://github.com/ydb-platform/ydb/pull/21651) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 22697:Fixed [false-positive unresponsive tablet issues](https://github.com/ydb-platform/ydb/issues/22390) in healthcheck during restarts. [#22697](https://github.com/ydb-platform/ydb/pull/22697) ([vporyadke](https://github.com/vporyadke))
 
 ## 25.1.2
 

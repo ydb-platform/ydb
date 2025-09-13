@@ -474,6 +474,7 @@ struct TPDiskMon {
     TReqCounters YardSlay;
     TReqCounters YardControl;
     TReqCounters YardResize;
+    TReqCounters ChangeExpectedSlotCount;
 
     TReqCounters ShredPDisk;
     TReqCounters PreShredCompactVDisk;

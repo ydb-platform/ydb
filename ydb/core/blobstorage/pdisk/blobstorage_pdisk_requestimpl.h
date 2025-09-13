@@ -1270,5 +1270,25 @@ public:
     }
 };
 
+class TChangeExpectedSlotCount : public TRequestBase {
+public:
+    ui64 ExpectedSlotCount;
+
+    TChangeExpectedSlotCount(const NPDisk::TEvChangeExpectedSlotCount &ev, const TActorId &sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ChangeExpectedSlotCount, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , ExpectedSlotCount(ev.ExpectedSlotCount)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChangeExpectedSlotCount;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TChangeExpectedSlotCount { ExpectedSlotCount# " << ExpectedSlotCount << " }";
+        return str.Str();
+    }
+};
+
 } // NPDisk
 } // NKikimr

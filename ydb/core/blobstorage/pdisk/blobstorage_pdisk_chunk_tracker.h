@@ -606,6 +606,10 @@ public:
             }
         }
     }
+
+    void SetExpectedOwnerCount(size_t newOwnerCount) {
+        OwnerQuota->SetExpectedOwnerCount(newOwnerCount);
+    }
 };
 
 } // NPDisk

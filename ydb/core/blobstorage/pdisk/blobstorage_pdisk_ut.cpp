@@ -1229,6 +1229,107 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 2u, 4);
     }
 
+    Y_UNIT_TEST(PDiskChangeExpectedSlotCount) {
+        TActorTestContext testCtx({
+            .IsBad=false,
+            .DiskSize = 1_GB,
+            .ChunkSize = 1_MB,
+        });
+
+        // Setup receiving whiteboard state updates
+        testCtx.GetRuntime()->SetDispatchTimeout(10 * TDuration::MilliSeconds(testCtx.GetPDiskConfig()->StatisticsUpdateIntervalMs));
+        testCtx.GetRuntime()->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(1), testCtx.Sender);
+        AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 0);
+
+        // Setup 2 vdisks
+        TVDiskMock vdisk1(&testCtx);
+        TVDiskMock vdisk2(&testCtx);
+
+        vdisk1.InitFull(0u);
+        vdisk2.InitFull(4u);
+
+        vdisk1.ReserveChunk();
+        vdisk2.ReserveChunk();
+
+        vdisk1.CommitReservedChunks();
+        vdisk2.CommitReservedChunks();
+
+        // State:
+        // PDisk.SlotSizeUnits: 0
+        // Owners.GroupSizeInUnits: [0, 4]
+
+        // Assert NumActiveSlots == 5
+        const auto evCheckSpaceResponse1 = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk1.PDiskParams->Owner, vdisk1.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResponse1->NumActiveSlots, 5);
+        AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 5);
+
+        // Set ExpectedSlotCount to 3
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(3),
+            NKikimrProto::OK);
+
+        // Check that NumActiveSlots is updated to match ExpectedSlotCount
+        const auto evCheckSpaceResponse2 = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk1.PDiskParams->Owner, vdisk1.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResponse2->NumActiveSlots, 3);
+        AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 3);
+
+        // Set ExpectedSlotCount to 0 (should be ignored and use actual number of slots)
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(0),
+            NKikimrProto::OK);
+
+        // Check that NumActiveSlots is updated to match actual number of slots
+        const auto evCheckSpaceResponse3 = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk1.PDiskParams->Owner, vdisk1.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResponse3->NumActiveSlots, 5);
+        AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 5);
+
+        // Graceful restart with same config
+        testCtx.GracefulPDiskRestart();
+        vdisk1.InitFull(0u);
+        vdisk1.SendEvLogSync();
+        vdisk2.InitFull(4u);
+        vdisk2.SendEvLogSync();
+
+        // Set ExpectedSlotCount to 10
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(10),
+            NKikimrProto::OK);
+
+        // Check that NumActiveSlots is still 5 (actual number of slots)
+        const auto evCheckSpaceResponse4 = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk1.PDiskParams->Owner, vdisk1.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResponse4->NumActiveSlots, 5);
+        AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 5);
+
+        // Graceful restart with ExpectedSlotCount in config
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->ExpectedSlotCount = 8;
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+        vdisk1.InitFull(0u);
+        vdisk1.SendEvLogSync();
+        vdisk2.InitFull(4u);
+        vdisk2.SendEvLogSync();
+
+        // Update ExpectedSlotCount again
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(6),
+            NKikimrProto::OK);
+
+        // Check that NumActiveSlots is still 5 (actual number of slots)
+        const auto evCheckSpaceResponse5 = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk1.PDiskParams->Owner, vdisk1.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResponse5->NumActiveSlots, 5);
+        AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 5);
+    }
+
     Y_UNIT_TEST(TestChunkWriteCrossOwner) {
         TActorTestContext testCtx{{}};
 

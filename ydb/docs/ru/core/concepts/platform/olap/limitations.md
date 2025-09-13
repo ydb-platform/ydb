@@ -270,6 +270,12 @@ WHERE e.user_id = p.user_id
 
 Используйте экспорт-импорт данных через Object Storage.
 
+{% note info %}
+
+Для выполнения операций экспорта и импорта убедитесь, что у вас настроены права доступа к Object Storage и указаны корректные учётные данные.
+
+{% endnote %}
+
 ```sql
 -- Параметры (для примера — как переменные)
 DECLARE $yc_key    AS String;
@@ -286,7 +292,7 @@ WITH (
 );
 
 -- 2) Внешняя "таблица" (папка с CSV в бакете)
-CREATE EXTERNAL TABLE s3_processed_backup
+CREATE EXTERNAL TABLE s3_my_columnstore_table_backup
 WITH (
   DATA_SOURCE = "s3_backup_ds",
   LOCATION    = "s3://my-bucket/ydb-backups/processed_data/full/",  -- путь в Object Storage
@@ -299,33 +305,13 @@ WITH (
 );
 
 -- 3) Экспорт
-INSERT INTO s3_processed_backup
+INSERT INTO s3_my_columnstore_table_backup
 SELECT * FROM my_columnstore_table;
-```
 
-```sql
--- 4) Импорт (восстановление)
+-- 4) Восстановление данных
 INSERT INTO my_columnstore_table
-SELECT * FROM s3_processed_backup;
-```
-
-{% note info %}
-
-Для выполнения операций экспорта и импорта убедитесь, что у вас настроены права доступа к Object Storage и указаны корректные учётные данные.
-
-{% endnote %}
 SELECT *
-FROM processed_data;  -- ваша колоночная таблица
-
-```
-
-Восстановление данных:
-
-```sql
--- Импорт из Parquet-бэкапа в S3
-INSERT INTO processed_data_restored
-SELECT *
-FROM s3_processed_backup;
+FROM s3_my_columnstore_table_backup;
 ```
 
 ## Число партиций фиксируется при создании

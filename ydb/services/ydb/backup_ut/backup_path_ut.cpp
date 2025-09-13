@@ -1,5 +1,7 @@
 #include "s3_backup_test_base.h"
 
+#include <util/random/random.h>
+
 #include <fmt/format.h>
 
 using namespace NYdb;
@@ -869,6 +871,63 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/Table2/scheme.pb.sha256",
                 "/test_bucket/Prefix/Table2/data_00.csv.sha256",
             }, importSettings);
+        }
+    }
+
+    // Test that covers races between processing and cancellation
+    Y_UNIT_TEST(CancelWhileProcessing) {
+        // Make tables for parallel export
+        auto createSchemaResult = YdbQueryClient().ExecuteQuery(R"sql(
+            CREATE TABLE `/Root/Table0` (
+                key Uint32 NOT NULL,
+                value String,
+                PRIMARY KEY (key)
+            );
+
+            CREATE TABLE `/Root/Table1` (
+                key Uint32 NOT NULL,
+                value String,
+                PRIMARY KEY (key)
+            );
+
+            CREATE TABLE `/Root/Table2` (
+                key Uint32 NOT NULL,
+                value String,
+                PRIMARY KEY (key)
+            );
+
+            CREATE TABLE `/Root/Table3` (
+                key Uint32 NOT NULL,
+                value String,
+                PRIMARY KEY (key)
+            );
+
+            CREATE TABLE `/Root/Table4` (
+                key Uint32 NOT NULL,
+                value String,
+                PRIMARY KEY (key)
+            );
+        )sql", NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(createSchemaResult.IsSuccess(), createSchemaResult.GetIssues().ToString());
+
+        for (bool cancelExport : {true, false}) {
+            TString exportPrefix = TStringBuilder() << "Prefix_" << cancelExport;
+            NExport::TExportToS3Settings exportSettings = MakeExportSettings("", exportPrefix);
+            auto exportResult = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
+            if (cancelExport) {
+                Sleep(TDuration::MilliSeconds(RandomNumber<ui64>(1500)));
+                YdbOperationClient().Cancel(exportResult.Id()).GetValueSync();
+                WaitOpStatus(exportResult, {NYdb::EStatus::SUCCESS, NYdb::EStatus::CANCELLED});
+                continue;
+            }
+            WaitOpSuccess(exportResult);
+
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings(exportPrefix, "/Root/RestorePrefix");
+            auto importResult = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+
+            Sleep(TDuration::MilliSeconds(RandomNumber<ui64>(1500)));
+            YdbOperationClient().Cancel(importResult.Id()).GetValueSync();
+            WaitOpStatus(importResult, {NYdb::EStatus::SUCCESS, NYdb::EStatus::CANCELLED});
         }
     }
 }

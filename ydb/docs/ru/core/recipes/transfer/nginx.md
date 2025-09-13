@@ -162,3 +162,5 @@ FROM `transfer_recipe/access_log`;
 * [{#T}](../../yql/reference/syntax/create-topic.md)
 * [{#T}](../../yql/reference/syntax/create-transfer.md)
 * [{#T}](../../yql/reference/syntax/select/index.md)
+* [Функция UNWRAP](../../yql/reference/builtins/basic.md#unwrap)
+* [Функция COALESCE](../../yql/reference/builtins/basic.md#coalesce)

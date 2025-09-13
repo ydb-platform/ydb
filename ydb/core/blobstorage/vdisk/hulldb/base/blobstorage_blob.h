@@ -362,6 +362,10 @@ namespace NKikimr {
             return Blob.Empty();
         }
 
+        bool ContainsMetadataPartsOnly() const {
+            return Blob.ContainsMetadataPartsOnly();
+        }
+
         TRope CreateDiskBlob(TRopeArena& arena, bool addHeader) const {
             return Blob.CreateDiskBlob(arena, addHeader);
         }

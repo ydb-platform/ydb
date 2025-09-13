@@ -134,11 +134,12 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllPa
     return result;
 }
 
-void TMergePartialStream::SkipToBound(const TSortableBatchPosition& pos, const bool lower) {
+ui64 TMergePartialStream::SkipToBound(const TSortableBatchPosition& pos, const bool lower) {
     if (SortHeap.Empty()) {
-        return;
+        return 0;
     }
     AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+    ui64 recordsSkipped = 0;
     while (!SortHeap.Empty()) {
         const auto cmpResult = SortHeap.Current().GetKeyColumns().Compare(pos);
         if (cmpResult == std::partial_ordering::greater) {
@@ -147,20 +148,32 @@ void TMergePartialStream::SkipToBound(const TSortableBatchPosition& pos, const b
         if (cmpResult == std::partial_ordering::equivalent && lower) {
             break;
         }
+
+        const ui64 currentPosIndex = SortHeap.Current().GetPositionIndex();
+        const ui64 sourceId = SortHeap.Current().GetSourceId();
         const TSortableBatchPosition::TFoundPosition skipPos = SortHeap.MutableCurrent().SkipToLower(pos);
+        AFL_VERIFY(SortHeap.Current().GetSourceId() == sourceId);
+        recordsSkipped += SortHeap.Current().GetPositionIndex() - currentPosIndex;
         AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+
         if (skipPos.IsEqual()) {
-            if (!lower && !SortHeap.MutableCurrent().Next()) {
-                SortHeap.RemoveTop();
+            if (!lower) {
+                ++recordsSkipped;
+                if (!SortHeap.MutableCurrent().Next()) {
+                    SortHeap.RemoveTop();
+                } else {
+                    SortHeap.UpdateTop();
+                }
             } else {
                 SortHeap.UpdateTop();
             }
         } else if (skipPos.IsLess()) {
+            ++recordsSkipped;
             SortHeap.RemoveTop();
         } else {
             SortHeap.UpdateTop();
         }
     }
+    return recordsSkipped;
 }
-
 }

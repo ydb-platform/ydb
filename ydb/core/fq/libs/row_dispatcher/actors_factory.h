@@ -17,6 +17,7 @@ struct IActorFactory : public TThrRefBase {
         const TString& endpoint,
         const TString& database,
         const NConfig::TRowDispatcherConfig& config,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         NActors::TActorId rowDispatcherActorId,
         NActors::TActorId compileServiceActorId,
         ui32 partitionId,

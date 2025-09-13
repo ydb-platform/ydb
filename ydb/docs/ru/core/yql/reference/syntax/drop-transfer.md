@@ -21,6 +21,14 @@ DROP TRANSFER <name>
 * `REMOVE SCHEMA` — для удаления экземпляра трансфера;
 * `ALTER SCHEMA` — для удаления автоматически созданного читателя топика (если применимо).
 
+## Примеры {#examples}
+
+Следующий запрос удаляет трансфер c именем `my_transfer`:
+
+```yql
+DROP TRANSFER my_transfer;
+```
+
 ## См. также
 
 * [CREATE TRANSFER](create-transfer.md)

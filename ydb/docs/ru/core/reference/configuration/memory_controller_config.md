@@ -11,6 +11,28 @@
 
 Лимиты памяти могут быть настроены для контроля общего использования памяти, обеспечивая эффективную работу базы данных в рамках доступных ресурсов.
 
+Общий вид потребления памяти:
+
+```mermaid
+---
+config:
+  sankey:
+    showValues: false
+---
+sankey-beta
+
+Process Memory,Cache Components,50
+Process Memory,Activity Components, 30
+Process Memory,Allocator caches, 10
+Process Memory,Other,10
+
+Cache Components,Shared cache, 40
+Cache Components,MemTable, 10
+
+Activity Components,"KQP", 20
+Activity Components,Compaction, 10
+```
+
 ## Жёсткий лимит памяти {#hard-memory-limit}
 
 Жёсткий лимит памяти определяет общее количество памяти, доступное для процесса {{ ydb-short-name }}.
@@ -79,7 +101,8 @@ memory_controller_config:
 
 К компонентам-активностям относятся:
 
-- KQP.
+- KQP;
+- Компактизация.
 
 Лимит памяти для каждого из компонентов-активностей указывает максимальное количество памяти, которое он может попытаться использовать. Однако, чтобы предотвратить превышение процессом {{ ydb-short-name }} мягкого лимита памяти, общее потребление компонентов-активностей ограничивается дополнительным лимитом, называемым лимитом памяти для активностей. Если общее использование памяти активными компонентами превышает этот лимит, любые дополнительные запросы на память будут отклонены. Когда выполнение запросов приближается к лимитам памяти, {{ ydb-short-name }} активирует [спиллинг](../../concepts/spilling.md) для временного сохранения промежуточных данных на диск, предотвращая нарушение лимитов памяти.
 
@@ -119,3 +142,4 @@ $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\
 | `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Минимальный порог для лимита памяти MemTable. |
 | `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Максимальный порог для лимита памяти MemTable. |
 | `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | Лимит памяти для KQP. |
+| `compaction_limit_percent`&nbsp;/<br/>`compaction_limit_bytes` | 10% | Лимит памяти для компактизации. |

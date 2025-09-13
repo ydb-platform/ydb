@@ -284,6 +284,7 @@ private:
                     LOG_E("Failed to save state: " << e.what());
                     mkqlProgramState = nullptr;
                 }
+                StartResumeByCheckpoint();
                 HasActiveCheckpoint = false;
                 if (!WatermarkRequests.empty()) {
                     auto nextWatermarkRequest = WatermarkRequests.front();
@@ -480,7 +481,7 @@ private:
             checkpoint = hasCheckpoint ? std::move(poppedCheckpoint) : TMaybe<NDqProto::TCheckpoint>();
 
             if (hasCheckpoint) {
-                ResumeByCheckpoint();
+                AdvanceResumeByCheckpoint();
                 break;
             }
 
@@ -504,10 +505,26 @@ private:
             ev->Cookie);
     }
 
-    void ResumeByCheckpoint() {
+    void MaybeResumeByCheckpoint() {
+        if (UnsentCheckpoints > 0) {
+            LOG_T("Pending " << UnsentCheckpoints << " checkpoints to be sent");
+            return;
+        }
         for (const auto& inputId : InputsWithCheckpoints) {
             TaskRunner->GetInputChannel(inputId)->ResumeByCheckpoint();
         }
+    }
+
+    void StartResumeByCheckpoint() {
+        Y_ENSURE(UnsentCheckpoints == 0);
+        UnsentCheckpoints = Sinks.size() + Outputs.size();
+        MaybeResumeByCheckpoint();
+    }
+
+    void AdvanceResumeByCheckpoint() {
+        Y_ENSURE(UnsentCheckpoints > 0);
+        --UnsentCheckpoints;
+        MaybeResumeByCheckpoint();
     }
 
     void ResumeByWatermark(TInstant watermark) {
@@ -539,7 +556,7 @@ private:
         if (hasCheckpoint) {
             checkpointSize = checkpoint.ByteSize();
             maybeCheckpoint.ConstructInPlace(std::move(checkpoint));
-            ResumeByCheckpoint();
+            AdvanceResumeByCheckpoint();
         }
         const bool finished = sink->IsFinished();
         const bool changed = finished || size > 0 || hasCheckpoint;
@@ -702,6 +719,7 @@ private:
     TMaybe<TInstant> LastWatermark;
     std::deque<TInstant> WatermarkRequests;
     bool HasActiveCheckpoint = false;
+    ui32 UnsentCheckpoints = 0;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {

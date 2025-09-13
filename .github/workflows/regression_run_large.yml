@@ -1,4 +1,4 @@
-name: Regression-run Large
+name: Regression-run_Large
 
 on:
   schedule:

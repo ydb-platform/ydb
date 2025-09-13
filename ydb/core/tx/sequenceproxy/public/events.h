@@ -62,6 +62,7 @@ namespace NSequenceProxy {
             TEvNextValResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
                 : Status(status)
                 , Issues(issues)
+                , Value(0)
             { }
 
             TEvNextValResult(const TPathId& pathId, i64 value)

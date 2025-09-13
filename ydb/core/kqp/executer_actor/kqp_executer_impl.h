@@ -1416,7 +1416,7 @@ protected:
         }
 
         if (partitions.size() > 0 && source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards()) {
-            auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
+            auto [startShard, shardInfo] = PartitionPruner.MakeVirtualTablePartition(source, stageInfo);
 
             YQL_ENSURE(Stats);
 

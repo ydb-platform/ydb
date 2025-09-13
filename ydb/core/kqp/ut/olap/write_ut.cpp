@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3) VALUES (3u, 3u, 3u)
         ------
         SCHEMA:
-        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col4 Uint32 NOT NULL DEFAULT 0
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col4 Uint32
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3, Col4) VALUES (4u, 4u, 4u, 4u)
@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col3 Uint32
         ------
         SCHEMA:
-        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col4 Uint32 NOT NULL DEFAULT 0
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col4 Uint32
         ------
         SCHEMA:
         ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col5 Uint32
@@ -412,7 +412,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
-        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetDisableColumnShardBulkUpsertRequireAllColumns(true);
+        kikimr.GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetBulkUpsertRequireAllColumns(false);
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         TTypedLocalHelper helper("Utf8", "Utf8", kikimr);
         helper.CreateTestOlapTable();
@@ -427,6 +427,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         writeGuard.Finalize();
         {
             auto selectQuery = TString(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
                 SELECT
                     field, count(*) as count,
                 FROM `/Root/olapStore/olapTable`

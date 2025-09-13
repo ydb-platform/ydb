@@ -277,6 +277,9 @@ TPartitionCompaction::TCompactState::TCompactState(
             Failure = true;
         }
     }
+    PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+              << PartitionActor->Partition << " Created compact state. StartOffset: " << partitionActor->StartOffset
+              << ", first head offset: " << FirstHeadOffset << ", EndOffset: " << partitionActor->EndOffset);
     MaxOffset = std::min(MaxOffset, FirstHeadOffset);
 
     KeysIter = DataKeysBody.begin();

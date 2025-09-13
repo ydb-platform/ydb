@@ -656,6 +656,7 @@ message TCompositeConveyorConfig {
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
         optional string Name = 4;
+        optional uint64 MaxBatchSize = 5;
     }
 
     optional bool Enabled = 1 [default = true];
@@ -1937,8 +1938,8 @@ message TColumnShardConfig {
     optional bool UseSlicesFilter = 31 [default = true];
     optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
     optional uint64 WritingBufferVolumeMb = 33 [default = 32];
-    optional uint64 WritingInFlightRequestsCountLimit = 34 [default = 1000];
-    optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 128000000];
+    optional uint64 WritingInFlightRequestsCountLimit = 34 [default = 1000000];
+    optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 2147483648];
     optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36;
     optional int32 DefaultCompressionLevel = 37;
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
@@ -1949,6 +1950,7 @@ message TColumnShardConfig {
     optional bool GenerateInternalPathId = 43 [default = false]; //Be aware! IRREVERSIBLE(if set, can not be unset for a dababase)
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
     optional bool DeduplicationEnabled = 46 [default = true];
+    optional bool BulkUpsertRequireAllColumns = 47 [default = true];
 }
 
 message TSchemeShardConfig {

@@ -59,7 +59,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TApiVersionsResponseData> ApiVersions(bool silent = false);
 
-        TMessagePtr<TMetadataResponseData> Metadata(const TVector<TString>& topics = {}, std::optional<bool> allowAutoTopicCreation = std::nullopt);
+        TMessagePtr<TMetadataResponseData> Metadata(const TVector<TString>& topics = {}, bool allowAutoTopicCreation = true);
 
         TMessagePtr<TSaslHandshakeResponseData> SaslHandshake(const TString& mechanism = "PLAIN");
 
@@ -150,7 +150,6 @@ class TKafkaTestClient {
         template <std::derived_from<TApiMessage> T>
         TMessagePtr<T> Read(TSocketInput& si, TRequestHeaderData* requestHeader);
         void Print(const TBuffer& buffer);
-        char Hex0(const unsigned char c);
         void FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics);
     private:
         TNetworkAddress Addr;

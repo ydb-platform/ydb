@@ -222,6 +222,26 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         return session;
     }
 
+    void DoCreateVectorIndex(TSession& session, bool covered = false, bool ___data = false) {
+        // Add an index
+        const TString createIndex(Q_(Sprintf(R"(
+            ALTER TABLE `/Root/TestTable`
+                ADD INDEX index1
+                GLOBAL USING vector_kmeans_tree
+                ON (emb)%s
+                WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+        )", covered ? (___data ? " COVER (___data, emb)" : " COVER (data, emb)") : "")));
+
+        auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    TSession DoCreateTableAndVectorIndex(TTableClient& db, bool nullable, bool covered = false) {
+        auto session = DoCreateTableForVectorIndex(db, nullable);
+        DoCreateVectorIndex(session, covered);
+        return session;
+    }
+
     Y_UNIT_TEST_QUAD(OrderByCosineLevel1, Nullable, UseSimilarity) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
@@ -314,6 +334,52 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
         DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(OrderByNoUnwrap) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableAndVectorIndex(db, true);
+
+        {
+            const TString query1(Q1_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                $TargetEmbedding = String::HexDecode("677103");
+                SELECT * FROM `/Root/TestTable` VIEW index1
+                ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
+                LIMIT 3;
+            )"));
+
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "Failed to execute: `" << query1 << "` with " << result.GetIssues().ToString());
+        }
+
+        {
+            const TString query1(Q1_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                $TargetEmbedding = (SELECT emb FROM `/Root/TestTable` WHERE pk=9);
+                SELECT * FROM `/Root/TestTable` VIEW index1
+                ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
+                LIMIT 3;
+            )"));
+
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "Failed to execute: `" << query1 << "` with " << result.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3) {

@@ -1154,7 +1154,7 @@ namespace NKikimr::NHttpProxy {
                 Request->URL + " " +
                 Request->Protocol + "/" + Request->Version + "\r\n" +
                 Request->Headers +
-                Request->Content;
+                Request->Body;
             signature = MakeHolder<NKikimr::NSQS::TAwsRequestSignV4>(fullRequest);
         }
 

@@ -43,7 +43,7 @@ public:
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", atTop);
 
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TTestBlockFlowWrapper::DoCalculateImpl));
+        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTestBlockFlowWrapper::DoCalculateImpl>());
         const auto doType = FunctionType::get(statusType, {self->getType(), ptrValueType,  ctx.Ctx->getType(), ptrValueType, ptrValueType, ptrValueType}, false);
         const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(doType), "function", atTop);
 

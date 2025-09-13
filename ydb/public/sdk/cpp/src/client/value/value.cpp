@@ -1130,32 +1130,32 @@ public:
         return GetProto().bool_value();
     }
 
-    i8 GetInt8() const {
+    int8_t GetInt8() const {
         CheckPrimitive(NYdb::EPrimitiveType::Int8);
         return GetProto().int32_value();
     }
 
-    ui8 GetUint8() const {
+    uint8_t GetUint8() const {
         CheckPrimitive(NYdb::EPrimitiveType::Uint8);
         return GetProto().uint32_value();
     }
 
-    i16 GetInt16() const {
+    int16_t GetInt16() const {
         CheckPrimitive(NYdb::EPrimitiveType::Int16);
         return GetProto().int32_value();
     }
 
-    ui16 GetUint16() const {
+    uint16_t GetUint16() const {
         CheckPrimitive(NYdb::EPrimitiveType::Uint16);
         return GetProto().uint32_value();
     }
 
-    i32 GetInt32() const {
+    int32_t GetInt32() const {
         CheckPrimitive(NYdb::EPrimitiveType::Int32);
         return GetProto().int32_value();
     }
 
-    ui32 GetUint32() const {
+    uint32_t GetUint32() const {
         CheckPrimitive(NYdb::EPrimitiveType::Uint32);
         return GetProto().uint32_value();
     }
@@ -1200,24 +1200,24 @@ public:
         return GetProto().int64_value();
     }
 
-    i32 GetDate32() const {
+    std::chrono::sys_time<TWideDays> GetDate32() const {
         CheckPrimitive(NYdb::EPrimitiveType::Date32);
-        return GetProto().int32_value();
+        return std::chrono::sys_time<TWideDays>(TWideDays(GetProto().int32_value()));
     }
 
-    int64_t GetDatetime64() const {
+    std::chrono::sys_time<TWideSeconds> GetDatetime64() const {
         CheckPrimitive(NYdb::EPrimitiveType::Datetime64);
-        return GetProto().int64_value();
+        return std::chrono::sys_time<TWideSeconds>(TWideSeconds(GetProto().int64_value()));
     }
 
-    int64_t GetTimestamp64() const {
+    std::chrono::sys_time<TWideMicroseconds> GetTimestamp64() const {
         CheckPrimitive(NYdb::EPrimitiveType::Timestamp64);
-        return GetProto().int64_value();
+        return std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(GetProto().int64_value()));
     }
 
-    int64_t GetInterval64() const {
+    TWideMicroseconds GetInterval64() const {
         CheckPrimitive(NYdb::EPrimitiveType::Interval64);
-        return GetProto().int64_value();
+        return TWideMicroseconds(GetProto().int64_value());
     }
 
     const std::string& GetTzDate() const {
@@ -1672,27 +1672,27 @@ bool TValueParser::GetBool() const {
     return Impl_->GetBool();
 }
 
-i8 TValueParser::GetInt8() const {
+int8_t TValueParser::GetInt8() const {
     return Impl_->GetInt8();
 }
 
-ui8 TValueParser::GetUint8() const {
+uint8_t TValueParser::GetUint8() const {
     return Impl_->GetUint8();
 }
 
-i16 TValueParser::GetInt16() const {
+int16_t TValueParser::GetInt16() const {
     return Impl_->GetInt16();
 }
 
-ui16 TValueParser::GetUint16() const {
+uint16_t TValueParser::GetUint16() const {
     return Impl_->GetUint16();
 }
 
-i32 TValueParser::GetInt32() const {
+int32_t TValueParser::GetInt32() const {
     return Impl_->GetInt32();
 }
 
-ui32 TValueParser::GetUint32() const {
+uint32_t TValueParser::GetUint32() const {
     return Impl_->GetUint32();
 }
 
@@ -1728,19 +1728,19 @@ int64_t TValueParser::GetInterval() const {
     return Impl_->GetInterval();
 }
 
-i32 TValueParser::GetDate32() const {
+std::chrono::sys_time<TWideDays> TValueParser::GetDate32() const {
     return Impl_->GetDate32();
 }
 
-int64_t TValueParser::GetDatetime64() const {
+std::chrono::sys_time<TWideSeconds> TValueParser::GetDatetime64() const {
     return Impl_->GetDatetime64();
 }
 
-int64_t TValueParser::GetTimestamp64() const {
+std::chrono::sys_time<TWideMicroseconds> TValueParser::GetTimestamp64() const {
     return Impl_->GetTimestamp64();
 }
 
-int64_t TValueParser::GetInterval64() const {
+TWideMicroseconds TValueParser::GetInterval64() const {
     return Impl_->GetInterval64();
 }
 
@@ -1804,28 +1804,28 @@ std::optional<bool> TValueParser::GetOptionalBool() const {
     RET_OPT_VALUE(bool, Bool);
 }
 
-std::optional<i8> TValueParser::GetOptionalInt8() const {
-    RET_OPT_VALUE(i8, Int8);
+std::optional<int8_t> TValueParser::GetOptionalInt8() const {
+    RET_OPT_VALUE(int8_t, Int8);
 }
 
-std::optional<ui8> TValueParser::GetOptionalUint8() const {
-    RET_OPT_VALUE(ui8, Uint8);
+std::optional<uint8_t> TValueParser::GetOptionalUint8() const {
+    RET_OPT_VALUE(uint8_t, Uint8);
 }
 
-std::optional<i16> TValueParser::GetOptionalInt16() const {
-    RET_OPT_VALUE(i16, Int16);
+std::optional<int16_t> TValueParser::GetOptionalInt16() const {
+    RET_OPT_VALUE(int16_t, Int16);
 }
 
-std::optional<ui16> TValueParser::GetOptionalUint16() const {
-    RET_OPT_VALUE(ui16, Uint16);
+std::optional<uint16_t> TValueParser::GetOptionalUint16() const {
+    RET_OPT_VALUE(uint16_t, Uint16);
 }
 
-std::optional<i32> TValueParser::GetOptionalInt32() const {
-    RET_OPT_VALUE(i32, Int32);
+std::optional<int32_t> TValueParser::GetOptionalInt32() const {
+    RET_OPT_VALUE(int32_t, Int32);
 }
 
-std::optional<ui32> TValueParser::GetOptionalUint32() const {
-    RET_OPT_VALUE(ui32, Uint32);
+std::optional<uint32_t> TValueParser::GetOptionalUint32() const {
+    RET_OPT_VALUE(uint32_t, Uint32);
 }
 
 std::optional<int64_t> TValueParser::GetOptionalInt64() const {
@@ -1860,20 +1860,20 @@ std::optional<int64_t> TValueParser::GetOptionalInterval() const {
     RET_OPT_VALUE(int64_t, Interval);
 }
 
-std::optional<i32> TValueParser::GetOptionalDate32() const {
-    RET_OPT_VALUE(int64_t, Date32);
+std::optional<std::chrono::sys_time<TWideDays>> TValueParser::GetOptionalDate32() const {
+    RET_OPT_VALUE(std::chrono::sys_time<TWideDays>, Date32);
 }
 
-std::optional<int64_t> TValueParser::GetOptionalDatetime64() const {
-    RET_OPT_VALUE(int64_t, Datetime64);
+std::optional<std::chrono::sys_time<TWideSeconds>> TValueParser::GetOptionalDatetime64() const {
+    RET_OPT_VALUE(std::chrono::sys_time<TWideSeconds>, Datetime64);
 }
 
-std::optional<int64_t> TValueParser::GetOptionalTimestamp64() const {
-    RET_OPT_VALUE(int64_t, Timestamp64);
+std::optional<std::chrono::sys_time<TWideMicroseconds>> TValueParser::GetOptionalTimestamp64() const {
+    RET_OPT_VALUE(std::chrono::sys_time<TWideMicroseconds>, Timestamp64);
 }
 
-std::optional<int64_t> TValueParser::GetOptionalInterval64() const {
-    RET_OPT_VALUE(int64_t, Interval64);
+std::optional<TWideMicroseconds> TValueParser::GetOptionalInterval64() const {
+    RET_OPT_VALUE(TWideMicroseconds, Interval64);
 }
 
 std::optional<std::string> TValueParser::GetOptionalTzDate() const {
@@ -2079,32 +2079,32 @@ public:
         GetValue().set_bool_value(value);
     }
 
-    void Int8(i8 value) {
+    void Int8(int8_t value) {
         FillPrimitiveType(EPrimitiveType::Int8);
         GetValue().set_int32_value(value);
     }
 
-    void Uint8(ui8 value) {
+    void Uint8(uint8_t value) {
         FillPrimitiveType(EPrimitiveType::Uint8);
         GetValue().set_uint32_value(value);
     }
 
-    void Int16(i16 value) {
+    void Int16(int16_t value) {
         FillPrimitiveType(EPrimitiveType::Int16);
         GetValue().set_int32_value(value);
     }
 
-    void Uint16(ui16 value) {
+    void Uint16(uint16_t value) {
         FillPrimitiveType(EPrimitiveType::Uint16);
         GetValue().set_uint32_value(value);
     }
 
-    void Int32(i32 value) {
+    void Int32(int32_t value) {
         FillPrimitiveType(EPrimitiveType::Int32);
         GetValue().set_int32_value(value);
     }
 
-    void Uint32(ui32 value) {
+    void Uint32(uint32_t value) {
         FillPrimitiveType(EPrimitiveType::Uint32);
         GetValue().set_uint32_value(value);
     }
@@ -2149,24 +2149,24 @@ public:
         GetValue().set_int64_value(value);
     }
 
-    void Date32(const i32 value) {
+    void Date32(const std::chrono::sys_time<TWideDays>& value) {
         FillPrimitiveType(EPrimitiveType::Date32);
-        GetValue().set_int32_value(value);
+        GetValue().set_int32_value(value.time_since_epoch().count());
     }
 
-    void Datetime64(const int64_t value) {
+    void Datetime64(const std::chrono::sys_time<TWideSeconds>& value) {
         FillPrimitiveType(EPrimitiveType::Datetime64);
-        GetValue().set_int64_value(value);
+        GetValue().set_int64_value(value.time_since_epoch().count());
     }
 
-    void Timestamp64(const int64_t value) {
+    void Timestamp64(const std::chrono::sys_time<TWideMicroseconds>& value) {
         FillPrimitiveType(EPrimitiveType::Timestamp64);
-        GetValue().set_int64_value(value);
+        GetValue().set_int64_value(value.time_since_epoch().count());
     }
 
-    void Interval64(const int64_t value) {
+    void Interval64(const TWideMicroseconds& value) {
         FillPrimitiveType(EPrimitiveType::Interval64);
-        GetValue().set_int64_value(value);
+        GetValue().set_int64_value(value.count());
     }
 
     void TzDate(const std::string& value) {
@@ -2823,37 +2823,37 @@ TDerived& TValueBuilderBase<TDerived>::Bool(bool value) {
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Int8(i8 value) {
+TDerived& TValueBuilderBase<TDerived>::Int8(int8_t value) {
     Impl_->Int8(value);
     return static_cast<TDerived&>(*this);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Uint8(ui8 value) {
+TDerived& TValueBuilderBase<TDerived>::Uint8(uint8_t value) {
     Impl_->Uint8(value);
     return static_cast<TDerived&>(*this);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Int16(i16 value) {
+TDerived& TValueBuilderBase<TDerived>::Int16(int16_t value) {
     Impl_->Int16(value);
     return static_cast<TDerived&>(*this);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Uint16(ui16 value) {
+TDerived& TValueBuilderBase<TDerived>::Uint16(uint16_t value) {
     Impl_->Uint16(value);
     return static_cast<TDerived&>(*this);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Int32(i32 value) {
+TDerived& TValueBuilderBase<TDerived>::Int32(int32_t value) {
     Impl_->Int32(value);
     return static_cast<TDerived&>(*this);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Uint32(ui32 value) {
+TDerived& TValueBuilderBase<TDerived>::Uint32(uint32_t value) {
     Impl_->Uint32(value);
     return static_cast<TDerived&>(*this);
 }
@@ -2907,25 +2907,25 @@ TDerived& TValueBuilderBase<TDerived>::Interval(int64_t value) {
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Date32(const i32 value) {
+TDerived& TValueBuilderBase<TDerived>::Date32(const std::chrono::sys_time<TWideDays>& value) {
     Impl_->Date32(value);
     return static_cast<TDerived&>(*this);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Datetime64(const int64_t value) {
+TDerived& TValueBuilderBase<TDerived>::Datetime64(const std::chrono::sys_time<TWideSeconds>& value) {
     Impl_->Datetime64(value);
     return static_cast<TDerived&>(*this);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Timestamp64(const int64_t value) {
+TDerived& TValueBuilderBase<TDerived>::Timestamp64(const std::chrono::sys_time<TWideMicroseconds>& value) {
     Impl_->Timestamp64(value);
     return static_cast<TDerived&>(*this);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Interval64(const int64_t value) {
+TDerived& TValueBuilderBase<TDerived>::Interval64(const TWideMicroseconds& value) {
     Impl_->Interval64(value);
     return static_cast<TDerived&>(*this);
 }
@@ -3002,7 +3002,7 @@ TDerived& TValueBuilderBase<TDerived>::Pg(const TPgValue& value) {
     return static_cast<TDerived&>(*this);
 }
 
-#define SET_OPT_VALUE_MAYBE(Name) \
+#define SET_OPT_VALUE_FROM_OPTIONAL(Name) \
     if (value) { \
         Impl_->BeginOptional(); \
         Impl_->Name(*value); \
@@ -3020,147 +3020,147 @@ TDerived& TValueBuilderBase<TDerived>::Pg(const TPgValue& value) {
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalBool(const std::optional<bool>& value) {
-    SET_OPT_VALUE_MAYBE(Bool);
+    SET_OPT_VALUE_FROM_OPTIONAL(Bool);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalInt8(const std::optional<i8>& value) {
-    SET_OPT_VALUE_MAYBE(Int8);
+TDerived& TValueBuilderBase<TDerived>::OptionalInt8(const std::optional<int8_t>& value) {
+    SET_OPT_VALUE_FROM_OPTIONAL(Int8);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalUint8(const std::optional<ui8>& value) {
-    SET_OPT_VALUE_MAYBE(Uint8);
+TDerived& TValueBuilderBase<TDerived>::OptionalUint8(const std::optional<uint8_t>& value) {
+    SET_OPT_VALUE_FROM_OPTIONAL(Uint8);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalInt16(const std::optional<i16>& value) {
-    SET_OPT_VALUE_MAYBE(Int16);
+TDerived& TValueBuilderBase<TDerived>::OptionalInt16(const std::optional<int16_t>& value) {
+    SET_OPT_VALUE_FROM_OPTIONAL(Int16);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalUint16(const std::optional<ui16>& value) {
-    SET_OPT_VALUE_MAYBE(Uint16);
+TDerived& TValueBuilderBase<TDerived>::OptionalUint16(const std::optional<uint16_t>& value) {
+    SET_OPT_VALUE_FROM_OPTIONAL(Uint16);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalInt32(const std::optional<i32>& value) {
-    SET_OPT_VALUE_MAYBE(Int32);
+TDerived& TValueBuilderBase<TDerived>::OptionalInt32(const std::optional<int32_t>& value) {
+    SET_OPT_VALUE_FROM_OPTIONAL(Int32);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalUint32(const std::optional<ui32>& value) {
-    SET_OPT_VALUE_MAYBE(Uint32);
+TDerived& TValueBuilderBase<TDerived>::OptionalUint32(const std::optional<uint32_t>& value) {
+    SET_OPT_VALUE_FROM_OPTIONAL(Uint32);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalInt64(const std::optional<int64_t>& value) {
-    SET_OPT_VALUE_MAYBE(Int64);
+    SET_OPT_VALUE_FROM_OPTIONAL(Int64);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalUint64(const std::optional<uint64_t>& value) {
-    SET_OPT_VALUE_MAYBE(Uint64);
+    SET_OPT_VALUE_FROM_OPTIONAL(Uint64);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalFloat(const std::optional<float>& value) {
-    SET_OPT_VALUE_MAYBE(Float);
+    SET_OPT_VALUE_FROM_OPTIONAL(Float);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalDouble(const std::optional<double>& value) {
-    SET_OPT_VALUE_MAYBE(Double);
+    SET_OPT_VALUE_FROM_OPTIONAL(Double);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalDate(const std::optional<TInstant>& value) {
-    SET_OPT_VALUE_MAYBE(Date);
+    SET_OPT_VALUE_FROM_OPTIONAL(Date);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalDatetime(const std::optional<TInstant>& value) {
-    SET_OPT_VALUE_MAYBE(Datetime);
+    SET_OPT_VALUE_FROM_OPTIONAL(Datetime);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp(const std::optional<TInstant>& value) {
-    SET_OPT_VALUE_MAYBE(Timestamp);
+    SET_OPT_VALUE_FROM_OPTIONAL(Timestamp);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalInterval(const std::optional<int64_t>& value) {
-    SET_OPT_VALUE_MAYBE(Interval);
+    SET_OPT_VALUE_FROM_OPTIONAL(Interval);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalDate32(const std::optional<i32>& value) {
-    SET_OPT_VALUE_MAYBE(Date32);
+TDerived& TValueBuilderBase<TDerived>::OptionalDate32(const std::optional<std::chrono::sys_time<TWideDays>>& value) {
+    SET_OPT_VALUE_FROM_OPTIONAL(Date32);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalDatetime64(const std::optional<int64_t>& value) {
-    SET_OPT_VALUE_MAYBE(Datetime64);
+TDerived& TValueBuilderBase<TDerived>::OptionalDatetime64(const std::optional<std::chrono::sys_time<TWideSeconds>>& value) {
+    SET_OPT_VALUE_FROM_OPTIONAL(Datetime64);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp64(const std::optional<int64_t>& value) {
-    SET_OPT_VALUE_MAYBE(Timestamp64);
+TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp64(const std::optional<std::chrono::sys_time<TWideMicroseconds>>& value) {
+    SET_OPT_VALUE_FROM_OPTIONAL(Timestamp64);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalInterval64(const std::optional<int64_t>& value) {
-    SET_OPT_VALUE_MAYBE(Interval64);
+TDerived& TValueBuilderBase<TDerived>::OptionalInterval64(const std::optional<TWideMicroseconds>& value) {
+    SET_OPT_VALUE_FROM_OPTIONAL(Interval64);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalTzDate(const std::optional<std::string>& value) {
-    SET_OPT_VALUE_MAYBE(TzDate);
+    SET_OPT_VALUE_FROM_OPTIONAL(TzDate);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalTzDatetime(const std::optional<std::string>& value) {
-    SET_OPT_VALUE_MAYBE(TzDatetime);
+    SET_OPT_VALUE_FROM_OPTIONAL(TzDatetime);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalTzTimestamp(const std::optional<std::string>& value) {
-    SET_OPT_VALUE_MAYBE(TzTimestamp);
+    SET_OPT_VALUE_FROM_OPTIONAL(TzTimestamp);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalString(const std::optional<std::string>& value) {
-    SET_OPT_VALUE_MAYBE(String);
+    SET_OPT_VALUE_FROM_OPTIONAL(String);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalUtf8(const std::optional<std::string>& value) {
-    SET_OPT_VALUE_MAYBE(Utf8);
+    SET_OPT_VALUE_FROM_OPTIONAL(Utf8);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalYson(const std::optional<std::string>& value) {
-    SET_OPT_VALUE_MAYBE(Yson);
+    SET_OPT_VALUE_FROM_OPTIONAL(Yson);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalJson(const std::optional<std::string>& value) {
-    SET_OPT_VALUE_MAYBE(Json);
+    SET_OPT_VALUE_FROM_OPTIONAL(Json);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalUuid(const std::optional<TUuidValue>& value) {
-    SET_OPT_VALUE_MAYBE(Uuid);
+    SET_OPT_VALUE_FROM_OPTIONAL(Uuid);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalJsonDocument(const std::optional<std::string>& value) {
-    SET_OPT_VALUE_MAYBE(JsonDocument);
+    SET_OPT_VALUE_FROM_OPTIONAL(JsonDocument);
 }
 
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalDyNumber(const std::optional<std::string>& value) {
-    SET_OPT_VALUE_MAYBE(DyNumber);
+    SET_OPT_VALUE_FROM_OPTIONAL(DyNumber);
 }
 
 

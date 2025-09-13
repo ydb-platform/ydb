@@ -123,7 +123,7 @@ public:
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
         Client->SetSecurityToken(RootToken);
         Client->InitRootScheme();
-        Client->TestGrant("/", ServerSettings->DomainName, RootToken, NACLib::EAccessRights::GenericFull );
+        Client->TestGrant("/", ServerSettings->DomainName, RootToken, NACLib::EAccessRights::GenericFull);
 
         // driver for actual grpc clients
         Endpoint = "localhost:" + ToString(grpcPort);
@@ -980,6 +980,9 @@ Y_UNIT_TEST_SUITE(SchemeReqAdminAccessInTenant) {
         CreateLocalUser(env, env.RootPath, "clusteradmin");
         env.GetTestServer().GetRuntime()->GetAppData(0).AdministrationAllowedSIDs.push_back("clusteradmin");
         env.GetTestServer().GetRuntime()->GetAppData(1).AdministrationAllowedSIDs.push_back("clusteradmin");
+
+        // Give cluster admin admin permissions (actually needed to be able to set owners)
+        SetPermissions(env, env.RootPath, "clusteradmin", {"ydb.generic.full"});
 
         Cerr << "TEST login clusteradmin" << Endl;
         auto subjectToken = LoginUser(env, env.RootPath, "clusteradmin", "passwd");

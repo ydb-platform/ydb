@@ -546,7 +546,7 @@ static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
         }
 
         // case lhs.GetOffset() == rhs.GetOffset() && lhs.GetPartNo() < rhs.GetPartNo()
-        Y_ABORT_UNLESS(lhs.GetPartNo() + lhs.GetInternalPartsCount() == rhs.GetPartNo(),
+        Y_ABORT_UNLESS(lhs.GetPartNo() + lhs.GetInternalPartsCount() <= rhs.GetPartNo(),
                        "lhs: %s, rhs: %s",
                        lhs.ToString().data(), rhs.ToString().data());
 

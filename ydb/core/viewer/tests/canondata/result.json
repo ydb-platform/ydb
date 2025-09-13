@@ -1252,6 +1252,54 @@
             "Truncated": true
         }
     },
+    "test.test_topic_data_cdc": {
+        "alter": null,
+        "insert":  {"version": 9},
+        "update": {"version": 9},
+        "data": {
+            "Messages": [
+                {
+                    "Offset": 0,
+                    "SeqNo": 1,
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "eyJ1cGRhdGUiOnsibmFtZSI6Im9uZSJ9LCJrZXkiOlsxXX0=",
+                    "OriginalSize": 35,
+                    "StorageSize": 35,
+                    "ProducerId": "not-zero-number-text",
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Offset": 1,
+                    "SeqNo": 2,
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "eyJ1cGRhdGUiOnsibmFtZSI6InR3byJ9LCJrZXkiOlsyXX0=",
+                    "OriginalSize": 35,
+                    "StorageSize": 35,
+                    "ProducerId": "not-zero-number-text",
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Offset": 2,
+                    "SeqNo": 3,
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "eyJ1cGRhdGUiOnsibmFtZSI6InRocmVlIn0sImtleSI6WzNdfQ==",
+                    "OriginalSize": 37,
+                    "StorageSize": 37,
+                    "ProducerId": "not-zero-number-text",
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 5,
+            "Truncated": false
+        }
+    },
     "test.test_transfer_describe": {
         "describe_result": {
             "batch_settings": {

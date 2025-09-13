@@ -59,7 +59,7 @@ private:
         }
     }
 
-    virtual ui64 DoGetWeight() const override {
+    virtual ui64 DoGetWeight(bool) const override {
         if (!GetNextLevel()) {
             return 0;
         }

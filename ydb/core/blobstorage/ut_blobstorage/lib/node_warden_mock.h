@@ -128,5 +128,8 @@ public:
         IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate);
         hFunc(TEvNodeWardenQueryStorageConfig, Handle);
         fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
+        IgnoreFunc(NStorage::TEvNodeWardenUpdateCache);
+        IgnoreFunc(NStorage::TEvNodeWardenQueryCache);
+        IgnoreFunc(NStorage::TEvNodeWardenUnsubscribeFromCache);
     )
 };

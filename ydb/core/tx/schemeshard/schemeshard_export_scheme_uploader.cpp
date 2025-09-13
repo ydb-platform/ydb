@@ -5,6 +5,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/wrappers/abstract.h>
+#include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -182,18 +183,11 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
     }
 
     void RetryOrFinish(const Aws::S3::S3Error& error) {
-        if (Attempt < Retries && ShouldRetry(error)) {
+        if (Attempt < Retries && NWrappers::ShouldRetry(error)) {
             Retry();
         } else {
             Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage());
         }
-    }
-
-    static bool ShouldRetry(const Aws::S3::S3Error& error) {
-        if (error.ShouldRetry()) {
-            return true;
-        }
-        return error.GetExceptionName() == "TooManyRequests";
     }
 
     void Retry() {

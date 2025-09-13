@@ -45,11 +45,12 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/miniselect
+    library/cpp/time_provider
     library/cpp/digest/md5
     library/cpp/string_utils/quote
     library/cpp/threading/future
     library/cpp/deprecated/atomic
-    contrib/libs/miniselect
 )
 
 END()

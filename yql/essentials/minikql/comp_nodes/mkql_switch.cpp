@@ -321,7 +321,7 @@ private:
 
         const auto pos = new LoadInst(indexType, posPtr, "pos", block);
 
-        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowState::Get));
+        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFlowState::Get>());
 
         const auto getType = FunctionType::get(valueType, {stateArg->getType(), pos->getType()}, false);
         const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", block);
@@ -386,7 +386,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSwitchFlowWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSwitchFlowWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -457,7 +457,7 @@ public:
 
             block = good;
 
-            const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowState::Add));
+            const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFlowState::Add>());
             const auto addArg = item;
             const auto addType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), addArg->getType()}, false);
             const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "add", block);
@@ -470,7 +470,7 @@ public:
             new StoreInst(ConstantInt::get(indexType, 0), indexPtr, block);
 
             const auto stat = ctx.GetStat();
-            const auto statFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowState::PushStat));
+            const auto statFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFlowState::PushStat>());
             const auto statType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), stat->getType()}, false);
             const auto statPtr = CastInst::Create(Instruction::IntToPtr, statFunc, PointerType::getUnqual(statType), "stat", block);
             CallInst::Create(statType, statPtr, {stateArg, stat}, "", block);
@@ -526,7 +526,7 @@ public:
 
             block = drop;
 
-            const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowState::Clear));
+            const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFlowState::Clear>());
             const auto clearType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
             const auto clearPtr = CastInst::Create(Instruction::IntToPtr, clearFunc, PointerType::getUnqual(clearType), "clear", block);
             CallInst::Create(clearType, clearPtr, {stateArg}, "", block);
@@ -887,7 +887,7 @@ private:
 
             block = good;
 
-            const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TValueBase::Add));
+            const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TValueBase::Add>());
             const auto addType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), itemPtr->getType()}, false);
             const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "add", block);
             CallInst::Create(addType, addPtr, {stateArg, itemPtr}, "", block);
@@ -897,7 +897,7 @@ private:
 
             block = done;
 
-            const auto resetFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TValueBase::Reset));
+            const auto resetFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TValueBase::Reset>());
             const auto resetType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
             const auto resetPtr = CastInst::Create(Instruction::IntToPtr, resetFunc, PointerType::getUnqual(resetType), "reset", block);
             CallInst::Create(resetType, resetPtr, {stateArg}, "", block);
@@ -915,7 +915,7 @@ private:
             ReturnInst::Create(context, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), exit);
             new UnreachableInst(context, stub);
 
-            const auto nextFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TValueBase::Get));
+            const auto nextFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TValueBase::Get>());
             const auto nextType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType(), valuePtr->getType()}, false);
             const auto nextPtr = CastInst::Create(Instruction::IntToPtr, nextFunc, PointerType::getUnqual(nextType), "next", block);
             const auto has = CallInst::Create(nextType, nextPtr, {stateArg, valuePtr}, "has", block);

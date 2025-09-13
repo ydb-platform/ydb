@@ -123,7 +123,7 @@ public:
 private:
     void RegisterDependencies() const final {
         DependsOn(Stream);
-        Arg->AddDependence(Stream);
+        Own(Arg);
     }
 
     IComputationNode* const Stream;

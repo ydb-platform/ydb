@@ -8,6 +8,7 @@ PY3TEST()
         test_quota_exhaustion.py
         tablets_movement.py
         zip_bomb.py
+        test_cs_many_updates.py
     )
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)

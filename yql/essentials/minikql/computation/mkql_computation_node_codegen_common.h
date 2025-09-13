@@ -5,4 +5,6 @@
 
 #include <yql/essentials/minikql/codegen/codegen.h>
 #include <yql/essentials/utils/method_index.h>
+#include <yql/essentials/minikql/computation/mkql_method_address_helper.h>
+
 #include <type_traits>

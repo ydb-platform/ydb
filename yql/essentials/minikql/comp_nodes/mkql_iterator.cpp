@@ -28,7 +28,7 @@ public:
         const auto value = GetNodeValue(List, ctx, block);
 
         const auto factory = ctx.GetFactory();
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateIteratorOverList));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CreateIteratorOverList>());
 
         const auto signature = FunctionType::get(value->getType(), {factory->getType(), value->getType()}, false);
         const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
@@ -64,7 +64,7 @@ public:
         const auto value = GetNodeValue(Stream, ctx, block);
 
         const auto factory = ctx.GetFactory();
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateForwardList));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CreateForwardList>());
 
         const auto signature = FunctionType::get(value->getType(), {factory->getType(), value->getType()}, false);
         const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
@@ -210,7 +210,7 @@ private:
         BranchInst::Create(kill, good, IsYield(value, block, context), block);
 
         block = kill;
-        const auto doThrow = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowForwardListWrapper::Throw));
+        const auto doThrow = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFlowForwardListWrapper::Throw>());
         const auto doThrowType = FunctionType::get(Type::getVoidTy(context), {}, false);
         const auto doThrowPtr = CastInst::Create(Instruction::IntToPtr, doThrow, PointerType::getUnqual(doThrowType), "thrower", block);
         CallInst::Create(doThrowType, doThrowPtr, {}, "", block)->setTailCall();

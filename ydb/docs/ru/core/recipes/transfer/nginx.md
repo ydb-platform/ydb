@@ -78,7 +78,7 @@ $transformation_lambda = ($msg) -> {
     -- Функция преобразования строки лога в строку таблицы
     $line_lambda = ($line) -> {
         -- Сначала разбиваем строку по символу " (двойные кавычки), чтобы выделить строки, которые могут содержать пробел.
-        -- Сами строки символ " (двойные кавычки) содержать не могут — он будет заменён последовательностью символов \x.
+        -- Сами строки символ " (двойные кавычки) содержать не могут — он будет заменён последовательностью символов \x22.
         $parts = String::SplitToList($line.1, '"');
         -- Каждую полученную часть, которая не соответствует экранированной строке, разбиваем по пробелу.
         $info_parts = String::SplitToList($parts[0], " ");
@@ -105,7 +105,7 @@ $transformation_lambda = ($msg) -> {
             status: CAST($response_parts[1] AS Uint32),
             body_bytes_sent: CAST($response_parts[2] AS Uint64),
             http_referer: $parts[3],
-            http_user_agent: CAST($parts[5] AS Utf8) -- Явно преобразуем в Utf8, так как столбец http_user_agent имеет тип Utf8, а не String
+            http_user_agent: CAST(String::CgiUnescape($parts[5]) AS Utf8) -- Явно преобразуем в Utf8, так как столбец http_user_agent имеет тип Utf8, а не String
         |>;
     };
 

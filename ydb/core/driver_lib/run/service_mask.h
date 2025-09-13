@@ -83,6 +83,7 @@ union TBasicKikimrServicesMask {
         bool EnableCompPriorities : 1;
         bool EnableGeneralCachePortionsMetadata: 1;
         bool EnableGeneralCacheColumnData: 1;
+        bool EnableOverloadManager : 1;
     };
 
     struct {

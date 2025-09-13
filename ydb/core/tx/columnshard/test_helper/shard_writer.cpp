@@ -37,8 +37,8 @@ TPlanStep TShardWriter::StartCommit(const ui64 txId) {
     return TPlanStep{event.GetMinStep()};
 }
 
-NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort(const ui64 txId) {
-    auto evCommit = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort() {
+    auto evCommit = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     evCommit->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
     auto* lock = evCommit->Record.MutableLocks()->AddLocks();
     lock->SetLockId(LockId);

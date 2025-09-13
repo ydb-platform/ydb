@@ -1083,12 +1083,14 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     if (!CanWrite()) {
+        WriteInflightSize -=  p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
                            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
 
     if (DiskIsFull) {
+        WriteInflightSize -=  p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false,
                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
                            "Disk is full");
@@ -1181,28 +1183,17 @@ ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
 }
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
-    if (!CanWrite()) {
-        ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
-                           TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
-        return false;
-    }
-    if (DiskIsFull) {
-        ScheduleReplyError(p.Cookie, false,
-                           NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
-                           "Disk is full");
-        return false;
-    }
-    const auto& ctx = ActorContext();
-
-    ui64& curOffset = parameters.CurOffset;
-    auto& sourceIdBatch = parameters.SourceIdBatch;
-    auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
-
     Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= p.Msg.Data.size(),
                          "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", p.Msg.Data.size=%" PRISZT,
                          TabletID, Partition.OriginalPartitionId, Partition.InternalPartitionId,
                          WriteInflightSize, p.Msg.Data.size());
     WriteInflightSize -= p.Msg.Data.size();
+
+    const auto& ctx = ActorContext();
+
+    ui64& curOffset = parameters.CurOffset;
+    auto& sourceIdBatch = parameters.SourceIdBatch;
+    auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written

@@ -16,7 +16,7 @@ void TMergePartialStream::PutControlPoint(const TSortableBatchPosition& point, c
 void TMergePartialStream::RemoveControlPoint() {
     Y_ABORT_UNLESS(ControlPoints == 1);
     Y_ABORT_UNLESS(ControlPointEnriched());
-    Y_ABORT_UNLESS(-- ControlPoints == 0);
+    Y_ABORT_UNLESS(--ControlPoints == 0);
     Y_ABORT_UNLESS(SortHeap.Current().IsControlPoint());
     SortHeap.RemoveTop();
 }

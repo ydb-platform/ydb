@@ -207,7 +207,7 @@ public:
         WorkloadManagerConfig = AppData()->WorkloadManagerConfig;
         // NOTE: some important actors are constructed within next call
         FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
-        AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory);
+        AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, QueryServiceConfig);
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
         LocalSessions = std::make_unique<TLocalSessionsRegistry>(AppData()->RandomProvider);

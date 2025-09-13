@@ -38,12 +38,12 @@
 
 ### Взаимодействие с внешними системами
 
-  - [Федеративные запросы](../../../concepts/federated_query/index.md): Выполнение запросов к данным, находящимся во внешних системах (S3, ClickHouse, Postgres).
-  - [Работа с S3 через внешние таблицы](../../../concepts/federated_query/s3/external_table.md): Чтение и запись данных в формате Parquet/CSV в Object Storage.
+- [Федеративные запросы](../../../concepts/federated_query/index.md): Выполнение запросов к данным, находящимся во внешних системах (S3, ClickHouse, Postgres).
+- [Работа с S3 через внешние таблицы](../../../concepts/federated_query/s3/external_table.md): Чтение и запись данных в формате Parquet/CSV в Object Storage.
 
 ## Обработка и трансформация данных (ETL/ELT)
 
-Язык запросов и интеграции с инструментами оркестрации.
+Язык запросов и интеграция с инструментами оркестрации.
 
 ### Язык запросов YQL
 
@@ -54,8 +54,8 @@
 
 ### Инструменты для построения пайплайнов
 
-  - [Интеграция с dbt (Data Build Tool)](../../../integrations/migration/dbt.md): Управление ELT-пайплайнами с помощью SQL.
-  - [Интеграция с Apache Airflow](../../../integrations/orchestration/airflow.md): Оркестрация сложных ETL/ELT-процессов.
+- [Интеграция с dbt (Data Build Tool)](../../../integrations/migration/dbt.md): Управление ELT-пайплайнами с помощью SQL.
+- [Интеграция с Apache Airflow](../../../integrations/orchestration/airflow.md): Оркестрация сложных ETL/ELT-процессов.
 
 ### Паттерны обработки данных**
 

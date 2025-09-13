@@ -45,6 +45,8 @@ public:
         // TODO(cherepashka): remove default value and move upper.
         const IInvokerPtr& invoker = NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker());
 
+    void Initialize();
+
     TFuture<TValue> Get(const TKey& key);
     TExtendedGetResult GetExtended(const TKey& key);
     TFuture<std::vector<TErrorOr<TValue>>> GetMany(const std::vector<TKey>& keys);

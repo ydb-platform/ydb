@@ -505,14 +505,15 @@ TExprNode::TPtr ApplyExtractMembersToFlatMap(const TExprNode::TPtr& node, const 
 }
 
 TExprNode::TPtr ApplyExtractMembersToPartitionByKey(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
-    TCoPartitionByKey part(node);
+    TCoPartitionByKeyBase part(node);
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
     auto newBody = Build<TCoExtractMembers>(ctx, part.Pos())
         .Input(part.ListHandlerLambda().Body())
         .Members(members)
         .Done();
 
-    return Build<TCoPartitionByKey>(ctx, part.Pos())
+    return Build<TCoPartitionByKeyBase>(ctx, part.Pos())
+        .CallableName(node->Content())
         .Input(part.Input())
         .KeySelectorLambda(part.KeySelectorLambda())
         .ListHandlerLambda()

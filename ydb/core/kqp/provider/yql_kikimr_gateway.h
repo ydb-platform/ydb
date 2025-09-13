@@ -205,8 +205,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
-                // FIXME: Support updating prefixed vector indexes
-                return KeyColumns.size() == 1;
+                return true;
         }
     }
 

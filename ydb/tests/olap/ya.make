@@ -10,6 +10,7 @@ PY3TEST()
         test_log_scenario.py
         upgrade_to_internal_path_id.py
         data_read_correctness.py
+        test_overloads.py
         zip_bomb.py
     )
     FORK_SUBTESTS()

@@ -12,7 +12,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>

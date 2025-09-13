@@ -58,6 +58,7 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     , Mutables(mutables)
     , TypeInfoHelper(new TTypeInfoHelper)
     , CountersProvider(opts.CountersProvider)
+    , AllocCountersProvider(opts.AllocCountersProvider)
     , SecureParamsProvider(opts.SecureParamsProvider)
     , LogProvider(opts.LogProvider)
     , LangVer(opts.LangVer)

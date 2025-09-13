@@ -166,6 +166,7 @@ TWorkerGraph::TWorkerGraph(
         countersProvider,
         nullptr,
         nullptr,
+        nullptr,
         langver);
 
     ComputationPattern = NKikimr::NMiniKQL::MakeComputationPattern(

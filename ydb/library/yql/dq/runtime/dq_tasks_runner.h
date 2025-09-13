@@ -147,6 +147,7 @@ struct TDqTaskRunnerContext {
     NKikimr::NMiniKQL::TCallableVisitFuncProvider FuncProvider;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
     std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> PatternCache;
+    NKikimr::NMiniKQL::TAllocCountersProvider::TCountersMapPtr AllocCounters;
 };
 
 class IDqTaskRunnerExecutionContext {
@@ -284,7 +285,7 @@ public:
         Y_ABORT_UNLESS(!ParamProvider, "GetSerialized isn't supported if external ParamProvider callback is specified!");
         return *Task_;
     }
-    
+
     NDqProto::TDqTask* GetTask() const {
         Y_ABORT_UNLESS(Arena);
         return Task_;

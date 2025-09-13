@@ -217,6 +217,8 @@ protected:
     using TStatefulSourceComputationNode<TDerived>::TStatefulSourceComputationNode;
 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override {
+        TAllocCounterGuard guard(compCtx.AllocCountersProvider, (TAllocCounterId)static_cast<const TDerived*>(this));
+
         if (*this->Stateless_)
             return static_cast<const TDerived*>(this)->DoCalculate(compCtx);
         NUdf::TUnboxedValue& valueRef = this->ValueRef(compCtx);
@@ -290,6 +292,7 @@ private:
     }
 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final {
+        TAllocCounterGuard guard(compCtx.AllocCountersProvider, (TAllocCounterId)static_cast<const TDerived*>(this));
         return static_cast<const TDerived*>(this)->DoCalculate(this->ValueRef(compCtx), compCtx);
     }
 private:
@@ -314,6 +317,7 @@ private:
     }
 
     EFetchResult FetchValues(TComputationContext& compCtx, NUdf::TUnboxedValue*const* values) const final {
+        TAllocCounterGuard guard(compCtx.AllocCountersProvider, (TAllocCounterId)static_cast<const TDerived*>(this));
         return static_cast<const TDerived*>(this)->DoCalculate(this->ValueRef(compCtx), compCtx, values);
     }
 };
@@ -457,6 +461,7 @@ protected:
     {}
 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override {
+        TAllocCounterGuard guard(compCtx.AllocCountersProvider, (TAllocCounterId)static_cast<const TDerived*>(this));
         return static_cast<const TDerived*>(this)->DoCalculate(compCtx);
     }
 private:
@@ -501,6 +506,7 @@ private:
     }
 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final {
+        TAllocCounterGuard guard(compCtx.AllocCountersProvider, (TAllocCounterId)static_cast<const TDerived*>(this));
         return static_cast<const TDerived*>(this)->DoCalculate(compCtx.MutableValues[StateIndex_], compCtx);
     }
 
@@ -533,6 +539,7 @@ protected:
 
 private:
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final {
+        TAllocCounterGuard guard(compCtx.AllocCountersProvider, (TAllocCounterId)static_cast<const TDerived*>(this));
         return static_cast<const TDerived*>(this)->DoCalculate(compCtx.MutableValues[StateIndex_], compCtx.MutableValues[StateIndex_ + 1U], compCtx);
     }
 
@@ -634,6 +641,7 @@ protected:
 
 private:
     EFetchResult FetchValues(TComputationContext& compCtx, NUdf::TUnboxedValue*const* values) const final {
+        TAllocCounterGuard guard(compCtx.AllocCountersProvider, (TAllocCounterId)static_cast<const TDerived*>(this));
         return static_cast<const TDerived*>(this)->DoCalculate(compCtx, values);
     }
 
@@ -673,6 +681,7 @@ protected:
     }
 private:
     EFetchResult FetchValues(TComputationContext& compCtx, NUdf::TUnboxedValue*const* values) const final {
+        TAllocCounterGuard guard(compCtx.AllocCountersProvider, (TAllocCounterId)static_cast<const TDerived*>(this));
         return static_cast<const TDerived*>(this)->DoCalculate(compCtx.MutableValues[StateIndex_], compCtx, values);
     }
 
@@ -707,6 +716,7 @@ protected:
 
 private:
     EFetchResult FetchValues(TComputationContext& compCtx, NUdf::TUnboxedValue*const* values) const final {
+        TAllocCounterGuard guard(compCtx.AllocCountersProvider, (TAllocCounterId)static_cast<const TDerived*>(this));
         return static_cast<const TDerived*>(this)->DoCalculate(compCtx.MutableValues[StateIndex_], compCtx.MutableValues[StateIndex_ + 1U], compCtx, values);
     }
 
@@ -762,6 +772,7 @@ private:
     }
 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final {
+        TAllocCounterGuard guard(compCtx.AllocCountersProvider, (TAllocCounterId)static_cast<const TDerived*>(this));
         return static_cast<const TDerived*>(this)->DoCalculate(compCtx, Node_->GetValue(compCtx));
     }
 
@@ -795,8 +806,9 @@ template <typename TDerived>
 class TBinaryComputationNode: public TRefCountedComputationNode<IComputationNode>, protected TBinaryComputationNodeBase
 {
 private:
-    NUdf::TUnboxedValue GetValue(TComputationContext& ctx) const final {
-        return static_cast<const TDerived*>(this)->DoCalculate(ctx);
+    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final {
+        TAllocCounterGuard guard(compCtx.AllocCountersProvider, (TAllocCounterId)static_cast<const TDerived*>(this));
+        return static_cast<const TDerived*>(this)->DoCalculate(compCtx);
     }
 
     const IComputationNode* GetSource() const final {

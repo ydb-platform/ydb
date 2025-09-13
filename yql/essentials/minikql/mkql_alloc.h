@@ -1,6 +1,7 @@
 #pragma once
 
 #include "aligned_page_pool.h"
+#include "mkql_alloc_counter.h"
 #include "mkql_mem_info.h"
 
 #include <yql/essentials/core/pg_settings/guc_settings.h>
@@ -15,10 +16,9 @@
 #include <util/system/tls.h>
 #include <util/generic/scope.h>
 
-#include <unordered_map>
 #include <atomic>
-#include <memory>
 #include <source_location>
+#include <unordered_map>
 
 namespace NKikimr::NMiniKQL {
 
@@ -31,6 +31,8 @@ struct TAllocPageHeader {
     ui64 Deallocated;
     TAlignedPagePool* MyAlloc;
     TAllocPageHeader* Link;
+    TAllocCounter* Counter;
+    char Padding[4] = {0, 0, 0, 0};
 };
 
 using TMemorySubPoolIdx = ui32;
@@ -101,6 +103,8 @@ struct TAllocState : public TAlignedPagePool
 
     void* MainContext = nullptr;
     void* CurrentContext = nullptr;
+
+    TAllocCounter* CurrentCounter = nullptr;
 
     struct TLockInfo {
          i32 OriginalRefs;
@@ -194,7 +198,8 @@ struct TMkqlArrowHeader {
     ui64 Size;
     ui64 Offset;
     std::atomic<ui64> UseCount;
-    char Padding[ArrowAlignment - sizeof(TAllocState::TListEntry) - sizeof(ui64) - sizeof(ui64) - sizeof(std::atomic<ui64>)];
+    TAllocCounter* Counter;
+    char Padding[ArrowAlignment - sizeof(TAllocState::TListEntry) - sizeof(ui64) - sizeof(ui64) - sizeof(std::atomic<ui64>) - sizeof(TAllocCounter*)];
 };
 
 static_assert(sizeof(TMkqlArrowHeader) == ArrowAlignment);

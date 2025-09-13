@@ -47,7 +47,8 @@ struct TComputationOpts {
 struct TComputationOptsFull: public TComputationOpts {
     TComputationOptsFull(IStatsRegistry* stats, TAllocState& allocState, const TTypeEnvironment& typeEnv, IRandomProvider& randomProvider,
             ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider,
-            NUdf::ICountersProvider* countersProvider, const NUdf::ILogProvider* logProvider, NYql::TLangVersion langver)
+            NUdf::ICountersProvider* countersProvider, TAllocCountersProvider* allocCountersProvider, const NUdf::ILogProvider* logProvider,
+            NYql::TLangVersion langver)
         : TComputationOpts(stats)
         , AllocState(allocState)
         , TypeEnv(typeEnv)
@@ -56,6 +57,7 @@ struct TComputationOptsFull: public TComputationOpts {
         , ValidatePolicy(validatePolicy)
         , SecureParamsProvider(secureParamsProvider)
         , CountersProvider(countersProvider)
+        , AllocCountersProvider(allocCountersProvider)
         , LogProvider(logProvider)
         , LangVer(langver)
     {}
@@ -67,6 +69,7 @@ struct TComputationOptsFull: public TComputationOpts {
     NUdf::EValidatePolicy ValidatePolicy;
     const NUdf::ISecureParamsProvider *const SecureParamsProvider;
     NUdf::ICountersProvider *const CountersProvider;
+    TAllocCountersProvider* AllocCountersProvider;
     const NUdf::ILogProvider* const LogProvider;
     const NYql::TLangVersion LangVer;
 };
@@ -122,6 +125,7 @@ struct TComputationContext : public TComputationContextLLVM {
     std::shared_ptr<ISpillerFactory> SpillerFactory;
     const NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
     NUdf::ICountersProvider *const CountersProvider;
+    TAllocCountersProvider* AllocCountersProvider;
     const NUdf::ISecureParamsProvider *const SecureParamsProvider;
     const NUdf::ILogProvider* LogProvider;
     NYql::TLangVersion LangVer = NYql::UnknownLangVersion;
@@ -282,6 +286,7 @@ struct TComputationNodeFactoryContext {
     const TTypeEnvironment& Env;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
     NUdf::ICountersProvider* CountersProvider;
+    TAllocCountersProvider* AllocCountersProvider;
     const NUdf::ISecureParamsProvider* SecureParamsProvider;
     const NUdf::ILogProvider* LogProvider;
     NYql::TLangVersion LangVer;
@@ -301,6 +306,7 @@ struct TComputationNodeFactoryContext {
         const TTypeEnvironment& env,
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
         NUdf::ICountersProvider* countersProvider,
+        TAllocCountersProvider* allocCountersProvider,
         const NUdf::ISecureParamsProvider* secureParamsProvider,
         const NUdf::ILogProvider* logProvider,
         NYql::TLangVersion langver,
@@ -319,6 +325,7 @@ struct TComputationNodeFactoryContext {
         , Env(env)
         , TypeInfoHelper(typeInfoHelper)
         , CountersProvider(countersProvider)
+        , AllocCountersProvider(allocCountersProvider)
         , SecureParamsProvider(secureParamsProvider)
         , LogProvider(logProvider)
         , LangVer(langver)
@@ -356,6 +363,7 @@ struct TComputationPatternOpts {
         EGraphPerProcess graphPerProcess,
         IStatsRegistry* stats = nullptr,
         NUdf::ICountersProvider* countersProvider = nullptr,
+        TAllocCountersProvider* allocCountersProvider = nullptr,
         const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr,
         const NUdf::ILogProvider* logProvider = nullptr,
         NYql::TLangVersion langver = NYql::UnknownLangVersion)
@@ -369,6 +377,7 @@ struct TComputationPatternOpts {
         , GraphPerProcess(graphPerProcess)
         , Stats(stats)
         , CountersProvider(countersProvider)
+        , AllocCountersProvider(allocCountersProvider)
         , SecureParamsProvider(secureParamsProvider)
         , LogProvider(logProvider)
         , LangVer(langver)
@@ -377,7 +386,8 @@ struct TComputationPatternOpts {
     void SetOptions(TComputationNodeFactory factory, const IFunctionRegistry* functionRegistry,
         NUdf::EValidateMode validateMode, NUdf::EValidatePolicy validatePolicy,
         const TString& optLLVM, EGraphPerProcess graphPerProcess, IStatsRegistry* stats = nullptr,
-        NUdf::ICountersProvider* counters = nullptr,
+        NUdf::ICountersProvider* countersProvider = nullptr,
+        TAllocCountersProvider* allocCountersProvider = nullptr,
         const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr,
         const NUdf::ILogProvider* logProvider = nullptr, NYql::TLangVersion langver = NYql::UnknownLangVersion) {
         Factory = factory;
@@ -387,7 +397,8 @@ struct TComputationPatternOpts {
         OptLLVM = optLLVM;
         GraphPerProcess = graphPerProcess;
         Stats = stats;
-        CountersProvider = counters;
+        CountersProvider = countersProvider;
+        AllocCountersProvider = allocCountersProvider;
         SecureParamsProvider = secureParamsProvider;
         LogProvider = logProvider;
         LangVer = langver;
@@ -409,13 +420,14 @@ struct TComputationPatternOpts {
     EGraphPerProcess GraphPerProcess = EGraphPerProcess::Multi;
     IStatsRegistry* Stats = nullptr;
     NUdf::ICountersProvider* CountersProvider = nullptr;
+    TAllocCountersProvider* AllocCountersProvider = nullptr;
     const NUdf::ISecureParamsProvider* SecureParamsProvider = nullptr;
     const NUdf::ILogProvider* LogProvider = nullptr;
     NYql::TLangVersion LangVer = NYql::UnknownLangVersion;
 
     TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider, TAllocState* allocStatePtr = nullptr) const {
         return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState, Env, randomProvider, timeProvider,
-            ValidatePolicy, SecureParamsProvider, CountersProvider, LogProvider, LangVer);
+            ValidatePolicy, SecureParamsProvider, CountersProvider, AllocCountersProvider, LogProvider, LangVer);
     }
 };
 

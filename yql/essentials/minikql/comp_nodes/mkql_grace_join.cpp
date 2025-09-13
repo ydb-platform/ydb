@@ -609,6 +609,9 @@ public:
             // id will be assigned externally in future versions
             TString id = TString(Operator_Join) + "0";
             CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+            if (TlsAllocState->CurrentCounter) {
+                TlsAllocState->CurrentCounter->BindCounter(ctx.CountersProvider->GetCounter(id, Counter_PeakBytes, false));
+            }
         }
     }
 

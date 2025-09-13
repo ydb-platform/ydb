@@ -17,7 +17,7 @@ constexpr ui64 ArrowSizeForArena = (TAllocState::POOL_PAGE_SIZE >> 2);
 
 Y_POD_THREAD(TAllocState*) TlsAllocState;
 
-TAllocPageHeader TAllocState::EmptyPageHeader = { 0, 0, 0, 0, nullptr, nullptr };
+TAllocPageHeader TAllocState::EmptyPageHeader = { 0, 0, 0, 0, nullptr, nullptr, nullptr };
 TAllocState::TCurrentPages TAllocState::EmptyCurrentPages = { &TAllocState::EmptyPageHeader, &TAllocState::EmptyPageHeader };
 
 void TAllocState::TListEntry::Link(TAllocState::TListEntry* root) noexcept {
@@ -228,6 +228,9 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
     currPage->UseCount = 1;
     currPage->MyAlloc = state;
     currPage->Link = nullptr;
+    if (currPage->Counter = state->CurrentCounter) {
+        currPage->Counter->IncreaseUsage(capacity);
+    }
     return ret;
 }
 
@@ -235,6 +238,9 @@ void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySub
     Y_DEBUG_ABORT_UNLESS(state);
     Y_DEBUG_ABORT_UNLESS(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
         "allocated with: " << header->MyAlloc->GetDebugInfo() << " freed with: " << TlsAllocState->GetDebugInfo()).data());
+    if (header->Counter) {
+        header->Counter->DecreaseUsage(header->Capacity);
+    }
     state->ReturnBlock(header, header->Capacity);
     if (header == state->CurrentPages[(TMemorySubPoolIdx)mPool]) {
         state->CurrentPages[(TMemorySubPoolIdx)mPool] = &TAllocState::EmptyPageHeader;
@@ -346,8 +352,8 @@ void* MKQLArrowAllocateImpl(ui64 size) {
         Y_ENSURE(res);
         ptr = res;
     } else {
-        ptr = GetAlignedPage(fullSize);
     }
+    ptr = GetAlignedPage(fullSize);
 
     auto* header = (TMkqlArrowHeader*)ptr;
     NYql::NUdf::SanitizerMakeRegionAccessible(header, sizeof(TMkqlArrowHeader));
@@ -362,6 +368,9 @@ void* MKQLArrowAllocateImpl(ui64 size) {
     }
 
     header->Size = size;
+    if (header->Counter = state->CurrentCounter) {
+        header->Counter->IncreaseUsage(fullSize);
+    }
     return header + 1;
 }
 
@@ -416,6 +425,10 @@ void MKQLArrowFreeImpl(const void* mem, ui64 size) {
         Y_ABORT_UNLESS(pool);
         pool->Free(reinterpret_cast<uint8_t*>(header), static_cast<int64_t>(fullSize));
         return;
+    }
+
+    if (header->Counter) {
+        header->Counter->DecreaseUsage(fullSize);
     }
 
     ReleaseAlignedPage(header, fullSize);
@@ -488,6 +501,11 @@ void MKQLArrowUntrack(const void* mem) {
         auto fullSize = header->Size + sizeof(TMkqlArrowHeader);
         state->OffloadFree(fullSize);
         state->ArrowBuffers.erase(it);
+    }
+
+    if (header->Counter) {
+        header->Counter->DecreaseUsage(header->Size + sizeof(TMkqlArrowHeader));
+        header->Counter = nullptr;
     }
 }
 

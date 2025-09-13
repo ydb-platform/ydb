@@ -131,6 +131,7 @@ private:
     THolder<NMiniKQL::TTypeEnvironment> KqpTypeEnv;
     NYql::NDq::TDqTaskRunnerContext KqpExecCtx;
     TIntrusivePtr<NKqp::TKqpTasksRunner> KqpTasksRunner;
+    NMiniKQL::TAllocCountersProvider::TCountersMapPtr AllocCounters;
 };
 
 }}

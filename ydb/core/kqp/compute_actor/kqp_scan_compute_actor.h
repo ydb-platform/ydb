@@ -64,6 +64,8 @@ private:
     using EBlockTrackingMode = NKikimrConfig::TTableServiceConfig::EBlockTrackingMode;
     const EBlockTrackingMode BlockTrackingMode;
 
+    NMiniKQL::TAllocCountersProvider::TCountersMapPtr AllocCounters;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SCAN_COMPUTE_ACTOR;

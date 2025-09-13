@@ -17,6 +17,7 @@
 * 21652:Fixed rare errors when reading using the pqv0 protocol from a topic during partition balancing. [#21652](https://github.com/ydb-platform/ydb/pull/21652) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 22455:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19842) where dedicated database deletion may leave database system tablets improperly cleaned. [#22455](https://github.com/ydb-platform/ydb/pull/22455) ([ijon](https://github.com/ijon))
 * 22203:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/22030) that caused tablets to hang when nodes experienced critical memory shortage. Now tablets will automatically start as soon as any of the nodes frees up sufficient resources. [#22203](https://github.com/ydb-platform/ydb/pull/22203) ([vporyadke](https://github.com/vporyadke))
+* 22698:Fixed [false-positive unresponsive tablet issues](https://github.com/ydb-platform/ydb/issues/22390) in healthcheck during restarts. [#22698](https://github.com/ydb-platform/ydb/pull/22698) ([vporyadke](https://github.com/vporyadke))
 
 ### YDB UI
 

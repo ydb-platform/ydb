@@ -58,9 +58,8 @@ public:
             partitioningParams->SetEachTopicPartitionGroupId(PartitionId1);
             partitioningParams->SetDqPartitionsCount(1);
 
-            TString serializedParams;
-            UNIT_ASSERT(params.SerializeToString(&serializedParams));
-
+            NYql::NPq::NProto::TDqPqTopicSource copySettings = settings;
+            TPqIoTestFixture setup;
             auto [dqAsyncInput, dqAsyncInputAsActor] = CreateDqPqRdReadActor(
                 actor.TypeEnv,
                 std::move(settings),
@@ -69,8 +68,8 @@ public:
                 "query_1",
                 0,
                 {},
-                {{"pq", serializedParams}},
-                Driver,
+                TVector<NPq::NProto::TDqReadTaskParams>{params},
+                setup.Driver,
                 {},
                 actor.SelfId(),         // computeActorId
                 LocalRowDispatcherId,

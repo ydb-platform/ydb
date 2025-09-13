@@ -34,7 +34,7 @@ struct TYdbConnection : public TThrRefBase {
         const NYdb::TDriver& driver);
 
     TYdbConnection(
-        const NKikimrConfig::TCheckpointsConfig::TExternalStorage& config,
+        const NKikimrConfig::TExternalStorage& config,
         const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
         const NYdb::TDriver& driver);
 };
@@ -116,7 +116,7 @@ using TGenerationContextPtr = TIntrusivePtr<TGenerationContext>;
 ////////////////////////////////////////////////////////////////////////////////
 
 TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);
-TYdbConnectionPtr NewYdbConnection(const NKikimrConfig::TCheckpointsConfig::TExternalStorage& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);
+TYdbConnectionPtr NewYdbConnection(const NKikimrConfig::TExternalStorage& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);
 
 NYdb::TStatus MakeErrorStatus(
     NYdb::EStatus code,
@@ -176,7 +176,7 @@ TSettings GetClientSettings(const TStorageConfig& config,
 
     settings.CredentialsProviderFactory(credProviderFactory(GetYdbCredentialSettings(config)));
 
-    if (config.GetUseLocalMetadataService()) {
+    if (config.GetUseLocalMetadataService() || config.GetUseSsl()) {
         settings.SslCredentials(NYdb::TSslCredentials(true));
     }
 

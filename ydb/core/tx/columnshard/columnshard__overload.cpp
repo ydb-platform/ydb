@@ -19,10 +19,11 @@ void TColumnShard::OnYellowChannelsChanged() {
 ui64 TColumnShard::GetShardWritesInFlyLimit() const {
     if (DEFAULT_WRITES_IN_FLY_LIMIT.load() == 0) {
         ui64 oldValue = 0;
-        const ui64 newValue = std::max(NKqp::TStagePredictor::GetUsableThreads() * 200, ui32(1000));
+        const ui64 newValue = std::max(NKqp::TStagePredictor::GetUsableThreads() * 10000, ui32(100000));
         DEFAULT_WRITES_IN_FLY_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
-    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit() : DEFAULT_WRITES_IN_FLY_LIMIT.load();
+
+    return HasAppData() && AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit() ?  AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit() : DEFAULT_WRITES_IN_FLY_LIMIT.load();
 }
 
 ui64 TColumnShard::GetShardWritesSizeInFlyLimit() const {
@@ -31,7 +32,8 @@ ui64 TColumnShard::GetShardWritesSizeInFlyLimit() const {
         const ui64 newValue = NKqp::TStagePredictor::GetUsableThreads() * 20_MB;
         DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
-    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestBytesLimit() : DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.load();
+    auto limit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestBytesLimit() : 0;
+    return limit ? limit : DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.load();
 }
 
 TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInternalPathId /* pathId */) const {

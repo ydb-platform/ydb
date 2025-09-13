@@ -166,7 +166,7 @@ private:
     const ui64 WritePartIdx;
     const ui64 TableId;
     const ui64 SchemaVersion;
-    const TString DedupId;
+    const TString DeduplicationId;
     const IShardInfo::TPtr DataForShard;
     ui32 NumRetries = 0;
     TWritersController::TPtr ExternalController;

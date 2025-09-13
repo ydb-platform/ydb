@@ -38,7 +38,7 @@ void TBuildSlicesTask::ReplyError(const TString& message, const NColumnShard::TE
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "error_on_TBuildSlicesTask")("message", message)("class", (ui32)errorClass);
     WriteData.GetWriteMetaPtr()->OnStage(NEvWrite::EWriteStage::SlicesError);
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
-    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
+    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr, Context.GetDeduplicationId()) }, Context.GetDeduplicationId());
     auto result =
         NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), message, errorClass);
     TActorContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
@@ -115,7 +115,7 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         return;
     }
     if (OriginalBatch->num_rows() == 0) {
-        NColumnShard::TWriteResult wResult(WriteData.GetWriteMetaPtr(), WriteData.GetSize(), nullptr, true, 0);
+        NColumnShard::TWriteResult wResult(WriteData.GetWriteMetaPtr(), WriteData.GetSize(), nullptr, true, 0, Context.GetDeduplicationId());
         NColumnShard::TInsertedPortions pack({ wResult }, {});
         WriteData.GetWriteMetaPtr()->OnStage(NEvWrite::EWriteStage::SlicesReady);
         auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
@@ -126,7 +126,7 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             NArrow::TColumnOperator().Extract(OriginalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
         auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(
             OriginalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), WriteData.GetData()->GetSeparationPoints());
-        NColumnShard::TWriteResult wResult(WriteData.GetWriteMetaPtr(), WriteData.GetSize(), pkBatch, false, OriginalBatch->num_rows());
+        NColumnShard::TWriteResult wResult(WriteData.GetWriteMetaPtr(), WriteData.GetSize(), pkBatch, false, OriginalBatch->num_rows(), Context.GetDeduplicationId());
         std::vector<TPortionWriteController::TInsertPortion> portions;
         for (auto&& batch : batches) {
             if (!batch) {

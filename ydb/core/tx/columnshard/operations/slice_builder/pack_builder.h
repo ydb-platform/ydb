@@ -14,11 +14,13 @@ class TWriteUnit: public NColumnShard::TMonitoringObjectsCounter<TWriteUnit> {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteData>, Data);
     YDB_READONLY_DEF(NArrow::TContainerWithIndexes<arrow::RecordBatch>, Batch);
+    YDB_READONLY_DEF(TString, DeduplicationId);
 
 public:
-    TWriteUnit(const std::shared_ptr<NEvWrite::TWriteData>& data, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& batch)
+    TWriteUnit(const std::shared_ptr<NEvWrite::TWriteData>& data, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& batch, const TString& deduplicationId)
         : Data(data)
-        , Batch(batch) {
+        , Batch(batch)
+        , DeduplicationId(deduplicationId) {
         Data->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::WaitFlush);
         AFL_VERIFY(Batch.HasContainer());
     }

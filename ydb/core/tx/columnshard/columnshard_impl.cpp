@@ -93,7 +93,8 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
-    , SysLocks(this) {
+    , SysLocks(this)
+    , DeduplicationCache(1000000) {
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
     SpaceWatcher = new TSpaceWatcher(this);
 }

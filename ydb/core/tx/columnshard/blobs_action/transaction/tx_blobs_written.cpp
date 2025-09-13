@@ -72,7 +72,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, operation->GetCookie(), "no_tx_write", true, "");
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
-            Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
+            Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie(), writeResult.GetDeduplicationId());
         } else {
             auto& info = Self->OperationsManager->GetLockVerified(operation->GetLockId());
             NKikimrDataEvents::TLock lock;
@@ -85,7 +85,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
             AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
                                          writeResult.GetRecordsCount(), writeResult.GetDataSize(), operation->GetModificationType());
-            Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
+            Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie(), writeResult.GetDeduplicationId());
         }
     }
     TransactionTime = TInstant::Now() - startTransactionTime;
@@ -103,6 +103,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     }
 
     for (auto&& i : Results) {
+        Self->SaveDeduplicationResponse(i.GetDeduplicationId(), i.GetEvent());
         i.DoSendReply(ctx);
     }
     std::set<TInternalPathId> pathIds;
@@ -173,13 +174,14 @@ bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorCont
             wResult.IsInternalError() ? NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR
                                       : NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
             wResult.GetErrorMessage());
-        Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
+        Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie(), wResult.GetDeduplicationId());
     }
     return true;
 }
 
 void TTxBlobsWritingFailed::DoComplete(const TActorContext& ctx) {
     for (auto&& i : Results) {
+        Self->ReleaseDeduplicationId(i.GetDeduplicationId());
         i.DoSendReply(ctx);
         Self->Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::PutBlob);
     }

@@ -51,10 +51,10 @@ protected:
     using TThis = typename TBase::TThis;
 
 public:
-    TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token, const TLongTxId& longTxId, const TString& dedupId)
+    TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token, const TLongTxId& longTxId, const TString& deduplicationId)
         : DatabaseName(databaseName)
         , Path(path)
-        , DedupId(dedupId)
+        , DeduplicationId(deduplicationId)
         , LongTxId(longTxId)
         , ActorSpan(0, NWilson::TTraceId::NewTraceId(0, Max<ui32>()), "TLongTxWriteBase") {
         if (token) {
@@ -125,7 +125,7 @@ protected:
                 InternalController->GetCounters()->OnRequest(shardInfo->GetRowsCount(), shardInfo->GetBytes());
                 sumBytes += shardInfo->GetBytes();
                 rowsCount += shardInfo->GetRowsCount();
-                this->Register(new NEvWrite::TShardWriter(shard, shardsSplitter->GetTableId(), shardsSplitter->GetSchemaVersion(), DedupId,
+                this->Register(new NEvWrite::TShardWriter(shard, shardsSplitter->GetTableId(), shardsSplitter->GetSchemaVersion(), DeduplicationId,
                     shardInfo, ActorSpan, InternalController, ++writeIdx, TDuration::Seconds(20)));
             }
         }
@@ -208,7 +208,7 @@ protected:
 protected:
     const TString DatabaseName;
     const TString Path;
-    const TString DedupId;
+    const TString DeduplicationId;
     TLongTxId LongTxId;
 
 private:
@@ -296,10 +296,10 @@ private:
 };
 
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
-    const TString& dedupId, const TString& databaseName, const TString& path,
+    const TString& deduplicationId, const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues) {
-    return ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues));
+    return ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(replyTo, longTxId, deduplicationId, databaseName, path, navigateResult, batch, issues));
 }
 
 //

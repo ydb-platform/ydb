@@ -388,6 +388,19 @@ private:
     ui64 GetShardWritesInFlyLimit() const;
     ui64 GetShardWritesSizeInFlyLimit() const;
 
+public:
+    enum class EDeduplicationResult {
+        START,
+        ALREADY_IN_PROGRESS,
+        READY,
+        SKIP
+    };
+
+private:
+    EDeduplicationResult SendDeduplicationResult(const TString& deduplicationId, const TActorId& source, ui64 cookie);
+    void ReleaseDeduplicationId(const TString& deduplicationId);
+    void SaveDeduplicationResponse(const TString& deduplicationId, const std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result);
+
 protected:
     STFUNC(StateInit) {
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
@@ -544,6 +557,26 @@ private:
     TActorId SpaceWatcherId;
     NOverload::TOverloadSubscribers OverloadSubscribers;
 
+public:
+    struct TDeduplicationState {
+        enum class EStatus {
+            UNKNOWN,
+            IN_PROGRESS,
+            READY
+        };
+        EStatus Status = EStatus::UNKNOWN;
+        std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> Result;
+
+        std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> CloneResult() const {
+            auto clonedResult = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
+            AFL_VERIFY(Result);
+            clonedResult->Record = Result->Record;
+            return clonedResult;
+        }
+    };
+    TLRUCache<TString, TDeduplicationState> DeduplicationCache;
+
+private:
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
 

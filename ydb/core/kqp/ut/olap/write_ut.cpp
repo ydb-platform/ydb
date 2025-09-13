@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
+#include <library/cpp/retry/retry.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp {
@@ -625,6 +626,77 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             resultSet.TryNextRow();
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 2);
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUint32(), 200);
+        }
+    }
+
+    Y_UNIT_TEST(TestDeduplicationId) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        settings.AppConfig.MutableColumnShardConfig()->SetWritingInFlightRequestsCountLimit(1);
+        auto kikimr = TKikimrRunner{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE test (
+                    key string NOT NULL,
+                    val int,
+                    PRIMARY KEY (key)
+                ) WITH (STORE = COLUMN);
+            )");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        DoWithRetryOnRetCode([&]() {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (size_t i = 0; i < 1000; ++i) {
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember("key").String(ToString(i))
+                        .AddMember("val").Int32(i)
+                    .EndStruct();
+            }
+            rows.EndList();
+
+            auto upsertResult = db.BulkUpsert("/Root/test", rows.Build()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(upsertResult.GetStatus(), NYdb::EStatus::OVERLOADED);
+            return false;
+        }, TRetryOptions{100, TDuration::Zero()});
+
+        auto result = DoWithRetryOnRetCode([&]() {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (size_t i = 1000; i < 2000; ++i) {
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember("key").String(ToString(i))
+                        .AddMember("val").Int32(i)
+                    .EndStruct();
+            }
+            rows.EndList();
+
+            NYdb::NTable::TBulkUpsertSettings bulkUpsertSettings;
+            bulkUpsertSettings.DeduplicationId("test");
+            auto upsertResult = db.BulkUpsert("/Root/test", rows.Build(), bulkUpsertSettings).GetValueSync();
+            UNIT_ASSERT(upsertResult.GetStatus() == NYdb::EStatus::OVERLOADED || upsertResult.GetStatus() == NYdb::EStatus::SUCCESS);
+            return upsertResult.GetStatus() == NYdb::EStatus::SUCCESS;
+        }, TRetryOptions{100, TDuration::Zero()});
+
+        UNIT_ASSERT_C(result, "deduplication id does not work");
+
+        {
+            auto queryClient = kikimr.GetQueryClient();
+            auto result = queryClient.ExecuteQuery("SELECT count(*) as count FROM `/Root/test` WHERE CAST(key as Uint64) >= 1000 AND CAST(key as Uint64) < 2000",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto resultSet = result.GetResultSetParser(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+            resultSet.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 1000);
         }
     }
 }

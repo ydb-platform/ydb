@@ -8,8 +8,9 @@
 namespace NKikimr::NOlap {
 
 TIndexedWriteController::TIndexedWriteController(
-    const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations)
-    : Buffer(action, std::move(aggregations))
+    const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations,
+    const TString& deduplicationId)
+    : Buffer(action, std::move(aggregations), deduplicationId)
     , DstActor(dstActor) {
     auto blobs = Buffer.GroupIntoBlobs();
     for (auto&& b : blobs) {

@@ -107,6 +107,7 @@ public:
             LWPROBE(EvWriteResult, owner.TabletID(), TxInfo.Source.ToString(), GetTxId(), TxInfo.Cookie, "on_complete", true, "");
             owner.GetOperationsManager().CommitTransactionOnComplete(owner, GetTxId(), *Version);
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(owner.TabletID(), GetTxId());
+
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
         }
         return true;

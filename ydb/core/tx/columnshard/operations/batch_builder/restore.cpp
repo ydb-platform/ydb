@@ -74,7 +74,7 @@ TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeD
 void TModificationRestoreTask::SendErrorMessage(
     const TString& errorMessage, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass) {
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
-    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
+    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr, Context.GetDeduplicationId()) }, Context.GetDeduplicationId());
     auto evResult =
         NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), errorMessage, errorClass);
     TActorContext::AsActorContext().Send(Context.GetTabletActorId(), evResult.release());

@@ -39,14 +39,14 @@ namespace NKikimr::NEvWrite {
         }
     }
 
-    TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
+    TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& deduplicationId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
         const std::optional<TDuration> timeout)
         : ShardId(shardId)
         , WritePartIdx(writePartIdx)
         , TableId(tableId)
         , SchemaVersion(schemaVersion)
-        , DedupId(dedupId)
+        , DeduplicationId(deduplicationId)
         , DataForShard(data)
         , ExternalController(externalController)
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
@@ -65,6 +65,7 @@ namespace NKikimr::NEvWrite {
         if (RetryBySubscription) {
             ev->Record.SetOverloadSubscribe(++LastOverloadSeqNo);
         }
+        ev->Record.SetDeduplicationId(DeduplicationId);
         SendToTablet(std::move(ev));
     }
 

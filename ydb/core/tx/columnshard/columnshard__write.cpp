@@ -56,6 +56,52 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
     ctx.Send(writeMeta.GetSource(), event.release(), 0, cookie);
 }
 
+ TColumnShard::EDeduplicationResult TColumnShard::SendDeduplicationResult(const TString& deduplicationId, const TActorId& source, ui64 cookie) {
+    if (!deduplicationId) {
+        return EDeduplicationResult::SKIP;
+    }
+
+    auto it = DeduplicationCache.Find(deduplicationId);
+    if (it == DeduplicationCache.End()) {
+        DeduplicationCache.Insert(deduplicationId, TDeduplicationState({.Status = TDeduplicationState::EStatus::IN_PROGRESS}));
+        return EDeduplicationResult::START;
+    }
+
+    const auto& value = it.Value();
+    switch (value.Status) {
+        case TDeduplicationState::EStatus::READY: {
+            Send(source, value.CloneResult(), 0, cookie);
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "dedupliaction")("reason", "response from deduplication cache");
+            return EDeduplicationResult::READY;
+        }
+        case TDeduplicationState::EStatus::IN_PROGRESS: {
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
+                TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload error: in progress deduplication id");
+            Send(source, result.release(), 0, cookie);
+            return EDeduplicationResult::ALREADY_IN_PROGRESS;
+        }
+        case TDeduplicationState::EStatus::UNKNOWN: {
+            AFL_VERIFY(false);
+        }
+    }
+
+    return EDeduplicationResult::SKIP;
+}
+
+void TColumnShard::ReleaseDeduplicationId(const TString& deduplicationId) {
+    auto it = DeduplicationCache.Find(deduplicationId);
+    if (it == DeduplicationCache.End()) {
+        return;
+    }
+    DeduplicationCache.Erase(it);
+}
+
+void TColumnShard::SaveDeduplicationResponse(const TString& deduplicationId, const std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result) {
+    auto clonedResult = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
+    clonedResult->Record = result->Record;
+    DeduplicationCache.Update(deduplicationId, { TDeduplicationState::EStatus::READY, std::move(clonedResult) });
+}
+
 TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalPathId pathId) const {
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     if (TablesManager.GetPrimaryIndex()) {
@@ -138,6 +184,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         AFL_VERIFY(!writeMeta.HasLongTxId());
         auto operation = OperationsManager->GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         LWPROBE(EvWriteResult, TabletID(), writeMeta.GetSource().ToString(), 0, operation->GetCookie(), "write_blob_result", false, ev->Get()->GetErrorMessage() ? ev->Get()->GetErrorMessage() : "put data fails");
+        ReleaseDeduplicationId(aggr->GetDeduplicationId());
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(), ev->Get()->GetWriteResultStatus(),
             ev->Get()->GetErrorMessage() ? ev->Get()->GetErrorMessage() : "put data fails");
         ctx.Send(writeMeta.GetSource(), result.release(), 0, operation->GetCookie());
@@ -327,6 +374,7 @@ public:
     virtual void Complete(const TActorContext& ctx) override {
         LWPROBE(EvWriteResult, Self->TabletID(), Source.ToString(), TxId, Cookie, "abort", true, "");
         Self->GetOperationsManager().AbortTransactionOnComplete(*Self, TxId);
+        // it isn't possible to have a deduplication key for this case
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), TxId);
         ctx.Send(Source, result.release(), 0, Cookie);
     }
@@ -348,7 +396,9 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto& record = ev->Get()->Record;
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
+    const auto& deduplicationId = record.GetDeduplicationId();
 
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "start")("deduplication id", deduplicationId);
 
     std::optional<TDuration> writeTimeout;
     if (record.HasTimeoutSeconds()) {
@@ -358,6 +408,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     if (!TablesManager.GetPrimaryIndex()) {
         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), "schema not ready for writing");
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
+        // skip deduplication key here
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "schema not ready for writing");
         ctx.Send(source, result.release(), 0, cookie);
@@ -369,6 +420,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     if (behaviourConclusion.IsFail()) {
         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), "invalid write event: " + behaviourConclusion.GetErrorMessage());
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
+        // skip deduplication key here
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
             "invalid write event: " + behaviourConclusion.GetErrorMessage());
         ctx.Send(source, result.release(), 0, cookie);
@@ -378,6 +430,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     if (behaviour == EOperationBehaviour::AbortWriteLock) {
         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "AbortWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED), "");
+        AFL_VERIFY(deduplicationId.empty());
         Execute(new TAbortWriteTransaction(this, record.GetLocks().GetLocks()[0].GetLockId(), source, cookie), ctx);
         return;
     }
@@ -385,6 +438,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto sendError = [&](const TString& message, const NKikimrDataEvents::TEvWriteResult::EStatus status) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
         LWPROBE(EvWriteResult, TabletID(), source.ToString(), record.GetTxId(), cookie, "immediate error", false, message);
+        // skip deduplication key here
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), record.GetTxId(), status, message);
         ctx.Send(source, result.release(), 0, cookie);
     };
@@ -443,6 +497,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         LWPROBE(EvWriteResult, TabletID(), source.ToString(), record.GetTxId(), cookie, "immediate error", false, "only single operation is supported");
         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), "only single operation is supported");
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
+        // skip deduplication key here
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "only single operation is supported");
         ctx.Send(source, result.release(), 0, cookie);
@@ -502,6 +557,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
+    auto deduplicationResult = SendDeduplicationResult(deduplicationId, source, cookie);
+
+    if (deduplicationResult == EDeduplicationResult::ALREADY_IN_PROGRESS || deduplicationResult == EDeduplicationResult::READY) {
+        return;
+    };
+
     const bool outOfSpace = SpaceWatcher->SubDomainOutOfSpace && (*mType != NEvWrite::EModificationType::Delete);
     if (outOfSpace) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "quota_exceeded")("source", "dataevent");
@@ -512,7 +573,9 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", false, operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED), "overload data error " + ToString(overloadStatus));
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
-
+        if (deduplicationResult == EDeduplicationResult::START) {
+            ReleaseDeduplicationId(deduplicationId);
+        }
         if (!outOfSpace && record.HasOverloadSubscribe()) {
             const auto rejectReasons = NOverload::MakeRejectReasons(overloadStatus);
             OverloadSubscribers.SetOverloadSubscribed(record.GetOverloadSubscribe(), ev->Recipient, ev->Sender, rejectReasons, result->Record);
@@ -544,7 +607,11 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", true, operation.GetIsBulk(), "", "");
     Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
     WriteTasksQueue->Enqueue(TWriteTask(
-        arrowData, schema, source, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId, *mType, behaviour, writeTimeout, record.GetTxId(), isBulk, record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>()));
+        arrowData, schema, source, granuleShardingVersionId, pathId, cookie,
+        mvccSnapshot, lockId, *mType, behaviour,
+        writeTimeout, record.GetTxId(), isBulk,
+        record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>(),
+        deduplicationId));
     WriteTasksQueue->Drain(false, ctx);
 }
 

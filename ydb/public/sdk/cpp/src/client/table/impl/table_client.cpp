@@ -1038,6 +1038,7 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
         *request->mutable_rows()->mutable_type() = TProtoAccessor::GetProto(rows.GetType());
         *request->mutable_rows()->mutable_value() = rows.GetProto();
     }
+    request->set_deduplication_id(settings.DeduplicationId_);
 
     auto promise = NewPromise<TBulkUpsertResult>();
     auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
@@ -1084,6 +1085,7 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
         }
     }
     request.set_data(TStringType{data});
+    request.set_deduplication_id(settings.DeduplicationId_);
 
     auto promise = NewPromise<TBulkUpsertResult>();
 

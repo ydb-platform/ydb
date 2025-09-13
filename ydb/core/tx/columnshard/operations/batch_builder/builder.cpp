@@ -16,7 +16,7 @@ void TBuildBatchesTask::ReplyError(const TString& message, const NColumnShard::T
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "cannot build batch for insert")("reason", message)(
         "data", WriteData.GetWriteMeta().GetLongTxIdOptional());
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
-    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
+    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr, Context.GetDeduplicationId()) }, Context.GetDeduplicationId());
     auto result =
         NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), message, errorClass);
     TActorContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());

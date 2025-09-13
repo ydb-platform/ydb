@@ -90,7 +90,7 @@ message KMeansTreeSettings {
     VectorIndexSettings settings = 1;
 
     optional uint32 clusters = 2;
-    
+
     optional uint32 levels = 3;
 }
 
@@ -1274,6 +1274,8 @@ message BulkUpsertRequest {
 
     // It's last in the definition to help with sidecar patterns
     bytes data = 1000;
+
+    string deduplication_id = 9;
 }
 
 message BulkUpsertResponse {

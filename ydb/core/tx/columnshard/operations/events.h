@@ -33,6 +33,7 @@ private:
     std::shared_ptr<NEvWrite::TWriteMeta> WriteMeta;
     YDB_READONLY(ui64, DataSize, 0);
     YDB_READONLY(bool, NoDataToWrite, false);
+    YDB_READONLY(TString, DeduplicationId, {});
     TString ErrorMessage;
     std::optional<bool> IsInternalErrorFlag;
     std::shared_ptr<arrow::RecordBatch> PKBatch;
@@ -85,7 +86,7 @@ public:
     }
 
     TWriteResult(const std::shared_ptr<NEvWrite::TWriteMeta>& writeMeta, const ui64 dataSize, const std::shared_ptr<arrow::RecordBatch>& pkBatch,
-        const bool noDataToWrite, const ui32 recordsCount);
+        const bool noDataToWrite, const ui32 recordsCount, const TString& deduplicationId);
 };
 
 class TInsertedPortions {

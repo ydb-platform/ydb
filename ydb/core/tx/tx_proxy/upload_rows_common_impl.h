@@ -104,7 +104,7 @@ private:
 namespace NTxProxy {
 
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
-    const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
+    const NLongTxService::TLongTxId& longTxId, const TString& deduplicationId,
     const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues);
@@ -198,6 +198,7 @@ protected:
     float RuCost = 0.0;
 
     NWilson::TSpan Span;
+    TString DeduplicationId;
 
     ui64 WrittenBytes = 0;
 
@@ -213,7 +214,8 @@ public:
     explicit TUploadRowsBase(std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> rows,
                              TDuration timeout = TDuration::Max(),
                              bool diskQuotaExceeded = false,
-                             NWilson::TSpan span = {})
+                             NWilson::TSpan span = {},
+                            const TString& deduplicationId = {})
         : TBase()
         , SchemeCache(MakeSchemeCacheID())
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
@@ -223,6 +225,7 @@ public:
         , DiskQuotaExceeded(diskQuotaExceeded)
         , Rows(std::move(rows))
         , Span(std::move(span))
+        , DeduplicationId(deduplicationId)
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
@@ -906,10 +909,8 @@ private:
         Y_ABORT_UNLESS(Batch);
 
         TBase::Become(&TThis::StateWaitWriteBatchResult);
-        ui32 batchNo = 0;
-        TString dedupId = ToString(batchNo);
         DoLongTxWriteSameMailbox(
-            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
+            ctx, ctx.SelfID, LongTxId, DeduplicationId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {

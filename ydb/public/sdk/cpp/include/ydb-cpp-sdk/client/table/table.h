@@ -1181,6 +1181,7 @@ struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSetting
     FLUENT_SETTING_DEFAULT(std::string, FormatSettings, "");
     google::protobuf::Arena* Arena_ = nullptr;
     TBulkUpsertSettings& Arena(google::protobuf::Arena* arena) { Arena_ = arena; return *this; }
+    FLUENT_SETTING_DEFAULT(std::string, DeduplicationId, "");
 };
 
 struct TReadRowsSettings : public TOperationRequestSettings<TReadRowsSettings> {

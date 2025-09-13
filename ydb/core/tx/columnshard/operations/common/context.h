@@ -20,6 +20,7 @@ private:
     const std::shared_ptr<const TAtomicCounter> ActivityChecker;
     YDB_READONLY(bool, NoTxWrite, false);
     YDB_READONLY(bool, IsBulk, false);
+    YDB_READONLY_DEF(TString, DeduplicationId);
 
 public:
     void MergeFrom(const TWritingContext& newContext) {
@@ -39,7 +40,7 @@ public:
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters,
         const std::shared_ptr<NColumnShard::TWriteCounters>& writingCounters, const TSnapshot& applyToSnapshot, const std::optional<ui64>& lockId,
         const std::shared_ptr<const TAtomicCounter>& activityChecker, const bool noTxWrite, const NActors::TActorId& bufferizationPortionsActorId,
-        const bool isBulk)
+        const bool isBulk, const TString& deduplicationId)
         : TabletId(tabletId)
         , BufferizationPortionsActorId(bufferizationPortionsActorId)
         , TabletActorId(tabletActorId)
@@ -52,6 +53,7 @@ public:
         , ActivityChecker(activityChecker)
         , NoTxWrite(noTxWrite)
         , IsBulk(isBulk)
+        , DeduplicationId(deduplicationId)
     {
         AFL_VERIFY(ActivityChecker);
     }

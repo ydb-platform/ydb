@@ -26,19 +26,29 @@ private:
 
     class TReplyInfo {
     private:
-        std::unique_ptr<NActors::IEventBase> Event;
+        std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> Event;
         TActorId DestinationForReply;
         const ui64 Cookie;
+        TString DeduplicationId;
 
     public:
-        TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply, const ui64 cookie)
+        TReplyInfo(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& ev, const TActorId& destinationForReply, const ui64 cookie, const TString& deduplicationId)
             : Event(std::move(ev))
             , DestinationForReply(destinationForReply)
-            , Cookie(cookie) {
+            , Cookie(cookie)
+            , DeduplicationId(deduplicationId) {
         }
 
         void DoSendReply(const TActorContext& ctx) {
             ctx.Send(DestinationForReply, Event.release(), 0, Cookie);
+        }
+
+        const std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& GetEvent() const {
+            return Event;
+        }
+
+        const TString& GetDeduplicationId() const {
+            return DeduplicationId;
         }
     };
 
@@ -67,16 +77,22 @@ private:
         std::unique_ptr<NActors::IEventBase> Event;
         TActorId DestinationForReply;
         const ui64 Cookie;
+        TString DeduplicationId;
 
     public:
-        TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply, const ui64 cookie)
+        TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply, const ui64 cookie, const TString& deduplicationId)
             : Event(std::move(ev))
             , DestinationForReply(destinationForReply)
-            , Cookie(cookie) {
+            , Cookie(cookie)
+            , DeduplicationId(deduplicationId) {
         }
 
         void DoSendReply(const TActorContext& ctx) {
             ctx.Send(DestinationForReply, Event.release(), 0, Cookie);
+        }
+
+        const TString& GetDeduplicationId() const {
+            return DeduplicationId;
         }
     };
 

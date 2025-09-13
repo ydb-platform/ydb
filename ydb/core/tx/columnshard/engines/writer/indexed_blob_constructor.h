@@ -98,6 +98,7 @@ private:
     YDB_READONLY_DEF(std::vector<TInsertWriteId>, InsertWriteIds);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, BlobsAction);
     YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
+    YDB_READONLY_DEF(TString, DeduplicationId);
     std::shared_ptr<arrow::RecordBatch> RecordBatch;
 
 public:
@@ -123,12 +124,13 @@ public:
     }
 
     TWriteAggregation(const NEvWrite::TWriteData& writeData, std::vector<NArrow::TSerializedBatch>&& splittedBlobs,
-        const std::shared_ptr<arrow::RecordBatch>& batch)
+        const std::shared_ptr<arrow::RecordBatch>& batch, const TString& deduplicationId)
         : WriteMeta(writeData.GetWriteMetaPtr())
         , SchemaVersion(writeData.GetData()->GetSchemaVersion())
         , Size(writeData.GetSize())
         , BlobsAction(writeData.GetBlobsAction())
         , SchemaSubset(writeData.GetSchemaSubsetVerified())
+        , DeduplicationId(deduplicationId)
         , RecordBatch(batch) {
         AFL_VERIFY(WriteMeta);
         for (auto&& s : splittedBlobs) {
@@ -139,11 +141,12 @@ public:
         }
     }
 
-    TWriteAggregation(const NEvWrite::TWriteData& writeData)
+    TWriteAggregation(const NEvWrite::TWriteData& writeData, const TString& deduplicationId)
         : WriteMeta(writeData.GetWriteMetaPtr())
         , SchemaVersion(writeData.GetData()->GetSchemaVersion())
         , Size(writeData.GetSize())
-        , BlobsAction(writeData.GetBlobsAction()) {
+        , BlobsAction(writeData.GetBlobsAction())
+        , DeduplicationId(deduplicationId) {
         AFL_VERIFY(!writeData.GetSchemaSubset());
     }
 };
@@ -153,13 +156,15 @@ private:
     std::shared_ptr<IBlobsWritingAction> BlobsAction;
     std::shared_ptr<IBlobsDeclareRemovingAction> DeclareRemoveAction;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<TWriteAggregation>>, Aggregations);
+    YDB_READONLY_DEF(TString, DeduplicationId);
     YDB_READONLY(ui64, SumSize, 0);
 
 public:
     TWritingBuffer() = default;
-    TWritingBuffer(const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations)
+    TWritingBuffer(const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations, const TString& deduplicationId)
         : BlobsAction(action)
-        , Aggregations(std::move(aggregations)) {
+        , Aggregations(std::move(aggregations))
+        , DeduplicationId(deduplicationId) {
         AFL_VERIFY(BlobsAction);
         for (auto&& aggr : Aggregations) {
             SumSize += aggr->GetSize();
@@ -224,7 +229,7 @@ private:
 
 public:
     TIndexedWriteController(const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action,
-        std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations);
+        std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations, const TString& deduplicationId);
 };
 
 }   // namespace NKikimr::NOlap

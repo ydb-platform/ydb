@@ -3,6 +3,8 @@ import os
 import time
 import pytest
 
+import ydb
+
 from ydb.tests.fq.streaming.base import StreamingImportTestBase
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
@@ -32,7 +34,6 @@ class TestStreamingInYdb(StreamingImportTestBase, TestYdsBase):
         time.sleep(1)
         data = ['{"time": "lunch time"}']
         self.write_stream(data)
-        # time.sleep(4)
         result_sets = future.result()
         assert result_sets[0].rows[0]['time'] == b'lunch time'
 
@@ -64,7 +65,6 @@ class TestStreamingInYdb(StreamingImportTestBase, TestYdsBase):
         assert result_sets1[0].rows[0]['time'] == b'lunch time'
         assert result_sets2[0].rows[0]['time'] == b'lunch time'
 
-    @pytest.mark.skip(reason="How to cancel queries?")
     def test_read_topic_shared_reading_insert_to_topic(self):
         sourceName = "source3"
         self.init_topics(sourceName, partitions_count=10)
@@ -85,10 +85,21 @@ class TestStreamingInYdb(StreamingImportTestBase, TestYdsBase):
 
             INSERT INTO {sourceName}.`{self.output_topic}` SELECT time FROM $in;"""
 
-        self.ydb_client.query_async(sql)
-        self.ydb_client.query_async(sql)
+        session1 = ydb.QuerySession(self.ydb_client.driver)
+        session1.create()
+        it1 = session1.execute(sql)
+
+        session2 = ydb.QuerySession(self.ydb_client.driver)
+        session2.create()
+        it2 = session2.execute(sql)
+
         time.sleep(3)
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time', 'lunch time']
         self.write_stream(data)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+
+        it1.cancel()
+        session1.delete()
+        it2.cancel()
+        session2.delete()

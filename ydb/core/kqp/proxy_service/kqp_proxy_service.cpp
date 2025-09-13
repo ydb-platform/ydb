@@ -34,6 +34,7 @@
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
@@ -1757,7 +1758,7 @@ private:
 
     void InitSharedReading() {
         const auto& sharedReading = QueryServiceConfig.GetSharedReading();
-        if (!sharedReading.GetEnabled()) {
+        if (!sharedReading.GetEnabled() || !FederatedQuerySetup) {
             return;
         }
         auto rowDispatcher = NFq::NewRowDispatcherService(
@@ -1778,7 +1779,7 @@ private:
     
     void InitCheckpointStorage() {
         const auto& checkpointConfig = QueryServiceConfig.GetCheckpointsConfig();
-        if (!checkpointConfig.GetEnabled()) {
+        if (!checkpointConfig.GetEnabled() || !FederatedQuerySetup) {
             return;
         }
         auto service = NFq::NewCheckpointStorageService(

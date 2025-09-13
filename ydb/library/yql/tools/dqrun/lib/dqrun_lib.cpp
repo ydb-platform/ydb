@@ -13,7 +13,6 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 
-#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>

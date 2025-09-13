@@ -3,11 +3,6 @@
 
 #include "row_dispatcher.h"
 
-namespace NKikimrConfig {
-class TSharedReadingConfig;
-} // namespace NKikimrConfig
-
-
 namespace NFq {
 
 using namespace NActors;

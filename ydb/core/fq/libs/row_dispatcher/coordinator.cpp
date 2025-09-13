@@ -11,6 +11,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -179,7 +180,6 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
     NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig Config;
     TActorId LocalRowDispatcherId;
-    TActorId NameserviceId;
     const TString LogPrefix;
     const TString Tenant;
     TMap<NActors::TActorId, RowDispatcherInfo> RowDispatchers;
@@ -360,12 +360,6 @@ void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected:
 
 void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, ev: " << ev->Get()->ToString());
-
-    if (ev->Sender == NActors::GetNameserviceActorId()) {
-        LOG_ROW_DISPATCHER_INFO("TEvUndelivered, from name service, reason: " << ev->Get()->Reason);
-        ScheduleNodeInfoRequest();
-        return;
-    }
 
     for (auto& [actorId, info] : RowDispatchers) {
         if (ev->Sender != actorId) {

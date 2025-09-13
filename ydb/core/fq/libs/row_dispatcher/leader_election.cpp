@@ -102,7 +102,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
     NYdb::TDriver Driver;
     TYdbConnectionPtr YdbConnection;
     TString TablePathPrefix;
-    const TString Tenant;
+    const TString TenantId;
     TString CoordinationNodePath;
     TMaybe<NYdb::NCoordination::TSession> Session;
     TActorId ParentId;
@@ -185,8 +185,8 @@ TLeaderElection::TLeaderElection(
     , Driver(driver)
     , YdbConnection(config.GetLocalMode() ? nullptr : NewYdbConnection(config.GetDatabase(), credentialsProviderFactory, Driver))
     , TablePathPrefix(JoinPath(config.GetDatabase().GetDatabase(), config.GetCoordinationNodePath()))
-    , Tenant(JoinSeq("_", NKikimr::SplitPath(tenant)))
-    , CoordinationNodePath(JoinPath(TablePathPrefix, Tenant))
+    , TenantId(JoinSeq(":", NKikimr::SplitPath(tenant)))
+    , CoordinationNodePath(JoinPath(TablePathPrefix, TenantId))
     , ParentId(parentId)
     , CoordinatorId(coordinatorId)
     , Metrics(counters) {
@@ -225,7 +225,7 @@ void TLeaderElection::Bootstrap() {
     Become(&TLeaderElection::StateFunc);
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString()
-         << ", tenant " << Tenant << ", local mode " << Config.GetLocalMode() << ", coordination node path " << CoordinationNodePath);
+         << ", tenant id " << TenantId << ", local mode " << Config.GetLocalMode() << ", coordination node path " << CoordinationNodePath);
     if (Config.GetLocalMode()) {
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(CoordinatorId, 0));
         return;

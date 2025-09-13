@@ -4,7 +4,9 @@
 
 #include <util/generic/size_literals.h>
 
-#include <ydb/core/protos/config.pb.h>
+namespace NKikimrConfig {
+class TSharedReadingConfig_TJsonParserConfig;
+} // namespace NKikimrConfig
 
 namespace NFq::NRowDispatcher {
 
@@ -15,6 +17,6 @@ struct TJsonParserConfig {
 };
 
 TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters);
-TJsonParserConfig CreateJsonParserConfig(const NKikimrConfig::TSharedReadingConfig::TJsonParserConfig& parserConfig);
+TJsonParserConfig CreateJsonParserConfig(const NKikimrConfig::TSharedReadingConfig_TJsonParserConfig& parserConfig);
 
 }  // namespace NFq::NRowDispatcher

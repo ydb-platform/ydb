@@ -569,6 +569,54 @@
         "restart_pdisk_viewer": {
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+        },
+        "storage_nodes_database": {
+            "FieldsAvailable": "10000000110000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "storage_nodes_monitoring": {
+            "FieldsAvailable": "10000000110000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "storage_nodes_root": {
+            "FieldsAvailable": "10000000110000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "storage_nodes_viewer": {
+            "FieldsAvailable": "10000000110000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
         }
     },
     "test.test_storage_groups": {

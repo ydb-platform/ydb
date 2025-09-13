@@ -151,9 +151,8 @@ private:
         return result;
     }
 
-    void StartIntervalProcessing(const THashMap<ui64, TPortionInfo::TConstPtr>& intersectingPortions,
-        const std::shared_ptr<TFilterAccumulator>& constructor, THashSet<ui64>& portionIdsToFetch,
-        std::vector<std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>>& intervalsToBuild);
+    void StartIntervalProcessing(const THashSet<ui64>& intersectingPortions, const std::shared_ptr<TFilterAccumulator>& constructor,
+        THashSet<ui64>& portionIdsToFetch, std::vector<TIntervalInfo>& intervalsToBuild);
 
 public:
     TDuplicateManager(const TSpecialReadContext& context, const std::deque<NSimple::TSourceConstructor>& portions);

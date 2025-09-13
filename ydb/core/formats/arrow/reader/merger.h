@@ -139,7 +139,7 @@ public:
     }
 
     void PutControlPoint(const TSortableBatchPosition& point, const bool deepCopy);
-    void SkipToBound(const TSortableBatchPosition& pos, const bool lower);
+    ui64 SkipToBound(const TSortableBatchPosition& pos, const bool lower);
 
     void SetPossibleSameVersion(const bool value) {
         PossibleSameVersionFlag = value;

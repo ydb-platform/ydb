@@ -62,10 +62,12 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalP
         if (TablesManager.GetPrimaryIndex()->IsOverloadedByMetadata(NOlap::IColumnEngine::GetMetadataLimit())) {
             return EOverloadStatus::OverloadMetadata;
         }
-        if (TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>()
+        auto& engineForLogs = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+        auto badPortionsCounter = engineForLogs.GetBadPortionsCounter();
+        if (engineForLogs
                 .GetGranuleVerified(pathId)
                 .GetOptimizerPlanner()
-                .IsOverloaded()) {
+                .IsOverloaded(badPortionsCounter)) {
             return EOverloadStatus::OverloadCompaction;
         }
     }

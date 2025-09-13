@@ -164,3 +164,15 @@ When you drop an asynchronous replication instance:
 * Asynchronous replication instance is deleted.
 
 To drop an asynchronous replication instance, use the [DROP ASYNC REPLICATION](../yql/reference/syntax/drop-async-replication.md) YQL expression.
+
+{% note warning %}
+
+Do not delete asynchronous replication without [stopping](../yql/reference/syntax/alter-async-replication.md) it first. This may lead to replica write blocking and system malfunctions.
+
+{% endnote %}
+
+Before deleting asynchronous replication, follow these steps:
+
+- Stop the processes related to replication.
+- Make sure that all data operations are completed and there are no active transactions.
+- Check the status of the system and the replica before proceeding with replication deletion.

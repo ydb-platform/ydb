@@ -111,7 +111,7 @@ $transformation_lambda = ($msg) -> {
 
 
     $split = String::SplitToList($msg._data, "\n"); -- Если одно сообщение содержит несколько строк лога, разделяем его на отдельные строки
-    $lines = ListFilter($split, ($line) -> { -- Фильтруем пустые строки, которые, например, могут появится после последнего символа \n 
+    $lines = ListFilter($split, ($line) -> { -- Фильтруем пустые строки, которые, например, могут появиться после последнего символа \n 
         return LENGTH($line) > 0;
     });
 
@@ -126,13 +126,13 @@ CREATE TRANSFER `transfer_recipe/access_log_transfer`
 
 В этом примере:
 
-* `$transformation_lambda` - это правило преобразования сообщения из топика в колонки таблицы. Каждая строка access лога, записанная в сообщение, обрабатывается отдельно при помощи `line_lambda`;
-* `$line_lambda`- это правило преобразование одной строки access лога в строку таблицы;
-* `$msg` - переменная, которая содержит обрабатываемое сообщение из топика.
+* `$transformation_lambda` — это правило преобразования сообщения из топика в колонки таблицы. Каждая строка access лога, записанная в сообщение, обрабатывается отдельно при помощи `line_transformation_lambda`;
+* `$line_lambda` — это правило преобразования одной строки access лога в строку таблицы;
+* `$msg` — переменная, которая содержит обрабатываемое сообщение из топика.
 
 ## Шаг 3. Проверка содержимого таблицы {#step3}
 
-После записи сообщении в топик `transfer_recipe/access_log_topic` спустя некоторое время появятся записи в таблице `transfer_recipe/access_log`. Проверить их наличие можно с помощью [SQL-запроса](../../yql/reference/syntax/select/index.md):
+После записи сообщений в топик `transfer_recipe/access_log_topic` спустя некоторое время появятся записи в таблице `transfer_recipe/access_log`. Проверить их наличие можно с помощью [SQL-запроса](../../yql/reference/syntax/select/index.md):
 
 ```yql
 SELECT *
@@ -157,3 +157,8 @@ FROM `transfer_recipe/access_log`;
 
 * [{#T}](../../concepts/transfer.md)
 * [{#T}](quickstart.md)
+* [Lambda-функция](../../yql/reference/syntax/expressions.md#lambda)
+* [{#T}](../../yql/reference/syntax/create_table/index.md)
+* [{#T}](../../yql/reference/syntax/create-topic.md)
+* [{#T}](../../yql/reference/syntax/create-transfer.md)
+* [{#T}](../../yql/reference/syntax/select/index.md)

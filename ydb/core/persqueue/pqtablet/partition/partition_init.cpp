@@ -1007,7 +1007,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     UsersInfoStorage->Init(Tablet, SelfId(), ctx);
 
-    AFL_ENSURE(AppData(ctx)->PQConfig.GetMaxBlobsPerLevel() > 0);
+    PQ_ENSURE(AppData(ctx)->PQConfig.GetMaxBlobsPerLevel() > 0);
     ui32 border = LEVEL0;
     MaxSizeCheck = 0;
     MaxBlobSize = AppData(ctx)->PQConfig.GetMaxBlobSize();
@@ -1015,7 +1015,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     for (ui32 i = 0; i < TotalLevels; ++i) {
         CompactLevelBorder.push_back(border);
         MaxSizeCheck += border;
-        AFL_ENSURE(i + 1 < TotalLevels && border < MaxBlobSize || i + 1 == TotalLevels && border == MaxBlobSize);
+        PQ_ENSURE(i + 1 < TotalLevels && border < MaxBlobSize || i + 1 == TotalLevels && border == MaxBlobSize);
         border *= AppData(ctx)->PQConfig.GetMaxBlobsPerLevel();
         border = Min(border, MaxBlobSize);
     }

@@ -171,8 +171,8 @@ int TMVP::Run() {
 
 int TMVP::Shutdown() {
     ActorSystem.Stop();
-    ActorSystem.Cleanup();
     AppData.GRpcClientLow->Stop(true);
+    ActorSystem.Cleanup();
     return 0;
 }
 

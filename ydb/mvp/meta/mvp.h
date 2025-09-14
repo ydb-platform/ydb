@@ -16,9 +16,6 @@ namespace NMVP {
 const TString& GetEServiceName(NActors::NLog::EComponent component);
 
 class TMVP {
-private:
-    TRWMutex ActorSystemStoppingLock;
-    TAtomic ActorSystemStopping; // Used by async gRPC callbacks to determine whether they are still allowed to send messages to the actor system.
 protected:
     static TAtomic Quit;
     static void OnTerminate(int);

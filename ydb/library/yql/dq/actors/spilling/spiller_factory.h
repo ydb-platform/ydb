@@ -29,7 +29,7 @@ public:
 
     ISpiller::TPtr CreateSpiller() override {
         return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_,
-                TSpillerMemoryUsageReporter(ReportAllocCallback_, ReportFreeCallback_), ActorSystem_);
+                MakeSpillerMemoryUsageReporter(ReportAllocCallback_, ReportFreeCallback_), ActorSystem_);
     }
 
     void SetMemoryReportingCallbacks(ISpiller::TMemoryReportCallback reportAlloc,

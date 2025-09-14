@@ -1130,6 +1130,7 @@ TFuture<TCheckPermissionByAclResult> TClient::CheckPermissionByAcl(
     req->set_permission(ToProto(permission));
     req->set_acl(ToProto(ConvertToYsonString(acl)));
     req->set_ignore_missing_subjects(options.IgnoreMissingSubjects);
+    req->set_ignore_pending_removal_subjects(options.IgnorePendingRemovalSubjects);
 
     ToProto(req->mutable_master_read_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);

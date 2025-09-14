@@ -166,18 +166,19 @@ def test_dml(ydb_cluster):
                     pass
 
     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with capture_audit:
-        with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as driver:
-            pool = QuerySessionPool(driver)
-            pool.execute_with_retries(create_table_sql)
-            pool.execute_with_retries(insert_sql)
-            pool.retry_operation_sync(select)
+    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as right_driver, \
+         Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=OTHER_TOKEN)) as wrong_driver:
 
-        # Unauthorized
-        with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=OTHER_TOKEN)) as driver:
-            pool = QuerySessionPool(driver)
+        right_pool = QuerySessionPool(right_driver)
+        wrong_pool = QuerySessionPool(wrong_driver)
+        with capture_audit:
+            right_pool.execute_with_retries(create_table_sql)
+            right_pool.execute_with_retries(insert_sql)
+            right_pool.retry_operation_sync(select)
+
+            # Request with error
             try:
-                pool.execute_with_retries(insert_sql)
+                wrong_pool.execute_with_retries(insert_sql)
             except SchemeError:
                 pass
 

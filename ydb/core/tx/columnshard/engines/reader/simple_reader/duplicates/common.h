@@ -225,4 +225,66 @@ public:
     }
 };
 
+class TIntervalBorder {
+private:
+    YDB_READONLY_DEF(bool, IsLast);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>, Key);
+    YDB_READONLY_DEF(ui64, PortionId);
+
+    TIntervalBorder(const bool isLast, const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const ui64 portionId)
+        : IsLast(isLast)
+        , Key(key)
+        , PortionId(portionId)
+    {
+    }
+
+public:
+    static TIntervalBorder First(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const ui64 portionId) {
+        return TIntervalBorder(false, key, portionId);
+    }
+    static TIntervalBorder Last(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const ui64 portionId) {
+        return TIntervalBorder(true, key, portionId);
+    }
+
+    bool operator<(const TIntervalBorder& other) const {
+        return std::tie(*Key, IsLast, PortionId) < std::tie(*other.Key, other.IsLast, other.PortionId);
+    }
+    bool operator==(const TIntervalBorder& other) = delete;
+    bool IsEquivalent(const TIntervalBorder& other) const {
+        return *Key == *other.Key && IsLast == other.IsLast;
+    };
+
+    TString DebugString() const {
+        return TStringBuilder() << "{" << (IsLast ? "Last:" : "First:") << "Portion=" << PortionId << ";Data=" << Key->GetSorting()->DebugJson(0)
+                                << "}";
+    }
+
+    TPortionBorderView MakeView() const {
+        return IsLast ? TPortionBorderView::Last(PortionId) : TPortionBorderView::First(PortionId);
+    }
+};
+
+class TIntervalInfo {
+private:
+    TIntervalBorder Begin;
+    TIntervalBorder End;
+    YDB_READONLY_DEF(ui64, IntersectingPortionsCount);
+
+public:
+    TIntervalInfo(const TIntervalBorder& begin, const TIntervalBorder& end, const ui64 intersectingPortionsCount)
+        : Begin(begin)
+        , End(end)
+        , IntersectingPortionsCount(intersectingPortionsCount)
+    {
+    }
+
+    const TIntervalBorder& GetBegin() const {
+        return Begin;
+    }
+
+    const TIntervalBorder& GetEnd() const {
+        return End;
+    }
+};
+
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

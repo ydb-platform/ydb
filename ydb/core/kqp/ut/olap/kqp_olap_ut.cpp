@@ -4494,7 +4494,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
 
         TTestHelper testHelper(runnerSettings);
-        testHelper.GetKikimr().GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_TRACE);
         auto client = testHelper.GetKikimr().GetQueryClient();
 
         TVector<TTestHelper::TColumnSchema> schema = {

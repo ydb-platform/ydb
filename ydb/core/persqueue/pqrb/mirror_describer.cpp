@@ -177,7 +177,7 @@ TString TMirrorDescriber::GetCurrentState() const {
 }
 
  bool TMirrorDescriber::OnUnhandledException(const std::exception& exc) {
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::PQ_MIRROR_DESCRIBER,
+    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::PQ_MIRROR_DESCRIBER,
         LogDescription() << "unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
             << TBackTrace::FromCurrentException().PrintToString());
 

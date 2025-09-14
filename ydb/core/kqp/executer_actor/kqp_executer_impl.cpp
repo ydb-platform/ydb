@@ -16,6 +16,7 @@ using namespace NYql;
 
 void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPtr& tx) {
     TxHolders.push_back(tx);
+    YQL_ENSURE(TxResults.empty());
     TxResults.reserve(TxResults.size() + tx->ResultsSize());
 
     for (ui32 i = 0; i < tx->ResultsSize(); ++i) {

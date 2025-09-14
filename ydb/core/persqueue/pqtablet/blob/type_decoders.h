@@ -86,7 +86,7 @@ public:
             return new TDerived(data);
         } else {
             auto codec = codecs->GetCodec(sig);
-            AFL_ENSURE(codec)("Unknown codec signature.", sig.Type());
+            AFL_ENSURE(codec)("description", "Unknown codec signature.");
             return codec->ReadChunk(data);
         }
     }

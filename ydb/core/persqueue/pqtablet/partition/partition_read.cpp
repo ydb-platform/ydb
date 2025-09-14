@@ -1,5 +1,4 @@
 #include "partition_util.h"
-#include "partition_common.h"
 #include "partition_compactification.h"
 
 #include <ydb/core/persqueue/pqtablet/cache/read.h>

@@ -130,7 +130,10 @@ struct TTransaction {
 };
 class TPartitionCompaction;
 
-class TPartition : public TActorBootstrapped<TPartition> {
+#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletID)("partition_id", Partition)
+
+class TPartition : public TActorBootstrapped<TPartition>
+                 , public IActorExceptionHandler {
     friend TInitializer;
     friend TInitializerStep;
     friend TInitConfigStep;
@@ -519,6 +522,7 @@ public:
                bool newPartition = false);
 
     void Bootstrap(const TActorContext& ctx);
+    bool OnUnhandledException(const std::exception&) override;
 
     ui64 Size() const {
         return CompactionBlobEncoder.GetSize() + BlobEncoder.GetSize();

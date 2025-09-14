@@ -2630,6 +2630,7 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
             .AccessControlObjects = FromProto<std::vector<std::string>>(rsp->access_control_objects()),
             .Clusters = FromProto<std::vector<std::string>>(rsp->clusters()),
             .EnginesInfo = rsp->has_engines_info() ? std::optional(TYsonString(rsp->engines_info())) : std::nullopt,
+            .ExpectedTablesVersion = rsp->has_expected_tables_version() ? std::optional(rsp->expected_tables_version()) : std::nullopt,
         };
     }));
 }

@@ -23,6 +23,7 @@ __all__ = [
     'has_items',
     'contains_inanyorder',
     'contains',
+    'contains_exactly',
     'only_contains',
     'match_equality',
     'matches_regexp',

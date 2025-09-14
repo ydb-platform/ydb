@@ -45,6 +45,7 @@ struct TReadOptions
     bool Global = false;
     bool DisableSensorsRename = false;
     bool DisableDefault = false;
+    bool MemOnly = false;
 
     int LingerWindowSize = 0;
 

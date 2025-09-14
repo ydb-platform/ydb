@@ -32,5 +32,8 @@
     },
     "test_canonical_records.test_replace_config": {
         "uri": "file://test_canonical_records.test_replace_config/audit_log.json"
+    },
+    "test_canonical_records.test_restart_pdisk": {
+        "uri": "file://test_canonical_records.test_restart_pdisk/audit_log.json"
     }
 }

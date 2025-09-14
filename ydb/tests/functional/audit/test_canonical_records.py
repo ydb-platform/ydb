@@ -183,3 +183,19 @@ def test_dml_through_http(ydb_cluster):
         select_response = http_helpers.sql_request(ydb_cluster, DATABASE, 'SELECT 42;', TOKEN)
         assert select_response.status_code == 200, select_response.content
     return capture_audit.canonize()
+
+
+def test_restart_pdisk(ydb_cluster):
+    list_pdisks_response = http_helpers.list_pdisks_request(ydb_cluster, TOKEN)
+    assert list_pdisks_response.status_code == 200, list_pdisks_response.content
+    pdisk_subpage = http_helpers.extract_pdisk(list_pdisks_response.content)
+    assert pdisk_subpage
+
+    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    with capture_audit:
+        restart_response = http_helpers.restart_pdisk(ydb_cluster, pdisk_subpage, OTHER_TOKEN)
+        assert restart_response.status_code == 403, restart_response.content
+
+        restart_response = http_helpers.restart_pdisk(ydb_cluster, pdisk_subpage, TOKEN)
+        assert restart_response.status_code == 200, restart_response.content
+    return capture_audit.canonize()

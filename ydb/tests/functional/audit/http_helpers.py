@@ -42,3 +42,22 @@ def sql_request(cluster, database, sql, token):
         'tracingLevel': 9,
     }
     return requests.post(f'http://{cluster_http_endpoint(cluster)}/viewer/json/query?schema=multi&base64=false', data=json.dumps(request), headers=headers)
+
+
+def list_pdisks_request(cluster, token):
+    return requests.get(f'http://{cluster_http_endpoint(cluster)}/actors/pdisks/', headers=authorization_headers(token))
+
+
+def extract_pdisk(html_content):
+    if isinstance(html_content, bytes):
+        html_content = html_content.decode('utf-8')
+    # Find PDisk
+    # <a href='pdisk000000001'>PDisk000000001</a>
+    match = re.search(f'<a href=\'(pdisk\\d+)\'>PDisk\\d+</a>', html_content)
+    if match:
+        return match.group(1)
+    return None
+
+
+def restart_pdisk(cluster, pdisk_subpage, token):
+    return requests.post(f'http://{cluster_http_endpoint(cluster)}/actors/pdisks/{pdisk_subpage}', data='restartPDisk=&ignoreChecks=true', headers=authorization_headers(token))

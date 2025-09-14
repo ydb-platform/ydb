@@ -6,8 +6,7 @@
 
 #include <memory>
 
-#undef PQ_ENSURE
-#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", Partition()->TabletID)("partition_id", Partition()->Partition)
+#define PQ_INIT_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", Partition()->TabletID)("partition_id", Partition()->Partition)
 
 namespace NKikimr::NPQ {
 
@@ -173,13 +172,13 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
     }
 
     auto& res = ev->Get()->Record;
-    PQ_ENSURE(res.ReadResultSize() == 1);
+    PQ_INIT_ENSURE(res.ReadResultSize() == 1);
 
     auto& response = res.GetReadResult(0);
 
     switch (response.GetStatus()) {
     case NKikimrProto::OK:
-        PQ_ENSURE(Partition()->Config.ParseFromString(response.GetValue()));
+        PQ_INIT_ENSURE(Partition()->Config.ParseFromString(response.GetValue()));
 
         Migrate(Partition()->Config);
 
@@ -206,7 +205,7 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
 
     // There should be no consumers in the configuration of the background partition. When creating a partition,
     // the PQ tablet specifically removes all consumer settings from the config.
-    PQ_ENSURE(!Partition()->IsSupportive() ||
+    PQ_INIT_ENSURE(!Partition()->IsSupportive() ||
                    (Partition()->Config.GetConsumers().empty() && Partition()->TabletConfig.GetConsumers().empty()));
 
     Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition.OriginalPartitionId);
@@ -253,7 +252,7 @@ void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActo
     }
 
     auto& response = ev->Get()->Record;
-    PQ_ENSURE(response.GetStatusResultSize());
+    PQ_INIT_ENSURE(response.GetStatusResultSize());
 
     Partition()->DiskIsFull = DiskIsFull(ev);
     if (Partition()->DiskIsFull) {
@@ -294,7 +293,7 @@ void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     }
 
     auto& response = ev->Get()->Record;
-    PQ_ENSURE(response.ReadResultSize() == 2);
+    PQ_INIT_ENSURE(response.ReadResultSize() == 2);
     LoadMeta(response, ctx);
     Done(ctx);
 }
@@ -325,7 +324,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
     auto loadMeta = [&](const NKikimrClient::TKeyValueResponse::TReadResult& response) {
         NKikimrPQ::TPartitionMeta meta;
         bool res = meta.ParseFromString(response.GetValue());
-        PQ_ENSURE(res);
+        PQ_INIT_ENSURE(res);
 
         Partition()->BlobEncoder.StartOffset = meta.GetStartOffset();
         Partition()->BlobEncoder.EndOffset = meta.GetEndOffset();
@@ -361,7 +360,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
     auto loadTxMeta = [this](const NKikimrClient::TKeyValueResponse::TReadResult& response) {
         NKikimrPQ::TPartitionTxMeta meta;
         bool res = meta.ParseFromString(response.GetValue());
-        PQ_ENSURE(res);
+        PQ_INIT_ENSURE(res);
 
         if (meta.HasPlanStep()) {
             Partition()->PlanStep = meta.GetPlanStep();
@@ -393,14 +392,14 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     }
 
     auto& response = ev->Get()->Record;
-    PQ_ENSURE(response.ReadRangeResultSize() == 1);
+    PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
 
     auto& range = response.GetReadRangeResult(0);
     auto now = ctx.Now();
 
-    PQ_ENSURE(response.ReadRangeResultSize() == 1);
+    PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
     //megaqc check here all results
-    PQ_ENSURE(range.HasStatus());
+    PQ_INIT_ENSURE(range.HasStatus());
     const TString *key = nullptr;
     switch (range.GetStatus()) {
         case NKikimrProto::OK:
@@ -411,7 +410,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 
             for (ui32 i = 0; i < range.PairSize(); ++i) {
                 const auto& pair = range.GetPair(i);
-                PQ_ENSURE(pair.HasStatus());
+                PQ_INIT_ENSURE(pair.HasStatus());
                 if (pair.GetStatus() != NKikimrProto::OK) {
                     PQ_LOG_ERROR("read range error got status " << pair.GetStatus() << " for key " << (pair.HasKey() ? pair.GetKey() : "unknown")
                     );
@@ -420,8 +419,8 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
                     return;
                 }
 
-                PQ_ENSURE(pair.HasKey());
-                PQ_ENSURE(pair.HasValue());
+                PQ_INIT_ENSURE(pair.HasKey());
+                PQ_INIT_ENSURE(pair.HasValue());
 
                 key = &pair.GetKey();
                 const auto type = (*key)[TKeyPrefix::MarkPosition()];
@@ -437,7 +436,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             }
             //make next step
             if (range.GetStatus() == NKikimrProto::OVERRUN) {
-                PQ_ENSURE(key);
+                PQ_INIT_ENSURE(key);
                 RequestInfoRange(ctx, Partition()->Tablet, PartitionId(), *key);
             } else {
                 PostProcessing(ctx);
@@ -486,11 +485,11 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     }
 
     auto& response = ev->Get()->Record;
-    PQ_ENSURE(response.ReadRangeResultSize() == 1);
+    PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
 
     auto& range = response.GetReadRangeResult(0);
 
-    PQ_ENSURE(range.HasStatus());
+    PQ_INIT_ENSURE(range.HasStatus());
     switch(range.GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
@@ -498,7 +497,7 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             FillBlobsMetaData(range, ctx);
 
             if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
-                PQ_ENSURE(range.PairSize());
+                PQ_INIT_ENSURE(range.PairSize());
                 RequestDataRange(ctx, Partition()->Tablet, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
                 return;
             }
@@ -579,7 +578,7 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
                     PQ_LOG_D("ignore key " << k);
                 } else {
                     // candidate после lastKey
-                    //PQ_ENSURE(lastKey.GetPartNo() + lastKey.GetInternalPartsCount() == candidate.GetPartNo(),
+                    //PQ_INIT_ENSURE(lastKey.GetPartNo() + lastKey.GetInternalPartsCount() == candidate.GetPartNo(),
                     //               "lastKey=%s, candidate=%s",
                     //               lastKey.ToString().data(), candidate.ToString().data());
                     PQ_LOG_D("add key " << k);
@@ -620,7 +619,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
 
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         const auto& pair = range.GetPair(i);
-        PQ_ENSURE(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+        PQ_INIT_ENSURE(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
         PQ_LOG_D("check key " << pair.GetKey());
         const auto k = TKey::FromString(pair.GetKey(), PartitionId());
         if (!actualKeys.contains(pair.GetKey())) {
@@ -635,14 +634,14 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
             }
             head.PartNo = 0;
         } else {
-            PQ_ENSURE(endOffset <= k.GetOffset())("endOffset", endOffset)("key", pair.GetKey());
+            PQ_INIT_ENSURE(endOffset <= k.GetOffset())("endOffset", endOffset)("key", pair.GetKey());
             if (endOffset < k.GetOffset()) {
                 gapOffsets.push_back(std::make_pair(endOffset, k.GetOffset()));
                 gapSize += k.GetOffset() - endOffset;
             }
         }
-        PQ_ENSURE(k.GetCount() + k.GetInternalPartsCount() > 0);
-        PQ_ENSURE(k.GetOffset() >= endOffset);
+        PQ_INIT_ENSURE(k.GetCount() + k.GetInternalPartsCount() > 0);
+        PQ_INIT_ENSURE(k.GetOffset() >= endOffset);
         endOffset = k.GetOffset() + k.GetCount();
         //at this point EndOffset > StartOffset
         if (!k.HasSuffix() || !k.IsHead()) { //head.Size will be filled after read or head blobs
@@ -659,7 +658,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
                                   Partition()->MakeBlobKeyToken(k.ToString()));
     }
 
-    PQ_ENSURE(endOffset >= startOffset);
+    PQ_INIT_ENSURE(endOffset >= startOffset);
 }
 
 struct TKeyBoundaries {
@@ -796,13 +795,13 @@ void TInitDataRangeStep::FormHeadAndProceed() {
         cz.Head.Offset = fwz.StartOffset;
     }
 
-    PQ_ENSURE((cz.StartOffset <= cz.EndOffset) && (fwz.StartOffset <= fwz.EndOffset) && (cz.EndOffset <= fwz.StartOffset))
+    PQ_INIT_ENSURE((cz.StartOffset <= cz.EndOffset) && (fwz.StartOffset <= fwz.EndOffset) && (cz.EndOffset <= fwz.StartOffset))
         ("cz.StartOffset", cz.StartOffset)("cz.EndOffset", cz.EndOffset)
         ("fwz.StartOffset", fwz.StartOffset)("fwz.EndOffset", fwz.EndOffset);
 
-    PQ_ENSURE(fwz.HeadKeys.empty() || fwz.Head.Offset == fwz.HeadKeys.front().Key.GetOffset() && fwz.Head.PartNo == fwz.HeadKeys.front().Key.GetPartNo());
-    PQ_ENSURE(fwz.Head.Offset < endOffset || fwz.Head.Offset == endOffset && fwz.HeadKeys.empty());
-    PQ_ENSURE(fwz.Head.Offset >= startOffset || fwz.Head.Offset == startOffset - 1 && fwz.Head.PartNo > 0);
+    PQ_INIT_ENSURE(fwz.HeadKeys.empty() || fwz.Head.Offset == fwz.HeadKeys.front().Key.GetOffset() && fwz.Head.PartNo == fwz.HeadKeys.front().Key.GetPartNo());
+    PQ_INIT_ENSURE(fwz.Head.Offset < endOffset || fwz.Head.Offset == endOffset && fwz.HeadKeys.empty());
+    PQ_INIT_ENSURE(fwz.Head.Offset >= startOffset || fwz.Head.Offset == startOffset - 1 && fwz.Head.PartNo > 0);
 }
 
 
@@ -820,7 +819,7 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
     for (const auto& p : Partition()->CompactionBlobEncoder.HeadKeys) {
         keys.emplace_back(p.Key.Data(), p.Key.Size());
     }
-    PQ_ENSURE(keys.size() < Partition()->TotalMaxCount);
+    PQ_INIT_ENSURE(keys.size() < Partition()->TotalMaxCount);
     if (keys.empty()) {
         Done(ctx);
         return;
@@ -841,7 +840,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     }
 
     auto& response = ev->Get()->Record;
-    PQ_ENSURE(response.ReadResultSize());
+    PQ_INIT_ENSURE(response.ReadResultSize());
 
     auto& head = Partition()->CompactionBlobEncoder.Head;
     auto& headKeys = Partition()->CompactionBlobEncoder.HeadKeys;
@@ -850,34 +849,34 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     auto totalLevels = Partition()->TotalLevels;
 
     ui32 currentLevel = 0;
-    PQ_ENSURE(headKeys.size() == response.ReadResultSize());
+    PQ_INIT_ENSURE(headKeys.size() == response.ReadResultSize());
     for (ui32 i = 0; i < response.ReadResultSize(); ++i) {
         auto& read = response.GetReadResult(i);
-        PQ_ENSURE(read.HasStatus());
+        PQ_INIT_ENSURE(read.HasStatus());
         switch(read.GetStatus()) {
             case NKikimrProto::OK: {
                 const TKey& key = headKeys[i].Key;
-                PQ_ENSURE(key.HasSuffix());
+                PQ_INIT_ENSURE(key.HasSuffix());
 
                 ui32 size = headKeys[i].Size;
                 ui64 offset = key.GetOffset();
                 while (currentLevel + 1 < totalLevels && size < compactLevelBorder[currentLevel + 1])
                     ++currentLevel;
-                PQ_ENSURE(size < compactLevelBorder[currentLevel]);
+                PQ_INIT_ENSURE(size < compactLevelBorder[currentLevel]);
 
                 dataKeysHead[currentLevel].AddKey(key, size);
-                PQ_ENSURE(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
-                PQ_ENSURE(!dataKeysHead[currentLevel].NeedCompaction());
+                PQ_INIT_ENSURE(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
+                PQ_INIT_ENSURE(!dataKeysHead[currentLevel].NeedCompaction());
 
                 PQ_LOG_D("read res partition offset " << offset << " endOffset " << Partition()->BlobEncoder.EndOffset
                         << " key " << key.GetOffset() << "," << key.GetCount() << " valuesize " << read.GetValue().size()
                         << " expected " << size
                 );
 
-                PQ_ENSURE(offset + 1 >= Partition()->CompactionBlobEncoder.StartOffset);
-                PQ_ENSURE(offset < Partition()->CompactionBlobEncoder.EndOffset)
+                PQ_INIT_ENSURE(offset + 1 >= Partition()->CompactionBlobEncoder.StartOffset);
+                PQ_INIT_ENSURE(offset < Partition()->CompactionBlobEncoder.EndOffset)
                     ("offset", offset)("CompactionBlobEncoder.EndOffset", Partition()->CompactionBlobEncoder.EndOffset);
-                PQ_ENSURE(size == read.GetValue().size())("size", size)("read.GetValue().size()", read.GetValue().size());
+                PQ_INIT_ENSURE(size == read.GetValue().size())("size", size)("read.GetValue().size()", read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
                     head.AddBatch(it.GetBatch());

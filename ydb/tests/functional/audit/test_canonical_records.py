@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 
 
 TOKEN = 'root@builtin'
+OTHER_TOKEN = 'other-user@builtin'
+
+DATABASE = '/Root'
 
 AUTH_CONFIG = f'staff_api_user_token: {TOKEN}'
 
@@ -104,7 +107,7 @@ def test_replace_config(ydb_cluster):
         client.set_config(config, dry_run=False, allow_unknown_fields=False)
 
     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), '/Root', auth_token=TOKEN)) as driver:
+    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as driver:
         with SessionPool(driver) as pool:
             with capture_audit:
                 pool.retry_operation_sync(apply_config, config=DYN_CONFIG)
@@ -114,7 +117,7 @@ def test_replace_config(ydb_cluster):
 def test_create_and_drop_table(ydb_cluster):
     capture_audit_create = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     capture_audit_drop = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), '/Root', auth_token=TOKEN)) as driver:
+    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as driver:
         table_client = TableClient(driver)
         description = TableDescription().with_columns(
             Column('key', OptionalType(PrimitiveType.Uint64)),
@@ -139,7 +142,7 @@ def test_dml(ydb_cluster):
                     pass
 
     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), '/Root', auth_token=TOKEN)) as driver:
+    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as driver:
         pool = QuerySessionPool(driver)
         with capture_audit:
             pool.retry_operation_sync(select_42)
@@ -157,10 +160,18 @@ def test_kill_tablet_using_developer_ui(ydb_cluster):
     # Kill schemeshard tablet
     with capture_audit:
         # The first request must write UNAUTHORIZED to audit log
-        kill_response = http_helpers.kill_tablet_request(ydb_cluster, ss_tablet_id, 'incorrect@builtin')
+        kill_response = http_helpers.kill_tablet_request(ydb_cluster, ss_tablet_id, OTHER_TOKEN)
         assert kill_response.status_code == 403, kill_response.content
 
-        # The second requests is done from valid user
+        # The second request is done from valid user
         kill_response = http_helpers.kill_tablet_request(ydb_cluster, ss_tablet_id, TOKEN)
         assert kill_response.status_code == 200, kill_response.content
+    return capture_audit.canonize()
+
+
+def test_dml_through_http(ydb_cluster):
+    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    with capture_audit:
+        select_response = http_helpers.sql_request(ydb_cluster, DATABASE, 'SELECT 42;', TOKEN)
+        assert select_response.status_code == 200, select_response.content
     return capture_audit.canonize()

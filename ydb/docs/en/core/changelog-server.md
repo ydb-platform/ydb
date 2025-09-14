@@ -2,9 +2,9 @@
 
 ## Version 25.1 {#25-1}
 
-### Version 25.1.4.7 {#25-1-4-7-rc}
+### Version 25.1.4.7 {#25-1-4-7}
 
-Release date: September , 2025.
+Release date: September 15, 2025.
 
 #### Functionality
 

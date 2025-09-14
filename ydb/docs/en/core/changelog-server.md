@@ -8,11 +8,11 @@ Release date: September , 2025.
 
 #### Functionality
 
-* [Added](https://github.com/ydb-platform/ydb/pull/21119) support for the Kafka frameworks like Kafka Connect, Kafka Streams, Confluent Schema Registry, Kafka Streams, Apache Flink, etc. Now [YDB Topics Kafka API](https://ydb.tech/docs/en/reference/kafka-api/) supports
+* [Added](https://github.com/ydb-platform/ydb/pull/21119) support for the Kafka frameworks like Kafka Connect, Kafka Streams, Confluent Schema Registry, Kafka Streams, Apache Flink, etc. Now [YDB Topics Kafka API](./reference/kafka-api/index.md) supports
   * client-side consumer balancing – enabled by setting the `enable_kafka_native_balancing` flag in the [cluster configuration](./reference/configuration/index.md). [How consumer balancing works in Apache Kafka](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb/). From now on consumer balancing will work the same way in YDB Topics,
   * [compacted topics](https://docs.confluent.io/kafka/design/log_compaction.html) – enabled via the `enable_topic_compactification_by_key` flag,
   * [transactions](https://www.confluent.io/blog/transactions-apache-kafka/) – enabled via the `enable_kafka_transactions` flag.
-* [Added](https://github.com/ydb-platform/ydb/pull/20982) [new protocol](https://github.com/ydb-platform/ydb/issues/11064) to [Node Broker](./concepts/glossary#node-broker.md), eliminating the long startup of nodes on large clusters (more than 1000 servers).
+* [Added](https://github.com/ydb-platform/ydb/pull/20982) [new protocol](https://github.com/ydb-platform/ydb/issues/11064) to [Node Broker](./concepts/glossary.md#node-broker), eliminating the long startup of nodes on large clusters (more than 1000 servers).
 
 #### YDB UI
 
@@ -23,7 +23,7 @@ Release date: September , 2025.
 
 ### Performance
 
-* Added the new mode of operating [actor system](./concepts/glossary#actor-system), which allows for more efficient use of computing resources – the performance of a 4-core node is increased by 40%, now the performance per core is the same as that of a 10-core node; the performance of a 2-core node is increased by 110%, the performance per core is only 5% less than that of a 10-core node (previously it was 50% less). It is enabled by setting the `use_shared_threads` flag in the [actor-system configuration](./devops/configuration-management/configuration-v1/change_actorsystem_configs).
+* Added the new mode of operating [actor system](./concepts/glossary.md#actor-system), which allows for more efficient use of computing resources – the performance of a 4-core node is increased by 40%, now the performance per core is the same as that of a 10-core node; the performance of a 2-core node is increased by 110%, the performance per core is only 5% less than that of a 10-core node (previously it was 50% less). It is enabled by setting the `use_shared_threads` flag in the [actor-system configuration](./devops/configuration-management/configuration-v1/change_actorsystem_configs.md).
 * [Optimized](https://github.com/ydb-platform/ydb/pull/20197 ) processing of empty inputs when performing JOIN operations.
 
 #### Bug fixes

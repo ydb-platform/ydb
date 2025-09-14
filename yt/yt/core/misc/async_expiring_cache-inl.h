@@ -50,6 +50,12 @@ TAsyncExpiringCache<TKey, TValue>::TAsyncExpiringCache(
 {
     RefreshExecutor_->SetPeriod(config->RefreshTime);
     ExpirationExecutor_->SetPeriod(config->ExpirationPeriod);
+}
+
+template <class TKey, class TValue>
+void TAsyncExpiringCache<TKey, TValue>::Initialize()
+{
+    auto config = GetConfig();
     if (config->BatchUpdate) {
         if (config->RefreshTime && *config->RefreshTime) {
             RefreshExecutor_->Start();

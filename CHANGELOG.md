@@ -16,3 +16,7 @@
   * YQ-4454 fixed clickhouse udf includes (https://github.com/ydb-platform/ydb/pull/21698)
 * 22678:Fixed [false-positive unresponsive tablet issues](https://github.com/ydb-platform/ydb/issues/22390) in healthcheck during restarts. [#22678](https://github.com/ydb-platform/ydb/pull/22678) ([vporyadke](https://github.com/vporyadke))
 * 23363:[Fixed](https://github.com/ydb-platform/ydb/pull/23363) an [issue](https://github.com/ydb-platform/ydb/issues/23171) with transaction validation memory limit during execution plan increase memory limit for run execution plan. [#23363] ([Vitalii Gridnev](https://github.com/gridnevvvit))
+* 24660:Do not mix scalar and block HashShuffle connections (#24033) [#24660](https://github.com/ydb-platform/ydb/pull/24660) ([Ivan](https://github.com/abyss7))
+* 24630:Fixing If predicate pushdown into column shards by expanding constant folding and getting rid of the if
+https://github.com/ydb-platform/ydb/issues/23731 [#24630](https://github.com/ydb-platform/ydb/pull/24630) ([Pavel Velikhov](https://github.com/pavelvelikhov))
+

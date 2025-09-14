@@ -45,7 +45,7 @@ void TMvpTestRuntime::InitNodeImpl(TNodeDataBase* node, size_t nodeIndex) {
     node->LogSettings->SetLevel(NActors::NLog::PRI_DEBUG, NMVP::EService::GRPC, explanation);
     node->LogSettings->SetLevel(NActors::NLog::PRI_INFO, NMVP::EService::QUERY, explanation);
 
-    node->AppData0.reset(new TMVPAppData());
+    node->AppData0.reset(new NMVP::TMVPAppData());
 
     if (!UseRealThreads) {
         node->SchedulerPool.Reset(CreateExecutorPoolStub(this, nodeIndex, node, 0));

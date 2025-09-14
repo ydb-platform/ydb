@@ -32,12 +32,14 @@ void TExtensionWhoamiWorker::Bootstrap() {
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvGetProfileResponse::TPtr event) {
     BLOG_D("Whoami Extension Info: OK");
     IamResponse = std::move(event);
+    RequestContext.reset();
     ApplyIfReady();
 }
 
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvErrorResponse::TPtr event) {
     BLOG_D("Whoami Extension Info " << event->Get()->Status << ": " << event->Get()->Message << ", " << event->Get()->Details);
     IamError = std::move(event);
+    RequestContext.reset();
     ApplyIfReady();
 }
 

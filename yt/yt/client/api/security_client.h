@@ -58,6 +58,7 @@ struct TCheckPermissionByAclOptions
     , public TPrerequisiteOptions
 {
     bool IgnoreMissingSubjects = false;
+    bool IgnorePendingRemovalSubjects = false;
 };
 
 struct TCheckPermissionByAclResult
@@ -68,6 +69,7 @@ struct TCheckPermissionByAclResult
     NSecurityClient::TSubjectId SubjectId;
     std::optional<std::string> SubjectName;
     std::vector<std::string> MissingSubjects;
+    std::vector<std::string> PendingRemovalSubjects;
 };
 
 struct TSetUserPasswordOptions

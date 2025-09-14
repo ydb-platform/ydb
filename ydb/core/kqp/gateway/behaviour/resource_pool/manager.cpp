@@ -179,6 +179,22 @@ TYqlConclusionStatus TResourcePoolManager::PrepareCreateResourcePool(NKqpProto::
     schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".metadata/workload_manager/pools/"}));
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
 
+    NACLib::TDiffACL diffAcl;
+    for (const TString& usedSid : AppData()->AdministrationAllowedSIDs) {
+        diffAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::EAccessRights::GenericUse, usedSid);
+    }
+
+    auto useAccess = NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::DescribeSchema;
+    for (const auto& userSID : AppData()->DefaultUserSIDs) {
+        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, userSID);
+    }
+    diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, AppData()->AllAuthenticatedUsers);
+    diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);
+
+    auto& modifyACL = *schemeTx.MutableModifyACL();
+    modifyACL.SetName(settings.GetObjectId());
+    modifyACL.SetDiffACL(diffAcl.SerializeAsString());
+
     return FillResourcePoolDescription(*schemeTx.MutableCreateResourcePool(), settings);
 }
 

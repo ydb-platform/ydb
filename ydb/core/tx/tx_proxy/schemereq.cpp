@@ -1277,9 +1277,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                         return false;
                     }
                 }
-
-                // Admins can always change ACLs
-                allowACLBypass = isAdmin;
             }
 
             ui32 access = requestIt->RequireAccess;

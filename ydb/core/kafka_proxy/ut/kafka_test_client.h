@@ -150,7 +150,6 @@ class TKafkaTestClient {
         template <std::derived_from<TApiMessage> T>
         TMessagePtr<T> Read(TSocketInput& si, TRequestHeaderData* requestHeader);
         void Print(const TBuffer& buffer);
-        char Hex0(const unsigned char c);
         void FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics);
     private:
         TNetworkAddress Addr;

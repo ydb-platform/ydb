@@ -30,6 +30,7 @@ RECURSE(
     coordinator
     datashard
     general_cache
+    limiter
     locks
     long_tx_service
     mediator

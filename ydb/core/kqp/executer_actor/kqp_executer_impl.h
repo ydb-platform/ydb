@@ -1934,28 +1934,6 @@ protected:
         for (auto& op : stage.GetTableOps()) {
             Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
             switch (op.GetTypeCase()) {
-                case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-                case NKqpProto::TKqpPhyTableOperation::kReadRange: {
-                    auto columns = BuildKqpColumns(op, tableInfo);
-                    bool isFullScan = false;
-                    auto partitions = PartitionPruner.Prune(op, stageInfo, isFullScan);
-                    auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
-
-                    if (!readSettings.ItemsLimit && isFullScan) {
-                        Counters->Counters->FullScansExecuted->Inc();
-                    }
-
-                    for (auto& [shardId, shardInfo] : partitions) {
-                        YQL_ENSURE(!shardInfo.KeyWriteRanges);
-
-                        auto& task = getShardTask(shardId);
-                        MergeReadInfoToTaskMeta(task.Meta, shardId, shardInfo.KeyReadRanges, readSettings,
-                            columns, op, /*isPersistentScan*/ false);
-                    }
-
-                    break;
-                }
-
                 case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
                 case NKqpProto::TKqpPhyTableOperation::kDeleteRows: {
                     YQL_ENSURE(stage.InputsSize() <= 1, "Effect stage with multiple inputs: " << stage.GetProgramAst());

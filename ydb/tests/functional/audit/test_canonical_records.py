@@ -2,6 +2,7 @@
 import logging
 
 from ydb import Driver, DriverConfig, SessionPool, TableClient, TableDescription, Column, OptionalType, PrimitiveType
+from ydb.issues import Unauthorized
 from ydb.draft import DynamicConfigClient
 from ydb.query import QuerySessionPool
 from ydb.tests.library.harness.util import LogLevels
@@ -106,11 +107,18 @@ def test_replace_config(ydb_cluster):
         client = DynamicConfigClient(pool._driver)
         client.set_config(config, dry_run=False, allow_unknown_fields=False)
 
+    def call_replace_config(token):
+        with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=token)) as driver:
+            with SessionPool(driver) as pool:
+                try:
+                    pool.retry_operation_sync(apply_config, config=DYN_CONFIG)
+                except Unauthorized:
+                    pass
+
     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as driver:
-        with SessionPool(driver) as pool:
-            with capture_audit:
-                pool.retry_operation_sync(apply_config, config=DYN_CONFIG)
+    with capture_audit:
+        call_replace_config(OTHER_TOKEN)
+        call_replace_config(TOKEN)
     return capture_audit.canonize()
 
 

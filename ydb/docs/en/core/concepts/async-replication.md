@@ -173,6 +173,6 @@ Do not delete asynchronous replication without [stopping](../yql/reference/synta
 
 Before deleting asynchronous replication, follow these steps:
 
-- Stop the processes related to replication.
-- Make sure that all data operations are completed and there are no active transactions.
-- Check the status of the system and the replica before proceeding with replication deletion.
+* Stop the processes related to replication.
+* Make sure that all data operations are completed and there are no active transactions.
+* Check the status of the system and the replica before proceeding with replication deletion.

@@ -13,7 +13,11 @@ NO_RECORDS_TIMEOUT = plain_or_under_sanitizer(2, 30)
 
 
 def cluster_endpoint(cluster):
-    return f'{cluster.nodes[1].host}:{cluster.nodes[1].port}'
+    return f'{cluster.nodes[1].host}:{cluster.nodes[1].grpc_port}'
+
+
+def cluster_http_endpoint(cluster):
+    return f'{cluster.nodes[1].host}:{cluster.nodes[1].mon_port}'
 
 
 def make_test_file_with_content(human_readable_file_name, content):

@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
+import logging
+
 from ydb import Driver, DriverConfig, SessionPool, TableClient, TableDescription, Column, OptionalType, PrimitiveType
 from ydb.draft import DynamicConfigClient
 from ydb.query import QuerySessionPool
 from ydb.tests.library.harness.util import LogLevels
 
+import http_helpers
 from helpers import cluster_endpoint, make_test_file_with_content, CanonicalCaptureAuditFileOutput
+
+logger = logging.getLogger(__name__)
 
 
 TOKEN = 'root@builtin'
@@ -138,4 +143,24 @@ def test_dml(ydb_cluster):
         pool = QuerySessionPool(driver)
         with capture_audit:
             pool.retry_operation_sync(select_42)
+    return capture_audit.canonize()
+
+
+def test_kill_tablet_using_developer_ui(ydb_cluster):
+    # List tablets
+    list_response = http_helpers.get_tablets_request(ydb_cluster, TOKEN)
+    assert list_response.status_code == 200, list_response.content
+    ss_tablet_id = http_helpers.extract_tablet_id(list_response.content, 'SCHEMESHARD')
+    assert ss_tablet_id
+
+    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    # Kill schemeshard tablet
+    with capture_audit:
+        # The first request must write UNAUTHORIZED to audit log
+        kill_response = http_helpers.kill_tablet_request(ydb_cluster, ss_tablet_id, 'incorrect@builtin')
+        assert kill_response.status_code == 403, kill_response.content
+
+        # The second requests is done from valid user
+        kill_response = http_helpers.kill_tablet_request(ydb_cluster, ss_tablet_id, TOKEN)
+        assert kill_response.status_code == 200, kill_response.content
     return capture_audit.canonize()

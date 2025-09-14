@@ -53,7 +53,7 @@ def extract_pdisk(html_content):
         html_content = html_content.decode('utf-8')
     # Find PDisk
     # <a href='pdisk000000001'>PDisk000000001</a>
-    match = re.search(f'<a href=\'(pdisk\\d+)\'>PDisk\\d+</a>', html_content)
+    match = re.search('<a href=\'(pdisk\\d+)\'>PDisk\\d+</a>', html_content)
     if match:
         return match.group(1)
     return None

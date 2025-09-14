@@ -2,7 +2,7 @@
 import logging
 
 from ydb import Driver, DriverConfig, SessionPool, TableClient, TableDescription, Column, OptionalType, PrimitiveType
-from ydb.issues import Unauthorized
+from ydb.issues import Unauthorized, SchemeError
 from ydb.draft import DynamicConfigClient
 from ydb.query import QuerySessionPool
 from ydb.tests.library.harness.util import LogLevels
@@ -140,9 +140,25 @@ def test_create_and_drop_table(ydb_cluster):
 
 
 def test_dml(ydb_cluster):
-    def select_42(session):
+    create_table_sql = """
+        CREATE TABLE TestTable (
+        id Int64 NOT NULL,
+        value Int64 NOT NULL,
+        PRIMARY KEY (id)
+    ) """
+
+    insert_sql = """
+        INSERT INTO TestTable
+            (id, value)
+        VALUES
+            (1, 2)
+    """
+
+    select_sql = 'SELECT * FROM TestTable'
+
+    def select(session):
         with session.transaction() as transaction:
-            with transaction.execute('SELECT 42;', commit_tx=True) as iterator:
+            with transaction.execute(select_sql, commit_tx=True) as iterator:
                 try:
                     while iterator.next():
                         pass
@@ -150,10 +166,21 @@ def test_dml(ydb_cluster):
                     pass
 
     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as driver:
-        pool = QuerySessionPool(driver)
-        with capture_audit:
-            pool.retry_operation_sync(select_42)
+    with capture_audit:
+        with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as driver:
+            pool = QuerySessionPool(driver)
+            pool.execute_with_retries(create_table_sql)
+            pool.execute_with_retries(insert_sql)
+            pool.retry_operation_sync(select)
+
+        # Unauthorized
+        with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=OTHER_TOKEN)) as driver:
+            pool = QuerySessionPool(driver)
+            try:
+                pool.execute_with_retries(insert_sql)
+            except SchemeError:
+                pass
+
     return capture_audit.canonize()
 
 
@@ -180,7 +207,11 @@ def test_kill_tablet_using_developer_ui(ydb_cluster):
 def test_dml_through_http(ydb_cluster):
     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     with capture_audit:
-        select_response = http_helpers.sql_request(ydb_cluster, DATABASE, 'SELECT 42;', TOKEN)
+        select_sql = 'SELECT 42'
+        select_response = http_helpers.sql_request(ydb_cluster, DATABASE, select_sql, OTHER_TOKEN)
+        assert select_response.status_code == 403, select_response.content
+
+        select_response = http_helpers.sql_request(ydb_cluster, DATABASE, select_sql, TOKEN)
         assert select_response.status_code == 200, select_response.content
     return capture_audit.canonize()
 

@@ -75,6 +75,7 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
     }
 
     bool stageContainsEmptyProgram = kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimization;
+    bool singlePartitionMakeSense = kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimization;
     if (stage.Program().Body().Raw() != matched->Expr.Raw()) {
         stageContainsEmptyProgram = false;
     }
@@ -187,12 +188,17 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         .Done();
     inputs.insert(inputs.begin(), TExprBase(ctx.ReplaceNodes(source.Ptr(), sourceReplaces)));
 
+    if (settings.PointPrefixLen == tableDesc.Metadata->KeyColumnNames.size()) {
+        singlePartitionMakeSense &= true;
+    }
+
     if (settings.IsSorted()) {
         stageContainsEmptyProgram = false;
+        singlePartitionMakeSense = false;
     }
 
     TDqStageSettings newSettings = TDqStageSettings::Parse(stage);
-    if (stageContainsEmptyProgram) {
+    if (stageContainsEmptyProgram || singlePartitionMakeSense) {
         newSettings.SetPartitionMode(TDqStageSettings::EPartitionMode::Single);
     }
 

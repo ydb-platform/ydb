@@ -8,6 +8,7 @@
 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
+#include <util/generic/maybe.h>
 #include <util/generic/queue.h>
 
 namespace NMVP::NOIDC {
@@ -32,7 +33,7 @@ struct TExtensionsSteps : public TQueue<std::unique_ptr<IExtension>> {
 struct TExtensionContext : public TThrRefBase {
     TActorId Sender;
     TExtensionsSteps Steps;
-    THolder<TProxiedResponseParams> Params;
+    TProxiedResponseParams Params;
 
     void Reply(NHttp::THttpOutgoingResponsePtr httpResponse);
     void Reply();

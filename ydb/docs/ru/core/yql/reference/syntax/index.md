@@ -22,7 +22,6 @@
 * [DROP TABLE](drop_table.md)
 * [INSERT](insert_into.md)
 * [SHOW CREATE](show_create.md)
-* [RETURNING](returning.md)
 
 {% if feature_map_tables %}
 
@@ -37,6 +36,8 @@
 * [REPLACE](replace_into.md)
 
 {% endif %}
+
+* [RETURNING](returning.md)
 
 {% if feature_upsert %}
 

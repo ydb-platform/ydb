@@ -4042,7 +4042,7 @@ size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request) {
 
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
-        Register(CreateMirrorer(Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, BlobEncoder.EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
+        Register(CreateMirrorer(TabletID, Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, BlobEncoder.EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
         TabletCounters
     );
 }

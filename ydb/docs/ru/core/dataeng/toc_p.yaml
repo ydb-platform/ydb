@@ -1,8 +1,3 @@
 items:
-  - name: Перенос данных c помощью TRANSFER
-    href: transfer/index.md
-    include:
-      mode: link
-      path: transfer/toc_p.yaml
-  - name: Реализация SCD2 в YDB
-    href: scd2.md
+  - name: Импорт-экспорт данных из колоночных таблиц
+    href: "olap_import_export.md"

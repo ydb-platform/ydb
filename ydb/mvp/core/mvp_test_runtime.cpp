@@ -5,7 +5,6 @@
 
 #include <ydb/library/actors/core/mailbox.h>
 #include <ydb/library/actors/core/executor_thread.h>
-#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 const TString& GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");

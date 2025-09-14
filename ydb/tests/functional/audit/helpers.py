@@ -61,6 +61,17 @@ class CanonicalCaptureAuditFileOutput:
         self.components = components
 
     def __enter__(self):
+        size = os.path.getsize(self.filename)
+        last_read_time = time.time()
+        with open(self.filename, 'rb', buffering=0) as f:
+            f.seek(size)
+            # Wait until we stop getting new asyncronous messages from log
+            while time.time() - last_read_time <= NO_RECORDS_TIMEOUT:
+                time.sleep(0.1)
+                line = f.readline()
+                if len(line) > 0:
+                    last_read_time = time.time()
+
         self.saved_pos = os.path.getsize(self.filename)
         return self
 
@@ -107,7 +118,7 @@ class CanonicalCaptureAuditFileOutput:
         with open(self.filename, 'rb', buffering=0) as f:
             f.seek(self.saved_pos)
             while time.time() - last_read_time <= NO_RECORDS_TIMEOUT:
-                # unreliable way to get all due audit records into the file
+                # Unreliable way to get all due audit records into the file
                 time.sleep(0.1)
                 line = f.readline()
                 if len(line) > 0:

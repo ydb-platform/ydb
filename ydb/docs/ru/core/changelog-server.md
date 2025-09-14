@@ -8,7 +8,7 @@
 
 #### Функциональность
 
-* [Добавлена](https://github.com/ydb-platform/ydb/pull/21119) возможность использовать привычные инструменты потоковой обработки данных –  Kafka Connect, Confluent Schema Registry, Kafka Streams, Apache Flink, AKH через [Kafka API](../reference/kafka-api.md) при работе с YDB Topics. Теперь YDB Topics Kafka API поддерживает:
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/21119) возможность использовать привычные инструменты потоковой обработки данных –  Kafka Connect, Confluent Schema Registry, Kafka Streams, Apache Flink, AKH через [Kafka API](./reference/kafka-api.md) при работе с YDB Topics. Теперь YDB Topics Kafka API поддерживает:
   * клиентскую балансировку читателей – включается установкой флага `enable_kafka_native_balancing` в [конфигурации кластера](./reference/configuration/index.md). [Как работает балансировка читателей в Apache Kafka](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb). Теперь балансировка читателей в Kafka API YDB Topics будет работать точно так же,
   * [компактифицированные топики](https://docs.confluent.io/kafka/design/log_compaction.html) – включается установкой флага `enable_topic_compactification_by_key`,
   * [транзакции](https://www.confluent.io/blog/transactions-apache-kafka) – включается установкой флага `enable_kafka_transactions`.
@@ -23,7 +23,7 @@
 
 #### Производительность
 
-* Внедрён новый способ работы [системы акторов](../concepts/glossary.md#actor-system), который позволяет более эффективно использовать вычислительные ресурсы – производительность 4-ядерного узла увеличивается на 40%, теперь производительность на ядро такая же, как у 10-ядерного узла; производительность 2-ядерного узла увеличивается на 110%, производительность на ядро всего на 5% меньше, чем у 10-ядерного узла (ранее была на 50% меньше). Включается установкой флага `use_shared_threads` в [конфигурации актор-системы](../devops/configuration-management/configuration-v1/change_actorsystem_configs.md).
+* Внедрён новый способ работы [системы акторов](./concepts/glossary.md#actor-system), который позволяет более эффективно использовать вычислительные ресурсы – производительность 4-ядерного узла увеличивается на 40%, теперь производительность на ядро такая же, как у 10-ядерного узла; производительность 2-ядерного узла увеличивается на 110%, производительность на ядро всего на 5% меньше, чем у 10-ядерного узла (ранее была на 50% меньше). Включается установкой флага `use_shared_threads` в [конфигурации актор-системы](./devops/configuration-management/configuration-v1/change_actorsystem_configs.md).
 * [Оптимизирована](https://github.com/ydb-platform/ydb/pull/20197) обработка пустых входов при выполнении JOIN-операций.
 
 #### Исправления ошибок

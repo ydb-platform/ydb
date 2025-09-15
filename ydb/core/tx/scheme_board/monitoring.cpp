@@ -1134,51 +1134,48 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
             SimplePanel(str, "Backup Configuration", [&backupProgress](IOutputStream& str) {
                 HTML(str) {
-                    str << "<form id='backupForm' method='GET'>";
-
-                    DIV_CLASS("form-group") {
-                        LABEL_CLASS_FOR("control-label", "backupPath") {
-                            str << "File Path";
+                    TAG_ATTRS(TFormC, {{"id", "backupForm"}, {"method", "GET"}}) {
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("control-label", "backupPath") {
+                                str << "File Path";
+                            }
+                            str << "<input type='text' id='backupPath' name='backupPath' class='form-control' "
+                                << "placeholder='/tmp/scheme_board_backup.jsonl' required>";
                         }
-                        str << "<input type='text' id='backupPath' name='backupPath' class='form-control' "
-                            << "placeholder='/tmp/scheme_board_backup.jsonl' required>";
-                    }
 
-                    DIV_CLASS("form-group") {
-                        LABEL_CLASS_FOR("control-label", "inFlightLimit") {
-                            str << "In-Flight Limit";
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("control-label", "inFlightLimit") {
+                                str << "In-Flight Limit";
+                            }
+                            str << "<input type='number' id='inFlightLimit' name='inFlightLimit' class='form-control' "
+                                << "value='" << BackupLimits.DefaultInFlight << "'>";
+                            str << "<small class='form-text text-muted'>Recommended range: "
+                                << BackupLimits.MinInFlight << " - " << BackupLimits.MaxInFlight
+                                << ". You can enter any value, but values outside this range may cause performance issues.</small>";
                         }
-                        str << "<input type='number' id='inFlightLimit' name='inFlightLimit' class='form-control' "
-                            << "value='" << BackupLimits.DefaultInFlight << "'>";
-                        str << "<small class='form-text text-muted'>Recommended range: "
-                            << BackupLimits.MinInFlight << " - " << BackupLimits.MaxInFlight
-                            << ". You can enter any value, but values outside this range may cause performance issues.</small>";
+
+                        DIV_CLASS("form-group") {
+                            str << "<button type='submit' name='startBackup' value='1' class='btn btn-primary' "
+                                << (backupProgress.IsRunning() ? "disabled" : "")
+                                << ">Start Backup</button>";
+                        }
                     }
 
-                    DIV_CLASS("form-group") {
-                        str << "<button type='submit' name='startBackup' value='1' class='btn btn-primary' "
-                            << (backupProgress.IsRunning() ? "disabled" : "")
-                            << ">Start Backup</button>";
+                    DIV_CLASS_ID("alert alert-info", "backupStatus") {
+                        str << "Status: " << backupProgress.StatusToString();
                     }
-
-                    str << "</form>";
-
-                    // status, progress, details – explicit HTML (no macro)
-                    str << "<div id='backupStatus' class='alert alert-info'>"
-                        << "Status: " << backupProgress.StatusToString()
-                        << "</div>";
 
                     double p = backupProgress.GetProgress();
-                    str << "<div id='backupProgress' class='progress'>"
-                        << "<div class='progress-bar' role='progressbar' "
-                        << "style='width:" << p << "%;' aria-valuenow='" << p
-                        << "' aria-valuemin='0' aria-valuemax='100'>"
-                        << p << "%</div></div>";
+                    DIV_CLASS_ID("progress", "backupProgress") {
+                        DIV_CLASS_STYLE("progress-bar", TStringBuilder() << "width:" << p << "%;") {
+                            str << p << "%";
+                        }
+                    }
 
-                    str << "<div id='backupDetails'>"
-                        << "Processed: " << backupProgress.ProcessedPaths
-                        << " / Total: " << backupProgress.TotalPaths
-                        << "</div>";
+                    TAG_ATTRS(TDiv, {{"id", "backupDetails"}}) {
+                        str << "Processed: " << backupProgress.ProcessedPaths
+                            << " / Total: " << backupProgress.TotalPaths;
+                    }
 
                     str << R"(
                     <script>
@@ -1234,14 +1231,12 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
                                 if (status === 'running' || status === 'starting') {
                                     $('#backupProgress .progress-bar').css('width', progress + '%')
-                                        .attr('aria-valuenow', progress)
                                         .text(progress.toFixed(1) + '%');
                                     $('#backupStatus').text('Status: ' + status);
                                     $('#backupDetails').text('Processed: ' + processed + ' / Total: ' + total);
                                     setTimeout(updateBackupProgress, 1000);
                                 } else if (status === 'completed') {
                                     $('#backupProgress .progress-bar').css('width', '100%')
-                                        .attr('aria-valuenow', 100)
                                         .text('100%');
                                     $('#backupStatus').text('Status: backup completed successfully')
                                         .removeClass('alert-info alert-danger').addClass('alert-success');
@@ -1298,59 +1293,56 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
             SimplePanel(str, "Restore Configuration", [&restoreProgress](IOutputStream& str) {
                 HTML(str) {
-                    str << "<form id='restoreForm' method='GET'>";
-
-                    DIV_CLASS("form-group") {
-                        LABEL_CLASS_FOR("control-label", "restorePath") {
-                            str << "Backup File Path";
+                    TAG_ATTRS(TFormC, {{"id", "restoreForm"}, {"method", "GET"}}) {
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("control-label", "restorePath") {
+                                str << "Backup File Path";
+                            }
+                            str << "<input type='text' id='restorePath' name='restorePath' class='form-control' "
+                                << "placeholder='/tmp/scheme_board_backup.jsonl' required>";
                         }
-                        str << "<input type='text' id='restorePath' name='restorePath' class='form-control' "
-                            << "placeholder='/tmp/scheme_board_backup.jsonl' required>";
-                    }
 
-                    DIV_CLASS("form-group") {
-                        LABEL_CLASS_FOR("control-label", "schemeShardId") {
-                            str << "Scheme Shard Tablet ID";
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("control-label", "schemeShardId") {
+                                str << "Scheme Shard Tablet ID";
+                            }
+                            str << "<input type='number' id='schemeShardId' name='schemeShardId' class='form-control' "
+                                << "placeholder='" << TTestTxConfig::SchemeShard << "' required>";
+                            str << "<small class='form-text text-muted'>"
+                                << "Only paths owned by this specific SchemeShard will be restored from the backup file"
+                                << "</small>";
                         }
-                        str << "<input type='number' id='schemeShardId' name='schemeShardId' class='form-control' "
-                            << "placeholder='" << TTestTxConfig::SchemeShard << "' required>";
-                        str << "<small class='form-text text-muted'>"
-                            << "Only paths owned by this specific SchemeShard will be restored from the backup file"
-                            << "</small>";
-                    }
 
-                    DIV_CLASS("form-group") {
-                        LABEL_CLASS_FOR("control-label", "generation") {
-                            str << "Generation";
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("control-label", "generation") {
+                                str << "Generation";
+                            }
+                            str << "<input type='number' id='generation' name='generation' class='form-control' "
+                                << "value='1' min='1' required>";
                         }
-                        str << "<input type='number' id='generation' name='generation' class='form-control' "
-                            << "value='1' min='1' required>";
+
+                        DIV_CLASS("form-group") {
+                            str << "<button type='submit' name='startRestore' value='1' class='btn btn-danger' "
+                                << (restoreProgress.IsRunning() ? "disabled" : "")
+                                << ">Start Emergency Restore</button>";
+                        }
                     }
 
-                    DIV_CLASS("form-group") {
-                        str << "<button type='submit' name='startRestore' value='1' class='btn btn-danger' "
-                            << (restoreProgress.IsRunning() ? "disabled" : "")
-                            << ">Start Emergency Restore</button>";
+                    DIV_CLASS_ID("alert alert-warning", "restoreStatus") {
+                        str << "Status: " << restoreProgress.StatusToString();
                     }
-
-                    str << "</form>";
-
-                    // status, progress, details – explicit HTML (no macro)
-                    str << "<div id='restoreStatus' class='alert alert-warning'>"
-                        << "Status: " << restoreProgress.StatusToString()
-                        << "</div>";
 
                     double p = restoreProgress.GetProgress();
-                    str << "<div id='restoreProgress' class='progress'>"
-                        << "<div class='progress-bar progress-bar-danger' role='progressbar' "
-                        << "style='width:" << p << "%;' aria-valuenow='" << p
-                        << "' aria-valuemin='0' aria-valuemax='100'>"
-                        << p << "%</div></div>";
+                    DIV_CLASS_ID("progress", "restoreProgress") {
+                        DIV_CLASS_STYLE("progress-bar progress-bar-danger", TStringBuilder() << "width:" << p << "%;") {
+                            str << p << "%";
+                        }
+                    }
 
-                    str << "<div id='restoreDetails'>"
-                        << "Processed: " << restoreProgress.ProcessedPaths
-                        << " / Total: " << restoreProgress.TotalPaths
-                        << "</div>";
+                    TAG_ATTRS(TDiv, {{"id", "restoreDetails"}}) {
+                        str << "Processed: " << restoreProgress.ProcessedPaths
+                            << " / Total: " << restoreProgress.TotalPaths;
+                    }
 
                     str << R"(
                     <script>
@@ -1393,14 +1385,12 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
                                 if (status === 'running' || status === 'starting') {
                                     $('#restoreProgress .progress-bar').css('width', progress + '%')
-                                        .attr('aria-valuenow', progress)
                                         .text(progress.toFixed(1) + '%');
                                     $('#restoreStatus').text('Status: ' + status);
                                     $('#restoreDetails').text('Processed: ' + processed + ' / Total: ' + total);
                                     setTimeout(updateRestoreProgress, 1000);
                                 } else if (status === 'completed') {
                                     $('#restoreProgress .progress-bar').css('width', '100%')
-                                        .attr('aria-valuenow', 100)
                                         .text('100%')
                                         .removeClass('progress-bar-danger')
                                         .addClass('progress-bar-success');

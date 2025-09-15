@@ -199,6 +199,7 @@ ITransactionPtr TClient::AttachTransaction(
     YT_OPTIONAL_SET_PROTO(req, ping_period, options.PingPeriod);
     req->set_ping(options.Ping);
     req->set_ping_ancestors(options.PingAncestors);
+    YT_OPTIONAL_SET_PROTO(req, pinger_address, options.PingerAddress);
 
     auto rsp = NConcurrency::WaitFor(req->Invoke())
         .ValueOrThrow();
@@ -234,6 +235,7 @@ ITransactionPtr TClient::AttachTransaction(
         durability,
         timeout,
         options.PingAncestors,
+        options.PingerAddress,
         options.PingPeriod,
         std::move(stickyParameters),
         rsp->sequence_number_source_id(),

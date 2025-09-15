@@ -225,6 +225,15 @@ message TSerialManagementStage {
     }
 }
 
+// set by CMS
+message TMaintenanceStatus {
+    enum E {
+        NOT_SET = 0;                        // unset status, default value
+        NO_REQUEST = 1;                     // no active maintenance request
+        LONG_TERM_MAINTENANCE_PLANNED = 2;  // maintence requested, VDisks should be moved asynchronously from PDisk
+    }
+}
+
 message TUpdateDriveStatus {
     THostKey HostKey = 1; // host on which we are looking for the drive
     string Path = 2; // absolute path to the device as enlisted in PDisk configuration
@@ -233,6 +242,7 @@ message TUpdateDriveStatus {
     string Serial = 5; // may be set instead of path and PDiskId to identify PDisk
     uint64 StatusChangeTimestamp = 6; // used only in return of ReadDriveStatus
     EDecommitStatus DecommitStatus = 7;
+    TMaintenanceStatus.E MaintenanceStatus = 8;
 }
 
 message TReadDriveStatus {
@@ -683,6 +693,7 @@ message TBaseConfig {
         string ExpectedSerial = 17;
         string LastSeenSerial = 18;
         bool ReadOnly = 19;
+        TMaintenanceStatus.E MaintenanceStatus = 20; 
     }
     message TVSlot {
         message TDonorDisk {

@@ -20,6 +20,19 @@ If consistency or freshness requirement for data read by a transaction can be re
 * *Stale Read-Only*: Read operations within a transaction may return results that are slightly out-of-date (lagging by fractions of a second). Each individual read returns consistent data, but no consistency between different reads is guaranteed.
 * *Snapshot Read-Only*: All the read operations within a transaction access the database snapshot. All the data reads are consistent. The snapshot is taken when the transaction begins, meaning the transaction sees all changes committed before it began.
 
+{% note warning "Limitation for Online Read-Only and Stale Read-Only" %}
+
+Reading from [column-oriented tables](../datamodel/table.md#column-oriented-tables) is not supported in these modes. Attempts fail with the following error:
+
+`Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. Use Serializable or Snapshot Read-Only mode instead.`
+
+For transactions that read column-oriented tables, use:
+
+* Serializable — the default mode.
+* Snapshot Read-Only — provides a read from a consistent snapshot.
+
+{% endnote %}
+
 ### Implicit Transactions {#implicit}
 
 If no [transaction mode](../transactions.md#modes) is specified for a query, {{ ydb-short-name }} automatically manages its behavior. This mode is called an **implicit transaction**.

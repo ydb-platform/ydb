@@ -86,15 +86,15 @@ public:
             return new TDerived(data);
         } else {
             auto codec = codecs->GetCodec(sig);
-            Y_ABORT_UNLESS(codec, "Unknown codec signature.");
+            AFL_ENSURE(codec)("description", "Unknown codec signature.");
             return codec->ReadChunk(data);
         }
     }
 
 protected:
     static inline void VerifySignature(const TDataRef& data) {
-        Y_ABORT_UNLESS(data.Size() >= sizeof(TCodecSig));
-        Y_ABORT_UNLESS(ReadUnaligned<TCodecSig>(data.Data()) == Sig());
+        AFL_ENSURE(data.Size() >= sizeof(TCodecSig));
+        AFL_ENSURE(ReadUnaligned<TCodecSig>(data.Data()) == Sig());
     }
 };
 
@@ -195,12 +195,12 @@ private:
         TDataRef Next() override {
             const char* data = Current;
             Current += Size;
-            Y_ABORT_UNLESS(Current <= End);
+            AFL_ENSURE(Current <= End);
             return MaskIter.Next() ? TDataRef(data, Size) : TDataRef();
         }
 
         TDataRef Peek() const override {
-            Y_ABORT_UNLESS(Current + Size <= End);
+            AFL_ENSURE(Current + Size <= End);
             return MaskIter.IsNotNull() ? TDataRef(Current, Size) : TDataRef();
         }
 
@@ -239,7 +239,7 @@ public:
 
     TDataRef GetValue(size_t index) const override {
         if (Mask.IsNotNull(index)) {
-            Y_ABORT_UNLESS(ReadUnaligned<ui32>(Sizes + index) + sizeof(TCodecSig) <= Data.Size() - Mask.Size());
+            AFL_ENSURE(ReadUnaligned<ui32>(Sizes + index) + sizeof(TCodecSig) <= Data.Size() - Mask.Size());
             ui32 begin = index ? ReadUnaligned<ui32>(Sizes + index - 1) : 0;
             return TDataRef(Data.Data() + sizeof(TCodecSig) + begin, ReadUnaligned<ui32>(Sizes + index) - begin);
         }
@@ -266,7 +266,7 @@ private:
 
                 const char* data = Current;
                 Current += size;
-                Y_ABORT_UNLESS(data + size <= End);
+                AFL_ENSURE(data + size <= End);
                 return TDataRef(data, size);
             }
             ++CurrentOffset;
@@ -275,7 +275,7 @@ private:
 
         TDataRef Peek() const override {
             if (MaskIter.IsNotNull()) {
-                Y_ABORT_UNLESS(Current + ReadUnaligned<ui32>(CurrentOffset) - LastOffset <= End);
+                AFL_ENSURE(Current + ReadUnaligned<ui32>(CurrentOffset) - LastOffset <= End);
                 return TDataRef(Current, ReadUnaligned<ui32>(CurrentOffset) - LastOffset);
             }
             return TDataRef();
@@ -305,14 +305,14 @@ public:
     inline TType Peek(const char* data, const char* end) const {
         i64 value;
         auto bytes = in_long(value, data);
-        Y_ABORT_UNLESS(data + bytes <= end);
+        AFL_ENSURE(data + bytes <= end);
         return value;
     }
 
     inline size_t Load(const char* data, const char* end, TType& value) const {
         i64 loaded = 0;
         auto bytes = in_long(loaded, data);
-        Y_ABORT_UNLESS(data + bytes <= end);
+        AFL_ENSURE(data + bytes <= end);
         value = loaded;
         return bytes;
     }
@@ -327,14 +327,14 @@ public:
     inline TType Peek(const char* data, const char* end) const {
         i64 value;
         auto bytes = in_long(value, data);
-        Y_ABORT_UNLESS(data + bytes <= end);
+        AFL_ENSURE(data + bytes <= end);
         return ZigZagDecode(static_cast<TUnsigned>(value));
     }
 
     inline size_t Load(const char* data, const char* end, TType& value) const {
         i64 loaded = 0;
         auto bytes = in_long(loaded, data);
-        Y_ABORT_UNLESS(data + bytes <= end);
+        AFL_ENSURE(data + bytes <= end);
         value = ZigZagDecode(static_cast<TUnsigned>(loaded));
         return bytes;
     }

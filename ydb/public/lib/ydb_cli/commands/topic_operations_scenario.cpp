@@ -249,7 +249,8 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
                 .ReadWithoutCommit = ReadWithoutCommit,
                 .ReadWithoutConsumer = ReadWithoutConsumer,
                 .CommitPeriodMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion,
-                .CommitMessages = CommitMessages
+                .CommitMessages = CommitMessages,
+                .MaxMemoryUsageBytes = ConsumerMaxMemoryUsageBytes,
             };
 
             threads.push_back(std::async([readerParams = std::move(readerParams)]() { TTopicWorkloadReader::RetryableReaderLoop(readerParams); }));
@@ -303,6 +304,7 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .KeyPrefix = KeyPrefix,
             .KeyCount = KeyCount,
             .KeySeed = writerIdx,
+            .MaxMemoryUsageBytes = ProducerMaxMemoryUsageBytes,
         };
 
         threads.push_back(std::async([writerParams = std::move(writerParams)]() { TTopicWorkloadWriterWorker::RetryableWriterLoop(writerParams); }));

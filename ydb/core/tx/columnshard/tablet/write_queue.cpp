@@ -36,7 +36,6 @@ void TWriteTask::Abort(TColumnShard* owner, const TString& reason, const TActorC
     auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
         owner->TabletID(), TxId, status, reason);
     owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
-    ctx.Send(SourceId, result.release(), 0, Cookie);
     if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED && OverloadSubscribeSeqNo) {
         result->Record.SetOverloadSubscribed(*OverloadSubscribeSeqNo);
         ctx.Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
@@ -44,6 +43,7 @@ void TWriteTask::Abort(TColumnShard* owner, const TString& reason, const TActorC
                 NOverload::TPipeServerInfo{.PipeServerId = RecipientId, .InterconnectSessionId = owner->PipeServersInterconnectSessions[RecipientId]},
                 NOverload::TOverloadSubscriberInfo{.PipeServerId = RecipientId, .OverloadSubscriberId = SourceId, .SeqNo = *OverloadSubscribeSeqNo}));
     }
+    ctx.Send(SourceId, result.release(), 0, Cookie);
 }
 
 bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {

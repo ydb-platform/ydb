@@ -685,6 +685,7 @@ namespace NActors {
         }
 
         // Run function inside actor system context
+        // This allows func to safely use AppData().
         template <typename Func>
         TFunctionResult<Func> RunCall(Func&& func) {
             using TResult = TFunctionResult<Func>;

@@ -25,6 +25,9 @@ private:
     int PrintResponse(NMonitoring::TSelfCheckResult& result);
 
     bool Verbose = false;
+    bool NoMerge = false;
+    bool NoCache = false;
+    TString Tenant;
 };
 
 }

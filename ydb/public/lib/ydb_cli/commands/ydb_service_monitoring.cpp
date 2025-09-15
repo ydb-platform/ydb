@@ -24,6 +24,15 @@ void TCommandSelfCheck::Config(TConfig& config) {
 
     config.Opts->AddLongOption('v', "verbose", "Return detailed info about components checked with their statuses.")
         .StoreTrue(&Verbose);
+
+    config.Opts->AddLongOption("no-merge", "Do not merge entries of health check result")
+        .StoreTrue(&NoMerge).Optional();
+
+    config.Opts->AddLongOption("no-cache", "Do not use cached result")
+        .StoreTrue(&NoCache).Optional();
+
+    config.Opts->AddLongOption("tenant", "Health check only specified tenant")
+        .StoreResult(&Tenant).Optional();
 }
 
 void TCommandSelfCheck::Parse(TConfig& config) {
@@ -37,6 +46,18 @@ int TCommandSelfCheck::Run(TConfig& config) {
 
     if (Verbose) {
         settings.ReturnVerboseStatus(true);
+    }
+
+    if (NoMerge) {
+        settings.NoMerge(true);
+    }
+
+    if (NoCache) {
+        settings.NoCache(true);
+    }
+
+    if (Tenant) {
+        settings.Tenant(Tenant);
     }
 
     NMonitoring::TSelfCheckResult result = client.SelfCheck(

@@ -40,12 +40,24 @@ public:
             request.set_return_verbose_status(settings.ReturnVerboseStatus_.value());
         }
 
+        if (settings.NoMerge_) {
+            request.set_merge_records(!settings.NoMerge_.value());
+        }
+
+        if (settings.NoCache_) {
+            request.set_do_not_cache(settings.NoCache_.value());
+        }
+
         if (settings.MinimumStatus_) {
             request.set_minimum_status((::Ydb::Monitoring::StatusFlag_Status)settings.MinimumStatus_.value());
         }
 
         if (settings.MaximumLevel_) {
             request.set_maximum_level(settings.MaximumLevel_.value());
+        }
+
+        if (settings.Tenant_) {
+            request.set_tenant(settings.Tenant_.value());
         }
 
         auto promise = NThreading::NewPromise<TSelfCheckResult>();

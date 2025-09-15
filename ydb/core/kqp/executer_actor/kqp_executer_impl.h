@@ -169,9 +169,7 @@ public:
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
     {
-        if (executerConfig.TableServiceConfig.HasArrayBufferMinFillPercentage()) {
-            ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
-        }
+        ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
 
         if (executerConfig.TableServiceConfig.HasBufferPageAllocSize()) {
             BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();

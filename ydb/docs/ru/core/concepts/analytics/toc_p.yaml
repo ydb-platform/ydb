@@ -5,3 +5,6 @@ items:
     include:
       mode: link
       path: concepts/toc_p.yaml
+  - name: Основные функции
+    href: olap_features.md
+

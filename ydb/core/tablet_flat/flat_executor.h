@@ -605,6 +605,7 @@ class TExecutor
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);
+    void ForceSendCounters();
     void UpdateYellow();
     void UpdateCompactions();
     void Handle(TEvTablet::TEvCheckBlobstorageStatusResult::TPtr &ev);

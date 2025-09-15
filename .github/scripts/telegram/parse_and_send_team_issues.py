@@ -365,7 +365,6 @@ def wait_for_telegram_api_availability(bot_token, max_wait_minutes=30, max_check
     Returns:
         bool: True if API becomes available, False if timeout or max checks exceeded
     """
-    import time
     
     print(f"🔍 Checking Telegram API availability (max {max_wait_minutes} minutes, max {max_checks} checks)...")
     

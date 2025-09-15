@@ -130,7 +130,7 @@ def _send_single_message(bot_token, chat_id, message, parse_mode, message_thread
                 if attempt < max_retries:
                     # Use exponential backoff for server errors (5xx) with maximum cap
                     if response.status_code >= 500:
-                        wait_time = min(retry_delay * (2 ** attempt), 60)  # Cap at 60 seconds
+                        wait_time = min(retry_delay * (2 ** (attempt - 1)), 60)  # Cap at 60 seconds
                     else:
                         wait_time = retry_delay
                     print(f"⏳ Waiting {wait_time} seconds before retry...")

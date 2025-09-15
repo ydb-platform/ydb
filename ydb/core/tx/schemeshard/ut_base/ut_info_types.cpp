@@ -451,6 +451,30 @@ ColumnFamilies {
             }
         )proto";
 
+        const TString settingsWithInvalidFilterByPath = R"proto(
+            items {
+                source_path: "invalid"
+            }
+            items {
+                source_path: "dir1"
+            }
+        )proto";
+
+        const TString settingsWithInvalidFilterByPrefix = R"proto(
+            items {
+                source_prefix: "invalid"
+            }
+            items {
+                source_path: "dir1"
+            }
+        )proto";
+
+        const TString emptySchemaMapping = R"json(
+        {
+            "exportedObjects": {}
+        }
+        )json";
+
         const TString schemaMapping = R"json(
         {
             "exportedObjects": {
@@ -557,6 +581,18 @@ ColumnFamilies {
             UNIT_ASSERT_VALUES_EQUAL(importInfo->Items.size(), 2);
             validateImportItem(importInfo->Items[0], "/MyRoot/dir1/Table1", "prefix1", "dir1/Table1", iv);
             validateImportItem(importInfo->Items[1], "/MyRoot/dir1/dir2/Table3", "prefix/prefix3", "dir1/dir2/Table3", iv);
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithInvalidFilterByPath, schemaMapping, false, "cannot find source path \"invalid\" in schema mapping");
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithInvalidFilterByPrefix, schemaMapping, false, "cannot find prefix \"invalid\" in schema mapping");
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithoutFilter, emptySchemaMapping, false, "no items to import");
         }
     }
 

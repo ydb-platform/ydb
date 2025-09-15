@@ -20,6 +20,7 @@ SRCS(
 PEERDIR(
     yql/essentials/public/issue
     yql/essentials/public/issue/protos
+    ydb/library/backup
     ydb/public/api/grpc
     ydb/public/api/protos
     ydb/public/api/protos/annotations
@@ -32,10 +33,8 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types/operation
     ydb/public/sdk/cpp/src/client/types/status
     library/cpp/containers/concurrent_hash
-    library/cpp/string_utils/parse_size
     library/cpp/unified_agent_client
     library/cpp/histogram/hdr
-    ydb/library/backup
 )
 
 END()

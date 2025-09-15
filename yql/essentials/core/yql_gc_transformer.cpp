@@ -29,6 +29,11 @@ public:
                 const auto range = ctx.UniqueNodes.equal_range(hash);
                 for (auto jt = range.first; range.second != jt;) {
                     if (jt->second == dead) {
+                        if(jt->second->UseCount()) {
+                            ctx.AddError(YqlIssue(TPosition(), TIssuesIds::CORE_GC_REMOVE_UNDEAD_NODE, TStringBuilder()
+                                << "GC of a node with non-zero use count: "));
+                            return TStatus::Error;
+                        }
                         jt = ctx.UniqueNodes.erase(jt);
                     } else {
                         ++jt;

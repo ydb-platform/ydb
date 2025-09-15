@@ -4081,8 +4081,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(CreateTableAlterTableVectorIndexInvalidSettings, CreateTable) {
-        return; // TODO: will be re-enabled in https://github.com/ydb-platform/ydb/pull/24606
-
         TKikimrRunner kikimr;
         // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
         // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);

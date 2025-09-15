@@ -852,7 +852,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
     return readSettings;
 }
 
-TPartitionPruner::TPartitionPruner(const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, TPartitionPruner::TConfig config)
+TPartitionPruner::TPartitionPruner(const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, TPartitionPrunerConfig config)
     : HolderFactory(&holderFactory)
     , TypeEnv(&typeEnv)
     , Config(std::move(config))

@@ -395,7 +395,7 @@ message TTableServiceConfig {
 
     optional bool EnableIndexStreamWrite = 88 [default = false];
 
-    reserved 89;
+    optional bool EnableParallelPointReadConsolidation = 89 [default = true];
 
     optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
 

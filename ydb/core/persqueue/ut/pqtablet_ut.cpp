@@ -259,7 +259,7 @@ protected:
     void WaitWriteResponse(const TWriteResponseMatcher& matcher);
 
     // returns owner cookie for this supportive partition
-    TString CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId, ui32 partitionId = 0);
+    TString CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId, const ui32& partitionId = 0);
     void SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32& partitionId = 0);
     void CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds = {0});
 
@@ -838,7 +838,7 @@ void TPQTabletFixture::SendWriteRequest(const TWriteRequestParams& params)
 }
 
 TString TPQTabletFixture::CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId,
-                                                            ui32 partitionId) {
+                                                            const ui32& partitionId) {
     EnsurePipeExist();
 
     auto request = MakeGetOwnershipRequest({.Partition=partitionId,
@@ -2630,6 +2630,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Deleting_State, TP
 
     const NKikimrPQ::TTabletTxInfo& txInfo = WaitForExactTxWritesCount(2);
     ui32 firstSupportivePartitionId = txInfo.GetTxWrites(0).GetInternalPartitionId();
+    ui32 secondSupportivePartitionId = txInfo.GetTxWrites(1).GetInternalPartitionId();
 
     TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent1;
     TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent2;
@@ -2669,6 +2670,10 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Deleting_State, TP
     UNIT_ASSERT_EQUAL(txInfo1.TxWritesSize(), 1);
     UNIT_ASSERT_VALUES_EQUAL(txInfo1.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId.Id);
     UNIT_ASSERT_VALUES_UNEQUAL(txInfo1.GetTxWrites(0).GetInternalPartitionId(), firstSupportivePartitionId);
+    auto txInfo2 = GetTxWritesFromKV();
+    UNIT_ASSERT_EQUAL(txInfo2.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo2.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId.Id);
+    UNIT_ASSERT_VALUES_UNEQUAL(txInfo2.GetTxWrites(0).GetInternalPartitionId(), secondSupportivePartitionId);
     TString ownerCookie3 = WaitGetOwnershipResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
     UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie1, ownerCookie3);
     UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie3);

@@ -29,6 +29,16 @@ TEST(TUnversionedOwningValueTest, String)
     ASSERT_EQ(owningValue.GetStringRef().ToStringBuf(), string);
 }
 
+TEST(TUnversionedOwningValueTest, FromSharedRef)
+{
+    auto string = TSharedRef::FromString("Hello world!");
+    auto owningValue = MakeUnversionedStringOwningValue(string);
+    TUnversionedValue value = owningValue;
+    ASSERT_EQ(owningValue.Type(), EValueType::String);
+    ASSERT_EQ(static_cast<const void*>(value.Data.String), static_cast<const void*>(string.data()));
+    ASSERT_EQ(owningValue.GetStringRef().ToStringBuf(), string.ToStringBuf());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST(TUnversionedOwningRowTest, DefaultCtor)

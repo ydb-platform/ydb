@@ -259,8 +259,8 @@ protected:
     void WaitWriteResponse(const TWriteResponseMatcher& matcher);
 
     // returns owner cookie for this supportive partition
-    TString CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId, const ui32& partitionId = 0);
-    void SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32& partitionId = 0);
+    TString CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId, const ui32 partitionId = 0);
+    void SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32 partitionId = 0);
     void CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds = {0});
 
     std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
@@ -838,7 +838,7 @@ void TPQTabletFixture::SendWriteRequest(const TWriteRequestParams& params)
 }
 
 TString TPQTabletFixture::CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId,
-                                                            const ui32& partitionId) {
+                                                            const ui32 partitionId) {
     EnsurePipeExist();
 
     auto request = MakeGetOwnershipRequest({.Partition=partitionId,
@@ -854,7 +854,7 @@ TString TPQTabletFixture::CreateSupportivePartitionForKafka(const NKafka::TProdu
     return WaitGetOwnershipResponse({.Cookie=4, .Status=NMsgBusProxy::MSTATUS_OK});
 }
 
-void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32& partitionId) {
+void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32 partitionId) {
     auto event = MakeHolder<TEvPersQueue::TEvRequest>();
     auto* request = event->Record.MutablePartitionRequest();
     request->SetTopic("/topic");

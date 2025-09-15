@@ -13,6 +13,7 @@ struct TPrerequisiteAttachOptions
     std::optional<TDuration> PingPeriod;
     bool Ping = true;
     bool PingAncestors = false;
+    std::optional<std::string> PingerAddress;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

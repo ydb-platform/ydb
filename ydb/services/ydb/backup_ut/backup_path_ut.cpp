@@ -542,6 +542,23 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             });
         }
 
+        // Recursive filter by directory
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix2");
+            importSettings
+                .AppendItem(NImport::TImportFromS3Settings::TItem{.SrcPath = "dir1"});
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateHasYdbTables({
+                "/Root/RestorePrefix2/dir1/Table1",
+                "/Root/RestorePrefix2/dir1/dir2/Table2",
+            });
+            ValidateDoesNotHaveYdbTables({
+                "/Root/RestorePrefix2/Table0",
+            });
+        }
+
         {
             // Both src path and src prefix are incorrect
             NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix");

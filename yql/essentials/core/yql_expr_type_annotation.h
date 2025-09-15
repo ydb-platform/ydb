@@ -250,8 +250,8 @@ using TConvertFlags = TEnumBitSet<EFlags, DisableTruncation, Last>;
 using NConvertFlags::TConvertFlags;
 
 //FIXME remove deprecated functions
-#define DEPRECATED [[deprecated]]
-//#define DEPRECATED
+//#define DEPRECATED [[deprecated]]
+#define DEPRECATED
 
 DEPRECATED
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,

@@ -101,6 +101,10 @@ class TGrpcRequestCheckActor
 {
     using TSelf = TGrpcRequestCheckActor<TEvent>;
     using TBase = TActorBootstrappedSecureRequest<TGrpcRequestCheckActor>;
+
+    static constexpr bool IsHttpRequest = std::is_same_v<TEvent, TEvRequestAuthAndCheck>;
+    static constexpr bool IsGrpcRequest = !IsHttpRequest;
+
 public:
     void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) {
         LOG_INFO(ctx, NKikimrServices::GRPC_SERVER, error.ToString());
@@ -474,8 +478,13 @@ private:
             auditEnabledReceived |= AppData()->AuditConfig.EnableLogging(auditMode.LogClass, NKikimrConfig::TAuditConfig::TLogClassConfig::Received, subjectType);
         }
 
-        const TString sanitizedToken = TBase::GetSanitizedToken();
         if (auditEnabledReceived || auditEnabledCompleted) {
+            if constexpr (IsGrpcRequest) {
+                if (const auto* reqCtx = dynamic_cast<const IRequestCtx*>(requestBaseCtx)) {
+                    requestBaseCtx->AddAuditLogPart("grpc_method", reqCtx->GetRpcMethodName());
+                }
+            }
+            const TString sanitizedToken = TBase::GetSanitizedToken();
             AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
             if (auditEnabledReceived) {
                 AuditLog(std::nullopt, requestBaseCtx->GetAuditLogParts());

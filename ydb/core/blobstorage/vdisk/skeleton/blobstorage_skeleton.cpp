@@ -1935,14 +1935,6 @@ namespace NKikimr {
                     NKikimrWhiteboard::EVDiskState::LocalRecoveryError);
             }
 
-            // notify skeketon front about recovery status
-            auto msg = std::make_unique<TEvFrontRecoveryStatus>(TEvFrontRecoveryStatus::LocalRecoveryDone,
-                                                            NKikimrProto::OK,
-                                                            PDiskCtx->Dsk,
-                                                            MinHugeBlobInBytes,
-                                                            Db->GetVDiskIncarnationGuid());
-            ctx.Send(*SkeletonFrontIDPtr, msg.release());
-
             // place new incarnation guid on whiteboard
             using TEv = NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate;
             ctx.Send(*SkeletonFrontIDPtr, new TEv(TEv::UpdateIncarnationGuid, Db->GetVDiskIncarnationGuid()));
@@ -1983,6 +1975,14 @@ namespace NKikimr {
 
         void HandleMetadata(TEvCommitVDiskMetadataDone::TPtr& /*ev*/, const TActorContext& ctx) {
             auto& ev = LocalRecoveryDoneEvent;
+
+            // notify skeketon front about recovery status
+            auto msg = std::make_unique<TEvFrontRecoveryStatus>(TEvFrontRecoveryStatus::LocalRecoveryDone,
+                                                            NKikimrProto::OK,
+                                                            PDiskCtx->Dsk,
+                                                            MinHugeBlobInBytes,
+                                                            Db->GetVDiskIncarnationGuid());
+            ctx.Send(*SkeletonFrontIDPtr, msg.release());
 
             // run HugeBlobKeeper
             TString localRecovInfoStr = Db->LocalRecoveryInfo ? Db->LocalRecoveryInfo->ToString() : TString("{}");

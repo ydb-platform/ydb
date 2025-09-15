@@ -221,6 +221,8 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
     
     total_teams = len(teams)
     sent_count = 0
+    processed_count = 0
+    failed_teams = []
     
     if dry_run:
         print(f"🔍 Dry run - showing formatted messages for {total_teams} teams...")
@@ -246,6 +248,8 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
         if not message.strip():
             continue
         
+        processed_count += 1
+        
         if dry_run:
             print(f"\n--- Team: {team_name} ---")
             print(f"📨 Channel: {team_chat_id}" + (f" (thread {team_thread_id})" if team_thread_id else ""))
@@ -259,15 +263,19 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                 print(f"✅ Message sent for team: {team_name}")
             else:
                 print(f"❌ Failed to send message for team: {team_name} after {max_retries} retries")
+                failed_teams.append(team_name)
             
-            # Add delay between messages
-            if sent_count < total_teams:
+            # Add delay between message attempts (not just successful ones)
+            if processed_count < total_teams:
                 time.sleep(delay)
     
     if dry_run:
         print(f"🎉 Dry run completed: {sent_count}/{total_teams} team messages formatted!")
     else:
         print(f"🎉 Sent {sent_count}/{total_teams} team messages successfully!")
+        if failed_teams:
+            print(f"⚠️ Failed to send messages for teams: {', '.join(failed_teams)}")
+            print(f"💡 Consider re-running the script for failed teams only")
 
 
 def parse_chat_and_thread_id(chat_id_str):

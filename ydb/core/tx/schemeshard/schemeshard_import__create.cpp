@@ -274,12 +274,17 @@ private:
         importInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const TString& dstPath = settings.items(itemIdx).destination_path();
-            if (!dstPaths.insert(NBackup::NormalizeItemPath(dstPath)).second) {
-                explain = TStringBuilder() << "Duplicate destination_path: " << dstPath;
-                return false;
-            }
+            if (dstPath) {
+                if (!dstPaths.insert(NBackup::NormalizeItemPath(dstPath)).second) {
+                    explain = TStringBuilder() << "Duplicate destination_path: " << dstPath;
+                    return false;
+                }
 
-            if (!ValidateImportDstPath(dstPath, Self, explain)) {
+                if (!ValidateImportDstPath(dstPath, Self, explain)) {
+                    return false;
+                }
+            } else if (settings.source_prefix().empty()) { // Can not take path from schema mapping
+                explain = "No common source prefix and item destination path set";
                 return false;
             }
 
@@ -1080,17 +1085,9 @@ private:
             }
         }
 
-        for (size_t i = 0; i < importInfo->Items.size(); ++i) {
-            LOG_D("TImport::TTxProgress: OnSchemaMappingResult, item before: " << importInfo->Items[i].ToString(i));
-        }
-
         const TImportInfo::TFillItemsFromSchemaMappingResult fillResult = importInfo->FillItemsFromSchemaMapping(Self);
         if (!fillResult.Success) {
             return CancelAndPersist(db, importInfo, -1, {}, fillResult.ErrorMessage);
-        }
-
-        for (size_t i = 0; i < importInfo->Items.size(); ++i) {
-            LOG_D("TImport::TTxProgress: OnSchemaMappingResult, item after: " << importInfo->Items[i].ToString(i));
         }
 
         importInfo->State = EState::Waiting;

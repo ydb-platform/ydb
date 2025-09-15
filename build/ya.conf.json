@@ -319,6 +319,14 @@
             },
             "formula": "build/external_resources/yexport/public.resources.json"
         },
+        "ygdiff": {
+            "executable": {
+                "ygdiff": [
+                    "ygdiff"
+                ]
+            },
+            "formula": "build/yandex_specific/autocheck/ygdiff/resources.json"
+        },
         "ymake": {
             "executable": {
                 "ymake": [
@@ -2413,6 +2421,34 @@
                 }
             }
         },
+        "ygdiff": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                }
+            ],
+            "tools": {
+                "ygdiff": {
+                    "bottle": "ygdiff",
+                    "executable": "ygdiff"
+                }
+            }
+        },
         "ymake": {
             "platforms": [
                 {
@@ -2599,6 +2635,10 @@
         },
         "yexport": {
             "description": "Run yexport",
+            "visible": false
+        },
+        "ygdiff": {
+            "description": "Run ygdiff tool",
             "visible": false
         },
         "ymake": {

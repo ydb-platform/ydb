@@ -1,6 +1,8 @@
 
 #include "pq_impl.h"
 #include "pq_impl_types.h"
+
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/pqtablet/cache/read.h>
@@ -119,24 +121,25 @@ TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrap
 
 /******************************************************* ReadProxy *********************************************************/
 //megaqc - remove it when LB will be ready
-class TReadProxy : public TActorBootstrapped<TReadProxy> {
+class TReadProxy : public TBaseActor<TReadProxy> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR;
     }
 
-    TReadProxy(const TActorId& sender, const TActorId& tablet, ui64 tabletGeneration,
+    TReadProxy(const TActorId& sender, const ui64 tabletId, const TActorId& tablet, ui64 tabletGeneration,
                const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request)
-        : Sender(sender)
+        : TBaseActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
+        , Sender(sender)
         , Tablet(tablet)
         , TabletGeneration(tabletGeneration)
         , Request(request)
         , Response(new TEvPersQueue::TEvResponse)
         , DirectReadKey(directReadKey)
     {
-        Y_ABORT_UNLESS(Request.HasPartitionRequest() && Request.GetPartitionRequest().HasCmdRead());
-        Y_ABORT_UNLESS(Request.GetPartitionRequest().GetCmdRead().GetPartNo() == 0); //partial request are not allowed, otherwise remove ReadProxy
-        Y_ABORT_UNLESS(!Response->Record.HasPartitionResponse());
+        AFL_ENSURE(Request.HasPartitionRequest() && Request.GetPartitionRequest().HasCmdRead());
+        AFL_ENSURE(Request.GetPartitionRequest().GetCmdRead().GetPartNo() == 0); //partial request are not allowed, otherwise remove ReadProxy
+        AFL_ENSURE(!Response->Record.HasPartitionResponse());
         if (!directReadKey.SessionId.empty()) {
             DirectReadKey.ReadId = Request.GetPartitionRequest().GetCmdRead().GetDirectReadId();
         }
@@ -147,10 +150,17 @@ public:
         Become(&TThis::StateFunc);
     }
 
+    const TString& GetLogPrefix() const override {
+        if (!LogPrefix) {
+            LogPrefix = TStringBuilder() <<"[ReadProxy][" << SelfId() << "] ";
+        }
+        return *LogPrefix;
+    }
+
 private:
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx)
     {
-        Y_ABORT_UNLESS(Response);
+        AFL_ENSURE(Response);
         const auto& record = ev->Get()->Record;
         auto isDirectRead = DirectReadKey.ReadId != 0;
         if (!record.HasPartitionResponse()
@@ -177,7 +187,7 @@ private:
         responseRecord.SetStatus(NMsgBusProxy::MSTATUS_OK);
         responseRecord.SetErrorCode(NPersQueue::NErrorCode::OK);
 
-        Y_ABORT_UNLESS(readResult.ResultSize() > 0 || isDirectRead);
+        AFL_ENSURE(readResult.ResultSize() > 0 || isDirectRead);
 
         ui64 readFromTimestampMs = PreciseReadFromTimestampBehaviourEnabled(*AppData(ctx))
                                    ? (responseRecord.HasPartitionResponse()
@@ -238,7 +248,7 @@ private:
                 // There must be some data in response already.
                 if (partResp->ResultSize() == 0) {
                     makeErrorResponse("Internal error - got message part on followup read request with empty current response");
-                    PQ_LOG_CRIT("Handle TEvRead got message part on followup read request with empty current response. Readed now "
+                    LOG_C("Handle TEvRead got message part on followup read request with empty current response. Readed now "
                                 << currentReadResult.GetSeqNo() << ", " << currentReadResult.GetPartNo()
                                 << " full request(now): " << Request);
                     break;
@@ -268,7 +278,7 @@ private:
                     const auto& back = partResp->GetResult(partResp->ResultSize() - 1);
                     if (back.GetPartNo() + 1 < back.GetTotalParts()) {
                         makeErrorResponse("Internal error - got message part from the middle when expecting first part");
-                        PQ_LOG_CRIT("Handle TEvRead last read pos (seqno/parno): " << back.GetSeqNo() << "," << back.GetPartNo() << " readed now "
+                        LOG_C("Handle TEvRead last read pos (seqno/parno): " << back.GetSeqNo() << "," << back.GetPartNo() << " readed now "
                                     << currentReadResult.GetSeqNo() << ", " << currentReadResult.GetPartNo()
                                     << " full request(now): " << Request);
                         break;
@@ -283,7 +293,7 @@ private:
             } else { // Glue next part to prevous otherwise
                 if(partResp->ResultSize() == 0) {
                     // This is error, Must have some data at this point;
-                    PQ_LOG_CRIT("Handle TEvRead, have last read pos, readed now "
+                    LOG_C("Handle TEvRead, have last read pos, readed now "
                                     << currentReadResult.GetSeqNo() << ", " << currentReadResult.GetPartNo()
                                     << " full request(now): " << Request);
                     makeErrorResponse("Internal error - got message part from the middle when current response if empty");
@@ -292,13 +302,13 @@ private:
                 }
                 auto* rr = partResp->MutableResult(partResp->ResultSize() - 1);
                 if (rr->GetSeqNo() != currentReadResult.GetSeqNo() || rr->GetPartNo() + 1 != currentReadResult.GetPartNo()) {
-                    PQ_LOG_CRIT("Handle TEvRead last read pos (seqno/parno): " << rr->GetSeqNo() << "," << rr->GetPartNo() << " readed now "
+                    LOG_C("Handle TEvRead last read pos (seqno/parno): " << rr->GetSeqNo() << "," << rr->GetPartNo() << " readed now "
                                     << currentReadResult.GetSeqNo() << ", " << currentReadResult.GetPartNo()
                                     << " full request(now): " << Request);
                     makeErrorResponse("Internal error - got message with wrong SeqNo/PartNo when expecting");
                     break;
                 }
-                Y_ABORT_UNLESS(rr->GetSeqNo() == currentReadResult.GetSeqNo());
+                AFL_ENSURE(rr->GetSeqNo() == currentReadResult.GetSeqNo());
                 (*rr->MutableData()) += currentReadResult.GetData();
                 rr->SetPartitionKey(currentReadResult.GetPartitionKey());
                 rr->SetExplicitHash(currentReadResult.GetExplicitHash());
@@ -306,7 +316,7 @@ private:
                 rr->SetUncompressedSize(rr->GetUncompressedSize() + currentReadResult.GetUncompressedSize());
                 if (currentReadResult.GetPartNo() + 1 == currentReadResult.GetTotalParts()) {
                     // This is the last part, validate data size;
-                    Y_ABORT_UNLESS((ui32)rr->GetTotalSize() == (ui32)rr->GetData().size());
+                    AFL_ENSURE((ui32)rr->GetTotalSize() == (ui32)rr->GetData().size());
                 }
             }
         }
@@ -404,14 +414,15 @@ private:
     TDirectReadKey DirectReadKey;
     bool InitialRequest = true;
     TMaybe<ui64> LastSkipOffset;
+    mutable TMaybe<TString> LogPrefix;
 };
 
 
-TActorId CreateReadProxy(const TActorId& sender, const TActorId& tablet, ui32 tabletGeneration,
+TActorId CreateReadProxy(const TActorId& sender, ui64 tabletId, const TActorId& tablet, ui32 tabletGeneration,
                          const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request,
                          const TActorContext& ctx)
 {
-    return ctx.Register(new TReadProxy(sender, tablet, tabletGeneration, directReadKey, request));
+    return ctx.Register(new TReadProxy(sender, tabletId, tablet, tabletGeneration, directReadKey, request));
 }
 
 /******************************************************* AnswerBuilderProxy *********************************************************/
@@ -2885,7 +2896,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
             directKey.PartitionSessionId = pipeIter->second.PartitionSessionId;
         }
         TStringBuilder log; log << "PQ - create read proxy" << Endl;
-        TActorId rr = CreateReadProxy(ev->Sender, ctx.SelfID, GetGeneration(), directKey, request, ctx);
+        TActorId rr = CreateReadProxy(ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request, ctx);
         ans = CreateResponseProxy(rr, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
     } else {
         ans = CreateResponseProxy(ev->Sender, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);

@@ -655,6 +655,27 @@ struct Schema : NIceDb::Schema {
             FollowerId>;
     };
 
+    struct CompileCacheQueries : Table<22> {
+        struct QueryId : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct NodeId : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Query : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct AccessCount : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct CompiledQueryAt : Column<5, NScheme::NTypeIds::Timestamp> {};
+        struct UserSID : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct LastAccessedAt : Column<7, NScheme::NTypeIds::Timestamp> {};
+        struct Warnings : Column<8, NScheme::NTypeIds::Utf8> {};
+        using TKey = TableKey<QueryId>;
+        using TColumns = TableColumns<
+            QueryId,
+            NodeId,
+            Query,
+            AccessCount,
+            CompiledQueryAt,
+            UserSID,
+            LastAccessedAt, 
+            Warnings>;
+    };
+};
     struct PrimaryIndexStats : Table<22> {
         struct PathId           : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Kind             : Column<2, NScheme::NTypeIds::Utf8> {};
@@ -824,6 +845,7 @@ const TVector<SysViewsRegistryRecord> SysViews = {
 
     {"query_sessions", ESysViewType::EQuerySessions, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QuerySessions>},
     {"query_metrics_one_minute", ESysViewType::EQueryMetricsOneMinute, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryMetrics>},
+    {"compile_cache_queries", ESysViewType::ECompileCacheQueries, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::CompileCacheQueries>},
 
     {"ds_pdisks", ESysViewType::EPDisks, {ESource::Domain},  &FillSchema<Schema::PDisks>},
     {"ds_vslots", ESysViewType::EVSlots, {ESource::Domain},  &FillSchema<Schema::VSlots>},

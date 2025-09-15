@@ -103,7 +103,7 @@ namespace NKikimr {
             };
 
         public:
-            TGroupMapper(TGroupGeometryInfo geom, bool randomize = false, bool withAttentionToReplication = false);
+            TGroupMapper(TGroupGeometryInfo geom, bool randomize = false, bool preferLessOccupiedRack = false, bool withAttentionToReplication = false);
             ~TGroupMapper();
 
             void SetPDiskSlotTracker(TPDiskSlotTracker&& state);

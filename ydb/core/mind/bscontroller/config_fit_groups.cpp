@@ -542,7 +542,7 @@ namespace NKikimr {
                     TBridgePileId bridgePileId,
                     T&& func) {
                 if (!Mapper) {
-                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping, State.Fit.WithAttentionToReplication);
+                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping, State.Fit.PreferLessOccupiedRack, State.Fit.WithAttentionToReplication);
                     PopulateGroupMapper();
                 }
                 TPDiskSlotTracker& pdiskSlotTracker= Mapper->GetPDiskSlotTracker();
@@ -594,7 +594,9 @@ namespace NKikimr {
 
                 TPDiskSlotTracker pdiskSlotTracker;
 
-                if (State.Fit.WithAttentionToReplication) {
+                bool populateSlotTracker = State.Fit.PreferLessOccupiedRack || State.Fit.WithAttentionToReplication;
+
+                if (populateSlotTracker) {
                     State.VSlots.ForEach([&](const TVSlotId& id, const TVSlotInfo& info) {
                         if (info.IsBeingDeleted()) {
                             return; // ignore slots being deleted
@@ -713,7 +715,9 @@ namespace NKikimr {
                     .BridgePileId = bridgePileId,
                 });
 
-                if (registered && State.Fit.WithAttentionToReplication) {
+                bool populateSlotTracker = State.Fit.PreferLessOccupiedRack || State.Fit.WithAttentionToReplication;
+
+                if (registered && populateSlotTracker) {
                     i32 freeSlots = i32(maxSlots) - numSlots;
                     pdiskSlotTracker.AddFreeSlotsForRack(location.GetRackId(), freeSlots);
                 }
@@ -723,7 +727,10 @@ namespace NKikimr {
 
             void UnregisterPDisk(TPDiskId id) {
                 TGroupMapper::TPDiskRecord rec = Mapper->UnregisterPDisk(id);
-                if (State.Fit.WithAttentionToReplication) {
+
+                bool populatedSlotTracker = State.Fit.PreferLessOccupiedRack || State.Fit.WithAttentionToReplication;
+
+                if (populatedSlotTracker) {
                     i32 freeSlots = i32(rec.MaxSlots) - rec.NumSlots;
                     Mapper->GetPDiskSlotTracker().AddFreeSlotsForRack(rec.Location.GetRackId(), -freeSlots);
                 }

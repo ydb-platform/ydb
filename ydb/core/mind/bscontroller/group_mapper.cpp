@@ -277,58 +277,57 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            bool BetterWithAttentionToReplication(const TPDiskInfo& pretender, const TPDiskInfo& king) const {
-                auto pretenderNode = pretender.PDiskId.NodeId;
-                auto kingNode = king.PDiskId.NodeId;
-
-                Y_ABORT_UNLESS(Self.PDiskSlotTracker.has_value());
-
-                auto& pdiskSlotTracker = *Self.PDiskSlotTracker;
-
-                // Compare by number of free slots in PDisk's rack.
-                i32 freeSlotsPretender = pdiskSlotTracker.GetFreeSlotsOnRack(pretender.Location.GetRackId());
-                i32 freeSlotsKing = pdiskSlotTracker.GetFreeSlotsOnRack(king.Location.GetRackId());
-
-                if (freeSlotsPretender != freeSlotsKing) {
-                    return freeSlotsPretender > freeSlotsKing;
-                }
-
-                // Compare by number of replicating VDisks on the PDisk's node.
-                auto pretenderNodeRepls = pdiskSlotTracker.GetReplicatingVDisksOnNode(pretenderNode);
-                auto kingNodeRepls = pdiskSlotTracker.GetReplicatingVDisksOnNode(kingNode);
-
-                if (pretenderNodeRepls != kingNodeRepls) {
-                    return pretenderNodeRepls < kingNodeRepls;
-                }
-
-                // Compare by number of replicating VDisks on the PDisk.
-                auto pretenderPDiskRepls = pdiskSlotTracker.GetReplicatingVDisksOnPDisk(pretender.PDiskId);
-                auto kingPDiskRepls = pdiskSlotTracker.GetReplicatingVDisksOnPDisk(king.PDiskId);
-
-                if (pretenderPDiskRepls != kingPDiskRepls) {
-                    return pretenderPDiskRepls < kingPDiskRepls;
-                }
-
-                // Fallback: lower PDiskId wins
-                return pretender.PDiskId < king.PDiskId;
-            }
-
             bool DiskIsBetter(const TPDiskInfo& pretender, const TPDiskInfo& king) const {
+                if (Self.PreferLessOccupiedRack) {
+                    Y_ABORT_UNLESS(Self.PDiskSlotTracker.has_value());
+
+                    auto& pdiskSlotTracker = *Self.PDiskSlotTracker;
+
+                    // Compare by number of free slots in PDisk's rack.
+                    i32 freeSlotsPretender = pdiskSlotTracker.GetFreeSlotsOnRack(pretender.Location.GetRackId());
+                    i32 freeSlotsKing = pdiskSlotTracker.GetFreeSlotsOnRack(king.Location.GetRackId());
+
+                    if (freeSlotsPretender != freeSlotsKing) {
+                        return freeSlotsPretender > freeSlotsKing;
+                    }
+                }
+                
                 if (Self.WithAttentionToReplication) {
-                    return BetterWithAttentionToReplication(pretender, king);
-                } else {
-                    if (pretender.FreeSlots() != king.FreeSlots()) {
-                        return pretender.FreeSlots() > king.FreeSlots();
+                    auto pretenderNode = pretender.PDiskId.NodeId;
+                    auto kingNode = king.PDiskId.NodeId;
+
+                    Y_ABORT_UNLESS(Self.PDiskSlotTracker.has_value());
+
+                    auto& pdiskSlotTracker = *Self.PDiskSlotTracker;
+
+                    // Compare by number of replicating VDisks on the PDisk's node.
+                    auto pretenderNodeRepls = pdiskSlotTracker.GetReplicatingVDisksOnNode(pretenderNode);
+                    auto kingNodeRepls = pdiskSlotTracker.GetReplicatingVDisksOnNode(kingNode);
+
+                    if (pretenderNodeRepls != kingNodeRepls) {
+                        return pretenderNodeRepls < kingNodeRepls;
                     }
 
-                    if (GivesLocalityBoost(pretender, king) || BetterQuotaMatch(pretender, king)) {
-                        return true;
-                    } else {
-                        if (pretender.NumDomainMatchingDisks != king.NumDomainMatchingDisks) {
-                            return pretender.NumDomainMatchingDisks > king.NumDomainMatchingDisks;
-                        }
-                        return pretender.PDiskId < king.PDiskId;
+                    // Compare by number of replicating VDisks on the PDisk.
+                    auto pretenderPDiskRepls = pdiskSlotTracker.GetReplicatingVDisksOnPDisk(pretender.PDiskId);
+                    auto kingPDiskRepls = pdiskSlotTracker.GetReplicatingVDisksOnPDisk(king.PDiskId);
+
+                    if (pretenderPDiskRepls != kingPDiskRepls) {
+                        return pretenderPDiskRepls < kingPDiskRepls;
                     }
+                }
+                
+                if (pretender.FreeSlots() != king.FreeSlots()) {
+                    return pretender.FreeSlots() > king.FreeSlots();
+                }
+
+                if (GivesLocalityBoost(pretender, king) || BetterQuotaMatch(pretender, king)) {
+                    return true;
+                } else {
+                    if (pretender.NumDomainMatchingDisks != king.NumDomainMatchingDisks) {
+                        return pretender.NumDomainMatchingDisks > king.NumDomainMatchingDisks;
+                    }
+                    return pretender.PDiskId < king.PDiskId;
                 }
             }
 
@@ -910,13 +909,15 @@ namespace NKikimr::NBsController {
         TPDisks PDisks;
         TPDiskByPosition PDiskByPosition;
         bool Dirty = false;
+        bool PreferLessOccupiedRack;
         bool WithAttentionToReplication;
         std::optional<TPDiskSlotTracker> PDiskSlotTracker;
 
     public:
-        TImpl(TGroupGeometryInfo geom, bool randomize, bool withAttentionToReplication)
+        TImpl(TGroupGeometryInfo geom, bool randomize, bool preferLessOccupiedRack, bool withAttentionToReplication)
             : Geom(std::move(geom))
             , Randomize(randomize)
+            , PreferLessOccupiedRack(preferLessOccupiedRack)
             , WithAttentionToReplication(withAttentionToReplication)
         {
             static bool controlsRegistered = false;
@@ -1222,8 +1223,8 @@ namespace NKikimr::NBsController {
         }
     };
 
-    TGroupMapper::TGroupMapper(TGroupGeometryInfo geom, bool randomize, bool withAttentionToReplication)
-        : Impl(new TImpl(std::move(geom), randomize, withAttentionToReplication))
+    TGroupMapper::TGroupMapper(TGroupGeometryInfo geom, bool randomize, bool preferLessOccupiedRack, bool withAttentionToReplication)
+        : Impl(new TImpl(std::move(geom), randomize, preferLessOccupiedRack, withAttentionToReplication))
     {}
 
     TGroupMapper::~TGroupMapper() = default;

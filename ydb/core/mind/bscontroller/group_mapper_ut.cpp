@@ -853,7 +853,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         UNIT_ASSERT_EQUAL_C(TPDiskId(9, 1), newGroup[0][7][0], context.FormatGroup(newGroup));
     }
     
-    Y_UNIT_TEST(RoundRobinMapping) {
+    Y_UNIT_TEST(WithAttentionToRacksAndReplication) {
         TTestContext context(
             {
                 // DC 1
@@ -896,23 +896,23 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
         TGroupMapper::TGroupDefinition group;
 
-        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1), false, true);
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1), false, true, true);
         TPDiskSlotTracker s;
         mapper.SetPDiskSlotTracker(std::move(s));
         context.PopulateGroupMapper(mapper, 8);
 
         ui32 groupId = context.AllocateGroup(mapper, group);
         
-        // All disks and racks are in the same state, so we pick next disk on the node 1
+        // All disks and racks are in the same state, so we pick a disk on node 7 (by NumDomainMatchingDisks heuristic)
         TGroupMapper::TGroupDefinition newGroup = context.ReallocateGroup(mapper, groupId, {TPDiskId(1, 1)});
-        UNIT_ASSERT_EQUAL_C(TPDiskId(1, 2), context.GetGroupDiskId(1), context.FormatGroup(1));
+        UNIT_ASSERT_EQUAL_C(TPDiskId(7, 1), context.GetGroupDiskId(1), context.FormatGroup(1));
 
         // This time rack 4 has more free slots than other racks in DC 1, it will be picked
         s = TPDiskSlotTracker();
         s.AddFreeSlotsForRack("DC=1/M=1/4", 1);
         mapper.SetPDiskSlotTracker(std::move(s));
-        newGroup = context.ReallocateGroup(mapper, groupId, {TPDiskId(1, 2)});
-        UNIT_ASSERT_EQUAL_C(TPDiskId(7, 1), context.GetGroupDiskId(1), context.FormatGroup(1));
+        newGroup = context.ReallocateGroup(mapper, groupId, {TPDiskId(7, 1)});
+        UNIT_ASSERT_EQUAL_C(TPDiskId(7, 2), context.GetGroupDiskId(1), context.FormatGroup(1));
 
         // Now we only select from the first rack, but we will change replicating disks per node.
         s = TPDiskSlotTracker();
@@ -920,7 +920,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         // Now node 1 has more replicating disks, so other node will be picked.
         s.AddReplicatingVSlot(TPDiskId(1, 1));
         mapper.SetPDiskSlotTracker(std::move(s));
-        newGroup = context.ReallocateGroup(mapper, groupId, {TPDiskId(7, 1)});
+        newGroup = context.ReallocateGroup(mapper, groupId, {TPDiskId(7, 2)});
         UNIT_ASSERT_EQUAL_C(TPDiskId(2, 1), context.GetGroupDiskId(1), context.FormatGroup(1));
 
         // Now select from the first node only. Pick the disk 

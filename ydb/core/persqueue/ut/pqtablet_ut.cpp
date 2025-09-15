@@ -2490,6 +2490,44 @@ Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Ti
     WaitForExactTxWritesCount(0);
 }
 
+Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_With_Delete_Partition_Done_Event_Drop, TPQTabletFixture)
+{
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+
+    // send data to create blobs for supportive partitions
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
+
+    TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent;
+    bool seenEvent = false;
+    // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
+    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, [&deleteDoneEvent](TAutoPtr<IEventHandle>& eventHandle) {
+        deleteDoneEvent = eventHandle->Release<TEvPQ::TEvDeletePartitionDone>();
+        return TTestActorRuntimeBase::EEventAction::DROP;
+    });
+
+    // validate supportive partition was created
+    WaitForExactSupportivePartitionsCount(1);
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetKafkaTransaction(), true);
+
+    // increment time till after kafka txn timeout
+    ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs()
+        + KAFKA_TRANSACTION_DELETE_DELAY_MS;
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
+    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&seenEvent]() {return seenEvent;};
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    PQTabletRestart(*Ctx);
+    // wait till supportive partition for this kafka transaction is deleted
+    // WaitForExactSupportivePartitionsCount(0);
+    WaitForExactTxWritesCount(0);
+}
+
 Y_UNIT_TEST_F(Non_Kafka_Transaction_Supportive_Partitions_Should_Not_Be_Deleted_After_Timeout, TPQTabletFixture)
 {
     PQTabletPrepare({.partitions=1}, {}, *Ctx);

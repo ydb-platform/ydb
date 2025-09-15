@@ -1,2 +1,3 @@
 * @ydb-platform/ReleaseApprovers
 /.github @ydb-platform/ci
+/CHANGELOG.md @ydb-platform/changelog-reviewers

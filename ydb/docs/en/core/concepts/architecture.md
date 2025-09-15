@@ -2,18 +2,18 @@
 
 ## Introduction
 
-{{ ydb-short-name }} is a horizontally scalable, distributed, and fault-tolerant database system designed as a versatile platform for high performance — for example, a typical cluster node can process tens of thousands of queries per second. The system supports both single-datacenter and geographically distributed (cross-datacenter) configurations, ranging from small clusters with a few nodes to large-scale deployments of thousands of servers capable of efficiently handling hundreds of petabytes of data.
+{{ ydb-short-name }} is a horizontally scalable, distributed, and fault-tolerant database system designed as a versatile platform for high performance — for example, a typical cluster node can process tens of thousands of queries per second. The system supports geographically distributed (cross-datacenter) configurations, ranging from small clusters with a few nodes to large-scale deployments of thousands of servers capable of efficiently handling hundreds of petabytes of data.
 
 ### Key Features and Capabilities of {{ ydb-short-name }}
 
 - **Horizontal scaling and automatic sharding**: data and workload are dynamically distributed across available hardware resources as data volume or query intensity grows.
 - **Fault tolerance**: automatic recovery from failures of nodes, racks, or availability zones.
-- **Synchronous replication**: data is replicated synchronously within the cluster to ensure high availability and durability.
-- **Asynchronous replication**: near real-time data synchronization between {{ ydb-short-name }} databases — both within a single cluster and across different clusters.
-- **Strong consistency and ACID transactions**: the system provides linearizability and [distributed transactions](transactions.md) with *serializable* isolation. Consistency and isolation levels can be relaxed when higher performance is required.
+- **Data high availability and durability**: ensured through automatic synchronous data replication within the cluster.
+- **Strong consistency and ACID transactions**: the system provides [distributed transactions](transactions.md) with *serializable* isolation. Consistency and isolation levels can be relaxed when higher performance is required.
 - [**YQL**](../yql/reference/index.md): a SQL dialect optimized for large-scale data and complex processing scenarios.
 - **Relational data model**: supports both [row-oriented](datamodel/table.md#row-oriented-tables) and [column-oriented](datamodel/table.md#column-oriented-tables) tables, enabling efficient handling of both transactional (OLTP) and analytical (OLAP) workloads within a single system.
 - **Hierarchical namespace**: tables, topics, and other [objects](datamodel/index.md) are organized in a hierarchical namespace, similar to a filesystem.
+- [**Asynchronous replication**](async-replication.md): near real-time data synchronization between {{ ydb-short-name }} databases — both within a single cluster and across different clusters.
 - **Streaming data processing and distribution**:
   - **Topics**: storage and streaming delivery of unstructured messages to multiple subscribers. Supports the [Kafka protocol](../reference/kafka-api/index.md).
   - [**Change Data Capture (CDC)**](cdc.md): built-in stream of table data changes published as a topic.
@@ -27,12 +27,11 @@
 
 ### Key Use Cases
 
-{{ ydb-short-name }} is a versatile platform suitable for a wide range of scenarios requiring scalability, reliability, and flexibility. It can serve as a standalone database or as part of a distributed architecture. Typical use cases include:
+{{ ydb-short-name }} is a versatile platform suitable for a wide range of scenarios requiring scalability, reliability, and flexibility. Typical use cases include:
 
 - In distributed systems requiring **strong consistency or support for multi-row and multi-table transactions**. {{ ydb-short-name }} combines NoSQL-like scalability with the consistency and integrity guarantees of relational databases.
 - Systems that store and process **very large datasets** and require nearly unlimited horizontal scaling (production clusters with thousands of nodes, handling millions of RPS and petabytes of data).
 - High-load systems relying on **manual sharding** of relational databases. {{ ydb-short-name }} simplifies architecture by automatically handling the sharding logic, re-sharding, query routing, and cross-shard transactions out of the box.
-- Systems with **low or unpredictable workloads** — use the **serverless mode** with on-demand scaling, including scaling down to zero.
 - New product development with **uncertain load patterns** or expected scale beyond the limits of traditional relational database management systems (RDBMS).
 - Projects requiring a **flexible platform** capable of handling diverse workloads and use cases — including transactional, streaming, and analytical.
 

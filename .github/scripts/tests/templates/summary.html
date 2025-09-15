@@ -491,12 +491,31 @@
 
     // Configuration constants
     const MAX_URL_LENGTH = 8000; // GitHub URL limit is 8201, stay under 8000 to be safe
-    const MAX_BINARY_SEARCH_ITERATIONS = 4; // Limit binary search to 4 iterations for performance
     const GITHUB_ISSUE_BASE_URL = "https://github.com/ydb-platform/ydb/issues/new"; // Base URL for GitHub issues
 
     // Utility functions
     function buildGitHubIssueUrl(title, body, labels) {
         return GITHUB_ISSUE_BASE_URL + "?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
+    }
+
+    // Show tooltip stub to avoid runtime errors (visual feedback provided by icon swap)
+    function showCopiedTooltip() {}
+
+    // Safe percent-encoded truncation helpers
+    function isDecodable(s) {
+        try { decodeURIComponent(s); return true; } catch (e) { return false; }
+    }
+
+    function safeTruncateEncoded(encoded, maxLen) {
+        if (encoded.length <= maxLen) return encoded;
+        let cut = encoded.slice(0, maxLen);
+        // Remove incomplete % sequence at the tail
+        cut = cut.replace(/%(?:[0-9A-Fa-f]{0,2})$/, '');
+        while (cut && !isDecodable(cut)) {
+            if (/%[0-9A-Fa-f]{2}$/.test(cut)) cut = cut.slice(0, -3);
+            else cut = cut.slice(0, -1);
+        }
+        return cut;
     }
 
     function parseTestName(full_name) {
@@ -633,42 +652,26 @@
             const errorSuffix = "%0A```%0A%0A";
             const truncationMsg = "%0A<TRUNCATED>";
             
-            // Start with full error text and try to fit it
             const fullErrorText = errorText.trim();
-            let testErrorSection = errorPrefix + encodeURIComponent(fullErrorText) + errorSuffix;
-            let testBody = body + testErrorSection;
-            let testUrl = buildGitHubIssueUrl(title, testBody, labels);
-            
-            if (testUrl.length <= maxUrlLength) {
-                // Full error fits, use it
-                body += testErrorSection;
+            const encodedFullError = encodeURIComponent(fullErrorText);
+
+            // Compute minimal overhead URL length (without error content)
+            const minimalSection = errorPrefix + errorSuffix;
+            const minimalUrl = buildGitHubIssueUrl(title, body + minimalSection, labels);
+            if (minimalUrl.length > maxUrlLength) {
+                // Can't include error section at all
             } else {
-                // Need to truncate - binary search for maximum length that fits (max 4 iterations)
-                let left = 0;
-                let right = fullErrorText.length;
-                let bestLength = 0;
-                let iterations = 0;
-                    
-                while (left <= right && iterations < MAX_BINARY_SEARCH_ITERATIONS) {
-                    const mid = Math.floor((left + right) / 2);
-                    const errorToTest = fullErrorText.substring(0, mid);
-                    testErrorSection = errorPrefix + encodeURIComponent(errorToTest) + truncationMsg + errorSuffix;
-                    testBody = body + testErrorSection;
-                    testUrl = buildGitHubIssueUrl(title, testBody, labels);
-                    
-                    if (testUrl.length <= maxUrlLength) {
-                        bestLength = mid;
-                        left = mid + 1;
-                    } else {
-                        right = mid - 1;
+                const allowedDelta = maxUrlLength - minimalUrl.length;
+                if (encodedFullError.length <= allowedDelta) {
+                    body += errorPrefix + encodedFullError + errorSuffix;
+                } else {
+                    const allowedForEncoded = allowedDelta - truncationMsg.length;
+                    if (allowedForEncoded > 0) {
+                        const truncatedEncoded = safeTruncateEncoded(encodedFullError, allowedForEncoded);
+                        if (truncatedEncoded) {
+                            body += errorPrefix + truncatedEncoded + truncationMsg + errorSuffix;
+                        }
                     }
-                    iterations++;
-                }
-                
-                if (bestLength > 0) {
-                    const errorToShow = fullErrorText.substring(0, bestLength);
-                    const errorSection = errorPrefix + encodeURIComponent(errorToShow) + truncationMsg + errorSuffix;
-                    body += errorSection;
                 }
             }
         }

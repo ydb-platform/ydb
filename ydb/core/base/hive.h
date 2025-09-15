@@ -527,7 +527,8 @@ namespace NKikimr {
 
             TEvReassignTablet(ui64 tabletId,
                               const TVector<ui32>& channels = {},
-                              const TVector<ui32>& forcedGroupIds = {})
+                              const TVector<ui32>& forcedGroupIds = {},
+                              bool async = false)
             {
                 Record.SetTabletID(tabletId);
                 for (ui32 channel : channels) {
@@ -535,6 +536,9 @@ namespace NKikimr {
                 }
                 for (ui32 forcedGroupId : forcedGroupIds) {
                     Record.AddForcedGroupIDs(forcedGroupId);
+                }
+                if (async) {
+                    Record.SetAsync(async);
                 }
             }
         };

@@ -47,7 +47,7 @@ using TValueStatus = TConclusionImpl<TStatus, TValue>;
 
 //// Events
 
-TString TruncateString(const TString& str, ui64 maxSize = 100) {
+TString TruncateString(const TString& str, ui64 maxSize = 300) {
     return str.size() > maxSize
         ? TStringBuilder() << str.substr(0, maxSize / 2) << " ... (TRUNCATED) ... " << str.substr(str.size() - maxSize / 2)
         : str;
@@ -2108,7 +2108,7 @@ private:
         State.SetRun(QuerySettings.Run);
         State.SetResourcePool(QuerySettings.ResourcePool);
 
-        if (State.GetStatus() == NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED) {
+        if (IsIn({NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED, NKikimrKqp::TStreamingQueryState::STATUS_CREATING}, State.GetStatus())) {
             State.SetStatus(NKikimrKqp::TStreamingQueryState::STATUS_CREATED);
         }
 
@@ -2135,6 +2135,7 @@ private:
 
         switch (State.GetStatus()) {
             case NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED:
+            case NKikimrKqp::TStreamingQueryState::STATUS_CREATING:
             case NKikimrKqp::TStreamingQueryState::STATUS_CREATED:
             case NKikimrKqp::TStreamingQueryState::STATUS_STOPPED: {
                 if (!StateEnrichedFromSS) {
@@ -2147,7 +2148,6 @@ private:
                 break;
             }
             case NKikimrKqp::TStreamingQueryState::STATUS_RUNNING:
-            case NKikimrKqp::TStreamingQueryState::STATUS_CREATING:
             case NKikimrKqp::TStreamingQueryState::STATUS_STARTING:
             case NKikimrKqp::TStreamingQueryState::STATUS_STOPPING: {
                 StopQuery(TStringBuilder() << "interrupt " << NKikimrKqp::TStreamingQueryState::EStatus_Name(State.GetStatus()));

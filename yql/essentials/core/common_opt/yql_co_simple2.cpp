@@ -191,7 +191,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
 
                     auto settings = self.Settings();
                     auto hoppingSetting = GetSetting(settings.Ref(), "hopping");
-                    if (hoppingSetting) {
+                    if (hoppingSetting && "HoppingTraits" == hoppingSetting->Child(1)->Content()) { // has legacy hopping window
                         structObj
                             .List(targetIndex++)
                                 .Atom(0, "_yql_time", TNodeFlags::Default)

@@ -365,6 +365,9 @@ namespace TEvDataShard {
 
         EvIncrementalRestoreResponse,
 
+        EvBuildFulltextIndexRequest,
+        EvBuildFulltextIndexResponse,
+
         EvEnd
     };
 
@@ -1556,6 +1559,18 @@ namespace TEvDataShard {
         : public TEventPB<TEvPrefixKMeansResponse,
                           NKikimrTxDataShard::TEvPrefixKMeansResponse,
                           TEvDataShard::EvPrefixKMeansResponse> {
+    };
+
+    struct TEvBuildFulltextIndexRequest
+        : public TEventPB<TEvBuildFulltextIndexRequest,
+                          NKikimrTxDataShard::TEvBuildFulltextIndexRequest,
+                          TEvDataShard::EvBuildFulltextIndexRequest> {
+    };
+
+    struct TEvBuildFulltextIndexResponse
+        : public TEventPB<TEvBuildFulltextIndexResponse,
+                          NKikimrTxDataShard::TEvBuildFulltextIndexResponse,
+                          TEvDataShard::EvBuildFulltextIndexResponse> {
     };
 
     struct TEvIncrementalRestoreResponse

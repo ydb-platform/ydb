@@ -8,30 +8,30 @@ Release date: September 15, 2025.
 
 #### Functionality
 
-* [Added](https://github.com/ydb-platform/ydb/pull/21119) support for the Kafka frameworks like Kafka Connect, Kafka Streams, Confluent Schema Registry, Kafka Streams, Apache Flink, etc. Now [YDB Topics Kafka API](./reference/kafka-api/index.md) supports
-  * client-side consumer balancing – enabled by setting the `enable_kafka_native_balancing` flag in the [cluster configuration](./reference/configuration/index.md). [How consumer balancing works in Apache Kafka](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb/). From now on consumer balancing will work the same way in YDB Topics,
-  * [compacted topics](https://docs.confluent.io/kafka/design/log_compaction.html) – enabled via the `enable_topic_compactification_by_key` flag,
-  * [transactions](https://www.confluent.io/blog/transactions-apache-kafka/) – enabled via the `enable_kafka_transactions` flag.
-* [Added](https://github.com/ydb-platform/ydb/pull/20982) [new protocol](https://github.com/ydb-platform/ydb/issues/11064) to [Node Broker](./concepts/glossary.md#node-broker), eliminating the long startup of nodes on large clusters (more than 1000 servers).
+* [Added](https://github.com/ydb-platform/ydb/pull/21119) support for the Kafka frameworks, such as Kafka Connect, Kafka Streams, Confluent Schema Registry, Kafka Streams, Apache Flink, etc. Now [YDB Topics Kafka API](./reference/kafka-api/index.md) supports the following features:
+  * client-side consumer balancing. To enable it, use the `enable_kafka_native_balancing` flag in the [cluster configuration](./reference/configuration/index.md). For for information, see [How consumer balancing works in Apache Kafka](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb/). When enabled, consumer balancing will work the same way in YDB Topics.
+  * [compacted topics](https://docs.confluent.io/kafka/design/log_compaction.html). To enable topic compaction, use the `enable_topic_compactification_by_key` flag.
+  * [transactions](https://www.confluent.io/blog/transactions-apache-kafka/). To enable transactions, use the `enable_kafka_transactions` flag.
+* [Added](https://github.com/ydb-platform/ydb/pull/20982) a [new protocol](https://github.com/ydb-platform/ydb/issues/11064) to [Node Broker](./concepts/glossary.md#node-broker) that eliminates the long startup of nodes on large clusters (more than 1000 servers).
 
 #### YDB UI
 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/17839) an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/18615) where not all tablets are shown for pers queue group on the tablets tab in diagnostics.
-* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18735) where the storage tab on the diagnostics page was displaying nodes of other types in addition to storage nodes.
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18735) where the storage tab on the diagnostics page displayed nodes of other types in addition to storage nodes.
 * Fixed an [serialization issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164) that caused an error to occur when opening query execution statistics.
 * Changed the logic for nodes transitioning to critical state – the CPU pool, which is 75-99% full, now triggers a warning, not a critical state.
 
 ### Performance
 
-* Added the new mode of operating [actor system](./concepts/glossary.md#actor-system), which allows for more efficient use of computing resources – the performance of a 4-core node is increased by 40%, now the performance per core is the same as that of a 10-core node; the performance of a 2-core node is increased by 110%, the performance per core is only 5% less than that of a 10-core node (previously it was 50% less). It is enabled by setting the `use_shared_threads` flag in the [actor-system configuration](./devops/configuration-management/configuration-v1/change_actorsystem_configs.md).
-* [Optimized](https://github.com/ydb-platform/ydb/pull/20197 ) processing of empty inputs when performing JOIN operations.
+* Added a new [actor system](./concepts/glossary.md#actor-system) mode that uses computing resources more efficiently — the performance of a 4-core node is increased by 40%. In this mode the performance per core is the same as that of a 10-core node; the performance of a 2-core node is increased by 110%, the performance per core is only 5% less than that of a 10-core node (previously it was 50% less). To enable this mode, use the `use_shared_threads` flag in the [actor-system configuration](./devops/configuration-management/configuration-v1/change_actorsystem_configs.md).
+* [Optimized](https://github.com/ydb-platform/ydb/pull/20197) processing of empty inputs when performing JOIN operations.
 
 #### Bug fixes
 
-* [Support](https://github.com/ydb-platform/ydb/pull/21918) in asynchronous replication new kind of change record — `reset` record (in addition to `update` & `erase` records).
+* [Added support](https://github.com/ydb-platform/ydb/pull/21918) for a new kind of change record in asynchronous replication — `reset` record (in addition to `update` & `erase` records).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/21836) an [issue](https://github.com/ydb-platform/ydb/issues/21814) where a replication instance with an unspecified `COMMIT_INTERVAL` option caused the process to crash.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/21652) rare errors when reading from a topic during partition balancing.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/22455) an [issue](https://github.com/ydb-platform/ydb/issues/19842) where dedicated database deletion may leave database system tablets improperly cleaned.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/22455) an [issue](https://github.com/ydb-platform/ydb/issues/19842) where dedicated database deletion might leave database system tablets improperly cleaned.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/22203) an [issue](https://github.com/ydb-platform/ydb/issues/22030) that caused tablets to hang when nodes experienced critical memory shortage. Now tablets will automatically start as soon as any of the nodes frees up sufficient resources.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/24278) an issue where only the first message from a batch was saved when writing Kafka messages, with all other messages in the batch being ignored.
 

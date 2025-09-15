@@ -578,8 +578,6 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
         keys.push_back(pair.GetKey());
     }
 
-    //PQ_LOG_D("original keys:\n" << JoinSeq("\n", keys));
-
     auto compare = [](const TString& lhs, const TString& rhs) {
         auto getKeySuffix = [](const TString& v) {
             return (v.back() == '?') ? '?' : '|';
@@ -593,15 +591,11 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
     };
     std::sort(keys.begin(), keys.end(), compare);
 
-    //PQ_LOG_D("sorted keys:\n" << JoinSeq("\n", keys));
-
     TDeque<TString> filtered;
     TKey lastKey;
 
     for (auto& key : keys) {
-        //PQ_LOG_D("candidate key " << key);
         if (filtered.empty()) {
-            //PQ_LOG_D("append key " << key);
             filtered.push_back(std::move(key));
             lastKey = MakeKeyFromString(filtered.back(), partitionId);
             continue;
@@ -612,7 +606,6 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
         switch (KeyPosition(lastKey, candidate)) {
         case RhsContainsLhs:
             if (key.StartsWith(filtered.back())) {
-                //PQ_LOG_D("ignore key " << key);
                 // filtered    key
                 // -------------------------
                 // xxx..xxx vs xxx..xxx|
@@ -620,28 +613,23 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
                 continue;
             }
             // We found a key that is wider than the previous key
-            //PQ_LOG_D("replace key " << filtered.back() << " to " << key);
             filtered.back() = std::move(key);
             lastKey = MakeKeyFromString(filtered.back(), partitionId);
             break;
         case RhsAfterLhs:
         case GapBetweenLhsAndRhs:
             // The new key is adjacent to the previous key or there is a gap between them
-            //PQ_LOG_D("append key " << key);
             filtered.push_back(std::move(key));
             lastKey = MakeKeyFromString(filtered.back(), partitionId);
             break;
         case LhsContainsRhs:
             // The current key already contains this key
-            //PQ_LOG_D("ignore key " << key);
             break;
         default:
             Y_ABORT("A strange key %s, last key %s",
                     key.data(), filtered.back().data());
         }
     }
-
-    //PQ_LOG_D("filtered keys:\n" << JoinSeq("\n", filtered));
 
     return {filtered.begin(), filtered.end()};
 }

@@ -1159,6 +1159,9 @@ message TopicSettings {
 
         // Client service type.
         string service_type = 7;
+
+        // Retention time in seconds for the important consumer. Missing value means infinity.
+        optional google.protobuf.Duration retention_period = 8;
     }
 
     // List of consumer read rules for this topic.

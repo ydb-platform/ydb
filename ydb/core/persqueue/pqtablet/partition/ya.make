@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     account_read_quoter.cpp
+    consumer_offset_tracker.cpp
     mirrorer.cpp
     offload_actor.cpp
     ownerinfo.cpp
@@ -39,4 +40,5 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
+    ut
 )

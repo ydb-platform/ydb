@@ -35,6 +35,7 @@ PEERDIR(
     library/cpp/string_utils/parse_size
     library/cpp/unified_agent_client
     library/cpp/histogram/hdr
+    ydb/library/backup
 )
 
 END()

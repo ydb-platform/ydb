@@ -1,7 +1,9 @@
 #include "topic_workload_run_read.h"
 #include "topic_workload_defines.h"
 
-#include <library/cpp/string_utils/parse_size/parse_size.h>
+#include <ydb/library/backup/util.h>
+#include <util/stream/format.h>
+
 
 using namespace NYdb::NConsoleClient;
 
@@ -57,9 +59,8 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config)
         .DefaultValue(1)
         .StoreResult(&Scenario.ConsumerThreadCount);
     config.Opts->AddLongOption("max-memory-usage-per-consumer", "Max memory usage per consumer in bytes. Should be more than '1M'.")
-        .DefaultValue(15_MB)
-        .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NSize::ParseSize);
-
+        .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
+        .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NYdb::SizeFromString);
     config.IsNetworkIntensive = true;
 }
 

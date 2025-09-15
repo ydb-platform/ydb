@@ -3,7 +3,8 @@
 #include "topic_workload_params.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
-#include <library/cpp/string_utils/parse_size/parse_size.h>
+#include <ydb/library/backup/util.h>
+#include <util/stream/format.h>
 
 using namespace NYdb::NConsoleClient;
 
@@ -114,12 +115,12 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .DefaultValue(false)
         .Hidden()
         .StoreTrue(&Scenario.UseTableSelect);
-    config.Opts->AddLongOption("max-memory-usage-per-consumer", "Max memory usage per consumer in bytes. Should be more than '1M'.")
-        .DefaultValue(15_MB)
-        .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NSize::ParseSize);
+    config.Opts->AddLongOption("max-memory-usage-per-consumer", "Max memory usage per consumer in bytes. Should be more than '1MiB'.")
+        .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
+        .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NYdb::SizeFromString);
     config.Opts->AddLongOption("max-memory-usage-per-producer", "Max memory usage per producer in bytes.")
-        .DefaultValue(15_MB)
-        .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NSize::ParseSize);
+        .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
+        .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NYdb::SizeFromString);
     config.IsNetworkIntensive = true;
 }
 

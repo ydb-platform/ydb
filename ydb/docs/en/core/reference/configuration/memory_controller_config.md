@@ -1,6 +1,6 @@
 # memory_controller_config
 
-There are many components inside {{ ydb-short-name }} [database nodes](../../concepts/glossary.md#database-node) that utilize memory. Most of them need a fixed amount, but some are flexible and can use varying amounts of memory, typically to improve performance. 
+There are many components inside {{ ydb-short-name }} [database nodes](../../concepts/glossary.md#database-node) that utilize memory. Most of them need a fixed amount, but some are flexible and can use varying amounts of memory, typically to improve performance.
 
 ## General Overview of Memory Consumption by Components within a YDB process
 

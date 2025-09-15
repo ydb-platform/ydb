@@ -18,6 +18,19 @@ If consistency or freshness requirement for data read by a transaction can be re
   * *false* (consistent reads): Each individual read operation returns consistent data, but no consistency is guaranteed between reads. Reading the same table range twice may return different results.
   * *true* (inconsistent reads): Even the data fetched by a particular read operation may contain inconsistent results.
 
+{% note warning "Limitation for Online Read-Only and Stale Read-Only" %}
+
+Reading from [column-oriented tables](../datamodel/table.md#column-oriented-tables) is not supported in these modes. Attempts fail with the following error:
+
+`Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. Use Serializable or Snapshot Read-Only mode instead.`
+
+For transactions that read column-oriented tables, use:
+
+* Serializable — the default mode.
+* Snapshot Read-Only — provides a read from a consistent snapshot.
+
+{% endnote %}
+
 The transaction execution mode is specified in its settings when creating the transaction. See the examples for the {{ ydb-short-name }} SDK in the [{#T}](../../recipes/ydb-sdk/tx-control.md).
 
 ## YQL language {#language-yql}

@@ -451,6 +451,8 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
 }
 
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
+    error = "";
+
     if (!settings.has_settings()) {
         error = TStringBuilder() << "vector index settings should be set";
         return false;
@@ -495,6 +497,8 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
 }
 
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
+    error = "";
+
     if (!settings.has_metric() || settings.metric() == Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED) {
         error = TStringBuilder() << "either distance or similarity should be set";
         return false;

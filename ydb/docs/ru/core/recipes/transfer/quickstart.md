@@ -41,7 +41,7 @@ CREATE TABLE `transfer_recipe/target_table` (
 
 ## Шаг 3. Создание трансфера {#step3}
 
-После создания топика и таблицы нужно добавить [трансфер](../../concepts/transfer.md) данных, который будет переносить сообщения из топика в таблицу. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-transfer.md):
+После создания топика и таблицы нужно добавить [трансфер](../../concepts/transfer.md) данных, который будет переносить сообщения из топика в таблицу. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create_transfer.md):
 
 ```yql
 $transformation_lambda = ($msg) -> {

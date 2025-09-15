@@ -4,24 +4,24 @@
 
 После выполнения шагов в базе данных будут созданы:
 
-- Внешний источник данных [`EXTERNAL DATA SOURCE`](../../datamodel/external_data_source.md).
-- Внешние таблицы [`EXTERNAL TABLE`](../../datamodel/external_table.md) для схем Parquet-файлов.
-- [Колоночные таблицы](../../datamodel/table.md#column-oriented-tables) {{ ydb-short-name }}, оптимизированные для аналитических запросов.
+- Внешний источник данных [`EXTERNAL DATA SOURCE`](../concepts/datamodel/external_data_source.md).
+- Внешние таблицы [`EXTERNAL TABLE`](../concepts/datamodel/external_table.md) для схем Parquet-файлов.
+- [Колоночные таблицы](../concepts/datamodel/table.md#column-oriented-tables) {{ ydb-short-name }}, оптимизированные для аналитических запросов.
 
 Действия включают:
 
-- Загрузку данных из {{ objstorage-name }} в таблицы {{ ydb-short-name }} с помощью [`UPSERT INTO... SELECT FROM`](../../../yql/reference/syntax/upsert_into).
+- Загрузку данных из {{ objstorage-name }} в таблицы {{ ydb-short-name }} с помощью [`UPSERT INTO... SELECT FROM`](../yql/reference/syntax/upsert_into).
 - Выполнение тестового запроса (TPC-H Q0) для проверки.
 
 
 ### Предварительные требования
 
 - Наличие созданной базы данных {{ ydb-short-name }}.
-- Наличие инструмента для выполнения YQL/SQL-запросов ({{ ydb-short-name }} UI или [CLI](../../../reference/ydb-cli/index.md)).
+- Наличие инструмента для выполнения YQL/SQL-запросов ({{ ydb-short-name }} UI или [CLI](../reference/ydb-cli/index.md)).
 
 ### Создание внешнего источника данных
 
-В данном этапе будет создан объект [`EXTERNAL DATA SOURCE`](../../../concepts/datamodel/external_data_source.md), который является именованной ссылкой на внешнее хранилище данных. Он содержит в себе информацию о местоположении данных и способе доступа к ним.
+В данном этапе будет создан объект [`EXTERNAL DATA SOURCE`](../concepts/datamodel/external_data_source.md), который является именованной ссылкой на внешнее хранилище данных. Он содержит в себе информацию о местоположении данных и способе доступа к ним.
 
 **`EXTERNAL DATA SOURCE`** — это сущность в {{ ydb-short-name }}, которая описывает подключение к внешнему хранилищу, например, к S3-совместимому Object Storage.
 
@@ -43,7 +43,7 @@ CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `external/tpc` WITH (
 
 На этом шаге определяются схемы (колонки и типы) для Parquet-файлов во внешнем источнике. Это позволяет обращаться к данным через SQL-запросы в {{ ydb-short-name }}, связывая логическую структуру с физическими файлами.
 
-[`EXTERNAL TABLE`](../../datamodel/external_table.md) — это "виртуальная" таблица, которая описывает структуру данных, находящихся во внешнем источнике. Это связывает логическую схему таблицы с физическими файлами.
+[`EXTERNAL TABLE`](../concepts/datamodel/external_table.md) — это "виртуальная" таблица, которая описывает структуру данных, находящихся во внешнем источнике. Это связывает логическую схему таблицы с физическими файлами.
 
 ```sql
 CREATE EXTERNAL TABLE IF NOT EXISTS `external/tpch/s10/customer` (
@@ -367,11 +367,11 @@ WITH (
 ```sql
 UPSERT INTO `tpch/s10/customer` SELECT * FROM `external/tpch/s10/customer`;
 UPSERT INTO `tpch/s10/lineitem` SELECT * FROM `external/tpch/s10/lineitem`;
-UPSERT INTO `tpch/s10/nation` SELECT * FROM `external/tpch/s10/nation`;
-UPSERT INTO `tpch/s10/orders` SELECT * FROM `external/tpch/s10/orders`;
-UPSERT INTO `tpch/s10/part` SELECT * FROM `external/tpch/s10/part`;
+UPSERT INTO `tpch/s10/nation`   SELECT * FROM `external/tpch/s10/nation`;
+UPSERT INTO `tpch/s10/orders`   SELECT * FROM `external/tpch/s10/orders`;
+UPSERT INTO `tpch/s10/part`     SELECT * FROM `external/tpch/s10/part`;
 UPSERT INTO `tpch/s10/partsupp` SELECT * FROM `external/tpch/s10/partsupp`;
-UPSERT INTO `tpch/s10/region` SELECT * FROM `external/tpch/s10/region`;
+UPSERT INTO `tpch/s10/region`   SELECT * FROM `external/tpch/s10/region`;
 UPSERT INTO `tpch/s10/supplier` SELECT * FROM `external/tpch/s10/supplier`;
 ```
 
@@ -406,5 +406,5 @@ ORDER BY
 
 ### Дальнейшие шаги
 
-- Выполнение других запросов из набора TPC-H к загруженным таблицам с помощью {{ ydb-short-name }} CLI и [тестовой нагрузки TPC-H](../../../reference/ydb-cli/workload-tpch.md).
-- Интеграция с BI-системами для [визуализации](../../../integrations/visualization/index.md) и [анализа](../../../integrations/gui/index.md) данных.
+- Выполнение других запросов из набора TPC-H к загруженным таблицам с помощью {{ ydb-short-name }} CLI и [тестовой нагрузки TPC-H](../reference/ydb-cli/workload-tpch.md).
+- Интеграция с BI-системами для [визуализации](../integrations/visualization/index.md) и [анализа](../integrations/gui/index.md) данных.

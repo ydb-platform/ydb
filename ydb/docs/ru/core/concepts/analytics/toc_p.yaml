@@ -1,0 +1,7 @@
+items:
+  - name: Обзор
+    href: index.md
+  - name: Детально
+    include:
+      mode: link
+      path: concepts/toc_p.yaml

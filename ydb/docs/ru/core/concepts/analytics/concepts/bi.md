@@ -20,7 +20,7 @@
 
 {{ ydb-short-name }} поддерживает следующие BI-платформы:
 
-- [Yandex DataLens](../../../../integrations/visualization/datalens.md);
-- [Apache Superset](../../../../integrations/visualization/superset.md);
-- [Grafana](../../../../integrations/visualization/grafana.md);
+- [Yandex DataLens](../../../integrations/visualization/datalens.md);
+- [Apache Superset](../../../integrations/visualization/superset.md);
+- [Grafana](../../../integrations/visualization/grafana.md);
 - [Polymatica](https://wiki.polymatica.ru/display/PDTNUG1343/YDB+Server).

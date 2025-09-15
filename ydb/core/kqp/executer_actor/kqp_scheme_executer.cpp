@@ -181,7 +181,89 @@ public:
         });
     }
 
-    void CreateCTASDirectory() {
+    void FindWorkingDirForCTAS() {
+        const auto& schemeOp = PhyTx->GetSchemeOperation();
+
+        AFL_ENSURE(schemeOp.GetOperationCase() == NKqpProto::TKqpSchemeOperation::kAlterTable);
+        const auto& alterTableModifyScheme = schemeOp.GetAlterTable();
+        AFL_ENSURE(alterTableModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
+
+        const auto dirPath = SplitPath(alterTableModifyScheme.GetMoveTable().GetDstPath());
+        AFL_ENSURE(dirPath.size() >= 2);
+
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        TVector<TString> path;
+
+        for (const auto& part : dirPath) {
+            path.emplace_back(part);
+
+            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+            entry.Path = path;
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+            entry.SyncVersion = true;
+            entry.RedirectRequired = false;
+            request->ResultSet.emplace_back(entry);
+        }
+
+        auto ev = std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(request);
+
+        Send(MakeSchemeCacheID(), ev.release());
+        Become(&TKqpSchemeExecuter::ExecuteState);
+    }
+
+    void HandleCTASWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto& resultSet = ev->Get()->Request->ResultSet;
+
+        const TVector<TString>* workingDir = nullptr;
+        bool lookupError = false;
+        for (auto it = resultSet.rbegin(); it != resultSet.rend(); ++it) {
+            if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                workingDir = &it->Path;
+                break;
+            } else if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError) {
+                lookupError = true;
+            }
+        }
+
+        const auto& schemeOp = PhyTx->GetSchemeOperation();
+        AFL_ENSURE(schemeOp.GetOperationCase() == NKqpProto::TKqpSchemeOperation::kAlterTable);
+        const auto& alterTableModifyScheme = schemeOp.GetAlterTable();
+        AFL_ENSURE(alterTableModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
+        const auto dirPath = SplitPath(alterTableModifyScheme.GetMoveTable().GetDstPath());
+        AFL_ENSURE(workingDir->size() <= dirPath.size());
+
+        if (!workingDir && lookupError) {
+            const auto errText = TStringBuilder()
+                << "Cannot resolve working dir, lookup error"
+                << " path# " << JoinPath(dirPath);
+            LOG_D(errText);
+
+            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR, errText);
+            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, issue);
+        }
+
+        if (!workingDir || workingDir->size() == dirPath.size()) {
+            const TString errText = TStringBuilder()
+                << "Cannot resolve working dir"
+                << " workingDir# " << (workingDir ? CanonizePath(JoinPath(*workingDir)) : "null")
+                << " path# " << JoinPath(dirPath);
+            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errText);
+            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, issue);
+        }
+
+        CreateCTASDirectory(
+            TConstArrayRef<TString>(
+                workingDir->begin(),
+                workingDir->end()),
+            TConstArrayRef<TString>(
+                dirPath.begin() + workingDir->size(),
+                dirPath.end()));
+    }
+
+    void CreateCTASDirectory(const TConstArrayRef<TString> workingDir, const TConstArrayRef<TString> dirPath) {
+        AFL_ENSURE(!dirPath.empty());
+        AFL_ENSURE(!workingDir.empty());
+
         auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         auto& record = ev->Record;
 
@@ -200,11 +282,7 @@ public:
         const auto& alterTableModifyScheme = schemeOp.GetAlterTable();
         AFL_ENSURE(alterTableModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
 
-        auto dirPath = SplitPath(alterTableModifyScheme.GetMoveTable().GetDstPath());
-        dirPath.pop_back();
-        const auto databasePath = SplitPath(Database);
-
-        if (std::equal(dirPath.begin(), dirPath.end(), databasePath.begin(), databasePath.end())) {
+        if (dirPath.size() == 1) {
             auto ev = MakeHolder<TEvPrivate::TEvMakeCTASDirResult>();
             ev->Result.SetSuccess();
             actorSystem->Send(selfId, ev.Release());
@@ -212,21 +290,12 @@ public:
             return;
         }
 
-        std::pair<TString, TString> pathPair;
-        TString error;
-        AFL_ENSURE(NSchemeHelpers::SplitTablePath(
-            CombinePath(dirPath.begin(), dirPath.end()),
-            Database,
-            pathPair,
-            error,
-            true))("Error", error);
-
         auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme->SetWorkingDir(pathPair.first);
+        modifyScheme->SetWorkingDir(CombinePath(workingDir.begin(), workingDir.end()));
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
 
         auto* makeDir = modifyScheme->MutableMkDir();
-        makeDir->SetName(pathPair.second);
+        makeDir->SetName(CombinePath(dirPath.begin(), std::prev(dirPath.end()), false));
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
         IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
@@ -670,7 +739,7 @@ public:
         if (schemeOp.GetObjectType()) {
             MakeObjectRequest();
         } else if (IsCreateTableAs && schemeOp.GetOperationCase() == NKqpProto::TKqpSchemeOperation::kAlterTable) {
-            CreateCTASDirectory();
+            FindWorkingDirForCTAS();
         } else {
             if (Temporary) {
                 CreateTmpDirectory();
@@ -778,6 +847,7 @@ public:
             entry.Path = paths;
         }
 
+        AFL_ENSURE(request->ResultSet.size() == 1);
         auto ev = std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release());
         Send(schemeCache, ev.release());
     }
@@ -789,6 +859,11 @@ public:
         LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult, errors# " << ev->Get()->Request.Get()->ErrorCount);
 
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
+
+        if (resp->ResultSet.size() > 1) {
+            HandleCTASWorkingDir(ev);
+            return;
+        }
 
         if (resp->ErrorCount > 0 || resp->ResultSet.empty()) {
             TStringBuilder builder;
@@ -804,6 +879,8 @@ public:
             LOG_E(error);
             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssue(error));
         }
+
+        AFL_ENSURE(resp->ResultSet.size() == 1);
 
         if (UserToken && !UserToken->GetSerializedToken().empty() && !CheckAlterAccess(*UserToken, resp)) {
             LOG_E("Access check failed");

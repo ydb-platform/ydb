@@ -504,9 +504,9 @@ private:
     void SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request);
 
     ::NMonitoring::TDynamicCounterPtr GetPerPartitionCounterSubgroup() const;
-    void SetupPerPartitionCounters();
-    void ResetPerPartitionCounters();
-    bool PartitionCountersAreEnabled() const;
+    void SetupDetailedMetrics();
+    void ResetDetailedMetrics();
+    bool DetailedMetricsAreEnabled() const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

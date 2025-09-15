@@ -3220,10 +3220,10 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         OffloadActor = {};
     }
 
-    if (PartitionCountersAreEnabled()) {
-        SetupPerPartitionCounters();
+    if (DetailedMetricsAreEnabled()) {
+        SetupDetailedMetrics();
     } else {
-        ResetPerPartitionCounters();
+        ResetDetailedMetrics();
     }
 }
 
@@ -4352,8 +4352,8 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
     }
 }
 
-void TPartition::SetupPerPartitionCounters() {
-    if (!PartitionCountersAreEnabled()) {
+void TPartition::SetupDetailedMetrics() {
+    if (!DetailedMetricsAreEnabled()) {
         return;
     }
     if (WriteTimeLagMsByLastWritePerPartition) {
@@ -4361,7 +4361,7 @@ void TPartition::SetupPerPartitionCounters() {
         return;
     }
 
-    UsersInfoStorage->SetupPerPartitionCounters(ActorContext());
+    UsersInfoStorage->SetupDetailedMetrics(ActorContext());
 
     auto subgroup = GetPerPartitionCounterSubgroup();
     if (!subgroup) {
@@ -4385,8 +4385,8 @@ void TPartition::SetupPerPartitionCounters() {
     MessagesWrittenPerPartition = getCounter("topic.partition.write.messages", "MessagesWrittenPerPartition", true);
 }
 
-void TPartition::ResetPerPartitionCounters() {
-    UsersInfoStorage->ResetPerPartitionCounters();
+void TPartition::ResetDetailedMetrics() {
+    UsersInfoStorage->ResetDetailedMetrics();
 
     WriteTimeLagMsByLastWritePerPartition.Reset();
     SourceIdCountPerPartition.Reset();

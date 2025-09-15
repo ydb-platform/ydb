@@ -1039,13 +1039,13 @@ void TPartition::Initialize(const TActorContext& ctx) {
         } else {
             SetupTopicCounters(ctx);
         }
-        if (PartitionCountersAreEnabled()) {
-            SetupPerPartitionCounters();
+        if (DetailedMetricsAreEnabled()) {
+            SetupDetailedMetrics();
         }
     }
 }
 
-bool TPartition::PartitionCountersAreEnabled() const {
+bool TPartition::DetailedMetricsAreEnabled() const {
     return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
 }
 

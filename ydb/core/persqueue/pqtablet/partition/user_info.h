@@ -248,7 +248,7 @@ struct TUserInfo: public TUserInfoBase {
     {
         if (AppData(ctx)->Counters) {
             if (partitionCountersSubgroup) {
-                SetupPerPartitionCounters(ctx, partitionCountersSubgroup);
+                SetupDetailedMetrics(ctx, partitionCountersSubgroup);
             }
 
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
@@ -266,7 +266,7 @@ struct TUserInfo: public TUserInfoBase {
         }
     }
 
-    void SetupPerPartitionCounters(const TActorContext& ctx, NMonitoring::TDynamicCounterPtr subgroup) {
+    void SetupDetailedMetrics(const TActorContext& ctx, NMonitoring::TDynamicCounterPtr subgroup) {
         Y_ABORT_UNLESS(subgroup);
 
         if (BytesReadPerPartition) {
@@ -300,7 +300,7 @@ struct TUserInfo: public TUserInfoBase {
         ReadTimeLagMsPerPartition = getCounter("read.lag_milliseconds", "ReadTimeLagMs", false);
     }
 
-    void ResetPerPartitionCounters() {
+    void ResetDetailedMetrics() {
         BytesReadPerPartition.Reset();
         MessagesReadPerPartition.Reset();
         MessageLagByLastReadPerPartition.Reset();
@@ -477,9 +477,9 @@ public:
     void Remove(const TString& user, const TActorContext& ctx);
 
     ::NMonitoring::TDynamicCounterPtr GetPartitionCounterSubgroup(const TActorContext& ctx) const;
-    void SetupPerPartitionCounters(const TActorContext& ctx);
-    void ResetPerPartitionCounters();
-    bool PartitionCountersAreEnabled() const;
+    void SetupDetailedMetrics(const TActorContext& ctx);
+    void ResetDetailedMetrics();
+    bool DetailedMetricsAreEnabled() const;
 
 private:
 

@@ -158,7 +158,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
 }
 
 ::NMonitoring::TDynamicCounterPtr TUsersInfoStorage::GetPartitionCounterSubgroup(const TActorContext& ctx) const {
-    if (!PartitionCountersAreEnabled()) {
+    if (!DetailedMetricsAreEnabled()) {
         return nullptr;
     }
     auto counters = AppData(ctx)->Counters;
@@ -185,23 +185,23 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
 }
 
 
-void TUsersInfoStorage::SetupPerPartitionCounters(const TActorContext& ctx) {
+void TUsersInfoStorage::SetupDetailedMetrics(const TActorContext& ctx) {
     auto subgroup = GetPartitionCounterSubgroup(ctx);
     if (!subgroup) {
         return;  // TODO(qyryq) Y_ABORT_UNLESS?
     }
     for (auto& userInfo : GetAll()) {
-        userInfo.second.SetupPerPartitionCounters(ctx, subgroup);
+        userInfo.second.SetupDetailedMetrics(ctx, subgroup);
     }
 }
 
-void TUsersInfoStorage::ResetPerPartitionCounters() {
+void TUsersInfoStorage::ResetDetailedMetrics() {
     for (auto& userInfo : GetAll()) {
-        userInfo.second.ResetPerPartitionCounters();
+        userInfo.second.ResetDetailedMetrics();
     }
 }
 
-bool TUsersInfoStorage::PartitionCountersAreEnabled() const {
+bool TUsersInfoStorage::DetailedMetricsAreEnabled() const {
     return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
 }
 

@@ -246,7 +246,21 @@ vdb    252:16   0   186G  0 disk
       - "root"
       - "ADMINS"
       - "DATABASE-ADMINS"
+      bootstrap_allowed_sids:
+      - "ADMINS"
     ```
+
+  Добавьте секцию `client_certificate_authorization` для проверки клиентского сертификата при первичном запуске кластера (bootstrap). Сертификат должен соответствовать группе из `bootstrap_allowed_sids` (пример для группы `ADMINS`):
+
+  ```yaml
+  client_certificate_authorization:
+    request_client_certificate: true
+    client_certificate_definitions:
+    - member_groups: ["ADMINS"]
+      subject_terms:
+      - short_name: "O"
+        values: ["YDB"]
+  ```
 
 При использовании режима шифрования трафика убедитесь в наличии в конфигурационном файле {{ ydb-short-name }} установленных путей к файлам ключей и сертификатов в секциях `interconnect_config` и `grpc_config`:
 
@@ -377,11 +391,16 @@ ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.y
 
   В качестве сервера для подключения (параметр `-e` или `--endpoint`) может быть указан любой из серверов хранения в составе кластера.
 
-  При успешном выполнении указанной выше команды аутентификационный токен будет записан в файл `token-file`. Файл токена необходимо скопировать на один из серверов хранения в составе кластера, а затем на выбранном сервере выполнить команды:
+  При успешном выполнении указанной выше команды аутентификационный токен будет записан в файл `token-file`. Файл токена необходимо скопировать на один из серверов хранения в составе кластера.
+
+  Для первичного поднятия кластера (bootstrap) при включённой авторизации необходимо использовать клиентские сертификаты (mTLS). До выполнения bootstrap служба схемы ещё не доступна, поэтому проверка по токену неприменима. Выполните bootstrap с сертификатами, указанными в конфигурационном файле {{ ydb-short-name }}:
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  ydb --token-file token-file --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 \
+  ydb --ca-file ca.crt \
+      --client-cert-file node.crt \
+      --client-cert-key-file node.key \
+      -e grpcs://<node.ydb.tech>:2135 \
       admin cluster bootstrap --uuid <строка>
   echo $?
   ```

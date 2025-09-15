@@ -53,7 +53,7 @@ TAsyncExpiringCache<TKey, TValue>::TAsyncExpiringCache(
 }
 
 template <class TKey, class TValue>
-void TAsyncExpiringCache<TKey, TValue>::Initialize()
+void TAsyncExpiringCache<TKey, TValue>::EnsureStarted()
 {
     auto config = GetConfig();
     if (config->BatchUpdate) {
@@ -242,6 +242,8 @@ TFuture<std::vector<TErrorOr<TValue>>> TAsyncExpiringCache<TKey, TValue>::GetMan
 template <class TKey, class TValue>
 std::optional<TErrorOr<TValue>> TAsyncExpiringCache<TKey, TValue>::Find(const TKey& key)
 {
+    EnsureStarted();
+
     auto config = GetConfig();
     auto now = NProfiling::GetCpuInstant();
 
@@ -263,6 +265,8 @@ std::optional<TErrorOr<TValue>> TAsyncExpiringCache<TKey, TValue>::Find(const TK
 template <class TKey, class TValue>
 std::vector<std::optional<TErrorOr<TValue>>> TAsyncExpiringCache<TKey, TValue>::FindMany(const std::vector<TKey>& keys)
 {
+    EnsureStarted();
+
     auto config = GetConfig();
     auto now = NProfiling::GetCpuInstant();
     std::vector<std::optional<TErrorOr<TValue>>> results(keys.size());
@@ -290,6 +294,8 @@ std::vector<std::optional<TErrorOr<TValue>>> TAsyncExpiringCache<TKey, TValue>::
 template <class TKey, class TValue>
 void TAsyncExpiringCache<TKey, TValue>::InvalidateActive(const TKey& key)
 {
+    EnsureStarted();
+
     {
         auto guard = ReaderGuard(SpinLock_);
         if (auto it = Map_.find(key); it == Map_.end() || !it->second->Promise.IsSet()) {
@@ -308,6 +314,8 @@ template <class TKey, class TValue>
 template <class T>
 void TAsyncExpiringCache<TKey, TValue>::InvalidateValue(const TKey& key, const T& value)
 {
+    EnsureStarted();
+
     {
         auto guard = ReaderGuard(SpinLock_);
         if (auto it = Map_.find(key); it != Map_.end() && it->second->Promise.IsSet()) {
@@ -334,6 +342,8 @@ template <class TKey, class TValue>
 template <class T>
 void TAsyncExpiringCache<TKey, TValue>::ForceRefresh(const TKey& key, const T& value)
 {
+    EnsureStarted();
+
     auto config = GetConfig();
     auto now = NProfiling::GetCpuInstant();
 
@@ -380,6 +390,8 @@ void TAsyncExpiringCache<TKey, TValue>::Ping(const TKey& key)
 template <class TKey, class TValue>
 void TAsyncExpiringCache<TKey, TValue>::Set(const TKey& key, TErrorOr<TValue> valueOrError)
 {
+    EnsureStarted();
+
     auto isValueOK = valueOrError.IsOK();
     auto config = GetConfig();
     auto now = NProfiling::GetCpuInstant();
@@ -491,6 +503,8 @@ void TAsyncExpiringCache<TKey, TValue>::SetResult(
     const TErrorOr<TValue>& valueOrError,
     bool isPeriodicUpdate)
 {
+    EnsureStarted();
+
     auto config = GetConfig();
     auto entry = weakEntry.Lock();
     if (!entry) {

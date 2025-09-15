@@ -5,18 +5,6 @@ The `DROP ASYNC REPLICATION` statement deletes an [asynchronous replication](../
 * automatically created [streams of changes](../../../concepts/glossary.md#changefeed)
 * [replicas](../../../concepts/glossary.md#replica-object) (optionally)
 
-{% note warning %}
-
-Do not delete asynchronous replication without [stopping](alter-async-replication.md) it first. This may lead to replica write blocking and system malfunctions.
-
-{% endnote %}
-
-Before deleting asynchronous replication, follow these steps:
-
-* Stop the processes related to replication.
-* Make sure that all data operations are completed and there are no active transactions.
-* Check the status of the system and the replica before proceeding with replication deletion.
-
 ## Syntax {#syntax}
 
 ```yql

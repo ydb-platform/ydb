@@ -1457,6 +1457,11 @@ private:
         }
 
         TImportInfo::TPtr importInfo = Self->Imports.at(id);
+
+        if (importInfo->State != EState::Waiting) {
+            return;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
 
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
@@ -1466,10 +1471,6 @@ private:
         Self->PersistImportItemState(db, *importInfo, itemIdx);
 
         Self->TxIdToImport.erase(txId);
-
-        if (importInfo->State != EState::Waiting) {
-            return;
-        }
 
         switch (item.State) {
         case EState::CreateSchemeObject:

@@ -414,9 +414,7 @@ TImportantConsumerOffsetTracker TPartition::ImportantClientsMinOffset() const {
         if (userInfo && userInfo->Offset >= 0) //-1 means no offset
             curOffset = userInfo->Offset;
 
-        TDuration retentionPeriod = consumer.HasRetentionPeriodMs() && consumer.GetRetentionPeriodMs() < TDuration::Max().MilliSeconds()
-            ? TDuration::MilliSeconds(consumer.GetRetentionPeriodMs())
-            : TDuration::Max();
+        TDuration retentionPeriod = TDuration::Max();
         if (consumersToCheck.empty()) {
             consumersToCheck.reserve(Config.ConsumersSize() - consumerIdx);
         }

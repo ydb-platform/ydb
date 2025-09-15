@@ -36,12 +36,6 @@ enum class EAutoPartitioningStrategy: uint32_t {
     Paused = 4,
 };
 
-enum class EMetricsLevel : uint32_t {
-    Database = 0,
-    Object = 1,
-    Detailed = 2,
-};
-
 class TConsumer {
 public:
     TConsumer(const Ydb::Topic::Consumer&);
@@ -313,8 +307,6 @@ public:
 
     const TTopicStats& GetTopicStats() const;
 
-    std::optional<EMetricsLevel> GetMetricsLevel() const;
-
     void SerializeTo(Ydb::Topic::CreateTopicRequest& request) const;
 private:
 
@@ -338,7 +330,6 @@ private:
     NScheme::TVirtualTimestamp CreationTimestamp_;
     std::vector<NScheme::TPermissions> Permissions_;
     std::vector<NScheme::TPermissions> EffectivePermissions_;
-    std::optional<EMetricsLevel> MetricsLevel_;
 };
 
 class TConsumerDescription {
@@ -566,8 +557,6 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
 
     FLUENT_SETTING(TAttributes, Attributes);
 
-    FLUENT_SETTING_OPTIONAL(EMetricsLevel, MetricsLevel);
-
     TCreateTopicSettings& SetSupportedCodecs(std::vector<ECodec>&& codecs) {
         SupportedCodecs_ = std::move(codecs);
         return *this;
@@ -694,8 +683,6 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
 
     FLUENT_SETTING(TAlterAttributes, AlterAttributes);
 
-    FLUENT_SETTING_OPTIONAL(EMetricsLevel, MetricsLevel);
-
     TAlterTopicAttributesBuilder BeginAlterAttributes() {
         return TAlterTopicAttributesBuilder(*this);
     }
@@ -739,11 +726,6 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
         AlterPartitioningSettings_.emplace(*this);
         AlterPartitioningSettings_->MinActivePartitions(minActivePartitions);
         AlterPartitioningSettings_->MaxActivePartitions(maxActivePartitions);
-        return *this;
-    }
-
-    TAlterTopicSettings& DropMetricsLevel() {
-        MetricsLevel_.reset();
         return *this;
     }
 

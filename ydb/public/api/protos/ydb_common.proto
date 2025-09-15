@@ -27,9 +27,3 @@ message VirtualTimestamp {
     uint64 plan_step = 1;
     uint64 tx_id = 2;
 }
-
-enum MetricsLevel {
-    Database = 0;
-    Object = 1;
-    Detailed = 2;
-}

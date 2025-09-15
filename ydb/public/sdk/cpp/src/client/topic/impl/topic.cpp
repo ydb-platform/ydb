@@ -50,7 +50,6 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     , PartitionWriteBurstBytes_(Proto_.partition_write_burst_bytes())
     , MeteringMode_(TProtoAccessor::FromProto(Proto_.metering_mode()))
     , TopicStats_(Proto_.topic_stats())
-    , MetricsLevel_(Proto_.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(Proto_.metrics_level())) : std::optional<EMetricsLevel>())
 {
     Owner_ = Proto_.self().owner();
     CreationTimestamp_ = NScheme::TVirtualTimestamp(Proto_.self().created_at());
@@ -185,9 +184,6 @@ void TTopicDescription::SerializeTo(Ydb::Topic::CreateTopicRequest& request) con
     *request.mutable_attributes() = Proto_.attributes();
     *request.mutable_consumers() = Proto_.consumers();
     request.set_metering_mode(Proto_.metering_mode());
-    if (Proto_.has_metrics_level()) {
-        request.set_metrics_level(Proto_.metrics_level());
-    }
 }
 
 const Ydb::Topic::DescribeTopicResult& TTopicDescription::GetProto() const {
@@ -212,10 +208,6 @@ const NScheme::TVirtualTimestamp& TTopicDescription::GetCreationTimestamp() cons
 
 const TTopicStats& TTopicDescription::GetTopicStats() const {
     return TopicStats_;
-}
-
-std::optional<EMetricsLevel> TTopicDescription::GetMetricsLevel() const {
-    return MetricsLevel_;
 }
 
 const std::vector<NScheme::TPermissions>& TTopicDescription::GetPermissions() const {
@@ -656,7 +648,6 @@ TCreateTopicSettings::TCreateTopicSettings(const Ydb::Topic::CreateTopicRequest&
     , PartitionWriteSpeedBytesPerSecond_(proto.partition_write_speed_bytes_per_second())
     , PartitionWriteBurstBytes_(proto.partition_write_burst_bytes())
     , Attributes_(DeserializeAttributes(proto.attributes()))
-    , MetricsLevel_(proto.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(proto.metrics_level())) : std::optional<EMetricsLevel>())
 {
     Consumers_ = DeserializeConsumers(*this, proto.consumers());
 }
@@ -671,9 +662,6 @@ void TCreateTopicSettings::SerializeTo(Ydb::Topic::CreateTopicRequest& request) 
     request.set_partition_write_burst_bytes(PartitionWriteBurstBytes_);
     *request.mutable_consumers() = SerializeConsumers(Consumers_);
     *request.mutable_attributes() = SerializeAttributes(Attributes_);
-    if (MetricsLevel_) {
-        request.set_metrics_level(static_cast<Ydb::MetricsLevel>(*MetricsLevel_));
-    }
 }
 
 } // namespace NYdb::NTopic

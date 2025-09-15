@@ -35,7 +35,7 @@ namespace NYdb {
             bool ReadWithoutConsumer = false;
             size_t CommitPeriodMs = 15'000;
             size_t CommitMessages = 1'000'000;
-            size_t MaxMemoryUsageBytes = 15_MB;
+            std::optional<size_t> MaxMemoryUsageBytes = 15_MB;
         };
 
         class TTransactionSupport;

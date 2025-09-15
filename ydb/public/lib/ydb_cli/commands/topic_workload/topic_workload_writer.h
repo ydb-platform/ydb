@@ -41,7 +41,7 @@ namespace NYdb {
             TMaybe<TString> KeyPrefix;
             ui32 KeyCount = 0;
             ui32 KeySeed = 0;
-            size_t MaxMemoryUsageBytes = 15_MB;
+            std::optional<size_t> MaxMemoryUsageBytes = 15_MB;
         };
 
         class TTopicWorkloadWriterProducer;

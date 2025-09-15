@@ -277,7 +277,7 @@ message TReassignGroupDisk {
     reserved 8;
     bool OnlyToLessOccupiedPDisk = 9; // when set, reassignment will only commence if new pdisk is less occupied than the old one
     bool PreferLessOccupiedRack = 10; // when set, round-robin is used to select the PDisk (each time next node will be selected)
-    bool WithAttentionToReplication = 11; // when set, round-robin is used to select the PDisk (each time next node will be selected)
+    bool WithAttentionToReplication = 11; // when set, pick rack with more free slots and then pick pdisk with less replicating vdisks (both per-pdisk and per-node)
 }
 
 message TSanitizeGroup {

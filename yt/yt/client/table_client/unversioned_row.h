@@ -28,6 +28,11 @@ extern const TString SerializedNullRow;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TOwningValueTag
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Unversioned value with shared ownership of string value.
 class TUnversionedOwningValue
 {
@@ -54,6 +59,9 @@ public:
 
     //! Returns string value. Call is valid only if value is string-like type.
     TSharedRef GetStringRef() const;
+
+    //! Returns string holder. Returned value is null if value is not of string-like type.
+    TSharedRangeHolderPtr GetStringHolder() const;
 
 private:
     TUnversionedValue Value_;
@@ -121,6 +129,23 @@ inline TUnversionedValue MakeUnversionedCompositeValue(TStringBuf value, int id 
 inline TUnversionedValue MakeUnversionedValueHeader(EValueType type, int id = 0, EValueFlags flags = EValueFlags::None)
 {
     return MakeSentinelValue<TUnversionedValue>(type, id, flags);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+inline TUnversionedOwningValue MakeUnversionedStringLikeOwningValue(EValueType valueType, TSharedRef value, int id = 0, EValueFlags flags = EValueFlags::None)
+{
+    return TUnversionedOwningValue(MakeUnversionedStringLikeValue(valueType, value.ToStringBuf(), id, flags), value.GetHolder());
+}
+
+inline TUnversionedOwningValue MakeUnversionedStringOwningValue(TSharedRef value, int id = 0, EValueFlags flags = EValueFlags::None)
+{
+    return TUnversionedOwningValue(MakeUnversionedStringValue(value.ToStringBuf(), id, flags), value.GetHolder());
+}
+
+inline TUnversionedOwningValue MakeUnversionedAnyOwningValue(TSharedRef value, int id = 0, EValueFlags flags = EValueFlags::None)
+{
+    return TUnversionedOwningValue(MakeUnversionedAnyValue(value.ToStringBuf(), id, flags), value.GetHolder());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

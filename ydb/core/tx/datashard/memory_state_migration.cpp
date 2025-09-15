@@ -52,18 +52,21 @@ private:
         Y_ENSURE(owner);
 
         if (Vars) {
+            owner->IncCounter(COUNTER_IN_MEMORY_MIGRATED_VARS, 1);
             owner->SnapshotManager.RestoreImmediateWriteEdge(Vars->ImmediateWriteEdge, Vars->ImmediateWriteEdgeReplied);
             owner->SnapshotManager.RestoreUnprotectedReadEdge(Vars->UnprotectedReadEdge);
             owner->InMemoryVarsRestored = true;
         }
 
         if (Locks) {
+            owner->IncCounter(COUNTER_IN_MEMORY_MIGRATED_LOCKS, Locks.size());
             owner->SysLocks.RestoreInMemoryLocks(std::move(Locks));
         }
 
         Detach();
         PassAway();
 
+        owner->IncCounter(COUNTER_IN_MEMORY_MIGRATED_VOLATILE_TXS, Transactions.size());
         owner->OnInMemoryStateRestored(std::move(Transactions));
     }
 
@@ -259,14 +262,23 @@ private:
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr&) {
+        if (Owner) {
+            Owner->IncCounter(COUNTER_IN_MEMORY_MIGRATION_DISCONNECTED);
+        }
         Failed();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr&) {
+        if (Owner) {
+            Owner->IncCounter(COUNTER_IN_MEMORY_MIGRATION_UNDELIVERED);
+        }
         Failed();
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
+        if (Owner) {
+            Owner->IncCounter(COUNTER_IN_MEMORY_MIGRATION_TIMEOUT);
+        }
         Failed();
     }
 

@@ -154,6 +154,12 @@ enum ECumulativeCounters {
     COUNTER_WRITE_DISK_SPACE_EXHAUSTED = 112              [(CounterOpts) = {Name: "WriteDiskSpaceExhausted"}];
     COUNTER_PREPARE_DISK_SPACE_EXHAUSTED = 113            [(CounterOpts) = {Name: "PrepareSpaceExhausted"}];
     COUNTER_REMOVED_COMMITTED_TXS = 114                   [(CounterOpts) = {Name: "RemovedCommittedTxs"}];
+    COUNTER_IN_MEMORY_MIGRATED_VARS = 115                 [(CounterOpts) = {Name: "InMemoryMigratedVars"}];
+    COUNTER_IN_MEMORY_MIGRATED_LOCKS = 116                [(CounterOpts) = {Name: "InMemoryMigratedLocks"}];
+    COUNTER_IN_MEMORY_MIGRATED_VOLATILE_TXS = 117         [(CounterOpts) = {Name: "InMemoryMigratedVolatileTxs"}];
+    COUNTER_IN_MEMORY_MIGRATION_TIMEOUT = 118             [(CounterOpts) = {Name: "InMemoryMigrationTimeout"}];
+    COUNTER_IN_MEMORY_MIGRATION_UNDELIVERED = 119         [(CounterOpts) = {Name: "InMemoryMigrationUndelivered"}];
+    COUNTER_IN_MEMORY_MIGRATION_DISCONNECTED = 120        [(CounterOpts) = {Name: "InMemoryMigrationDisconnected"}];
 }
 
 enum EPercentileCounters {

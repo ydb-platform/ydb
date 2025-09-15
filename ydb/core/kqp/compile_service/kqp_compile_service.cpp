@@ -285,7 +285,7 @@ private:
 
     void Handle(TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
         auto snapshot = QueryCache->GetSnapshot();
-
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Got query compile cache request, snapshot has " << snapshot.size() << " entries");
         if (snapshot.empty()) {
             auto resp = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
             resp->Record.SetFinished(true);
@@ -293,7 +293,7 @@ private:
             return;
         }
         constexpr ui64 batchLimit = 16 * 1024 * 1024; // 16 MB
-        const ui64 freeSpace = ev->Get()->Record.GetFreeSpace() == 0 ? (ui64)-1 : ev->Get()->Record.GetFreeSpace();
+        const ui64 freeSpace = ev->Get()->Record.GetFreeSpace() == 0 ? (ui64) - 1 : ev->Get()->Record.GetFreeSpace();
 
         ui64 totalSentBytes = 0;
         size_t pos = 0;

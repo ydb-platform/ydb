@@ -895,7 +895,9 @@ struct Schema : NIceDb::Schema {
             Query,
             AccessCount,
             CompiledQueryAt,
-            UserSID>;
+            UserSID,
+            LastAccessedAt,
+            Warnings>;
     };
 };
 

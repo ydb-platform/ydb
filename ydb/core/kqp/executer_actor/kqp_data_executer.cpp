@@ -105,7 +105,7 @@ public:
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings,
-        TPartitionPruner::TConfig partitionPrunerConfig,
+        TPartitionPrunerConfig partitionPrunerConfig,
         const TShardIdToTableInfoPtr& shardIdToTableInfo,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId bufferActorId,
@@ -2001,7 +2001,7 @@ private:
         }
 
         for(const auto& channel: GetTasksGraph().GetChannels()) {
-            if (IsCrossShardChannel(GetTasksGraph(), channel)) {
+            if (GetTasksGraph().IsCrossShardChannel(channel)) {
                 HasPersistentChannels = true;
                 break;
             }
@@ -2099,7 +2099,7 @@ private:
         YQL_ENSURE(preparedQuery);
         *physicalGraph.MutablePreparedQuery() = *preparedQuery;
 
-        PersistTasksGraphInfo(GetTasksGraph(), physicalGraph);
+        GetTasksGraph().PersistTasksGraphInfo(physicalGraph);
 
         const auto runScriptActorId = GetUserRequestContext()->RunScriptActorId;
         Y_ENSURE(runScriptActorId);
@@ -2173,11 +2173,11 @@ private:
                     if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                         const auto& source = stage.GetSources(0).GetReadRangesSource();
                         bool isFullScan;
-                        SourceScanStageIdToParititions[stageInfo.Id] = PartitionPruner.Prune(source, stageInfo, isFullScan);
+                        GetMeta().SourceScanStageIdToParititions[stageInfo.Id] = GetTasksGraph().PartitionPruner->Prune(source, stageInfo, isFullScan);
                         if (isFullScan && !source.HasItemsLimit()) {
                             Counters->Counters->FullScansExecuted->Inc();
                         }
-                        for (const auto& [shardId, _] : SourceScanStageIdToParititions.at(stageId)) {
+                        for (const auto& [shardId, _] : GetMeta().SourceScanStageIdToParititions.at(stageId)) {
                             shardIds.insert(shardId);
                         }
                     }
@@ -2978,7 +2978,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
+    TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation)
 {

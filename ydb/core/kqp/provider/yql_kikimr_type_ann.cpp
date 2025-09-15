@@ -57,7 +57,7 @@ const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tab
 }
 
 IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKikimrTableDescription& tableDesc,
-    TExprContext& ctx)
+    TExprContext& ctx, const TTypeAnnotationContext& typeCtx)
 {
     YQL_ENSURE(input->GetTypeAnn());
 
@@ -94,7 +94,7 @@ IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKi
             break;
     }
 
-    auto convertStatus = TryConvertTo(input, *expectedType, ctx);
+    auto convertStatus = TryConvertTo(input, *expectedType, ctx, typeCtx);
 
     if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
         ctx.AddError(TIssue(pos, TStringBuilder()
@@ -368,7 +368,8 @@ namespace {
         return true;
     }
 
-    bool ParseConstraintNode(TExprContext& ctx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple, TCoNameValueTuple constraint, bool& needEval, bool isAlter = false) {
+    bool ParseConstraintNode(TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple,
+        TCoNameValueTuple constraint, bool& needEval, bool isAlter = false) {
         auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
         auto typeNode = columnTuple.Item(1);
 
@@ -410,7 +411,7 @@ namespace {
 
             if (!skipAnnotationValidation && !IsSameAnnotation(*defaultType, *actualType)) {
                 auto constrPtr = constraint.Value().Cast().Ptr();
-                auto status = TryConvertTo(constrPtr, *type, ctx);
+                auto status = TryConvertTo(constrPtr, *type, ctx, typeCtx);
                 if (status == IGraphTransformer::TStatus::Error) {
                     ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
                         << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
@@ -522,7 +523,7 @@ private:
                 }
 
                 TExprNode::TPtr node = value.Ptr();
-                if (TryConvertTo(node, *expectedType, ctx) == TStatus::Error) {
+                if (TryConvertTo(node, *expectedType, ctx, Types) == TStatus::Error) {
                     ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
                         << "Failed to convert input columns types to scheme types"));
                     return TStatus::Error;
@@ -722,7 +723,7 @@ private:
             }
         }
 
-        auto status = ConvertTableRowType(node.Ptr()->ChildRef(TKiWriteTable::idx_Input), *table, ctx);
+        auto status = ConvertTableRowType(node.Ptr()->ChildRef(TKiWriteTable::idx_Input), *table, ctx, Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -840,7 +841,7 @@ private:
 
 
         auto updateBody = node.Update().Body().Ptr();
-        auto status = ConvertTableRowType(updateBody, *table, ctx);
+        auto status = ConvertTableRowType(updateBody, *table, ctx, Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             if (status == IGraphTransformer::TStatus::Repeat) {
                 updateLambda = Build<TCoLambda>(ctx, node.Update().Pos())
@@ -953,7 +954,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                 for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                     bool needEval = false;
-                    if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, needEval)) {
+                    if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval)) {
                         return TStatus::Error;
                     }
 
@@ -1246,7 +1247,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         TExprNode::TPtr keyNode = boundaries.Item(j).Ptr();
                         TString content(keyNode->Child(0)->Content());
                         if (keyNode->GetTypeAnn()->Cast<TDataExprType>()->GetSlot() != keyTypes[j]->GetSlot()) {
-                            if (TryConvertTo(keyNode, *keyTypes[j], ctx) == TStatus::Error) {
+                            if (TryConvertTo(keyNode, *keyTypes[j], ctx, Types) == TStatus::Error) {
                                 ctx.AddError(TIssue(ctx.GetPosition(keyNode->Pos()), TStringBuilder()
                                     << "Failed to convert value \"" << content
                                     << "\" to a corresponding key column type"));
@@ -1406,7 +1407,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                             bool needEval = false;
-                            if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, needEval, true)) {
+                            if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, true)) {
                                 return TStatus::Error;
                             }
 

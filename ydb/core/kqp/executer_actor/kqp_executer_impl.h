@@ -645,7 +645,20 @@ protected:
             addQueryEvent->PoolId = poolId;
             addQueryEvent->QueryId = TxId;
             this->Send(schedulerServiceId, addQueryEvent.Release(), 0, TxId);
+
+            {
+                TStringStream ss;
+                ss << "Waiting query response: " << TxId << Endl;
+                Cerr << ss.Str();
+            }
+
             Query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(TxId))->Get()->Query; // TODO: Y_DEFER
+
+            {
+                TStringStream ss;
+                ss << "Received query response: " << TxId << Endl;
+                Cerr << ss.Str();
+            }
         }
 
         auto lockTxId = Request.AcquireLocksTxId;

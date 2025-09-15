@@ -290,7 +290,9 @@ protected:
     void TestSendingTEvReadSetViaApp(const TSendReadSetViaAppTestParams& params);
 
     template<class EventType>
-    void AddOneTimeEventObserver(bool& seenEvent, std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback = [](){return TTestActorRuntimeBase::EEventAction::PROCESS;});
+    void AddOneTimeEventObserver(bool& seenEvent,
+                                 ui32& unseenEventCount,
+                                 std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback = [](){return TTestActorRuntimeBase::EEventAction::PROCESS;});
 
     void ExpectNoExclusiveLockAcquired();
     void ExpectNoReadQuotaAcquired();
@@ -1422,10 +1424,13 @@ void TPQTabletFixture::WaitForAppSendRsResponse(const TAppSendReadSetMatcher& ma
 }
 
 template<class EventType>
-void TPQTabletFixture::AddOneTimeEventObserver(bool& seenEvent, std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback) {
+void TPQTabletFixture::AddOneTimeEventObserver(bool& seenEvent, ui32& unseenEventCount, std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback) {
     auto observer = [&](TAutoPtr<IEventHandle>& input) {
         if (!seenEvent && input->CastAsLocal<EventType>()) {
-            seenEvent = true;
+            unseenEventCount--;
+            if (unseenEventCount == 0) {
+                seenEvent = true;
+            }
             return callback(input);
         }
 
@@ -2574,8 +2579,9 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_
 
     TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent;
     bool seenEvent = false;
+    ui32 unseenEventCount = 1;
     // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
-    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, [&deleteDoneEvent](TAutoPtr<IEventHandle>& eventHandle) {
+    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, unseenEventCount, [&deleteDoneEvent](TAutoPtr<IEventHandle>& eventHandle) {
         deleteDoneEvent = eventHandle->Release<TEvPQ::TEvDeletePartitionDone>();
         return TTestActorRuntimeBase::EEventAction::DROP;
     });
@@ -2608,7 +2614,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_
     UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie);
 }
 
-Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet, TPQTabletFixture) {
+Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Deleting_State, TPQTabletFixture) {
     NKafka::TProducerInstanceId producerInstanceId = {1, 0};
     const ui64 txId = 67890;
     PQTabletPrepare({.partitions=2}, {}, *Ctx);
@@ -2624,20 +2630,21 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet, TPQTabletFixture)
 
     const NKikimrPQ::TTabletTxInfo& txInfo = WaitForExactTxWritesCount(2);
     ui32 firstSupportivePartitionId = txInfo.GetTxWrites(0).GetInternalPartitionId();
-    ui32 secondSupportivePartitionId = txInfo.GetTxWrites(1).GetInternalPartitionId();
-    Cerr << "Sup1Id: " << firstSupportivePartitionId << ", Sup2Id: " <<  secondSupportivePartitionId << Endl;
 
-    TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent;
+    TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent1;
+    TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent2;
+    std::vector<TAutoPtr<TEvPQ::TEvDeletePartitionDone>> deleteDoneEvents = {deleteDoneEvent1, deleteDoneEvent2};
+    ui32 unseenEventCount = deleteDoneEvents.size();
     bool seenEvent = false;
-    // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
-    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, [&deleteDoneEvent](TAutoPtr<IEventHandle>& eventHandle) {
-        deleteDoneEvent = eventHandle->Release<TEvPQ::TEvDeletePartitionDone>();
+    // add observer for TEvPQ::TEvDeletePartitionDone requests and skip it
+    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, unseenEventCount, [&unseenEventCount, &deleteDoneEvents](TAutoPtr<IEventHandle>& eventHandle) {
+        deleteDoneEvents[deleteDoneEvents.size() - unseenEventCount - 1] = eventHandle->Release<TEvPQ::TEvDeletePartitionDone>();
         return TTestActorRuntimeBase::EEventAction::DROP;
     });
 
     CommitKafkaTransaction(producerInstanceId, txId, {0, 1});
 
-    // wait for delete response and save it
+    // wait for delete responses and save them
     TDispatchOptions options;
     options.CustomFinalCondition = [&seenEvent]() {return seenEvent;};
     UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
@@ -2648,11 +2655,14 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet, TPQTabletFixture)
                      .NeedSupportivePartition=true,
                      .Owner=DEFAULT_OWNER,
                      .Cookie=5});
-    // now we can eventually send TEvPQ::TEvDeletePartitionDone
-    Ctx->Runtime->SendToPipe(Pipe,
+    // now we can eventually send TEvPQ::TEvDeletePartitionDone responses
+    for (size_t i = 0; i < deleteDoneEvents.size(); i++) {
+        Ctx->Runtime->SendToPipe(Pipe,
                              Ctx->Edge,
-                             deleteDoneEvent.Release(),
-                             0, 0);
+                             deleteDoneEvents[i].Release(),
+                             0, i);
+    }
+
     WaitForTheTransactionToBeDeleted(txId);
 
     auto txInfo1 = GetTxWritesFromKV();
@@ -2662,7 +2672,24 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet, TPQTabletFixture)
     TString ownerCookie3 = WaitGetOwnershipResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
     UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie1, ownerCookie3);
     UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie3);
+}
 
+Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Successful_Commit, TPQTabletFixture) {
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+    EnsurePipeExist();
+
+    TString ownerCookie1 = CreateSupportivePartitionForKafka(producerInstanceId, 0);
+    TString ownerCookie2 = CreateSupportivePartitionForKafka(producerInstanceId, 1);
+
+    UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie1, ownerCookie2);
+
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie1, 0);
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie2, 1);
+
+    const NKikimrPQ::TTabletTxInfo& txInfo = WaitForExactTxWritesCount(2);
+    CommitKafkaTransaction(producerInstanceId, txId, {0, 1});
 }
 
 Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Should_Be_Processed_After_Previous_Complete_Erasure, TPQTabletFixture) {

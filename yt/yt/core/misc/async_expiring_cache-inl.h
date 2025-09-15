@@ -379,7 +379,7 @@ void TAsyncExpiringCache<TKey, TValue>::Ping(const TKey& key)
             return;
         }
 
-        entry->AccessDeadline.store(NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
+        entry->AccessDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
         entry->UpdateDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterSuccessfulUpdateTime));
         if (!config->BatchUpdate) {
             ScheduleEntryUpdate(entry, key, config);

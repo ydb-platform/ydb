@@ -232,6 +232,7 @@ void ToProto(
     YT_OPTIONAL_TO_PROTO(proto, subject_name, result.SubjectName);
 
     ToProto(proto->mutable_missing_subjects(), result.MissingSubjects);
+    ToProto(proto->mutable_pending_removal_subjects(), result.PendingRemovalSubjects);
 }
 
 void FromProto(
@@ -244,6 +245,7 @@ void FromProto(
     result->SubjectName = YT_OPTIONAL_FROM_PROTO(proto, subject_name);
 
     FromProto(&result->MissingSubjects, proto.missing_subjects());
+    FromProto(&result->PendingRemovalSubjects, proto.pending_removal_subjects());
 }
 
 void ToProto(

@@ -980,7 +980,6 @@ void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, co
 void TColumnShard::Die(const TActorContext& ctx) {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "tablet_die");
     AFL_VERIFY(TabletActivityImpl->Dec() == 0);
-    OverloadSubscribers.NotifyAllOverloadSubscribers(SelfId(), TabletID());
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
@@ -991,6 +990,8 @@ void TColumnShard::Die(const TActorContext& ctx) {
     } else {
         Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
     }
+    Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+        std::make_unique<NOverload::TEvOverloadColumnShardDied>(NOverload::TColumnShardInfo{.ColumnShardId = SelfId(), .TabletId = TabletID()}));
     IActor::Die(ctx);
 }
 

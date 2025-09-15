@@ -14,6 +14,7 @@
 * [Добавлены](https://github.com/ydb-platform/ydb/pull/11775) приоритеты проверки аутентификационных тикетов [с использованием стороннего IAM-провайдера](./security/authentication.md#iam), с самым высоким приоритетом обрабатываются запросы от новых пользователей. Тикеты в кеше обновляют свою информацию с приоритетом ниже.
 * Добавлена возможность [чтения и записи в топик](./reference/kafka-api/examples.md#primery-raboty-s-kafka-api) с использованием Kafka API без аутентификации.
 * Включены по умолчанию:
+  
   * поддержка {% if feature_view %}[представлений (VIEW)](./concepts/datamodel/view.md){% else %}представлений (VIEW){% endif %};
   * режим [автопартиционирования](./concepts/datamodel/topic.md#autopartitioning) топиков;
   * [транзакции с участием топиков и строковых таблиц](./concepts/transactions.md#topic-table-transactions);

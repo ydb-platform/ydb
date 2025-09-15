@@ -5,6 +5,7 @@
 ## Из файла в {{ ydb-short-name }} {#file-to-topic}
 
 Пример файла настроек FileSource-коннектора `/etc/kafka-connect-worker/file-sink.properties` для переноса данных из файла в топик:
+
 ```ini
 name=local-file-source
 connector.class=FileStreamSource

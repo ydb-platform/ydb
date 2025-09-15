@@ -61,12 +61,11 @@ namespace {
 
 bool TAuditCtx::AuditEnabled(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase, NACLibProto::ESubjectType subjectType)
 {
-    bool auditEnabled = false;
     if (NKikimr::HasAppData()) {
-        auditEnabled = NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin,
-                                                                     logPhase, subjectType);
+        return NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin,
+                                                             logPhase, subjectType);
     }
-    return auditEnabled;
+    return false;
 }
 
 

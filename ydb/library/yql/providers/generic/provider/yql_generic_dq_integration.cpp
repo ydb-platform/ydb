@@ -72,15 +72,9 @@ namespace NYql {
                 return Nothing();
             }
 
-            TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
+            TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
-
-                    if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
-                        ctx.AddError(TIssue(ctx.GetPosition(genReadTable.Pos()), "Cannot use watermarks"));
-                        return {};
-                    }
-
                     YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
                     const auto token = TString("cluster:default_") += genReadTable.DataSource().Cluster().StringValue();
                     const auto rowType = genReadTable.Ref()

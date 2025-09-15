@@ -2,6 +2,7 @@
 #include <google/protobuf/io/coded_stream.h>
 #include <util/generic/buffer.h>
 #include <util/system/unaligned_mem.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -16,14 +17,14 @@ ui32 GetMaxHeaderSize() {
 
 NKikimrPQ::TBatchHeader ExtractHeader(const char *data, ui32 size) {
     ui16 sz = ReadUnaligned<ui16>(data);
-    Y_ABORT_UNLESS(sz < size);
+    AFL_ENSURE(sz < size);
     data += sizeof(ui16);
     NKikimrPQ::TBatchHeader header;
     bool res = header.ParseFromArray(data, sz);
-    Y_ABORT_UNLESS(res);
-    Y_ABORT_UNLESS((ui32)header.ByteSize() == sz);
+    AFL_ENSURE(res);
+    AFL_ENSURE((ui32)header.ByteSize() == sz);
 
-    Y_ABORT_UNLESS(header.ByteSize() + header.GetPayloadSize() + sizeof(ui16) <= size);
+    AFL_ENSURE(header.ByteSize() + header.GetPayloadSize() + sizeof(ui16) <= size);
     return header;
 }
 

@@ -1,5 +1,5 @@
 #include "mirrorer.h"
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -15,6 +15,8 @@
 
 #include <util/string/join.h>
 
+#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
+
 using namespace NPersQueue;
 
 namespace NKikimr {
@@ -27,6 +29,7 @@ constexpr NKikimrServices::TActivity::EType TMirrorer::ActorActivityType() {
 }
 
 TMirrorer::TMirrorer(
+    ui64 tabletId,
     TActorId tabletActor,
     TActorId partitionActor,
     const NPersQueue::TTopicConverterPtr& topicConverter,
@@ -36,7 +39,8 @@ TMirrorer::TMirrorer(
     const NKikimrPQ::TMirrorPartitionConfig& config,
     const TTabletCountersBase& counters
 )
-    : TabletActor(tabletActor)
+    : TabletId(tabletId)
+    , TabletActor(tabletActor)
     , PartitionActor(partitionActor)
     , TopicConverter(topicConverter)
     , Partition(partition)
@@ -160,8 +164,8 @@ void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg, const
 }
 
 void TMirrorer::AfterSuccesWrite(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(WriteInFlight.empty());
-    Y_ABORT_UNLESS(WriteRequestInFlight);
+    PQ_ENSURE(WriteInFlight.empty());
+    PQ_ENSURE(WriteRequestInFlight);
     LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
         << " written " <<  WriteRequestInFlight.value().CmdWriteSize()
         << " messages with first offset=" << WriteRequestInFlight.value().GetCmdWriteOffset()
@@ -203,7 +207,7 @@ void TMirrorer::ProcessWriteResponse(
             MirrorerTimeLags->IncFor(lag.MilliSeconds(), 1);
         }
         ui64 offset = writtenMessageInfo.GetOffset();
-        Y_ABORT_UNLESS((ui64)result.GetOffset() == offset);
+        PQ_ENSURE((ui64)result.GetOffset() == offset);
         Y_VERIFY_S(EndOffset <= offset, MirrorerDescription()
             << "end offset more the written " << EndOffset << ">" << offset);
         EndOffset = offset + 1;
@@ -417,7 +421,7 @@ void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, c
     CredentialsProvider = nullptr;
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
-    Y_ABORT_UNLESS(factory);
+    PQ_ENSURE(factory);
     auto future = factory->GetCredentialsProvider(Config.GetCredentials());
     future.Subscribe(
         [
@@ -457,7 +461,7 @@ void TMirrorer::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev,
 }
 
 void TMirrorer::RetryWrite(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(WriteRequestInFlight);
+    PQ_ENSURE(WriteRequestInFlight);
 
     THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
     auto req = request->Record.MutablePartitionRequest();
@@ -485,7 +489,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
         OffsetToRead = Queue.front().GetOffset();
         while (!Queue.empty()) {
             ui64 dataSize = Queue.back().GetData().size();
-            Y_ABORT_UNLESS(BytesInFlight >= dataSize);
+            PQ_ENSURE(BytesInFlight >= dataSize);
             BytesInFlight -= dataSize;
             Queue.pop_back();
         }
@@ -497,7 +501,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     PartitionStream.Reset();
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
-    Y_ABORT_UNLESS(factory);
+    PQ_ENSURE(factory);
 
     TLog log(MakeHolder<TDeferredActorLogBackend>(
         factory->GetSharedActorSystem(),
@@ -554,7 +558,7 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
 void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
-        Y_ABORT_UNLESS(OffsetToRead <= offset);
+        PQ_ENSURE(OffsetToRead <= offset);
         ui64 messageSize = msg.GetData().size();
 
         Counters.Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Increment(messageSize);
@@ -728,6 +732,28 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
 
     Send(SelfId(), new TEvents::TEvWakeup());
     ConsumerInitInterval = CONSUMER_INIT_INTERVAL_START;
+}
+
+bool TMirrorer::OnUnhandledException(const std::exception& exc) {
+    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::PQ_MIRRORER,
+        MirrorerDescription() << "unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+            << TBackTrace::FromCurrentException().PrintToString());
+
+    Send(TabletActor, new TEvents::TEvPoison());
+    PassAway();
+    return true;
+}
+
+NActors::IActor* CreateMirrorer(const ui64 tabletId,
+                                const NActors::TActorId& tabletActor,
+                                const NActors::TActorId& partitionActor,
+                                const NPersQueue::TTopicConverterPtr& topicConverter,
+                                const ui32 partition,
+                                const bool localDC,
+                                const ui64 endOffset,
+                                const NKikimrPQ::TMirrorPartitionConfig& config,
+                                const TTabletCountersBase& counters) {
+    return new TMirrorer(tabletId, tabletActor, partitionActor, topicConverter, partition, localDC, endOffset, config, counters);
 }
 
 }// NPQ

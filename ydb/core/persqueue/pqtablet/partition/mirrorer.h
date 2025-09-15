@@ -1,11 +1,11 @@
 #pragma once
 
-#include <ydb/core/persqueue/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/public/lib/base/msgbus.h>
@@ -18,7 +18,8 @@
 namespace NKikimr {
 namespace NPQ {
 
-class TMirrorer : public TActorBootstrapped<TMirrorer> {
+class TMirrorer : public TActorBootstrapped<TMirrorer>
+                , public IActorExceptionHandler {
 private:
     const ui64 MAX_READ_FUTURES_STORE = 25;
     const ui64 MAX_BYTES_IN_FLIGHT = 16_MB;
@@ -121,6 +122,7 @@ private:
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();
     TMirrorer(
+        ui64 tabletId,
         TActorId tabletActor,
         TActorId partitionActor,
         const NPersQueue::TTopicConverterPtr& topicConverter,
@@ -151,12 +153,14 @@ public:
     );
     void StartWaitNextReaderEvent(const TActorContext& ctx);
 
+    bool OnUnhandledException(const std::exception&) override;
 private:
-    TActorId TabletActor;
-    TActorId PartitionActor;
-    NPersQueue::TTopicConverterPtr TopicConverter;
-    ui32 Partition;
-    bool IsLocalDC;
+    const ui64 TabletId;
+    const TActorId TabletActor;
+    const TActorId PartitionActor;
+    const NPersQueue::TTopicConverterPtr TopicConverter;
+    const ui32 Partition;
+    const bool IsLocalDC;
     ui64 EndOffset;
     ui64 OffsetToRead;
     NKikimrPQ::TMirrorPartitionConfig Config;

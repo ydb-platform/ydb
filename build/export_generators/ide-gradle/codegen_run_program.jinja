@@ -2,7 +2,7 @@
 {%-     set current_target_object_indexes = current_target_object_indexes + current_target.custom_runs|map(attribute='_object_index') -%}
 {%-     for custom_run in current_target.custom_runs %}
 
-val {{ varprefix }}{{ custom_run['_object_index'] }} = task<Exec>("{{ varprefix }}{{ custom_run['_object_index'] }}") {
+val {{ varprefix }}{{ custom_run['_object_index'] }} = tasks.register<Exec>("{{ varprefix }}{{ custom_run['_object_index'] }}") {
     group = "build"
     description = "Code generation by run custom program"
 
@@ -34,8 +34,8 @@ val {{ varprefix }}{{ custom_run['_object_index'] }} = task<Exec>("{{ varprefix 
 {%-        if custom_run.depends|length -%}
 {%-            for depend in custom_run.depends|unique %}
     inputs.files({{ PatchRoots(depend, true) }})
-{%             endfor -%}
-{%-        endif -%}
+{%-            endfor %}
+{%         endif -%}
 
 {%-        if custom_run.outputs|length -%}
 {%-            for out in custom_run.outputs|unique %}
@@ -43,8 +43,8 @@ val {{ varprefix }}{{ custom_run['_object_index'] }} = task<Exec>("{{ varprefix 
     outputs.files({{ PatchGeneratedProto(out) }})
 {%-                else %}
     outputs.files({{ PatchRoots(out, false, true) }})
-{%-                endif -%}
-{%-            endfor -%}
+{%-                endif %}
+{%             endfor -%}
 {%-        endif -%}
 {#-
     Не использованы атрибуты

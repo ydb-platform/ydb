@@ -1,9 +1,9 @@
 #include "account_read_quoter.h"
-#include <ydb/core/persqueue/event_helpers.h>
+#include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 
@@ -11,6 +11,8 @@
 
 #include <util/string/join.h>
 #include <util/string/vector.h>
+
+#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
 
 namespace NKikimr {
 namespace NPQ {
@@ -96,7 +98,7 @@ void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed:
         << ", consumed in credit " << ConsumedBytesInCredit << "/" << CreditBytes
     );
     auto it = InProcessQuotaRequestCookies.find(ev->Get()->RequestCookie);
-    Y_ABORT_UNLESS(it != InProcessQuotaRequestCookies.end());
+    PQ_ENSURE(it != InProcessQuotaRequestCookies.end());
     InProcessQuotaRequestCookies.erase(it);
 
     if (!QuotaRequestInFlight) {
@@ -125,14 +127,14 @@ void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, cons
         LimiterDescription() << "Got quota from Kesus:" << ev->Get()->Result << ". Cookie: " << cookie
     );
 
-    Y_ABORT_UNLESS(CurrentQuotaRequestCookie == cookie);
+    PQ_ENSURE(CurrentQuotaRequestCookie == cookie);
     if (!Queue.empty()) {
         ApproveQuota(Queue.front().Request, Queue.front().StartWait, ctx);
         Queue.pop_front();
     }
 
     if (Y_UNLIKELY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Success)) {
-        Y_ABORT_UNLESS(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request.
+        PQ_ENSURE(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request.
         if (ctx.Now() - LastReportedErrorTime > TDuration::Minutes(1)) {
             LOG_ERROR_S(ctx, NKikimrServices::PQ_RATE_LIMITER, LimiterDescription() << "Got quota request error: " << ev->Get()->Result);
             LastReportedErrorTime = ctx.Now();
@@ -240,7 +242,7 @@ TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
 ) {
     TQuoterParams params;
     const auto& quotingConfig = pqConfig.GetQuotingConfig();
-    Y_ABORT_UNLESS(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
+    AFL_ENSURE(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
     auto topicPath = topicConverter->GetFederationPath();
 
     auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element
@@ -280,6 +282,16 @@ constexpr NKikimrServices::TActivity::EType TAccountReadQuoter::ActorActivityTyp
 
 constexpr NKikimrServices::TActivity::EType TAccountWriteQuoter::ActorActivityType() {
     return NKikimrServices::TActivity::PERSQUEUE_ACCOUNT_WRITE_QUOTER;
+}
+
+bool TBasicAccountQuoter::OnUnhandledException(const std::exception& exc) {
+    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::PERSQUEUE,
+        LimiterDescription() << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+            << TBackTrace::FromCurrentException().PrintToString());
+
+    Send(TabletActor, new TEvents::TEvPoison());
+    PassAway();
+    return true;
 }
 
 }// NPQ

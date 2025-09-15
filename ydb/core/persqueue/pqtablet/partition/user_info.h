@@ -2,10 +2,9 @@
 
 #include "account_read_quoter.h"
 
-#include <ydb/core/persqueue/working_time_counter.h>
+#include "working_time_counter.h"
 #include "subscriber.h"
-#include <ydb/core/persqueue/percentile_counter.h>
-#include "quota_tracker.h"
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/pqtablet/metering_sink.h>
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
@@ -187,7 +186,7 @@ struct TUserInfo: public TUserInfoBase {
         for (auto& avg : AvgReadBytes) {
             avg.Update(readSize, now);
         }
-        Y_ABORT_UNLESS(ActiveReads > 0);
+        AFL_ENSURE(ActiveReads > 0);
         --ActiveReads;
         UpdateReadingTimeAndState(endOffset, now);
         ReadTimestamp = now;
@@ -243,7 +242,7 @@ struct TUserInfo: public TUserInfoBase {
     }
 
     void SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {
-        Y_ABORT_UNLESS(subgroup);
+        AFL_ENSURE(subgroup);
         TVector<std::pair<TString, TString>> subgroups;
         if (!NoConsumer) {
             subgroups.push_back({"consumer", User});

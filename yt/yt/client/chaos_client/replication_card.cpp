@@ -187,9 +187,12 @@ void FormatValue(
         replicationCard.Era,
         MakeFormattableView(
             replicationCard.Replicas,
-            [&] (TStringBuilderBase* builder, std::pair<const NYT::TGuid, NYT::NChaosClient::TReplicaInfo> replica) {
+            [&] (
+                TStringBuilderBase* builder,
+                const std::pair<const NYT::TGuid, NYT::NChaosClient::TReplicaInfo>& replica)
+            {
                 FormatValue(builder, replica.first, TStringBuf());
-                builder->AppendString(": ");
+                builder->AppendString(": "sv);
                 FormatValue(builder, replica.second, TStringBuf(), replicationProgressProjection);
             }),
         replicationCard.CoordinatorCellIds,
@@ -749,6 +752,7 @@ TReplicationProgress BuildMaxProgress(
     }
 
     TReplicationProgress result;
+    result.Segments.reserve(progress.Segments.size() + other.Segments.size());
 
     auto progressIt = progress.Segments.begin();
     auto otherIt = other.Segments.begin();

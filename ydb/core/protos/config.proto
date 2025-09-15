@@ -1190,6 +1190,11 @@ message TCheckpointsConfig {
     optional uint64 CheckpointingSnapshotRotationPeriod = 8; // 0 - All checkpoints are snapshots, 1 - 1 increment/ 1 snapshot, 20 - 20 increment / 1 snapshot.
 }
 
+message TStreamingQueriesConfig {
+    optional uint64 MaxQueryExecutions = 1 [default = 30];
+    optional bool PrivateSystemTables = 2 [default = true];
+}
+
 message TQueryServiceConfig {
     optional uint64 ScriptOperationTimeoutDefaultSeconds = 1 [default = 604800]; // default = 1 week
     optional uint64 ScriptForgetAfterDefaultSeconds = 2 [default = 31536000]; // default = 1 year; 0 = infinity
@@ -1211,11 +1216,12 @@ message TQueryServiceConfig {
     optional NYql.TGenericGatewayConfig Generic = 11;
     optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
-    optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
+    optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 7200];
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
     optional TCheckpointsConfig CheckpointsConfig = 24;
+    optional TStreamingQueriesConfig StreamingQueries = 25;
 }
 
 // Config describes immediate controls and allows
@@ -1851,6 +1857,7 @@ message TAuditConfig {
             Operations = 7; // Operations API. See ydb/public/api/grpc/ydb_operation_v1.proto
             ExportImport = 8;
             Acl = 9;
+            AuditHeartbeat = 10;
             Default = 1000; // For default settings for all other nonconfigured log classes
         }
 
@@ -1872,10 +1879,20 @@ message TAuditConfig {
         repeated ELogPhase LogPhase = 4; // The phases of requests execution where audit log records are written
     }
 
+    // Settings for heartbeat audit messages
+    // Heartbeat messages are messages that are written in
+    // a time interval that is set up in this config.
+    // Audit messages are written from AuditHeartbeat log class
+    // and Anonymous account type and also can be set up using its setting
+    message THeartbeatSettings {
+        optional uint32 IntervalSeconds = 5; // Make heartbeat records to audit log every HeartbeatInterval seconds. 0 means that heartbeat is disabled
+    }
+
     optional TStderrBackend StderrBackend = 1;
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
     repeated TLogClassConfig LogClassConfig = 4;
+    optional THeartbeatSettings Heartbeat = 5;
 };
 
 message THiveTabletLimit {
@@ -2028,6 +2045,7 @@ message THiveConfig {
     repeated TBootPriority TabletTypeToBootPriority = 87;
     optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
     optional bool LockedTabletsSendMetrics = 89 [default = false]; // if true then hive will process metrics from locked tablets
+    optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
 }
 
 message THealthCheckConfig {
@@ -2065,7 +2083,7 @@ message TColumnShardConfig {
     optional bool CompactionEnabled = 5 [default = true];
     optional bool TTLEnabled = 6 [default = true];
     optional bool WritingEnabled = 7 [default = true];
-    optional uint32 WritingBufferDurationMs = 8 [default = 0];
+    optional uint32 WritingBufferDurationMs = 8 [default = 1000];
     optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
     optional uint64 TieringsMemoryLimit = 11 [default = 536870912];
     message TIndexMetadataMemoryLimit {
@@ -2091,7 +2109,7 @@ message TColumnShardConfig {
     }
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
-    optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
+    optional uint32 MaxReadStaleness_ms = 18 [default = 1800000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
     optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
     optional uint32 ActualizationTasksLagMs = 21 [default = 1000];
@@ -2106,9 +2124,9 @@ message TColumnShardConfig {
     optional uint32 RestoreDataOnWriteTimeoutSeconds = 30;
     optional bool UseSlicesFilter = 31 [default = true];
     optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
-    optional uint64 WritingBufferVolumeMb = 33 [default = 32];
-    optional uint64 WritingInFlightRequestsCountLimit = 34 [default = 1000000];
-    optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 2147483648];
+    optional uint64 WritingBufferVolumeMb = 33 [default = 32, deprecated = true];
+    optional uint64 WritingInFlightRequestsCountLimit = 34;
+    optional uint64 WritingInFlightRequestBytesLimit = 35;
     optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36;
     optional int32 DefaultCompressionLevel = 37;
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
@@ -2121,6 +2139,11 @@ message TColumnShardConfig {
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
     optional bool DeduplicationEnabled = 46 [default = true];
     optional bool BulkUpsertRequireAllColumns = 47 [default = true];
+    optional uint64 ProxyMemoryInFlightLimit = 48;
+    optional uint64 WritingBufferVolumeBytes = 49 [default = 524288];
+    optional bool OnlyBulkUpsertWritingBuffer = 50 [default = true];
+    optional uint64 BadPortionSizeLimit = 51 [default = 524288];
+    optional uint64 BadPortionsLimit = 52;
 }
 
 message TSchemeShardConfig {
@@ -2491,6 +2514,16 @@ message TStatisticsConfig {
     optional uint32 BaseStatsPropagateIntervalSecondsServerless = 4 [default = 180];
 };
 
+message TSystemTabletBackupConfig {
+    message TFilesystemBackend {
+        optional string Path = 1;
+    }
+
+    oneof Backend {
+        TFilesystemBackend Filesystem = 1;
+    }
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -2597,6 +2630,7 @@ message TAppConfig {
     optional TGroupedMemoryLimiterConfig DeduplicationGroupedMemoryLimiterConfig = 112;
     optional TStatisticsConfig StatisticsConfig = 113;
     optional TMetricsConfig MetricsConfig = 114;
+    optional TSystemTabletBackupConfig SystemTabletBackupConfig = 115;
 }
 
 message TYdbVersion {

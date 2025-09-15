@@ -569,6 +569,54 @@
         "restart_pdisk_viewer": {
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+        },
+        "storage_nodes_database": {
+            "FieldsAvailable": "10000000110000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "storage_nodes_monitoring": {
+            "FieldsAvailable": "10000000110000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "storage_nodes_root": {
+            "FieldsAvailable": "10000000110000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "storage_nodes_viewer": {
+            "FieldsAvailable": "10000000110000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
         }
     },
     "test.test_storage_groups": {
@@ -11011,7 +11059,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "CreateTime": "not-zero-number-text",
-                "Id": "72057594046678944-1",
+                "Id": "1",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": {},
@@ -11058,7 +11106,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-6",
+                "Id": "6",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -11125,12 +11173,12 @@
             {
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-8",
+                "Id": "8",
                 "Metrics": "not-empty-object",
                 "Name": "/Root/serverless_db",
                 "Overall": "Green",
                 "Owner": "root",
-                "ResourceId": "72057594046678944-7",
+                "ResourceId": "7",
                 "State": "RUNNING",
                 "StateStats": [
                     {
@@ -11145,7 +11193,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-7",
+                "Id": "7",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -11212,7 +11260,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "CreateTime": "not-zero-number-text",
-                    "Id": "72057594046678944-1",
+                    "Id": "1",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": {},
@@ -11263,7 +11311,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-6",
+                    "Id": "6",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11334,11 +11382,11 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-8",
+                    "Id": "8",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Owner": "root",
-                    "ResourceId": "72057594046678944-7",
+                    "ResourceId": "7",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11357,7 +11405,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-7",
+                    "Id": "7",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11423,7 +11471,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "CreateTime": "not-zero-number-text",
-                    "Id": "72057594046678944-1",
+                    "Id": "1",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": {},
@@ -11470,7 +11518,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-6",
+                    "Id": "6",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11537,12 +11585,12 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-8",
+                    "Id": "8",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Overall": "Green",
                     "Owner": "root",
-                    "ResourceId": "72057594046678944-7",
+                    "ResourceId": "7",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11557,7 +11605,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-7",
+                    "Id": "7",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",

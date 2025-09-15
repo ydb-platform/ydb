@@ -45,6 +45,8 @@ public:
         // TODO(cherepashka): remove default value and move upper.
         const IInvokerPtr& invoker = NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker());
 
+    void Initialize();
+
     TFuture<TValue> Get(const TKey& key);
     TExtendedGetResult GetExtended(const TKey& key);
     TFuture<std::vector<TErrorOr<TValue>>> GetMany(const std::vector<TKey>& keys);
@@ -115,7 +117,7 @@ private:
         std::atomic<NProfiling::TCpuInstant> AccessDeadline;
 
         //! When this entry must be evicted with respect to update timeout.
-        NProfiling::TCpuInstant UpdateDeadline;
+        std::atomic<NProfiling::TCpuInstant> UpdateDeadline;
 
         //! Some latest known value (possibly not yet set).
         TPromise<TValue> Promise;

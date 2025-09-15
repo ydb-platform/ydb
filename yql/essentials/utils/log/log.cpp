@@ -405,19 +405,22 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
         }
 
         auto& logger = TLoggerOperator<TYqlLog>::Log();
-        logger.ResetBackend(MakeFormattingLogBackend(Formatter(config), std::move(backend)));
+        logger.ResetBackend(MakeFormattingLogBackend(
+            Formatter(config),
+            config.GetFormat().GetIsStrict(),
+            std::move(backend)));
     }
     NYql::NBacktrace::AddAfterFatalCallback([](int signo){ LogBacktraceOnSignal(signo); });
 }
 
-void InitLogger(TAutoPtr<TLogBackend> backend, TFormatter formatter) {
+void InitLogger(TAutoPtr<TLogBackend> backend, TFormatter formatter, bool isStrictFormatting) {
     with_lock(g_InitLoggerMutex) {
         ++g_LoggerInitialized;
         if (g_LoggerInitialized > 1) {
             return;
         }
 
-        backend = MakeFormattingLogBackend(std::move(formatter), std::move(backend));
+        backend = MakeFormattingLogBackend(std::move(formatter), isStrictFormatting, std::move(backend));
 
         TComponentLevels levels;
         levels.fill(ELevel::INFO);
@@ -426,8 +429,8 @@ void InitLogger(TAutoPtr<TLogBackend> backend, TFormatter formatter) {
     NYql::NBacktrace::AddAfterFatalCallback([](int signo){ LogBacktraceOnSignal(signo); });
 }
 
-void InitLogger(IOutputStream* out, TFormatter formatter) {
-    InitLogger(new TStreamLogBackend(out), std::move(formatter));
+void InitLogger(IOutputStream* out, TFormatter formatter, bool isStrictFormatting) {
+    InitLogger(new TStreamLogBackend(out), std::move(formatter), isStrictFormatting);
 }
 
 void CleanupLogger() {

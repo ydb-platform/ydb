@@ -116,8 +116,6 @@
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
-#include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>

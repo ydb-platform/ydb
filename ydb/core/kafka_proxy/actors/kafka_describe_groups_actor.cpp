@@ -27,8 +27,12 @@ NActors::IActor* CreateKafkaDescribeGroupsActor(const TContext::TPtr context, co
 void TKafkaDescribeGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
     if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
         Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
-        Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
-        Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
+        if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
+            Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
+            Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
+        } else {
+            StartKqpSession(ctx);
+        }
         Become(&TKafkaDescribeGroupsActor::StateWork);
         auto wakeup = std::make_unique<TEvents::TEvWakeup>();
         ctx.ActorSystem()->Schedule(

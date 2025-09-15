@@ -1,6 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_type_ann_pg.h"
 
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 
 #include <yql/essentials/core/type_ann/type_ann_impl.h>
@@ -12,6 +13,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
+#include <ydb/services/metadata/optimization/abstract.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/is_in.h>
@@ -269,6 +271,10 @@ private:
                 return TStatus::Ok;
             }
             case TKikimrKey::Type::Sequence:
+            {
+                return TStatus::Ok;
+            }
+            case TKikimrKey::Type::Secret:
             {
                 return TStatus::Ok;
             }
@@ -879,37 +885,6 @@ private:
         return TStatus::Ok;
     }
 
-Ydb::Table::KMeansTreeSettings SerializeVectorIndexSettingsToProto(const TCoNameValueTupleList& indexSettings) {
-    Ydb::Table::KMeansTreeSettings proto;
-
-    for (const auto& indexSetting : indexSettings) {
-        const auto& name = indexSetting.Name().Value();
-        const auto& value = indexSetting.Value().Cast<TCoAtom>().StringValue();
-
-        if (name == "distance") {
-            proto.mutable_settings()->set_metric(VectorIndexSettingsParseDistance(value));
-        } else if (name == "similarity") {
-            proto.mutable_settings()->set_metric(VectorIndexSettingsParseSimilarity(value));
-        } else if (name =="vector_type") {
-            proto.mutable_settings()->set_vector_type(VectorIndexSettingsParseVectorType(value));
-        } else if (name =="vector_dimension") {
-            proto.mutable_settings()->set_vector_dimension(FromString<ui32>(value));
-        } else if (name =="clusters") {
-            proto.set_clusters(FromString<ui32>(value));
-        } else if (name =="levels") {
-            proto.set_levels(FromString<ui32>(value));
-        } else {
-            YQL_ENSURE(false, "Wrong index setting name: " << name);
-        }
-    }
-
-    YQL_ENSURE(proto.settings().metric() != Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED, "Missed index setting metric");
-    YQL_ENSURE(proto.settings().vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED, "Missed index setting vector_type");
-    YQL_ENSURE(proto.settings().vector_dimension(), "Missed index setting vector_dimension");
-
-    return proto;
-}
-
 virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
         TString cluster = TString(create.DataSink().Cluster());
         TString table = TString(create.Table());
@@ -1044,8 +1019,17 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
             TIndexDescription::TSpecializedIndexDescription specializedIndexDescription;
             if (indexType == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                TVector<std::pair<TString, TString>> settings(::Reserve(index.IndexSettings().Size()));
+                for (const auto& indexSetting : index.IndexSettings()) {
+                    settings.emplace_back(indexSetting.Name().Value(), indexSetting.Value().Cast<TCoAtom>().StringValue());
+                }
+                TString error;
                 *specializedIndexDescription.emplace<NKikimrKqp::TVectorIndexKmeansTreeDescription>()
-                     .MutableSettings() = SerializeVectorIndexSettingsToProto(index.IndexSettings());
+                     .MutableSettings() = NKikimr::NKMeans::FillSettings(settings, error);
+                if (error) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), error));
+                    return IGraphTransformer::TStatus::Error;
+                }
             }
 
             // IndexState and version, pathId are ignored for create table with index request
@@ -2093,22 +2077,51 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleUpsertObject(TKiUpsertObject node, TExprContext& /*ctx*/) override {
+    template <typename TNode>
+    TStatus ValidateObjectNodeAnnotation(const TNode& node, TExprContext& ctx) {
+        const auto typeId = node.TypeId().Value();
+        NKikimr::NMetadata::IClassBehaviour::TPtr cBehaviour(NKikimr::NMetadata::IClassBehaviour::TFactory::Construct(typeId));
+        YQL_ENSURE(cBehaviour, "Unsupported object type: \"" << typeId << "\"");
+
+        if (const auto optimizationManager = cBehaviour->ConstructOptimizationManager()) {
+            return optimizationManager->ValidateObjectNodeAnnotation(node.Ptr(), ctx);
+        }
+
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleUpsertObject(TKiUpsertObject node, TExprContext& ctx) override {
+        if (const auto status = ValidateObjectNodeAnnotation(node, ctx); status != TStatus::Ok) {
+            return status;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleCreateObject(TKiCreateObject node, TExprContext& /*ctx*/) override {
+    virtual TStatus HandleCreateObject(TKiCreateObject node, TExprContext& ctx) override {
+        if (const auto status = ValidateObjectNodeAnnotation(node, ctx); status != TStatus::Ok) {
+            return status;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleAlterObject(TKiAlterObject node, TExprContext& /*ctx*/) override {
+    virtual TStatus HandleAlterObject(TKiAlterObject node, TExprContext& ctx) override {
+        if (const auto status = ValidateObjectNodeAnnotation(node, ctx); status != TStatus::Ok) {
+            return status;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleDropObject(TKiDropObject node, TExprContext& /*ctx*/) override {
+    virtual TStatus HandleDropObject(TKiDropObject node, TExprContext& ctx) override {
+        if (const auto status = ValidateObjectNodeAnnotation(node, ctx); status != TStatus::Ok) {
+            return status;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
@@ -2393,6 +2406,21 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleRestore(TKiRestore node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleCreateSecret(TKiCreateSecret node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleAlterSecret(TKiAlterSecret node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleDropSecret(TKiDropSecret node, TExprContext&) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

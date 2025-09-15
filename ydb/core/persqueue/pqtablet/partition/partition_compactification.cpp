@@ -1,7 +1,7 @@
 #include "partition.h"
 #include "partition_compactification.h"
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include "partition_util.h"
 
 namespace NKikimr::NPQ {
@@ -129,7 +129,7 @@ void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
 TPartitionCompaction::TReadState::TReadState(ui64 firstOffset, TPartition* partitionActor)
     : OffsetToRead(firstOffset)
     , LastOffset(partitionActor->BlobEncoder.DataKeysBody.empty()
-        ?  partitionActor->BlobEncoder.Head.Offset
+        ? partitionActor->BlobEncoder.Head.Offset
         : partitionActor->BlobEncoder.DataKeysBody.front().Key.GetOffset())
     , PartitionActor(partitionActor)
 {
@@ -589,6 +589,9 @@ void TPartitionCompaction::TCompactState::AddDeleteRange(const TKey& key) {
     if (!Request) {
         Request = MakeHolder<TEvKeyValue::TEvRequest>();
     }
+    PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+        << PartitionActor->Partition << " add CmdDeleteRange for key " << key.ToString());
+
     auto* cmd = Request->Record.AddCmdDeleteRange();
     auto* range = cmd->MutableRange();
 

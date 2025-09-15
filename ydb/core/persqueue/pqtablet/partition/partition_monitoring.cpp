@@ -1,11 +1,9 @@
-#include <ydb/core/persqueue/event_helpers.h>
+#include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/common/common_app.h>
-#include "mirrorer.h"
 #include "partition_compactification.h"
 #include "partition_util.h"
 #include "partition.h"
-#include <ydb/core/persqueue/read.h>
-//#include <ydb/core/persqueue/transaction.h>
+#include <ydb/core/persqueue/pqtablet/cache/read.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -182,7 +180,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                 ui32 size  = BlobEncoder.HeadKeys[p].Size;
                                 while (currentLevel + 1 < TotalLevels && size < CompactLevelBorder[currentLevel + 1])
                                     ++currentLevel;
-                                Y_ABORT_UNLESS(size < CompactLevelBorder[currentLevel]);
+                                PQ_ENSURE(size < CompactLevelBorder[currentLevel]);
                                 TABLER() {
                                     TABLED() {out << "DataHead[" << currentLevel << "]";}
                                     TABLED() {out << i++;}

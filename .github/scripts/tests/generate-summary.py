@@ -5,6 +5,7 @@ import os
 import sys
 import traceback
 import re
+import json
 from codeowners import CodeOwners
 from enum import Enum
 from operator import attrgetter
@@ -12,6 +13,19 @@ from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from junit_utils import get_property_value, iter_xml_files
 from get_test_history import get_test_history
+
+
+def load_owner_area_mapping():
+    """Load owner to area label mapping from JSON config file."""
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        config_dir = os.path.join(script_dir, '..', '..', 'config')
+        mapping_file = os.path.join(config_dir, 'owner_area_mapping.json')
+        with open(mapping_file, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Warning: Could not load owner area mapping: {e}")
+        return {}
 
 
 def is_sanitizer_issue(error_text):
@@ -339,6 +353,10 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     github_repository = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
     
+    # For commit SHA, prioritize the actual head commit over merge commit
+    # In PR context, GITHUB_HEAD_SHA contains the actual commit being tested
+    github_sha = os.environ.get("GITHUB_HEAD_SHA", "")
+    
     # Construct PR and workflow URLs if the information is available
     pr_url = None
     workflow_url = None
@@ -348,6 +366,9 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     
     if workflow_run_id:
         workflow_url = f"{github_server_url}/{github_repository}/actions/runs/{workflow_run_id}"
+    
+    # Load owner to area mapping
+    owner_area_mapping = load_owner_area_mapping()
         
     content = env.get_template("summary.html").render(
         status_order=status_order,
@@ -360,7 +381,9 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         pr_number=pr_number,
         pr_url=pr_url,
         workflow_run_id=workflow_run_id,
-        workflow_url=workflow_url
+        workflow_url=workflow_url,
+        owner_area_mapping=owner_area_mapping,
+        commit_sha=github_sha
     )
 
     with open(fn, "w") as fp:

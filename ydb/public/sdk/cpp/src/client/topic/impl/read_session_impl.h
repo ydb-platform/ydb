@@ -365,7 +365,7 @@ private:
     std::vector<TMessageMetaPtrVector> MessagesMeta;
     TCallbackContextPtr<UseMigrationProtocol> CbContext;
     bool DoDecompress;
-    i64 ServerBytesSize = 0;
+    std::atomic<i64> ServerBytesSize = 0;
     std::atomic<i64> SourceDataNotProcessed = 0;
     std::pair<size_t, size_t> CurrentDecompressingMessage = {0, 0}; // (Batch, Message)
     std::deque<TReadyMessageThreshold> ReadyThresholds;

@@ -3,9 +3,9 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
-#include <ydb/core/persqueue/key.h>
+#include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>

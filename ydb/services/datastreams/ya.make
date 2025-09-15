@@ -15,6 +15,9 @@ PEERDIR(
     ydb/core/client/server
     ydb/core/grpc_services
     ydb/core/mind
+    ydb/core/persqueue/public/list_topics
+    ydb/core/persqueue/public/partition_key_range
+    ydb/core/persqueue/public/write_meta
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/library/operation_id

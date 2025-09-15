@@ -960,7 +960,7 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<EStatisticsAggregation>(
+    registrar.ParameterWithUniversalAccessor<std::optional<EStatisticsAggregation>>(
         "statistics_aggregation",
         [] (TThis* command) -> auto& {
             return command->Options.StatisticsAggregation;

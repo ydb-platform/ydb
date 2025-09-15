@@ -589,7 +589,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     bool SendDeleteTestTablet(TTestActorRuntime &runtime, ui64 hiveTablet,
             THolder<TEvHive::TEvDeleteTablet> ev, ui32 nodeIndex = 0,
-            NKikimrProto::EReplyStatus expectedStatus = NKikimrProto::OK) {
+            std::optional<NKikimrProto::EReplyStatus> expectedStatus = NKikimrProto::OK) {
         bool seenEvDeleteTabletResult = false;
         TTestActorRuntime::TEventObserver prevObserverFunc;
         prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
@@ -600,11 +600,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
         TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
         runtime.SendToPipe(hiveTablet, senderB, ev.Release(), 0, GetPipeConfigWithRetries());
-        TAutoPtr<IEventHandle> handle;
-        auto deleteTabletReply = runtime.GrabEdgeEventRethrow<TEvHive::TEvDeleteTabletReply>(handle);
-        UNIT_ASSERT(deleteTabletReply);
-        UNIT_ASSERT_EQUAL_C(deleteTabletReply->Record.GetStatus(), expectedStatus,
-            (ui32)deleteTabletReply->Record.GetStatus() << " != " << (ui32)expectedStatus);
+        if (expectedStatus) {
+            TAutoPtr<IEventHandle> handle;
+            auto deleteTabletReply = runtime.GrabEdgeEventRethrow<TEvHive::TEvDeleteTabletReply>(handle);
+            UNIT_ASSERT(deleteTabletReply);
+            UNIT_ASSERT_EQUAL_C(deleteTabletReply->Record.GetStatus(), *expectedStatus,
+                (ui32)deleteTabletReply->Record.GetStatus() << " != " << (ui32)*expectedStatus);
+        }
         runtime.SetObserverFunc(prevObserverFunc);
         return seenEvDeleteTabletResult;
     }
@@ -3196,6 +3198,80 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
         MakeSureTabletIsUp(runtime, tabletId, 0);
         UNIT_ASSERT_VALUES_EQUAL(getGroup(tabletId), goodGroup);
+    }
+
+    Y_UNIT_TEST(TestDeleteTabletError) {
+        static constexpr ui64 NUM_TABLETS = 4;
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetMaxDeleteTabletInProgress(1);
+        });
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        auto bootstrapper = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        runtime.EnableScheduleForActor(bootstrapper);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        std::vector<ui64> tablets;
+        for (ui64 i = 0; i < NUM_TABLETS; ++i) {
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS), 0, true);
+            tablets.push_back(tabletId);
+        }
+
+        ui64 deleteCount = 0;
+        ui64 blockCount = 0;
+        auto deleteCounter = runtime.AddObserver<TEvTabletBase::TEvDeleteTabletResult>([&](auto&&) { ++deleteCount; });
+        auto blockObserver = runtime.AddObserver<TEvBlobStorage::TEvBlockResult>([&](auto&& ev) {
+            if (blockCount++ % 10 == 0) {
+                ev->Get()->Status = NKikimrProto::ERROR;
+            }
+        });
+
+        for (ui64 i = 0; i < NUM_TABLETS; ++i) {
+            SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 100500 + i, 0));
+        }
+
+        runtime.WaitFor("everything is deleted", [&] { return deleteCount == NUM_TABLETS; }, TDuration::Minutes(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(deleteCount, NUM_TABLETS);
+    }
+
+    Y_UNIT_TEST(TestDeleteTabletWithRestartAndRetry) {
+        static constexpr ui64 NUM_TABLETS = 3;
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetMaxDeleteTabletInProgress(1);
+        });
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        auto bootstrapper = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        runtime.EnableScheduleForActor(bootstrapper);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        std::vector<ui64> tablets;
+        for (ui64 i = 0; i < NUM_TABLETS; ++i) {
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS), 0, true);
+            tablets.push_back(tabletId);
+        }
+
+        ui64 deleteCount = 0;
+        auto deleteCounter = runtime.AddObserver<TEvTabletBase::TEvDeleteTabletResult>([&](auto&&) { ++deleteCount; });
+
+        for (ui64 i = 0; i < NUM_TABLETS; ++i) {
+            SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 100500 + i, 0), 0, std::nullopt);
+        }
+
+        runtime.Register(CreateTabletKiller(hiveTablet));
+
+        for (ui64 i = 0; i < NUM_TABLETS; ++i) {
+            SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 100500 + i, 0), 0, std::nullopt);
+        }
+
+        runtime.WaitFor("everything is deleted", [&] { return deleteCount == NUM_TABLETS; }, TDuration::Minutes(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(deleteCount, NUM_TABLETS);
     }
 
     Y_UNIT_TEST(TestStorageBalancer) {

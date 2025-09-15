@@ -5,7 +5,7 @@
 
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
-#include <ydb/core/persqueue/key.h>
+#include <ydb/core/persqueue/common/key.h>
 #include "partition_init.h"
 #include "partition_sourcemanager.h"
 #include "partition_types.h"
@@ -32,14 +32,8 @@
 
 namespace NKikimr::NPQ {
 
-static const ui32 MAX_BLOB_PART_SIZE = 500_KB;
 static const ui32 DEFAULT_BUCKET_COUNTER_MULTIPLIER = 20;
 static const ui32 MAX_USER_ACTS = 1000;
-// Extra amount of time YDB should wait before deleting supportive partition for kafka transaction
-// after transaction timeout has passed.
-//
-// Total time till kafka supportive partition deletion = AppData.KafkaProxyConfig.TransactionTimeoutMs + KAFKA_TRANSACTION_DELETE_DELAY_MS
-static const ui32 KAFKA_TRANSACTION_DELETE_DELAY_MS = TDuration::Hours(1).MilliSeconds(); // 1 hour;
 static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 static const ui32 MAX_INLINE_SIZE = 1000;
 
@@ -130,7 +124,10 @@ struct TTransaction {
 };
 class TPartitionCompaction;
 
-class TPartition : public TActorBootstrapped<TPartition> {
+#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletID)("partition_id", Partition)
+
+class TPartition : public TActorBootstrapped<TPartition>
+                 , public IActorExceptionHandler {
     friend TInitializer;
     friend TInitializerStep;
     friend TInitConfigStep;
@@ -197,7 +194,6 @@ private:
     void ReplyWrite(const TActorContext& ctx, ui64 dst, const TString& sourceId, ui64 seqNo, ui16 partNo, ui16 totalParts, ui64 offset, TInstant writeTimestamp, bool already, ui64 maxSeqNo, TDuration partitionQuotedTime, TDuration topicQuotedTime, TDuration queueTime, TDuration writeTime, NWilson::TSpan& span);
     void SendReadingFinished(const TString& consumer);
 
-    void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
     void AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
     void AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime, const TActorContext& ctx);
     void AnswerCurrentWrites(const TActorContext& ctx);
@@ -520,6 +516,7 @@ public:
                bool newPartition = false);
 
     void Bootstrap(const TActorContext& ctx);
+    bool OnUnhandledException(const std::exception&) override;
 
     ui64 Size() const {
         return CompactionBlobEncoder.GetSize() + BlobEncoder.GetSize();
@@ -817,7 +814,8 @@ private:
     void ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
     bool ExecRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request);
 
-    [[nodiscard]] EProcessResult BeginTransaction(const TEvPQ::TEvTxCalcPredicate& event, TMaybe<bool>& predicate);
+    [[nodiscard]] EProcessResult BeginTransaction(const TEvPQ::TEvTxCalcPredicate& event,
+                                                  TMaybe<bool>& predicate, TString& issueMsg);
 
     EProcessResult ApplyWriteInfoResponse(TTransaction& tx);
 

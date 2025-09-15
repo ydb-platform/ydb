@@ -703,6 +703,34 @@ TExprNode::TPtr PropagateCoalesceWithConstIntoLogicalOps(const TExprNode::TPtr& 
     return node;
 }
 
+bool IsPullJustFromLogicalOpsEnabled(const TOptimizeContext& optCtx) {
+    static const char optName[] = "PullJustFromLogicalOps";
+    YQL_ENSURE(optCtx.Types);
+    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+}
+
+TExprNode::TPtr PullJustFromLogicalOps(const TExprNode::TPtr& node, TExprContext& ctx, const TOptimizeContext& optCtx) {
+    if (!IsPullJustFromLogicalOpsEnabled(optCtx)) {
+        return node;
+    }
+    if (AllOf(node->ChildrenList(), [](const auto& child) { return !child->IsCallable("Just"); })) {
+        return node;
+    }
+    bool haveOptional = false;
+    TExprNodeList newChildren;
+    newChildren.reserve(node->ChildrenSize());
+    node->ForEachChild([&](TExprNode& child) {
+        if (child.IsCallable("Just")) {
+            newChildren.push_back(child.HeadPtr());
+        } else {
+            haveOptional = haveOptional || child.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
+            newChildren.push_back(&child);
+        }
+    });
+    YQL_CLOG(DEBUG, Core) << node->Content() << " over Just";
+    return ctx.WrapByCallableIf(!haveOptional, "Just", ctx.ChangeChildren(*node, std::move(newChildren)));
+}
+
 template<bool AndOr>
 TExprNode::TPtr SimplifyLogical(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     const auto size = node->ChildrenSize();
@@ -755,7 +783,12 @@ TExprNode::TPtr SimplifyLogical(const TExprNode::TPtr& node, TExprContext& ctx, 
         return ctx.ChangeChildren(*node, std::move(children));
     }
 
+    if (auto opt = PullJustFromLogicalOps(node, ctx, optCtx); opt != node) {
+        return opt;
+    }
+
     if (justs && size == justs + bools) {
+        // TODO: remove after enabling PullJustFromLogicalOps
         YQL_CLOG(DEBUG, Core) << node->Content() <<  " over Just";
         TExprNode::TListType children;
         children.reserve(size);
@@ -839,7 +872,12 @@ TExprNode::TPtr SimplifyLogicalXor(const TExprNode::TPtr& node, TExprContext& ct
         return ctx.ChangeChildren(*node, std::move(children));
     }
 
+    if (auto opt = PullJustFromLogicalOps(node, ctx, optCtx); opt != node) {
+        return opt;
+    }
+
     if (justs && size == justs + bools) {
+        // TODO: remove after enabling PullJustFromLogicalOps
         YQL_CLOG(DEBUG, Core) << node->Content() <<  " over Just";
         TExprNode::TListType children;
         children.reserve(size);
@@ -3717,8 +3755,8 @@ TExprNode::TPtr ExpandSelectMembers(const TExprNode::TPtr& node, TExprContext& c
     UpdateStructMembers(ctx, node->HeadPtr(), ByPrefix ? "SelectMembers" : "FilterMembers", members, filterByPrefixFunc);
     auto res = ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
     res = KeepWorld(res, *node, ctx, *optCtx.Types);
-    if (members.empty() && node->HasSideEffects()) {
-        res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
+    if (members.empty()) {
+        res = KeepSideEffects(res, node->HeadPtr(), ctx);
     }
 
     return res;
@@ -4777,10 +4815,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             auto res = ctx.NewCallable(node->Pos(), "Uint64",
                 { ctx.NewAtom(node->Pos(), ToString(nodeToCheck.ChildrenSize()), TNodeFlags::Default) });
             res = KeepWorld(res, *node, ctx, *optCtx.Types);
-            if (node->HasSideEffects()) {
-                res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
-            }
-
+            res = KeepSideEffects(res, node->HeadPtr(), ctx);
             return res;
         }
 
@@ -4789,10 +4824,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             auto res = ctx.NewCallable(node->Pos(), "Uint64",
                 { ctx.NewAtom(node->Pos(), ToString(nodeToCheck.ChildrenSize() - 1), TNodeFlags::Default) });
             res = KeepWorld(res, *node, ctx, *optCtx.Types);
-            if (node->HasSideEffects()) {
-                res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
-            }
-
+            res = KeepSideEffects(res, node->HeadPtr(), ctx);
             return res;
         }
 
@@ -4848,10 +4880,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             auto res = MakeBool<true>(node->Pos(), ctx);
             res = KeepWorld(res, *node, ctx, *optCtx.Types);
-            if (node->HasSideEffects()) {
-                res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
-            }
-
+            res = KeepSideEffects(res, node->HeadPtr(), ctx);
             return res;
         }
 
@@ -4860,10 +4889,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << nodeToCheck.Content();
             auto res = MakeBool(node->Pos(), nodeToCheck.ChildrenSize() > 0U, ctx);
             res = KeepWorld(res, *node, ctx, *optCtx.Types);
-            if (node->HasSideEffects()) {
-                res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
-            }
-
+            res = KeepSideEffects(res, node->HeadPtr(), ctx);
             return res;
         }
 
@@ -4871,10 +4897,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << nodeToCheck.Content();
             auto res = MakeBool(node->Pos(), nodeToCheck.ChildrenSize() > 1U, ctx);
             res = KeepWorld(res, *node, ctx, *optCtx.Types);
-            if (node->HasSideEffects()) {
-                res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
-            }
-
+            res = KeepSideEffects(res, node->HeadPtr(), ctx);
             return res;
         }
 
@@ -4945,10 +4968,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             auto res = ExtractMember(*node);
             res = KeepWorld(res, *node, ctx, *optCtx.Types);
-            if (node->HasSideEffects()) {
-                res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
-            }
-
+            res = KeepSideEffects(res, node->HeadPtr(), ctx);
             return res;
         }
 
@@ -5007,10 +5027,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             const auto index = FromString<ui32>(node->Tail().Content());
             auto res = node->Head().ChildPtr(index);
             res = KeepWorld(res, *node, ctx, *optCtx.Types);
-            if (node->HasSideEffects()) {
-                res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
-            }
-
+            res = KeepSideEffects(res, node->HeadPtr(), ctx);
             return res;
         }
 
@@ -5757,9 +5774,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content() << " - different index";
                 res = ctx.NewCallable(node->Pos(), "Nothing", { ExpandType(node->Pos(), *node->GetTypeAnn(), ctx) });
                 res = KeepWorld(res, *node, ctx, *optCtx.Types);
-                if (node->HasSideEffects()) {
-                    res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
-                }
+                res = KeepSideEffects(res, node->HeadPtr(), ctx);
             }
 
             return res;
@@ -5789,10 +5804,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             }
 
             res = KeepWorld(res, *node, ctx, *optCtx.Types);
-            if (node->HasSideEffects()) {
-                res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
-            }
-
+            res = KeepSideEffects(res, node->HeadPtr(), ctx);
             return res;
         }
 
@@ -6480,10 +6492,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         res = KeepWorld(res, *node, ctx, *optCtx.Types);
-        if (node->HasSideEffects()) {
-            res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res});
-        }
-
+        res = KeepSideEffects(res, node->HeadPtr(), ctx);
         return res;
     };
 

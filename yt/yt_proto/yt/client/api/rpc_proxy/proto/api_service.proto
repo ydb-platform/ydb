@@ -666,6 +666,7 @@ message TReqSelectRows
     //optional NYT.NProto.TGuid transaction_id = 2;
     optional uint64 timestamp = 3 [default = 0x3fffffffffffff01];
     optional uint64 retention_timestamp = 16 [default = 0];
+    optional int32 read_from = 34; // NHydra::EPeerKind
 
     optional uint64 input_row_limit = 4;
     optional uint64 output_row_limit = 5;
@@ -2985,6 +2986,7 @@ message TReqCheckPermissionByAcl
     required string acl = 3;
 
     optional bool ignore_missing_subjects = 4 [default = false];
+    optional bool ignore_pending_removal_subjects = 5 [default = false];
 
     optional TPrerequisiteOptions prerequisite_options = 101;
     optional TMasterReadOptions master_read_options = 102;
@@ -3422,6 +3424,7 @@ message TCheckPermissionByAclResult
     required NYT.NProto.TGuid subject_id = 2;
     optional string subject_name = 3;
     repeated string missing_subjects = 4;
+    repeated string pending_removal_subjects = 5;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3621,6 +3624,7 @@ message TRspGetQueryTrackerInfo
     optional string query_tracker_stage = 4;
     repeated string clusters = 5;
     optional bytes engines_info = 6; // YSON
+    optional int32 expected_tables_version = 7;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

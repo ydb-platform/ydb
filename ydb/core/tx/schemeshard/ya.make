@@ -345,10 +345,10 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/keyvalue/protos
     ydb/core/metering
-    ydb/core/persqueue
-    ydb/core/persqueue/config
     ydb/core/persqueue/events
-    ydb/core/persqueue/partition_index_generator
+    ydb/core/persqueue/public
+    ydb/core/persqueue/public/partition_index_generator
+    ydb/core/persqueue/public/partition_key_range
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/resource_pools

@@ -20,6 +20,36 @@
 namespace NKikimr {
 namespace NKqp {
 
+namespace {
+
+void TerminateHandler() {
+    Cerr << "======= terminate() call stack ========" << Endl;
+    FormatBackTrace(&Cerr);
+    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
+        Cerr << "======== exception call stack =========" << Endl;
+        backtrace.PrintTo(Cerr);
+    }
+    Cerr << "=======================================" << Endl;
+
+    if (std::current_exception()) {
+        Cerr << "Uncaught exception: " << CurrentExceptionMessage() << Endl;
+    } else {
+        Cerr << "Terminate for unknown reason (no current exception)" << Endl;
+    }
+
+    abort();
+}
+
+void BackTraceSignalHandler(int signal) {
+    Cerr << "======= Signal " << signal << " call stack ========" << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << "===============================================" << Endl;
+
+    abort();
+}
+
+} // anonymous namespace
+
 using namespace NYdb::NTable;
 
 const TString EXPECTED_EIGHTSHARD_VALUE1 = R"(
@@ -101,6 +131,11 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
 
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     EnableYDBBacktraceFormat();
+
+    std::set_terminate(&TerminateHandler);
+    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
+        signal(sig, &BackTraceSignalHandler);
+    }
 
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
@@ -665,15 +700,22 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
         return true;
     });
 
-    if (settings.AuthToken) {
-        this->Client->GrantConnect(settings.AuthToken);
-    }
-
+    // Create sample tables in anonymous mode
     if (settings.WithSampleTables) {
         RunCall([this] {
             this->CreateSampleTables();
             return true;
         });
+    }
+
+    // Initial user becomes cluster admin.
+    if (settings.AuthToken) {
+        // Cluster admin does not require the explicit EAccessRights::ConnectDatabase right,
+        // but does require explicit EAccessRights::GenericFull rights.
+        // The order is important here, because grants from anonymous user are possible
+        // only while AdministrationAllowedSIDs is empty (which means that anyone is an admin).
+        this->Client->TestGrant("/", settings.DomainRoot, settings.AuthToken, NACLib::EAccessRights::GenericFull);
+        Server->GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back(settings.AuthToken);
     }
 }
 

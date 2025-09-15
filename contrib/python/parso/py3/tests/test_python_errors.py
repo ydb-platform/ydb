@@ -29,7 +29,7 @@ def assert_comparison(code, error_code, positions):
     errors = [(error.start_pos, error.code) for error in _get_error_list(code)]
     assert [(pos, error_code) for pos in positions] == errors
 
-@pytest.mark.skipif(sys.version_info >= (3, 10), reason="parso don't support Python 3.10 yet")
+
 @pytest.mark.parametrize('code', FAILING_EXAMPLES)
 def test_python_exception_matches(code):
     wanted, line_nr = _get_actual_exception(code)
@@ -118,25 +118,57 @@ def _get_actual_exception(code):
             assert False, "The piece of code should raise an exception."
 
     # SyntaxError
-    if wanted == 'SyntaxError: assignment to keyword':
+    # Some errors have changed error message in later versions of Python,
+    # and we give a translation table here.  We deal with special cases
+    # below.
+    translations = {
+        'SyntaxError: f-string: unterminated string':
+        'SyntaxError: EOL while scanning string literal',
+        "SyntaxError: f-string: expecting '}'":
+        'SyntaxError: EOL while scanning string literal',
+        'SyntaxError: f-string: empty expression not allowed':
+        'SyntaxError: invalid syntax',
+        "SyntaxError: f-string expression part cannot include '#'":
+        'SyntaxError: invalid syntax',
+        "SyntaxError: f-string: single '}' is not allowed":
+        'SyntaxError: invalid syntax',
+        'SyntaxError: cannot use starred expression here':
+        "SyntaxError: can't use starred expression here",
+        'SyntaxError: f-string: cannot use starred expression here':
+        "SyntaxError: f-string: can't use starred expression here",
+        'SyntaxError: unterminated string literal':
+        'SyntaxError: EOL while scanning string literal',
+        'SyntaxError: parameter without a default follows parameter with a default':
+        'SyntaxError: non-default argument follows default argument',
+        "SyntaxError: 'yield from' outside function":
+        "SyntaxError: 'yield' outside function",
+        "SyntaxError: f-string: valid expression required before '}'":
+        'SyntaxError: invalid syntax',
+        "SyntaxError: '{' was never closed":
+        'SyntaxError: invalid syntax',
+        "SyntaxError: f-string: invalid conversion character 'b': expected 's', 'r', or 'a'":
+        "SyntaxError: f-string: invalid conversion character: expected 's', 'r', or 'a'",
+        "SyntaxError: (value error) Invalid format specifier '  5' for object of type 'int'":
+        'SyntaxError: f-string: expressions nested too deeply',
+        "SyntaxError: f-string: expecting a valid expression after '{'":
+        'SyntaxError: f-string: invalid syntax',
+        "SyntaxError: f-string: expecting '=', or '!', or ':', or '}'":
+        'SyntaxError: f-string: invalid syntax',
+        "SyntaxError: f-string: expecting '=', or '!', or ':', or '}'":
+        'SyntaxError: f-string: invalid syntax',
+    }
+
+    if wanted in translations:
+        wanted = translations[wanted]
+    elif wanted == 'SyntaxError: assignment to keyword':
         return [wanted, "SyntaxError: can't assign to keyword",
                 'SyntaxError: cannot assign to __debug__'], line_nr
-    elif wanted == 'SyntaxError: f-string: unterminated string':
-        wanted = 'SyntaxError: EOL while scanning string literal'
     elif wanted == 'SyntaxError: f-string expression part cannot include a backslash':
         return [
             wanted,
             "SyntaxError: EOL while scanning string literal",
             "SyntaxError: unexpected character after line continuation character",
         ], line_nr
-    elif wanted == "SyntaxError: f-string: expecting '}'":
-        wanted = 'SyntaxError: EOL while scanning string literal'
-    elif wanted == 'SyntaxError: f-string: empty expression not allowed':
-        wanted = 'SyntaxError: invalid syntax'
-    elif wanted == "SyntaxError: f-string expression part cannot include '#'":
-        wanted = 'SyntaxError: invalid syntax'
-    elif wanted == "SyntaxError: f-string: single '}' is not allowed":
-        wanted = 'SyntaxError: invalid syntax'
     elif "Maybe you meant '==' instead of '='?" in wanted:
         wanted = wanted.removesuffix(" here. Maybe you meant '==' instead of '='?")
     elif re.match(
@@ -148,18 +180,28 @@ def _get_actual_exception(code):
         wanted,
     ):
         wanted = 'SyntaxError: EOF while scanning triple-quoted string literal'
-    elif wanted == 'SyntaxError: cannot use starred expression here':
-        wanted = "SyntaxError: can't use starred expression here"
-    elif wanted == 'SyntaxError: f-string: cannot use starred expression here':
-        wanted = "SyntaxError: f-string: can't use starred expression here"
     elif re.match(
         r"IndentationError: expected an indented block after '[^']*' statement on line \d",
         wanted,
     ):
         wanted = 'IndentationError: expected an indented block'
-    elif wanted == 'SyntaxError: unterminated string literal':
-        wanted = 'SyntaxError: EOL while scanning string literal'
-    return [wanted], line_nr
+    # The following two errors are produced for both some f-strings and
+    # some non-f-strings in Python 3.13:
+    elif wanted == "SyntaxError: can't use starred expression here":
+        wanted = [
+            "SyntaxError: can't use starred expression here",
+            "SyntaxError: f-string: can't use starred expression here"
+        ]
+    elif wanted == 'SyntaxError: cannot mix bytes and nonbytes literals':
+        wanted = [
+            'SyntaxError: cannot mix bytes and nonbytes literals',
+            'SyntaxError: f-string: cannot mix bytes and nonbytes literals'
+        ]
+
+    if isinstance(wanted, list):
+        return wanted, line_nr
+    else:
+        return [wanted], line_nr
 
 
 def test_default_except_error_postition():

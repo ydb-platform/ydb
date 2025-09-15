@@ -2678,6 +2678,14 @@ TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprConte
     }
 }
 
+TExprNode::TPtr KeepSideEffects(TExprNode::TPtr node, TExprNode::TPtr src, TExprContext& ctx) {
+    if (!src->HasSideEffects()) {
+        return node;
+    }
+
+    return ctx.NewCallable(src->Pos(), "Seq", { src, node });
+}
+
 TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root) {
     auto pRoot = &root;
 
@@ -2831,6 +2839,12 @@ bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeA
     } else {
         YQL_ENSURE(false, "Incompatible lambdas for fuse");
     }
+}
+
+bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char optName[] = "ExtractMembersForPartitionsByKeys";
+    return IsOptimizerEnabled<optName>(*types) && !IsOptimizerDisabled<optName>(*types);
 }
 
 }

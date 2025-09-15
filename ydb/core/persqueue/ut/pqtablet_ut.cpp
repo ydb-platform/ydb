@@ -1,5 +1,6 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/pqtablet/partition/read_quoter.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>

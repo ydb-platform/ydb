@@ -36,7 +36,7 @@
 #include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/core/security/token_manager/token_manager_settings.h>
 #include <ydb/core/base/grpc_service_factory.h>
-#include <ydb/core/persqueue/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 #include <ydb/core/http_proxy/auth_factory.h>
 #include <ydb/library/accessor/accessor.h>

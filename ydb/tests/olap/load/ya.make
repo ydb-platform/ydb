@@ -12,6 +12,15 @@ PY3TEST()
     ENV(LOG_WORKLOAD_BINARY="ydb/tests/stress/log/workload_log")
     ENV(MIXED_WORKLOAD_BINARY="ydb/tests/stress/mixedpy/workload_mixed")
     ENV(KV_WORKLOAD_BINARY="ydb/tests/stress/kv/workload_kv")
+    ENV(CTAS_WORKLOAD_BINARY="ydb/tests/stress/ctas/ctas")
+    ENV(KAFKA_WORKLOAD_BINARY="ydb/tests/stress/kafka/kafka_streams_test")
+    ENV(NODE_BROKER_WORKLOAD_BINARY="ydb/tests/stress/node_broker/node_broker")
+    ENV(TOPIC_KAFKA_WORKLOAD_BINARY="ydb/tests/stress/topic_kafka/workload_topic_kafka")
+    ENV(TRANSFER_WORKLOAD_BINARY="ydb/tests/stress/transfer/transfer")
+    ENV(RECONFIG_STATE_STORAGE_WORKLOAD_BINARY="ydb/tests/stress/reconfig_state_storage_workload/reconfig_state_storage_workload")
+    ENV(SHOW_CREATE_WORKLOAD_BINARY="ydb/tests/stress/show_create/view/show_create_view")
+    ENV(CDC_WORKLOAD_BINARY="ydb/tests/stress/cdc/cdc")
+    ENV(STATISTICS_WORKLOAD_BINARY="ydb/tests/stress/statistics_workload/statistics_workload")
     ENV(NEMESIS_BINARY="ydb/tests/tools/nemesis/driver/nemesis")
 
     TEST_SRCS (
@@ -29,6 +38,15 @@ PY3TEST()
         test_workload_log.py
         test_workload_mixed.py
         test_workload_kv.py
+        test_workload_ctas.py
+        test_workload_kafka.py
+        test_workload_node_broker.py
+        test_workload_topic_kafka.py
+        test_workload_transfer.py
+        test_workload_reconfig_state_storage.py
+        test_workload_show_create.py
+        test_workload_cdc.py
+        test_workload_statistics.py
     )
 
     PEERDIR (
@@ -45,6 +63,15 @@ PY3TEST()
             ydb/tests/stress/kv
             ydb/tests/stress/oltp_workload
             ydb/tests/stress/olap_workload
+            ydb/tests/stress/ctas
+            ydb/tests/stress/kafka
+            ydb/tests/stress/node_broker
+            ydb/tests/stress/topic_kafka
+            ydb/tests/stress/transfer
+            ydb/tests/stress/reconfig_state_storage_workload
+            ydb/tests/stress/show_create/view
+            ydb/tests/stress/cdc
+            ydb/tests/stress/statistics_workload
             ydb/tests/tools/nemesis/driver
         )
     ENDIF()

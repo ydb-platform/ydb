@@ -1032,6 +1032,12 @@ TCheckFunc ConsumerExist(const TString& name) {
     };
 }
 
+TCheckFunc ConsumersSize(ui64 size) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_EQUAL(record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().ConsumersSize(), size);
+    };
+}
+
 void NoChildren(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     ChildrenCount(0)(record);
 }

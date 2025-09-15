@@ -621,6 +621,13 @@ void TDqPqRdReadActor::ProcessGlobalState() {
             return;
         }
         auto partitionToRead = GetPartitionsToRead();
+        if (WatermarkTracker) {
+            TPartitionKey partitionKey { .Cluster = Cluster };
+            for (auto partitionId: partitionToRead) {
+                partitionKey.PartitionId = partitionId;
+                WatermarkTracker->RegisterPartition(partitionKey);
+            }
+        }
         auto cookie = ++CoordinatorRequestCookie;
         SRC_LOG_I("Send TEvCoordinatorRequest to coordinator " << CoordinatorActorId->ToString() << ", partIds: "
             << JoinSeq(", ", partitionToRead) << " cookie " << cookie);

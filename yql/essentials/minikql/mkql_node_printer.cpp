@@ -252,6 +252,32 @@ namespace {
             WriteNewline();
         }
 
+        void Visit(TLinearType& node) override {
+            WriteIndentation();
+            Out_ << "Type (Linear), isDynamic: " << node.IsDynamic() << " {";
+            WriteNewline();
+
+            {
+                TIndentScope scope(this);
+                WriteIndentation();
+                Out_ << "Linear item type: {";
+                WriteNewline();
+
+                {
+                    TIndentScope scope2(this);
+                    node.GetItemType()->Accept(*this);
+                }
+
+                WriteIndentation();
+                Out_ << "}";
+                WriteNewline();
+            }
+
+            WriteIndentation();
+            Out_ << "}";
+            WriteNewline();
+        }
+
         void Visit(TDictType& node) override {
             WriteIndentation();
             Out_ << "Type (Dict) {";

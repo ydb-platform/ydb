@@ -1185,7 +1185,7 @@ message TCheckpointsConfig {
     }
     optional TCheckpointGcConfig CheckpointGarbageConfig = 4;
     optional TStateStorageLimitsConfig StateStorageLimits = 5;
-    optional uint64 CheckpointingPeriodMillis = 6;
+    optional uint64 CheckpointingPeriodMillis = 6 [default = 30000];
     optional uint64 MaxInflight = 7;
     optional uint64 CheckpointingSnapshotRotationPeriod = 8; // 0 - All checkpoints are snapshots, 1 - 1 increment/ 1 snapshot, 20 - 20 increment / 1 snapshot.
 }
@@ -2109,7 +2109,7 @@ message TColumnShardConfig {
     }
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
-    optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
+    optional uint32 MaxReadStaleness_ms = 18 [default = 1800000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
     optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
     optional uint32 ActualizationTasksLagMs = 21 [default = 1000];

@@ -39,6 +39,7 @@ public:
         const NWilson::TTraceId& traceId,
         TIntrusivePtr<TKqpCounters> counters)
         : Settings(std::move(settings))
+        , IsPrefixed(Settings.HasRootClusterColumnIndex())
         , LogPrefix(TStringBuilder() << "VectorResolveActor, inputIndex: " << inputIndex << ", CA Id " << computeActorId)
         , InputIndex(inputIndex)
         , Input(input)
@@ -180,7 +181,15 @@ private:
             if (!LevelClusters.size()) {
                 LevelClusters.clear();
                 if (!ResolvedLevel) {
-                    LevelClusters.insert(0);
+                    if (IsPrefixed) {
+                        for (size_t i = 0; i < PendingRows.size(); i++) {
+                            auto rootClusterId = (ui64)PendingRows[i].GetElement(Settings.GetRootClusterColumnIndex()).GetInt128();
+                            PrevClusters.push_back(rootClusterId);
+                            LevelClusters.insert(rootClusterId);
+                        }
+                    } else {
+                        LevelClusters.insert(0);
+                    }
                 } else {
                     for (auto cluster: PrevClusters) {
                         if (!NKikimr::NTableIndex::NKMeans::HasPostingParentFlag(cluster)) {
@@ -199,14 +208,14 @@ private:
             }
             while (LevelClusters.size() > 0) {
                 auto cluster = *LevelClusters.begin();
-                if (ResolvedLevel > 0 ? !CurClusters : !RootClusters) {
+                if (IsPrefixed || ResolvedLevel > 0 ? !CurClusters : !RootClusters) {
                     ReadChildClusters(cluster);
                     return;
                 }
-                auto & clusters = (ResolvedLevel > 0 ? CurClusters : RootClusters);
-                auto & clusterIds = (ResolvedLevel > 0 ? CurClusterIds : RootClusterIds);
+                auto & clusters = (IsPrefixed || ResolvedLevel > 0 ? CurClusters : RootClusters);
+                auto & clusterIds = (IsPrefixed || ResolvedLevel > 0 ? CurClusterIds : RootClusterIds);
                 for (size_t i = 0; i < PendingRows.size(); i++) {
-                    if (ResolvedLevel > 0 && PrevClusters[i] != cluster) {
+                    if ((ResolvedLevel > 0 || IsPrefixed) && PrevClusters[i] != cluster) {
                         continue;
                     }
                     auto embedding = PendingRows[i].GetElement(Settings.GetVectorColumnIndex());
@@ -501,6 +510,7 @@ private:
     // Parameters
 
     const NKikimrTxDataShard::TKqpVectorResolveSettings Settings;
+    const bool IsPrefixed;
     const TString LogPrefix;
     const ui64 InputIndex;
     NUdf::TUnboxedValue Input;

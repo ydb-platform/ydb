@@ -312,6 +312,67 @@ protected:
         }
     };
 
+    void SendStreamData(NKikimr::NKqp::TKqpExecuterTxResult & txResult, TVector<NYql::NDq::TDqSerializedBatch>&& batches,
+        ui32 channelId, ui32 seqNo, bool finished)
+    {
+        auto resultIndex = *txResult.QueryResultIndex + StatementResultIndex;
+        auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
+        streamEv->Record.SetSeqNo(seqNo);
+        streamEv->Record.SetQueryResultIndex(resultIndex);
+        streamEv->Record.SetChannelId(channelId);
+        streamEv->Record.SetFinished(finished);
+        const auto &snap = GetSnapshot();
+        if (snap.IsValid()) {
+            auto vt = streamEv->Record.MutableVirtualTimestamp();
+            vt->SetStep(snap.Step);
+            vt->SetTxId(snap.TxId);
+        }
+
+        bool fillSchema = false;
+        if (ResultSetFormatSettings.IsSchemaInclusionAlways()) {
+            fillSchema = true;
+        } else if (ResultSetFormatSettings.IsSchemaInclusionFirstOnly()) {
+            fillSchema =
+                (SentResultIndexes.find(resultIndex) == SentResultIndexes.end());
+        } else {
+            YQL_ENSURE(false, "Unexpected schema inclusion mode");
+        }
+
+        TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
+        protoBuilder.BuildYdbResultSet(
+            *streamEv->Record.MutableResultSet(), std::move(batches),
+            txResult.MkqlItemType, ResultSetFormatSettings, fillSchema,
+            txResult.ColumnOrder, txResult.ColumnHints);
+
+        // TODO: Calculate rows/bytes count for the arrow format of result set
+        LOG_D("Send TEvStreamData to "
+            << Target << ", seqNo: " << streamEv->Record.GetSeqNo()
+            << ", nRows: " << streamEv->Record.GetResultSet().rows().size());
+
+        SentResultIndexes.insert(resultIndex);
+        this->Send(Target, streamEv.Release());
+    }
+
+    void OnEmptyResult() {
+        for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
+            auto& tx = Request.Transactions[txIdx].Body;
+            for (ui32 i = 0; i < tx->ResultsSize(); ++i) {
+                const auto& result = tx->GetResults(i);
+                const auto& connection = result.GetConnection();
+                const auto& inputStageInfo = TasksGraph.GetStageInfo(NYql::NDq::TStageId(txIdx, connection.GetStageIndex()));
+                if (inputStageInfo.Tasks.size() >= 1) {
+                    continue;
+                }
+
+                auto& txResult = ResponseEv->TxResults.at(i);
+                TVector<NYql::NDq::TDqSerializedBatch> batches(1);
+                if (StreamResult && txResult.IsStream && txResult.QueryResultIndex.Defined()) {
+                    SendStreamData(txResult, std::move(batches), std::numeric_limits<ui32>::max(), 1, true);
+                }
+            }
+        }
+    }
+
     void HandleChannelData(NYql::NDq::TEvDqCompute::TEvChannelData::TPtr& ev) {
         auto& record = ev->Get()->Record;
         auto& channelData = record.GetChannelData();
@@ -342,38 +403,7 @@ protected:
             batch.Payload = NYql::MakeChunkedBuffer(std::move(computeData.Payload));
 
             if (!trailingResults) {
-                auto resultIndex = *txResult.QueryResultIndex + StatementResultIndex;
-                auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
-                streamEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
-                streamEv->Record.SetQueryResultIndex(resultIndex);
-                streamEv->Record.SetChannelId(channel.Id);
-                streamEv->Record.SetFinished(channelData.GetFinished());
-                const auto& snap = GetSnapshot();
-                if (snap.IsValid()) {
-                    auto vt = streamEv->Record.MutableVirtualTimestamp();
-                    vt->SetStep(snap.Step);
-                    vt->SetTxId(snap.TxId);
-                }
-
-                bool fillSchema = false;
-                if (ResultSetFormatSettings.IsSchemaInclusionAlways()) {
-                    fillSchema = true;
-                } else if (ResultSetFormatSettings.IsSchemaInclusionFirstOnly()) {
-                    fillSchema = (SentResultIndexes.find(resultIndex) == SentResultIndexes.end());
-                } else {
-                    YQL_ENSURE(false, "Unexpected schema inclusion mode");
-                }
-
-                TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
-                protoBuilder.BuildYdbResultSet(*streamEv->Record.MutableResultSet(), std::move(batches),
-                    txResult.MkqlItemType, ResultSetFormatSettings, fillSchema, txResult.ColumnOrder, txResult.ColumnHints);
-
-                // TODO: Calculate rows/bytes count for the arrow format of result set
-                LOG_D("Send TEvStreamData to " << Target << ", seqNo: " << streamEv->Record.GetSeqNo()
-                    << ", nRows: " << streamEv->Record.GetResultSet().rows().size());
-
-                SentResultIndexes.insert(resultIndex);
-                this->Send(Target, streamEv.Release());
+                SendStreamData(txResult, std::move(batches), channel.Id, computeData.Proto.GetSeqNo(), channelData.GetFinished());
             } else {
                 auto ackEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
                 ackEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
@@ -417,8 +447,12 @@ protected:
     }
 
     void HandleStreamAck(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
+        if (ev->Get()->Record.GetChannelId() == std::numeric_limits<ui32>::max())
+            return;
+
         ui64 channelId;
         if (ResponseEv->TxResults.size() == 1) {
+            YQL_ENSURE(!ResultChannelToComputeActor.empty());
             channelId = ResultChannelToComputeActor.begin()->first;
         } else {
             channelId = ev->Get()->Record.GetChannelId();
@@ -1044,6 +1078,8 @@ protected:
             BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, txIdx);
         }
 
+        OnEmptyResult();
+
         return sourceScanPartitionsCount;
     }
 
@@ -1635,6 +1671,7 @@ protected:
         ui32 inputTasks = 0;
         bool isShuffle = false;
         bool forceMapTasks = false;
+        bool isParallelUnionAll = false;
         ui32 mapCnt = 0;
 
 
@@ -1683,7 +1720,8 @@ protected:
                     break;
                 }
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
-                    partitionsCount = std::max<ui64>(partitionsCount, originStageInfo.Tasks.size());
+                    inputTasks += originStageInfo.Tasks.size();
+                    isParallelUnionAll = true;
                     break;
                 }
                 case NKqpProto::TKqpPhyConnection::kVectorResolve: {
@@ -1700,7 +1738,7 @@ protected:
 
         Y_ENSURE(mapCnt < 2, "There can be only < 2 'Map' connections");
 
-        if (isShuffle && !forceMapTasks) {
+        if ((isShuffle || isParallelUnionAll) && !forceMapTasks) {
             if (stage.GetTaskCount()) {
                 partitionsCount = stage.GetTaskCount();
                 intros.push_back("Manually overridden - " + ToString(partitionsCount));
@@ -1932,28 +1970,6 @@ protected:
         for (auto& op : stage.GetTableOps()) {
             Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
             switch (op.GetTypeCase()) {
-                case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-                case NKqpProto::TKqpPhyTableOperation::kReadRange: {
-                    auto columns = BuildKqpColumns(op, tableInfo);
-                    bool isFullScan = false;
-                    auto partitions = PartitionPruner.Prune(op, stageInfo, isFullScan);
-                    auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
-
-                    if (!readSettings.ItemsLimit && isFullScan) {
-                        Counters->Counters->FullScansExecuted->Inc();
-                    }
-
-                    for (auto& [shardId, shardInfo] : partitions) {
-                        YQL_ENSURE(!shardInfo.KeyWriteRanges);
-
-                        auto& task = getShardTask(shardId);
-                        MergeReadInfoToTaskMeta(task.Meta, shardId, shardInfo.KeyReadRanges, readSettings,
-                            columns, op, /*isPersistentScan*/ false);
-                    }
-
-                    break;
-                }
-
                 case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
                 case NKqpProto::TKqpPhyTableOperation::kDeleteRows: {
                     YQL_ENSURE(stage.InputsSize() <= 1, "Effect stage with multiple inputs: " << stage.GetProgramAst());

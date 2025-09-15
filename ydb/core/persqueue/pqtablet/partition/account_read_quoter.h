@@ -59,7 +59,8 @@ namespace NAccountQuoterEvents {
     };
 }
 
-class TBasicAccountQuoter : public TActorBootstrapped<TBasicAccountQuoter> {
+class TBasicAccountQuoter : public TActorBootstrapped<TBasicAccountQuoter>
+                          , public IActorExceptionHandler {
 private:
     struct TQueueEvent {
         TQueueEvent(NAccountQuoterEvents::TEvRequest::TPtr request, TInstant startWait)
@@ -95,6 +96,8 @@ public:
     void ApproveQuota(NAccountQuoterEvents::TEvRequest::TPtr& ev, TInstant startWait, const TActorContext& ctx);
 
     void HandleUpdateCounters(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
+
+    bool OnUnhandledException(const std::exception&) override;
 
 protected:
     virtual TString LimiterDescription() const = 0;

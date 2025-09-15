@@ -17,6 +17,9 @@ struct TInnerJoinDescription {
     TDqSetup<false>* Setup;
 };
 
+bool IsBlockJoin(ETestedJoinAlgo algo);
+
 THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, TInnerJoinDescription descr);
+
 i32 ResultColumnCount(ETestedJoinAlgo algo, TInnerJoinDescription descr);
 } // namespace NKikimr::NMiniKQL

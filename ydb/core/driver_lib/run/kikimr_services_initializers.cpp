@@ -179,7 +179,6 @@
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
@@ -2186,12 +2185,10 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
 TKqpServiceInitializer::TKqpServiceInitializer(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories,
-        IGlobalObjectStorage& globalObjects,
-        NFq::IYqSharedResources::TPtr yqSharedResources)
+        IGlobalObjectStorage& globalObjects)
     : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))
     , GlobalObjects(globalObjects)
-    , YqSharedResources(yqSharedResources)
 {}
 
 void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
@@ -2245,20 +2242,6 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
-
-        const auto& checkpointConfig = Config.GetQueryServiceConfig().GetCheckpointsConfig();
-        if (checkpointConfig.GetEnabled()) {
-            auto service = NFq::NewCheckpointStorageService(
-                checkpointConfig,
-                "cs",
-                NKikimr::CreateYdbCredentialsProviderFactory,
-                NFq::TYqSharedResources::Cast(YqSharedResources),
-                appData->Counters);
-
-            setup->LocalServices.push_back(std::make_pair(
-                NYql::NDq::MakeCheckpointStorageID(),
-                TActorSetupCmd(service.release(), TMailboxType::HTSwap, appData->UserPoolId)));
-        }
     }
 }
 

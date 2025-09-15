@@ -15,6 +15,8 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NFq::NRowDispatcher {
 
 namespace {
@@ -539,7 +541,7 @@ TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr cons
     return ITopicParser::TPtr(parser);
 }
 
-TJsonParserConfig CreateJsonParserConfig(const NConfig::TJsonParserConfig& parserConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) {
+TJsonParserConfig CreateJsonParserConfig(const NKikimrConfig::TSharedReadingConfig::TJsonParserConfig& parserConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) {
     TJsonParserConfig result = {.FunctionRegistry = functionRegistry};
     if (const auto batchSize = parserConfig.GetBatchSizeBytes()) {
         result.BatchSize = batchSize;

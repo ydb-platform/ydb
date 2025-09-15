@@ -278,7 +278,7 @@ public:
     NActors::TActorId ReadActorId2;
     NActors::TActorId ReadActorId3;
     ui32 PartitionId = 0;
-    NConfig::TRowDispatcherConfig Config;
+    NKikimrConfig::TSharedReadingConfig Config;
     TIntrusivePtr<IMockPqGateway> MockPqGateway;
 
     const TString Json1 = "{\"dt\":100,\"value\":\"value1\"}";

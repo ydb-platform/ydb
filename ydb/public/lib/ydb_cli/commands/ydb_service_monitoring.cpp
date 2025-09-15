@@ -57,6 +57,13 @@ int TCommandSelfCheck::Run(TConfig& config) {
     }
 
     if (Tenant) {
+        if (config.Database) {
+            if (!config.Database.StartsWith(Tenant)) {
+                Cerr << "If you specify both the database '" << config.Database << "' and the tenant '" << Tenant
+                    <<  "', tenant must be prefix of the database" << Endl;
+                return EXIT_FAILURE;
+            }
+        }
         settings.Tenant(Tenant);
     }
 

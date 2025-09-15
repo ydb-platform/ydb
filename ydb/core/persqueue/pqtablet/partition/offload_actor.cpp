@@ -35,7 +35,7 @@ private:
     TActorId Worker;
     TActorId SchemeShardPipe;
 
-    TStringBuf GetLogPrefix() const override {
+    const TString& GetLogPrefix() const override {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
                 << "[OffloadActor]"
@@ -44,7 +44,7 @@ private:
                 << SelfId() << " ";
         }
 
-        return LogPrefix.GetRef();
+        return *LogPrefix;
     }
 
 public:

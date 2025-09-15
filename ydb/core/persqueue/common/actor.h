@@ -13,8 +13,6 @@
 #define LOG_E(stream) LOG_ERROR_S (*TlsActivationContext, Service, LOG_PREFIX << stream)
 #define LOG_C(stream) LOG_CRIT_S  (*TlsActivationContext, Service, LOG_PREFIX << stream)
 
-#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)
-
 namespace NKikimr::NPQ {
 
 using namespace NActors;
@@ -24,7 +22,7 @@ class TBaseActor : public TActorBootstrapped<TDerived>
                  , public IActorExceptionHandler {
 public:
     using TBase = TActorBootstrapped<TDerived>;
-    using TThis = TBaseActor<TDerived>;
+    using TThis = TDerived;
 
     TBaseActor(ui64 tabletId, TActorId tabletActorId, NKikimrServices::EServiceKikimr service)
         : TabletId(tabletId)
@@ -37,13 +35,14 @@ public:
         LOG_C("unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
                 << TBackTrace::FromCurrentException().PrintToString());
 
-        TThis::Send(TabletActorId, new TEvents::TEvPoison());
-        TThis::PassAway();
+        TDerived& self = static_cast<TDerived&>(*this);
+        self.Send(TabletActorId, new TEvents::TEvPoison());
+        self.PassAway();
 
         return true;
     }
 
-    virtual TStringBuf GetLogPrefix() const = 0;
+    virtual const TString& GetLogPrefix() const = 0;
 
 protected:
     const ui64 TabletId;

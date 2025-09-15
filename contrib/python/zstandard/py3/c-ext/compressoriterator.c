@@ -194,7 +194,7 @@ PyType_Slot ZstdCompressorIteratorSlots[] = {
 };
 
 PyType_Spec ZstdCompressorIteratorSpec = {
-    "zstd.ZstdCompressorIterator",
+    "zstandard.backend_c.ZstdCompressorIterator",
     sizeof(ZstdCompressorIterator),
     0,
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,

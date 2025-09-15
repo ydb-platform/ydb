@@ -190,7 +190,7 @@ PyType_Slot ZstdDecompressionObjSlots[] = {
 };
 
 PyType_Spec ZstdDecompressionObjSpec = {
-    "zstd.ZstdDecompressionObj",
+    "zstandard.backend_c.ZstdDecompressionObj",
     sizeof(ZstdDecompressionObj),
     0,
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,

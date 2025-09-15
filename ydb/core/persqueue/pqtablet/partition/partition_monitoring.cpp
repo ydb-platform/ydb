@@ -180,7 +180,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                 ui32 size  = BlobEncoder.HeadKeys[p].Size;
                                 while (currentLevel + 1 < TotalLevels && size < CompactLevelBorder[currentLevel + 1])
                                     ++currentLevel;
-                                Y_ABORT_UNLESS(size < CompactLevelBorder[currentLevel]);
+                                PQ_ENSURE(size < CompactLevelBorder[currentLevel]);
                                 TABLER() {
                                     TABLED() {out << "DataHead[" << currentLevel << "]";}
                                     TABLED() {out << i++;}

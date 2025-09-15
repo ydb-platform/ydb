@@ -27,7 +27,7 @@ using namespace NNodeWhiteboard;
 #endif
 
 Y_UNIT_TEST_SUITE(THealthCheckTest) {
-    void BasicTest(IEventBase* ev) {
+    Ydb::Monitoring::SelfCheckResult BasicTest(IEventBase* ev) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -49,6 +49,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         NHealthCheck::TEvSelfCheckResult* result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
 
         UNIT_ASSERT(result != nullptr);
+
+        return result->Result;
     }
 
     Y_UNIT_TEST(Basic) {
@@ -57,6 +59,14 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(BasicNodeCheckRequest) {
         BasicTest(new NHealthCheck::TEvNodeCheckRequest());
+    }
+
+    Y_UNIT_TEST(DatabaseDoesNotExist) {
+        auto ev = std::make_unique<NHealthCheck::TEvSelfCheckRequest>();
+        ev->Database = "/Root/this/db/does/not/exist";
+        auto result = BasicTest(ev.release());
+        Cerr << result.ShortDebugString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(result.issue_log().size(), 1);
     }
 
     const int GROUP_START_ID = 0x80000000;

@@ -14,7 +14,8 @@
 namespace NKikimr::NPQ {
 
 
-class TMirrorDescriber : public TActorBootstrapped<TMirrorDescriber> {
+class TMirrorDescriber : public TActorBootstrapped<TMirrorDescriber>
+                       , public IActorExceptionHandler {
 private:
     static constexpr TDuration INIT_INTERVAL_MAX = TDuration::Seconds(240);
     static constexpr TDuration INIT_INTERVAL_START = TDuration::Seconds(1);
@@ -76,7 +77,7 @@ public:
     void HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx);
     void HandleWakeup(const TActorContext& ctx);
     void HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
-
+    bool OnUnhandledException(const std::exception&) override;
 private:
     TActorId ReadBalancerActorId;
     TString TopicName;

@@ -63,7 +63,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
 
     TColumnOrder order = columnHints ? TColumnOrder(*columnHints) : TColumnOrder{};
 
-    std::vector<std::pair<TString, NScheme::TTypeInfo>> arrowSchema;
+    std::vector<std::pair<TString, NMiniKQL::TType*>> arrowSchema;
     std::set<std::string> arrowNotNullColumns;
 
     if (fillSchema) {
@@ -85,12 +85,11 @@ void TKqpProtoBuilder::BuildYdbResultSet(
             auto columnName = TString(columnHints && columnHints->size() ? order.at(idx).LogicalName : mkqlSrcRowStructType->GetMemberName(memberIndex));
             auto* columnType = mkqlSrcRowStructType->GetMemberType(memberIndex);
 
-            if (columnType->GetKind() != TType::EKind::Optional) {
+            if (columnType->GetKind() != NMiniKQL::TType::EKind::Optional) {
                 arrowNotNullColumns.insert(columnName);
             }
 
-            NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(columnType);
-            arrowSchema.emplace_back(std::move(columnName), std::move(typeInfo));
+            arrowSchema.emplace_back(std::move(columnName), std::move(columnType));
         }
     }
 
@@ -140,7 +139,6 @@ void TKqpProtoBuilder::BuildYdbResultSet(
         batchBuilder.Reserve(arrowRowsCount);
         YQL_ENSURE(batchBuilder.Start(arrowSchema).ok());
 
-        TRowBuilder rowBuilder(arrowSchema.size());
         for (auto& part : data) {
             if (!part.ChunkCount()) {
                 continue;
@@ -150,14 +148,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
             dataSerializer.Deserialize(std::move(part), mkqlSrcRowType, rows);
 
             rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
-                for (size_t i = 0; i < arrowSchema.size(); ++i) {
-                    ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? i : (*columnOrder)[i];
-                    const auto& [name, type] = arrowSchema[i];
-                    rowBuilder.AddCell(i, type, value.GetElement(memberIndex), type.GetPgTypeMod(name));
-                }
-
-                auto cells = rowBuilder.BuildCells();
-                batchBuilder.AddRow(cells);
+                batchBuilder.AddRow(value, arrowSchema.size(), columnOrder);
             });
         }
 

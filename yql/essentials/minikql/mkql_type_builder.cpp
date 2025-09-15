@@ -2865,6 +2865,10 @@ TType* TTypeBuilder::BuildBlockStructType(const TStructType* structType) const {
     return NewStructType(blockStructItems);
 }
 
+TType* TTypeBuilder::NewLinearType(TType* itemType, bool isDynamic) const {
+    return TLinearType::Create(itemType, isDynamic, Env);
+}
+
 void RebuildTypeIndex() {
     HugeSingleton<TPgTypeIndex>()->Rebuild();
 }

@@ -1701,7 +1701,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     bool pushRes = EventsQueue->PushEvent(partitionStreamIt->second,
                             TReadSessionEvent::TPartitionSessionStatusEvent(
                                 partitionStreamIt->second, msg.committed_offset(),
-                                0, // TODO: support read offset in status
+                                msg.read_offset(),
                                 msg.partition_offsets().end(),
                                 TInstant::MilliSeconds(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(
                                     msg.write_time_high_watermark()))),

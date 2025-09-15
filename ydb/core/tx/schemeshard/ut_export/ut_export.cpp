@@ -657,10 +657,10 @@ namespace {
             EnvOptions().EnablePermissionsExport(enablePermissions);
             Env();
             ui64 txId = 100;
-            
+
             TVector<TString> requestItems;
             TVector<NDescUT::TSimpleTopic> expected;
-            
+
             for (ui64 i = 0; i < topicsCount; ++i) {
                 auto topic = NDescUT::TSimpleTopic(i, (topicsCount == 1 || i > 0) ? consumersCount : 0);
                 TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetPrivateProto().DebugString());
@@ -670,7 +670,7 @@ namespace {
             }
 
             auto exportRequest = NDescUT::TExportRequest(S3Port(), requestItems);
-      
+
             auto schemeshardId = TTestTxConfig::SchemeShard;
             TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", exportRequest.GetRequest(), "", "", Ydb::StatusIds::SUCCESS);
             Env().TestWaitNotification(Runtime(), txId, schemeshardId);
@@ -1934,6 +1934,21 @@ partitioning_settings {
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
     }
 
+    struct TWaitExportItemStateDelayFunc {
+        bool GotModify = false;
+        bool GotModifyResult = false;
+
+        bool operator()(TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
+                GotModify |= ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+                    .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
+            }
+
+            GotModifyResult |= GotModify && ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransactionResult;
+            return GotModifyResult && ev->GetTypeRewrite() == TEvSchemeShard::EvNotifyTxCompletion;
+        }
+    };
+
     Y_UNIT_TEST(CancelledExportEndTime) {
         Env(); // Init test env
         Runtime().UpdateCurrentTime(TInstant::Now());
@@ -1947,15 +1962,7 @@ partitioning_settings {
         )");
         Env().TestWaitNotification(Runtime(), txId);
 
-        auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
-                return false;
-            }
-
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
-        };
-
+        TWaitExportItemStateDelayFunc delayFunc;
         THolder<IEventHandle> delayed;
         auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (delayFunc(ev)) {
@@ -1986,17 +1993,29 @@ partitioning_settings {
             });
             Runtime().DispatchEvents(opts);
         }
-        Runtime().SetObserverFunc(prevObserver);
+        // Block TEvSchemeShard::TEvCancelTxResult
+        THolder<IEventHandle> cancelAck;
+        Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvCancelTxResult) {
+                cancelAck.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
 
         TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
 
-        auto desc = TestGetExport(Runtime(), exportId, "/MyRoot");
+        auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         auto entry = desc.GetResponse().GetEntry();
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(!entry.HasEndTime());
 
+        Runtime().SetObserverFunc(prevObserver);
         Runtime().Send(delayed.Release(), 0, true);
+        if (cancelAck) {
+            Runtime().Send(cancelAck.Release(), 0, true);
+        }
         Env().TestWaitNotification(Runtime(), exportId);
 
         desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
@@ -2110,15 +2129,7 @@ partitioning_settings {
         )");
         Env().TestWaitNotification(Runtime(), txId);
 
-        auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
-                return false;
-            }
-
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
-        };
-
+        TWaitExportItemStateDelayFunc delayFunc;
         THolder<IEventHandle> delayed;
         auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (delayFunc(ev)) {
@@ -2177,7 +2188,16 @@ partitioning_settings {
             });
             Runtime().DispatchEvents(opts);
         }
-        Runtime().SetObserverFunc(prevObserver);
+
+        // Block TEvSchemeShard::TEvCancelTxResult
+        THolder<IEventHandle> cancelAck;
+        Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvCancelTxResult) {
+                cancelAck.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
 
         // Cancel export mid-air
         //
@@ -2189,7 +2209,11 @@ partitioning_settings {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(!entry.HasEndTime());
 
+        Runtime().SetObserverFunc(prevObserver);
         Runtime().Send(delayed.Release(), 0, true);
+        if (cancelAck) {
+            Runtime().Send(cancelAck.Release(), 0, true);
+        }
         Env().TestWaitNotification(Runtime(), exportId);
 
         desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);

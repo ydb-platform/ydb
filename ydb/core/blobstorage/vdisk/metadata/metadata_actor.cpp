@@ -38,6 +38,10 @@ class TMetadataActor : public TActor<TMetadataActor> {
     }
 
     void Handle(TEvCommitVDiskMetadata::TPtr& ev) {
+        // remove in next version
+        Send(ev->Sender, new TEvCommitVDiskMetadataDone);
+        return;
+
         CommitNotifyId = ev->Sender;
         WriteEntryPoint();
     }
@@ -58,6 +62,9 @@ class TMetadataActor : public TActor<TMetadataActor> {
     }
 
     void Handle(NPDisk::TEvCutLog::TPtr& ev) {
+        // remove in next version
+        return;
+
         if (CurEntryPointLsn < ev->Get()->FreeUpToLsn) {
             WriteEntryPoint();
         }

@@ -264,14 +264,6 @@ namespace NKikimr {
                     SignalErrorAndDie(ctx, NKikimrProto::ERROR, "Entry point for disk metadata is incorrect");
                     return false;
                 }
-            } else {
-                MetadataEntryPoint.SetIsTinyDisk(IsTinyDisk);
-                MetadataEntryPoint.SetHullCompLevel0MaxSstsAtOnce(IsTinyDisk ?
-                    TVDiskConfig::TinyDiskHullCompLevel0MaxSstsAtOnce : Config->HullCompLevel0MaxSstsAtOnce);
-                MetadataEntryPoint.SetHullCompSortedPartsNum(IsTinyDisk ?
-                    TVDiskConfig::TinyDiskHullCompSortedPartsNum : Config->HullCompSortedPartsNum);
-                MetadataEntryPoint.SetHugeBlobOverhead(IsTinyDisk ?
-                    TVDiskConfig::TinyDiskHugeBlobOverhead : Config->HugeBlobOverhead);
             }
             return true;
         }
@@ -280,14 +272,8 @@ namespace NKikimr {
         bool InitMetabase(const TStartingPoints &startingPoints, TIntrusivePtr<TMetaBase> &metabase,
                           bool &initFlag, NMonitoring::TDeprecatedCounter &counter, bool &emptyDb,
                           ui64 freshBufSize, ui64 compThreshold, const TActorContext &ctx) {
-            TLevelIndexSettings settings(LocRecCtx->HullCtx,
-                MetadataEntryPoint.GetHullCompLevel0MaxSstsAtOnce(),
-                freshBufSize,
-                compThreshold,
-                Config->FreshHistoryWindow,
-                Config->FreshHistoryBuckets,
-                Config->FreshUseDreg,
-                Config->Level0UseDreg);
+            ui32 hullCompLevel0MaxSstsAtOnce = Config->HullCompLevel0MaxSstsAtOnce;
+            ui32 hullCompSortedPartsNum = Config->HullCompSortedPartsNum;
 
             TStartingPoints::const_iterator it;
             it = startingPoints.find(signature);
@@ -295,6 +281,27 @@ namespace NKikimr {
                 // create an empty DB
                 emptyDb = true;
                 counter = 1;
+
+                if (MetadataEntryPoint.HasHullCompLevel0MaxSstsAtOnce()) {
+                    hullCompLevel0MaxSstsAtOnce = MetadataEntryPoint.GetHullCompLevel0MaxSstsAtOnce();
+                } else if (IsTinyDisk) {
+                    hullCompLevel0MaxSstsAtOnce = TVDiskConfig::TinyDiskHullCompLevel0MaxSstsAtOnce;
+                }
+
+                if (MetadataEntryPoint.HasHullCompSortedPartsNum()) {
+                    hullCompSortedPartsNum = MetadataEntryPoint.GetHullCompSortedPartsNum();
+                } else if (IsTinyDisk) {
+                    hullCompSortedPartsNum = TVDiskConfig::TVDiskConfig::TinyDiskHullCompSortedPartsNum;
+                }
+
+                TLevelIndexSettings settings(LocRecCtx->HullCtx,
+                    hullCompLevel0MaxSstsAtOnce,
+                    freshBufSize,
+                    compThreshold,
+                    Config->FreshHistoryWindow,
+                    Config->FreshHistoryBuckets,
+                    Config->FreshUseDreg,
+                    Config->Level0UseDreg);
 
                 auto mb = MakeIntrusive<TMetaBase>(settings, Arena);
 
@@ -317,6 +324,27 @@ namespace NKikimr {
                     return false;
                 }
 
+                if (MetadataEntryPoint.HasHullCompLevel0MaxSstsAtOnce()) {
+                    hullCompLevel0MaxSstsAtOnce = MetadataEntryPoint.GetHullCompLevel0MaxSstsAtOnce();
+                } else if (pb.HasHullCompLevel0MaxSstsAtOnce()) {
+                    hullCompLevel0MaxSstsAtOnce = pb.GetHullCompLevel0MaxSstsAtOnce();
+                }
+
+                if (MetadataEntryPoint.HasHullCompSortedPartsNum()) {
+                    hullCompSortedPartsNum = MetadataEntryPoint.GetHullCompSortedPartsNum();
+                } else if (pb.HasHullCompSortedPartsNum()) {
+                    hullCompSortedPartsNum = pb.GetHullCompSortedPartsNum();
+                }
+
+                TLevelIndexSettings settings(LocRecCtx->HullCtx,
+                    hullCompLevel0MaxSstsAtOnce,
+                    freshBufSize,
+                    compThreshold,
+                    Config->FreshHistoryWindow,
+                    Config->FreshHistoryBuckets,
+                    Config->FreshUseDreg,
+                    Config->Level0UseDreg);
+
                 auto mb = MakeIntrusive<TMetaBase>(settings, pb.GetLevelIndex(), it->second.Lsn, Arena);
                 metabase.Swap(mb);
                 initFlag = false;
@@ -325,8 +353,11 @@ namespace NKikimr {
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
 
-            LocRecCtx->HullCtx->HullCompLevel0MaxSstsAtOnce = MetadataEntryPoint.GetHullCompLevel0MaxSstsAtOnce();
-            LocRecCtx->HullCtx->HullCompSortedPartsNum = MetadataEntryPoint.GetHullCompSortedPartsNum();
+            MetadataEntryPoint.SetHullCompLevel0MaxSstsAtOnce(hullCompLevel0MaxSstsAtOnce);
+            MetadataEntryPoint.SetHullCompSortedPartsNum(hullCompSortedPartsNum);
+
+            LocRecCtx->HullCtx->HullCompLevel0MaxSstsAtOnce = hullCompLevel0MaxSstsAtOnce;
+            LocRecCtx->HullCtx->HullCompSortedPartsNum = hullCompSortedPartsNum;
 
             return true;
         }
@@ -458,6 +489,15 @@ namespace NKikimr {
             Y_VERIFY_S(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                 LocRecCtx->VCtx->VDiskLogPrefix);
 
+            ui32 hugeBlobOverhead = Config->HugeBlobOverhead;
+
+            if (MetadataEntryPoint.HasHugeBlobOverhead()) {
+                hugeBlobOverhead = MetadataEntryPoint.GetHugeBlobOverhead();
+            } else if (IsTinyDisk) {
+                hugeBlobOverhead = TVDiskConfig::TinyDiskHugeBlobOverhead;
+            }
+            MetadataEntryPoint.SetHugeBlobOverhead(hugeBlobOverhead);
+
             auto logFunc = [&] (const TString &msg) {
                 LOG_DEBUG(ctx, BS_HULLHUGE, msg);
             };
@@ -473,7 +513,7 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
-                            MetadataEntryPoint.GetHugeBlobOverhead(),
+                            hugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
                             logFunc);
             } else {
@@ -494,7 +534,7 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
-                            MetadataEntryPoint.GetHugeBlobOverhead(),
+                            hugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
                             lsn, entryPoint, logFunc);
             }

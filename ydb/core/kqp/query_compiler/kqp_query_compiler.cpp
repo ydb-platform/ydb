@@ -1763,7 +1763,8 @@ private:
             const auto outputItemType = outputType->Cast<TStreamExprType>()->GetItemType();
             vectorResolveProto.SetOutputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *outputItemType), TypeEnv));
 
-            // Input columns. Input is strictly mapped to main table's columns to ease passing their types through PhyCnVectorResolve
+            // Input columns. Input is strictly mapped to main table's columns to ease passing their types through PhyCnVectorResolve.
+            // For prefixed indexes, input must contain the __ydb_parent column referring the root cluster ID of the row's prefix.
 
             TMap<TString, ui32> columnIndexes;
             YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Struct);
@@ -1771,9 +1772,11 @@ private:
             ui32 n = 0;
             for (const auto inputColumn : inputColumns) {
                 auto name = TString(inputColumn->GetName());
-                YQL_ENSURE(tableMeta->Columns.FindPtr(name), "Unknown column: " << name);
                 vectorResolveProto.AddColumns(name);
-                tablesMap[vectorResolve.Table().Path()].emplace(name);
+                if (name != NTableIndex::NKMeans::ParentColumn) {
+                    YQL_ENSURE(tableMeta->Columns.FindPtr(name), "Unknown column: " << name);
+                    tablesMap[vectorResolve.Table().Path()].emplace(name);
+                }
                 columnIndexes[name] = n++;
             }
 
@@ -1782,6 +1785,12 @@ private:
             auto vectorColumn = indexDesc->KeyColumns.back();
             YQL_ENSURE(columnIndexes.contains(vectorColumn));
             vectorResolveProto.SetVectorColumnIndex(columnIndexes.at(vectorColumn));
+
+            if (indexDesc->KeyColumns.size() > 1) {
+                // Prefixed index
+                YQL_ENSURE(columnIndexes.contains(NTableIndex::NKMeans::ParentColumn));
+                vectorResolveProto.SetRootClusterColumnIndex(columnIndexes.at(NTableIndex::NKMeans::ParentColumn));
+            }
 
             TSet<TString> copyColumns;
             copyColumns.insert(NTableIndex::NKMeans::ParentColumn);

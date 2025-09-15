@@ -1635,6 +1635,7 @@ protected:
         ui32 inputTasks = 0;
         bool isShuffle = false;
         bool forceMapTasks = false;
+        bool isParallelUnionAll = false;
         ui32 mapCnt = 0;
 
 
@@ -1683,7 +1684,8 @@ protected:
                     break;
                 }
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
-                    partitionsCount = std::max<ui64>(partitionsCount, originStageInfo.Tasks.size());
+                    inputTasks += originStageInfo.Tasks.size();
+                    isParallelUnionAll = true;
                     break;
                 }
                 case NKqpProto::TKqpPhyConnection::kVectorResolve: {
@@ -1700,7 +1702,7 @@ protected:
 
         Y_ENSURE(mapCnt < 2, "There can be only < 2 'Map' connections");
 
-        if (isShuffle && !forceMapTasks) {
+        if ((isShuffle || isParallelUnionAll) && !forceMapTasks) {
             if (stage.GetTaskCount()) {
                 partitionsCount = stage.GetTaskCount();
                 intros.push_back("Manually overridden - " + ToString(partitionsCount));
@@ -1932,28 +1934,6 @@ protected:
         for (auto& op : stage.GetTableOps()) {
             Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
             switch (op.GetTypeCase()) {
-                case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-                case NKqpProto::TKqpPhyTableOperation::kReadRange: {
-                    auto columns = BuildKqpColumns(op, tableInfo);
-                    bool isFullScan = false;
-                    auto partitions = PartitionPruner.Prune(op, stageInfo, isFullScan);
-                    auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
-
-                    if (!readSettings.ItemsLimit && isFullScan) {
-                        Counters->Counters->FullScansExecuted->Inc();
-                    }
-
-                    for (auto& [shardId, shardInfo] : partitions) {
-                        YQL_ENSURE(!shardInfo.KeyWriteRanges);
-
-                        auto& task = getShardTask(shardId);
-                        MergeReadInfoToTaskMeta(task.Meta, shardId, shardInfo.KeyReadRanges, readSettings,
-                            columns, op, /*isPersistentScan*/ false);
-                    }
-
-                    break;
-                }
-
                 case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
                 case NKqpProto::TKqpPhyTableOperation::kDeleteRows: {
                     YQL_ENSURE(stage.InputsSize() <= 1, "Effect stage with multiple inputs: " << stage.GetProgramAst());

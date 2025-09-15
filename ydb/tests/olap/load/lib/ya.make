@@ -24,6 +24,7 @@ PY3_LIBRARY()
         workload_reconfig_state_storage.py
         workload_show_create.py
         workload_cdc.py
+        workload_statistics.py
         upload.py
 
     )

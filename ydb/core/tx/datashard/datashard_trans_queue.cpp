@@ -11,12 +11,17 @@ void TTransQueue::AddTxInFly(TOperation::TPtr op) {
     const ui64 txId = op->GetTxId();
     Y_ENSURE(!TxsInFly.contains(txId), "Adding duplicate txId " << txId);
     TxsInFly[txId] = op;
-    if (Y_LIKELY(!op->GetStep())) {
+    const ui64 step = op->GetStep();
+    if (Y_LIKELY(!step)) {
         ++PlanWaitingTxCount;
         const ui64 maxStep = op->GetMaxStep();
         if (maxStep != Max<ui64>()) {
             DeadlineQueue.emplace(std::make_pair(maxStep, txId));
         }
+    } else if (op->HasVolatilePrepareFlag()) {
+        // Restoring a previously planned volatile transaction
+        PlannedTxs.emplace(TStepOrder(step, txId));
+        PlannedTxsByKind[op->GetKind()].emplace(TStepOrder(step, txId));
     }
     Self->SetCounter(COUNTER_TX_IN_FLY, TxsInFly.size());
 }

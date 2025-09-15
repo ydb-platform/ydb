@@ -4,7 +4,7 @@
 #include "events.h"
 
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>

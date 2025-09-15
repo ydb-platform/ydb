@@ -1668,7 +1668,7 @@ private:
         return true;
     }
 
-    void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx, const bool isOlap)
+    void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx)
     {
         YQL_ENSURE(ReadOnlyTx || !TxManager);
         TShardState shardState;
@@ -1721,16 +1721,7 @@ private:
             << ", immediate: " << ImmediateTx);
 
         std::unique_ptr<IEventBase> ev;
-        if (isOlap) {
-            const ui32 flags =
-                (ImmediateTx ? NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE: 0);
-            ev.reset(new TEvColumnShard::TEvProposeTransaction(
-                NKikimrTxColumnShard::TX_KIND_DATA,
-                SelfId(),
-                TxId,
-                dataTransaction.SerializeAsString(),
-                flags));
-        } else {
+        {
             const ui32 flags =
                 (ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0) |
                 (VolatileTx ? NTxDataShard::TTxFlags::VolatilePrepare : 0);
@@ -2660,8 +2651,7 @@ private:
         }
 
         GetMeta().SinglePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty();
-        GetMeta().LocalComputeTasks = !DatashardTxs.empty();
-        GetMeta().MayRunTasksLocally = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.empty());
+        GetMeta().MayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
 
         bool isSubmitSuccessful = BuildPlannerAndSubmitTasks();
         if (!isSubmitSuccessful)
@@ -2670,53 +2660,15 @@ private:
         // then start data tasks with known actor ids of compute tasks
         for (auto& [shardId, shardTx] : DatashardTxs) {
             shardTx->SetType(NKikimrTxDataShard::KQP_TX_TYPE_DATA);
-            std::optional<bool> isOlap;
             for (auto& protoTask : *shardTx->MutableTasks()) {
                 ui64 taskId = protoTask.GetId();
                 const auto& task = GetTasksGraph().GetTask(taskId);
                 const auto& stageInfo = GetTasksGraph().GetStageInfo(task.StageId);
-                Y_ENSURE(!isOlap || *isOlap == stageInfo.Meta.IsOlap());
-                isOlap = stageInfo.Meta.IsOlap();
-
-                for (ui64 outputIndex = 0; outputIndex < task.Outputs.size(); ++outputIndex) {
-                    auto& output = task.Outputs[outputIndex];
-                    auto* protoOutput = protoTask.MutableOutputs(outputIndex);
-
-                    for (ui64 outputChannelIndex = 0; outputChannelIndex < output.Channels.size(); ++outputChannelIndex) {
-                        ui64 outputChannelId = output.Channels[outputChannelIndex];
-                        auto* protoChannel = protoOutput->MutableChannels(outputChannelIndex);
-
-                        ui64 dstTaskId = GetTasksGraph().GetChannel(outputChannelId).DstTask;
-
-                        if (dstTaskId == 0) {
-                            continue;
-                        }
-
-                        const auto& dstTask = GetTasksGraph().GetTask(dstTaskId);
-                        if (dstTask.ComputeActorId) {
-                            protoChannel->MutableDstEndpoint()->Clear();
-                            ActorIdToProto(dstTask.ComputeActorId, protoChannel->MutableDstEndpoint()->MutableActorId());
-                        } else {
-                            if (protoChannel->HasDstEndpoint() && protoChannel->GetDstEndpoint().HasTabletId()) {
-                                if (protoChannel->GetDstEndpoint().GetTabletId() == shardId) {
-                                    // inplace update
-                                } else {
-                                    // TODO: send data via executer?
-                                    // but we don't have such examples...
-                                    YQL_ENSURE(false, "not implemented yet: " << protoTask.DebugString());
-                                }
-                            } else {
-                                YQL_ENSURE(!protoChannel->GetDstEndpoint().IsInitialized());
-                                // effects-only stage
-                            }
-                        }
-                    }
-                }
-
-                LOG_D("datashard task: " << taskId << ", proto: " << protoTask.ShortDebugString());
+                Y_ENSURE(!stageInfo.Meta.IsOlap());
+                Y_ENSURE(task.Outputs.size() >= 1);
             }
 
-            ExecuteDatashardTransaction(shardId, *shardTx, isOlap.value_or(false));
+            ExecuteDatashardTransaction(shardId, *shardTx);
         }
 
         for (const auto& [shardId, shardTx] : EvWriteTxs) {

@@ -208,6 +208,20 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(!opt1type->IsSameType(*opt2type));
     }
 
+    Y_UNIT_TEST(TestLinearType) {
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+        TLinearType* lin1type = TLinearType::Create(env.GetVoidLazy()->GetGenericType(), true, env);
+        UNIT_ASSERT_EQUAL(lin1type->GetKind(), TType::EKind::Linear);
+        UNIT_ASSERT(lin1type->IsDynamic());
+        TLinearType* lin2type = TLinearType::Create(env.GetEmptyTupleLazy()->GetGenericType(), true, env);
+        TLinearType* lin1typeCloned = TLinearType::Create(env.GetVoidLazy()->GetGenericType(), true, env);
+        TLinearType* lin3type = TLinearType::Create(env.GetVoidLazy()->GetGenericType(), false, env);
+        UNIT_ASSERT(lin1type->IsSameType(*lin1typeCloned));
+        UNIT_ASSERT(!lin1type->IsSameType(*lin2type));
+        UNIT_ASSERT(!lin1type->IsSameType(*lin3type));
+    }
+
     Y_UNIT_TEST(TestOptionalLiteral) {
         TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
@@ -318,7 +332,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
             Y_UNUSED(env);
         }
     };
-    
+
     template<typename... T>
     struct TArgs<TOpt<T...>>
     {

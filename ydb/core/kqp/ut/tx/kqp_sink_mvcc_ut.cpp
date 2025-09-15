@@ -480,7 +480,8 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
                     val1 Uint32,
                     val2 Uint32,
                     PRIMARY KEY (key)
-                ) 
+                )
+                WITH (STORE = COLUMN)
                 ;
                 )", NQuery::TTxControl::NoTx()
             ).GetValueSync();

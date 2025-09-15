@@ -6,34 +6,34 @@
 
 ### Key Features and Capabilities of {{ ydb-short-name }}
 
-- **Horizontal scaling and automatic sharding**: data and workload are dynamically distributed as data volume or query intensity grows.
+- **Horizontal scaling and automatic sharding**: data and workload are dynamically distributed across available hardware resources as data volume or query intensity grows.
 - **Fault tolerance**: automatic recovery from failures of nodes, racks, or availability zones.
 - **Synchronous replication**: data is replicated synchronously within the cluster to ensure high availability and durability.
 - **Asynchronous replication**: near real-time data synchronization between {{ ydb-short-name }} databases — both within a single cluster and across different clusters.
 - **Strong consistency and ACID transactions**: the system provides linearizability and [distributed transactions](transactions.md) with *serializable* isolation. Consistency and isolation levels can be relaxed when higher performance is required.
-- [**Query language YQL**](../yql/reference/index.md): a SQL dialect optimized for large-scale data and complex processing scenarios.
-- **Relational data model**: supports both [row-based](datamodel/table.md#row-tables) and [column-based](datamodel/table.md#column-tables) tables, enabling efficient handling of both transactional (OLTP) and analytical (OLAP) workloads within a single system.
+- [**YQL**](../yql/reference/index.md): a SQL dialect optimized for large-scale data and complex processing scenarios.
+- **Relational data model**: supports both [row-oriented](datamodel/table.md#row-oriented-tables) and [column-oriented](datamodel/table.md#column-oriented-tables) tables, enabling efficient handling of both transactional (OLTP) and analytical (OLAP) workloads within a single system.
 - **Hierarchical namespace**: tables, topics, and other [objects](datamodel/index.md) are organized in a hierarchical namespace, similar to a filesystem.
 - **Streaming data processing and distribution**:
   - **Topics**: storage and streaming delivery of unstructured messages to multiple subscribers. Supports the [Kafka protocol](../reference/kafka-api/index.md).
-  - [**Change Data Capture (CDC)**](cdc.md): built-in streaming read of data changes from tables.
+  - [**Change Data Capture (CDC)**](cdc.md): built-in stream of table data changes published as a topic.
   - **Transfers**: automated data delivery from topics to tables.
-- [**Federated queries**](federated_query/index.md): execute queries against external data sources (e.g., S3) as part of YQL queries, without prior data loading.
+- [**Federated queries**](federated_query/index.md): execute queries against external data sources (e.g., S3) as part of YQL queries, without prior data import to {{ ydb-short-name }} storage.
 - [**Vector indexes**](vector_search.md): support for storing and searching vector embeddings — ideal for semantic search, similarity matching, and ML use cases.
 - [**Observability**](../reference/observability/index.md): built-in metrics, logs, and dashboards.
 - **Security and audit**: data encryption (at-rest and in-transit), operation auditing, and support for authentication and authorization — see [Security](../security/index.md).
-- **Tools, integrations, and APIs**: [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) for administration and debugging, and [SDKs](../reference/ydb-sdk/index.md) for C++, C#, Go, Java, Node.js, PHP, Python, and Rust. Integration with external systems is supported. Learn more in [Integrations](../integrations/index.md) and [Languages and APIs](../reference/languages-and-apis/).
+- **Tools, integrations, and APIs**: [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) for running queries, administration, and debugging. [SDKs](../reference/ydb-sdk/index.md) for C++, C#, Go, Java, Node.js, PHP, Python, and Rust. Integrations with various third-party systems. Learn more in [{#T}](../integrations/index.md) and [{#T}](../reference/languages-and-apis/index.md).
 - **Open architecture**: [source code](https://github.com/ydb-platform/ydb) is available under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). The system uses the open [gRPC](https://grpc.io/) protocol, enabling client implementations in any programming language.
 
 ### Key Use Cases
 
 {{ ydb-short-name }} is a versatile platform suitable for a wide range of scenarios requiring scalability, reliability, and flexibility. It can serve as a standalone database or as part of a distributed architecture. Typical use cases include:
 
-- In distributed systems requiring **strong consistency or support for multi-row/multi-table transactions**. {{ ydb-short-name }} combines NoSQL-like scalability with the consistency and integrity guarantees of relational databases.
+- In distributed systems requiring **strong consistency or support for multi-row and multi-table transactions**. {{ ydb-short-name }} combines NoSQL-like scalability with the consistency and integrity guarantees of relational databases.
 - Systems that store and process **very large datasets** and require nearly unlimited horizontal scaling (production clusters with thousands of nodes, handling millions of RPS and petabytes of data).
-- High-load systems relying on **manual sharding** of relational databases. {{ ydb-short-name }} simplifies architecture by eliminating complex sharding logic and manual orchestration.
+- High-load systems relying on **manual sharding** of relational databases. {{ ydb-short-name }} simplifies architecture by automatically handling the sharding logic, re-sharding, query routing, and cross-shard transactions out of the box.
 - Systems with **low or unpredictable workloads** — use the **serverless mode** with on-demand scaling, including scaling down to zero.
-- New product development with **uncertain load patterns** or expected scale beyond the limits of traditional RDBMS.
+- New product development with **uncertain load patterns** or expected scale beyond the limits of traditional relational database management systems (RDBMS).
 - Projects requiring a **flexible platform** capable of handling diverse workloads and use cases — including transactional, streaming, and analytical.
 
 ## How It Works?

@@ -365,4 +365,4 @@
 * Добавлено игнорирование устаревших событий.
 * Исправлено падение write-сессий на невалидном имени топика.
 * Исправлена ошибка `CheckExpected(): requirement newConstr failed, message: Rewrite error, missing Distinct((id)) constraint in node FlatMap`.
-* Включён `safe heal` по умолчанию.
+* Включён `self heal` по умолчанию.

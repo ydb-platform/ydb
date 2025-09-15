@@ -465,6 +465,63 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.SetCommitOnInsert(CommitOnInsert);
         tester.Execute();
     }
+
+    Y_UNIT_TEST(UpdateColumns) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto kikimr = std::make_unique<TKikimrRunner>(settings);
+        Tests::NCommon::TLoggerInit(*kikimr).Initialize();
+
+        auto client = kikimr->GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/Test` (
+                    key Uint32 not null,
+                    val1 Uint32,
+                    val2 Uint32,
+                    PRIMARY KEY (key)
+                ) 
+                ;
+                )", NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/Test` (key, val1, val2) VALUES (1, 1, 1);
+                )", NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto session1 = client.GetSession().GetValueSync().GetSession();
+        auto session2 = client.GetSession().GetValueSync().GetSession();
+        
+        auto insertResult1 = session1.ExecuteQuery(R"(
+                    UPSERT INTO `/Root/Test` (key, val1) VALUES (1, 2)
+            )", NQuery::TTxControl::BeginTx()) .GetValueSync();
+        UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, insertResult1.GetStatus(), insertResult1.GetIssues().ToString());
+        auto tx1 = insertResult1.GetTransaction();
+        UNIT_ASSERT(tx1);
+
+        auto insertResult2 = session1.ExecuteQuery(R"(
+                    UPSERT INTO `/Root/Test` (key, val2) VALUES (1, 3)
+            )", NQuery::TTxControl::BeginTx()) .GetValueSync();
+        UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, insertResult2.GetStatus(), insertResult2.GetIssues().ToString());
+        auto tx2 = insertResult2.GetTransaction();
+        UNIT_ASSERT(tx2);
+
+        auto commitResult1 = tx1->Commit().GetValueSync();
+        UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, commitResult1.GetStatus(), commitResult1.GetIssues().ToString());
+        auto commitResult2 = tx2->Commit().GetValueSync();
+        UNIT_ASSERT_EQUAL_C(commitResult2.GetStatus(), NYdb::EStatus::SUCCESS, commitResult2.GetIssues().ToString());
+
+        auto readResult = client.ExecuteQuery(R"(
+                    SELECT * FROM `/Root/Test`;
+                )", NQuery::TTxControl::NoTx()) .GetValueSync();
+        UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, readResult.GetStatus(), readResult.GetIssues().ToString());
+        CompareYson("[[1u;[2u];[3u]]]", FormatResultSetYson(readResult.GetResultSet(0)));
+    }
 }
 
 } // namespace NKqp

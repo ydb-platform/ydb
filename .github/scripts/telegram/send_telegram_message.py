@@ -9,11 +9,8 @@ import sys
 import argparse
 import requests
 import time
-import hashlib
 from pathlib import Path
 
-# Global cache for sent messages to avoid duplicates in the same session
-_sent_messages_cache = set()
 
 
 def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="Markdown", message_thread_id=None, disable_web_page_preview=True, max_retries=5, retry_delay=10, delay=1):
@@ -93,19 +90,6 @@ def _send_single_message(bot_token, chat_id, message, parse_mode, message_thread
     Returns:
         bool: True if successful, False otherwise
     """
-    # Create a unique key for this message
-    message_key = f"{chat_id}:{message_thread_id}:{hashlib.md5(message.encode('utf-8')).hexdigest()}"
-    
-    # Check local cache first (for same session duplicates)
-    if message_key in _sent_messages_cache:
-        print(f"⚠️ Message already sent in this session, skipping duplicate")
-        return True
-    
-    # Check for recent duplicate messages before sending
-    if _check_for_recent_duplicate(bot_token, chat_id, message, message_thread_id):
-        print(f"⚠️ Similar message found recently in chat, skipping to avoid duplicate")
-        _sent_messages_cache.add(message_key)  # Add to cache even if skipped
-        return True
     for attempt in range(max_retries + 1):
         if attempt > 0:
             print(f"🔄 Retry attempt {attempt}/{max_retries}...")
@@ -144,8 +128,11 @@ def _send_single_message(bot_token, chat_id, message, parse_mode, message_thread
             elif response.status_code != 200:
                 print(f"❌ HTTP Error {response.status_code}: {response.text}")
                 if attempt < max_retries:
-                    # Use exponential backoff for server errors (5xx)
-                    wait_time = retry_delay * (2 ** attempt) if response.status_code >= 500 else retry_delay
+                    # Use exponential backoff for server errors (5xx) with maximum cap
+                    if response.status_code >= 500:
+                        wait_time = min(retry_delay * (2 ** attempt), 60)  # Cap at 60 seconds
+                    else:
+                        wait_time = retry_delay
                     print(f"⏳ Waiting {wait_time} seconds before retry...")
                     time.sleep(wait_time)
                     continue
@@ -156,7 +143,6 @@ def _send_single_message(bot_token, chat_id, message, parse_mode, message_thread
             if result.get('ok'):
                 thread_info = f" (thread {message_thread_id})" if message_thread_id is not None else ""
                 print(f"✅ Message sent successfully to chat {chat_id}{thread_info}")
-                _sent_messages_cache.add(message_key)  # Add to cache on successful send
                 return True
             else:
                 print(f"❌ Telegram API Error: {result.get('description', 'Unknown error')}")
@@ -188,7 +174,7 @@ def _send_single_message(bot_token, chat_id, message, parse_mode, message_thread
     print(f"   Chat ID: {chat_id}")
     if message_thread_id:
         print(f"   Thread ID: {message_thread_id}")
-    print(f"   Message Hash: {hashlib.md5(message.encode('utf-8')).hexdigest()[:8]}")
+    print(f"   Message Length: {len(message)} characters")
     print("   Message content:")
     print("=" * 80)
     print(message)
@@ -197,64 +183,6 @@ def _send_single_message(bot_token, chat_id, message, parse_mode, message_thread
     return False
 
 
-def _check_for_recent_duplicate(bot_token, chat_id, message, message_thread_id=None, limit=10):
-    """
-    Check if a similar message was sent recently to avoid duplicates.
-    
-    Args:
-        bot_token (str): Telegram bot token
-        chat_id (str): Telegram chat ID
-        message (str): Message to check
-        message_thread_id (int, optional): Thread ID for group messages
-        limit (int): Number of recent messages to check
-        
-    Returns:
-        bool: True if duplicate found, False otherwise
-    """
-    try:
-        # Get recent messages from the chat
-        url = f"https://api.telegram.org/bot{bot_token}/getUpdates"
-        params = {'limit': limit, 'timeout': 5}
-        
-        response = requests.get(url, params=params, timeout=10)
-        if response.status_code != 200:
-            # If we can't check, assume no duplicate to avoid blocking legitimate messages
-            return False
-            
-        result = response.json()
-        if not result.get('ok'):
-            return False
-            
-        # Create a hash of the current message for comparison
-        message_hash = hashlib.md5(message.encode('utf-8')).hexdigest()[:8]
-        
-        # Check recent messages for similar content
-        for update in result.get('result', []):
-            if 'message' in update:
-                msg = update['message']
-                
-                # Check if it's from the same chat and thread
-                if str(msg.get('chat', {}).get('id')) != str(chat_id):
-                    continue
-                    
-                if message_thread_id is not None:
-                    if msg.get('message_thread_id') != message_thread_id:
-                        continue
-                
-                # Check if message content is similar
-                msg_text = msg.get('text', '')
-                if msg_text:
-                    msg_hash = hashlib.md5(msg_text.encode('utf-8')).hexdigest()[:8]
-                    if message_hash == msg_hash:
-                        print(f"🔍 Found duplicate message hash: {message_hash}")
-                        return True
-                        
-        return False
-        
-    except Exception as e:
-        print(f"⚠️ Could not check for duplicates: {e}")
-        # If we can't check, assume no duplicate to avoid blocking legitimate messages
-        return False
 
 
 def split_message(message, max_length=4000):

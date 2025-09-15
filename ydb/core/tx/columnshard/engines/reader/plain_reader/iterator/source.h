@@ -176,6 +176,8 @@ public:
         , FinishReplaceKey(finish)
         , Start(context->GetReadMetadata()->BuildSortedPosition(StartReplaceKey))
         , Finish(context->GetReadMetadata()->BuildSortedPosition(FinishReplaceKey)) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "!!! HERE 4");
+
         UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start, finish);
         AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());

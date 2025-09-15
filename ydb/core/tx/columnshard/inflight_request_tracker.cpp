@@ -30,12 +30,13 @@ NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFli
 void TInFlightReadsTracker::AddToInFlightRequest(
     const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* /*index*/) {
     AFL_VERIFY(RequestsMeta.emplace(cookie, readMetaBase).second);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Add in Flight Request");
 
-    auto readMeta = std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase);
+    // auto readMeta = std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase);
 
-    if (!readMeta) {
-        return;
-    }
+    // if (!readMeta) {
+    //     return;
+    // }
 }
 
 namespace {

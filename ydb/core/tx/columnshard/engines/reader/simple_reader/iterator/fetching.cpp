@@ -12,6 +12,8 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "!!! HERE 5");
+
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
         source->GetStageData().GetTable().ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
             source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(

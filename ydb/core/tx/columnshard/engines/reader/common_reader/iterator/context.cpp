@@ -45,12 +45,14 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     auto readSchema = ReadMetadata->GetResultSchema();
     SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSnapshotColumnIdsSet(), readSchema);
     {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "!!! HERE 1");
         auto predicateColumns = ReadMetadata->GetPKRangesFilter().GetColumnIds(ReadMetadata->GetIndexInfo());
         if (predicateColumns.size()) {
             PredicateColumns = std::make_shared<TColumnsSet>(predicateColumns, readSchema);
         } else {
             PredicateColumns = std::make_shared<TColumnsSet>();
         }
+        // ReadMetadata->ClearPKRangesFilter();
     }
     {
         std::set<ui32> columnIds = { NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG_INDEX };

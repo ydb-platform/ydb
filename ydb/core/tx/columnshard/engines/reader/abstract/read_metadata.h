@@ -27,7 +27,7 @@ private:
     std::optional<ui64> FilteredCountLimit;
     std::optional<ui64> RequestedLimit;
     const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches
-    std::shared_ptr<TPKRangesFilter> PKRangesFilter;
+    mutable std::shared_ptr<TPKRangesFilter> PKRangesFilter;
     TProgramContainer Program;
     const std::shared_ptr<const TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
@@ -135,12 +135,19 @@ public:
         }
     }
 
+    void ClearPKRangesFilter() const {
+        PKRangesFilter.reset();
+    }
+
     const TPKRangesFilter& GetPKRangesFilter() const {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "GetPKRangesFilter");
+
         Y_ABORT_UNLESS(!!PKRangesFilter);
         return *PKRangesFilter;
     }
 
     const std::shared_ptr<TPKRangesFilter>& GetPKRangesFilterPtr() const {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "GetPKRangesFilterPtr");
         Y_ABORT_UNLESS(!!PKRangesFilter);
         return PKRangesFilter;
     }

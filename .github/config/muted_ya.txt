@@ -215,6 +215,7 @@ ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_pg-kqprun]
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg_ch-kqprun]
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg_pg-kqprun]
+ydb/mvp/oidc_proxy/ut Mvp.OidcWhoamiForward307
 ydb/mvp/oidc_proxy/ut Mvp.OidcYandexIgnoresWhoamiExtension
 ydb/mvp/oidc_proxy/ut unittest.sole chunk
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.PropagateSessionClosed

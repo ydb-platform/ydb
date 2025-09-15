@@ -17,6 +17,8 @@ TCommandSelfCheck::TCommandSelfCheck()
 {}
 
 void TCommandSelfCheck::Config(TConfig& config) {
+    config.AllowEmptyDatabase = true;
+
     TYdbSimpleCommand::Config(config);
     config.SetFreeArgsNum(0);
 
@@ -30,9 +32,6 @@ void TCommandSelfCheck::Config(TConfig& config) {
 
     config.Opts->AddLongOption("no-cache", "Do not use cached result")
         .StoreTrue(&NoCache).Optional();
-
-    config.Opts->AddLongOption("tenant", "Health check only specified tenant")
-        .StoreResult(&Tenant).Optional();
 }
 
 void TCommandSelfCheck::Parse(TConfig& config) {
@@ -54,17 +53,6 @@ int TCommandSelfCheck::Run(TConfig& config) {
 
     if (NoCache) {
         settings.NoCache(true);
-    }
-
-    if (Tenant) {
-        if (config.Database) {
-            if (!config.Database.StartsWith(Tenant)) {
-                Cerr << "If you specify both the database '" << config.Database << "' and the tenant '" << Tenant
-                    <<  "', tenant must be prefix of the database" << Endl;
-                return EXIT_FAILURE;
-            }
-        }
-        settings.Tenant(Tenant);
     }
 
     NMonitoring::TSelfCheckResult result = client.SelfCheck(

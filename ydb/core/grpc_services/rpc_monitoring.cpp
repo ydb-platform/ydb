@@ -36,9 +36,7 @@ public:
     void SendHealthCheckRequest() {
         THolder<NHealthCheck::TEvSelfCheckRequest> request = MakeHolder<NHealthCheck::TEvSelfCheckRequest>();
         request->Request = *GetProtoRequest();
-        if (request->Request.tenant()) {
-            request->Database = request->Request.tenant();
-        } else if (Request->GetDatabaseName()) {
+        if (Request->GetDatabaseName()) {
             request->Database = Request->GetDatabaseName().GetRef();
         }
         Send(NHealthCheck::MakeHealthCheckID(), request.Release());

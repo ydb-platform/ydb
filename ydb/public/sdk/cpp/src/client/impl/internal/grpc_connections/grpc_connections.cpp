@@ -23,6 +23,7 @@ std::string GetAuthInfo(TDbDriverStatePtr p) {
 
 void SetDatabaseHeader(TCallMeta& meta, const std::string& database) {
     // See TDbDriverStateTracker::GetDriverState to find place where we do quote non ASCII characters
+    Cerr << (TStringBuilder() << "XXX, header: " << database << Endl);
     meta.Aux.push_back({YDB_DATABASE_HEADER, database});
 }
 

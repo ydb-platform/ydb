@@ -27,7 +27,6 @@ private:
     bool Verbose = false;
     bool NoMerge = false;
     bool NoCache = false;
-    TString Tenant;
 };
 
 }

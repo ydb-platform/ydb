@@ -56,10 +56,6 @@ public:
             request.set_maximum_level(settings.MaximumLevel_.value());
         }
 
-        if (settings.Tenant_) {
-            request.set_tenant(settings.Tenant_.value());
-        }
-
         auto promise = NThreading::NewPromise<TSelfCheckResult>();
 
         auto extractor = [promise]

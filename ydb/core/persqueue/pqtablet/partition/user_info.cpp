@@ -173,16 +173,14 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
             ->GetSubgroup("cloud_id", CloudId)
             ->GetSubgroup("folder_id", FolderId)
             ->GetSubgroup("database_id", DbId)
-            ->GetSubgroup("topic", TopicConverter->GetClientsideName())
-            ->GetSubgroup("partition_id", ToString(Partition));
+            ->GetSubgroup("topic", TopicConverter->GetClientsideName());
     } else {
         return counters
             ->GetSubgroup("counters", "topics_per_partition")
             ->GetSubgroup("host", "cluster")
             ->GetSubgroup("Account", TopicConverter->GetAccount())
             ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
-            ->GetSubgroup("OriginDC", TopicConverter->GetCluster())
-            ->GetSubgroup("Partition", ToString(Partition));
+            ->GetSubgroup("OriginDC", TopicConverter->GetCluster());
     }
 }
 
@@ -204,7 +202,7 @@ void TUsersInfoStorage::ResetPerPartitionCounters() {
 }
 
 bool TUsersInfoStorage::PartitionCountersAreEnabled() const {
-    return AppData()->FeatureFlags.GetEnablePartitionCounters() && Config.GetEnablePartitionCounters();
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
 }
 
 const TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) const {

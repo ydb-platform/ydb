@@ -904,7 +904,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        pqTabletConfig->SetEnablePartitionCounters(settings.enable_partition_counters());
+        if (settings.has_metrics_level()) {
+            pqTabletConfig->SetMetricsLevel(settings.metrics_level());
+        }
 
         return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST);
     }
@@ -1105,7 +1107,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        pqTabletConfig->SetEnablePartitionCounters(request.enable_partition_counters());
+        if (request.has_metrics_level()) {
+            pqTabletConfig->SetMetricsLevel(request.metrics_level());
+        }
 
         return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST),
                            Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
@@ -1348,8 +1352,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        if (request.has_set_enable_partition_counters()) {
-            pqTabletConfig->SetEnablePartitionCounters(request.set_enable_partition_counters());
+        if (request.has_set_metrics_level()) {
+            pqTabletConfig->SetMetricsLevel(request.set_metrics_level());
+        } else if (request.has_reset_metrics_level()) {
+            pqTabletConfig->ClearMetricsLevel();
         }
 
         return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);

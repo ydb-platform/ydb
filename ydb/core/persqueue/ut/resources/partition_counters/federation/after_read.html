@@ -5,16 +5,11 @@ Account=asdfgs:
 
         OriginDC=dc1:
 
-            Partition=0:
-                sensor=BytesWrittenPerPartition: 540
-                sensor=MessagesWrittenPerPartition: 30
-                sensor=SourceIdCount: 3
-                sensor=TimeSinceLastWriteMs: 0
-                sensor=WriteTimeLagMsByLastWrite: 0
+            Client=user:
 
-                Client=user:
+                ConsumerPath=shared/user:
 
-                    ConsumerPath=shared/user:
+                    Partition=0:
                         sensor=BytesReadPerPartition: 0
                         sensor=MessageLagByCommittedPerPartition: 30
                         sensor=MessageLagByLastReadPerPartition: 29
@@ -24,28 +19,7 @@ Account=asdfgs:
                         sensor=WriteTimeLagMsByCommittedPerPartition: 0
                         sensor=WriteTimeLagMsByLastReadPerPartition: 0
 
-                Client=user1:
-
-                    ConsumerPath=shared/user1:
-                        sensor=BytesReadPerPartition: 106
-                        sensor=MessageLagByCommittedPerPartition: 0
-                        sensor=MessageLagByLastReadPerPartition: 0
-                        sensor=MessagesReadPerPartition: 2
-                        sensor=ReadTimeLagMsPerPartition: 0
-                        sensor=TimeSinceLastReadMsPerPartition: 0
-                        sensor=WriteTimeLagMsByCommittedPerPartition: 0
-                        sensor=WriteTimeLagMsByLastReadPerPartition: 0
-
-            Partition=1:
-                sensor=BytesWrittenPerPartition: 360
-                sensor=MessagesWrittenPerPartition: 20
-                sensor=SourceIdCount: 2
-                sensor=TimeSinceLastWriteMs: 0
-                sensor=WriteTimeLagMsByLastWrite: 0
-
-                Client=user:
-
-                    ConsumerPath=shared/user:
+                    Partition=1:
                         sensor=BytesReadPerPartition: 0
                         sensor=MessageLagByCommittedPerPartition: 20
                         sensor=MessageLagByLastReadPerPartition: 19
@@ -55,9 +29,21 @@ Account=asdfgs:
                         sensor=WriteTimeLagMsByCommittedPerPartition: 0
                         sensor=WriteTimeLagMsByLastReadPerPartition: 0
 
-                Client=user1:
+            Client=user1:
 
-                    ConsumerPath=shared/user1:
+                ConsumerPath=shared/user1:
+
+                    Partition=0:
+                        sensor=BytesReadPerPartition: 106
+                        sensor=MessageLagByCommittedPerPartition: 0
+                        sensor=MessageLagByLastReadPerPartition: 0
+                        sensor=MessagesReadPerPartition: 2
+                        sensor=ReadTimeLagMsPerPartition: 0
+                        sensor=TimeSinceLastReadMsPerPartition: 0
+                        sensor=WriteTimeLagMsByCommittedPerPartition: 0
+                        sensor=WriteTimeLagMsByLastReadPerPartition: 0
+
+                    Partition=1:
                         sensor=BytesReadPerPartition: 693
                         sensor=MessageLagByCommittedPerPartition: 0
                         sensor=MessageLagByLastReadPerPartition: 0
@@ -66,4 +52,18 @@ Account=asdfgs:
                         sensor=TimeSinceLastReadMsPerPartition: 0
                         sensor=WriteTimeLagMsByCommittedPerPartition: 0
                         sensor=WriteTimeLagMsByLastReadPerPartition: 0
+
+            Partition=0:
+                sensor=BytesWrittenPerPartition: 540
+                sensor=MessagesWrittenPerPartition: 30
+                sensor=SourceIdCount: 3
+                sensor=TimeSinceLastWriteMs: 0
+                sensor=WriteTimeLagMsByLastWrite: 0
+
+            Partition=1:
+                sensor=BytesWrittenPerPartition: 360
+                sensor=MessagesWrittenPerPartition: 20
+                sensor=SourceIdCount: 2
+                sensor=TimeSinceLastWriteMs: 0
+                sensor=WriteTimeLagMsByLastWrite: 0
 </pre>

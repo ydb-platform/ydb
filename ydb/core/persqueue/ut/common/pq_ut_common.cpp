@@ -93,7 +93,9 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 tabletConfig->SetEnableCompactification(true);
             }
 
-            tabletConfig->SetEnablePartitionCounters(parameters.enablePartitionCounters);
+            if (parameters.metricsLevel) {
+                tabletConfig->SetMetricsLevel(static_cast<decltype(tabletConfig->GetMetricsLevel())>(*parameters.metricsLevel));
+            }
 
             for (auto& u : users) {
                 auto* consumer = tabletConfig->AddConsumers();

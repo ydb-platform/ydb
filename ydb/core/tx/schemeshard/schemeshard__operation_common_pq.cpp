@@ -418,18 +418,22 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 "pqGroup is null"
                     << ", pathId " << txState->TargetPathId);
 
-    const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
+    const auto attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
     TString cloudId;
-    if (dbRootEl->UserAttrs->Attrs.contains("cloud_id")) {
-        cloudId = dbRootEl->UserAttrs->Attrs.at("cloud_id");
+    if (auto it = attrs.find("cloud_id"); it != attrs.end()) {
+        cloudId = it->second;
     }
     TString folderId;
-    if (dbRootEl->UserAttrs->Attrs.contains("folder_id")) {
-        folderId = dbRootEl->UserAttrs->Attrs.at("folder_id");
+    if (auto it = attrs.find("folder_id"); it != attrs.end()) {
+        folderId = it->second;
     }
     TString databaseId;
-    if (dbRootEl->UserAttrs->Attrs.contains("database_id")) {
-        databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
+    if (auto it = attrs.find("database_id"); it != attrs.end()) {
+        databaseId = it->second;
+    }
+    TString abcSlug;
+    if (auto it = attrs.find("abc_slug"); it != attrs.end()) {
+        abcSlug = it->second;
     }
 
     TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();

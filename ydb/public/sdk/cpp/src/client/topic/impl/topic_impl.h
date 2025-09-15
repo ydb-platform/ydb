@@ -142,8 +142,8 @@ public:
             ConvertAlterConsumerToProto(consumer, consumerProto);
         }
 
-        if (settings.EnablePartitionCounters_) {
-            request.set_set_enable_partition_counters(*settings.EnablePartitionCounters_);
+        if (settings.MetricsLevel_) {
+            request.set_set_metrics_level(static_cast<Ydb::MetricsLevel>(*settings.MetricsLevel_));
         }
 
         return request;

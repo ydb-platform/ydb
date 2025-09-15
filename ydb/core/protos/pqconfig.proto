@@ -1,6 +1,7 @@
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 
 import "ydb/public/api/protos/annotations/sensitive.proto";
+import "ydb/public/api/protos/ydb_common.proto";
 
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
@@ -446,7 +447,7 @@ message TPQTabletConfig {
 
     optional bool EnableCompactification = 39 [default = false];
 
-    optional bool EnablePartitionCounters = 40 [default = false];
+    optional Ydb.MetricsLevel MetricsLevel = 40;
 }
 
 message THeartbeat {

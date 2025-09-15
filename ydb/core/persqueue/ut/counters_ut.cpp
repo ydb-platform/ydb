@@ -124,9 +124,9 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
     tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, firstClassCitizen, true);
     tc.Runtime->SetScheduledLimit(100);
 
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnablePartitionCounters(featureFlagEnabled);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(featureFlagEnabled);
 
-    PQTabletPrepare({ .enablePartitionCounters = false }, {}, tc);
+    PQTabletPrepare({ .metricsLevel = 1 }, {}, tc);
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
@@ -150,22 +150,23 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
         return counters;
     };
 
-    auto getCountersHtml = [&tc](const TString& group = "topics_per_partition") {
+    auto getCountersHtml = [&tc](const TString& group = "topics_per_partition", bool skipAddedLabels = true) {
         auto counters = tc.Runtime->GetAppData(0).Counters;
-        auto dbGroup = GetServiceCounters(counters, group);
+        auto dbGroup = GetServiceCounters(counters, group, skipAddedLabels);
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
         return countersStr.Str();
     };
 
     TString counters = getCountersHtml();
+    Cerr << "XXXXX before write: " << counters << Endl;
     TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_turned_off.html");
     UNIT_ASSERT(counters + "\n" == referenceCounters || counters == EMPTY_COUNTERS);
 
     {
         // Turn on per partition counters, check counters.
 
-        PQTabletPrepare({ .enablePartitionCounters = true }, {}, tc);
+        PQTabletPrepare({ .metricsLevel = 2 }, {}, tc);
 
         // partition, sourceId, data, text
         CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
@@ -226,20 +227,21 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
             UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
         }
 
-        TString counters = getCountersHtml();
-        Cerr << "after read: " << counters << "\n";
+        TString counters = getCountersHtml("topics_per_partition");
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_after_read.html");
         counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");
+        Cerr << "XXXXX after read: " << counters << "\n";
         UNIT_ASSERT_VALUES_EQUAL(counters, featureFlagEnabled ? referenceCounters : EMPTY_COUNTERS);
     }
 
     {
         // Disable per partition counters, the counters should be empty.
 
-        PQTabletPrepare({ .enablePartitionCounters = false }, {}, tc);
+        PQTabletPrepare({ .metricsLevel = 1 }, {}, tc);
         TString counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_turned_off.html");
         counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");
+        Cerr << "XXXXX after read counters disabled: " << counters << "\n";
         UNIT_ASSERT_VALUES_EQUAL(counters, featureFlagEnabled ? referenceCounters : EMPTY_COUNTERS);
     }
 }

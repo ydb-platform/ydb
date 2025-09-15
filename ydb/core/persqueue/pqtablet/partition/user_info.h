@@ -124,6 +124,8 @@ struct TUserInfo: public TUserInfoBase {
     ui32 ReadsInQuotaQueue;
     ui32 Subscriptions;
 
+    ui32 Partition;
+
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgReadBytes;
 
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
@@ -133,6 +135,7 @@ struct TUserInfo: public TUserInfoBase {
 
     bool DoInternalRead = false;
     bool MeterRead = true;
+
 
     bool Parsed = false;
 
@@ -236,6 +239,7 @@ struct TUserInfo: public TUserInfoBase {
         , ActiveReads(0)
         , ReadsInQuotaQueue(0)
         , Subscriptions(0)
+        , Partition(partition)
         , AvgReadBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000},
                        {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
         , WriteLagMs(TDuration::Minutes(1), 100)
@@ -271,13 +275,16 @@ struct TUserInfo: public TUserInfoBase {
         }
 
         bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
-        auto consumerSubgroup = fcc
+
+        auto partitionSubgroup = fcc
             ? subgroup->GetSubgroup("consumer", User)
+                      ->GetSubgroup("partition_id", ToString(Partition))
             : subgroup->GetSubgroup("Client", User)
-                      ->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx));
+                      ->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx))
+                      ->GetSubgroup("Partition", ToString(Partition));
 
         auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
-            return consumerSubgroup->GetExpiringNamedCounter(
+            return partitionSubgroup->GetExpiringNamedCounter(
                 fcc ? "name" : "sensor",
                 fcc ? "topic.partition." + forFCC : forFederation + "PerPartition",
                 deriv);

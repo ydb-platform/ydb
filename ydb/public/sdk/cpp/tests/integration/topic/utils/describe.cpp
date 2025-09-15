@@ -43,7 +43,7 @@ void DescribeTopicTest(ITopicTestSetup& setup, TTopicClient& client, bool requir
             Y_ENSURE(partitionLocation.GetGeneration() >= 0); // greater-or-equal 0
         }
 
-        Y_ENSURE(description.GetEnablePartitionCounters() == false);
+        Y_ENSURE(!description.GetMetricsLevel().has_value());
     }
 }
 

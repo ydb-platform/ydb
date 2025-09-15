@@ -1046,7 +1046,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
 }
 
 bool TPartition::PartitionCountersAreEnabled() const {
-    return AppData()->FeatureFlags.GetEnablePartitionCounters() && Config.GetEnablePartitionCounters();
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {

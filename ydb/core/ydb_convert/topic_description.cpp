@@ -160,7 +160,9 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
         }
     }
 
-    out.set_enable_partition_counters(config.GetEnablePartitionCounters());
+    if (config.HasMetricsLevel()) {
+        out.set_metrics_level(config.GetMetricsLevel());
+    }
 
     for (const auto& consumer : config.GetConsumers()) {
         if (!FillConsumer(*out.add_consumers(), consumer, status, error)) {

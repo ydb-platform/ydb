@@ -2839,9 +2839,6 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         TStringBuilder result;
         result << rootPath;
         if (TString objectPath = CanonizePath(path)) {
-            if (result && result.back() != '/') {
-                result << '/';
-            }
             result << objectPath;
         }
         return std::move(result);

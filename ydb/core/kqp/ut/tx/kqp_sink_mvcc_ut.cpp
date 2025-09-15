@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         auto tx1 = insertResult1.GetTransaction();
         UNIT_ASSERT(tx1);
 
-        auto insertResult2 = session1.ExecuteQuery(R"(
+        auto insertResult2 = session2.ExecuteQuery(R"(
                     UPSERT INTO `/Root/Test` (key, val2) VALUES (1, 3)
             )", NQuery::TTxControl::BeginTx()) .GetValueSync();
         UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, insertResult2.GetStatus(), insertResult2.GetIssues().ToString());

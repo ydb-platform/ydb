@@ -24,5 +24,5 @@ feature_flags:
 | `enable_strict_user_management`                          | Strict checks for local users — only the cluster or database administrator can administer local users |
 | `enable_database_admin`                                  | The role of a database administrator |
 | `enable_kafka_native_balancing`                          | Client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
-| `enable_topic_compactification_by_key`                   | Enabling topic compactification in the [YDB Topics Kafka API](./reference/kafka-api/index.md) |
-| `enable_kafka_transactions`                              | Enabling transactions in the [YDB Topics Kafka API](./reference/kafka-api/index.md) |
+| `enable_topic_compactification_by_key`                   | Enabling topic compactification in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
+| `enable_kafka_transactions`                              | Enabling transactions in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |

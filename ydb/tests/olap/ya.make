@@ -10,7 +10,6 @@ PY3TEST()
         test_cs_many_updates.py
         data_read_correctness.py
         zip_bomb.py
-        test_cs_many_updates.py
     )
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)

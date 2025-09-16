@@ -164,8 +164,8 @@ public:
 
     bool HandleProxyResponse(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx)
     {
-        Y_ABORT_UNLESS(Waiting);
-        Y_ABORT_UNLESS(Response);
+        AFL_ENSURE(Waiting);
+        AFL_ENSURE(Response);
         --Waiting;
         bool skip = false;
         if (WasSplit && ev->Get()->Response->GetPartitionResponse().CmdWriteResultSize() == 1) { //megaqc - remove this
@@ -420,7 +420,7 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
         PQ_ENSURE(TopicName.size())("description", "Need topic name here");
         ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(TopicName, cacheSize));
     } else {
-        //Y_ABORT_UNLESS(TopicName == Config.GetTopicName(), "Changing topic name is not supported");
+        //AFL_ENSURE(TopicName == Config.GetTopicName(), "Changing topic name is not supported");
         TopicPath = Config.GetTopicPath();
         ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(cacheSize));
     }
@@ -1316,8 +1316,8 @@ void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
                                                                   "",
                                                                   config.GetLocalDC());
     topicConverter = converterFactory->MakeTopicConverter(config);
-    Y_ABORT_UNLESS(topicConverter);
-    Y_ABORT_UNLESS(topicConverter->IsValid(), "%s", topicConverter->GetReason().c_str());
+    AFL_ENSURE(topicConverter);
+    AFL_ENSURE(topicConverter->IsValid())("reason", topicConverter->GetReason());
 }
 
 void TPersQueue::UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const

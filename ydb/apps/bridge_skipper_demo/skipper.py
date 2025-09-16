@@ -217,19 +217,18 @@ def _parse_args():
     parser.add_argument("--cluster", default="cluster", help="Cluster name to display")
     parser.add_argument("--tui", action="store_true", help="Enable TUI")
     parser.add_argument("--tui-refresh", type=float, default=1.0, help="Refresh interval in seconds")
-    parser.add_argument("--https", action="store_true", help="Use HTTPS for viewer healthcheck requests")
 
     return parser.parse_args()
 
 
-def _run_no_tui(path_to_cli, piles, use_https, auto_failover, state_path, ydb_auth_opts):
-    keeper = bridge.BridgeSkipper(path_to_cli, piles, use_https=use_https, auto_failover=auto_failover, state_path=state_path, ydb_auth_opts=ydb_auth_opts)
+def _run_no_tui(path_to_cli, piles, auto_failover, state_path, ydb_auth_opts):
+    keeper = bridge.BridgeSkipper(path_to_cli, piles, auto_failover=auto_failover, state_path=state_path, ydb_auth_opts=ydb_auth_opts)
     keeper.run()
 
 
 def _run_tui(args, path_to_cli, piles, ydb_auth_opts):
     auto_failover = not args.disable_auto_failover
-    keeper = bridge.BridgeSkipper(path_to_cli, piles, use_https=args.https, auto_failover=auto_failover, state_path=args.state, ydb_auth_opts=ydb_auth_opts)
+    keeper = bridge.BridgeSkipper(path_to_cli, piles, auto_failover=auto_failover, state_path=args.state, ydb_auth_opts=ydb_auth_opts)
     app = skipper_tui.KeeperApp(
         keeper=keeper,
         cluster_name=args.cluster,
@@ -353,7 +352,7 @@ def main():
         _run_tui(args, path_to_cli, piles, ydb_auth_opts)
     else:
         auto_failover = not args.disable_auto_failover
-        _run_no_tui(path_to_cli, piles, args.https, auto_failover, args.state, ydb_auth_opts)
+        _run_no_tui(path_to_cli, piles, auto_failover, args.state, ydb_auth_opts)
 
 
 if __name__ == "__main__":

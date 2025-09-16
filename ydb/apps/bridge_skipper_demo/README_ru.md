@@ -48,5 +48,3 @@ pip3 install textual requests yaml
 | `--cluster` | cluster | Имя кластера для отображения. |
 | `--tui` | false | Включить TUI. |
 | `--tui-refresh` | 1.0 | Интервал обновления TUI в секундах. |
-| `--https` | false | Использовать HTTPS для healthcheck-запросов viewer. |
-

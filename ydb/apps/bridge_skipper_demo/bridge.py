@@ -439,15 +439,14 @@ class TransitionHistory:
 
 
 class BridgeSkipper:
-    def __init__(self, path_to_cli: str, initial_piles: Dict[str, List[str]], use_https: bool = False, auto_failover: bool = True, state_path: Optional[str] = None, ydb_auth_opts: Optional[List[str]] = None):
+    def __init__(self, path_to_cli: str, initial_piles: Dict[str, List[str]], auto_failover: bool = True, state_path: Optional[str] = None, ydb_auth_opts: Optional[List[str]] = None):
         self.path_to_cli = path_to_cli
         self.initial_piles = initial_piles
-        self.use_https = use_https
         self.auto_failover = auto_failover
         self.state_path = state_path
         self.ydb_auth_opts = list(ydb_auth_opts or [])
 
-        self.async_checker = health.AsyncHealthcheckRunner(path_to_cli, initial_piles, use_https=use_https, ydb_auth_opts=self.ydb_auth_opts)
+        self.async_checker = health.AsyncHealthcheckRunner(path_to_cli, initial_piles, ydb_auth_opts=self.ydb_auth_opts)
         self.async_checker.start()
 
         # TODO: avoid hack, sleep to give async_checker time to get data

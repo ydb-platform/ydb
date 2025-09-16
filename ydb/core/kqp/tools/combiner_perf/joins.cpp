@@ -39,7 +39,6 @@ NKikimr::NMiniKQL::TInnerJoinDescription PrepareDescription(NKikimr::NMiniKQL::T
     return descr;
 }
 
-
 struct TTestResult {
     TRunResult Run;
     TString TestName;

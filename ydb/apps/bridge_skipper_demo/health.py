@@ -283,7 +283,6 @@ def _async_pile_health_check(path_to_cli: str, pile_name: str, endpoints, execut
             if result is None:
                 return None
             data = json.loads(result.stdout.decode())
-            #logger.trace(f"data: {data}")
             end_ts = time.monotonic()
             delta = end_ts - start_ts
             if delta > HEALTH_REPLY_TTL_SECONDS:

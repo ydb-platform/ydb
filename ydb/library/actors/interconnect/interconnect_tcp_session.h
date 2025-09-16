@@ -287,7 +287,7 @@ namespace NActors {
 
         struct TInboundPacket {
             ui64 Serial;
-            size_t XdcUnreadBytes; // number of unread bytes from XDC stream for this exact unprocessed packet
+            size_t XdcUnreadBytes = 0; // number of unread bytes from XDC stream for this exact unprocessed packet
             size_t RdmaUnreadBytes = 0;
         };
         std::deque<TInboundPacket> InboundPacketQ;
@@ -333,7 +333,7 @@ namespace NActors {
         void ProcessInboundPacketQ(ui64 numXdcBytesRead, ui64 numRdmaBytesRead);
         void UpdateInboundPacketQ(ui64& numXdcBytesRead, ui64& numRdmaBytesRead);
         void ProcessXdcCommand(ui16 channel, TReceiveContext::TPerChannelContext& context);
-        void ProcessEvents(TReceiveContext::TPerChannelContext& context);
+        void ProcessEvents(TReceiveContext::TPerChannelContext& context, bool processPacketQueue = true);
         ssize_t Read(NInterconnect::TStreamSocket& socket, const TPollerToken::TPtr& token, bool *readPending,
             const TIoVec *iov, size_t num);
         bool ReadMore();
@@ -604,6 +604,7 @@ namespace NActors {
         struct TOutgoingPacket {
             ui32 PacketSize; // including header
             ui32 ExternalSize;
+            ui32 RdmaPayloadSize;
         };
         std::deque<TOutgoingPacket> SendQueue; // packet boundaries
         size_t OutgoingOffset = 0;
@@ -633,6 +634,7 @@ namespace NActors {
         TPollerToken::TPtr XdcPollerToken;
         ui32 SendBufferSize;
         ui64 InflightDataAmount = 0;
+        ui64 RdmaInflightDataAmount = 0;
 
         std::unordered_map<TActorId, ui64, TActorId::THash> Subscribers;
 

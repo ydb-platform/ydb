@@ -622,7 +622,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             if (Config.GetInterconnectConfig().GetUseRdma()) {
                 // Interconnect uses rdma mem pool directly
                 const auto counters = GetServiceCounters(appData->Counters, "utils");
-                icCommon->RdmaMemPool = CreateIncrementalMemPool(counters.Get());
+                icCommon->RdmaMemPool = CreateSlotMemPool(counters.Get());
                 // Clients via wrapper to handle allocation fail
                 setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(icCommon->RdmaMemPool);
             }

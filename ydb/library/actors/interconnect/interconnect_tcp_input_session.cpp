@@ -598,7 +598,13 @@ namespace NActors {
                 };
 
                 Metrics->IncInputChannelsIncomingEvents(channel);
-                ProcessEvents(context);
+                // In case of rdma we call ProcessEvents from rdma io callback handler
+                // and we need to process packet queue from ProcessEvents to make sure ack will be sent.
+                // But LastProcessedSerial increasing here after ProcessEvents calls. So this violate invariant inside
+                // ProcessInboundPacketQ
+                // The simplest way to fix it - the flag which forbids to call ProcessInboundPacketQ if ProcessEvents
+                // has been called here
+                ProcessEvents(context, false);
             }
 
             const ui32 traffic = sizeof(part) + part.Size;
@@ -820,7 +826,7 @@ namespace NActors {
         }
     }
 
-    void TInputSessionTCP::ProcessEvents(TReceiveContext::TPerChannelContext& context) {
+    void TInputSessionTCP::ProcessEvents(TReceiveContext::TPerChannelContext& context, bool processPacketQueue) {
         for (; !context.PendingEvents.empty(); context.PendingEvents.pop_front()) {
             auto& pendingEvent = context.PendingEvents.front();
             size_t rdmaSizeLeft = pendingEvent.RdmaSizeLeft ? pendingEvent.RdmaSizeLeft->load() : 0;
@@ -829,7 +835,11 @@ namespace NActors {
             }
             auto& descr = *pendingEvent.EventData;
             ui64 z = 0;
+
             UpdateInboundPacketQ(z, pendingEvent.RdmaSize);
+            if (processPacketQueue) {
+                ProcessInboundPacketQ(0,0);
+            }
 
             // create aggregated payload
             TRope payload;

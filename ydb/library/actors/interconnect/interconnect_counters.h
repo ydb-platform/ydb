@@ -16,7 +16,9 @@ public:
     virtual ~IInterconnectMetrics() = default;
 
     virtual void AddInflightDataAmount(ui64 value) = 0;
+    virtual void AddInflightRdmaDataAmount(ui64 value) = 0;
     virtual void SubInflightDataAmount(ui64 value) = 0;
+    virtual void SubInflightRdmaDataAmount(ui64 value) = 0;
     virtual void AddTotalBytesWritten(ui64 value) = 0;
     virtual void SetClockSkewMicrosec(i64 value) = 0;
     virtual void IncSessionDeaths() = 0;

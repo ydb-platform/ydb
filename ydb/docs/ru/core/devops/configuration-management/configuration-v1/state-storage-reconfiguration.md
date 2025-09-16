@@ -12,7 +12,7 @@
     ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
     ```
 
-2. Изменить конфигурационный файл `config.yaml`, поменяв значение параметра `domains_config`:
+2. Внести требуемые изменения в секции `domains_config` конфигурационного файла `config.yaml`:
 
     Можно указать единую конфигурацию сразу для всех компонент StateStorage, Board, SchemeBoard:
 

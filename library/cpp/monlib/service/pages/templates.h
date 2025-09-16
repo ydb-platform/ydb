@@ -20,7 +20,6 @@
 #define DIV() TAG(TDiv)
 #define DIV_CLASS(cls) TAG_CLASS(TDiv, cls)
 #define DIV_CLASS_ID(cls, id) TAG_CLASS_ID(TDiv, cls, id)
-#define DIV_CLASS_STYLE(cls, style) TAG_CLASS_STYLE(TDiv, cls, style)
 #define PRE() TAG(TPre)
 #define TABLE() TAG(TTable)
 #define TABLE_CLASS(cls) TAG_CLASS(TTable, cls)

@@ -1178,7 +1178,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
                     double p = backupProgress.GetProgress();
                     DIV_CLASS_ID("progress", "backupProgress") {
-                        DIV_CLASS_STYLE("progress-bar", TStringBuilder() << "width:" << p << "%;") {
+                        TAG_CLASS_STYLE(TDiv, "progress-bar", TStringBuilder() << "width:" << p << "%;") {
                             str << p << "%";
                         }
                     }
@@ -1341,7 +1341,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
                     double p = restoreProgress.GetProgress();
                     DIV_CLASS_ID("progress", "restoreProgress") {
-                        DIV_CLASS_STYLE("progress-bar progress-bar-danger", TStringBuilder() << "width:" << p << "%;") {
+                        TAG_CLASS_STYLE(TDiv, "progress-bar progress-bar-danger", TStringBuilder() << "width:" << p << "%;") {
                             str << p << "%";
                         }
                     }

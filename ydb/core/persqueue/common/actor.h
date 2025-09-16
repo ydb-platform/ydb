@@ -58,7 +58,7 @@ protected:
 
 class TConstantLogPrefix: virtual NPrivate::ILogPrefixBase {
 public:
-    const TString& GetLogPrefix() const override;
+    const TString& GetLogPrefix() const final;
     virtual TString BuildLogPrefix() const = 0;
 private:
     mutable TMaybe<TString> LogPrefix_;

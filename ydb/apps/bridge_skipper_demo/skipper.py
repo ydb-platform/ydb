@@ -26,6 +26,7 @@ import sys
 import time
 import subprocess
 import threading
+import shlex
 
 
 logger = logging.getLogger(__name__)
@@ -207,6 +208,8 @@ def _parse_args():
     parser.add_argument("--state", "-s", required=True, help="Path to keeper state file (pickle format)")
 
     parser.add_argument("--ydb", required=False, help="Path to ydb cli")
+    parser.add_argument("--ydb-auth-opts", required=False,
+                        help="Extra auth/TLS options for ydb CLI (single string, e.g. '--ca-file /path --client-cert-file /path --client-cert-key-file /path')")
     parser.add_argument("--disable-auto-failover", action="store_true", help="Disable automatical failover")
 
     parser.add_argument("--log-level", default="INFO", choices=log_choices, help="Logging level")
@@ -219,14 +222,14 @@ def _parse_args():
     return parser.parse_args()
 
 
-def _run_no_tui(path_to_cli, piles, use_https, auto_failover, state_path):
-    keeper = bridge.BridgeSkipper(path_to_cli, piles, use_https=use_https, auto_failover=auto_failover, state_path=state_path)
+def _run_no_tui(path_to_cli, piles, use_https, auto_failover, state_path, ydb_auth_opts):
+    keeper = bridge.BridgeSkipper(path_to_cli, piles, use_https=use_https, auto_failover=auto_failover, state_path=state_path, ydb_auth_opts=ydb_auth_opts)
     keeper.run()
 
 
-def _run_tui(args, path_to_cli, piles):
+def _run_tui(args, path_to_cli, piles, ydb_auth_opts):
     auto_failover = not args.disable_auto_failover
-    keeper = bridge.BridgeSkipper(path_to_cli, piles, use_https=args.https, auto_failover=auto_failover, state_path=args.state)
+    keeper = bridge.BridgeSkipper(path_to_cli, piles, use_https=args.https, auto_failover=auto_failover, state_path=args.state, ydb_auth_opts=ydb_auth_opts)
     app = skipper_tui.KeeperApp(
         keeper=keeper,
         cluster_name=args.cluster,
@@ -255,6 +258,15 @@ def main():
     _setup_logging(args)
 
     path_to_cli = args.ydb
+    # parse auth opts for ydb CLI, if provided
+    ydb_auth_opts = None
+    try:
+        if hasattr(args, "ydb_auth_opts") and args.ydb_auth_opts:
+            ydb_auth_opts = shlex.split(args.ydb_auth_opts)
+    except Exception as e:
+        logger.error(f"Failed to parse --ydb-auth-opts: {e}")
+        sys.exit(2)
+
     if path_to_cli:
         if not os.path.exists(path_to_cli) or not os.access(path_to_cli, os.X_OK):
             logger.error(f"Specified --ydb '{path_to_cli}' not found or not executable")
@@ -306,7 +318,7 @@ def main():
 
     piles = None
     try:
-        piles = bridge.resolve(args.endpoint, path_to_cli)
+        piles = bridge.resolve(args.endpoint, path_to_cli, ydb_auth_opts=ydb_auth_opts)
     except Exception as e:
         # ignore, result is checked below
         logger.debug(f"Resolve throw exception: {e}")
@@ -338,10 +350,10 @@ def main():
         sys.exit(1)
 
     if args.tui:
-        _run_tui(args, path_to_cli, piles)
+        _run_tui(args, path_to_cli, piles, ydb_auth_opts)
     else:
         auto_failover = not args.disable_auto_failover
-        _run_no_tui(path_to_cli, piles, args.https, auto_failover, args.state)
+        _run_no_tui(path_to_cli, piles, args.https, auto_failover, args.state, ydb_auth_opts)
 
 
 if __name__ == "__main__":

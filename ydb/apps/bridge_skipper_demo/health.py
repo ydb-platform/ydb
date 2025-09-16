@@ -219,10 +219,10 @@ def get_latest_generation_pile(pile_world_views: Dict[str, PileWorldView]) -> Tu
     return (latest_generation, pile_with_latest_generation,)
 
 
-def _async_fetch_pile_list(path_to_cli: str, endpoints: List[str], executor: ThreadPoolExecutor) -> Future:
+def _async_fetch_pile_list(path_to_cli: str, endpoints: List[str], executor: ThreadPoolExecutor, ydb_auth_opts: Optional[List[str]] = None) -> Future:
     def worker() -> Optional[PileAdminStates]:
         cmd = ["admin", "cluster", "bridge", "list", "--format=json"]
-        result = execute_cli_command_parallel(path_to_cli, cmd, endpoints)
+        result = execute_cli_command_parallel(path_to_cli, cmd, endpoints, ydb_auth_opts=ydb_auth_opts)
         if result is None:
             return None
         try:
@@ -324,10 +324,11 @@ class AsyncHealthcheckRunner:
     - get_health_state() is thread-safe and returns a snapshot for BridgeSkipper
     """
 
-    def __init__(self, path_to_cli, initial_piles, use_https=False):
+    def __init__(self, path_to_cli, initial_piles, use_https=False, ydb_auth_opts: Optional[List[str]] = None):
         self.path_to_cli = path_to_cli
         self.pile_to_endpoints = initial_piles
         self.use_https = use_https
+        self.ydb_auth_opts = list(ydb_auth_opts or [])
 
         self._lock = threading.Lock()
 
@@ -412,7 +413,7 @@ class AsyncHealthcheckRunner:
             # to return correct result
             endpoints = endpoints[:MINIMAL_EXPECTED_ENDPOINTS_PER_PILE]
 
-            future = _async_fetch_pile_list(self.path_to_cli, endpoints, self._executor)
+            future = _async_fetch_pile_list(self.path_to_cli, endpoints, self._executor, self.ydb_auth_opts)
             future_to_pile[future] = pile_name
 
         for future in as_completed(list(future_to_pile.keys())):

@@ -18,6 +18,8 @@ namespace NKikimr {
         size_t RecordSize;
         size_t RecordItems = 0;
 
+        TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> BarriersEssence;
+
         static constexpr TDuration MaxQuantumTime = TDuration::MilliSeconds(10);
         static constexpr size_t MaxResultSize = 5'000'000; // may overshoot a little
         static constexpr size_t MaxResultItems = 10'000;
@@ -139,7 +141,7 @@ namespace NKikimr {
             RecordSize += len;
             ++RecordItems;
 
-            return iter.Next();
+            iter.Next();
         }
 
         template<bool IsForward>
@@ -192,6 +194,14 @@ namespace NKikimr {
         void Process(TBlobIter<IsForward>& iter) {
             const TKeyLogoBlob& key = iter;
             const TMemRecLogoBlob& memRec = iter;
+
+            if (!BarriersEssence) {
+                BarriersEssence = Snap.BarriersSnap.CreateEssence(Snap.HullCtx);
+            }
+            if (auto keep = BarriersEssence->Keep(key, memRec, {}, Snap.HullCtx->AllowKeepFlags, true); !keep.KeepData) {
+                return iter.Next(); // we are not interested in this blob -- it is going to be collected
+            }
+
             auto *pb = Result->Record.AddBlobs();
 
             const TLogoBlobID id(key.LogoBlobID());
@@ -227,7 +237,7 @@ namespace NKikimr {
             RecordSize += len;
             ++RecordItems;
 
-            return iter.Next();
+            iter.Next();
         }
 
         template<typename TKey, typename TMemRec, bool IsForward>

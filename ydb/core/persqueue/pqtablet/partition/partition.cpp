@@ -2544,32 +2544,32 @@ bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
     return haveChanges;
 }
 
-//void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)
-//{
-//    DBGTRACE_LOG("=== DumpKeyValueRequest ===");
-//    DBGTRACE_LOG("--- delete ----------------");
-//    for (size_t i = 0; i < request.CmdDeleteRangeSize(); ++i) {
-//        const auto& cmd = request.GetCmdDeleteRange(i);
-//        const auto& range = cmd.GetRange();
-//        Y_UNUSED(range);
-//        DBGTRACE_LOG((range.GetIncludeFrom() ? '[' : '(') << range.GetFrom() <<
-//                     ", " <<
-//                     range.GetTo() << (range.GetIncludeTo() ? ']' : ')'));
-//    }
-//    DBGTRACE_LOG("--- write -----------------");
-//    for (size_t i = 0; i < request.CmdWriteSize(); ++i) {
-//        const auto& cmd = request.GetCmdWrite(i);
-//        Y_UNUSED(cmd);
-//        DBGTRACE_LOG(cmd.GetKey());
-//    }
-//    DBGTRACE_LOG("--- rename ----------------");
-//    for (size_t i = 0; i < request.CmdRenameSize(); ++i) {
-//        const auto& cmd = request.GetCmdRename(i);
-//        Y_UNUSED(cmd);
-//        DBGTRACE_LOG(cmd.GetOldKey() << ", " << cmd.GetNewKey());
-//    }
-//    DBGTRACE_LOG("===========================");
-//}
+void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)
+{
+    PQ_LOG_D("=== DumpKeyValueRequest ===");
+    PQ_LOG_D("--- delete ----------------");
+    for (size_t i = 0; i < request.CmdDeleteRangeSize(); ++i) {
+        const auto& cmd = request.GetCmdDeleteRange(i);
+        const auto& range = cmd.GetRange();
+        Y_UNUSED(range);
+        PQ_LOG_D((range.GetIncludeFrom() ? '[' : '(') << range.GetFrom() <<
+                 ", " <<
+                 range.GetTo() << (range.GetIncludeTo() ? ']' : ')'));
+    }
+    PQ_LOG_D("--- write -----------------");
+    for (size_t i = 0; i < request.CmdWriteSize(); ++i) {
+        const auto& cmd = request.GetCmdWrite(i);
+        Y_UNUSED(cmd);
+        PQ_LOG_D(cmd.GetKey());
+    }
+    PQ_LOG_D("--- rename ----------------");
+    for (size_t i = 0; i < request.CmdRenameSize(); ++i) {
+        const auto& cmd = request.GetCmdRename(i);
+        Y_UNUSED(cmd);
+        PQ_LOG_D(cmd.GetOldKey() << ", " << cmd.GetNewKey());
+    }
+    PQ_LOG_D("===========================");
+}
 
 //void TPartition::DumpZones(const char* file, unsigned line) const
 //{

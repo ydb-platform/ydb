@@ -318,7 +318,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     CompactionInProgress = false;
 
-    return;
+    //return;
 
     TProcessParametersBase parameters;
     parameters.CurOffset = CompactionBlobEncoder.PartitionedBlob.IsInited()
@@ -358,7 +358,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     EndProcessWritesForCompaction(compactionRequest.Get(), blobCreationUnixTime, ctx);
 
     // for debugging purposes
-    //DumpKeyValueRequest(compactionRequest->Record);
+    DumpKeyValueRequest(compactionRequest->Record);
 
     ctx.Send(BlobCache, compactionRequest.Release(), 0, 0);
 }
@@ -367,7 +367,7 @@ void TPartition::BlobsForCompactionWereWrite()
 {
     const auto& ctx = ActorContext();
 
-    LOG_D("compaction completed");
+    PQ_LOG_D("Blobs compaction is completed");
 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(BlobEncoder.DataKeysBody.size() >= CompactionBlobsCount);

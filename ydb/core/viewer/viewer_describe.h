@@ -155,7 +155,17 @@ public:
                 return NKikimrSchemeOp::EPathTypeView;
             case TNavigate::KindSysView:
                 return NKikimrSchemeOp::EPathTypeSysView;
-            default:
+            case TNavigate::KindResourcePool:
+                return NKikimrSchemeOp::EPathTypeResourcePool;
+            case TNavigate::KindBackupCollection:
+                return NKikimrSchemeOp::EPathTypeBackupCollection;
+            case TNavigate::KindSecret:
+                return NKikimrSchemeOp::EPathTypeSecret;
+            case TNavigate::KindStreamingQuery:
+                return NKikimrSchemeOp::EPathTypeStreamingQuery;
+            case TNavigate::KindIndex:
+                return NKikimrSchemeOp::EPathTypeTableIndex;
+            case TNavigate::KindUnknown:
                 return NKikimrSchemeOp::EPathTypeDir;
         }
     }

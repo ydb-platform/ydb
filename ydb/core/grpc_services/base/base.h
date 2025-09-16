@@ -455,6 +455,8 @@ public:
     }
     virtual void SetAuditLogHook(TAuditLogHook&& hook) = 0;
     virtual void SetDiskQuotaExceeded(bool disk) = 0;
+
+    virtual TString GetRpcMethodName() const = 0;
 };
 
 // Request context
@@ -708,6 +710,10 @@ public:
 
     void SetAuditLogHook(TAuditLogHook&&) override {
         Y_ABORT("unimplemented for TRefreshTokenImpl");
+    }
+
+    TString GetRpcMethodName() const override {
+        return {};
     }
 
     // IRequestCtxBase
@@ -1021,6 +1027,10 @@ public:
     bool WriteAndFinish(TResponse&& message, Ydb::StatusIds::StatusCode status, const grpc::WriteOptions& options, const grpc::Status& grpcStatus = grpc::Status::OK) {
         AuditLogRequestEnd(status);
         return Ctx_->WriteAndFinish(std::move(message), options, grpcStatus);
+    }
+
+    TString GetRpcMethodName() const override {
+        return Ctx_->GetRpcMethodName();
     }
 
 private:
@@ -1912,6 +1922,10 @@ public:
 
     TAuditMode GetAuditMode() const override {
         return AuditMode;
+    }
+
+    TString GetRpcMethodName() const override {
+        return {};
     }
 
     TString Database;

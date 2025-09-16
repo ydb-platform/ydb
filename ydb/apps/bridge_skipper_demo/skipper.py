@@ -261,7 +261,7 @@ def main():
     # parse auth opts for ydb CLI, if provided
     ydb_auth_opts = None
     try:
-        if hasattr(args, "ydb_auth_opts") and args.ydb_auth_opts:
+        if args.ydb_auth_opts:
             ydb_auth_opts = shlex.split(args.ydb_auth_opts)
     except Exception as e:
         logger.error(f"Failed to parse --ydb-auth-opts: {e}")

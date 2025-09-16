@@ -241,7 +241,6 @@ struct TGraphMeta {
     TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
     bool CreateSuspended = false;
     bool CheckDuplicateRows = false;
-    bool EnableParallelPointReadConsolidation = false;
     bool ShardsResolved = false;
     THashMap<NYql::NDq::TStageId, THashMap<ui64, TShardInfo>> SourceScanStageIdToParititions;
     TMaybe<ui64> MaxBatchSize;

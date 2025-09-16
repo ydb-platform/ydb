@@ -423,6 +423,9 @@ message TReqStartTransaction
 
     optional TReplicateToMasterCellTags replicate_to_master_cell_tags = 15;
 
+    // Address of the last client that pinged transaction.
+    optional string pinger_address = 16;
+
     optional TMutatingOptions mutating_options = 103;
 }
 
@@ -1863,6 +1866,8 @@ message TReqAttachTransaction
     optional uint64 ping_period = 4; // TDuration
     optional bool ping = 5 [default = true];
     optional bool ping_ancestors = 6 [default = false];
+    // Address of the last client that pinged transaction.
+    optional string pinger_address = 7;
 }
 
 message TRspAttachTransaction

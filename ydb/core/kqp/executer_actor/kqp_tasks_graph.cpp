@@ -710,21 +710,6 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
     }
 }
 
-bool TKqpTasksGraph::IsCrossShardChannel(const TChannel& channel) const {
-    YQL_ENSURE(channel.SrcTask);
-
-    if (!channel.DstTask) {
-        return false;
-    }
-
-    ui64 targetShard = GetTask(channel.DstTask).Meta.ShardId;
-    if (!targetShard) {
-        return false;
-    }
-
-    ui64 srcShard = GetTask(channel.SrcTask).Meta.ShardId;
-    return srcShard && targetShard != srcShard;
-}
 
 void TShardKeyRanges::AddPoint(TSerializedCellVec&& point) {
     if (!IsFullRange()) {
@@ -966,8 +951,6 @@ std::pair<const TSerializedCellVec*, bool> TShardKeyRanges::GetRightBorder() con
 void FillEndpointDesc(NDqProto::TEndpoint& endpoint, const TTask& task) {
     if (task.ComputeActorId) {
         ActorIdToProto(task.ComputeActorId, endpoint.MutableActorId());
-    } else if (task.Meta.ShardId) {
-        endpoint.SetTabletId(task.Meta.ShardId);
     }
 }
 
@@ -998,7 +981,7 @@ void TKqpTasksGraph::FillChannelDesc(NDqProto::TChannel& channelDesc, const TCha
         ActorIdToProto(srcTask.Meta.ExecuterId, channelDesc.MutableDstEndpoint()->MutableActorId());
     }
 
-    channelDesc.SetIsPersistent(IsCrossShardChannel(channel));
+    channelDesc.SetIsPersistent(false);
     channelDesc.SetInMemory(channel.InMemory);
     if (chanTransportVersion == NKikimrConfig::TTableServiceConfig::CTV_OOB_PICKLE_1_0) {
         channelDesc.SetTransportVersion(NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0);
@@ -1017,29 +1000,11 @@ void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransact
 }
 
 void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto::TDqTask& taskDesc) {
-    if (task.Meta.ShardId && (task.Meta.Reads || task.Meta.Writes)) {
+    if (task.Meta.ShardId && task.Meta.Writes) {
         NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta protoTaskMeta;
 
         FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
 
-        if (task.Meta.Reads) {
-            for (auto& read : *task.Meta.Reads) {
-                auto* protoReadMeta = protoTaskMeta.AddReads();
-                read.Ranges.SerializeTo(protoReadMeta->MutableRange());
-                for (auto& column : read.Columns) {
-                    auto* protoColumn = protoReadMeta->AddColumns();
-                    protoColumn->SetId(column.Id);
-                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                    protoColumn->SetType(columnType.TypeId);
-                    if (columnType.TypeInfo) {
-                        *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
-                    }
-                    protoColumn->SetName(column.Name);
-                }
-                protoReadMeta->SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
-                protoReadMeta->SetReverse(task.Meta.ReadInfo.IsReverse());
-            }
-        }
         if (task.Meta.Writes) {
             auto* protoWrites = protoTaskMeta.MutableWrites();
             task.Meta.Writes->Ranges.SerializeTo(protoWrites->MutableRange());
@@ -2665,9 +2630,8 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
     }
 
     bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
-    bool isParallelPointRead = GetMeta().EnableParallelPointReadConsolidation && !isSequentialInFlight && !source.GetSorted() && IsParallelPointReadPossible(partitions);
 
-    if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead || singlePartitionedStage)) {
+    if (partitions.size() > 0 && (isSequentialInFlight || singlePartitionedStage)) {
         auto [startShard, shardInfo] = PartitionPruner->MakeVirtualTablePartition(source, stageInfo);
 
         YQL_ENSURE(stats);
@@ -2681,10 +2645,10 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         }
 
         if (shardInfo.KeyReadRanges) {
-            const TMaybe<ui64> nodeId = (isParallelPointRead || singlePartitionedStage) ? TMaybe<ui64>{GetMeta().ExecuterId.NodeId()} : Nothing();
+            const TMaybe<ui64> nodeId = singlePartitionedStage ? TMaybe<ui64>{GetMeta().ExecuterId.NodeId()} : Nothing();
             addPartition(startShard, nodeId, {}, shardInfo, inFlightShards);
             fillRangesForTasks();
-            return (isParallelPointRead || singlePartitionedStage) ? TMaybe<size_t>(partitions.size()) : Nothing();
+            return singlePartitionedStage ? TMaybe<size_t>(partitions.size()) : Nothing();
         } else {
             return 0;
         }

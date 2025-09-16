@@ -326,7 +326,7 @@ PyType_Slot ZstdCompressionDictSlots[] = {
 };
 
 PyType_Spec ZstdCompressionDictSpec = {
-    "zstd.ZstdCompressionDict",
+    "zstandard.backend_c.ZstdCompressionDict",
     sizeof(ZstdCompressionDict),
     0,
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,

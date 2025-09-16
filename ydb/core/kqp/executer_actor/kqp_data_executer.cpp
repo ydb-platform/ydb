@@ -2000,13 +2000,6 @@ private:
             }
         }
 
-        for(const auto& channel: GetTasksGraph().GetChannels()) {
-            if (GetTasksGraph().IsCrossShardChannel(channel)) {
-                HasPersistentChannels = true;
-                break;
-            }
-        }
-
         if (computeTasks.size() > Request.MaxComputeActors) {
             LOG_N("Too many compute actors: " << computeTasks.size());
             ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,

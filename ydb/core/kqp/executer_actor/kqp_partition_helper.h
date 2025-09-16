@@ -103,8 +103,4 @@ TPhysicalShardReadSettings ExtractReadSettings(
     const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
 
-// Returns true if parallel point read is possible for the given partitions
-// for EnableParallelPointReadConsolidation settings
-bool IsParallelPointReadPossible(const THashMap<ui64, TShardInfo>& partitions);
-
 } // namespace NKikimr::NKqp

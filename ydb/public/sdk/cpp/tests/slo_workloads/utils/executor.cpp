@@ -3,8 +3,8 @@
 const TDuration WaitTimeout = TDuration::Seconds(10);
 
 // Debug use only:
-std::atomic<ui64> ReadPromises = 0;
-std::atomic<ui64> ExecutorPromises = 0;
+std::atomic<std::uint64_t> ReadPromises = 0;
+std::atomic<std::uint64_t> ExecutorPromises = 0;
 
 
 TInsistentClient::TInsistentClient(const TCommonOptions& opts)
@@ -74,9 +74,9 @@ void TInsistentClient::Report(TStringBuilder& out) const {
         << ", successful " << CounterSOk.load() << Endl;
 }
 
-ui64 TInsistentClient::GetActiveSessions() const {
-    i64 sessions = Client.GetActiveSessionCount();
-    return static_cast<ui64>(sessions);
+std::uint64_t TInsistentClient::GetActiveSessions() const {
+    std::int64_t sessions = Client.GetActiveSessionCount();
+    return static_cast<std::uint64_t>(sessions);
 }
 
 void TInsistentClient::ClearContext(std::shared_ptr<TOperationContext>& context) {
@@ -103,7 +103,6 @@ void TInsistentClient::RemoveTimeoutIter(std::shared_ptr<TOperationContext>& con
 }
 
 TAsyncFinalStatus TInsistentClient::ExecuteWithRetry(const NYdb::NTable::TTableClient::TOperationFunc& operation) {
-    //auto promise = NThreading::NewPromise<NYdb::TStatus>();
     TTracedPromise<TFinalStatus> promise = TTracedPromise<TFinalStatus>(
         NThreading::NewPromise<TFinalStatus>(),
         &ExecutorPromises
@@ -210,15 +209,15 @@ TExecutor::TExecutor(const TCommonOptions& opts, TStat& stats, EMode mode)
             SleepUntil(wakeupTime);
         }
     };
-    SolomonPusherThread.reset(SystemThreadFactory()->Run(threadFunc).Release());
+    MetricsPusherThread.reset(SystemThreadFactory()->Run(threadFunc).Release());
 }
 
 TExecutor::~TExecutor() {
-    ui32 infly = StopAndWait(WaitTimeout);
-    if (SolomonPusherThread) {
-        SolomonPusherThread->Join();
+    std::uint32_t infly = StopAndWait(WaitTimeout);
+    if (MetricsPusherThread) {
+        MetricsPusherThread->Join();
     } else {
-        Cerr << (TStringBuilder() << "TExecutor::~TExecutor Error: SolomonPusherThread is not running." << Endl);
+        Cerr << (TStringBuilder() << "TExecutor::~TExecutor Error: MetricsPusherThread is not running." << Endl);
     }
     if (infly) {
         Cerr << "Warning: destroying TExecutor while having " << infly << " infly requests." << Endl;
@@ -331,7 +330,7 @@ void TExecutor::Wait() {
     InputQueue->Stop();
 }
 
-ui32 TExecutor::Wait(TDuration waitTimeout) {
+std::uint32_t TExecutor::Wait(TDuration waitTimeout) {
     AllJobsFinished.WaitT(waitTimeout);
     InputQueue->Stop();
     return Infly;
@@ -342,7 +341,7 @@ void TExecutor::StopAndWait() {
     Wait();
 }
 
-ui32 TExecutor::StopAndWait(TDuration waitTimeout) {
+std::uint32_t TExecutor::StopAndWait(TDuration waitTimeout) {
     Stop();
     return Wait(waitTimeout);
 }
@@ -365,17 +364,17 @@ void TExecutor::UpdateStats() {
     if (Infly > MaxSecInfly) {
         MaxSecInfly = Infly;
     }
-    ui64 activeSessions = InsistentClient.GetActiveSessions();
+    std::uint64_t activeSessions = InsistentClient.GetActiveSessions();
     if (activeSessions > MaxSecSessions) {
         MaxSecSessions = activeSessions;
     }
 
     // Debug use only:
-    ui64 readPromises = ReadPromises.load();
+    std::uint64_t readPromises = ReadPromises.load();
     if (readPromises > MaxSecReadPromises) {
         MaxSecReadPromises = readPromises;
     }
-    ui64 executorPromises = ExecutorPromises.load();
+    std::uint64_t executorPromises = ExecutorPromises.load();
     if (executorPromises > MaxSecExecutorPromises) {
         MaxSecExecutorPromises = executorPromises;
     }

@@ -32,7 +32,7 @@ int DoCreate(TDatabaseOptions& dbOptions, int argc, char** argv) {
         return result;
     }
 
-    ui32 maxId = GetTableStats(dbOptions, TableName).MaxId;
+    std::uint32_t maxId = GetTableStats(dbOptions, TableName).MaxId;
 
     createOptions.CommonOptions.ReactionTime = TDuration::Seconds(20);
 
@@ -41,7 +41,7 @@ int DoCreate(TDatabaseOptions& dbOptions, int argc, char** argv) {
 
     std::shared_ptr<TJobContainer>& jobs = *Singleton<std::shared_ptr<TJobContainer>>();
     TJobGC gc(jobs);
-    jobs.reset(new TJobContainer());
+    jobs = std::make_shared<TJobContainer>();
 
     jobs->Add(new TGenerateInitialContentJob(createOptions, maxId));
 

@@ -16,12 +16,12 @@
 extern const TDuration WaitTimeout;
 
 // Debug use only
-extern std::atomic<ui64> ReadPromises;
+extern std::atomic<std::uint64_t> ReadPromises;
 
 template<typename T>
 class TTracedPromise : public NThreading::TPromise<T> {
 public:
-    TTracedPromise(NThreading::TPromise<T> promise, std::atomic<ui64>* counter)
+    TTracedPromise(NThreading::TPromise<T> promise, std::atomic<std::uint64_t>* counter)
         : NThreading::TPromise<T>(promise)
         , Counter(counter)
     {
@@ -44,7 +44,7 @@ public:
     }
 
 private:
-    mutable std::atomic<ui64>* Counter;
+    mutable std::atomic<std::uint64_t>* Counter;
 };
 
 class TInsistentClient {
@@ -73,7 +73,7 @@ public:
     ~TInsistentClient();
     void Report(TStringBuilder& out) const;
     TAsyncFinalStatus ExecuteWithRetry(const NYdb::NTable::TTableClient::TOperationFunc& operation);
-    ui64 GetActiveSessions() const;
+    std::uint64_t GetActiveSessions() const;
 
 private:
     void ClearContext(std::shared_ptr<TOperationContext>& context);
@@ -82,7 +82,7 @@ private:
 
     TThreadPool CallbackQueue;
     NYdb::NTable::TTableClient Client;
-    ui32 ClientMaxRetries;
+    std::uint32_t ClientMaxRetries;
     TDuration Timeout;
     TDuration RetryTimeout;
     TDuration SessionTimeout;
@@ -95,13 +95,13 @@ private:
     bool SendPreventiveRequest;
 
     // Ok received on the First try
-    std::atomic<ui64> CounterFOk = 0;
+    std::atomic<std::uint64_t> CounterFOk = 0;
     // Ok received on the Second try
-    std::atomic<ui64> CounterSOk = 0;
+    std::atomic<std::uint64_t> CounterSOk = 0;
     // First try launches (= total)
-    std::atomic<ui64> CounterFStart = 0;
+    std::atomic<std::uint64_t> CounterFStart = 0;
     // Second try launches
-    std::atomic<ui64> CounterSStart = 0;
+    std::atomic<std::uint64_t> CounterSStart = 0;
 };
 
 class TExecutor {
@@ -113,7 +113,7 @@ public:
 
     struct TErrorData {
         std::string Message;
-        ui64 Counter;
+        std::uint64_t Counter;
     };
 
     TExecutor(const TCommonOptions& opts, TStat& stats, EMode mode = ModeNonBlocking);
@@ -127,11 +127,11 @@ public:
     void Wait();
     // Signal that there will be no more new jobs
     void StopAndWait();
-    ui32 StopAndWait(TDuration waitTimeout);
-    ui32 Wait(TDuration waitTimeout);
+    std::uint32_t StopAndWait(TDuration waitTimeout);
+    std::uint32_t Wait(TDuration waitTimeout);
     bool IsStopped();
     void Finish();
-    ui32 GetTotal() const;
+    std::uint32_t GetTotal() const;
     void Report(TStringBuilder& out) const;
 
 protected:
@@ -149,34 +149,34 @@ protected:
     TFastSemaphore Semaphore;
     EMode Mode;
     std::unique_ptr<TThreadPool> InputQueue;
-    std::unique_ptr<IThreadFactory::IThread> SolomonPusherThread;
+    std::unique_ptr<IThreadFactory::IThread> MetricsPusherThread;
     std::atomic<bool> ShouldStop = false;
-    std::atomic<ui64> Total = 0;
-    std::atomic<ui64> Succeeded = 0;
-    std::atomic<ui64> Failed = 0;
+    std::atomic<std::uint64_t> Total = 0;
+    std::atomic<std::uint64_t> Succeeded = 0;
+    std::atomic<std::uint64_t> Failed = 0;
     TAdaptiveLock ErrorLock;
     std::unordered_map<NYdb::EStatus, TErrorData> Errors;
     TAdaptiveLock Lock;
     // Jobs put in queue but haven't started yet
-    ui32 Waiting = 0;
+    std::uint32_t Waiting = 0;
     // Jobs started executing
-    ui32 Infly = 0;
-    ui32 MaxInfly = 0;
+    std::uint32_t Infly = 0;
+    std::uint32_t MaxInfly = 0;
     bool AllJobsLaunched = false;
     TManualEvent AllJobsFinished;
     TInstant Deadline;
     // Last second we reported Infly
-    ui64 LastReportSec = 0;
+    std::uint64_t LastReportSec = 0;
     // Max infly for current second
-    ui64 MaxSecInfly = 0;
+    std::uint64_t MaxSecInfly = 0;
     // Max Active sessions for current second
-    ui64 MaxSecSessions = 0;
+    std::uint64_t MaxSecSessions = 0;
 
     //(Debug usage) Monitoring the number of jobs waiting for rps limiter
-    size_t InProgressCount = 0;
-    size_t InProgressSum = 0;
-    ui64 MaxSecReadPromises = 0;
-    ui64 MaxSecExecutorPromises = 0;
+    std::size_t InProgressCount = 0;
+    std::size_t InProgressSum = 0;
+    std::uint64_t MaxSecReadPromises = 0;
+    std::uint64_t MaxSecExecutorPromises = 0;
 };
 
 class TExecutorWithRetry : public TExecutor {
@@ -190,7 +190,7 @@ public:
         TStatUnit LifeTimeStat;
         TStatUnit PerRequestStat;
         std::unique_ptr<std::function<void(const TAsyncFinalStatus& resultFuture)>> HandleStatusFunc;
-        std::atomic<ui64> Retries = 0;
+        std::atomic<std::uint64_t> Retries = 0;
     };
 
     TExecutorWithRetry(const TCommonOptions& opts, TStat& stats);

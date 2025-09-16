@@ -12,7 +12,7 @@ NYdb::TValue BuildValueFromRecord(const TKeyValueRecordData& recordData);
 // Initial content generation
 class TGenerateInitialContentJob : public TThreadJob {
 public:
-    TGenerateInitialContentJob(const TCreateOptions& createOpts, ui32 maxId);
+    TGenerateInitialContentJob(const TCreateOptions& createOpts, std::uint32_t maxId);
     void ShowProgress(TStringBuilder& report) override;
     void DoJob() override;
     void OnFinish() override;
@@ -20,7 +20,7 @@ public:
 private:
     TExecutor Executor;
     TPackGenerator<TKeyValueGenerator, TKeyValueRecordData> PackGenerator;
-    ui64 Total;
+    std::uint64_t Total;
 };
 
 int CreateTable(TDatabaseOptions& dbOptions);

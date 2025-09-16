@@ -90,7 +90,7 @@ void TJobContainer::ShowProgress() {
 void SetUpInteraction() {
     signal(SIGUSR1, [](int) -> void {
         Cout << (TStringBuilder() << TInstant::Now().ToRfc822StringLocal() << " " << "SIGUSR1 handle" << Endl);
-        TIntrusivePtr<TJobContainer> jobs = *Singleton<TIntrusivePtr<TJobContainer>>();
+        std::shared_ptr<TJobContainer> jobs = *Singleton<std::shared_ptr<TJobContainer>>();
         if (jobs) {
             jobs->ShowProgress();
         } else {
@@ -100,7 +100,7 @@ void SetUpInteraction() {
 
     signal(SIGINT, [](int) -> void {
         Cerr << (TStringBuilder() << TInstant::Now().ToRfc822StringLocal() << " " << "SIGINT handle received. Stop signal sent." << Endl);
-        TIntrusivePtr<TJobContainer> jobs = *Singleton<TIntrusivePtr<TJobContainer>>();
+        std::shared_ptr<TJobContainer> jobs = *Singleton<std::shared_ptr<TJobContainer>>();
         if (jobs) {
             jobs->Stop();
         } else {

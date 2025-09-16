@@ -7,7 +7,7 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 
-TGenerateInitialContentJob::TGenerateInitialContentJob(const TCreateOptions& createOpts, ui32 maxId)
+TGenerateInitialContentJob::TGenerateInitialContentJob(const TCreateOptions& createOpts, std::uint32_t maxId)
     : TThreadJob(createOpts.CommonOptions)
     , Executor(createOpts.CommonOptions, Stats, TExecutor::ModeBlocking)
     , PackGenerator(
@@ -24,7 +24,7 @@ void TGenerateInitialContentJob::ShowProgress(TStringBuilder& report) {
     report << Endl << "======- GenerateInitialContentJob report -======" << Endl;
     Executor.Report(report);
     TDuration timePassed = TInstant::Now() - Stats.GetStartTime();
-    ui64 rps = (Total - PackGenerator.GetRemain()) * 1000000 / timePassed.MicroSeconds();
+    std::uint64_t rps = (Total - PackGenerator.GetRemain()) * 1000000 / timePassed.MicroSeconds();
     report << "Generated " << Total - PackGenerator.GetRemain() << " new elements." << Endl
         << "With pack_size=" << PackGenerator.GetPackSize() << " its " << rps << " rows/sec" << Endl
         << "Generator compute time: " << PackGenerator.GetComputeTime() << Endl;
@@ -81,4 +81,5 @@ UPSERT INTO `%s` SELECT * FROM AS_TABLE($items);
 void TGenerateInitialContentJob::OnFinish() {
     Executor.Finish();
     Executor.Wait();
+    Stats.Flush();
 }

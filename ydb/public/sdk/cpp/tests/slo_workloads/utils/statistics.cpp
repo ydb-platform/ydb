@@ -6,7 +6,7 @@
 #include <util/stream/file.h>
 
 
-TStatUnit::TStatUnit(TPeriodData* periodData, TInstant startTime)
+TStatUnit::TStatUnit(const std::shared_ptr<TPeriodData>& periodData, TInstant startTime)
     : PeriodData(periodData)
     , Start(startTime)
 {
@@ -24,11 +24,11 @@ TPeriodData::TPeriodData(
     TStat* stats,
     bool retryMode,
     const TDuration maxDelay,
-    ui64 currentSecond,
-    ui64 currInfly,
-    ui64 currSessions,
-    ui64 currPromises,
-    ui64 currExecutorPromises
+    std::uint64_t currentSecond,
+    std::uint64_t currInfly,
+    std::uint64_t currSessions,
+    std::uint64_t currPromises,
+    std::uint64_t currExecutorPromises
 )
     : Stats(stats)
     , RetryMode(retryMode)
@@ -46,10 +46,10 @@ TPeriodData::~TPeriodData() {
 }
 
 TStatUnit TPeriodData::CreateStatUnit(TInstant startTime) {
-    return TStatUnit(this, startTime);
+    return TStatUnit(shared_from_this(), startTime);
 }
 
-ui64 TPeriodData::GetCurrentSecond() const {
+std::uint64_t TPeriodData::GetCurrentSecond() const {
     return CurrentSecond;
 }
 
@@ -57,25 +57,25 @@ void TPeriodData::ReportMaxInfly() {
     ++Replies.CountMaxInfly;
 }
 
-void TPeriodData::ReportInfly(ui64 infly) {
+void TPeriodData::ReportInfly(std::uint64_t infly) {
     if (infly > Counters.Infly) {
         Counters.Infly = infly;
     }
 }
 
-void TPeriodData::ReportActiveSessions(ui64 sessions) {
+void TPeriodData::ReportActiveSessions(std::uint64_t sessions) {
     if (sessions > Counters.ActiveSessions) {
         Counters.ActiveSessions = sessions;
     }
 }
 
 // Debug use only:
-void TPeriodData::ReportReadPromises(ui64 promises) {
+void TPeriodData::ReportReadPromises(std::uint64_t promises) {
     if (promises > Counters.ReadPromises) {
         Counters.ReadPromises = promises;
     }
 }
-void TPeriodData::ReportExecutorPromises(ui64 promises) {
+void TPeriodData::ReportExecutorPromises(std::uint64_t promises) {
     if (promises > Counters.ExecutorPromises) {
         Counters.ExecutorPromises = promises;
     }
@@ -87,9 +87,6 @@ void TPeriodData::AddStat(TDuration delay, const TInnerStatus& status) {
     } else {
         NotOkDelays.push_back(delay);
     }
-
-    // std::cerr << "DEBUG: OkDelays.size(): " << OkDelays.size() << std::endl;
-    // std::cerr << "DEBUG: NotOkDelays.size(): " << NotOkDelays.size() << std::endl;
 
     switch (status.InnerStatus) {
     case TInnerStatus::StatusReceived:
@@ -142,7 +139,11 @@ TStat::TStat(
 }
 
 TStat::~TStat() {
-    ui64 lastSecMeasured = TInstant::Now().Seconds();
+    Flush();
+}
+
+void TStat::Flush() {
+    std::uint64_t lastSecMeasured = TInstant::Now().Seconds();
     if (ActivePeriod) {
         lastSecMeasured = ActivePeriod->GetCurrentSecond();
         ActivePeriod.reset();
@@ -203,7 +204,7 @@ void TStat::ReportMaxInfly() {
     ActivePeriod->ReportMaxInfly();
 }
 
-void TStat::ReportStats(ui64 infly, ui64 sessions, ui64 readPromises, ui64 executorPromises) {
+void TStat::ReportStats(std::uint64_t infly, std::uint64_t sessions, std::uint64_t readPromises, std::uint64_t executorPromises) {
     std::lock_guard<std::mutex> lock(Mutex);
 
     Counters.Infly = infly;
@@ -226,7 +227,7 @@ void TStat::Reserve(size_t size) {
 }
 
 void TStat::ReportLatencyData(
-    ui64 currSecond,
+    std::uint64_t currSecond,
     TCounters&& counters,
     TReplies&& replies,
     std::vector<TDuration>&& oks,
@@ -258,7 +259,7 @@ void TStat::PrintStatistics(TStringBuilder& out) {
 
     TInstant now = TInstant::Now();
     CheckCurrentSecond(now);
-    ui64 total = GetTotal();
+    std::uint64_t total = GetTotal();
 
     TDuration timePassed;
     if (FinishTime < StartTime) {
@@ -268,7 +269,7 @@ void TStat::PrintStatistics(TStringBuilder& out) {
         timePassed = FinishTime - StartTime;
     }
 
-    ui64 rps = total * 1000000 / timePassed.MicroSeconds();
+    std::uint64_t rps = total * 1000000 / timePassed.MicroSeconds();
     out << total << " requests total" << Endl
         << Replies.Statuses[NYdb::EStatus::SUCCESS] << " succeeded";
     if (total) {
@@ -327,7 +328,7 @@ void TStat::CalculateGlobalPercentile() {
     if (GlobalPercentile) {
         return;
     }
-    TVector<TDuration> fullData;
+    std::vector<TDuration> fullData;
     size_t totalSize = 0;
     for (auto& periodData : LatencyData) {
         totalSize += periodData.size();
@@ -360,7 +361,7 @@ void TStat::CalculateFailSeconds() {
     });
     FailSeconds = std::make_unique<size_t>(0);
     size_t& failSeconds = *FailSeconds;
-    ui64 lastSecChecked = LatencyStats[0].Seconds - 1;
+    std::uint64_t lastSecChecked = LatencyStats[0].Seconds - 1;
     for (auto& stat : LatencyStats) {
         failSeconds += stat.Seconds - lastSecChecked - 1;
         lastSecChecked = stat.Seconds;
@@ -370,8 +371,8 @@ void TStat::CalculateFailSeconds() {
     }
 }
 
-ui64 TStat::GetTotal() {
-    ui64 total = Replies.CountMaxInfly + Replies.CountHighLatency + Replies.NotFinished;
+std::uint64_t TStat::GetTotal() {
+    std::uint64_t total = Replies.CountMaxInfly + Replies.CountHighLatency + Replies.NotFinished;
     if (!RetryMode) {
         for (const auto& [status, counter] : Replies.Statuses) {
             total += counter;
@@ -414,7 +415,7 @@ void TStat::OnReport(TStatUnit& unit, const TInnerStatus& status) {
 }
 
 void TStat::CheckCurrentSecond(TInstant now) {
-    ui64 currSecond = now.Seconds();
+    std::uint64_t currSecond = now.Seconds();
     if (currSecond > CurrentSecond) {
         CurrentSecond = currSecond;
         ActivePeriod = std::make_shared<TPeriodData>(
@@ -442,7 +443,7 @@ void TStat::PushMetricsData(const TPeriodStat& p) {
     }
 }
 
-void TStat::ResetMetricsPusher(ui64 timestamp) {
+void TStat::ResetMetricsPusher(std::uint64_t timestamp) {
     while (timestamp >= TInstant::Now().Seconds()) {
         Sleep(TDuration::Seconds(1));
     }

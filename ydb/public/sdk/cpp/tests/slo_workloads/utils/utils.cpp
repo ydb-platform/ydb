@@ -17,7 +17,7 @@ using namespace NYdb;
 const TDuration DefaultReactionTime = TDuration::Minutes(2);
 const TDuration ReactionTimeDelay = TDuration::MilliSeconds(5);
 const TDuration GlobalTimeout = TDuration::Minutes(2);
-const ui64 PartitionsCount = 64;
+const std::uint64_t PartitionsCount = 64;
 
 Y_DECLARE_OUT_SPEC(, NYdb::TStatus, stream, value) {
     stream << "Status: " << value.GetStatus() << Endl;
@@ -34,7 +34,7 @@ TDurationMeter::~TDurationMeter() {
     Value += TInstant::Now() - StartTime;
 }
 
-TRpsProvider::TRpsProvider(ui64 rps)
+TRpsProvider::TRpsProvider(std::uint64_t rps)
     : Rps(rps)
     , Period(Max(TDuration::MilliSeconds(10), TDuration::MicroSeconds(1000000 / Rps)))
     , ProcessedTime(TInstant::Now())
@@ -69,7 +69,7 @@ bool TRpsProvider::TryUse() {
     }
 }
 
-ui64 TRpsProvider::GetRps() const {
+std::uint64_t TRpsProvider::GetRps() const {
     return Rps;
 }
 
@@ -230,13 +230,13 @@ std::string JoinPath(const std::string& prefix, const std::string& path) {
     return prefixPathSplit.Reconstruct();
 }
 
-std::string GenerateRandomString(ui32 minLength, ui32 maxLength) {
-    ui32 length = minLength + RandomNumber<ui32>() % (maxLength - minLength);
+std::string GenerateRandomString(std::uint32_t minLength, std::uint32_t maxLength) {
+    std::uint32_t length = minLength + RandomNumber<std::uint32_t>() % (maxLength - minLength);
     static const char* symbols = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
     std::string result;
     result.reserve(length);
     for (size_t i = 0; i < length; ++i) {
-        result.push_back(symbols[RandomNumber<ui8>(61)]);
+        result.push_back(symbols[RandomNumber<std::uint8_t>(61)]);
     }
     return result;
 }
@@ -257,18 +257,18 @@ TParams PackValuesToParamsAsList(const std::vector<TValue>& items, const std::st
     return paramsBuilder.Build();
 }
 
-static double shardSize = (static_cast<double>(Max<ui32>()) + 1) / PartitionsCount;
+static double shardSize = (static_cast<double>(Max<std::uint32_t>()) + 1) / PartitionsCount;
 
-ui32 GetSpecialId(ui32 id) {
-    return static_cast<ui32>(id / shardSize) * shardSize + 1;
+std::uint32_t GetSpecialId(std::uint32_t id) {
+    return static_cast<std::uint32_t>(id / shardSize) * shardSize + 1;
 }
 
-ui32 GetShardSpecialId(ui64 shardNo) {
+std::uint32_t GetShardSpecialId(std::uint64_t shardNo) {
     return shardNo * shardSize + 1;
 }
 
-ui32 GetHash(ui32 value) {
-    ui32 result = NumericHash(value);
+std::uint32_t GetHash(std::uint32_t value) {
+    std::uint32_t result = NumericHash(value);
     if (result == GetSpecialId(result)) {
         ++result;
     }
@@ -316,11 +316,11 @@ TTableStats GetTableStats(TDatabaseOptions& dbOptions, const std::string& tableN
             NThreading::Async(
                 [extractedPart = tablePart.ExtractPart()]{
                     auto rsParser = TResultSetParser(extractedPart);
-                    ui32 partMax = 0;
+                    std::uint32_t partMax = 0;
                     while (rsParser.TryNextRow()) {
                         auto& idParser = rsParser.ColumnParser("object_id");
                         idParser.OpenOptional();
-                        ui32 id = idParser.GetUint32();
+                        std::uint32_t id = idParser.GetUint32();
                         if (id > partMax) {
                             partMax = id;
                         }
@@ -385,7 +385,7 @@ bool CheckOptionsCommon(TCommonOptions& options) {
         return false;
     }
     if (!options.DontPushMetrics) {
-        Cerr << "Add --solomon_token_file option to push metrics to Solomon. Or use --dont_push instead." << Endl;
+        Cerr << "Push metrics is not supported yet" << Endl;
         return false;
     }
     return true;

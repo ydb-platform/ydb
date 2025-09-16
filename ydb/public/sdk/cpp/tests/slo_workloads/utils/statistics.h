@@ -42,7 +42,7 @@ class TPeriodData;
 
 // Primitive latency unit
 struct TStatUnit {
-    TStatUnit(TPeriodData* periodData, TInstant startTime);
+    TStatUnit(const std::shared_ptr<TPeriodData>& periodData, TInstant startTime);
     void Report(const TInnerStatus& status);
     TDuration Delay() const;
 
@@ -52,20 +52,20 @@ struct TStatUnit {
 };
 
 struct TCounters {
-    ui64 Infly = 0;
-    ui64 ActiveSessions = 0;
+    std::uint64_t Infly = 0;
+    std::uint64_t ActiveSessions = 0;
 
     // Debug use only:
-    ui64 ReadPromises = 0;
-    ui64 ExecutorPromises = 0;
+    std::uint64_t ReadPromises = 0;
+    std::uint64_t ExecutorPromises = 0;
 };
 
 struct TReplies {
-    std::map<NYdb::EStatus, ui64> Statuses;
-    ui64 CountMaxInfly = 0;
-    ui64 CountHighLatency = 0;
-    ui64 ApplicationTimeout = 0;
-    ui64 NotFinished = 0;
+    std::map<NYdb::EStatus, std::uint64_t> Statuses;
+    std::uint64_t CountMaxInfly = 0;
+    std::uint64_t CountHighLatency = 0;
+    std::uint64_t ApplicationTimeout = 0;
+    std::uint64_t NotFinished = 0;
 };
 
 // Calculated percentiles for a period of time
@@ -80,7 +80,7 @@ struct TPercentile {
 
 // Accumulated statistics for a period of time
 struct TPeriodStat {
-    ui64 Seconds = 0;
+    std::uint64_t Seconds = 0;
     TCounters Counters;
     TReplies Replies;
     TPercentile Oks;
@@ -90,34 +90,34 @@ struct TPeriodStat {
 class TStat;
 
 // Full latency data for a period of time
-class TPeriodData {
+class TPeriodData : public std::enable_shared_from_this<TPeriodData> {
 public:
     TPeriodData(
         TStat* stats,
         bool RetryMode,
         const TDuration maxDelay,
-        ui64 currentSecond,
-        ui64 currInfly,
-        ui64 currSessions,
-        ui64 currPromises,
-        ui64 currExecutorPromises
+        std::uint64_t currentSecond,
+        std::uint64_t currInfly,
+        std::uint64_t currSessions,
+        std::uint64_t currPromises,
+        std::uint64_t currExecutorPromises
     );
     ~TPeriodData();
     TStatUnit CreateStatUnit(TInstant startTime);
     void AddStat(TDuration delay, const TInnerStatus& status);
-    ui64 GetCurrentSecond() const;
+    std::uint64_t GetCurrentSecond() const;
     void ReportMaxInfly();
-    void ReportInfly(ui64 infly);
-    void ReportActiveSessions(ui64 sessions);
+    void ReportInfly(std::uint64_t infly);
+    void ReportActiveSessions(std::uint64_t sessions);
 
     // Debug use only:
-    void ReportReadPromises(ui64 promises);
-    void ReportExecutorPromises(ui64 promises);
+    void ReportReadPromises(std::uint64_t promises);
+    void ReportExecutorPromises(std::uint64_t promises);
 
 private:
     TStat* Stats;
     bool RetryMode;
-    ui64 CurrentSecond;
+    std::uint64_t CurrentSecond;
     std::vector<TDuration> OkDelays;
     std::vector<TDuration> NotOkDelays;
     TCounters Counters;
@@ -143,16 +143,17 @@ public:
     ~TStat();
     void Reset();
     void Finish();
+    void Flush();
     TStatUnit CreateStatUnit();
     void Report(TStatUnit& unit, const TInnerStatus& status);
     void Report(TStatUnit& unit, TInnerStatus::EInnerStatus innerStatus);
     void Report(TStatUnit& unit, const TFinalStatus& status);
     void Report(TStatUnit& unit, NYdb::EStatus status);
     void ReportMaxInfly();
-    void ReportStats(ui64 infly, ui64 sessions, ui64 readPromises, ui64 executorPromises);
+    void ReportStats(std::uint64_t infly, std::uint64_t sessions, std::uint64_t readPromises, std::uint64_t executorPromises);
     void Reserve(size_t size);
     void ReportLatencyData(
-        ui64 currSecond,
+        std::uint64_t currSecond,
         TCounters&& counters,
         TReplies&& replies,
         std::vector<TDuration>&& oks,
@@ -169,10 +170,10 @@ private:
     void OnReport(TStatUnit& unit, const TInnerStatus& status);
     void CheckCurrentSecond(TInstant now);
     void PushMetricsData(const TPeriodStat& p);
-    void ResetMetricsPusher(ui64 timestamp);
+    void ResetMetricsPusher(std::uint64_t timestamp);
     void CalculateGlobalPercentile();
     void CalculateFailSeconds();
-    ui64 GetTotal();
+    std::uint64_t GetTotal();
 
     std::mutex Mutex;
     TThreadPool MetricsPushQueue;
@@ -184,7 +185,7 @@ private:
     TInstant StartTime;
     TInstant FinishTime;
     std::unordered_map<std::string, size_t> SessionStats;
-    ui64 CurrentSecond = 0;
+    std::uint64_t CurrentSecond = 0;
     // program lifetime
     TCounters Counters;
     TReplies Replies;
@@ -194,7 +195,7 @@ private:
     std::unique_ptr<IMetricsPusher> MetricsPusher;
 
     std::unique_ptr<TPercentile> GlobalPercentile;
-    std::unique_ptr<ui64> FailSeconds;
+    std::unique_ptr<std::uint64_t> FailSeconds;
 };
 
 std::string YdbStatusToString(NYdb::EStatus status);

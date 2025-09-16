@@ -13,18 +13,18 @@
 extern const TDuration DefaultReactionTime;
 extern const TDuration ReactionTimeDelay;
 extern const TDuration GlobalTimeout;
-extern const ui64 PartitionsCount;
+extern const std::uint64_t PartitionsCount;
 
 struct TRecordData {
-    ui32 ObjectId;
-    ui64 Timestamp;
+    std::uint32_t ObjectId;
+    std::uint64_t Timestamp;
     std::string Guid;
     std::string Payload;
 };
 
 struct TKeyValueRecordData {
-    ui32 ObjectId;
-    ui64 Timestamp;
+    std::uint32_t ObjectId;
+    std::uint64_t Timestamp;
     std::string Payload;
 };
 
@@ -44,13 +44,13 @@ struct TDatabaseOptions {
 struct TCommonOptions {
     // Executor options:
     TDatabaseOptions DatabaseOptions;
-    ui32 SecondsToRun = 10;
-    ui32 Rps = 10;
-    ui32 MaxInputThreads = 50;
-    ui32 MaxCallbackThreads = 50;
-    ui32 MaxInfly = 500;
-    ui32 MaxRetries = 50;
-    ui64 A_ReactionTime = 70; //ms
+    std::uint32_t SecondsToRun = 10;
+    std::uint32_t Rps = 10;
+    std::uint32_t MaxInputThreads = 50;
+    std::uint32_t MaxCallbackThreads = 50;
+    std::uint32_t MaxInfly = 500;
+    std::uint32_t MaxRetries = 50;
+    std::uint64_t A_ReactionTime = 70; //ms
     TDuration ReactionTime = DefaultReactionTime;
     bool StopOnError = false;
     bool UseApplicationTimeout = false;
@@ -58,8 +58,8 @@ struct TCommonOptions {
     bool DoNotPrepare = false;
 
     //Generator options:
-    ui32 MinLength = 20;
-    ui32 MaxLength = 200;
+    std::uint32_t MinLength = 20;
+    std::uint32_t MaxLength = 200;
 
     //Output options:
     bool DontPushMetrics = true;
@@ -72,8 +72,8 @@ struct TCommonOptions {
 
 struct TCreateOptions {
     TCommonOptions CommonOptions;
-    ui32 Count = 10000;
-    ui32 PackSize = 100;
+    std::uint32_t Count = 10000;
+    std::uint32_t PackSize = 100;
 };
 
 struct TRunOptions {
@@ -81,24 +81,24 @@ struct TRunOptions {
     bool DontRunA = false;
     bool DontRunB = false;
     bool DontRunC = false;
-    ui32 Read_rps = 1000;
-    ui32 Write_rps = 10;
+    std::uint32_t Read_rps = 1000;
+    std::uint32_t Write_rps = 10;
 };
 
 class TRpsProvider {
 public:
-    TRpsProvider(ui64 rps);
+    TRpsProvider(std::uint64_t rps);
     void Reset();
     void Use();
     bool TryUse();
-    ui64 GetRps() const;
+    std::uint64_t GetRps() const;
 
 private:
-    ui64 Rps;
+    std::uint64_t Rps;
     TDuration Period;
     TInstant ProcessedTime;
     TInstant LastCheck;
-    ui32 Allowed = 0;
+    std::uint32_t Allowed = 0;
     TInstant StartTime;
 };
 
@@ -110,8 +110,8 @@ enum class ECommandType {
 };
 
 struct TTableStats {
-    ui64 RowCount = 0;
-    ui32 MaxId = 0;
+    std::uint64_t RowCount = 0;
+    std::uint32_t MaxId = 0;
 };
 
 using TCreateCommand = std::function<int(TDatabaseOptions&, int, char**)>;
@@ -151,9 +151,9 @@ inline void ThrowOnError(NYdb::TStatus status) {
 }
 
 inline void RetryBackoff(
-    NYdb::NTable::TTableClient& client
-    , ui32 retries
-    , const NYdb::NTable::TTableClient::TOperationSyncFunc& func
+    NYdb::NTable::TTableClient& client,
+    std::uint32_t retries,
+    const NYdb::NTable::TTableClient::TOperationSyncFunc& func
 ) {
     TDuration delay = TDuration::Seconds(5);
     while (retries) {
@@ -173,17 +173,17 @@ inline void RetryBackoff(
     }
 }
 
-std::string GenerateRandomString(ui32 minLength, ui32 maxLength);
+std::string GenerateRandomString(std::uint32_t minLength, std::uint32_t maxLength);
 
 NYdb::TParams PackValuesToParamsAsList(const std::vector<NYdb::TValue>& items, const std::string name = "$items");
 
 // Returns special object_id within the same shard as given id
-ui32 GetSpecialId(ui32 id);
+std::uint32_t GetSpecialId(std::uint32_t id);
 
 // Returns special object_id for given shard
-ui32 GetShardSpecialId(ui64 shardNo);
+std::uint32_t GetShardSpecialId(std::uint64_t shardNo);
 
-ui32 GetHash(ui32 value);
+std::uint32_t GetHash(std::uint32_t value);
 
 TTableStats GetTableStats(TDatabaseOptions& dbOptions, const std::string& tableName);
 

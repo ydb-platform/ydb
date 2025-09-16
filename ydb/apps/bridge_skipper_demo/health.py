@@ -324,10 +324,9 @@ class AsyncHealthcheckRunner:
     - get_health_state() is thread-safe and returns a snapshot for BridgeSkipper
     """
 
-    def __init__(self, path_to_cli, initial_piles, use_https=False, ydb_auth_opts: Optional[List[str]] = None):
+    def __init__(self, path_to_cli, initial_piles, ydb_auth_opts: Optional[List[str]] = None):
         self.path_to_cli = path_to_cli
         self.pile_to_endpoints = initial_piles
-        self.use_https = use_https
         self.ydb_auth_opts = list(ydb_auth_opts or [])
 
         self._lock = threading.Lock()

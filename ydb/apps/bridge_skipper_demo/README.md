@@ -48,6 +48,3 @@ Example with additional authentication parameters:
 | `--cluster` | cluster | Cluster name to display. |
 | `--tui` | false | Enable TUI. |
 | `--tui-refresh` | 1.0 | TUI refresh interval in seconds. |
-| `--https` | false | Use HTTPS for viewer healthcheck requests. |
-
-

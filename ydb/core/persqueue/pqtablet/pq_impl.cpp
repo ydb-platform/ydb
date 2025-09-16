@@ -538,19 +538,21 @@ TAutoPtr<TResponseBuilder> CreateResponseProxy(const TActorId& sender, const TAc
 /******************************************************* OffsetsBuilderProxy *********************************************************/
 
 template <typename T, typename T2, typename T3>
-class TBuilderProxy : public TActorBootstrapped<TBuilderProxy<T,T2,T3>> {
+class TBuilderProxy : public TBaseActor<TBuilderProxy<T,T2,T3>> {
     typedef TBuilderProxy<T,T2,T3> TThis;
 
     friend class TActorBootstrapped<TThis>;
     typedef T TEvent;
     typedef typename TEvent::TPtr TTPtr;
+
+    using TBase = TBaseActor<TThis>;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR;
     }
 
-    TBuilderProxy(const ui64 tabletId, const TActorId& sender, const ui32 count, const ui64 cookie)
-    : TabletId(tabletId)
+    TBuilderProxy(const ui64 tabletId, const TActorId& tabletActorId, const TActorId& sender, const ui32 count, const ui64 cookie)
+    : TBaseActor<TBuilderProxy<T,T2,T3>>(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
     , Sender(sender)
     , Waiting(count)
     , Result()
@@ -567,6 +569,11 @@ public:
         ctx.Schedule(TOTAL_TIMEOUT, new TEvents::TEvWakeup());
     }
 
+    const TString& GetLogPrefix() const {
+        static const TString LogPrefix = "[BuilderProxy]";
+        return LogPrefix;
+    }
+
 private:
 
     void AnswerAndDie(const TActorContext& ctx)
@@ -576,7 +583,7 @@ private:
                                                 });
         THolder<T3> res = MakeHolder<T3>();
         auto& resp = res->Record;
-        resp.SetTabletId(TabletId);
+        resp.SetTabletId(TBase::TabletId);
         for (const auto& p : Result) {
             resp.AddPartResult()->CopyFrom(p);
         }
@@ -605,7 +612,6 @@ private:
         };
     }
 
-    ui64 TabletId;
     TActorId Sender;
     ui32 Waiting;
     TVector<typename T2::TPartResult> Result;
@@ -613,21 +619,21 @@ private:
 };
 
 
-TActorId CreateOffsetsProxyActor(const ui64 tabletId, const TActorId& sender, const ui32 count, const TActorContext& ctx)
+TActorId CreateOffsetsProxyActor(const ui64 tabletId, const TActorId& tabletActorId, const TActorId& sender, const ui32 count, const TActorContext& ctx)
 {
     return ctx.Register(new TBuilderProxy<TEvPQ::TEvPartitionOffsetsResponse,
                                           NKikimrPQ::TOffsetsResponse,
-                                          TEvPersQueue::TEvOffsetsResponse>(tabletId, sender, count, 0));
+                                          TEvPersQueue::TEvOffsetsResponse>(tabletId, tabletActorId, sender, count, 0));
 }
 
 /******************************************************* StatusProxy *********************************************************/
 
 
-TActorId CreateStatusProxyActor(const ui64 tabletId, const TActorId& sender, const ui32 count, const ui64 cookie, const TActorContext& ctx)
+TActorId CreateStatusProxyActor(const ui64 tabletId, const TActorId& tabletActorId, const TActorId& sender, const ui32 count, const ui64 cookie, const TActorContext& ctx)
 {
     return ctx.Register(new TBuilderProxy<TEvPQ::TEvPartitionStatusResponse,
                                           NKikimrPQ::TStatusResponse,
-                                          TEvPersQueue::TEvStatusResponse>(tabletId, sender, count, cookie));
+                                          TEvPersQueue::TEvStatusResponse>(tabletId, tabletActorId, sender, count, cookie));
 }
 
 /******************************************************* TPersQueue *********************************************************/
@@ -1858,7 +1864,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext&
 
         cnt += p.second.InitDone;
     }
-    TActorId ans = CreateOffsetsProxyActor(TabletID(), ev->Sender, cnt, ctx);
+    TActorId ans = CreateOffsetsProxyActor(TabletID(), SelfId(), ev->Sender, cnt, ctx);
 
     for (auto& p : Partitions) {
         if (!p.second.InitDone || p.first.IsSupportivePartition()) {
@@ -1928,7 +1934,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
         cnt += partitionInfo.InitDone;
     }
 
-    TActorId ans = CreateStatusProxyActor(TabletID(), ev->Sender, cnt, ev->Cookie, ctx);
+    TActorId ans = CreateStatusProxyActor(TabletID(), SelfId(), ev->Sender, cnt, ev->Cookie, ctx);
     for (auto& p : Partitions) {
         if (!p.second.InitDone || p.first.IsSupportivePartition()) {
             continue;

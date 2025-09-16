@@ -1979,7 +1979,6 @@ private:
         }
 
         THashMap<ui64, TVector<NDqProto::TDqTask*>> datashardTasks;  // shardId -> [task]
-        THashMap<ui64, TVector<ui64>> remoteComputeTasks;  // shardId -> [task]
         TVector<ui64> computeTasks;
 
         for (const auto& task : GetTasksGraph().GetTasks()) {
@@ -1992,11 +1991,7 @@ private:
             } else if (stageInfo.Meta.IsSysView()) {
                 computeTasks.emplace_back(task.Id);
             } else {
-                if (task.Meta.ShardId) {
-                    remoteComputeTasks[task.Meta.ShardId].emplace_back(task.Id);
-                } else {
-                    computeTasks.emplace_back(task.Id);
-                }
+                computeTasks.emplace_back(task.Id);
             }
         }
 
@@ -2073,7 +2068,6 @@ private:
         TopicTxs = std::move(topicTxs);
         DatashardTxs = std::move(datashardTxs);
         EvWriteTxs = std::move(evWriteTxs);
-        RemoteComputeTasks = std::move(remoteComputeTasks);
 
         GetMeta().UseFollowers = GetUseFollowers();
 
@@ -2106,20 +2100,7 @@ private:
     }
 
     void ResolveShards() {
-        if (RemoteComputeTasks) {
-            TSet<ui64> shardIds;
-            for (const auto& [shardId, _] : RemoteComputeTasks) {
-                shardIds.insert(shardId);
-            }
-
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
-            auto kqpShardsResolver = CreateKqpShardsResolver(
-                SelfId(), TxId, GetTasksGraph().GetMeta().UseFollowers, std::move(shardIds));
-            RegisterWithSameMailbox(kqpShardsResolver);
-            Become(&TKqpDataExecuter::WaitResolveState);
-        } else {
-            OnShardsResolve();
-        }
+        OnShardsResolve();
     }
 
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
@@ -2138,61 +2119,62 @@ private:
             }
         }
 
-        if (StreamResult || EnableReadsMerge || AllowOlapDataQuery) {
-            TSet<ui64> shardIds;
-            for (const auto& [stageId, stageInfo] : GetTasksGraph().GetStagesInfo()) {
-                if (stageInfo.Meta.IsOlap()) {
-                    HasOlapTable = true;
-                }
-                const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
-                    YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
-                    HasDatashardSourceScan = true;
-                }
+        TSet<ui64> shardIds;
+        bool hasDatashardSourceScan = false;
+        for (const auto& [stageId, stageInfo] : GetTasksGraph().GetStagesInfo()) {
+            if (stageInfo.Meta.IsOlap()) {
+                HasOlapTable = true;
             }
-            if (HasOlapTable) {
-                for (const auto& [stageId, stageInfo] : GetTasksGraph().GetStagesInfo()) {
-                    if (stageInfo.Meta.ShardKey) {
-                        for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                            shardIds.insert(partition.ShardId);
-                        }
-                    }
-                }
-            }
-            if (HasDatashardSourceScan) {
-                for (const auto& [stageId, stageInfo] : GetTasksGraph().GetStagesInfo()) {
-                    YQL_ENSURE(stageId == stageInfo.Id);
-                    const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-                    if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
-                        const auto& source = stage.GetSources(0).GetReadRangesSource();
-                        bool isFullScan;
-                        GetMeta().SourceScanStageIdToParititions[stageInfo.Id] = GetTasksGraph().PartitionPruner->Prune(source, stageInfo, isFullScan);
-                        if (isFullScan && !source.HasItemsLimit()) {
-                            Counters->Counters->FullScansExecuted->Inc();
-                        }
-                        for (const auto& [shardId, _] : GetMeta().SourceScanStageIdToParititions.at(stageId)) {
-                            shardIds.insert(shardId);
-                        }
-                    }
-                }
-            }
-
-            if (shardIds.size() <= 1 && HasDatashardSourceScan) {
-                // nothing to merge
-                HasDatashardSourceScan = false;
-            }
-
-            if ((HasOlapTable || HasDatashardSourceScan) && shardIds) {
-                LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
-                ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
-                auto kqpShardsResolver = CreateKqpShardsResolver(
-                    this->SelfId(), TxId, false, std::move(shardIds));
-                KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
-                return;
-            } else if (HasOlapTable) {
-                ResourceSnapshotRequired = true;
+            const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+            if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
+                hasDatashardSourceScan = true;
             }
         }
+
+        if (HasOlapTable) {
+            for (const auto& [stageId, stageInfo] : GetTasksGraph().GetStagesInfo()) {
+                if (stageInfo.Meta.ShardKey) {
+                    for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                        shardIds.insert(partition.ShardId);
+                    }
+                }
+            }
+        }
+
+        if (hasDatashardSourceScan) {
+            for (const auto& [stageId, stageInfo] : GetTasksGraph().GetStagesInfo()) {
+                YQL_ENSURE(stageId == stageInfo.Id);
+                const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                    const auto& source = stage.GetSources(0).GetReadRangesSource();
+                    bool isFullScan;
+                    GetMeta().SourceScanStageIdToParititions[stageInfo.Id] = GetTasksGraph().PartitionPruner->Prune(source, stageInfo, isFullScan);
+                    if (isFullScan && !source.HasItemsLimit()) {
+                        Counters->Counters->FullScansExecuted->Inc();
+                    }
+                    for (const auto& [shardId, _] : GetMeta().SourceScanStageIdToParititions.at(stageId)) {
+                        shardIds.insert(shardId);
+                    }
+                }
+            }
+        }
+
+        if (shardIds.size() <= 1 && hasDatashardSourceScan) {
+            hasDatashardSourceScan = false;
+        }
+
+        if ((HasOlapTable || hasDatashardSourceScan) && shardIds) {
+            LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
+            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+            auto kqpShardsResolver = CreateKqpShardsResolver(
+                this->SelfId(), TxId, false, std::move(shardIds));
+            KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
+            return;
+        } else if (HasOlapTable) {
+            ResourceSnapshotRequired = true;
+        }
+
         DoExecute();
     }
 
@@ -2200,8 +2182,8 @@ private:
         if (!TBase::HandleResolve(ev)) {
             return;
         }
-        if (HasOlapTable || HasDatashardSourceScan) {
-            ResourceSnapshotRequired = ResourceSnapshotRequired || HasOlapTable;
+
+        if (HasOlapTable) {
             DoExecute();
             return;
         }
@@ -2633,18 +2615,8 @@ private:
 
         LWTRACK(KqpDataExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, ComputeTasks.size(), DatashardTxs.size() + EvWriteTxs.size());
 
-        // TODO: task-related stuff should be outside executer
-        for (auto& [shardId, tasks] : RemoteComputeTasks) {
-            auto it = ShardIdToNodeId.find(shardId);
-            YQL_ENSURE(it != ShardIdToNodeId.end());
-            for (ui64 taskId : tasks) {
-                auto& task = GetTask(taskId);
-                task.Meta.NodeId = it->second;
-            }
-        }
-
         GetMeta().SinglePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty();
-        GetMeta().MayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
+        GetMeta().MayRunTasksLocally = !HasExternalSources && !HasOlapTable;
 
         bool isSubmitSuccessful = BuildPlannerAndSubmitTasks();
         if (!isSubmitSuccessful)
@@ -2947,7 +2919,6 @@ private:
     bool HasPersistentChannels = false;
 
     THashSet<ui64> SubscribedNodes;
-    THashMap<ui64, TVector<ui64>> RemoteComputeTasks;
 
     TVector<ui64> ComputeTasks;
     TDatashardTxs DatashardTxs;

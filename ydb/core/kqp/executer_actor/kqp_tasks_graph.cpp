@@ -2428,7 +2428,6 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
     TVector<ui64> createdTasksIds;
     auto createNewTask = [&](
             TMaybe<ui64> nodeId,
-            ui64 taskLocation,
             TMaybe<ui64> shardId,
             TMaybe<ui64> maxInFlightShards) -> TTask& {
         auto& task = AddTask(stageInfo);
@@ -2439,7 +2438,6 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
 
         if (!nodeId || !GetMeta().ShardsResolved) {
             YQL_ENSURE(!GetMeta().ShardsResolved);
-            task.Meta.ShardId = taskLocation;
         }
 
         const auto& stageSource = stage.GetSources(0);
@@ -2570,16 +2568,17 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         }
 
         if (limitTasksPerNode && GetMeta().ShardsResolved) {
+            YQL_ENSURE(nodeId.Defined());
             const auto maxScanTasksPerNode = GetScanTasksPerNode(stageInfo, /* isOlapScan */ false, *nodeId);
             auto& nodeTasks = nodeIdToTasks[*nodeId];
             if (nodeTasks.size() < maxScanTasksPerNode) {
-                const auto& task = createNewTask(nodeId, taskLocation, {}, maxInFlightShards);
+                const auto& task = createNewTask(nodeId, {}, maxInFlightShards);
                 nodeTasks.push_back(task.Id);
             }
 
             nodeIdToShardKeyRanges[*nodeId].push_back(TShardRangesWithShardId{shardId, &*shardInfo.KeyReadRanges});
         } else {
-            auto& task = createNewTask(nodeId, taskLocation, shardId, maxInFlightShards);
+            auto& task = createNewTask(nodeId, shardId, maxInFlightShards);
             const auto& stageSource = stage.GetSources(0);
             auto& input = task.Inputs[stageSource.GetInputIndex()];
             NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings = input.Meta.SourceSettings;
@@ -2621,9 +2620,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
     };
 
     bool isFullScan = false;
-    const THashMap<ui64, TShardInfo> partitions = GetMeta().SourceScanStageIdToParititions.empty()
-        ? PartitionPruner->Prune(source, stageInfo, isFullScan)
-        : GetMeta().SourceScanStageIdToParititions.at(stageInfo.Id);
+    const THashMap<ui64, TShardInfo> partitions = GetMeta().SourceScanStageIdToParititions.at(stageInfo.Id);
 
     if (isFullScan && !source.HasItemsLimit()) {
         Counters->Counters->FullScansExecuted->Inc();

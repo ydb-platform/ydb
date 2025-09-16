@@ -1795,7 +1795,6 @@ protected:
     bool AllowOlapDataQuery = true; // used by Data executer - always true for Scan executer
     bool HasOlapTable = false;
     bool StreamResult = false;
-    bool HasDatashardSourceScan = false;
     bool UnknownAffectedShardCount = false;
 
     THashMap<ui64, TActorId> ResultChannelToComputeActor;

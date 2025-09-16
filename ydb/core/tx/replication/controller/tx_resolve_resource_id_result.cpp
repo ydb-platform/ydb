@@ -2,19 +2,19 @@
 
 namespace NKikimr::NReplication::NController {
 
-class TController::TTxResolveSecretResult: public TTxBase {
-    TEvPrivate::TEvResolveSecretResult::TPtr Ev;
+class TController::TTxResolveResourceIdResult: public TTxBase {
+    TEvPrivate::TEvResolveResourceIdResult::TPtr Ev;
     TReplication::TPtr Replication;
 
 public:
-    explicit TTxResolveSecretResult(TController* self, TEvPrivate::TEvResolveSecretResult::TPtr& ev)
-        : TTxBase("TxResolveSecretResult", self)
+    explicit TTxResolveResourceIdResult(TController* self, TEvPrivate::TEvResolveResourceIdResult::TPtr& ev)
+        : TTxBase("TxResolveResourceIdResult", self)
         , Ev(ev)
     {
     }
 
     TTxType GetTxType() const override {
-        return TXTYPE_RESOLVE_SECRET_RESULT;
+        return TXTYPE_RESOLVE_RESOURCE_ID_RESULT;
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -29,23 +29,21 @@ public:
             return true;
         }
 
-        if (Ev->Cookie != Replication->GetExpectedSecretResolverCookie()) {
-            CLOG_E(ctx, "Unexpected cookie"
-                << ": cookie# " << Ev->Cookie);
-            return true;
-        }
-
+        NIceDb::TNiceDb db(txc.DB);
         if (Ev->Get()->IsSuccess()) {
-            CLOG_N(ctx, "Secret resolved"
+            CLOG_N(ctx, "Resource id resolved"
                 << ": rid# " << rid);
-            Replication->UpdateSecret(Ev->Get()->Value);
+            Replication->UpdateResourceId(Ev->Get()->Value);
+
+            db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+                NIceDb::TUpdate<Schema::Replications::Config>(Replication->GetConfig().SerializeAsString())
+            );
         } else {
-            CLOG_E(ctx, "Resolve secret error"
+            CLOG_E(ctx, "Resolve resource id error"
                 << ": rid# " << rid
                 << ", error# " << Ev->Get()->Error);
             Replication->SetState(TReplication::EState::Error, Ev->Get()->Error);
 
-            NIceDb::TNiceDb db(txc.DB);
             db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
                 NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
                 NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
@@ -63,10 +61,10 @@ public:
         }
     }
 
-}; // TTxResolveSecretResult
+}; // TTxResolveResourceIdResult
 
-void TController::RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx) {
-    Execute(new TTxResolveSecretResult(this, ev), ctx);
+void TController::RunTxResolveResourceIdResult(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxResolveResourceIdResult(this, ev), ctx);
 }
 
 }

@@ -679,8 +679,7 @@ namespace NKikimr {
                         Y_VERIFY_S(writtenLocation == preallocatedLocation, HullCtx->VCtx->VDiskLogPrefix);
                     }
                 } else {
-                    Y_VERIFY_S(collectTask.BlobMerger.ContainsMetadataPartsOnly() || collectTask.BlobMerger.Empty(),
-                        HullCtx->VCtx->VDiskLogPrefix);
+                    Y_VERIFY_S(collectTask.BlobMerger.Empty(), HullCtx->VCtx->VDiskLogPrefix);
                     Y_VERIFY_S(collectTask.Reads.empty(), HullCtx->VCtx->VDiskLogPrefix);
                 }
 

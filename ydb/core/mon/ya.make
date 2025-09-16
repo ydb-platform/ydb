@@ -1,6 +1,13 @@
+RECURSE_FOR_TESTS(
+    ut
+)
+
 LIBRARY()
 
 SRCS(
+    auth.cpp
+    auth.h
+    events.h
     mon.cpp
     mon.h
     crossref.cpp

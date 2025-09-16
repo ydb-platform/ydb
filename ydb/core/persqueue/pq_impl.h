@@ -574,6 +574,10 @@ private:
     void ProcessPendingEvents();
 
     void AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx);
+
+    void BeginDeleteTransaction(const TActorContext& ctx,
+                                TDistributedTransaction& tx,
+                                NKikimrPQ::TTransaction::EState state);
 };
 
 

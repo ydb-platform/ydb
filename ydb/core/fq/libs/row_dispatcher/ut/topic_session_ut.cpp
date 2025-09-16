@@ -14,6 +14,7 @@
 
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -35,6 +36,10 @@ public:
     using TBase = NTests::TBaseFixture;
 
 public:
+    TFixture()
+        : FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {}))
+    {}
+
     void SetUp(NUnitTest::TTestContext& ctx) override {
         TBase::SetUp(ctx);
 
@@ -75,6 +80,7 @@ public:
             GetDefaultPqEndpoint(),
             GetDefaultPqDatabase(),
             Config,
+            FunctionRegistry.Get(),
             RowDispatcherActorId,
             compileServiceActorId,
             0,
@@ -259,6 +265,7 @@ public:
     }
 
 public:
+    const NKikimr::NMiniKQL::IFunctionRegistry::TPtr FunctionRegistry;
     TString TopicPath;
     NActors::TActorId TopicSession;
     NActors::TActorId RowDispatcherActorId;

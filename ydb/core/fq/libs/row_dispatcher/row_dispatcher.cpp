@@ -331,6 +331,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     ui64 CoordinatorGeneration = 0;
     TSet<TActorId> CoordinatorChangedSubscribers;
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     const TString LogPrefix;
     ui64 NextEventQueueId = 0;
     TString Tenant;
@@ -420,6 +421,7 @@ public:
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         const TString& tenant,
         const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
@@ -501,6 +503,7 @@ TRowDispatcher::TRowDispatcher(
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
@@ -509,6 +512,7 @@ TRowDispatcher::TRowDispatcher(
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , CredentialsFactory(credentialsFactory)
+    , FunctionRegistry(functionRegistry)
     , LogPrefix("RowDispatcher: ")
     , Tenant(tenant)
     , ActorFactory(actorFactory)
@@ -879,6 +883,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 source.GetEndpoint(),
                 source.GetDatabase(),
                 Config,
+                FunctionRegistry,
                 SelfId(),
                 CompileServiceActorId,
                 partitionId,
@@ -1290,6 +1295,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
@@ -1302,6 +1308,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         credentialsFactory,
         tenant,
         actorFactory,
+        functionRegistry,
         counters,
         countersRoot,
         pqGateway,

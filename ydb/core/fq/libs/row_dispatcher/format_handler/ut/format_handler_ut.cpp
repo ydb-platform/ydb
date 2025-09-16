@@ -154,7 +154,8 @@ public:
         CompileService = Runtime.Register(CreatePurecalcCompileServiceMock(CompileNotifier));
 
         CreateFormatHandler({
-            .JsonParserConfig = {},
+            .FunctionRegistry = FunctionRegistry,
+            .JsonParserConfig = {.FunctionRegistry = FunctionRegistry},
             .FiltersConfig = {.CompileServiceId = CompileService},
         });
     }
@@ -384,7 +385,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
     Y_UNIT_TEST_F(ManyRawClients, TFormatHandlerFixture) {
         CreateFormatHandler(
-            {.JsonParserConfig = {}, .FiltersConfig = {.CompileServiceId = CompileService}},
+            {.FunctionRegistry = FunctionRegistry, .JsonParserConfig = {.FunctionRegistry = FunctionRegistry}, .FiltersConfig = {.CompileServiceId = CompileService}},
             {.ParsingFormat = "raw"}
         );
 

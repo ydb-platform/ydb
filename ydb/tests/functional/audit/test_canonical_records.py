@@ -8,6 +8,8 @@ from ydb.draft import DynamicConfigClient
 from ydb.query import QuerySessionPool
 from ydb.tests.library.harness.util import LogLevels
 
+from yatest.common import process
+
 import http_helpers
 from helpers import cluster_endpoint, make_test_file_with_content, CanonicalCaptureAuditFileOutput
 
@@ -263,4 +265,36 @@ def test_topic(ydb_cluster):
             # Write
             with right_topic_client.writer(topic_name, producer_id='test_id') as writer:
                 writer.write('message')
+    return capture_audit.canonize()
+
+
+def test_execute_minikql(ydb_cluster):
+    # List tablets
+    list_response = http_helpers.get_tablets_request(ydb_cluster, TOKEN)
+    assert list_response.status_code == 200, list_response.content
+    ss_tablet_id = http_helpers.extract_tablet_id(list_response.content, 'SCHEMESHARD')
+    assert ss_tablet_id
+
+    query = '''
+        (
+            (let row '('('TabId (Uint64 '42))))
+            (let data
+                '(
+                    '('NextColId (Uint32 '42))
+                    '('PartitionConfig (Utf8 'Trash))
+                )
+            )
+            (let update (UpdateRow 'Tables row data))
+            (return (
+                AsList update
+            ))
+        )
+    '''
+    ydbd_binary_path = ydb_cluster.nodes[1].binary_path
+    cmd = [ydbd_binary_path, '-s', f'grpc://{cluster_endpoint(ydb_cluster)}', 'admin', 'tablet', ss_tablet_id, 'execute', make_test_file_with_content('minikql.query', query)]
+    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    with capture_audit:
+        proc_result = process.execute(cmd, check_exit_code=False, env={'YDB_TOKEN': TOKEN})
+        if proc_result.exit_code != 0:
+            assert False, f'Command\n{cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err}\n\nstdout:\n{proc_result.std_out}'
     return capture_audit.canonize()

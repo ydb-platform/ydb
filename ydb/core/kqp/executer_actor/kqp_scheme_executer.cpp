@@ -204,6 +204,7 @@ public:
             entry.RedirectRequired = false;
             request->ResultSet.emplace_back(entry);
         }
+        request->ResultSet.pop_back();
 
         auto ev = std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(request);
 
@@ -215,13 +216,10 @@ public:
         const auto& resultSet = ev->Get()->Request->ResultSet;
 
         const TVector<TString>* workingDir = nullptr;
-        bool lookupError = false;
         for (auto it = resultSet.rbegin(); it != resultSet.rend(); ++it) {
             if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 workingDir = &it->Path;
                 break;
-            } else if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError) {
-                lookupError = true;
             }
         }
 
@@ -230,26 +228,22 @@ public:
         const auto& alterTableModifyScheme = schemeOp.GetAlterTable();
         AFL_ENSURE(alterTableModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
         const auto dirPath = SplitPath(alterTableModifyScheme.GetMoveTable().GetDstPath());
-        AFL_ENSURE(workingDir->size() <= dirPath.size());
 
-        if (!workingDir && lookupError) {
+        if (!workingDir) {
             const auto errText = TStringBuilder()
-                << "Cannot resolve working dir, lookup error"
+                << "Cannot resolve working dir."
                 << " path# " << JoinPath(dirPath);
             LOG_D(errText);
 
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR, errText);
             return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, issue);
         }
-
-        if (!workingDir || workingDir->size() == dirPath.size()) {
-            const TString errText = TStringBuilder()
-                << "Cannot resolve working dir"
-                << " workingDir# " << (workingDir ? CanonizePath(JoinPath(*workingDir)) : "null")
-                << " path# " << JoinPath(dirPath);
-            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errText);
-            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, issue);
-        }
+        AFL_ENSURE(!workingDir->empty() && workingDir->size() < dirPath.size());
+        AFL_ENSURE(std::equal(
+            workingDir->begin(),
+            workingDir->end(),
+            dirPath.begin(),
+            dirPath.begin() + workingDir->size()));
 
         CreateCTASDirectory(
             TConstArrayRef<TString>(
@@ -859,10 +853,10 @@ public:
 
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
-        if (resp->ResultSet.size() > 1
-                && std::all_of(resp->ResultSet.begin(), resp->ResultSet.end(), [](const auto& entry) {
-                    return entry.Operation == NSchemeCache::TSchemeCacheNavigate::OpPath;
-                })) {
+        if (IsCreateTableAs) {
+            AFL_ENSURE(std::all_of(resp->ResultSet.begin(), resp->ResultSet.end(), [](const auto& entry) {
+                return entry.Operation == NSchemeCache::TSchemeCacheNavigate::OpPath;
+            }));
             HandleCTASWorkingDir(ev);
             return;
         }

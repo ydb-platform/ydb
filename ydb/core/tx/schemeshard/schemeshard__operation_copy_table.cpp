@@ -399,9 +399,7 @@ public:
 
             if (checks) {
                 if (parent.Base()->IsTableIndex()) {
-                    checks
-                        .IsInsideTableIndexPath() //copy imp index table as index index table, not a separate one
-                        .NotChildren(); //imp table doesn't have indexes
+                    checks.IsInsideTableIndexPath(); //copy imp index table as index index table, not a separate one
                 } else {
                     checks.IsCommonSensePath();
                 }
@@ -869,7 +867,8 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             operation->SetOmitFollowers(copying.GetOmitFollowers());
             operation->SetIsBackup(copying.GetIsBackup());
 
-            result.push_back(CreateCopyTable(NextPartId(nextId, result), schema));
+            result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, GetLocalSequences(context, implTable)));
+            AddCopySequences(nextId, tx, context, result, implTable, JoinPath({dstPath.PathString(), name, implTableName}));
         }
     }
 

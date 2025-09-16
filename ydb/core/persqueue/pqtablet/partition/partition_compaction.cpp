@@ -13,7 +13,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
 
     ui64 poffset = p.Offset ? *p.Offset : curOffset;
 
-    PQ_LOG_T("Topic '" << TopicName() << "' partition " << Partition
+    LOG_T("Topic '" << TopicName() << "' partition " << Partition
             << " process write for '" << EscapeC(p.Msg.SourceId) << "'"
             << " DisableDeduplication=" << p.Msg.DisableDeduplication
             << " SeqNo=" << p.Msg.SeqNo
@@ -51,7 +51,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
                                                  MaxBlobSize);
     }
 
-    PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition
+    LOG_D("Topic '" << TopicName() << "' partition " << Partition
             << " part blob processing sourceId '" << EscapeC(p.Msg.SourceId)
             << "' seqNo " << p.Msg.SeqNo << " partNo " << p.Msg.PartNo
     );
@@ -87,7 +87,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     if (newWrite && !newWrite->Value.empty()) {
         AddCmdWrite(newWrite, request, blobCreationUnixTime, ctx);
 
-        PQ_LOG_D("Topic '" << TopicName() <<
+        LOG_D("Topic '" << TopicName() <<
                 "' partition " << Partition <<
                 " part blob sourceId '" << EscapeC(p.Msg.SourceId) <<
                 "' seqNo " << p.Msg.SeqNo << " partNo " << p.Msg.PartNo <<
@@ -128,7 +128,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
 
         Y_ABORT_UNLESS(countOfLastParts == 1);
 
-        PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition
+        LOG_D("Topic '" << TopicName() << "' partition " << Partition
                 << " part blob complete sourceId '" << EscapeC(p.Msg.SourceId) << "' seqNo " << p.Msg.SeqNo
                 << " partNo " << p.Msg.PartNo << " FormedBlobsCount " << CompactionBlobEncoder.PartitionedBlob.GetFormedBlobs().size()
                 << " NewHead: " << CompactionBlobEncoder.NewHead
@@ -154,12 +154,12 @@ ui64 TPartition::GetCumulativeSizeLimit() const
 void TPartition::TryRunCompaction()
 {
     if (CompactionInProgress) {
-        PQ_LOG_D("compaction in progress");
+        LOG_D("compaction in progress");
         return;
     }
 
     if (BlobEncoder.DataKeysBody.empty()) {
-        PQ_LOG_D("no data for compaction");
+        LOG_D("no data for compaction");
         return;
     }
 
@@ -167,7 +167,7 @@ void TPartition::TryRunCompaction()
 
     if ((cumulativeSize < GetCumulativeSizeLimit()) &&
         (BlobEncoder.DataKeysBody.size() < GetBodyKeysCountLimit())) {
-        PQ_LOG_D("need more data for compaction. " <<
+        LOG_D("need more data for compaction. " <<
                  //"cumulativeSize=" << cumulativeSize << ", requestSize=" << requestSize <<
                  "cumulativeSize=" << cumulativeSize <<
                  ", count=" << BlobEncoder.DataKeysBody.size() <<
@@ -176,7 +176,7 @@ void TPartition::TryRunCompaction()
         return;
     }
 
-    PQ_LOG_D("need run compaction for " << cumulativeSize << " bytes in " << BlobEncoder.DataKeysBody.size() << " blobs");
+    LOG_D("need run compaction for " << cumulativeSize << " bytes in " << BlobEncoder.DataKeysBody.size() << " blobs");
 
     CompactionInProgress = true;
 
@@ -188,7 +188,7 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
 {
     const ui64 cumulativeSize = ev->Get()->CumulativeSize;
 
-    PQ_LOG_D("begin compaction for " << cumulativeSize << " bytes in " << BlobEncoder.DataKeysBody.size() << " blobs");
+    LOG_D("begin compaction for " << cumulativeSize << " bytes in " << BlobEncoder.DataKeysBody.size() << " blobs");
 
 #if 1
     TVector<TRequestedBlob> blobs;
@@ -224,10 +224,10 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
                                               size,
                                               0, // lastOffset
                                               &tokens);
-    PQ_LOG_D("count=" << count << ", size=" << size);
+    LOG_D("count=" << count << ", size=" << size);
 #endif
     for (const auto& b : blobs) {
-        PQ_LOG_D("request key " << b.Key.ToString() << ", size " << b.Size);
+        LOG_D("request key " << b.Key.ToString() << ", size " << b.Size);
     }
     CompactionBlobsCount = blobs.size();
     auto request = MakeHolder<TEvPQ::TEvBlobRequest>(ERequestCookie::ReadBlobsForCompaction,
@@ -235,14 +235,14 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
                                                      std::move(blobs));
     Send(BlobCache, request.Release());
 
-    PQ_LOG_D("request " << CompactionBlobsCount << " blobs for compaction");
+    LOG_D("request " << CompactionBlobsCount << " blobs for compaction");
 }
 
 void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs)
 {
     const auto& ctx = ActorContext();
 
-    PQ_LOG_D("continue compaction");
+    LOG_D("continue compaction");
 
     Y_ABORT_UNLESS(CompactionInProgress);
     Y_ABORT_UNLESS(blobs.size() == CompactionBlobsCount);
@@ -327,7 +327,7 @@ void TPartition::BlobsForCompactionWereWrite()
 {
     const auto& ctx = ActorContext();
 
-    PQ_LOG_D("compaction completed");
+    LOG_D("compaction completed");
 
     Y_ABORT_UNLESS(CompactionInProgress);
     Y_ABORT_UNLESS(BlobEncoder.DataKeysBody.size() >= CompactionBlobsCount);
@@ -400,7 +400,7 @@ void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request,
 
     Y_ABORT_UNLESS(!key.HasSuffix() || key.IsHead()); // body or head
 
-    PQ_LOG_D("Add new write blob: topic '" << TopicName() << "' partition " << Partition
+    LOG_D("Add new write blob: topic '" << TopicName() << "' partition " << Partition
             << " compactOffset " << key.GetOffset() << "," << key.GetCount()
             << " HeadOffset " << CompactionBlobEncoder.Head.Offset << " endOffset " << CompactionBlobEncoder.EndOffset << " curOffset "
             << CompactionBlobEncoder.NewHead.GetNextOffset() << " " << key.ToString()

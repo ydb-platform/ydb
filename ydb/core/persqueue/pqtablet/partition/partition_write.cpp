@@ -31,7 +31,7 @@ static const TDuration SubDomainQuotaWaitDurationMs = TDuration::Seconds(60);
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE;
 
 void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie, ui64 seqNo, NWilson::TSpan& span) {
-    PQ_LOG_D("TPartition::ReplyOwnerOk. Partition: " << Partition);
+    LOG_D("TPartition::ReplyOwnerOk. Partition: " << Partition);
 
     THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
@@ -54,7 +54,7 @@ void TPartition::ReplyWrite(
     const ui64 offset, const TInstant writeTimestamp, bool already, const ui64 maxSeqNo,
     const TDuration partitionQuotedTime, const TDuration topicQuotedTime, const TDuration queueTime, const TDuration writeTime, NWilson::TSpan& span) {
 
-    PQ_LOG_D("TPartition::ReplyWrite. Partition: " << Partition);
+    LOG_D("TPartition::ReplyWrite. Partition: " << Partition);
 
     PQ_ENSURE(offset <= (ui64)Max<i64>())("Offset is too big", offset);
     PQ_ENSURE(seqNo <= (ui64)Max<i64>())("SeqNo is too big", seqNo);
@@ -97,13 +97,13 @@ void TPartition::HandleOnIdle(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActor
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::HandleOnWrite TEvUpdateAvailableSize.");
+    LOG_T("TPartition::HandleOnWrite TEvUpdateAvailableSize.");
 
     UpdateAvailableSize(ctx);
 }
 
 void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::ProcessChangeOwnerRequest.");
+    LOG_T("TPartition::ProcessChangeOwnerRequest.");
 
     auto &owner = ev->Owner;
     auto it = Owners.find(owner);
@@ -134,7 +134,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
 
 
 THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator& it, const TActorContext& ctx) {
-    PQ_LOG_D("TPartition::DropOwner.");
+    LOG_D("TPartition::DropOwner.");
 
     PQ_ENSURE(ReservedSize >= it->second.ReservedSize);
     ReservedSize -= it->second.ReservedSize;
@@ -150,7 +150,7 @@ THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THas
 }
 
 void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::HandleOnWrite TEvChangeOwner.");
+    LOG_T("TPartition::HandleOnWrite TEvChangeOwner.");
 
     bool res = OwnerPipes.insert(ev->Get()->PipeClient).second;
     PQ_ENSURE(res);
@@ -159,7 +159,7 @@ void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ct
 }
 
 void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::ProcessReserveRequests.");
+    LOG_T("TPartition::ProcessReserveRequests.");
 
     const ui64 maxWriteInflightSize = Config.GetPartitionConfig().GetMaxWriteInflightSize();
 
@@ -190,12 +190,12 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
 
         const ui64 currentSize = ReservedSize + WriteInflightSize + WriteCycleSize;
         if (currentSize != 0 && currentSize + size > maxWriteInflightSize) {
-            PQ_LOG_D("Reserve processing: maxWriteInflightSize riched. Partition: " << Partition);
+            LOG_D("Reserve processing: maxWriteInflightSize riched. Partition: " << Partition);
             break;
         }
 
         if (WaitingForSubDomainQuota(currentSize)) {
-            PQ_LOG_D("Reserve processing: SubDomainOutOfSpace. Partition: " << Partition);
+            LOG_D("Reserve processing: SubDomainOutOfSpace. Partition: " << Partition);
             break;
         }
 
@@ -216,7 +216,7 @@ void TPartition::UpdateWriteBufferIsFullState(const TInstant& now) {
 }
 
 void TPartition::Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::HandleOnWrite TEvReserveBytes.");
+    LOG_T("TPartition::HandleOnWrite TEvReserveBytes.");
 
     const TString& ownerCookie = ev->Get()->OwnerCookie;
     TStringBuf owner = TOwnerInfo::GetOwnerFromOwnerCookie(ownerCookie);
@@ -278,7 +278,7 @@ ui64 CalculateReplyOffset(bool already, bool kafkaDeduplication, ui64 maxOffset,
 }
 
 void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::AnswerCurrentWrites. Responses.size()=" << Responses.size());
+    LOG_T("TPartition::AnswerCurrentWrites. Responses.size()=" << Responses.size());
     const auto now = ctx.Now();
 
     ui64 offset = BlobEncoder.EndOffset;
@@ -353,7 +353,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 PartitionQuotaWaitTimeForCurrentBlob, TopicQuotaWaitTimeForCurrentBlob, queueTime, writeTime, response.Span
             );
 
-            PQ_LOG_D("Answering for message sourceid: '" << EscapeC(s)
+            LOG_D("Answering for message sourceid: '" << EscapeC(s)
                     << "', Topic: '" << TopicName()
                     << "', Partition: " << Partition
                     << ", SeqNo: " << seqNo << ", partNo: " << partNo
@@ -421,7 +421,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 }
 
 void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::SyncMemoryStateWithKVState.");
+    LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
     BlobEncoder.SyncHeadKeys();
 
@@ -487,7 +487,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
 
 void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx)
 {
-    PQ_LOG_D("Received TPartition::Handle TEvHandleWriteResponse.");
+    LOG_D("Received TPartition::Handle TEvHandleWriteResponse.");
     OnHandleWriteResponse(ctx);
 }
 
@@ -507,7 +507,7 @@ void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
 }
 
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::HandleWriteResponse.");
+    LOG_T("TPartition::HandleWriteResponse.");
     if (!HaveWriteMsg) {
         return;
     }
@@ -562,7 +562,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
         avg.Update(WriteNewSizeFromSupportivePartitions, now);
     }
 
-    PQ_LOG_D("TPartition::HandleWriteResponse " <<
+    LOG_D("TPartition::HandleWriteResponse " <<
              "writeNewSize# " << WriteNewSize <<
              " WriteNewSizeFromSupportivePartitions# " << WriteNewSizeFromSupportivePartitions);
 
@@ -617,7 +617,7 @@ NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
     const auto sourceIdCount = SourceIdCounter.Count(ctx.Now() - sourceIdWindow);
     const auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
 
-    PQ_LOG_D("TPartition::CheckScaleStatus"
+    LOG_D("TPartition::CheckScaleStatus"
             << " splitMergeAvgWriteBytes# " << SplitMergeAvgWriteBytes->GetValue()
             << " writeSpeedUsagePercent# " << writeSpeedUsagePercent
             << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
@@ -634,11 +634,11 @@ NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
     auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
 
     if (splitEnabled && canSplit && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
-        PQ_LOG_D("TPartition::CheckScaleStatus NEED_SPLIT" << " Topic: \"" << TopicName() << "\"."
+        LOG_D("TPartition::CheckScaleStatus NEED_SPLIT" << " Topic: \"" << TopicName() << "\"."
                 << " Partition: " << Partition);
         return NKikimrPQ::EScaleStatus::NEED_SPLIT;
     } else if (mergeEnabled && writeSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
-        PQ_LOG_D("TPartition::CheckScaleStatus NEED_MERGE" << " Topic: \"" << TopicName() << "\"."
+        LOG_D("TPartition::CheckScaleStatus NEED_MERGE" << " Topic: \"" << TopicName() << "\"."
                 << " Partition: " << Partition << " writeSpeedUsagePercent: " << writeSpeedUsagePercent
                 << " Threshold: " << Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()
         );
@@ -658,7 +658,7 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
-    PQ_LOG_D("Received TPartition::TEvWrite");
+    LOG_D("Received TPartition::TEvWrite");
 
     if (!CanEnqueue()) {
         ReplyError(ctx, ev->Get()->Cookie, InactivePartitionErrorCode,
@@ -737,7 +737,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         PQ_ENSURE(!msg.Data.empty());
 
         if (msg.SeqNo > (ui64)Max<i64>()) {
-            PQ_LOG_ERROR( "Request to write wrong SeqNo. Partition "
+            LOG_E( "Request to write wrong SeqNo. Partition "
                 << Partition << " sourceId '" << EscapeC(msg.SourceId) << "' seqno " << msg.SeqNo);
 
             ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -790,7 +790,7 @@ void TPartition::HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TA
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::HandleOnWrite TEvRegisterMessageGroup.");
+    LOG_T("TPartition::HandleOnWrite TEvRegisterMessageGroup.");
 
     const auto& body = ev->Get()->Body;
 
@@ -829,7 +829,7 @@ void TPartition::HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const 
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::HandleOnWrite TEvDeregisterMessageGroup.");
+    LOG_T("TPartition::HandleOnWrite TEvDeregisterMessageGroup.");
 
     const auto& body = ev->Get()->Body;
 
@@ -849,7 +849,7 @@ void TPartition::HandleOnIdle(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActo
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::HandleOnWrite TEvSplitMessageGroup.");
+    LOG_T("TPartition::HandleOnWrite TEvSplitMessageGroup.");
 
     if (ev->Get()->Deregistrations.size() > 1) {
         return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -894,7 +894,7 @@ void TPartition::Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr&, const TActo
 }
 
 void TPartition::ProcessChangeOwnerRequests(const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::ProcessChangeOwnerRequests.");
+    LOG_T("TPartition::ProcessChangeOwnerRequests.");
 
     while (!WaitToChangeOwner.empty()) {
         auto &ev = WaitToChangeOwner.front();
@@ -1101,7 +1101,7 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
                 ("HeadOffset", zone.Head.Offset)
                 ("NEWKEY", x.NewKey.ToString());
         }
-        PQ_LOG_D("writing blob: topic '" << TopicName() << "' partition " << Partition <<
+        LOG_D("writing blob: topic '" << TopicName() << "' partition " << Partition <<
                  " old key " << x.OldKey.ToString() << " new key " << x.NewKey.ToString() <<
                  " size " << x.Size << " WTime " << ctx.Now().MilliSeconds());
 
@@ -1163,7 +1163,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
     ui64 poffset = p.Offset.GetOrElse(curOffset);
 
-    PQ_LOG_T("Topic '" << TopicName() << "' partition " << Partition
+    LOG_T("Topic '" << TopicName() << "' partition " << Partition
             << " process write for '" << EscapeC(p.Msg.SourceId) << "'"
             << " DisableDeduplication=" << p.Msg.DisableDeduplication
             << " SeqNo=" << p.Msg.SeqNo
@@ -1209,7 +1209,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo) || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))
     ) {
         if (poffset >= curOffset) {
-            PQ_LOG_W("Already written message. Topic: '" << TopicName()
+            LOG_W("Already written message. Topic: '" << TopicName()
                     << "' Partition: " << Partition << " SourceId: '" << EscapeC(p.Msg.SourceId)
                     << "'. Message seqNo: " << p.Msg.SeqNo
                     << ". Committed seqNo: " << sourceId.CommittedSeqNo()
@@ -1248,7 +1248,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             return false;
         }
 
-        PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition
+        LOG_D("Topic '" << TopicName() << "' partition " << Partition
                 << " process heartbeat sourceId '" << EscapeC(p.Msg.SourceId) << "'"
                 << " version " << *hbVersion
         );
@@ -1319,7 +1319,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                                        MaxBlobSize);
     }
 
-    PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition
+    LOG_D("Topic '" << TopicName() << "' partition " << Partition
             << " part blob processing sourceId '" << EscapeC(p.Msg.SourceId)
             << "' seqNo " << p.Msg.SeqNo << " partNo " << p.Msg.PartNo
     );
@@ -1377,7 +1377,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         newWrite->Key.SetFastWrite();
         AddCmdWrite(newWrite, request, ctx);
 
-        PQ_LOG_D("Topic '" << TopicName() <<
+        LOG_D("Topic '" << TopicName() <<
                 "' partition " << Partition <<
                 " part blob sourceId '" << EscapeC(p.Msg.SourceId) <<
                 "' seqNo " << p.Msg.SeqNo << " partNo " << p.Msg.PartNo <<
@@ -1422,7 +1422,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
         PQ_ENSURE(countOfLastParts == 1);
 
-        PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition
+        LOG_D("Topic '" << TopicName() << "' partition " << Partition
                 << " part blob complete sourceId '" << EscapeC(p.Msg.SourceId) << "' seqNo " << p.Msg.SeqNo
                 << " partNo " << p.Msg.PartNo << " FormedBlobsCount " << BlobEncoder.PartitionedBlob.GetFormedBlobs().size()
                 << " NewHead: " << BlobEncoder.NewHead
@@ -1462,7 +1462,7 @@ std::pair<TKey, ui32> TPartition::GetNewFastWriteKey(bool headCleared)
 
 void TPartition::AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
-    PQ_LOG_T("TPartition::AddNewFastWriteBlob");
+    LOG_T("TPartition::AddNewFastWriteBlob");
 
     const auto& key = res.first;
 
@@ -1490,7 +1490,7 @@ void TPartition::AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TE
 }
 
 void TPartition::SetDeadlinesForWrites(const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::SetDeadlinesForWrites.");
+    LOG_T("TPartition::SetDeadlinesForWrites.");
     auto quotaWaitDurationMs = TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs());
     if (SubDomainOutOfSpace) {
         quotaWaitDurationMs = quotaWaitDurationMs ? std::min(quotaWaitDurationMs, SubDomainQuotaWaitDurationMs) : SubDomainQuotaWaitDurationMs;
@@ -1503,7 +1503,7 @@ void TPartition::SetDeadlinesForWrites(const TActorContext& ctx) {
 }
 
 void TPartition::Handle(TEvPQ::TEvQuotaDeadlineCheck::TPtr&, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::Handle TEvQuotaDeadlineCheck.");
+    LOG_T("TPartition::Handle TEvQuotaDeadlineCheck.");
 
     FilterDeadlinedWrites(ctx);
 }
@@ -1512,7 +1512,7 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
     if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > ctx.Now()) {
         return;
     }
-    PQ_LOG_T("TPartition::FilterDeadlinedWrites.");
+    LOG_T("TPartition::FilterDeadlinedWrites.");
 
     FilterDeadlinedWrites(ctx, PendingRequests);
 
@@ -1673,7 +1673,7 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
     std::pair<TKey, ui32> res = GetNewFastWriteKey(BlobEncoder.HeadCleared);
     const auto& key = res.first;
 
-    PQ_LOG_D("Add new write blob: topic '" << TopicName() << "' partition " << Partition
+    LOG_D("Add new write blob: topic '" << TopicName() << "' partition " << Partition
             << " compactOffset " << key.GetOffset() << "," << key.GetCount()
             << " HeadOffset " << BlobEncoder.Head.Offset << " endOffset " << BlobEncoder.EndOffset << " curOffset "
             << BlobEncoder.NewHead.GetNextOffset() << " " << key.ToString()
@@ -1712,7 +1712,7 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
 {
     if (const auto heartbeat = SourceIdBatch->CanEmitHeartbeat()) {
         if (heartbeat->Version > LastEmittedHeartbeat) {
-            PQ_LOG_I("Topic '" << TopicName() << "' partition " << Partition
+            LOG_I("Topic '" << TopicName() << "' partition " << Partition
                     << " emit heartbeat " << heartbeat->Version);
 
             auto hbMsg = TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
@@ -1755,7 +1755,7 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
 }
 
 void TPartition::RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie) {
-    PQ_LOG_D("Send write quota request." <<" Topic: \"" << TopicName() << "\"." <<
+    LOG_D("Send write quota request." <<" Topic: \"" << TopicName() << "\"." <<
             " Partition: " << Partition << "." <<
             " Amount: " << dataSize << "." <<
             " Cookie: " << cookie
@@ -1782,7 +1782,7 @@ bool TPartition::WaitingForSubDomainQuota(const ui64 withSize) const {
 
 void TPartition::RequestBlobQuota(size_t quotaSize)
 {
-    PQ_LOG_T("TPartition::RequestBlobQuota.");
+    LOG_T("TPartition::RequestBlobQuota.");
 
     PQ_ENSURE(!WaitingForPreviousBlobQuota());
 

@@ -1032,7 +1032,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
         OffloadActor = Register(CreateOffloadActor(TabletActorId, TabletId, Partition, Config.GetOffloadConfig()));
     }
 
-    PQ_LOG_I("bootstrapping " << Partition << " " << ctx.SelfID);
+    LOG_I("bootstrapping " << Partition << " " << ctx.SelfID);
 
     if (AppData(ctx)->Counters) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {

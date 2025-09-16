@@ -24,6 +24,7 @@ import requests
 import shutil
 import sys
 import time
+import subprocess
 import threading
 
 
@@ -266,6 +267,21 @@ def main():
         path_to_cli = found
         logger.debug(f"Found ydb CLI: {path_to_cli}")
 
+    # ensure that we have a proper cli version by checking presence of "--no-merge"
+    try:
+        help_proc = subprocess.run([path_to_cli, "monitoring", "healthcheck", "--help"],
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                   text=True, timeout=10)
+        if help_proc.returncode != 0:
+            logger.error(f"Failed to run '{path_to_cli} monitoring healthcheck --help' (exit {help_proc.returncode})")
+            sys.exit(2)
+        if "--no-merge" not in help_proc.stdout:
+            logger.error("ydb CLI is too old: missing '--no-merge' in 'monitoring healthcheck --help'. Please update ydb CLI.")
+            sys.exit(2)
+    except Exception as e:
+        logger.error(f"Failed to verify ydb CLI capabilities: {e}")
+        sys.exit(2)
+
     # check state path
     try:
         state_path = args.state
@@ -297,6 +313,7 @@ def main():
 
     if not piles or len(piles) == 0:
         logger.error(f"No piles resolved")
+        sys.exit(2)
 
     resolve_summary = ", ".join(f"{pile}: {len(hosts)}" for pile, hosts in piles.items())
     logger.info(f"Piles host counts: {resolve_summary}")

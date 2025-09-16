@@ -4,7 +4,7 @@
 
 {% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
 
-## Изменение конфигурации StateStorage
+## Сценарий изменения конфигурации StateStorage
 
 1. Получить текущую конфигурацию кластера с помощью команды [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md):
 

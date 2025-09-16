@@ -151,10 +151,12 @@ namespace NKikimr {
             LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_DEFRAG, DCtx->VCtx->VDiskLogPrefix << "rewriting BlobId# "
                 << rec.LogoBlobId << " from Location# " << rec.OldDiskPart);
 
+            auto msgSize = rope.size();
             auto writeEvent = std::make_unique<TEvBlobStorage::TEvVPut>(rec.LogoBlobId, std::move(rope),
                     SelfVDiskId, true, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob);
             writeEvent->RewriteBlob = true;
-            Send(DCtx->SkeletonId, writeEvent.release());
+            TEventsQuoter::QuoteMessage(DCtx->Throttler, std::make_unique<IEventHandle>(DCtx->SkeletonId, SelfId(), writeEvent.release()),
+                msgSize, DCtx->VCfg->DefragThrottlerBytesRate);
         }
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr& ev, const TActorContext& ctx) {

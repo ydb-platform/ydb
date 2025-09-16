@@ -198,6 +198,8 @@ namespace NKikimr::NStorage {
         vdiskConfig->HullCompMaxInFlightReads = HullCompMaxInFlightReads;
         vdiskConfig->HullCompFullCompPeriodSec = HullCompFullCompPeriodSec;
         vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
+        vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
+        vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
 
         vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
         if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
@@ -226,8 +228,8 @@ namespace NKikimr::NStorage {
 
         vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
-        if (StorageConfig.HasBlobStorageConfig() && StorageConfig.GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
-            for (auto &type : StorageConfig.GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {
+        if (Cfg->BlobStorageConfig.HasVDiskPerformanceSettings()) {
+            for (auto &type : Cfg->BlobStorageConfig.GetVDiskPerformanceSettings().GetVDiskTypes()) {
                 if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
                     if (type.HasMinHugeBlobSizeInBytes()) {
                         vdiskConfig->MinHugeBlobInBytes = type.GetMinHugeBlobSizeInBytes();

@@ -132,6 +132,7 @@ namespace NKikimr {
         TControlWrapper HullCompMaxInFlightReads;
         TControlWrapper HullCompFullCompPeriodSec;
         TControlWrapper HullCompThrottlerBytesRate;
+        TControlWrapper DefragThrottlerBytesRate;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;
         bool AddHeader;
@@ -242,6 +243,7 @@ namespace NKikimr {
         TControlWrapper DefaultHugeGarbagePerMille = 300;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille = 260;
         TControlWrapper MaxChunksToDefragInflight = 10;
+        TControlWrapper GarbageThresholdToRunFullCompactionPerMille = 0;
 
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;

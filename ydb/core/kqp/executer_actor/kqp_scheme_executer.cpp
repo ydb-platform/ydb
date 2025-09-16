@@ -847,7 +847,6 @@ public:
             entry.Path = paths;
         }
 
-        AFL_ENSURE(request->ResultSet.size() == 1);
         auto ev = std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release());
         Send(schemeCache, ev.release());
     }
@@ -860,7 +859,10 @@ public:
 
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
-        if (resp->ResultSet.size() > 1) {
+        if (resp->ResultSet.size() > 1
+                && std::all_of(resp->ResultSet.begin(), resp->ResultSet.end(), [](const auto& entry) {
+                    return entry.Operation == NSchemeCache::TSchemeCacheNavigate::OpPath;
+                })) {
             HandleCTASWorkingDir(ev);
             return;
         }

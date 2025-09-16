@@ -951,8 +951,6 @@ std::pair<const TSerializedCellVec*, bool> TShardKeyRanges::GetRightBorder() con
 void FillEndpointDesc(NDqProto::TEndpoint& endpoint, const TTask& task) {
     if (task.ComputeActorId) {
         ActorIdToProto(task.ComputeActorId, endpoint.MutableActorId());
-    } else if (task.Meta.ShardId) {
-        endpoint.SetTabletId(task.Meta.ShardId);
     }
 }
 
@@ -1002,29 +1000,11 @@ void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransact
 }
 
 void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto::TDqTask& taskDesc) {
-    if (task.Meta.ShardId && (task.Meta.Reads || task.Meta.Writes)) {
+    if (task.Meta.ShardId && task.Meta.Writes) {
         NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta protoTaskMeta;
 
         FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
 
-        if (task.Meta.Reads) {
-            for (auto& read : *task.Meta.Reads) {
-                auto* protoReadMeta = protoTaskMeta.AddReads();
-                read.Ranges.SerializeTo(protoReadMeta->MutableRange());
-                for (auto& column : read.Columns) {
-                    auto* protoColumn = protoReadMeta->AddColumns();
-                    protoColumn->SetId(column.Id);
-                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                    protoColumn->SetType(columnType.TypeId);
-                    if (columnType.TypeInfo) {
-                        *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
-                    }
-                    protoColumn->SetName(column.Name);
-                }
-                protoReadMeta->SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
-                protoReadMeta->SetReverse(task.Meta.ReadInfo.IsReverse());
-            }
-        }
         if (task.Meta.Writes) {
             auto* protoWrites = protoTaskMeta.MutableWrites();
             task.Meta.Writes->Ranges.SerializeTo(protoWrites->MutableRange());

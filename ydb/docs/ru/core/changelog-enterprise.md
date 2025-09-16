@@ -15,7 +15,7 @@
 * Добавлена возможность [чтения и записи в топик](./reference/kafka-api/examples.md#primery-raboty-s-kafka-api) с использованием Kafka API без аутентификации.
 * Включены по умолчанию:
   
-  * поддержка {% if feature_view %}[представлений (VIEW)](./concepts/datamodel/view.md){% else %}представлений (VIEW){% endif %};
+  * поддержка [представлений (VIEW)](./concepts/datamodel/view.md);
   * режим [автопартиционирования](./concepts/datamodel/topic.md#autopartitioning) топиков;
   * [транзакции с участием топиков и строковых таблиц](./concepts/transactions.md#topic-table-transactions);
   * [волатильные распределённые транзакции](./contributor/datashard-distributed-txs.md#osobennosti-vypolneniya-volatilnyh-tranzakcij).

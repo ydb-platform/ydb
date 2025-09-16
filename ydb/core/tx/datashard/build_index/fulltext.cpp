@@ -240,9 +240,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
 {
     auto& request = ev->Get()->Record;
     const ui64 id = request.GetId();
-    auto rowVersion = request.HasSnapshotStep() || request.HasSnapshotTxId()
-        ? TRowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId())
-        : GetMvccTxVersion(EMvccTxMode::ReadOnly);
+    TRowVersion rowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId());
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
@@ -295,7 +293,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         const auto& userTable = **userTableIt;
 
         // 2. Validating request fields
-        if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
+        if (!request.HasSnapshotStep() || !request.HasSnapshotTxId()) {
+            badRequest(TStringBuilder() << "Missing snapshot");
+        } else {
             const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
             if (!SnapshotManager.FindAvailable(snapshotKey)) {
                 badRequest(TStringBuilder() << "Unknown snapshot for path id " << pathId.OwnerId << ":" << pathId.LocalPathId
@@ -319,12 +319,16 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
             }
         }
 
+        if (trySendBadRequest()) {
+            return;
+        }
+
         // 3. Validating fulltext index settings
         if (!request.HasSettings()) {
             badRequest(TStringBuilder() << "Missing fulltext index settings");
         } else {
             TString error;
-            if (!NKikimr::NFulltext::ValidateSettings(request.GetSettings(), error)) {
+            if (!NKikimr::NFulltext::ValidateSettings({request.keycolumns().begin(), request.keycolumns().end()}, request.GetSettings(), error)) {
                 badRequest(error);
             }
         }

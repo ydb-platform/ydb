@@ -137,15 +137,25 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
     return tokens;
 }
 
-bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString& error) {
+bool ValidateSettings(const NProtoBuf::RepeatedPtrField<TString>& keyColumns, const Ydb::Table::FulltextIndexSettings& settings, TString& error) {
     if (!settings.has_layout() || settings.layout() == Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED) {
         error = "layout should be set";
         return false;
     }
 
+    if (keyColumns.size() != 1) {
+        error = TStringBuilder() << "fulltext index should have a single text key column"
+            << " but have " << keyColumns.size() << " of them";
+        return false;
+    }
     if (settings.columns().size() != 1) {
-        error = TStringBuilder() << "fulltext index should have single column settings"
+        error = TStringBuilder() << "fulltext index should have a single text key column settings"
             << " but have " << settings.columns().size() << " of them";
+        return false;
+    }
+    if (keyColumns.at(0) != settings.columns().at(0).column()) {
+        error = TStringBuilder() << "fulltext index should have a single text key column " << keyColumns.at(0) << " settings"
+            << " but have " << settings.columns().at(0).column();
         return false;
     }
 
@@ -167,7 +177,7 @@ bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString
     return true;
 }
 
-Ydb::Table::FulltextIndexSettings FillSettings(const TString& column, const TVector<std::pair<TString, TString>>& settings, TString& error) {
+Ydb::Table::FulltextIndexSettings FillSettings(const TString& keyColumn, const TVector<std::pair<TString, TString>>& settings, TString& error) {
     Ydb::Table::FulltextIndexSettings result;
     Ydb::Table::FulltextIndexSettings::Analyzers resultAnalyzers;
 
@@ -209,11 +219,16 @@ Ydb::Table::FulltextIndexSettings FillSettings(const TString& column, const TVec
     {
         // only single-columned index is supported for now
         auto columnAnalyzers = result.add_columns();
-        columnAnalyzers->set_column(column);
+        columnAnalyzers->set_column(keyColumn);
         columnAnalyzers->mutable_analyzers()->CopyFrom(resultAnalyzers);
     }
 
-    ValidateSettings(result, error);
+    {
+        NProtoBuf::RepeatedPtrField<TString> keyColumns;
+        TString keyColumn_ = keyColumn;
+        keyColumns.Add(std::move(keyColumn_));
+        ValidateSettings(keyColumns, result, error);
+    }
 
     return result;
 }

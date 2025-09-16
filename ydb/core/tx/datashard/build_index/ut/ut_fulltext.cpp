@@ -48,9 +48,15 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
 
         FulltextIndexSettings settings;
         settings.set_layout(FulltextIndexSettings::FLAT);
+        auto column = settings.add_columns();
+        column->set_column("text");
+        column->mutable_analyzers()->set_tokenizer(FulltextIndexSettings::WHITESPACE);
         *request.MutableSettings() = settings;
 
         request.SetIndexName(kIndexTable);
+
+        request.AddKeyColumns("text");
+        request.AddDataColumns("data");
 
         setupRequest(request);
 
@@ -161,75 +167,57 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.SetTabletId(0);
         }, TStringBuilder() << "{ <main>: Error: Wrong shard 0 this is " << GetTableShards(server, sender, kMainTable)[0] << " }");
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     TPathId(0, 0).ToProto(request.MutablePathId());
-        // }, "{ <main>: Error: Unknown table id: 0 }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            TPathId(0, 0).ToProto(request.MutablePathId());
+        }, "{ <main>: Error: Unknown table id: 0 }");
 
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.SetSnapshotStep(request.GetSnapshotStep() + 1);
-        // }, "Error: Unknown snapshot", true);
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.SetSnapshotTxId(request.GetSnapshotTxId() + 1);
-        // }, "Error: Unknown snapshot", true);
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.SetSnapshotStep(request.GetSnapshotStep() + 1);
+        }, "Error: Unknown snapshot", true);
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.ClearSnapshotStep();
+        }, "{ <main>: Error: Missing snapshot }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.SetSnapshotTxId(request.GetSnapshotTxId() + 1);
+        }, "Error: Unknown snapshot", true);
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.ClearSnapshotTxId();
+        }, "{ <main>: Error: Missing snapshot }");
 
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.MutableSettings()->set_vector_type(FulltextIndexSettings::VECTOR_TYPE_UNSPECIFIED);
-        // }, "{ <main>: Error: vector_type should be set }");
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.MutableSettings()->set_vector_type(FulltextIndexSettings::VECTOR_TYPE_BIT);
-        // }, "{ <main>: Error: Unsupported vector_type: VECTOR_TYPE_BIT }");
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.MutableSettings()->set_metric(FulltextIndexSettings::METRIC_UNSPECIFIED);
-        // }, "{ <main>: Error: either distance or similarity should be set }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.clear_settings();
+        }, "{ <main>: Error: Missing fulltext index settings }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.MutableSettings()->clear_columns();
+        }, "{ <main>: Error: fulltext index should have single column settings but have 0 of them }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.MutableSettings()->mutable_columns()->at(0).mutable_analyzers()->clear_tokenizer();
+        }, "{ <main>: Error: tokenizer should be set }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.MutableSettings()->mutable_columns()->at(0).set_column("data");
+        }, "{ <main>: Error: fulltext index should have key column text settings but have data }");
 
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.SetUpload(NKikimrTxDataShard::UNSPECIFIED);
-        // }, "{ <main>: Error: Wrong upload }");
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.SetUpload(NKikimrTxDataShard::SAMPLE);
-        // }, "{ <main>: Error: Wrong upload }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.ClearIndexName();
+        }, "{ <main>: Error: Empty index table name }");
 
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.SetK(0);
-        // }, "{ <main>: Error: Should be requested partition on at least two rows }");
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.SetK(1);
-        // }, "{ <main>: Error: Should be requested partition on at least two rows }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.ClearKeyColumns();
+        }, "{ <main>: Error: fulltext index should have single key column but have 0 of them }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.ClearKeyColumns();
+            request.AddKeyColumns("some");
+        }, "{ <main>: Error: Unknown key column: some }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.AddDataColumns("some");
+        }, "{ <main>: Error: Unknown data column: some }");
 
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.SetParentFrom(100);
-        //     request.SetParentTo(99);
-        // }, "{ <main>: Error: Parent from 100 should be less or equal to parent to 99 }");
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.SetParentFrom(0);
-        //     request.SetParentTo(0);
-        //     request.SetUpload(NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING);
-        // }, "{ <main>: Error: Wrong upload for zero parent }");
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.SetParentFrom(100);
-        //     request.SetParentTo(200);
-        //     request.SetUpload(NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD);
-        // }, "{ <main>: Error: Wrong upload for non-zero parent }");
-
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.ClearLevelName();
-        // }, "{ <main>: Error: Empty level table name }");
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.ClearOutputName();
-        // }, "{ <main>: Error: Empty output table name }");
-
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.SetEmbeddingColumn("some");
-        // }, "{ <main>: Error: Unknown embedding column: some }");
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.AddDataColumns("some");
-        // }, "{ <main>: Error: Unknown data column: some }");
-
-        // // test multiple issues:
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-        //     request.SetK(1);
-        //     request.SetEmbeddingColumn("some");
-        // }, "[ { <main>: Error: Should be requested partition on at least two rows } { <main>: Error: Unknown embedding column: some } ]");
+        // test multiple issues:
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.ClearIndexName();
+            request.ClearKeyColumns();
+            request.AddKeyColumns("some");
+        }, "[ { <main>: Error: Empty index table name } { <main>: Error: Unknown key column: some } ]");
     }
 
     // Y_UNIT_TEST(MainToPosting) {

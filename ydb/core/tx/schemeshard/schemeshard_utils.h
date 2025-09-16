@@ -174,13 +174,13 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                 return false;
             }
     
-            const TString& indexColumnName = indexKeys.KeyColumns.back();
-            Y_ABORT_UNLESS(baseColumnTypes.contains(indexColumnName));
-            auto typeInfo = baseColumnTypes.at(indexColumnName);
+            const TString& embeddingColumnName = indexKeys.KeyColumns.back();
+            Y_ABORT_UNLESS(baseColumnTypes.contains(embeddingColumnName));
+            auto typeInfo = baseColumnTypes.at(embeddingColumnName);
     
             if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
                 status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
+                error = TStringBuilder() << "Embedding column '" << embeddingColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
                 return false;
             }
             break;
@@ -191,30 +191,18 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
     
             if (indexKeys.KeyColumns.size() > 1) {
                 status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder() << "fulltext index can only have a single key text column";
+                error = TStringBuilder() << "fulltext index should have a single text key column";
                 return false;
             }
-            if (indexDesc.GetFulltextIndexDescription().GetSettings().Getcolumns().size() != 1) {
-                status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder() << "fulltext index should have single '" << indexKeys.KeyColumns.at(0) << "' column settings"
-                    << " but have " << indexDesc.GetFulltextIndexDescription().GetSettings().Getcolumns().size() << " of them";
-                return false;
-            }
-            if (indexDesc.GetFulltextIndexDescription().GetSettings().Getcolumns().at(0).Getcolumn() != indexKeys.KeyColumns.at(0)) {
-                status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder() << "fulltext index should have '" << indexKeys.KeyColumns.at(0) << "' column settings"
-                    << " but have '" << indexDesc.GetFulltextIndexDescription().GetSettings().Getcolumns().at(0).Getcolumn() << "' column settings";
-                return false;
-            }
-    
-            const TString& indexColumnName = indexKeys.KeyColumns.back();
-            Y_ABORT_UNLESS(baseColumnTypes.contains(indexColumnName));
-            auto typeInfo = baseColumnTypes.at(indexColumnName);
+            
+            const TString& textColumnName = indexKeys.KeyColumns.at(0);
+            Y_ABORT_UNLESS(baseColumnTypes.contains(textColumnName));
+            auto typeInfo = baseColumnTypes.at(textColumnName);
     
             // TODO: support utf-8 in fulltext index
             if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
                 status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
+                error = TStringBuilder() << "Text column '" << textColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
                 return false;
             }
             break;

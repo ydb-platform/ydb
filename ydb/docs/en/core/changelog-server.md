@@ -21,9 +21,8 @@ Release date: September 15, 2025.
 * Fixed a [serialization issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164) that caused an error when opening query execution statistics.
 * Changed the logic for nodes transitioning to critical state – the CPU pool, which is 75-99% full, now triggers a warning, not a critical state.
 
-### Performance
+#### Performance
 
-* Added a new [actor system](./concepts/glossary.md#actor-system) mode that uses computing resources more efficiently — the performance of a 4-core node is increased by 40%. In this mode the performance per core is the same as that of a 10-core node; the performance of a 2-core node is increased by 110%, the performance per core is only 5% less than that of a 10-core node (previously it was 50% less). To enable this mode, use the `use_shared_threads` flag in the [actor-system configuration](./devops/configuration-management/configuration-v1/change_actorsystem_configs.md).
 * [Optimized](https://github.com/ydb-platform/ydb/pull/20197) processing of empty inputs when performing JOIN operations.
 
 #### Bug fixes

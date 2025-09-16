@@ -20,6 +20,14 @@ TWriteQuoter::TWriteQuoter(
 {
 }
 
+const TString& TReadQuoter::GetLogPrefix() const {
+    if (!LogPrefix) {
+        LogPrefix = TStringBuilder() << "[WriteQuoter][" << Partition << "] ";
+    }
+
+    return *LogPrefix;
+}
+
 void TWriteQuoter::Bootstrap(const TActorContext& ctx) {
     UpdateQuotaConfigImpl(true, ctx);
     TBase::Bootstrap(ctx);

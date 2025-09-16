@@ -117,7 +117,17 @@ namespace NKikimr {
 
                 if (memRec.GetType() == TBlobType::DiskBlob) {
                     const TDiskPart& location = extr.SwearOne();
-                    ui32 offset = AddHeader ? TDiskBlob::HeaderSize : 0;
+
+                    // calculate total data size of parts stored within this blob
+                    ui32 totalSize = 0;
+                    for (ui8 partIdx : parts) {
+                        totalSize += GType.PartSize(TLogoBlobID(fullId, partIdx + 1));
+                    }
+
+                    // calculate initial offset of first stored part
+                    Y_ABORT_UNLESS(location.Size == totalSize || location.Size == totalSize + TDiskBlob::HeaderSize);
+                    ui32 offset = location.Size - totalSize;
+
                     for (ui8 partIdx : parts) {
                         const ui32 partSize = GType.PartSize(TLogoBlobID(fullId, partIdx + 1));
                         Y_DEBUG_ABORT_UNLESS(partIdx < Parts.size());

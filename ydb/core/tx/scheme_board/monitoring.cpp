@@ -48,6 +48,32 @@ struct TBackupLimits {
     ui32 MaxInFlight = 10'000;
 };
 
+void Alert(IOutputStream& str, TStringBuf type, TStringBuf text) {
+    HTML(str) {
+        DIV_CLASS(TStringBuilder() << "alert alert-" << type) {
+            if (type == "warning") {
+                STRONG() {
+                    str << "Warning: ";
+                }
+            }
+            str << text;
+        }
+    }
+}
+
+void Warning(IOutputStream& str, TStringBuf text) {
+    Alert(str, "warning", text);
+}
+void Danger(IOutputStream& str, TStringBuf text) {
+    Alert(str, "danger", text);
+}
+void Info(IOutputStream& str, TStringBuf text) {
+    Alert(str, "info", text);
+}
+void Success(IOutputStream& str, TStringBuf text) {
+    Alert(str, "success", text);
+}
+
 class TMonitoring: public TActorBootstrapped<TMonitoring> {
     static constexpr char ROOT[] = "scheme_board";
     static constexpr TBackupLimits BackupLimits = TBackupLimits();
@@ -335,17 +361,6 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     template <>
     void Header(IOutputStream& str, const TString& activityType, const NActorsProto::TActorId& actorId) {
         Header(str, activityType, ActorIdFromProto(actorId));
-    }
-
-    static void Alert(IOutputStream& str, const TStringBuf text) {
-        HTML(str) {
-            DIV_CLASS("alert alert-warning") {
-                STRONG() {
-                    str << "Warning:";
-                }
-                str << " " << text << ".";
-            }
-        }
     }
 
     static void Panel(IOutputStream& str, TRenderer title, TRenderer body) {
@@ -712,7 +727,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         HTML(str) {
             Header(str, record.GetActivityType(), record.GetSelf());
             if (record.GetTruncated()) {
-                Alert(str, "some lists has been truncated");
+                Warning(str, "some lists have been truncated.");
             }
 
             SimplePanel(str, "Descriptions", [&record](IOutputStream& str) {
@@ -796,7 +811,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         HTML(str) {
             Header(str, record.GetActivityType(), record.GetSelf());
             if (record.GetTruncated()) {
-                Alert(str, "some lists has been truncated");
+                Warning(str, "some lists have been truncated.");
             }
 
             SimplePanel(str, "Info", [&record](IOutputStream& str) {
@@ -892,7 +907,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         HTML(str) {
             Header(str, record.GetActivityType(), record.GetSelf());
             if (record.GetTruncated()) {
-                Alert(str, "some lists has been truncated");
+                Warning(str, "some lists have been truncated.");
             }
 
             SimplePanel(str, "Info", [&response](IOutputStream& str) {
@@ -1121,15 +1136,11 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             Header(str, "Backup", "Backup path descriptions locally, see <a href='https://ydb.tech/docs' target='_blank'>docs</a>");
 
             if (backupStarted) {
-                DIV_CLASS("alert alert-info") {
-                    str << "Backup started successfully!";
-                }
+                Info(str, "Backup started successfully!");
             }
 
             if (!errorMessage.empty()) {
-                DIV_CLASS("alert alert-danger") {
-                    str << errorMessage;
-                }
+                Danger(str, errorMessage);
             }
 
             SimplePanel(str, "Backup Configuration", [&backupProgress](IOutputStream& str) {
@@ -1274,22 +1285,17 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             Navbar(str, ERequestType::Restore);
             Header(str, "Restore", "Restore path descriptions saved locally, see <a href='https://ydb.tech/docs' target='_blank'>docs</a>");
 
-            DIV_CLASS("alert alert-danger") {
-                STRONG() { str << "Warning:"; }
-                str << " Emergency restore will override existing scheme board data."
-                    << " Use only when the Scheme Shard is unavailable!";
-            }
+            Warning(str,
+                "Emergency restore will override existing scheme board data. "
+                "Use only when the Scheme Shard is unavailable."
+            );
 
             if (restoreStarted) {
-                DIV_CLASS("alert alert-info") {
-                    str << "Restore started successfully!";
-                }
+                Info(str, "Restore started successfully!");
             }
 
             if (!errorMessage.empty()) {
-                DIV_CLASS("alert alert-danger") {
-                    str << errorMessage;
-                }
+                Danger(str, errorMessage);
             }
 
             SimplePanel(str, "Restore Configuration", [&restoreProgress](IOutputStream& str) {

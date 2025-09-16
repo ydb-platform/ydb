@@ -291,7 +291,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         if (MirrorTopicDescriberActorId) {
             ctx.Send(MirrorTopicDescriberActorId, new TEvPQ::TEvChangePartitionConfig(nullptr, TabletConfig));
         } else {
-            MirrorTopicDescriberActorId = ctx.Register(CreateMirrorDescriber(SelfId(), Topic, TabletConfig.GetPartitionConfig().GetMirrorFrom()));
+            MirrorTopicDescriberActorId = ctx.Register(CreateMirrorDescriber(TabletID(), SelfId(), Topic, TabletConfig.GetPartitionConfig().GetMirrorFrom()));
         }
     } else {
         if (MirrorTopicDescriberActorId) {

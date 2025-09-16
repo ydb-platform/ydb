@@ -159,14 +159,6 @@
             "Moderne-Source-Available-License"
         ]
     },
-    "NDA": {
-        "default": [
-            "Custom-cryptopro-client",
-            "Intel-NDA",
-            "mimepp",
-            "OracleOebs"
-        ]
-    },
     "REQUIRE_CITATION": {
         "default": [
             "0BSD",

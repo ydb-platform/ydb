@@ -102,7 +102,7 @@ class TConsumerReadQuota {
 };
 
 
-class TPartitionQuoterBase : public TActorBootstrapped<TPartitionQuoterBase> {
+class TPartitionQuoterBase : public TBaseActor<TPartitionQuoterBase> {
 
 const TDuration WAKE_UP_TIMEOUT = TDuration::Seconds(1);
 
@@ -117,13 +117,12 @@ public:
         const TTabletCountersBase& counters,
         ui64 maxRequestsInflight
     )
-        : InflightLimitSlidingWindow(1000, TDuration::Minutes(1))
+        : TBaseActor(tabletId, tabletActor, NKikimrServices::PERSQUEUE)
+        , Partition(partition)
+        , InflightLimitSlidingWindow(1000, TDuration::Minutes(1))
         , RequestsInflight(0)
         , PQTabletConfig(config)
         , TopicConverter(topicConverter)
-        , TabletActor(tabletActor)
-        , Partition(partition)
-        , TabletId(tabletId)
         , MaxInflightRequests(maxRequestsInflight)
         , TotalPartitionQuotaEnabled(totalPartitionQuotaEnabled)
     {
@@ -166,7 +165,7 @@ protected:
     void ApproveQuota(TRequestContext& context);
     TQuotaTracker CreatePartitionTotalQuotaTracker(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const;
 
-    inline const TActorId& GetTabletActor() const {return TabletActor;}
+    inline const TActorId& GetTabletActor() const {return TabletActorId;}
     inline ui64 GetTabletId() const {return TabletId;}
     inline const TPartitionId& GetPartition() const {return Partition;}
 
@@ -199,6 +198,7 @@ private:
     void ReplyExclusiveLockAcquired(const TActorId& receiver);
 
 protected:
+    const TPartitionId Partition;
     std::deque<TRequestContext> WaitingInflightRequests;
     TMicrosecondsSlidingWindow InflightLimitSlidingWindow;
     TInstant InflightIsFullStartTime;
@@ -208,6 +208,7 @@ protected:
     TMaybe<TQuotaTracker> PartitionTotalQuotaTracker;
     NPersQueue::TTopicConverterPtr TopicConverter;
     TTabletCountersBase Counters;
+    mutable TMaybe<TString> LogPrefix;
 
 private:
     enum class EExclusiveLockState {
@@ -216,11 +217,8 @@ private:
         EAcquired,
     };
 
-    TActorId TabletActor;
     std::deque<TRequestContext> WaitingTotalPartitionQuotaRequests;
     THashMap<ui64, TRequestContext> PendingAccountQuotaRequests;
-    const TPartitionId Partition;
-    ui64 TabletId;
     ui64 MaxInflightRequests;
     bool TotalPartitionQuotaEnabled;
     TVector<TEvPQ::TEvRequestQuota::TPtr> PendingQuotaRequests;
@@ -263,6 +261,8 @@ public:
 
     void UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorContext& ctx) override;
     IEventBase* MakeQuotaApprovedEvent(TRequestContext& context) override;
+
+    const TString& GetLogPrefix() const override;
 
 protected:
     void HandleQuotaRequestImpl(TRequestContext& context) override;
@@ -326,6 +326,7 @@ public:
     void Bootstrap(const TActorContext &ctx) override;
     THolder<TAccountQuoterHolder> CreateAccountQuotaTracker() const;
 
+    const TString& GetLogPrefix() const override;
 
 protected:
     void HandleQuotaRequestImpl(TRequestContext& context) override;

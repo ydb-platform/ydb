@@ -7,7 +7,7 @@ items:
   href: scrubbing.md
 - name: Работа с SelfHeal
   href: selfheal.md
-- name: Работа с Self Heal State Storage
+- name: Self Heal State Storage
   href: selfheal_statestorage.md
 - name: Декомиссия части кластера
   href: ../../devops/deployment-options/manual/decommissioning.md

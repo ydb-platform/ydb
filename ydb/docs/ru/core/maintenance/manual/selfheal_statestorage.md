@@ -1,17 +1,17 @@
-# Работа с Self Heal State Storage
+# Self Heal State Storage
 
 В процессе работы кластеров могут выходить из строя узлы целиком, на которых работает {{ ydb-short-name }}.
 
-Self Heal State Storage используется для сохранения работоспособности и отказоустойчивости подсистеи [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) кластера, если невозможно быстро восстановить вышедшие из строя узлы, и автоматически увеличивать количество реплик этих подсистем при добавлении новых узлов в кластер.
+Self Heal State Storage обеспечивает сохранение работоспособности подсистем [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) кластера, если невозможно быстро восстановить вышедшие из строя узлы, и автоматически увеличивать количество реплик этих подсистем при добавлении новых узлов в кластер.
 
-Self Heal State Storage позволяет:
+Self Heal State Storage обеспечивает:
 
-* обнаружить неисправные узлы кластера {{ ydb-short-name }};
-* перенести реплики [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) на другие узлы или добавить новые реплики.
+* обнаружение неисправных узлов кластера {{ ydb-short-name }};
+* перенос реплик [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) на другие узлы или добавление новых реплик.
 
 Self Heal State Storage  включен по умолчанию.
 
-Компонент {{ ydb-short-name }}, отвечающий за Self Heal State Storage, называется [CMS Sentinel](../../concepts/glossary.md#cms).
+Компонент Self Heal State Storage, является частью системы управления кластером [CMS Sentinel](../../concepts/glossary.md#cms).
 
 ## Включение и выключение Self Heal State Storage {#on-off}
 
@@ -21,27 +21,30 @@ Self Heal State Storage  включен по умолчанию.
 1. Получить текущую конфигурацию кластера с помощью команды [ydb admin cluster config fetch](../../reference/ydb-cli/commands/configuration/cluster/fetch.md):
 
     ```bash
-    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
+    ydb [global options...] admin cluster config fetch > config.yaml
     ```
 
 2. Изменить конфигурационный файл `config.yaml`, поменяв значение параметра `state_storage_self_heal_config.enable` на `true` или на `false`:
 
     ```yaml
     config:
+        self_management_config:
+            enabled: true # Включение распределённой конфигурации
         cms_config:
             sentinel_config:
+                enable: true # Включение Sentinel
                 state_storage_self_heal_config:
                     enable: true # Включение self heal state storage
     ```
 
     {% cut "Подробнее" %}
     Для работы механизма требуется активация как [CMS Sentinel](../../concepts/glossary.md#cms), так и [распределённой конфигурации](../../concepts/glossary.md#distributed-configuration). Убедитесь что они включены.
-
-    Значении опции `state_storage_self_heal_config: true` включает механизм сохранения работоспособности и отказоустойчивости [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board)
+    Подробнее о [миграции на конфигурацию V2 и включении распределенной конфигурации](../../devops/configuration-management/migration/migration-to-v2.md)
+    Значение опции `state_storage_self_heal_config: true` включает механизм сохранения работоспособности и отказоустойчивости [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board)
     {% endcut %}
 
 3. Обновить конфигурацию кластера с учетом выполненных изменений с помощью [ydb admin cluster config replace](../../reference/ydb-cli/commands/configuration/cluster/replace.md):
 
     ```bash
-    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
+    ydb [global options...] admin cluster config replace -f config.yaml
     ```

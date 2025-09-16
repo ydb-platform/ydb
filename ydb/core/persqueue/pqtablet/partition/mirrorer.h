@@ -1,20 +1,11 @@
 #pragma once
 
-
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/common/actor.h>
-#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
-#include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/protos/counters_pq.pb.h>
-#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/public/lib/base/msgbus.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
-
 
 namespace NKikimr {
 namespace NPQ {

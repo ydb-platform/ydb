@@ -121,7 +121,7 @@ TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrap
 
 /******************************************************* ReadProxy *********************************************************/
 //megaqc - remove it when LB will be ready
-class TReadProxy : public TBaseActor<TReadProxy> {
+class TReadProxy : public TBaseActor<TReadProxy>, private TCachedLogPrefix {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR;
@@ -150,11 +150,8 @@ public:
         Become(&TThis::StateFunc);
     }
 
-    const TString& GetLogPrefix() const override {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder() <<"[ReadProxy][" << SelfId() << "] ";
-        }
-        return *LogPrefix;
+    TString DoGetLogPrefix() const override {
+        return TStringBuilder() <<"[ReadProxy][" << SelfId() << "] ";
     }
 
 private:
@@ -414,7 +411,6 @@ private:
     TDirectReadKey DirectReadKey;
     bool InitialRequest = true;
     TMaybe<ui64> LastSkipOffset;
-    mutable TMaybe<TString> LogPrefix;
 };
 
 

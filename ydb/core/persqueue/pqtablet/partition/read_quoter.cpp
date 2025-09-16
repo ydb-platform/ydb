@@ -209,12 +209,8 @@ IEventBase* TReadQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
     return new TEvPQ::TEvApproveReadQuota(IEventHandle::Downcast<TEvPQ::TEvRead>(std::move(context.Request->Request)), context.TotalQuotaWaitTime);
 };
 
-const TString& TReadQuoter::GetLogPrefix() const {
-    if (!LogPrefix) {
-        LogPrefix = TStringBuilder() << "[ReadQuoter][" << Partition << "] ";
-    }
-
-    return *LogPrefix;
+TString TReadQuoter::DoGetLogPrefix() const {
+    return TStringBuilder() << "[ReadQuoter][" << Partition << "] ";
 }
 
 void TReadQuoter::CheckConsumerPerPartitionQuota(TRequestContext&& context) {

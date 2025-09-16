@@ -140,7 +140,7 @@ private:
     TDuration DoNotQuoteAfterErrorPeriod;
 };
 
-class TAccountReadQuoter : public TBasicAccountQuoter {
+class TAccountReadQuoter : public TBasicAccountQuoter, private TCachedLogPrefix {
 private:
     static const TString READ_QUOTA_ROOT_PATH;
 
@@ -160,18 +160,17 @@ public:
 
 protected:
     void InitCountersImpl(const TActorContext& ctx) override;
-    const TString& GetLogPrefix() const override;
+    TString DoGetLogPrefix() const override;
     THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() override;
 
 private:
     static TQuoterParams GetQuoterParams(const TString& user);
     const TString User;
     TString ConsumerPath;
-    mutable TMaybe<TString> LogPrefix;
 };
 
 
-class TAccountWriteQuoter : public TBasicAccountQuoter {
+class TAccountWriteQuoter : public TBasicAccountQuoter, private TCachedLogPrefix {
 private:
 static const TString WRITE_QUOTA_ROOT_PATH;
 
@@ -188,11 +187,8 @@ public:
 
 protected:
     void InitCountersImpl(const TActorContext& ctx) override;
-    const TString& GetLogPrefix() const override;
+    TString DoGetLogPrefix() const override;
     THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() override;
-
-private:
-    mutable TMaybe<TString> LogPrefix;
 };
 
 }// NPQ

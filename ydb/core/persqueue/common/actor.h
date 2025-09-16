@@ -15,9 +15,18 @@
 
 namespace NKikimr::NPQ {
 
+namespace NPrivate {
+    class ILogPrefixBase {
+    public:
+        virtual const TString& GetLogPrefix() const = 0;
+        virtual ~ILogPrefixBase() = default;
+    };
+};
+
 template<typename TDerived>
 class TBaseActor : public NActors::TActorBootstrapped<TDerived>
-                 , public NActors::IActorExceptionHandler {
+                 , public NActors::IActorExceptionHandler
+                 , virtual public NPrivate::ILogPrefixBase {
 public:
     using TBase = NActors::TActorBootstrapped<TDerived>;
     using TThis = TDerived;
@@ -40,12 +49,19 @@ public:
         return true;
     }
 
-    virtual const TString& GetLogPrefix() const = 0;
-
 protected:
     const ui64 TabletId;
     const NActors::TActorId TabletActorId;
     const NKikimrServices::EServiceKikimr Service;
+};
+
+
+class TCachedLogPrefix: virtual NPrivate::ILogPrefixBase {
+public:
+    const TString& GetLogPrefix() const override;
+    virtual TString DoGetLogPrefix() const = 0;
+private:
+    mutable TMaybe<TString> LogPrefix_;
 };
 
 }

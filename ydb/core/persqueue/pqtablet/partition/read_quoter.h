@@ -102,7 +102,7 @@ class TConsumerReadQuota {
 };
 
 
-class TPartitionQuoterBase : public TBaseActor<TPartitionQuoterBase> {
+class TPartitionQuoterBase : public TBaseActor<TPartitionQuoterBase>, private TCachedLogPrefix {
 
 const TDuration WAKE_UP_TIMEOUT = TDuration::Seconds(1);
 
@@ -208,7 +208,6 @@ protected:
     TMaybe<TQuotaTracker> PartitionTotalQuotaTracker;
     NPersQueue::TTopicConverterPtr TopicConverter;
     TTabletCountersBase Counters;
-    mutable TMaybe<TString> LogPrefix;
 
 private:
     enum class EExclusiveLockState {
@@ -262,7 +261,7 @@ public:
     void UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorContext& ctx) override;
     IEventBase* MakeQuotaApprovedEvent(TRequestContext& context) override;
 
-    const TString& GetLogPrefix() const override;
+    TString DoGetLogPrefix() const override;
 
 protected:
     void HandleQuotaRequestImpl(TRequestContext& context) override;
@@ -326,7 +325,7 @@ public:
     void Bootstrap(const TActorContext &ctx) override;
     THolder<TAccountQuoterHolder> CreateAccountQuotaTracker() const;
 
-    const TString& GetLogPrefix() const override;
+    TString DoGetLogPrefix() const override;
 
 protected:
     void HandleQuotaRequestImpl(TRequestContext& context) override;

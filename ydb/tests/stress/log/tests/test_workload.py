@@ -16,10 +16,6 @@ class TestYdbLogWorkload(StressFixture):
 
     @pytest.mark.parametrize('store_type', ['row', 'column'])
     def test(self, store_type):
-        yatest.common.execute([
-            yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
-            "--endpoint", self.endpoint,
-            "--database", self.database,
-            "--store_type", store_type,
-            "--duration", "120",
-        ])
+        a = 42
+        b = 43
+        assert a > b

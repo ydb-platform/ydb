@@ -1984,7 +1984,7 @@ private:
 
         for (const auto& task : GetTasksGraph().GetTasks()) {
             const auto& stageInfo = GetTasksGraph().GetStageInfo(task.StageId);
-            if (task.Meta.ShardId && (task.Meta.Reads || task.Meta.Writes)) {
+            if (task.Meta.ShardId && task.Meta.Writes) {
                 auto* protoTask = SerializeTaskToProto(task, true);
                 datashardTasks[task.Meta.ShardId].emplace_back(protoTask);
 

@@ -371,7 +371,6 @@ protected:
         auto& record = ev->Get()->Record;
         auto& channelData = record.GetChannelData();
         auto& channel = TasksGraph.GetChannel(channelData.GetChannelId());
-        auto& task = TasksGraph.GetTask(channel.SrcTask);
         const TActorId channelComputeActorId = ev->Sender;
 
         auto& txResult = ResponseEv->TxResults[channel.DstInputIndex];
@@ -426,7 +425,7 @@ protected:
         Stats->ResultBytes += batch.Size();
         Stats->ResultRows += batch.RowCount();
 
-        LOG_T("Got result, channelId: " << channel.Id << ", shardId: " << task.Meta.ShardId
+        LOG_T("Got result, channelId: " << channel.Id
             << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender
             << ", finished: " << channelData.GetFinished());
 

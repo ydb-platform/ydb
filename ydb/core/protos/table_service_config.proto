@@ -386,7 +386,7 @@ message TTableServiceConfig {
 
     optional bool EnableFoldUdfs = 82 [ default = true ];
 
-    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true ];
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = false ];
 
     optional bool EnableNewRBO = 84 [default = false];
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = true];
@@ -399,7 +399,7 @@ message TTableServiceConfig {
 
     optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
 
-    optional bool EnableOlapPushdownProjections = 91  [ default = true ];
+    optional bool EnableOlapPushdownProjections = 91  [ default = false ];
 
     optional uint32 DefaultLangVer = 92 [default = 202501];
 
@@ -410,7 +410,7 @@ message TTableServiceConfig {
 
     optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V2 ];
 
-    optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = true ];
+    optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = false ];
 
     optional bool EnableTempTablesForUser = 95 [default = false];
 

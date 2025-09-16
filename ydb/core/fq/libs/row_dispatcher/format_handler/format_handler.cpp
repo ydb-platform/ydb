@@ -229,7 +229,10 @@ private:
                     rowId = value->GetElement(0).Get<ui64>();
                 } else if (value->GetListLength() == 2) {
                     rowId = value->GetElement(0).Get<ui64>();
-                    watermarkUs = value->GetElement(1).Get<ui64>();
+                    if (const auto maybeWatermark = value->GetElement(1);
+                        maybeWatermark.IsEmbedded()) {
+                        watermarkUs = maybeWatermark.Get<ui64>();
+                    }
                 } else {
                     Y_ENSURE(false, "Unexpected output schema size");
                 }
@@ -271,6 +274,10 @@ private:
 
         void OnBatchFinish() override {
             if (NewNumberRows == NumberRows && NewDataPackerSize == DataPackerSize && WatermarksUs.empty()) {
+                return;
+            }
+            if (const auto nextOffset = Client->GetNextMessageOffset(); nextOffset && Offset < *nextOffset) {
+                LOG_ROW_DISPATCHER_TRACE("OnBatchFinish, skip historical offset: " << Offset << ", next message offset: " << *nextOffset);
                 return;
             }
 

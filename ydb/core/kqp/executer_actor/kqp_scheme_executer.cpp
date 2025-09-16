@@ -882,7 +882,7 @@ public:
             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssue(error));
         }
 
-        AFL_ENSURE(resp->ResultSet.size() == 1);
+        AFL_ENSURE(resp->ResultSet.size() <= 2);
 
         if (UserToken && !UserToken->GetSerializedToken().empty() && !CheckAlterAccess(*UserToken, resp)) {
             LOG_E("Access check failed");

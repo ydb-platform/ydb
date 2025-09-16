@@ -52,6 +52,8 @@ struct TEnvironmentSetup {
         const float VDiskPredictedDelayMultiplier = 1;
         const ui32 MaxNumOfSlowDisks = 2;
         const bool UseActorSystemTimeInBSQueue = true;
+        const ui64 PDiskSize = 10_TB;
+        const ui64 PDiskChunkSize = 0;
     };
 
     const TSettings Settings;
@@ -69,7 +71,10 @@ struct TEnvironmentSetup {
             const auto key = std::make_pair(nodeId, pdiskId);
             TIntrusivePtr<TPDiskMockState>& state = Env.PDiskMockStates[key];
             if (!state) {
-                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, ui64(10) << 40, cfg->ChunkSize,
+                // state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, ui64(10) << 40, cfg->ChunkSize,
+                //         cfg->ReadOnly, Env.Settings.DiskType));
+                ui64 chunkSize = Env.Settings.PDiskChunkSize ? Env.Settings.PDiskChunkSize : cfg->ChunkSize;
+                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, Env.Settings.PDiskSize, chunkSize,
                         cfg->ReadOnly, Env.Settings.DiskType));
             }
             const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
@@ -412,7 +417,11 @@ struct TEnvironmentSetup {
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksHDD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("VDiskControls.HullCompThrottlerBytesRate", 0, 0, 10737418240, 0);
+                ADD_ICB_CONTROL("VDiskControls.DefragThrottlerBytesRate", 0, 0, 10'000'000'000, 0);
 
+                ADD_ICB_CONTROL("VDiskControls.MaxChunksToDefragInflight", 10, 1, 50, 10);
+                ADD_ICB_CONTROL("VDiskControls.DefaultHugeGarbagePerMille", 300, 0, 1000, 300);
+                ADD_ICB_CONTROL("VDiskControls.GarbageThresholdToRunFullCompactionPerMille", 0, 0, 300, 0);
                 
 #undef ADD_ICB_CONTROL
 
@@ -978,7 +987,8 @@ struct TEnvironmentSetup {
     }
 
     ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-            const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
+        const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter,
+        std::unordered_map<TString, TString> labels = {}, bool derivative = false) {
         ui64 ctr = 0;
 
         for (ui32 nodeId = 1; nodeId <= nodesCount; ++nodeId) {
@@ -990,18 +1000,21 @@ struct TEnvironmentSetup {
                 ss.Clear();
                 ss << LeftPad(pdiskLayout[i], 9, '0');
                 TString pdisk = ss.Str();
-                ctr += GetServiceCounters(appData->Counters, "vdisks")->
+                auto cntr = GetServiceCounters(appData->Counters, "vdisks")->
                         GetSubgroup("storagePool", storagePool)->
                         GetSubgroup("group", std::to_string(groupId))->
                         GetSubgroup("orderNumber", orderNumber)->
                         GetSubgroup("pdisk", pdisk)->
                         GetSubgroup("media", "rot")->
-                        GetSubgroup("subsystem", subsystem)->
-                        GetCounter(counter, derivative)->Val();
+                        GetSubgroup("subsystem", subsystem);
+                for (const auto& [label, value] : labels) {
+                    cntr = cntr->GetSubgroup(label, value);
+                }
+                ctr += cntr->GetCounter(counter, derivative)->Val();
             }
         }
         return ctr;
-    };
+    }
 
     void SetIcbControl(ui32 nodeId, TString controlName, ui64 value) {
         if (nodeId == 0) {

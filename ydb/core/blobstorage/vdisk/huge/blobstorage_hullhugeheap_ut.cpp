@@ -79,7 +79,7 @@ namespace NKikimr {
         }
 
         void AllocFreeOneChunk(ui32 slotsInChunk) {
-            TChain chain("vdisk", slotsInChunk);
+            TChain chain("vdisk", slotsInChunk, false);
             TVector<NPrivate::TChunkSlot> arr;
             AllocateScenaryOneChunk(chain, arr, slotsInChunk);
             FreeScenaryOneChunk(chain, arr, slotsInChunk);
@@ -156,7 +156,7 @@ namespace NKikimr {
         }
 
         void AllocFreeAlloc(ui32 slotsInChunk) {
-            TChain chain("vdisk", slotsInChunk);
+            TChain chain("vdisk", slotsInChunk, false);
             TVector<NPrivate::TChunkSlot> arr;
             TVector<ui32> chunks;
 
@@ -172,13 +172,13 @@ namespace NKikimr {
             TStringStream serialized;
 
             {
-                TChain chain("vdisk", slotsInChunk);
+                TChain chain("vdisk", slotsInChunk, false);
                 PreliminaryAllocate(24, chain, arr);
                 FreeChunksScenary(chain, arr, chunks);
                 chain.Save(&serialized);
             }
             {
-                TChain chain("vdisk", slotsInChunk);
+                TChain chain("vdisk", slotsInChunk, false);
                 TStringInput str(serialized.Str());
                 chain.Load(&str);
             }
@@ -251,7 +251,7 @@ namespace NKikimr {
     Y_UNIT_TEST_SUITE(TBlobStorageHullHugeLayout) {
 
         Y_UNIT_TEST(TestOldAppendBlockSize) {
-            TAllChains all("vdisk", 134274560, 56896, 512 << 10, 512 << 10, 512 << 10, 10 << 20, 8);
+            TAllChains all("vdisk", 134274560, 56896, 512 << 10, 512 << 10, 512 << 10, 10 << 20, 8, false);
             all.PrintOutChains(STR);
             all.PrintOutSearchTable(STR);
             std::pair<ui32, ui32> p = all.GetTablesSize();
@@ -266,7 +266,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(TestNewAppendBlockSize) {
-            TAllChains all("vdisk", 134274560, 4064, 512 << 10, 512 << 10, 512 << 10, 10 << 20, 8);
+            TAllChains all("vdisk", 134274560, 4064, 512 << 10, 512 << 10, 512 << 10, 10 << 20, 8, false);
             all.PrintOutChains(STR);
             all.PrintOutSearchTable(STR);
             TVector<NPrivate::TChainLayoutBuilder::TSeg> canonical = {
@@ -291,7 +291,7 @@ namespace NKikimr {
             ui32 overhead = 8;
             ui32 freeChunksReservation = 0;
             THeap heap("vdisk", chunkSize, appendBlockSize, appendBlockSize, minHugeBlobInBytes, mileStoneBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             ui32 hugeBlobSize = 6u << 20u;
 
             heap.AddChunk(5);
@@ -315,7 +315,7 @@ namespace NKikimr {
             // just serialize/deserialize
             TString serialized = heap.Serialize();
             THeap newHeap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes, mileStoneBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             newHeap.ParseFromString(serialized);
         }
 
@@ -358,7 +358,7 @@ namespace NKikimr {
             ui32 overhead = 8;
             ui32 freeChunksReservation = 0;
             THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes, minHugeBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             TVector<THugeSlot> arr;
 
             AllocateScenary(heap, 6u << 20u, arr);
@@ -373,14 +373,14 @@ namespace NKikimr {
             ui32 overhead = 8;
             ui32 freeChunksReservation = 0;
             THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes, minHugeBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             TVector<THugeSlot> arr;
 
             AllocateScenary(heap, 6u << 20u, arr);
             TString serialized = heap.Serialize();
             UNIT_ASSERT(THeap::CheckEntryPoint(serialized));
             THeap newHeap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes, minHugeBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             newHeap.ParseFromString(serialized);
             FreeScenary(newHeap, arr);
         }
@@ -393,7 +393,7 @@ namespace NKikimr {
             ui32 overhead = 8;
             ui32 freeChunksReservation = 0;
             THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes, minHugeBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
 
             heap.RecoveryModeAddChunk(2);
             heap.RecoveryModeAddChunk(34);
@@ -423,7 +423,7 @@ namespace NKikimr {
             ui32 overhead = 8u;
             ui32 freeChunksReservation = 1;
             THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes, minHugeBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
 
             THugeSlot hugeSlot;
             ui32 slotSize;
@@ -462,10 +462,10 @@ namespace NKikimr {
                         break;
             }
             THeap oldHeap("vdisk", chunkSize, appendBlockSize, oldMinHugeBlobInBytes, oldMinHugeBlobInBytes, mileStoneBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
 
             THeap fromHeap("vdisk", chunkSize, appendBlockSize, fromMin, oldMinHugeBlobInBytes, mileStoneBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             fromHeap.ParseFromString(oldHeap.Serialize());
             TVector<THugeSlot> arr;
 
@@ -473,7 +473,7 @@ namespace NKikimr {
             TString serialized = fromHeap.Serialize();
             UNIT_ASSERT(THeap::CheckEntryPoint(serialized));
             THeap toHeap("vdisk", chunkSize, appendBlockSize, toMin, oldMinHugeBlobInBytes, mileStoneBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             toHeap.ParseFromString(serialized);
             FreeScenary(toHeap, arr);
         }
@@ -533,7 +533,7 @@ namespace NKikimr {
                 ui32 oldMinHugeBlobSizeInBytes = 524288;
                 ui32 minHugeBlobInBytes = 524288; // 24.2
                 THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, oldMinHugeBlobSizeInBytes, milestoneBlobInBytes,
-                    maxBlobInBytes, overhead, 0);
+                    maxBlobInBytes, overhead, 0, false);
                 
                 serialized = heap.Serialize();
             }
@@ -542,7 +542,7 @@ namespace NKikimr {
                 ui32 oldMinHugeBlobSizeInBytes = 524288;
                 ui32 minHugeBlobInBytes = appendBlockSize; // update 24.2 -> 24.3
                 THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, oldMinHugeBlobSizeInBytes, milestoneBlobInBytes,
-                    maxBlobInBytes, overhead, 0);
+                    maxBlobInBytes, overhead, 0, false);
 
                 {
                     // emulate old behavior
@@ -564,7 +564,7 @@ namespace NKikimr {
                 ui32 oldMinHugeBlobSizeInBytes = 524288;
                 ui32 minHugeBlobInBytes = appendBlockSize; // 24.3
                 THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, oldMinHugeBlobSizeInBytes, milestoneBlobInBytes,
-                    maxBlobInBytes, overhead, 0);
+                    maxBlobInBytes, overhead, 0, false);
                 heap.ParseFromString(serialized);
 
                 heap.AddChunk(1);
@@ -594,7 +594,7 @@ namespace NKikimr {
                 ui32 oldMinHugeBlobSizeInBytes = 524288;
                 ui32 minHugeBlobInBytes = appendBlockSize; // 24.3
                 THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, oldMinHugeBlobSizeInBytes, milestoneBlobInBytes,
-                    maxBlobInBytes, overhead, 0);
+                    maxBlobInBytes, overhead, 0, false);
                 heap.ParseFromString(serialized);
 
                 THugeSlot slot;
@@ -607,6 +607,57 @@ namespace NKikimr {
                 Cerr << slot.GetChunkId() << Endl;
 
                 serialized = heap.Serialize();
+            }
+        }
+
+        Y_UNIT_TEST(LockChunks) {
+            ui32 chunkSize = 134274560u;
+            ui32 appendBlockSize = 56896u;
+            ui32 minHugeBlobInBytes = 56u << 10u;
+            ui32 oldMinHugeBlobSizeInBytes = 56u << 10u;
+            ui32 milestoneBlobInBytes = 512u << 10u;
+            ui32 maxBlobInBytes = 10u << 20u;
+            ui32 overhead = 8;
+            ui32 freeChunksReservation = 0;
+            ui32 hugeBlobSize = 6u << 20u;
+
+            for (bool chunksSoftLocking: {false, true}) {
+                THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, oldMinHugeBlobSizeInBytes, milestoneBlobInBytes,
+                    maxBlobInBytes, overhead, freeChunksReservation, chunksSoftLocking);
+                // heap.FinishRecovery();
+                heap.AddChunk(5);
+                heap.AddChunk(3);
+
+                THugeSlot slot1, slot2;
+                ui32 slotSize;
+                ui32 lockedChunkId;
+
+                // fill 1 chunk
+                for (ui32 i = 0; i < heap.SlotNumberOfThisSize(hugeBlobSize); i++) {
+                    UNIT_ASSERT(heap.Allocate(hugeBlobSize, &slot1, &slotSize));
+                }
+
+                // allocate 1 slot from another chunk and lock it
+                UNIT_ASSERT(heap.Allocate(hugeBlobSize, &slot2, &slotSize));
+                lockedChunkId = slot2.GetChunkId();
+                heap.LockChunkForAllocation(lockedChunkId, slotSize);
+
+                // free one slot from the first chunk
+                heap.Free(slot1.GetDiskPart());
+
+                // allocate new slot, it should not be from the locked chunk, because we have free slot in the first chunk
+                THugeSlot slot;
+                UNIT_ASSERT(heap.Allocate(hugeBlobSize, &slot, &slotSize));
+                UNIT_ASSERT_VALUES_UNEQUAL(slot.GetChunkId(), lockedChunkId);
+
+                if (!chunksSoftLocking) {
+                    // we have no more free slots in first chunk, second chunk is locked, so we can't allocate
+                    UNIT_ASSERT(!heap.Allocate(hugeBlobSize, &slot, &slotSize));
+                } else {
+                    // allocate another slot, it should be from the locked chunk, because we have no free slots in the first chunk
+                    UNIT_ASSERT(heap.Allocate(hugeBlobSize, &slot, &slotSize));
+                    UNIT_ASSERT_VALUES_EQUAL(slot.GetChunkId(), lockedChunkId);
+                }
             }
         }
     }

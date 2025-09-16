@@ -154,6 +154,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
                         maxBlobInBytes,
                         HmCtx->Config->HugeBlobOverhead,
                         HmCtx->Config->HugeBlobsFreeChunkReservation,
+                        false,
                         logFunc);
         } else {
             // read existing one
@@ -173,7 +174,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
                         maxBlobInBytes,
                         HmCtx->Config->HugeBlobOverhead,
                         HmCtx->Config->HugeBlobsFreeChunkReservation,
-                        lsn, entryPoint, logFunc);
+                        lsn, entryPoint, false, logFunc);
         }
 
         return true;

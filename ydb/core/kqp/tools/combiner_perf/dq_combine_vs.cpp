@@ -205,14 +205,25 @@ THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM>& setup, THolder<NUdf::TBox
 
     TRuntimeNode pgmReturn;
 
+    constexpr const useFlow = true; // TODO: configurable
     if (useDqImpl) {
-        pgmReturn = pb.FromFlow(pb.DqHashCombine(
-            pb.ToFlow(TRuntimeNode(streamCallable, false)),
-            memLimit,
-            lambdaKey,
-            lambdaInit,
-            lambdaUpdate,
-            lambdaFinalize));
+        if (useFlow) {
+            pgmReturn = pb.FromFlow(pb.DqHashCombine(
+                pb.ToFlow(TRuntimeNode(streamCallable, false)),
+                memLimit,
+                lambdaKey,
+                lambdaInit,
+                lambdaUpdate,
+                lambdaFinalize));
+        } else {
+            pgmReturn = pgmReturn = pb.FromFlow(pb.DqHashCombine(
+                pb.ToFlow(TRuntimeNode(streamCallable, false)),
+                memLimit,
+                lambdaKey,
+                lambdaInit,
+                lambdaUpdate,
+                lambdaFinalize));
+        }
     } else {
         pgmReturn = pb.FromFlow(pb.WideCombiner(
             pb.ToFlow(TRuntimeNode(streamCallable, false)),

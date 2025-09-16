@@ -222,8 +222,7 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
         if (llvm) {
             NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<true>(params, printout);
         } else {
-            // TODO: <false>
-            NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<true>(params, printout);
+            NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<false>(params, printout);
         }
     } else if (testType == ETestType::SimpleGraceJoin) {
         if (params.NumRuns != 1) {

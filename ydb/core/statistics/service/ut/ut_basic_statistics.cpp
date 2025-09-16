@@ -328,6 +328,8 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
 
         // After everything is healed, stats should get updated.
         blockSSUpdates.Stop();
+        // Wait takes a long time because of long send intervals in schemeshard, raise the limit.
+        runtime.SetScheduledLimit(200000);
         WaitForRowCount(runtime, otherNodeIdx, pathId, rowCount2);
     }
 }

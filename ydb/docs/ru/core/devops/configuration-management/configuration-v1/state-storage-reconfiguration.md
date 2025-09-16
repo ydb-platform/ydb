@@ -48,7 +48,7 @@
                     node: [11,12,13,14,15,16,17,18]
     ```
 
-3. Загрузить обновлённый конфигурационный файл в кластер с помощью [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
+3. Применить новую конфигурацию кластера с помощью [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
 
     ```bash
     ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml

@@ -46,7 +46,8 @@ TUsersInfoStorage::TUsersInfoStorage(
     const TString& dbId,
     const TString& dbPath,
     const bool isServerless,
-    const TString& folderId
+    const TString& folderId,
+    const TString& monitoringProject
 )
     : DCId(std::move(dcId))
     , TopicConverter(topicConverter)
@@ -57,6 +58,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     , DbPath(dbPath)
     , IsServerless(isServerless)
     , FolderId(folderId)
+    , MonitoringProject(monitoringProject)
     , CurReadRuleGeneration(0)
 {
 }
@@ -166,18 +168,26 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
         return nullptr;
     }
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        return counters
+        auto s = counters
             ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")
-            ->GetSubgroup("host", "")
+            ->GetSubgroup("host", "");
+        if (MonitoringProject) {
+            s = s->GetSubgroup("monitoring_project", MonitoringProject);
+        }
+        return s
             ->GetSubgroup("database", Config.GetYdbDatabasePath())
             ->GetSubgroup("cloud_id", CloudId)
             ->GetSubgroup("folder_id", FolderId)
             ->GetSubgroup("database_id", DbId)
             ->GetSubgroup("topic", TopicConverter->GetClientsideName());
     } else {
-        return counters
+        auto s = counters
             ->GetSubgroup("counters", "topics_per_partition")
-            ->GetSubgroup("host", "cluster")
+            ->GetSubgroup("host", "cluster");
+        if (MonitoringProject) {
+            s = s->GetSubgroup("monitoring_project", MonitoringProject);
+        }
+        return s
             ->GetSubgroup("Account", TopicConverter->GetAccount())
             ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
             ->GetSubgroup("OriginDC", TopicConverter->GetCluster());

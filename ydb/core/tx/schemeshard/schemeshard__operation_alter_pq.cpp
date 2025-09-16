@@ -249,8 +249,8 @@ public:
             if (auto it = attrs.find("database_id"); it != attrs.end()) {
                 alterConfig.SetYdbDatabaseId(it->second);
             }
-            if (auto it = attrs.find("abc_slug"); it != attrs.end()) {
-                alterConfig.SetAbcSlug(it->second);
+            if (auto it = attrs.find("monitoring_project"); it != attrs.end()) {
+                alterConfig.SetMonitoringProject(it->second);
             }
             const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
             alterConfig.SetYdbDatabasePath(databasePath);

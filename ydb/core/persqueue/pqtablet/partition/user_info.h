@@ -285,7 +285,7 @@ struct TUserInfo: public TUserInfoBase {
 
         auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
             return partitionSubgroup->GetExpiringNamedCounter(
-                fcc ? "name" : "sensor",
+                "name",
                 fcc ? "topic.partition." + forFCC : forFederation + "PerPartition",
                 deriv);
         };
@@ -449,7 +449,8 @@ public:
         const TString& DbId,
         const TString& DbPath,
         const bool isServerless,
-        const TString& FolderId);
+        const TString& FolderId,
+        const TString& MonitoringProject);
 
     void Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx);
 
@@ -512,6 +513,7 @@ private:
     TString DbPath;
     bool IsServerless;
     TString FolderId;
+    TString MonitoringProject;
     mutable ui64 CurReadRuleGeneration;
 };
 

@@ -982,6 +982,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     DbId = Config.GetYdbDatabaseId();
     DbPath = Config.GetYdbDatabasePath();
     FolderId = Config.GetYcFolderId();
+    MonitoringProject = Config.GetMonitoringProject();
 
     UsersInfoStorage.ConstructInPlace(DCId,
                                       TopicConverter,
@@ -991,7 +992,8 @@ void TPartition::Initialize(const TActorContext& ctx) {
                                       DbId,
                                       Config.GetYdbDatabasePath(),
                                       IsServerless,
-                                      FolderId);
+                                      FolderId,
+                                      MonitoringProject);
     TotalChannelWritesByHead.resize(NumChannels);
 
     if (!IsSupportive()) {

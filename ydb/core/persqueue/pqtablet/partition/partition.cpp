@@ -4332,9 +4332,15 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
     }
 
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        return counters
+        auto s = counters
             ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")
-            ->GetSubgroup("host", "")
+            ->GetSubgroup("host", "");
+
+        if (MonitoringProject) {
+            s = s->GetSubgroup("monitoring_project", MonitoringProject);
+        }
+
+        return s
             ->GetSubgroup("database", Config.GetYdbDatabasePath())
             ->GetSubgroup("cloud_id", CloudId)
             ->GetSubgroup("folder_id", FolderId)
@@ -4342,9 +4348,15 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
             ->GetSubgroup("topic", EscapeBadChars(TopicName()))
             ->GetSubgroup("partition_id", ToString(Partition.InternalPartitionId));
     } else {
-        return counters
+        auto s = counters
             ->GetSubgroup("counters", "topics_per_partition")
-            ->GetSubgroup("host", "cluster")
+            ->GetSubgroup("host", "cluster");
+
+        if (MonitoringProject) {
+            s = s->GetSubgroup("monitoring_project", MonitoringProject);
+        }
+
+        return s
             ->GetSubgroup("Account", TopicConverter->GetAccount())
             ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
             ->GetSubgroup("OriginDC", TopicConverter->GetCluster())
@@ -4371,7 +4383,7 @@ void TPartition::SetupDetailedMetrics() {
     auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
         bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
         return subgroup->GetExpiringNamedCounter(
-            fcc ? "name" : "sensor",
+            "name",
             fcc ? forFCC : forFederation,
             deriv);
     };

@@ -431,9 +431,9 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
     if (auto it = attrs.find("database_id"); it != attrs.end()) {
         databaseId = it->second;
     }
-    TString abcSlug;
-    if (auto it = attrs.find("abc_slug"); it != attrs.end()) {
-        abcSlug = it->second;
+    TString monitoringProject;
+    if (auto it = attrs.find("monitoring_project"); it != attrs.end()) {
+        monitoringProject = it->second;
     }
 
     TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();

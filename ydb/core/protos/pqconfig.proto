@@ -448,6 +448,9 @@ message TPQTabletConfig {
     optional bool EnableCompactification = 39 [default = false];
 
     optional Ydb.MetricsLevel MetricsLevel = 40;
+
+    // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
+    optional string MonitoringProject = 41;
 }
 
 message THeartbeat {

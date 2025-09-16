@@ -783,6 +783,7 @@ private:
     TString DbPath;
     bool IsServerless;
     TString FolderId;
+    TString MonitoringProject;
 
     TMaybe<TUsersInfoStorage> UsersInfoStorage;
 

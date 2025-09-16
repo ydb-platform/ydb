@@ -2,6 +2,7 @@
 import logging
 
 from ydb import Driver, DriverConfig, SessionPool, TableClient, TableDescription, Column, OptionalType, PrimitiveType
+from ydb.topic import TopicClient, TopicAlterConsumer
 from ydb.issues import Unauthorized, SchemeError
 from ydb.draft import DynamicConfigClient
 from ydb.query import QuerySessionPool
@@ -230,4 +231,36 @@ def test_restart_pdisk(ydb_cluster):
 
         restart_response = http_helpers.restart_pdisk(ydb_cluster, pdisk_subpage, TOKEN)
         assert restart_response.status_code == 200, restart_response.content
+    return capture_audit.canonize()
+
+
+def test_topic(ydb_cluster):
+    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as right_driver, \
+         Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=OTHER_TOKEN)) as wrong_driver:
+        right_topic_client = TopicClient(driver=right_driver, settings=None)
+        wrong_topic_client = TopicClient(driver=wrong_driver, settings=None)
+
+        topic_name = 'test_topic'
+        consumer_name = 'test_consumer'
+        with capture_audit:
+            # Create
+            right_topic_client.create_topic(topic_name)
+
+            # Try to modify without rights
+            try:
+                wrong_topic_client.alter_topic(topic_name, add_consumers=[consumer_name])
+            except SchemeError:
+                # ydb.issues.SchemeError: message: "path 'Root/test_topic' does not exist or you do not have access rights" issue_code: 500018 severity: 1 (server_code: 400070)
+                pass
+
+            # Add consumer
+            right_topic_client.alter_topic(topic_name, add_consumers=[consumer_name])
+
+            # Modify consumer
+            right_topic_client.alter_topic(topic_name, alter_consumers=[TopicAlterConsumer(name=consumer_name, alter_attributes={'x': 'y'})])
+
+            # Write
+            with right_topic_client.writer(topic_name, producer_id='test_id') as writer:
+                writer.write('message')
     return capture_audit.canonize()

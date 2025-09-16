@@ -668,10 +668,6 @@ public:
     }
 
     TUnboxedValue* const* GetInputBuffer() override {
-        return GetInputBufferNV();
-    }
-
-    TUnboxedValue* const* GetInputBufferNV() {
         return Ctx.WideFields.data() + WideFieldsIndex;
     }
 
@@ -754,34 +750,41 @@ public:
         }
 
         Map->Advance(DrainMapIterator);
-
         return true;
     }
 
     ~TWideAggregationState() {
-        if (!Draining) {
-            DrainMapIterator = Map->Begin();
+        if (Ctx.ExecuteLLVM) {
+            // LLVM code doesn't ref inputs so we need to just forget the contents of the input buffer without unref-ing
+            for (TUnboxedValue& val : InputBuffer) {
+                static_cast<TUnboxedValuePod&>(val) = TUnboxedValuePod{};
+            }
         }
-        for (; DrainMapIterator != Map->End(); Map->Advance(DrainMapIterator)) {
-            if (!Map->IsValid(DrainMapIterator)) {
-                continue;
+
+        if (Map->GetSize() > 0) {
+            if (!Draining) {
+                DrainMapIterator = Map->Begin();
             }
-            const auto key = Map->GetKey(DrainMapIterator);
-            char* statePtr = static_cast<char *>(static_cast<void *>(key)) + StatesOffset;
-            for (auto& agg : Aggs) {
-                agg->ForgetState(statePtr);
-                statePtr += agg->GetStateSize();
-            }
-            if (HasGenericAggregation) {
-                auto keyIter = key;
-                for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
-                    (keyIter++)->UnRef();
+            for (; DrainMapIterator != Map->End(); Map->Advance(DrainMapIterator)) {
+                if (!Map->IsValid(DrainMapIterator)) {
+                    continue;
+                }
+                const auto key = Map->GetKey(DrainMapIterator);
+                char* statePtr = static_cast<char *>(static_cast<void *>(key)) + StatesOffset;
+                for (auto& agg : Aggs) {
+                    agg->ForgetState(statePtr);
+                    statePtr += agg->GetStateSize();
+                }
+                if (HasGenericAggregation) {
+                    auto keyIter = key;
+                    for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
+                        (keyIter++)->UnRef();
+                    }
                 }
             }
         }
         Map->Clear();
         Store->Clear();
-
         // TODO: CleanupCurrentContext for the allocator?
     }
 
@@ -1034,6 +1037,12 @@ public:
     }
 
     ~TBlockAggregationState() {
+        if (Ctx.ExecuteLLVM) {
+            // LLVM code doesn't ref inputs so we need to just forget the contents of the input buffer without unref-ing
+            for (TUnboxedValue& val : InputBuffer) {
+                static_cast<TUnboxedValuePod&>(val) = TUnboxedValuePod{};
+            }
+        }
         // TODO: clean up drainage like in TWideAggregationState
     }
 

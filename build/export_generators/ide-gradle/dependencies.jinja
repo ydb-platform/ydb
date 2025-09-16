@@ -125,4 +125,12 @@ dependencies {
 {{ AddFileJars(test_file_jars) }}
     )))
 {%- endif %}
+
+{%- if proto_template -%}
+{%-     if target.proto_namespace %}
+    protobuf(files(File(mainProtosDir, "{{ target.proto_namespace }}")))
+{%-     else %}
+    protobuf(files(mainProtosDir))
+{%-     endif -%}
+{%- endif %}
 }

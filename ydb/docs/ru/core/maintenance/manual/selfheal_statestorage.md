@@ -40,7 +40,7 @@ Self Heal State Storage  включен по умолчанию.
     Опция `state_storage_self_heal_config` отвечает за управление механизмом сохранения работоспособности и отказоустойчивости [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board)
     {% endcut %}
 
-3. Загрузить обновлённый конфигурационный файл в кластер с помощью [ydb admin cluster config replace](../../reference/ydb-cli/commands/configuration/cluster/replace.md):
+3. Обновить конфигурацию кластера с учетом выполненных изменений с помощью [ydb admin cluster config replace](../../reference/ydb-cli/commands/configuration/cluster/replace.md):
 
     ```bash
     ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml

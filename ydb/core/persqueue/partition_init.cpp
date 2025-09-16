@@ -519,7 +519,7 @@ static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
 
     if (lhs.GetOffset() == rhs.GetOffset()) {
         if (lhs.GetPartNo() == rhs.GetPartNo()) {
-            Y_ABORT_UNLESS(lhs.GetCount() <= rhs.GetCount(),
+            Y_ABORT_UNLESS(lhs.GetCount() < rhs.GetCount(),
                            "lhs: %s, rhs: %s",
                            lhs.ToString().data(), rhs.ToString().data());
             return RhsContainsLhs;
@@ -838,7 +838,7 @@ TInitEndWriteTimestampStep::TInitEndWriteTimestampStep(TInitializer* initializer
 
 void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
     if (Partition()->EndWriteTimestamp != TInstant::Zero() || (Partition()->HeadKeys.empty() && Partition()->DataKeysBody.empty())) {
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE,
+        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
             "Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
             << "' partition " << Partition()->Partition
             << " skiped because already initialized.");
@@ -857,7 +857,7 @@ void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
     }
 
-     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE,
+     LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
         "Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
         << "' partition " << Partition()->Partition
         << " from keys completed. Value " << Partition()->EndWriteTimestamp);

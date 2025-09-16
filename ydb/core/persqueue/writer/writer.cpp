@@ -306,7 +306,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         if (HasSupportivePartitionId()) {
             operations->SetSupportivePartition(SupportivePartitionId);
-            operations->SetTabletId(TabletId);
         }
 
         return ev;

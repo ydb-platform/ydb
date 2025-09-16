@@ -164,10 +164,7 @@ ui64 TTopicPartitionOperations::GetTabletId() const
 
 void TTopicPartitionOperations::SetTabletId(ui64 value)
 {
-    if (!TabletId_.Empty()) {
-        Y_ABORT_UNLESS(TabletId_ == value);
-        return;
-    }
+    Y_ABORT_UNLESS(TabletId_.Empty());
 
     TabletId_ = value;
 }
@@ -388,13 +385,6 @@ bool TTopicOperations::HasThisPartitionAlreadyBeenAdded(const TString& topicPath
     }
 
     return false;
-}
-
-void TTopicOperations::SetTabletId(const TString& topicPath, ui32 partitionId,
-                                   ui64 tabletId)
-{
-    TTopicPartition key{topicPath, partitionId};
-    Operations_[key].SetTabletId(tabletId);
 }
 
 void TTopicOperations::CacheSchemeCacheNavigate(const NSchemeCache::TSchemeCacheNavigate::TResultSet& results)

@@ -36,13 +36,13 @@ TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& req
     return TTxId(tx.session(), tx.id());
 }
 
-TTxIdOpt GetTransactionId(const TMaybe<TTransactionInfo>& tx)
+TTxIdOpt GetTransactionId(const NTable::TTransaction* tx)
 {
     if (!tx) {
         return std::nullopt;
     }
 
-    return TTxId(tx->SessionId, tx->TxId);
+    return TTxId(tx->GetSession().GetId(), tx->GetId());
 }
 
 }
@@ -1363,8 +1363,8 @@ void TWriteSessionImpl::SendImpl() {
                 auto* msgData = writeRequest->add_messages();
 
                 if (message.Tx) {
-                    writeRequest->mutable_tx()->set_id(message.Tx->TxId);
-                    writeRequest->mutable_tx()->set_session(message.Tx->SessionId);
+                    writeRequest->mutable_tx()->set_id(message.Tx->GetId());
+                    writeRequest->mutable_tx()->set_session(message.Tx->GetSession().GetId());
                 }
 
                 msgData->set_seq_no(GetSeqNoImpl(message.Id));

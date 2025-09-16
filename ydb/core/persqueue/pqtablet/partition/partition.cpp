@@ -1662,7 +1662,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
                                 const TActorContext& ctx)
 {
     TReadAnswer answer = info.FormAnswer(
-        ctx, blobResponse, BlobEncoder.StartOffset, BlobEncoder.EndOffset, Partition, userInfo,
+        ctx, blobResponse, CompactionBlobEncoder.StartOffset, BlobEncoder.EndOffset, Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive(),
         GetResultPostProcessor<NKikimrClient::TCmdReadResult>(info.User)
     );

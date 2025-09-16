@@ -1,4 +1,4 @@
-# Переконфигурирование State Storage
+# Конфигурирование State Storage
 
 Применяется если нужно изменить конфигурацию [домена кластера State Storage](../../../reference/configuration/index.md#domains-state) состоящую из [StateStorage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), [SchemeBoard](../../../concepts/glossary.md#scheme-board), на кластере {{ ydb-short-name }}.
 

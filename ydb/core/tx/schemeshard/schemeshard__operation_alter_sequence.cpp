@@ -429,18 +429,26 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderDeleting()
-                .IsCommonSensePath();
+                .NotUnderDeleting();
 
             if (checks) {
-                if (parentPath->IsTable()) {
+                if (parentPath.Parent()->IsTableIndex()) {
+                    checks.IsInsideTableIndexPath();
+                    // Only __ydb_id sequence can be created in the prefixed index
+                    if (name != NTableIndex::NKMeans::IdColumnSequence ||
+                        !Transaction.GetInternal()) {
+                        checks.IsCommonSensePath();
+                    }
+                } else if (parentPath->IsTable()) {
                     // allow immediately inside a normal table
+                    checks.IsCommonSensePath();
                     if (parentPath.IsUnderOperation()) {
                         checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
                     }
                 } else {
                     // otherwise don't allow unexpected object types
-                    checks.IsLikeDirectory();
+                    checks.IsCommonSensePath()
+                        .IsLikeDirectory();
                 }
             }
 

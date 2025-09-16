@@ -389,19 +389,28 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
                 .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (checks) {
-                if (parentPath->IsTable()) {
-                    checks.NotBackupTable();
+                if (parentPath.Parent()->IsTableIndex()) {
+                    // Only __ydb_id sequence can be created in the prefixed index
+                    if (name != NTableIndex::NKMeans::IdColumnSequence) {
+                        checks.IsCommonSensePath();
+                    }
+                    checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                    checks.IsInsideTableIndexPath();
+                } else if (parentPath->IsTable()) {
+                    checks
+                        .IsCommonSensePath()
+                        .NotBackupTable();
                     // allow immediately inside a normal table
                     if (parentPath.IsUnderOperation()) {
                         checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
                     }
-                } else {
+                } else if (!Transaction.GetAllowAccessToPrivatePaths()) {
                     // otherwise don't allow unexpected object types
-                    checks.IsLikeDirectory();
+                    checks.IsCommonSensePath()
+                          .IsLikeDirectory();
                 }
             }
 

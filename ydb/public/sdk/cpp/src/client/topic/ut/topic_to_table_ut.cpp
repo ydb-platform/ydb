@@ -3359,6 +3359,23 @@ Y_UNIT_TEST_F(The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other, TFixt
     RestartPQTablet("topic_A", 1);
 }
 
+Y_UNIT_TEST_F(Foo, TFixtureNoClient)
+{
+    CreateTopic("topic_A");
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    for (int i = 0; i < 320; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(64'000, 'x'), nullptr);
+    }
+    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    RestartPQTablet("topic_A", 0);
+
+    auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 320);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 320);
+}
+
 }
 
 }

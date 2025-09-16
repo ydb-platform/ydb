@@ -675,7 +675,7 @@ struct Schema : NIceDb::Schema {
             LastAccessedAt, 
             Warnings>;
     };
-};
+
 };
 
 // SYSTEM VIEWS REGISTRY MODIFICATION POLICY:

@@ -12,11 +12,12 @@ namespace NKikimr {
 namespace NPQ {
 
 TMirrorDescriber::TMirrorDescriber(
+    ui64 tabletId,
     TActorId readBalancerActorId,
     TString topicName,
     const NKikimrPQ::TMirrorPartitionConfig& config
 )
-    : ReadBalancerActorId(readBalancerActorId)
+    : TBaseActor(tabletId, readBalancerActorId, NKikimrServices::PQ_MIRROR_DESCRIBER)
     , TopicName(std::move(topicName))
     , Config(config)
 {
@@ -33,7 +34,7 @@ void TMirrorDescriber::StartInit(const TActorContext& ctx) {
 }
 
 void TMirrorDescriber::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
-    LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRROR_DESCRIBER, LogDescription() << " killed");
+    LOG_N("killed");
     CredentialsProvider = nullptr;
     Die(ctx);
 }
@@ -43,10 +44,10 @@ void TMirrorDescriber::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr&
         Config,
         ev->Get()->Config.GetPartitionConfig().GetMirrorFrom()
     );
-    LOG_INFO_S(ctx, NKikimrServices::PQ_MIRROR_DESCRIBER, LogDescription() << " got new config, equal with previous: " << equalConfigs);
+    LOG_D("got new config, equal with previous: " << equalConfigs);
     if (!equalConfigs) {
         Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
-        LOG_INFO_S(ctx, NKikimrServices::PQ_MIRROR_DESCRIBER, LogDescription() << " changing config");
+        LOG_I("changing config");
         StartInit(ctx);
     }
 }
@@ -55,13 +56,13 @@ void TMirrorDescriber::HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription:
     DescribeTopicRequestInFlight = false;
     const auto& description = ev->Get()->Description;
     if (!description.has_value()) {
-        LOG_ERROR_S(ctx, NKikimrServices::PQ_MIRROR_DESCRIBER, LogDescription() << " cannot describe topic " << description.error());
+        LOG_E("cannot describe topic " << description.error());
         ScheduleWithIncreasingTimeout<TEvents::TEvWakeup>(SelfId(), DescribeRetryTimeout, DESCRIBE_RETRY_TIMEOUT_MAX, ctx);
         return;
     }
     const NYdb::NTopic::TDescribeTopicResult& result = description.value();
     if (!result.IsSuccess()) {
-        LOG_ERROR_S(ctx, NKikimrServices::PQ_MIRROR_DESCRIBER, LogDescription() << " cannot describe topic " << result.GetIssues().ToString());
+        LOG_E("cannot describe topic " << result.GetIssues().ToString());
         ScheduleWithIncreasingTimeout<TEvents::TEvWakeup>(SelfId(), DescribeRetryTimeout, DESCRIBE_RETRY_TIMEOUT_MAX, ctx);
         return;
     }
@@ -70,14 +71,14 @@ void TMirrorDescriber::HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription:
         descr.SerializeTo(req);
         return req.ShortUtf8DebugString();
     };
-    LOG_TRACE_S(ctx, NKikimrServices::PQ_MIRROR_DESCRIBER, LogDescription() << " topic description: " << debugTopicDescriptionString(description.value().GetTopicDescription()));
-    ctx.Send(ReadBalancerActorId, ev->Release());
+    LOG_T("topic description: " << debugTopicDescriptionString(description.value().GetTopicDescription()));
+    ctx.Send(TabletActorId, ev->Release());
     ctx.Schedule(DESCRIBE_RETRY_TIMEOUT_MAX, new TEvents::TEvWakeup());
 }
 
 void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
     if (DescribeTopicRequestInFlight) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_MIRROR_DESCRIBER, LogDescription() << " description request already inflight.");
+        LOG_I("description request already inflight.");
         return;
     }
 
@@ -110,7 +111,7 @@ void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
 
 void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
     if (CredentialsRequestInFlight) {
-        LOG_WARN_S(ctx, NKikimrServices::PQ_MIRROR_DESCRIBER, LogDescription() << " credentials request already inflight.");
+        LOG_W("credentials request already inflight.");
         return;
     }
     CredentialsProvider = nullptr;
@@ -144,13 +145,13 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*
 void TMirrorDescriber::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx) {
     CredentialsRequestInFlight = false;
     if (ev->Get()->Error) {
-        LOG_WARN_S(ctx, NKikimrServices::PQ_MIRROR_DESCRIBER, LogDescription() << "cannot initialize credentials provider: " << ev->Get()->Error.value());
+        LOG_W("cannot initialize credentials provider: " << ev->Get()->Error.value());
         ScheduleWithIncreasingTimeout<TEvPQ::TEvInitCredentials>(SelfId(), CredentialsInitInterval, INIT_INTERVAL_MAX, ctx);
         return;
     }
 
     CredentialsProvider = ev->Get()->Credentials;
-    LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRROR_DESCRIBER, LogDescription() << " credentials provider created " << bool(CredentialsProvider));
+    LOG_N("credentials provider created " << bool(CredentialsProvider));
     CredentialsInitInterval = INIT_INTERVAL_START;
     ScheduleDescription(ctx);
 }
@@ -163,8 +164,11 @@ void TMirrorDescriber::ScheduleDescription(const TActorContext& ctx) {
     ScheduleWithIncreasingTimeout<TEvents::TEvWakeup>(SelfId(), DescribeRetryTimeout, DESCRIBE_RETRY_TIMEOUT_MAX, ctx);
 }
 
-TString TMirrorDescriber::LogDescription() const {
-    return TStringBuilder() << "[MirrorDescriber for " << TopicName << ']';
+const TString& TMirrorDescriber::GetLogPrefix() const {
+    if (!LogPrefix) {
+        LogPrefix = TStringBuilder() << "[MirrorDescriber][" << TopicName << "] ";
+    }
+    return *LogPrefix;
 }
 
 TString TMirrorDescriber::GetCurrentState() const {
@@ -176,22 +180,13 @@ TString TMirrorDescriber::GetCurrentState() const {
     return "UNKNOWN";
 }
 
- bool TMirrorDescriber::OnUnhandledException(const std::exception& exc) {
-    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::PQ_MIRROR_DESCRIBER,
-        LogDescription() << "unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-            << TBackTrace::FromCurrentException().PrintToString());
-
-    Send(ReadBalancerActorId, new TEvents::TEvPoison());
-    PassAway();
-    return true;
-}
-
 NActors::IActor* CreateMirrorDescriber(
+    const ui64 tabletId,
     const NActors::TActorId& readBalancerActorId,
     const TString& topicName,
     const NKikimrPQ::TMirrorPartitionConfig& config
 ) {
-    return new TMirrorDescriber(readBalancerActorId, topicName, config);
+    return new TMirrorDescriber(tabletId, readBalancerActorId, topicName, config);
 }
 
 

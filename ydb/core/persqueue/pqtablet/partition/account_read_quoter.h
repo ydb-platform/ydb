@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/core/quoter/public/quoter.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/internal.h>
-
+#include <ydb/core/quoter/public/quoter.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 
@@ -59,8 +59,7 @@ namespace NAccountQuoterEvents {
     };
 }
 
-class TBasicAccountQuoter : public TActorBootstrapped<TBasicAccountQuoter>
-                          , public IActorExceptionHandler {
+class TBasicAccountQuoter : public TBaseActor<TBasicAccountQuoter> {
 private:
     struct TQueueEvent {
         TQueueEvent(NAccountQuoterEvents::TEvRequest::TPtr request, TInstant startWait)
@@ -97,10 +96,7 @@ public:
 
     void HandleUpdateCounters(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
 
-    bool OnUnhandledException(const std::exception&) override;
-
 protected:
-    virtual TString LimiterDescription() const = 0;
     virtual void InitCountersImpl(const TActorContext& ctx) = 0;
     virtual THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() = 0;
 
@@ -126,9 +122,7 @@ protected:
     const TPartitionId Partition;
 
 private:
-    const TActorId TabletActor;
     const TActorId Recepient;
-    const ui64 TabletId;
 
     const ui64 CreditBytes = 0;
 
@@ -166,13 +160,14 @@ public:
 
 protected:
     void InitCountersImpl(const TActorContext& ctx) override;
-    TString LimiterDescription() const override;
+    const TString& GetLogPrefix() const override;
     THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() override;
 
 private:
     static TQuoterParams GetQuoterParams(const TString& user);
     const TString User;
     TString ConsumerPath;
+    mutable TMaybe<TString> LogPrefix;
 };
 
 
@@ -193,8 +188,11 @@ public:
 
 protected:
     void InitCountersImpl(const TActorContext& ctx) override;
-    TString LimiterDescription() const override;
+    const TString& GetLogPrefix() const override;
     THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() override;
+
+private:
+    mutable TMaybe<TString> LogPrefix;
 };
 
 }// NPQ

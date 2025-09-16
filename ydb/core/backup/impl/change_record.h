@@ -131,8 +131,7 @@ private:
             
             TString serializedMetadata;
             Y_ABORT_UNLESS(changeMetadata.SerializeToString(&serializedMetadata));
-            TString base64Metadata = Base64Encode(serializedMetadata);
-            cells.emplace_back(TCell(base64Metadata.data(), base64Metadata.size()));
+            cells.emplace_back(TCell(serializedMetadata.data(), serializedMetadata.size()));
 
             *upsert.MutableTags() = {tags.begin(), tags.end()};
             upsert.SetData(TSerializedCellVec::Serialize(cells));
@@ -169,8 +168,7 @@ private:
             
             TString serializedMetadata;
             Y_ABORT_UNLESS(changeMetadata.SerializeToString(&serializedMetadata));
-            TString base64Metadata = Base64Encode(serializedMetadata);
-            cells.emplace_back(TCell(base64Metadata.data(), base64Metadata.size()));
+            cells.emplace_back(TCell(serializedMetadata.data(), serializedMetadata.size()));
 
             *upsert.MutableTags() = {tags.begin(), tags.end()};
             upsert.SetData(TSerializedCellVec::Serialize(cells));

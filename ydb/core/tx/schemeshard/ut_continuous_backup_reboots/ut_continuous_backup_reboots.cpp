@@ -4,7 +4,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/                    NLs::CheckColumns("IncrBackupImpl1", {"key", "value", "__ydb_incrBackupImpl_changeMetadata"}, {}, {"key"}),                   NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__ydb_incrBackupImpl_changeMetadata"}, {}, {"key"}),son/json_writer.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <util/string/escape.h>
 #include <util/string/printf.h>

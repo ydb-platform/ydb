@@ -21,6 +21,8 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/generic/size_literals.h>
+#include <util/string/escape.h>
+#include <util/string/hex.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
 #include <util/string/strip.h>
@@ -259,9 +261,15 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             columnState->SetIsChanged(state.second);
         }
         
+        TString binaryData;
+        Y_PROTOBUF_SUPPRESS_NODISCARD metadata.SerializeToString(&binaryData);
+        
+        // Convert binary data to hex escape sequences for YDB SQL string literal
         TString result;
-        Y_PROTOBUF_SUPPRESS_NODISCARD metadata.SerializeToString(&result);
-        return Base64Encode(result);  // Base64 encode for safe SQL embedding
+        for (unsigned char byte : binaryData) {
+            result += TStringBuilder() << "\\x" << Sprintf("%02x", static_cast<int>(byte));
+        }
+        return result;
     }
 
     Y_UNIT_TEST(SimpleBackup) {
@@ -383,10 +391,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         ExecSQL(server, edgeActor, TStringBuilder() << R"(
             UPSERT INTO `/Root/IncrBackupImpl` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
-            (1, 10, ")" << normalMetadata << R"("),
-            (2, NULL, ")" << deletedMetadata << R"("),
-            (3, 30, ")" << normalMetadata << R"("),
-            (5, NULL, ")" << deletedMetadata << R"(");
+            (1, 10, ')" << normalMetadata << R"('),
+            (2, NULL, ')" << deletedMetadata << R"('),
+            (3, 30, ')" << normalMetadata << R"('),
+            (5, NULL, ')" << deletedMetadata << R"(');
         )");
 
         WaitTxNotification(server, edgeActor, AsyncAlterRestoreIncrementalBackup(server, "/Root", "/Root/IncrBackupImpl", "/Root/Table"));
@@ -840,8 +848,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
             ExecSQL(server, edgeActor, TStringBuilder() << R"(
                 UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
-                  (2, 200, ")" << normalMetadata << R"(")
-                , (1, NULL, ")" << deletedMetadata << R"(")
+                  (2, 200, ')" << normalMetadata << R"(')
+                , (1, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
 
@@ -849,8 +857,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
             ExecSQL(server, edgeActor, TStringBuilder() << R"(
                 UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
-                  (2, 2000, ")" << normalMetadata << R"(")
-                , (5, NULL, ")" << deletedMetadata << R"(")
+                  (2, 2000, ')" << normalMetadata << R"(')
+                , (5, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
         }
@@ -985,8 +993,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
                 ExecSQL(server, edgeActor, TStringBuilder() << R"(
                     UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
-                      (2, 200, ")" << normalMetadata << R"(")
-                    , (1, NULL, ")" << deletedMetadata << R"(")
+                      (2, 200, ')" << normalMetadata << R"(')
+                    , (1, NULL, ')" << deletedMetadata << R"(')
                     ;
                 )");
 
@@ -994,8 +1002,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
                 ExecSQL(server, edgeActor, TStringBuilder() << R"(
                     UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
-                      (2, 2000, ")" << normalMetadata << R"(")
-                    , (5, NULL, ")" << deletedMetadata << R"(")
+                      (2, 2000, ')" << normalMetadata << R"(')
+                    , (5, NULL, ')" << deletedMetadata << R"(')
                     ;
                 )");
             }
@@ -1006,8 +1014,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
                 ExecSQL(server, edgeActor, TStringBuilder() << R"(
                     UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/DirA/TableA` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
-                      (21, 20001, ")" << normalMetadata << R"(")
-                    , (51, NULL, ")" << deletedMetadata << R"(")
+                      (21, 20001, ')" << normalMetadata << R"(')
+                    , (51, NULL, ')" << deletedMetadata << R"(')
                     ;
                 )");
             }
@@ -1017,8 +1025,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
                 ExecSQL(server, edgeActor, TStringBuilder() << R"(
                     UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/DirA/TableB` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
-                      (22, 2002, ")" << normalMetadata << R"(")
-                    , (12, NULL, ")" << deletedMetadata << R"(")
+                      (22, 2002, ')" << normalMetadata << R"(')
+                    , (12, NULL, ')" << deletedMetadata << R"(')
                     ;
                 )");
 
@@ -1376,10 +1384,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
             ExecSQL(server, edgeActor, TStringBuilder() << R"(
                 UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table2Shard` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
-                  (2, 2000, ")" << normalMetadata << R"(")
-                , (12, 12000, ")" << normalMetadata << R"(")
-                , (1, NULL, ")" << deletedMetadata << R"(")
-                , (21, NULL, ")" << deletedMetadata << R"(")
+                  (2, 2000, ')" << normalMetadata << R"(')
+                , (12, 12000, ')" << normalMetadata << R"(')
+                , (1, NULL, ')" << deletedMetadata << R"(')
+                , (21, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
 
@@ -1389,12 +1397,12 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
             ExecSQL(server, edgeActor, TStringBuilder() << R"(
                 UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table3Shard` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
-                  (1, 1000, ")" << normalMetadata << R"(")
-                , (11, 11000, ")" << normalMetadata << R"(")
-                , (21, 21000, ")" << normalMetadata << R"(")
-                , (3, NULL, ")" << deletedMetadata << R"(")
-                , (13, NULL, ")" << deletedMetadata << R"(")
-                , (23, NULL, ")" << deletedMetadata << R"(")
+                  (1, 1000, ')" << normalMetadata << R"(')
+                , (11, 11000, ')" << normalMetadata << R"(')
+                , (21, 21000, ')" << normalMetadata << R"(')
+                , (3, NULL, ')" << deletedMetadata << R"(')
+                , (13, NULL, ')" << deletedMetadata << R"(')
+                , (23, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
 
@@ -1404,14 +1412,14 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
             ExecSQL(server, edgeActor, TStringBuilder() << R"(
                 UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table4Shard` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
-                  (2, 200, ")" << normalMetadata << R"(")
-                , (12, 1200, ")" << normalMetadata << R"(")
-                , (22, 2200, ")" << normalMetadata << R"(")
-                , (32, 3200, ")" << normalMetadata << R"(")
-                , (1, NULL, ")" << deletedMetadata << R"(")
-                , (11, NULL, ")" << deletedMetadata << R"(")
-                , (21, NULL, ")" << deletedMetadata << R"(")
-                , (31, NULL, ")" << deletedMetadata << R"(")
+                  (2, 200, ')" << normalMetadata << R"(')
+                , (12, 1200, ')" << normalMetadata << R"(')
+                , (22, 2200, ')" << normalMetadata << R"(')
+                , (32, 3200, ')" << normalMetadata << R"(')
+                , (1, NULL, ')" << deletedMetadata << R"(')
+                , (11, NULL, ')" << deletedMetadata << R"(')
+                , (21, NULL, ')" << deletedMetadata << R"(')
+                , (31, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
         }

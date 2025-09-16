@@ -23,9 +23,8 @@ std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cell
         
         if (it->second.Name == "__ydb_incrBackupImpl_changeMetadata") {
             if (const auto& cell = cells.at(pos); !cell.IsNull()) {
-                TString base64Metadata(cell.Data(), cell.Size());
-                if (!base64Metadata.empty()) {
-                    TString serializedMetadata = Base64Decode(base64Metadata);
+                TString serializedMetadata(cell.Data(), cell.Size());
+                if (!serializedMetadata.empty()) {
                     if (changeMetadata.ParseFromString(serializedMetadata)) {
                         hasChangeMetadata = true;
                     }

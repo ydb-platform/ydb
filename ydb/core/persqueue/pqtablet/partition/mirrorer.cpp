@@ -571,7 +571,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
 
 const TString& TMirrorer::GetLogPrefix() const {
     if (!LogPrefix) {
-        LogPrefix =  TStringBuilder() << "[Mirrorer][" << TopicConverter->GetPrintableString() << ':' << Partition << "] ";
+        LogPrefix = TStringBuilder() << "[Mirrorer][" << TopicConverter->GetPrintableString() << ':' << Partition << "] ";
     }
     return *LogPrefix;
 }

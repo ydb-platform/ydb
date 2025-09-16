@@ -229,7 +229,7 @@ TAccountWriteQuoter::TAccountWriteQuoter(
                           0, counters,
                           TDuration::Zero())
 {
-    LOG_D("topicWriteQuutaResourcePath '" << ResourcePath
+    LOG_D("topicWriteQuotaResourcePath '" << ResourcePath
                 << "' topicWriteQuoterPath '" << KesusPath
                 << "' account '" << topicConverter->GetAccount()
                 << "'"

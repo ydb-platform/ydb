@@ -5,26 +5,24 @@
 #include <ydb/library/services/services.pb.h>
 
 #define LOG_PREFIX_INT TStringBuilder() << "[" << TabletId << "] " << GetLogPrefix()
-#define LOG_T(stream) LOG_TRACE_S (*TlsActivationContext, Service, LOG_PREFIX_INT << stream)
-#define LOG_D(stream) LOG_DEBUG_S (*TlsActivationContext, Service, LOG_PREFIX_INT << stream)
-#define LOG_I(stream) LOG_INFO_S  (*TlsActivationContext, Service, LOG_PREFIX_INT << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, Service, LOG_PREFIX_INT << stream)
-#define LOG_W(stream) LOG_WARN_S  (*TlsActivationContext, Service, LOG_PREFIX_INT << stream)
-#define LOG_E(stream) LOG_ERROR_S (*TlsActivationContext, Service, LOG_PREFIX_INT << stream)
-#define LOG_C(stream) LOG_CRIT_S  (*TlsActivationContext, Service, LOG_PREFIX_INT << stream)
+#define LOG_T(stream) LOG_TRACE_S (*NActors::TlsActivationContext, Service, LOG_PREFIX_INT << stream)
+#define LOG_D(stream) LOG_DEBUG_S (*NActors::TlsActivationContext, Service, LOG_PREFIX_INT << stream)
+#define LOG_I(stream) LOG_INFO_S  (*NActors::TlsActivationContext, Service, LOG_PREFIX_INT << stream)
+#define LOG_N(stream) LOG_NOTICE_S(*NActors::TlsActivationContext, Service, LOG_PREFIX_INT << stream)
+#define LOG_W(stream) LOG_WARN_S  (*NActors::TlsActivationContext, Service, LOG_PREFIX_INT << stream)
+#define LOG_E(stream) LOG_ERROR_S (*NActors::TlsActivationContext, Service, LOG_PREFIX_INT << stream)
+#define LOG_C(stream) LOG_CRIT_S  (*NActors::TlsActivationContext, Service, LOG_PREFIX_INT << stream)
 
 namespace NKikimr::NPQ {
 
-using namespace NActors;
-
 template<typename TDerived>
-class TBaseActor : public TActorBootstrapped<TDerived>
-                 , public IActorExceptionHandler {
+class TBaseActor : public NActors::TActorBootstrapped<TDerived>
+                 , public NActors::IActorExceptionHandler {
 public:
-    using TBase = TActorBootstrapped<TDerived>;
+    using TBase = NActors::TActorBootstrapped<TDerived>;
     using TThis = TDerived;
 
-    TBaseActor(ui64 tabletId, TActorId tabletActorId, NKikimrServices::EServiceKikimr service)
+    TBaseActor(ui64 tabletId, NActors::TActorId tabletActorId, NKikimrServices::EServiceKikimr service)
         : TabletId(tabletId)
         , TabletActorId(tabletActorId)
         , Service(service)
@@ -36,7 +34,7 @@ public:
                 << TBackTrace::FromCurrentException().PrintToString());
 
         TDerived& self = static_cast<TDerived&>(*this);
-        self.Send(TabletActorId, new TEvents::TEvPoison());
+        self.Send(TabletActorId, new NActors::TEvents::TEvPoison());
         self.PassAway();
 
         return true;
@@ -46,7 +44,7 @@ public:
 
 protected:
     const ui64 TabletId;
-    const TActorId TabletActorId;
+    const NActors::TActorId TabletActorId;
     const NKikimrServices::EServiceKikimr Service;
 };
 

@@ -20,11 +20,11 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
             << " InitialSeqNo=" << p.InitialSeqNo
     );
 
-    Y_ABORT_UNLESS(poffset >= curOffset);
+    AFL_ENSURE(poffset >= curOffset);
 
     bool needCompactHead = poffset > curOffset;
     if (needCompactHead) { //got gap
-        Y_ABORT_UNLESS(p.Msg.PartNo == 0);
+        AFL_ENSURE(p.Msg.PartNo == 0);
         curOffset = poffset;
     }
 
@@ -97,9 +97,9 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     }
 
     if (lastBlobPart) {
-        Y_ABORT_UNLESS(CompactionBlobEncoder.PartitionedBlob.IsComplete());
+        AFL_ENSURE(CompactionBlobEncoder.PartitionedBlob.IsComplete());
         ui32 curWrites = RenameTmpCmdWrites(request);
-        Y_ABORT_UNLESS(curWrites <= CompactionBlobEncoder.PartitionedBlob.GetFormedBlobs().size());
+        AFL_ENSURE(curWrites <= CompactionBlobEncoder.PartitionedBlob.GetFormedBlobs().size());
         RenameFormedBlobs(CompactionBlobEncoder.PartitionedBlob.GetFormedBlobs(),
                           parameters,
                           curWrites,
@@ -118,7 +118,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
                 ++countOfLastParts;
             }
 
-            Y_ABORT_UNLESS(!CompactionBlobEncoder.NewHead.GetLastBatch().Packed);
+            AFL_ENSURE(!CompactionBlobEncoder.NewHead.GetLastBatch().Packed);
             CompactionBlobEncoder.NewHead.AddBlob(x);
             CompactionBlobEncoder.NewHead.PackedSize += x.GetSerializedSize();
             if (CompactionBlobEncoder.NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
@@ -126,7 +126,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
             }
         }
 
-        Y_ABORT_UNLESS(countOfLastParts == 1);
+        AFL_ENSURE(countOfLastParts == 1);
 
         LOG_D("Topic '" << TopicName() << "' partition " << Partition
                 << " part blob complete sourceId '" << EscapeC(p.Msg.SourceId) << "' seqNo " << p.Msg.SeqNo
@@ -244,8 +244,8 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     LOG_D("continue compaction");
 
-    Y_ABORT_UNLESS(CompactionInProgress);
-    Y_ABORT_UNLESS(blobs.size() == CompactionBlobsCount);
+    AFL_ENSURE(CompactionInProgress);
+    AFL_ENSURE(blobs.size() == CompactionBlobsCount);
 
     TProcessParametersBase parameters;
     parameters.CurOffset = CompactionBlobEncoder.PartitionedBlob.IsInited()
@@ -261,7 +261,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     auto compactionRequest = MakeHolder<TEvKeyValue::TEvRequest>();
     compactionRequest->Record.SetCookie(ERequestCookie::WriteBlobsForCompaction);
 
-    Y_ABORT_UNLESS(CompactionBlobEncoder.NewHead.GetBatches().empty());
+    AFL_ENSURE(CompactionBlobEncoder.NewHead.GetBatches().empty());
 
     ui64 blobCreationUnixTime = 0;
 
@@ -329,8 +329,8 @@ void TPartition::BlobsForCompactionWereWrite()
 
     LOG_D("compaction completed");
 
-    Y_ABORT_UNLESS(CompactionInProgress);
-    Y_ABORT_UNLESS(BlobEncoder.DataKeysBody.size() >= CompactionBlobsCount);
+    AFL_ENSURE(CompactionInProgress);
+    AFL_ENSURE(BlobEncoder.DataKeysBody.size() >= CompactionBlobsCount);
 
     for (size_t i = 0; i < CompactionBlobsCount; ++i) {
         BlobEncoder.BodySize -= BlobEncoder.DataKeysBody.front().Size;
@@ -350,9 +350,9 @@ void TPartition::BlobsForCompactionWereWrite()
     CompactionBlobEncoder.SyncHeadKeys();
     CompactionBlobEncoder.SyncNewHeadKey();
 
-    Y_ABORT_UNLESS(CompactionBlobEncoder.EndOffset == CompactionBlobEncoder.Head.GetNextOffset(),
-                   "EndOffset=%" PRIu64 ", NextOffset=%" PRIu64,
-                   CompactionBlobEncoder.EndOffset, CompactionBlobEncoder.Head.GetNextOffset());
+    AFL_ENSURE(CompactionBlobEncoder.EndOffset == CompactionBlobEncoder.Head.GetNextOffset())
+        ("EndOffset", CompactionBlobEncoder.EndOffset)
+        ("NextOffset", CompactionBlobEncoder.Head.GetNextOffset());
 
     if (!CompactionBlobEncoder.CompactedKeys.empty() || CompactionBlobEncoder.Head.PackedSize == 0) { //has compactedkeys or head is already empty
         CompactionBlobEncoder.SyncHeadFromNewHead();
@@ -377,11 +377,11 @@ void TPartition::BlobsForCompactionWereWrite()
 void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime, const TActorContext& ctx)
 {
     if (CompactionBlobEncoder.HeadCleared) {
-        Y_ABORT_UNLESS(!CompactionBlobEncoder.CompactedKeys.empty() || CompactionBlobEncoder.Head.PackedSize == 0,
-                       "CompactedKeys.size=%" PRISZT
-                       ", Head.Offset=%" PRIu64 ", Head.PartNo=%" PRIu16 ", Head.PackedSize=%" PRIu32,
-                       CompactionBlobEncoder.CompactedKeys.size(),
-                       CompactionBlobEncoder.Head.Offset, CompactionBlobEncoder.Head.PartNo, CompactionBlobEncoder.Head.PackedSize);
+        AFL_ENSURE(!CompactionBlobEncoder.CompactedKeys.empty() || CompactionBlobEncoder.Head.PackedSize == 0)
+                       ("CompactedKeys.size", CompactionBlobEncoder.CompactedKeys.size())
+                       ("Head.Offset", CompactionBlobEncoder.Head.Offset)
+                       ("Head.PartNo", CompactionBlobEncoder.Head.PartNo)
+                       ("Head.PackedSize", CompactionBlobEncoder.Head.PackedSize);
         for (ui32 i = 0; i < TotalLevels; ++i) {
             CompactionBlobEncoder.DataKeysHead[i].Clear();
         }
@@ -398,7 +398,7 @@ void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request,
     std::pair<TKey, ui32> res = GetNewCompactionWriteKey(CompactionBlobEncoder.HeadCleared);
     const auto& key = res.first;
 
-    Y_ABORT_UNLESS(!key.HasSuffix() || key.IsHead()); // body or head
+    AFL_ENSURE(!key.HasSuffix() || key.IsHead()); // body or head
 
     LOG_D("Add new write blob: topic '" << TopicName() << "' partition " << Partition
             << " compactOffset " << key.GetOffset() << "," << key.GetCount()
@@ -416,10 +416,10 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKeyImpl(const bool headCl
     TKey key = CompactionBlobEncoder.KeyForWrite(TKeyPrefix::TypeData, Partition, needCompaction);
 
     if (CompactionBlobEncoder.NewHead.PackedSize > 0) {
-        Y_ABORT_UNLESS(CompactionBlobEncoder.DataKeysHead.size() == TotalLevels);
+        AFL_ENSURE(CompactionBlobEncoder.DataKeysHead.size() == TotalLevels);
         CompactionBlobEncoder.DataKeysHead[TotalLevels - 1].AddKey(key, CompactionBlobEncoder.NewHead.PackedSize);
     }
-    Y_ABORT_UNLESS(headSize + CompactionBlobEncoder.NewHead.PackedSize <= 3 * MaxSizeCheck);
+    AFL_ENSURE(headSize + CompactionBlobEncoder.NewHead.PackedSize <= 3 * MaxSizeCheck);
 
     std::pair<TKey, ui32> res;
 
@@ -438,19 +438,20 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKeyImpl(const bool headCl
         res = std::make_pair(key, headSize + CompactionBlobEncoder.NewHead.PackedSize);
     } else {
         res = CompactionBlobEncoder.Compact(key, headCleared);
-        Y_ABORT_UNLESS(res.first.IsHead(),
-                       "res.first=%s",
-                       res.first.ToString().data());//may compact some KV blobs from head, but new KV blob is from head too
-        Y_ABORT_UNLESS(res.second >= CompactionBlobEncoder.NewHead.PackedSize,
-                       "res.second=%" PRIu32 ", NewHead.PackedSize=%" PRIu32,
-                       res.second, CompactionBlobEncoder.NewHead.PackedSize); //at least new data must be writed
+        AFL_ENSURE(res.first.IsHead())("res.firsts", res.first.ToString()); //may compact some KV blobs from head, but new KV blob is from head too
+        AFL_ENSURE(res.second >= CompactionBlobEncoder.NewHead.PackedSize)  //at least new data must be writed
+            ("res.second", res.second)("NewHead.PackedSize", CompactionBlobEncoder.NewHead.PackedSize);
     }
-    Y_ABORT_UNLESS_S(res.second <= MaxBlobSize,
-                     "headCleared=" << headCleared << ", needCompaction=" << needCompaction << ", headSize=" << headSize <<
-                     ", Head.PackedSize=" << CompactionBlobEncoder.Head.PackedSize <<
-                     ", NewHead.PackedSize=" << CompactionBlobEncoder.NewHead.PackedSize <<
-                     ", key=" << res.first.ToString() << " (" << res.second << ")" <<
-                     ", MaxBlobSize=" << MaxBlobSize << ", MaxSizeCheck=" << MaxSizeCheck);
+    AFL_ENSURE(res.second <= MaxBlobSize)
+        ("headCleared", headCleared)
+        ("needCompaction", needCompaction)
+        ("headSize", headSize)
+        ("Head.PackedSize", CompactionBlobEncoder.Head.PackedSize)
+        ("NewHead.PackedSize", CompactionBlobEncoder.NewHead.PackedSize)
+        ("key", res.first.ToString())
+        ("key2", res.second)
+        ("MaxBlobSize", MaxBlobSize)
+        ("MaxSizeCheck", MaxSizeCheck);
 
     return res;
 }
@@ -468,7 +469,7 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKey(const bool headCleare
         needCompaction = false;
     }
 
-    Y_ABORT_UNLESS(CompactionBlobEncoder.NewHead.PackedSize > 0 || needCompaction); //smthing must be here
+    AFL_ENSURE(CompactionBlobEncoder.NewHead.PackedSize > 0 || needCompaction); //smthing must be here
 
     return GetNewCompactionWriteKeyImpl(headCleared, needCompaction, headSize);
 }
@@ -496,11 +497,10 @@ void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyVal
 
     if (!key.IsHead()) {
         if (!CompactionBlobEncoder.DataKeysBody.empty() && CompactionBlobEncoder.CompactedKeys.empty()) {
-            Y_ABORT_UNLESS(CompactionBlobEncoder.DataKeysBody.back().Key.GetOffset() + CompactionBlobEncoder.DataKeysBody.back().Key.GetCount() <= key.GetOffset(),
-                           "LAST KEY %s, HeadOffset %lu, NEWKEY %s",
-                           CompactionBlobEncoder.DataKeysBody.back().Key.ToString().c_str(),
-                           CompactionBlobEncoder.Head.Offset,
-                           key.ToString().c_str());
+            AFL_ENSURE(CompactionBlobEncoder.DataKeysBody.back().Key.GetOffset() + CompactionBlobEncoder.DataKeysBody.back().Key.GetCount() <= key.GetOffset())
+                ("LAST KEY", CompactionBlobEncoder.DataKeysBody.back().Key.ToString())
+                ("HeadOffset", CompactionBlobEncoder.Head.Offset)
+                ("NEW KEY", key.ToString());
         }
 
         CompactionBlobEncoder.CompactedKeys.push_back(res);
@@ -510,7 +510,7 @@ void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyVal
         CompactionBlobEncoder.NewHead.Offset = res.first.GetOffset() + res.first.GetCount();
         CompactionBlobEncoder.NewHead.PartNo = 0;
     } else {
-        Y_ABORT_UNLESS(CompactionBlobEncoder.NewHeadKey.Size == 0);
+        AFL_ENSURE(CompactionBlobEncoder.NewHeadKey.Size == 0);
         CompactionBlobEncoder.NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
     }
 }

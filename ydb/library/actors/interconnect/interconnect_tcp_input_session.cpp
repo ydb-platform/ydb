@@ -598,6 +598,12 @@ namespace NActors {
                 };
 
                 Metrics->IncInputChannelsIncomingEvents(channel);
+                // In case of rdma we call ProcessEvents from rdma io callback handler
+                // and we need to process packet queue from ProcessEvents to make sure ack will be sent.
+                // But LastProcessedSerial increasing here after ProcessEvents calls. So this violate invariant inside
+                // ProcessInboundPacketQ
+                // The simplest way to fix it - the flag which forbids to call ProcessInboundPacketQ if ProcessEvents
+                // has been called here
                 ProcessEvents(context, false);
             }
 

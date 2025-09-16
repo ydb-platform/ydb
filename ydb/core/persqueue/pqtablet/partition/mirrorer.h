@@ -19,7 +19,7 @@
 namespace NKikimr {
 namespace NPQ {
 
-class TMirrorer : public TBaseActor<TMirrorer>, private TCachedLogPrefix {
+class TMirrorer : public TBaseActor<TMirrorer>, private TConstantLogPrefix {
 private:
     const ui64 MAX_READ_FUTURES_STORE = 25;
     const ui64 MAX_BYTES_IN_FLIGHT = 16_MB;
@@ -115,7 +115,7 @@ private:
     void ProcessNextReaderEvent(TEvPQ::TEvReaderEventArrived::TPtr& ev, const TActorContext& ctx);
     void DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup=false);
 
-    TString DoGetLogPrefix() const override;
+    TString BuildLogPrefix() const override;
 
     TString GetCurrentState() const;
 

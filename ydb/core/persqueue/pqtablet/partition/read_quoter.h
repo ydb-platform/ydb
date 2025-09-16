@@ -102,7 +102,7 @@ class TConsumerReadQuota {
 };
 
 
-class TPartitionQuoterBase : public TBaseActor<TPartitionQuoterBase>, private TCachedLogPrefix {
+class TPartitionQuoterBase : public TBaseActor<TPartitionQuoterBase>, private TConstantLogPrefix {
 
 const TDuration WAKE_UP_TIMEOUT = TDuration::Seconds(1);
 
@@ -261,7 +261,7 @@ public:
     void UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorContext& ctx) override;
     IEventBase* MakeQuotaApprovedEvent(TRequestContext& context) override;
 
-    TString DoGetLogPrefix() const override;
+    TString BuildLogPrefix() const override;
 
 protected:
     void HandleQuotaRequestImpl(TRequestContext& context) override;
@@ -325,7 +325,7 @@ public:
     void Bootstrap(const TActorContext &ctx) override;
     THolder<TAccountQuoterHolder> CreateAccountQuotaTracker() const;
 
-    TString DoGetLogPrefix() const override;
+    TString BuildLogPrefix() const override;
 
 protected:
     void HandleQuotaRequestImpl(TRequestContext& context) override;

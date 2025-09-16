@@ -20,7 +20,7 @@ TWriteQuoter::TWriteQuoter(
 {
 }
 
-TString TWriteQuoter::DoGetLogPrefix() const {
+TString TWriteQuoter::BuildLogPrefix() const {
     return TStringBuilder() << "[WriteQuoter][" << Partition << "] ";
 }
 

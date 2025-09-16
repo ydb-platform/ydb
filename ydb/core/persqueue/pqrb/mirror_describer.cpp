@@ -164,7 +164,7 @@ void TMirrorDescriber::ScheduleDescription(const TActorContext& ctx) {
     ScheduleWithIncreasingTimeout<TEvents::TEvWakeup>(SelfId(), DescribeRetryTimeout, DESCRIBE_RETRY_TIMEOUT_MAX, ctx);
 }
 
-TString TMirrorDescriber::DoGetLogPrefix() const {
+TString TMirrorDescriber::BuildLogPrefix() const {
     return TStringBuilder() << "[MirrorDescriber][" << TopicName << "] ";
 }
 

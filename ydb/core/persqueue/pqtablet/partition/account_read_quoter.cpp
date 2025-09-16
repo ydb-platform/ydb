@@ -207,7 +207,7 @@ THolder<NAccountQuoterEvents::TEvCounters> TAccountReadQuoter::MakeCountersUpdat
     return MakeHolder<NAccountQuoterEvents::TEvCounters>(Counters, true, User);
 }
 
-TString TAccountReadQuoter::DoGetLogPrefix() const {
+TString TAccountReadQuoter::BuildLogPrefix() const {
     return TStringBuilder()  << "topic=" << TopicConverter->GetClientsideName() << ":" << Partition << " user=" << User << ": ";
 }
 
@@ -262,7 +262,7 @@ THolder<NAccountQuoterEvents::TEvCounters> TAccountWriteQuoter::MakeCountersUpda
     return MakeHolder<NAccountQuoterEvents::TEvCounters>(Counters, false, TString{});
 }
 
-TString TAccountWriteQuoter::DoGetLogPrefix() const {
+TString TAccountWriteQuoter::BuildLogPrefix() const {
     return TStringBuilder() << "topic=" << TopicConverter->GetClientsideName() << ":" << Partition << " writeQuoter" << ": ";
 }
 

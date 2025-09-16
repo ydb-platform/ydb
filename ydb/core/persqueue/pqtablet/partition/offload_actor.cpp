@@ -25,7 +25,7 @@ namespace NKikimr::NPQ {
 
 class TOffloadActor
     : public TBaseActor<TOffloadActor>
-    , private TCachedLogPrefix
+    , private TConstantLogPrefix
     , private NSchemeCache::TSchemeCacheHelpers
 {
 private:
@@ -35,7 +35,7 @@ private:
     TActorId Worker;
     TActorId SchemeShardPipe;
 
-    TString DoGetLogPrefix() const override {
+    TString BuildLogPrefix() const override {
         return TStringBuilder()
                 << "[OffloadActor]"
                 << "[" << TabletActorId << "]"

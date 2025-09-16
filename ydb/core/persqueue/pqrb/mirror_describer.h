@@ -15,7 +15,7 @@
 namespace NKikimr::NPQ {
 
 
-class TMirrorDescriber : public TBaseActor<TMirrorDescriber>, private TCachedLogPrefix {
+class TMirrorDescriber : public TBaseActor<TMirrorDescriber>, private TConstantLogPrefix {
 private:
     static constexpr TDuration INIT_INTERVAL_MAX = TDuration::Seconds(240);
     static constexpr TDuration INIT_INTERVAL_START = TDuration::Seconds(1);
@@ -61,7 +61,7 @@ private:
 
     void DescribeTopic(const TActorContext& ctx);
 
-    TString DoGetLogPrefix() const override;
+    TString BuildLogPrefix() const override;
     TString GetCurrentState() const;
 
 public:

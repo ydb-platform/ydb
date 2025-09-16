@@ -2,9 +2,9 @@
 
 namespace NKikimr::NPQ {
 
-const TString& TCachedLogPrefix::GetLogPrefix() const {
+const TString& TConstantLogPrefix::GetLogPrefix() const {
     if (!LogPrefix_) {
-        LogPrefix_ = DoGetLogPrefix();
+        LogPrefix_ = BuildLogPrefix();
     }
     return *LogPrefix_;
 }

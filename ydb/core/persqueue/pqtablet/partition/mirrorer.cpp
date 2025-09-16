@@ -569,7 +569,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
 }
 
-TString TMirrorer::DoGetLogPrefix() const {
+TString TMirrorer::BuildLogPrefix() const {
     return TStringBuilder() << "[Mirrorer][" << TopicConverter->GetPrintableString() << ':' << Partition << "] ";
 }
 

@@ -230,6 +230,7 @@ void TColumnShard::ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& 
 
 void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const NOlap::TSnapshot& version,
     NTabletFlatExecutor::TTransactionContext& txc) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("RunSchemaTx", "okak");
     switch (body.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard: {
             RunInit(body.GetInitShard(), version, txc);
@@ -269,6 +270,7 @@ void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const 
     NIceDb::TNiceDb db(txc.DB);
     AFL_VERIFY(proto.HasOwnerPathId());
     const auto& tabletSchemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(proto);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("runinit", "okak");
     TablesManager.Init(db, tabletSchemeShardLocalPathId, Info());
     if (proto.HasOwnerPath()) {
         OwnerPath = proto.GetOwnerPath();
@@ -278,6 +280,8 @@ void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const 
     for (auto& createTable : proto.GetTables()) {
         RunEnsureTable(createTable, version, txc);
     }
+
+    ActorContext().Send(ColumnShardStatisticsReporter, new NOlap::TColumnShardStatisticsReporter::TEvSetSSId(CurrentSchemeShardId, TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId.GetRawValue()));
 }
 
 void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tableProto, const NOlap::TSnapshot& version,

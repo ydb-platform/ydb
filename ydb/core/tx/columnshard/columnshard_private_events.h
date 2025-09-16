@@ -80,8 +80,7 @@ struct TEvPrivate {
         EvFilterRequestResourcesAllocated,
         EvFilterConstructionResult,
 
-        EvReportBaseStatistics,
-        EvReportExecutorStatistics,
+        EvReportStatistics,
         EvSetSSId,
 
         EvEnd
@@ -291,6 +290,8 @@ struct TEvPrivate {
 
         bool Manual;
     };
+
+    struct TEvReportStatistics: public TEventLocal<TEvReportStatistics, EvReportStatistics> {};
 
     struct TEvPingSnapshotsUsage: public TEventLocal<TEvPingSnapshotsUsage, EvPingSnapshotsUsage> {
         TEvPingSnapshotsUsage() = default;

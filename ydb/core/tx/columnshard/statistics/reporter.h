@@ -18,30 +18,32 @@ class TColumnShardStatisticsReporter : public NActors::TActorBootstrapped<TColum
 private:
     TActorId StatsReportPipe;
     ui64 SSId = 0;
-    NColumnShard::TColumnShard& Owner;
-    ui32 ReportBaseStatisticsPeriodMs;
-    ui32 ReportExecutorStatisticsPeriodMs;
+    ui64 SSLocalId = 0;
+    ui64 TabletId = 0;
+    ui32 ReportStatisticsPeriodMs;
     NKikimr::NColumnShard::TCountersManager& CountersManager;
     ui64 StatsReportRound = 0;
+    std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> latestCSExecutorStats;
 
-    void BuildSSPipe(const TActorContext& ctx);
+    void BuildSSPipe();
     void ReportBaseStatistics();
     void ReportExecutorStatistics();
     void SendPeriodicStats();
 
-    class TEvReportBaseStatistics: public NActors::TEventLocal<TEvReportBaseStatistics, NColumnShard::TEvPrivate::EEv::EvReportBaseStatistics> {};
-    class TEvReportExecutorStatistics: public NActors::TEventLocal<TEvReportExecutorStatistics, NColumnShard::TEvPrivate::EEv::EvReportExecutorStatistics> {};
+    void FillWhateverCan(std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+
+    // class TEvCSExecutorStatistics: public NActors::TEventLocal<TEvCSExecutorStatistics, NColumnShard::TEvPrivate::EEv::EvCSExecutorStatistics> {};
 
     STFUNC(StateFunc) {
         // TLogContextGuard gLogging(
         //     NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", ParentActorId));
         switch (ev->GetTypeRewrite()) {
             // cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle)
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle)
-            HFunc(TEvReportBaseStatistics, Handle);
-            HFunc(TEvReportExecutorStatistics, Handle);
-            HFunc(TEvSetSSId, Handle);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle)
+            sFunc(TEvTabletPipe::TEvClientConnected, SendPeriodicStats)
+            sFunc(NColumnShard::TEvPrivate::TEvReportStatistics, SendPeriodicStats);
+            hFunc(TEvDataShard::TEvPeriodicTableStats, Handle);
+            hFunc(TEvSetSSId, Handle);
             default:
                 AFL_VERIFY(false)("ev", (ev->ToString()));
         }
@@ -52,26 +54,24 @@ public:
     class TEvSetSSId: public NActors::TEventLocal<TEvSetSSId, NColumnShard::TEvPrivate::EEv::EvSetSSId> {
     public:
         ui64 SSId;
-        explicit TEvSetSSId(ui64 sSId) : SSId(sSId){}
+        ui64 SSLocalId;
+        explicit TEvSetSSId(ui64 sSId, ui64 sSLocalId) : SSId(sSId), SSLocalId(sSLocalId) {}
     };
 
     TColumnShardStatisticsReporter (
-        NColumnShard::TColumnShard& owner,
-        ui32 reportBaseStatisticsPeriodMs,
-        ui32 reportExecutorStatisticsPeriodMs,
+        ui64 tabletId,
+        ui32 reportStatisticsPeriodMs,
         NColumnShard::TCountersManager& countersManager)
         :
-        Owner(owner),
-        ReportBaseStatisticsPeriodMs(reportBaseStatisticsPeriodMs),
-        ReportExecutorStatisticsPeriodMs(reportExecutorStatisticsPeriodMs),
+        TabletId(tabletId),
+        ReportStatisticsPeriodMs(reportStatisticsPeriodMs),
         CountersManager(countersManager) {}
     void Bootstrap(const NActors::TActorContext&);
-    void SetSSId(ui64 sSId, const TActorContext&);
-    void Handle(NKikimr::TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext&);
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr&, const TActorContext&);
-    void Handle(TEvReportBaseStatistics::TPtr&, const NActors::TActorContext&);
-    void Handle(TEvReportExecutorStatistics::TPtr&, const NActors::TActorContext&);
-    void Handle(TEvSetSSId::TPtr&, const NActors::TActorContext&);
+    void Handle(NKikimr::TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
+    // void Handle(TEvTabletPipe::TEvClientConnected::TPtr&, const TActorContext&);
+    // void Handle(TEvReportStatistics::TPtr&, const NActors::TActorContext&);
+    void Handle(TEvDataShard::TEvPeriodicTableStats::TPtr&);
+    void Handle(TEvSetSSId::TPtr&);
 
 };
 

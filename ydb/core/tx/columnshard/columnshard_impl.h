@@ -272,6 +272,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvReportStatistics::TPtr&);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
@@ -437,6 +438,7 @@ protected:
             HFunc(TEvPrivate::TEvReadFinished, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
             HFunc(NActors::TEvents::TEvWakeup, Handle);
+            hFunc(TEvPrivate::TEvReportStatistics, Handle);
             HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
 
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);

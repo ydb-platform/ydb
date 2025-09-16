@@ -131,7 +131,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
 
     auto statistics = AppDataVerified().ColumnShardConfig.GetStatistics();
-    ColumnShardStatisticsReporter = ctx.Register(new NOlap::TColumnShardStatisticsReporter(*this, statistics.GetReportBaseStatisticsPeriodMs(), statistics.GetReportExecutorStatisticsPeriodMs(), Counters));
+    ColumnShardStatisticsReporter = ctx.Register(new NOlap::TColumnShardStatisticsReporter(TabletID(), statistics.GetReportBaseStatisticsPeriodMs(), Counters));
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(SelfId());
     ColumnDataManager = std::make_shared<NOlap::NColumnFetching::TColumnDataManager>(SelfId());
     NormalizerController.SetDataAccessorsManager(DataAccessorsManager);
@@ -243,6 +243,11 @@ void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const
         Execute(writeTx.release(), ctx);
     }
     ctx.Schedule(NYDBTest::TControllers::GetColumnShardController()->GetStalenessLivetimePing(ping), new TEvPrivate::TEvPingSnapshotsUsage());
+}
+
+void TColumnShard::Handle(TEvPrivate::TEvReportStatistics::TPtr& /*ev*/) {
+
+    ActorContext().Schedule(TDuration::MilliSeconds(1000), new TEvPrivate::TEvReportStatistics);
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {

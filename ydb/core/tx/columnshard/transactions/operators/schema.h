@@ -95,6 +95,7 @@ public:
             TxAddSharding->Execute(txc, NActors::TActivationContext::AsActorContext());
         }
         if (SchemaTxBody.TxBody_case() != NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("RunSchemaTx", "okak")("tx", GetTxId());;
             owner.RunSchemaTx(SchemaTxBody, version, txc);
             owner.ProtectSchemaSeqNo(SchemaTxBody.GetSeqNo(), txc);
         }

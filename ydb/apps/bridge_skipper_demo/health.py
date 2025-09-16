@@ -275,7 +275,6 @@ def _async_pile_health_check(path_to_cli: str, pile_name: str, endpoints, execut
 
     def fetch_health(path_to_cli, endpoint: str) -> Optional[Tuple[str, Dict[str, Any]]]:
         try:
-            #logger.trace(f"fetch health from {endpoint}")
             start_ts = time.monotonic()
             cmd = ["-d", "", "monitoring", "healthcheck", "-v", "--format=json", "--no-merge", "--no-cache"]
             cmd += ["--timeout", str(YDB_HEALTHCHECK_TIMEOUT_MS)]

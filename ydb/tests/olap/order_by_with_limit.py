@@ -41,7 +41,7 @@ class TestOrderBy(object):
                 }
             ]
 
-            data.extend({"id": i * 100000 + j} for j in range(100))
+            data.extend({"id": j * 100000 + i} for j in range(1, 100))
 
             self.ydb_client.bulk_upsert(
                 table,

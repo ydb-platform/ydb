@@ -137,10 +137,6 @@ struct TMemoryUsageChange {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionImpl
-struct TTransactionInfo {
-    TString SessionId;
-    TString TxId;
-};
 
 class TWriteSessionImpl : public TContinuationTokenIssuer,
                           public TEnableSelfContext<TWriteSessionImpl> {
@@ -261,16 +257,15 @@ private:
         TInstant CreatedAt;
         size_t Size;
         TVector<std::pair<TString, TString>> MessageMeta;
-        TMaybe<TTransactionInfo> Tx;
+        const NTable::TTransaction* Tx;
 
         TOriginalMessage(const ui64 id, const TInstant createdAt, const size_t size,
                          const NTable::TTransaction* tx)
             : Id(id)
             , CreatedAt(createdAt)
             , Size(size)
-        {
-            InitTx(tx);
-        }
+            , Tx(tx)
+        {}
 
         TOriginalMessage(const ui64 id, const TInstant createdAt, const size_t size,
                          TVector<std::pair<TString, TString>>&& messageMeta,
@@ -279,15 +274,8 @@ private:
             , CreatedAt(createdAt)
             , Size(size)
             , MessageMeta(std::move(messageMeta))
-        {
-            InitTx(tx);
-        }
-
-        void InitTx(const NTable::TTransaction* tx) {
-            if (tx) {
-                Tx.ConstructInPlace(tx->GetSession().GetId(), tx->GetId());
-            }
-        }
+            , Tx(tx)
+        {}
     };
 
     //! Block comparer, makes block with smallest offset (first sequence number) appear on top of the PackedMessagesToSend priority queue

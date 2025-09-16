@@ -8,7 +8,6 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
@@ -575,19 +574,6 @@ private:
     void ProcessPendingEvents();
 
     void AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx);
-
-    TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
-    NWilson::TSpan WriteTxsSpan;
-
-    void InitPipeClientCache();
-
-    bool HasTxPersistSpan = false;
-    bool HasTxDeleteSpan = false;
-    ui8 WriteTxsSpanVerbosity = 0;
-
-    void BeginDeleteTransaction(const TActorContext& ctx,
-                                TDistributedTransaction& tx,
-                                NKikimrPQ::TTransaction::EState state);
 };
 
 

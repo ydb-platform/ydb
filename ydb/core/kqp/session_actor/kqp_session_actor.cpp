@@ -510,19 +510,6 @@ public:
 
     bool AreAllTheTopicsAndPartitionsKnown() const {
         const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperations();
-
-        if (operations.HasTabletId()) {
-            for (const auto& topic : operations.GetTopics()) {
-                auto path = CanonizePath(NPersQueue::GetFullTopicPath(TlsActivationContext->AsActorContext(),
-                                                                      QueryState->GetDatabase(), topic.path()));
-                for (const auto& partition : topic.partitions()) {
-                    QueryState->TxCtx->TopicOperations.SetTabletId(path, partition.partition_id(), operations.GetTabletId());
-                }
-            }
-
-            return true;
-        }
-
         for (const auto& topic : operations.GetTopics()) {
             auto path = CanonizePath(NPersQueue::GetFullTopicPath(TlsActivationContext->AsActorContext(),
                                                                   QueryState->GetDatabase(), topic.path()));
@@ -533,7 +520,6 @@ public:
                 }
             }
         }
-
         return true;
     }
 

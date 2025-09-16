@@ -59,7 +59,7 @@ ui64 TPartition::GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) cons
 }
 
 void TPartition::SendReadingFinished(const TString& consumer) {
-    Send(Tablet, new TEvPQ::TEvReadingPartitionStatusRequest(consumer, Partition.OriginalPartitionId, TabletGeneration, ++PQRBCookie));
+    Send(TabletActorId, new TEvPQ::TEvReadingPartitionStatusRequest(consumer, Partition.OriginalPartitionId, TabletGeneration, ++PQRBCookie));
 }
 
 void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
@@ -110,7 +110,7 @@ void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
                 0, consumer, 0, "", 0, 0, 0, TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0
         );
         if (!userInfo.Important && userInfo.LabeledCounters) {
-            ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo.LabeledCounters->GetGroup()));
+            ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo.LabeledCounters->GetGroup()));
         }
         userInfo.Session = "";
         userInfo.Offset = 0;
@@ -244,7 +244,7 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
 
         TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumer.GetName());
         if (userInfo && !userInfo->Important && userInfo->LabeledCounters) {
-            ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo->LabeledCounters->GetGroup()));
+            ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo->LabeledCounters->GetGroup()));
             userInfo->SetImportant(true);
             continue;
         }
@@ -260,7 +260,7 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
     for (auto& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
         if (!important.contains(consumer) && userInfo.Important && userInfo.LabeledCounters) {
             ctx.Send(
-                Tablet,
+                TabletActorId,
                 new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo.LabeledCounters->GetGroup())
             );
             userInfo.SetImportant(false);
@@ -676,9 +676,9 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
         return;
     TReadAnswer answer = res->FormAnswer(
             ctx, nullptr, CompactionBlobEncoder.StartOffset, res->Offset, Partition, nullptr,
-            res->Destination, 0, Tablet, Config.GetMeteringMode(), IsActive(), GetResultPostProcessor<NKikimrClient::TCmdReadResult>(res->User)
+            res->Destination, 0, TabletActorId, Config.GetMeteringMode(), IsActive(), GetResultPostProcessor<NKikimrClient::TCmdReadResult>(res->User)
     );
-    ctx.Send(answer.IsInternal ? SelfId() : Tablet, answer.Event.Release());
+    ctx.Send(answer.IsInternal ? SelfId() : TabletActorId, answer.Event.Release());
     PQ_LOG_D(" waiting read cookie " << ev->Get()->Cookie
         << " partition " << Partition << " read timeout for " << res->User << " offset " << res->Offset);
     auto& userInfo = UsersInfoStorage->GetOrCreate(res->User, ctx);

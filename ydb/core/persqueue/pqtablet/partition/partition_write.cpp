@@ -45,7 +45,7 @@ void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TS
         r->SetSupportivePartition(Partition.InternalPartitionId);
     }
 
-    ctx.Send(Tablet, response.Release());
+    ctx.Send(TabletActorId, response.Release());
     span.EndOk();
 }
 
@@ -81,7 +81,7 @@ void TPartition::ReplyWrite(
 
     write->SetWrittenInTx(IsSupportive());
 
-    ctx.Send(Tablet, response.Release());
+    ctx.Send(TabletActorId, response.Release());
     span.EndOk();
 }
 
@@ -652,7 +652,7 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
     if (scaleStatus == ScaleStatus || MirroringEnabled(Config) || LastScaleRequestTime + TDuration::Seconds(SCALE_REQUEST_REPEAT_MIN_SECONDS) > now) {
         return;
     }
-    Send(Tablet, new TEvPQ::TEvPartitionScaleStatusChanged(Partition.OriginalPartitionId, scaleStatus));
+    Send(TabletActorId, new TEvPQ::TEvPartitionScaleStatusChanged(Partition.OriginalPartitionId, scaleStatus));
     LastScaleRequestTime = now;
     ScaleStatus = scaleStatus;
 }
@@ -1148,7 +1148,7 @@ void TPartition::TryCorrectStartOffset(TMaybe<ui64> offset)
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
     Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= p.Msg.Data.size(),
                          "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", p.Msg.Data.size=%" PRISZT,
-                         TabletID, Partition.OriginalPartitionId, Partition.InternalPartitionId,
+                         TabletId, Partition.OriginalPartitionId, Partition.InternalPartitionId,
                          WriteInflightSize, p.Msg.Data.size());
     WriteInflightSize -= p.Msg.Data.size();
 
@@ -1327,7 +1327,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     if (!BlobEncoder.PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
         //this must not be happen - client sends gaps, fail this client till the end
         //now no changes will leak
-        ctx.Send(Tablet, new TEvents::TEvPoisonPill());
+        ctx.Send(TabletActorId, new TEvents::TEvPoisonPill());
 
         return false;
     }
@@ -1536,7 +1536,7 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& 
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
             Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= msg.Data.size(),
                                  "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", msg.Data.size=%" PRISZT,
-                                 TabletID, Partition.OriginalPartitionId, Partition.InternalPartitionId,
+                                 TabletId, Partition.OriginalPartitionId, Partition.InternalPartitionId,
                                  WriteInflightSize, msg.Data.size());
             WriteInflightSize -= msg.Data.size();
         }
@@ -1716,7 +1716,7 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
                     << " emit heartbeat " << heartbeat->Version);
 
             auto hbMsg = TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
-                .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletID)),
+                .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletId)),
                 .SeqNo = 0, // we don't use SeqNo because we disable deduplication
                 .PartNo = 0,
                 .TotalParts = 1,

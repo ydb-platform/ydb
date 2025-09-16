@@ -195,7 +195,22 @@ TString TPartition::LogPrefix() const {
     } else {
         state = "Unknown";
     }
-    return TStringBuilder() << "[PQ: " << TabletID << ", Partition: " << Partition << ", State: " << state << "] ";
+    return TStringBuilder() << "[Partition][" << Partition << "][" << state << "] ";
+}
+
+const TString& TPartition::GetLogPrefix() const {
+    TMaybe<TString>& logPrefix = UnknownLogPrefix;
+    if (CurrentStateFunc() == &TThis::StateInit) {
+        logPrefix = InitLogPrefix;
+    } else if (CurrentStateFunc() == &TThis::StateIdle) {
+        logPrefix = IdleLogPrefix;
+    }
+
+    if (!logPrefix.Defined()) {
+        logPrefix = LogPrefix();
+    }
+
+    return *logPrefix;
 }
 
 bool TPartition::IsActive() const {
@@ -247,7 +262,7 @@ ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp
 
 void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool isInternal) {
     ReplyPersQueueError(
-        dst == 0 ? ctx.SelfID : Tablet, ctx, TabletID, TopicName(), Partition,
+        dst == 0 ? ctx.SelfID : TabletActorId, ctx, TabletId, TopicName(), Partition,
         TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, isInternal
     );
 }
@@ -270,7 +285,7 @@ void TPartition::ReplyPropose(const TActorContext& ctx,
 }
 
 void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst) {
-    ctx.Send(Tablet, MakeReplyOk(dst, false).Release());
+    ctx.Send(TabletActorId, MakeReplyOk(dst, false).Release());
 }
 
 void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst, NWilson::TSpan& span) {
@@ -281,7 +296,7 @@ void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst, NWilson::TSpa
 void TPartition::ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset,
     const TInstant writeTimestamp, const TInstant createTimestamp, bool consumerHasAnyCommits,
     const std::optional<TString>& committedMetadata) {
-    ctx.Send(Tablet, MakeReplyGetClientOffsetOk(dst, offset, writeTimestamp, createTimestamp, consumerHasAnyCommits, committedMetadata).Release());
+    ctx.Send(TabletActorId, MakeReplyGetClientOffsetOk(dst, offset, writeTimestamp, createTimestamp, consumerHasAnyCommits, committedMetadata).Release());
 }
 
 NKikimrClient::TKeyValueRequest::EStorageChannel GetChannel(ui32 i) {
@@ -300,8 +315,8 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
                        const TActorId& writeQuoterActorId,
                        TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
                        bool newPartition)
-    : Initializer(this)
-    , TabletID(tabletId)
+    : TBaseActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
+    , Initializer(this)
     , TabletGeneration(tabletGeneration)
     , Partition(partition)
     , TabletConfig(tabletConfig)
@@ -312,7 +327,6 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , PartitionGraph()
     , SourceManager(*this)
     , WriteInflightSize(0)
-    , Tablet(tablet)
     , BlobCache(blobCache)
     , DeletedKeys(std::make_shared<std::deque<TString>>())
     , CompactionBlobEncoder(partition, false)
@@ -324,7 +338,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , InitDuration(TDuration::Zero())
     , InitDone(false)
     , NewPartition(newPartition)
-    , Subscriber(partition, TabletCounters, Tablet)
+    , Subscriber(partition, TabletCounters, TabletActorId)
     , DiskIsFull(false)
     , SubDomainOutOfSpace(subDomainOutOfSpace)
     , HasDataReqNum(0)
@@ -428,11 +442,11 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     FilterDeadlinedWrites(ctx);
 
     ctx.Schedule(WAKE_TIMEOUT, new TEvents::TEvWakeup());
-    ctx.Send(Tablet, new TEvPQ::TEvPartitionCounters(Partition, TabletCounters));
+    ctx.Send(TabletActorId, new TEvPQ::TEvPartitionCounters(Partition, TabletCounters));
 
     ui64 usedStorage = GetUsedStorage(now);
     if (usedStorage > 0) {
-        ctx.Send(Tablet, new TEvPQ::TEvMetering(EMeteringJson::UsedStorageV1, usedStorage));
+        ctx.Send(TabletActorId, new TEvPQ::TEvMetering(EMeteringJson::UsedStorageV1, usedStorage));
     }
 
     if (ManageWriteTimestampEstimate || !IsActive()) {
@@ -704,7 +718,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     ProcessTxsAndUserActs(ctx);
 
     ctx.Send(ctx.SelfID, new TEvents::TEvWakeup());
-    ctx.Send(Tablet, new TEvPQ::TEvInitComplete(Partition));
+    ctx.Send(TabletActorId, new TEvPQ::TEvInitComplete(Partition));
 
     for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) {
         PQ_LOG_D("Init complete for topic '" << TopicName() << "' Partition: " << Partition
@@ -725,7 +739,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         PartitionCountersLabeled->GetCounters()[METRIC_LIFE_TIME] = CreationTime.MilliSeconds();
         PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS] = 1;
         PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS_TOTAL] = Config.PartitionsSize();
-        ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
+        ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
     }
     UpdateUserInfoEndOffset(ctx.Now());
 
@@ -1022,7 +1036,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const T
             ScaleStatus = record.GetScaleStatus();
             PartitionScaleParticipants.ConstructInPlace();
             PartitionScaleParticipants->CopyFrom(record.GetParticipatingPartitions());
-            ctx.Send(Tablet, ev->Release());
+            ctx.Send(TabletActorId, ev->Release());
         } else {
             PQ_LOG_W("Ignoring split-merge event from the mirrorer because it does not have participating partitions info: " << ev->ToString());
         }
@@ -1282,7 +1296,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCalcPredicate> 
 {
     if (PlanStep.Defined() && TxId.Defined()) {
         if (GetStepAndTxId(*ev) < GetStepAndTxId(*PlanStep, *TxId)) {
-            Send(Tablet,
+            Send(TabletActorId,
                  MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(ev->Step,
                                                              ev->TxId,
                                                              Partition,
@@ -1322,7 +1336,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit> ev, con
             PQ_LOG_D("Send TEvTxCommitDone" <<
                      " Step " << ev->Step <<
                      ", TxId " << ev->TxId);
-            ctx.Send(Tablet, MakeCommitDone(ev->Step, ev->TxId).Release());
+            ctx.Send(TabletActorId, MakeCommitDone(ev->Step, ev->TxId).Release());
             return;
         }
     }
@@ -1602,7 +1616,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
 
         PQ_LOG_TX_D("Send TEvTxCalcPredicateResult. TxId: " << tx->GetTxId());
 
-        Send(Tablet,
+        Send(TabletActorId,
              MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx->Tx->Step,
                                                          tx->Tx->TxId,
                                                          Partition,
@@ -1624,7 +1638,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
                 m->SetSeqNo(v.SeqNo);
             }
         }
-        Send(Tablet, result.Release());
+        Send(TabletActorId, result.Release());
     }
 }
 
@@ -1652,7 +1666,7 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
         protoInfo.SetState(TSourceIdInfo::ConvertState(info.State));
     }
 
-    ctx.Send(Tablet, response.Release());
+    ctx.Send(TabletActorId, response.Release());
 }
 
 void TPartition::OnReadComplete(TReadInfo& info,
@@ -1662,7 +1676,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
 {
     TReadAnswer answer = info.FormAnswer(
         ctx, blobResponse, BlobEncoder.StartOffset, BlobEncoder.EndOffset, Partition, userInfo,
-        info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive(),
+        info.Destination, GetSizeLag(info.Offset), TabletActorId, Config.GetMeteringMode(), IsActive(),
         GetResultPostProcessor<NKikimrClient::TCmdReadResult>(info.User)
     );
     const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
@@ -1689,7 +1703,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
     }
 
-    ctx.Send(info.Destination != 0 && !info.IsInternal ? Tablet : ctx.SelfID, answer.Event.Release());
+    ctx.Send(info.Destination != 0 && !info.IsInternal ? TabletActorId : ctx.SelfID, answer.Event.Release());
 
     OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
 }
@@ -1876,7 +1890,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         }
 
         if (haveChanges) {
-            ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCounters(Partition, *userInfo.LabeledCounters));
+            ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCounters(Partition, *userInfo.LabeledCounters));
         }
     }
 
@@ -1999,7 +2013,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
 
 void TPartition::ReportCounters(const TActorContext& ctx, bool force) {
     if (UpdateCounters(ctx, force)) {
-        ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
+        ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
     }
 }
 
@@ -2035,7 +2049,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         PQ_LOG_ERROR("OnWrite topic '" << TopicName() << "' partition " << Partition
                 << " commands are not processed at all, reason: " << response.DebugString());
-        ctx.Send(Tablet, new TEvents::TEvPoisonPill());
+        ctx.Send(TabletActorId, new TEvents::TEvPoisonPill());
         //TODO: if status is DISK IS FULL, is global status MSTATUS_OK? it will be good if it is true
         return;
     }
@@ -2044,7 +2058,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
             if (response.GetDeleteRangeResult(i).GetStatus() != NKikimrProto::OK) {
                 PQ_LOG_ERROR("OnWrite topic '" << TopicName() << "' partition " << Partition << " delete range error");
                 //TODO: if disk is full, could this be ok? delete must be ok, of course
-                ctx.Send(Tablet, new TEvents::TEvPoisonPill());
+                ctx.Send(TabletActorId, new TEvents::TEvPoisonPill());
                 return;
             }
         }
@@ -2055,7 +2069,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         for (ui32 i = 0; i < response.WriteResultSize(); ++i) {
             if (response.GetWriteResult(i).GetStatus() != NKikimrProto::OK) {
                 PQ_LOG_ERROR("OnWrite  topic '" << TopicName() << "' partition " << Partition << " write error");
-                ctx.Send(Tablet, new TEvents::TEvPoisonPill());
+                ctx.Send(TabletActorId, new TEvents::TEvPoisonPill());
                 return;
             }
             diskIsOk = diskIsOk && CheckDiskStatus(response.GetWriteResult(i).GetStatusFlags());
@@ -2068,7 +2082,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         if (res.GetStatus() != NKikimrProto::OK) {
             PQ_LOG_ERROR("OnWrite  topic '" << TopicName() << "' partition " << Partition
                     << " are not processed at all, got KV error in CmdGetStatus " << res.GetStatus());
-            ctx.Send(Tablet, new TEvents::TEvPoisonPill());
+            ctx.Send(TabletActorId, new TEvents::TEvPoisonPill());
             return;
         }
         diskIsOk = diskIsOk && CheckDiskStatus(res.GetStatusFlags());
@@ -2422,7 +2436,7 @@ void TPartition::RunPersist() {
         TxForPersistTraceIds.clear();
 
         PersistRequestSpan.Attribute("bytes", static_cast<i64>(PersistRequest->Record.ByteSizeLong()));
-        ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
+        ctx.Send(HaveWriteMsg ? BlobCache : TabletActorId, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
         CurrentPersistRequestSpan = std::move(PersistRequestSpan);
         PersistRequestSpan = NWilson::TSpan();
 
@@ -3163,7 +3177,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     }
 
     if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {
-        OffloadActor = Register(CreateOffloadActor(Tablet, TabletID, Partition, Config.GetOffloadConfig()));
+        OffloadActor = Register(CreateOffloadActor(TabletActorId, TabletId, Partition, Config.GetOffloadConfig()));
     } else if (!Config.HasOffloadConfig() && OffloadActor) {
         Send(OffloadActor, new TEvents::TEvPoisonPill());
         OffloadActor = {};
@@ -3612,7 +3626,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
 void TPartition::ScheduleReplyOk(const ui64 dst, bool internal)
 {
-    Replies.emplace_back(internal ? SelfId() : Tablet,
+    Replies.emplace_back(internal ? SelfId() : TabletActorId,
                          MakeReplyOk(dst, internal).Release());
 }
 
@@ -3623,7 +3637,7 @@ void TPartition::ScheduleReplyGetClientOffsetOk(const ui64 dst,
                                                 bool consumerHasAnyCommits,
                                                 const std::optional<TString>& committedMetadata)
 {
-    Replies.emplace_back(Tablet,
+    Replies.emplace_back(TabletActorId,
                          MakeReplyGetClientOffsetOk(dst,
                                                     offset,
                                                     writeTimestamp,
@@ -3637,7 +3651,7 @@ void TPartition::ScheduleReplyError(const ui64 dst, bool internal,
                                     const TString& error)
 {
     PQ_LOG_ERROR("Got error: " << error);
-    Replies.emplace_back(internal ? SelfId() : Tablet,
+    Replies.emplace_back(internal ? SelfId() : TabletActorId,
                          MakeReplyError(dst,
                                         errorCode,
                                         error).Release());
@@ -3667,24 +3681,24 @@ void TPartition::ScheduleReplyCommitDone(ui64 step, ui64 txId, NWilson::TSpan&& 
     auto event = MakeCommitDone(step, txId);
     event->Span = std::move(commitSpan);
 
-    Replies.emplace_back(Tablet, event.Release());
+    Replies.emplace_back(TabletActorId, event.Release());
 }
 
 void TPartition::ScheduleDropPartitionLabeledCounters(const TString& group)
 {
-    Replies.emplace_back(Tablet,
+    Replies.emplace_back(TabletActorId,
                          MakeHolder<TEvPQ::TEvPartitionLabeledCountersDrop>(Partition, group).Release());
 }
 
 void TPartition::SchedulePartitionConfigChanged()
 {
-    Replies.emplace_back(Tablet,
+    Replies.emplace_back(TabletActorId,
                          MakeHolder<TEvPQ::TEvPartitionConfigChanged>(Partition).Release());
 }
 
 void TPartition::ScheduleDeletePartitionDone()
 {
-    Replies.emplace_back(Tablet,
+    Replies.emplace_back(TabletActorId,
                          MakeHolder<TEvPQ::TEvDeletePartitionDone>(Partition).Release());
 }
 
@@ -3918,7 +3932,7 @@ THolder<TEvPersQueue::TEvProposeTransactionResult> TPartition::MakeReplyPropose(
 {
     auto response = MakeHolder<TEvPersQueue::TEvProposeTransactionResult>();
 
-    response->Record.SetOrigin(TabletID);
+    response->Record.SetOrigin(TabletId);
     response->Record.SetStatus(statusCode);
     response->Record.SetTxId(event.GetTxId());
 
@@ -4025,7 +4039,7 @@ size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request) {
 
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
-        Register(CreateMirrorer(TabletID, Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, BlobEncoder.EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
+        Register(CreateMirrorer(TabletId, TabletActorId, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, BlobEncoder.EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
         TabletCounters
     );
 }
@@ -4190,7 +4204,7 @@ void TPartition::ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransac
         writeId = GetWriteId(tx.GetData());
     }
 
-    Replies.emplace_back(Tablet,
+    Replies.emplace_back(TabletActorId,
                          MakeHolder<TEvPQ::TEvTransactionCompleted>(writeId).Release());
 }
 
@@ -4246,16 +4260,6 @@ void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
                        << ": Acquired RW Lock, send compacter KV request    ");
     Send(BlobCache, CompacterKvRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
 }
-
-bool TPartition::OnUnhandledException(const std::exception& exc) {
-    PQ_LOG_CRIT("unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-            << TBackTrace::FromCurrentException().PrintToString());
-
-    Send(Tablet, new TEvents::TEvPoison());
-    PassAway();
-    return true;
-}
-
 
 IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration,
     const TActorId& blobCache, const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,

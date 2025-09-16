@@ -60,7 +60,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     if (!CompactionBlobEncoder.PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
         //this must not be happen - client sends gaps, fail this client till the end
         //now no changes will leak
-        ctx.Send(Tablet, new TEvents::TEvPoisonPill());
+        ctx.Send(TabletActorId, new TEvents::TEvPoison());
         return false;
     }
 

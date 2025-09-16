@@ -3103,6 +3103,39 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             CompareYson(output, R"([[[1u];[1u]];[[10u];[10u]];[[100u];[100u]]])");
         }
     }
+
+     Y_UNIT_TEST(CreateTableAs_MkDir) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableMoveColumnTable(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        TKikimrRunner kikimr(settings);
+
+        const TString query = R"(
+            CREATE TABLE `/Root/test_dir/Destination` (
+                PRIMARY KEY (Col1)
+            )
+            WITH (STORE = ROW)
+            AS SELECT 1u As Col1, 1u As Col2;
+        )";
+
+        auto client = kikimr.GetQueryClient();
+        {
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/test_dir/Destination` ORDER BY Col1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[1u;1u]])");
+        }
+    }
 }
 
 } // namespace NKqp

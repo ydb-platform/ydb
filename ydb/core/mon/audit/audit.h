@@ -26,6 +26,7 @@ public:
     void LogOnReceived();
     void LogOnCompleted(const NHttp::THttpOutgoingResponsePtr& response);
     void SetSubjectType(NACLibProto::ESubjectType subjectType);
+    static bool AuditEnabled(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase, NACLibProto::ESubjectType subjectType);
 
 private:
     void AddAuditLogPart(TStringBuf name, const TString& value);

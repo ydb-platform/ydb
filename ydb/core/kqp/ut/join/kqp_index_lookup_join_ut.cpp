@@ -717,8 +717,11 @@ void TestKeyCastForAllJoinTypes(TSession session, const TString& leftTable, cons
         if (isError) {
             UNIT_ASSERT(!result.IsSuccess());
             return;
+        } else {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
         TKikimrSettings settings;
+        UNIT_ASSERT(result.GetStats().has_value());
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         if (!isCast) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);

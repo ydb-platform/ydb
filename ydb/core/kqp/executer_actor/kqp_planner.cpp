@@ -551,7 +551,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
     }
     nComputeTasks = ComputeTasks.size();
 
-    LOG_D("Total tasks: " << nScanTasks + nComputeTasks << ", readonly: true"  // TODO ???
+    LOG_D("Total tasks: " << TasksGraph.GetTasks().size() << " " << nScanTasks + nComputeTasks << ", readonly: true"  // TODO ???
         << ", " << nScanTasks << " scan tasks on " << TasksPerNode.size() << " nodes"
         << ", localComputeTasks: " << TasksGraph.GetMeta().LocalComputeTasks
         << ", MayRunTasksLocally " << TasksGraph.GetMeta().MayRunTasksLocally

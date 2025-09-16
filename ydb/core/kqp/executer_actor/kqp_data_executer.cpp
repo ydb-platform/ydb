@@ -2184,11 +2184,10 @@ private:
         }
 
         if (HasOlapTable) {
-            DoExecute();
-            return;
+            ResourceSnapshotRequired = true;
         }
 
-        OnShardsResolve();
+        DoExecute();
     }
 
     void OnShardsResolve() {

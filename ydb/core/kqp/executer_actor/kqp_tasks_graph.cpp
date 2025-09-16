@@ -2427,18 +2427,12 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
 
     TVector<ui64> createdTasksIds;
     auto createNewTask = [&](
-            TMaybe<ui64> nodeId,
+            ui64 nodeId,
             TMaybe<ui64> shardId,
             TMaybe<ui64> maxInFlightShards) -> TTask& {
         auto& task = AddTask(stageInfo);
         task.Meta.Type = TTaskMeta::TTaskType::Scan;
-        if (nodeId) {
-            task.Meta.NodeId = *nodeId;
-        }
-
-        if (!nodeId || !GetMeta().ShardsResolved) {
-            YQL_ENSURE(!GetMeta().ShardsResolved);
-        }
+        task.Meta.NodeId = nodeId;
 
         const auto& stageSource = stage.GetSources(0);
         auto& input = task.Inputs[stageSource.GetInputIndex()];
@@ -2548,7 +2542,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
 
     auto addPartition = [&](
         ui64 taskLocation,
-        TMaybe<ui64> nodeId,
+        ui64 nodeId,
         TMaybe<ui64> shardId,
         const TShardInfo& shardInfo,
         TMaybe<ui64> maxInFlightShards = Nothing())
@@ -2557,7 +2551,12 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
 
         if (!nodeId) {
             const auto nodeIdPtr = shardIdToNodeId.FindPtr(taskLocation);
-            nodeId = nodeIdPtr ? TMaybe<ui64>{*nodeIdPtr} : Nothing();
+            if (nodeIdPtr)
+                nodeId = *nodeIdPtr;
+        }
+
+        if (!nodeId) {
+            nodeId = GetMeta().ExecuterId.NodeId();
         }
 
         YQL_ENSURE(!GetMeta().ShardsResolved || nodeId);
@@ -2567,16 +2566,17 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
             stats->AffectedShards.insert(*shardId);
         }
 
+        //YQL_ENSURE(nodeId > 0);
+
         if (limitTasksPerNode && GetMeta().ShardsResolved) {
-            YQL_ENSURE(nodeId.Defined());
-            const auto maxScanTasksPerNode = GetScanTasksPerNode(stageInfo, /* isOlapScan */ false, *nodeId);
-            auto& nodeTasks = nodeIdToTasks[*nodeId];
+            const auto maxScanTasksPerNode = GetScanTasksPerNode(stageInfo, /* isOlapScan */ false, nodeId);
+            auto& nodeTasks = nodeIdToTasks[nodeId];
             if (nodeTasks.size() < maxScanTasksPerNode) {
                 const auto& task = createNewTask(nodeId, {}, maxInFlightShards);
                 nodeTasks.push_back(task.Id);
             }
 
-            nodeIdToShardKeyRanges[*nodeId].push_back(TShardRangesWithShardId{shardId, &*shardInfo.KeyReadRanges});
+            nodeIdToShardKeyRanges[nodeId].push_back(TShardRangesWithShardId{shardId, &*shardInfo.KeyReadRanges});
         } else {
             auto& task = createNewTask(nodeId, shardId, maxInFlightShards);
             const auto& stageSource = stage.GetSources(0);
@@ -2642,7 +2642,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         }
 
         if (shardInfo.KeyReadRanges) {
-            const TMaybe<ui64> nodeId = singlePartitionedStage ? TMaybe<ui64>{GetMeta().ExecuterId.NodeId()} : Nothing();
+            const ui64 nodeId = singlePartitionedStage ? GetMeta().ExecuterId.NodeId() : 0;
             addPartition(startShard, nodeId, {}, shardInfo, inFlightShards);
             fillRangesForTasks();
             return singlePartitionedStage ? TMaybe<size_t>(partitions.size()) : Nothing();
@@ -2651,7 +2651,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         }
     } else {
         for (auto& [shardId, shardInfo] : partitions) {
-            addPartition(shardId, {}, shardId, shardInfo, {});
+            addPartition(shardId, 0, shardId, shardInfo, {});
         }
         fillRangesForTasks();
         return partitions.size();

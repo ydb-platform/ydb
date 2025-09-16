@@ -188,19 +188,7 @@ private:
             addQueryEvent->QueryId = txId;
             Send(schedulerServiceId, addQueryEvent.Release(), 0, txId);
 
-            {
-                TStringStream ss;
-                ss << "Waiting query response: " << txId << Endl;
-                Cerr << ss.Str();
-            }
-
             query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(txId))->Get()->Query;
-
-            {
-                TStringStream ss;
-                ss << "Received query response: " << txId << Endl;
-                Cerr << ss.Str();
-            }
         }
 
         auto now = TAppData::TimeProvider->Now();

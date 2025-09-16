@@ -471,9 +471,9 @@ int TQueuePair::ToRtsState(TRdmaCtx* ctx, ui32 qpNum, const ibv_gid& gid, int mt
         qpAttr.qp_state      = IBV_QPS_RTS;
         qpAttr.sq_psn        = 0;
         qpAttr.max_rd_atomic = 1;
-        qpAttr.timeout       = 14;
-        qpAttr.retry_cnt     = 4;
-        qpAttr.rnr_retry     = 4;
+        qpAttr.timeout       = 16;
+        qpAttr.retry_cnt     = 2;
+        qpAttr.rnr_retry     = 2;
 
         int err = ibv_modify_qp(Qp, &qpAttr, IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC);
         if (err) {

@@ -134,8 +134,16 @@ namespace {
             *InflightDataAmount += value;
         }
 
+        void AddInflightRdmaDataAmount(ui64 value) override {
+            *InflightRdmaDataAmount += value;
+        }
+
         void SubInflightDataAmount(ui64 value) override {
             *InflightDataAmount -= value;
+        }
+
+        void SubInflightRdmaDataAmount(ui64 value) override {
+            *InflightRdmaDataAmount -= value;
         }
 
         void AddTotalBytesWritten(ui64 value) override {
@@ -318,6 +326,7 @@ namespace {
                 HandshakeFails = AdaptiveCounters->GetCounter("Handshake_Fails", true);
                 InflyLimitReach = AdaptiveCounters->GetCounter("InflyLimitReach", true);
                 InflightDataAmount = AdaptiveCounters->GetCounter("Inflight_Data");
+                InflightRdmaDataAmount = AdaptiveCounters->GetCounter("InflightRdma_Data");
 
                 PingTimeHistogram = AdaptiveCounters->GetHistogram(
                     "PingTimeUs", NMonitoring::ExponentialHistogram(18, 2, 125));
@@ -372,6 +381,7 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr Connected;
         NMonitoring::TDynamicCounters::TCounterPtr Disconnections;
         NMonitoring::TDynamicCounters::TCounterPtr InflightDataAmount;
+        NMonitoring::TDynamicCounters::TCounterPtr InflightRdmaDataAmount;
         NMonitoring::TDynamicCounters::TCounterPtr InflyLimitReach;
         NMonitoring::TDynamicCounters::TCounterPtr OutputBuffersTotalSize;
         NMonitoring::TDynamicCounters::TCounterPtr QueueUtilization;
@@ -488,8 +498,16 @@ namespace {
             InflightDataAmount_->Add(value);
         }
 
+        void AddInflightRdmaDataAmount(ui64 value) override {
+            InflightRdmaDataAmount_->Add(value);
+        }
+
         void SubInflightDataAmount(ui64 value) override {
             InflightDataAmount_->Add(-value);
+        }
+
+        void SubInflightRdmaDataAmount(ui64 value) override {
+            InflightRdmaDataAmount_->Add(-value);
         }
 
         void AddTotalBytesWritten(ui64 value) override {
@@ -682,6 +700,7 @@ namespace {
                 HandshakeFails_ = createRate(AdaptiveMetrics_, "interconnect.handshake_fails");
                 InflyLimitReach_ = createRate(AdaptiveMetrics_, "interconnect.infly_limit_reach");
                 InflightDataAmount_ = createRate(AdaptiveMetrics_, "interconnect.inflight_data");
+                InflightRdmaDataAmount_ = createRate(AdaptiveMetrics_, "interconnect.inflight_rdma_data");
                 PingTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_us"}}), NMonitoring::ExponentialHistogram(18, 2, 125));
                 RdmaReadTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
@@ -759,6 +778,7 @@ namespace {
         NMonitoring::IRate* HandshakeFails_;
         NMonitoring::IRate* InflyLimitReach_;
         NMonitoring::IRate* InflightDataAmount_;
+        NMonitoring::IRate* InflightRdmaDataAmount_;
         NMonitoring::IRate* OutputBuffersTotalSize_;
         NMonitoring::IIntGauge* SubscribersCount_;
         NMonitoring::IRate* SendSyscalls_;

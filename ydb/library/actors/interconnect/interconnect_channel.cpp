@@ -245,8 +245,8 @@ namespace NActors {
             Y_ABORT();
         }
         Y_ABORT_UNLESS(!complete || event.EventActuallySerialized == event.EventSerializedSize,
-            "EventActuallySerialized# %" PRIu32 " EventSerializedSize# %" PRIu32 " Type# 0x%08" PRIx32,
-            event.EventActuallySerialized, event.EventSerializedSize, event.Descr.Type);
+            "EventActuallySerialized# %" PRIu32 " EventSerializedSize# %" PRIu32 " Type# 0x%08" PRIx32 " External# %" PRIi32,
+            event.EventActuallySerialized, event.EventSerializedSize, event.Descr.Type, (ui32)External);
 
         return complete;
     }
@@ -338,6 +338,7 @@ namespace NActors {
                 auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
                 if (memReg.Empty()) {
                     // TODO: may be copy to RDMA buffer ?????
+                    Iter = event.Buffer->GetBeginIter();
                     return false;
                 }
                 checkSum = Crc32cExtendMSanCompatible(checkSum, buf.GetData(), buf.GetSize());
@@ -375,12 +376,20 @@ namespace NActors {
         ui16 credsSerializedSize = rdmaCreds.ByteSizeLong();
         WriteUnaligned<ui16>(ptr, credsSerializedSize);
         ptr += sizeof(ui16);
+
+        ui32 payloadSz = 0;
+        for (const auto& rdmaCred : rdmaCreds.GetCreds()) {
+            payloadSz += rdmaCred.GetSize();
+        }
+
         Y_ABORT_UNLESS(rdmaCreds.SerializePartialToArray(ptr, credsSerializedSize));
         ptr += credsSerializedSize;
         WriteUnaligned<ui32>(ptr, checkSum);
         OutputQueueSize -= event.EventSerializedSize;
 
         task.Write<false>(buffer, partSize);
+
+        task.AttachRdmaPayloadSize(payloadSz);
 
         return true;
     }

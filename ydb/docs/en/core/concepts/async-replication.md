@@ -165,7 +165,7 @@ When you drop an asynchronous replication instance:
 
 {% note warning %}
 
-If asynchronous replication is deleted without prior [termination](#done) and replica objects are not deleted, they will remain available for read-only access.
+If asynchronous replication is dropped without prior [completion](#done) and replica objects are not deleted, they will remain available only for reading.
 
 {% endnote %}
 

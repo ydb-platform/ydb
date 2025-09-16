@@ -4,7 +4,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
-#define LOG_PREFIX_INT TStringBuilder() << "[" << TabletId << "] " << GetLogPrefix()
+#define LOG_PREFIX_INT TStringBuilder() << "[" << TabletId << "]" << GetLogPrefix()
 #define LOG_T(stream) LOG_TRACE_S (*NActors::TlsActivationContext, Service, LOG_PREFIX_INT << stream)
 #define LOG_D(stream) LOG_DEBUG_S (*NActors::TlsActivationContext, Service, LOG_PREFIX_INT << stream)
 #define LOG_I(stream) LOG_INFO_S  (*NActors::TlsActivationContext, Service, LOG_PREFIX_INT << stream)

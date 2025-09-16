@@ -458,6 +458,16 @@ class BridgeSkipper:
         # Attempt to load previous state if provided
         try:
             self._load_state()
+            # Check that loaded state generation is not ahead of what cluster reports
+            if self.current_state:
+                pile_world_views = self.async_checker.get_health_state()
+                latest_generation = health.get_latest_generation_pile(pile_world_views)[0]
+                logger.info(f"Loaded state: {self.current_state}, cluster reported latest generation: {latest_generation}")
+                if self.current_state.generation and latest_generation and self.current_state.generation > latest_generation:
+                    logger.error(f"Generation {self.current_state.generation} from state file is ahead of cluster generation {latest_generation}")
+                    self.async_checker.stop(wait=True)
+                    sys.exit(1)
+
         except Exception as e:
             logger.debug(f"Failed to load saved state: {e}")
 

@@ -119,9 +119,6 @@ TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrap
     return explicitMessageGroups;
 }
 
-/******************************************************* ReadProxy *********************************************************/
-//megaqc - remove it when LB will be ready
-
 /******************************************************* AnswerBuilderProxy *********************************************************/
 class TResponseBuilder {
 public:

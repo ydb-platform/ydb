@@ -63,7 +63,7 @@ private:
             Die(ctx);
             return;
         }
-        Y_ABORT_UNLESS(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult());
+        AFL_ENSURE(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult());
         const auto& readResult = record.GetPartitionResponse().GetCmdReadResult();
         if (isDirectRead) {
             if (!PreparedResponse) {

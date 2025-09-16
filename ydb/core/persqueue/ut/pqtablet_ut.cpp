@@ -291,7 +291,7 @@ protected:
 
     template<class EventType>
     void AddOneTimeEventObserver(bool& seenEvent,
-                                 ui32& unseenEventCount,
+                                 ui32 unseenEventCount,
                                  std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback = [](){return TTestActorRuntimeBase::EEventAction::PROCESS;});
 
     void ExpectNoExclusiveLockAcquired();
@@ -1424,8 +1424,8 @@ void TPQTabletFixture::WaitForAppSendRsResponse(const TAppSendReadSetMatcher& ma
 }
 
 template<class EventType>
-void TPQTabletFixture::AddOneTimeEventObserver(bool& seenEvent, ui32& unseenEventCount, std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback) {
-    auto observer = [&](TAutoPtr<IEventHandle>& input) {
+void TPQTabletFixture::AddOneTimeEventObserver(bool& seenEvent, ui32 unseenEventCount, std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback) {
+    auto observer = [&seenEvent, unseenEventCount, callback](TAutoPtr<IEventHandle>& input) mutable {
         if (!seenEvent && input->CastAsLocal<EventType>()) {
             unseenEventCount--;
             if (unseenEventCount == 0) {
@@ -2606,6 +2606,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_
                              0, 0);
     WaitForTheTransactionToBeDeleted(txId);
 
+    // check that information about a transaction with this WriteId has been renewed on disk
     auto txInfo = GetTxWritesFromKV();
     UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 1);
     UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId.Id);
@@ -2628,18 +2629,15 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Deleting_State, TP
     SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie1, 0);
     SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie2, 1);
 
-    const NKikimrPQ::TTabletTxInfo& txInfo = WaitForExactTxWritesCount(2);
-    ui32 firstSupportivePartitionId = txInfo.GetTxWrites(0).GetInternalPartitionId();
-    ui32 secondSupportivePartitionId = txInfo.GetTxWrites(1).GetInternalPartitionId();
+    const NKikimrPQ::TTabletTxInfo& txInfo1 = WaitForExactTxWritesCount(2);
+    ui32 firstSupportivePartitionId = txInfo1.GetTxWrites(0).GetInternalPartitionId();
+    ui32 secondSupportivePartitionId = txInfo1.GetTxWrites(1).GetInternalPartitionId();
 
-    TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent1;
-    TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent2;
-    std::vector<TAutoPtr<TEvPQ::TEvDeletePartitionDone>> deleteDoneEvents = {deleteDoneEvent1, deleteDoneEvent2};
-    ui32 unseenEventCount = deleteDoneEvents.size();
+    std::vector<TAutoPtr<TEvPQ::TEvDeletePartitionDone>> deleteDoneEvents;
     bool seenEvent = false;
     // add observer for TEvPQ::TEvDeletePartitionDone requests and skip it
-    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, unseenEventCount, [&unseenEventCount, &deleteDoneEvents](TAutoPtr<IEventHandle>& eventHandle) {
-        deleteDoneEvents[deleteDoneEvents.size() - unseenEventCount - 1] = eventHandle->Release<TEvPQ::TEvDeletePartitionDone>();
+    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, 2, [&deleteDoneEvents](TAutoPtr<IEventHandle>& eventHandle) {
+        deleteDoneEvents.push_back(eventHandle->Release<TEvPQ::TEvDeletePartitionDone>());
         return TTestActorRuntimeBase::EEventAction::DROP;
     });
 
@@ -2666,14 +2664,13 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Deleting_State, TP
 
     WaitForTheTransactionToBeDeleted(txId);
 
-    auto txInfo1 = GetTxWritesFromKV();
-    UNIT_ASSERT_EQUAL(txInfo1.TxWritesSize(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(txInfo1.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId.Id);
-    UNIT_ASSERT_VALUES_UNEQUAL(txInfo1.GetTxWrites(0).GetInternalPartitionId(), firstSupportivePartitionId);
+    // check that information about a transaction with this WriteId has been renewed on disk
     auto txInfo2 = GetTxWritesFromKV();
     UNIT_ASSERT_EQUAL(txInfo2.TxWritesSize(), 1);
     UNIT_ASSERT_VALUES_EQUAL(txInfo2.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId.Id);
-    UNIT_ASSERT_VALUES_UNEQUAL(txInfo2.GetTxWrites(0).GetInternalPartitionId(), secondSupportivePartitionId);
+    UNIT_ASSERT_UNEQUAL(txInfo2.GetTxWrites(0).GetInternalPartitionId(), firstSupportivePartitionId);
+    UNIT_ASSERT_UNEQUAL(txInfo2.GetTxWrites(0).GetInternalPartitionId(), secondSupportivePartitionId);
+
     TString ownerCookie3 = WaitGetOwnershipResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
     UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie1, ownerCookie3);
     UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie3);

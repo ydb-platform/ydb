@@ -244,7 +244,7 @@ public:
     }
 };
 
-IActor* THive::StartHiveDrain(TDrainTarget target, TDrainSettings settings) {
+THiveDrain* THive::StartHiveDrain(TDrainTarget target, TDrainSettings settings) {
     bool shouldStart = false;
     for (TGetNodes getNodes{this}; auto nodeId : std::visit(getNodes, target)) {
         if (BalancerNodes.emplace(nodeId).second) {
@@ -272,14 +272,17 @@ void THive::Handle(TEvHive::TEvRequestDrainInfo::TPtr& ev) {
         return;
     }
     auto response = std::make_unique<TEvHive::TEvResponseDrainInfo>();
-    response->Record.SetNodeId(nodeId);
     if (node) {
+        response->Record.SetNodeId(nodeId);
         response->Record.SetDrainSeqNo(node->DrainSeqNo);
-        response->Record.SetDrainInProgress(node->Drain);
-        if (node->DrainActor) {
-            auto* drain = static_cast<THiveDrain*>(node->DrainActor);
-            auto progress = drain->GetProgress();
-            response->Record.SetProgress(progress);
+        if (node->Drain) {
+            response->Record.MutableDrainInProgress();
+            if (node->DrainActor) {
+                auto progress = node->DrainActor->GetProgress();
+                response->Record.MutableDrainInProgress()->SetProgress(progress);
+            }
+        } else {
+            response->Record.MutableNotRunning();
         }
     }
 

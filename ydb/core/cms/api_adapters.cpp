@@ -58,7 +58,12 @@ namespace {
         return true;
     }
 
-    template <typename TApiAction>
+    template<typename T>
+    concept CApiAction = std::same_as<T, Ydb::Maintenance::LockAction>
+                      || std::same_as<T, Ydb::Maintenance::DrainAction>
+                      || std::same_as<T, Ydb::Maintenance::CordonAction>;
+
+    template <CApiAction TApiAction>
     static void ConvertAction(const NKikimrCms::TAction& cmsAction, TApiAction& action) {
         if constexpr (std::is_same_v<TApiAction, Ydb::Maintenance::LockAction>) {
             *action.mutable_duration() = TimeUtil::MicrosecondsToDuration(cmsAction.GetDuration());
@@ -144,6 +149,8 @@ namespace {
         switch (permission.GetAction().GetType()) {
         case NKikimrCms::TAction::DRAIN_NODE:
             return ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_drain_action());
+        case NKikimrCms::TAction::CORDON_NODE:
+            return ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_cordon_action());
         default:
             return ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_lock_action());
         }
@@ -956,12 +963,12 @@ public:
         }
         const ui64 expectedSeqNo = FromString(cmsIt->second.Action.GetMaintenanceTaskContext());
         const ui64 actualSeqNo = record.GetDrainSeqNo();
-        if (actualSeqNo > expectedSeqNo || (actualSeqNo == expectedSeqNo && !record.GetDrainInProgress())) {
+        if (actualSeqNo > expectedSeqNo || (actualSeqNo == expectedSeqNo && !record.HasDrainInProgress())) {
             actionInfo.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PERFORMED);
-        } else if (actualSeqNo == expectedSeqNo && record.GetDrainInProgress()) {
+        } else if (actualSeqNo == expectedSeqNo && record.HasDrainInProgress()) {
             actionInfo.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_IN_PROGRESS);
-            if (record.HasProgress()) {
-                actionInfo.set_details(Sprintf("Progress: %.2f%%", record.GetProgress()));
+            if (record.GetDrainInProgress().HasProgress()) {
+                actionInfo.set_details(Sprintf("Progress: %.2f%%", record.GetDrainInProgress().GetProgress()));
             }
         } else {
             actionInfo.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_UNSPECIFIED);

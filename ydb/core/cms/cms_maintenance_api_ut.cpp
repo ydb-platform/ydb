@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
                 auto response = std::make_unique<TEvHive::TEvResponseDrainInfo>();
                 response->Record.SetNodeId(env.GetNodeId(1));
                 response->Record.SetDrainSeqNo(requestDrainCount++);
-                response->Record.SetDrainInProgress(true);
+                response->Record.MutableDrainInProgress();
                 env.Send(new IEventHandle(ev->Sender, env.GetSender(), response.release(), 0, ev->Cookie), 0);
             }
         });
@@ -367,8 +367,9 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         );
 
         auto getResult = env.CheckMaintenanceTaskGet("task-1", Ydb::StatusIds::SUCCESS);
-        auto status = getResult.action_group_states(0).action_states(0).status();
-        UNIT_ASSERT_VALUES_EQUAL(status, ActionState::ACTION_STATUS_PERFORMED);
+        const auto& actionState = getResult.action_group_states(0).action_states(0);
+        UNIT_ASSERT_VALUES_EQUAL(actionState.status(), ActionState::ACTION_STATUS_PERFORMED);
+        UNIT_ASSERT(actionState.action().has_cordon_action());
     }
 }
 

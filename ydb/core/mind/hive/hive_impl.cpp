@@ -3023,7 +3023,7 @@ std::optional<TActorId> THive::GetPipeToTenantHive(const TNodeInfo* nodeInfo) {
         return std::nullopt;
     }
     TDomainInfo* domainInfo = FindDomain(nodeInfo->ServicedDomains.front());
-    if (!domainInfo || domainInfo->HiveId == 0 == domainInfo->HiveId == TabletID()) {
+    if (!domainInfo || domainInfo->HiveId == 0 || domainInfo->HiveId == TabletID()) {
         return std::nullopt;
     }
     return domainInfo->GetPipeToHive(this);

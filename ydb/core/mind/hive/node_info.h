@@ -100,7 +100,7 @@ public:
     ui64 DrainSeqNo = 0;
     std::optional<TLastScheduledTablet> LastScheduledTablet; // remembered for a limited time
     TBridgePileId BridgePileId;
-    IActor* DrainActor = nullptr;
+    THiveDrain* DrainActor = nullptr;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;

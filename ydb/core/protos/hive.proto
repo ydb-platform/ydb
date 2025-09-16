@@ -5,6 +5,8 @@ import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/follower_group.proto";
 
+import "google/protobuf/empty.proto";
+
 package NKikimrHive;
 option java_package = "ru.yandex.kikimr.proto";
 
@@ -648,10 +650,16 @@ message TEvRequestDrainInfo {
 }
 
 message TEvResponseDrainInfo {
+    message TDrainInProgress {
+        optional float Progress = 1;
+    }
+
     optional uint32 NodeId = 1;
     optional uint64 DrainSeqNo = 2;
-    optional bool DrainInProgress = 3;
-    optional float Progress = 4;
+    oneof DrainStatus {
+        TDrainInProgress DrainInProgress = 3;
+        google.protobuf.Empty NotRunning = 4;
+    }
 }
 
 message TEvSetDown {

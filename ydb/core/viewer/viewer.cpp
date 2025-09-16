@@ -972,6 +972,7 @@ NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo:
     case NKikimrWhiteboard::TTabletStateInfo::Lock:
     case NKikimrWhiteboard::TTabletStateInfo::RebuildGraph:
     case NKikimrWhiteboard::TTabletStateInfo::ResolveLeader:
+    case NKikimrWhiteboard::TTabletStateInfo::Terminating:
         flag = NKikimrViewer::EFlag::Yellow;
         break;
     case NKikimrWhiteboard::TTabletStateInfo::Deleted:

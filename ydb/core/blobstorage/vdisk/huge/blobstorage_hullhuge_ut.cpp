@@ -30,7 +30,7 @@ namespace NKikimr {
             std::unique_ptr<THullHugeKeeperPersState> state(
                     new THullHugeKeeperPersState(vctx, chunkSize, appendBlockSize,
                         appendBlockSize, milestoneHugeBlobInBytes, maxBlobInBytes,
-                        overhead, freeChunksReservation, logf));
+                        overhead, freeChunksReservation, false, logf));
 
             state->LogPos = THullHugeRecoveryLogPos(0, 0, 100500, 50000, 70000, 56789, 39482);
 

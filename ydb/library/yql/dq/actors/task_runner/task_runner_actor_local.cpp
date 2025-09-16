@@ -219,15 +219,16 @@ private:
         }
 
         if (!ev->Get()->CheckpointOnly) {
-            if (!WatermarkRequests.empty()) {
+            res = TaskRunner->Run();
+
+            if (res == ERunStatus::PendingInput && !WatermarkRequests.empty()) {
                 auto watermarkRequest = WatermarkRequests.front();
                 if (TaskRunner->GetWatermark().WatermarkIn < watermarkRequest && ReadyToWatermark()) {
                     LOG_T("Task runner. Inject watermark " << watermarkRequest);
                     TaskRunner->SetWatermarkIn(watermarkRequest);
                 }
+                res = TaskRunner->Run();
             }
-
-            res = TaskRunner->Run();
         }
 
         for (auto& channelId : inputMap) {
@@ -635,7 +636,7 @@ private:
                 MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl(guard.GetMutex());
             } else {
                 MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
-            }   
+            }
         }
 
         if (settings.GetEnableSpilling()) {

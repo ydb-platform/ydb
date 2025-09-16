@@ -22,7 +22,6 @@ public:
                const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request)
         : TBaseActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
         , Sender(sender)
-        , Tablet(tablet)
         , TabletGeneration(tabletGeneration)
         , Request(request)
         , Response(new TEvPersQueue::TEvResponse)
@@ -219,7 +218,7 @@ private:
             Request.MutablePartitionRequest()->MutableCmdRead()->SetPartNo(0);
             THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
             req->Record = Request;
-            Send(Tablet, req.Release());
+            Send(TabletActorId, req.Release());
             return;
         }
         if (!partResp->GetResult().empty()) {
@@ -239,7 +238,7 @@ private:
 
                 THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
                 req->Record = Request;
-                Send(Tablet, req.Release());
+                Send(TabletActorId, req.Release());
                 InitialRequest = false;
                 return;
             }
@@ -294,7 +293,6 @@ private:
     }
 
     const TActorId Sender;
-    const TActorId Tablet;
     const ui32 TabletGeneration;
     NKikimrClient::TPersQueueRequest Request;
     THolder<TEvPersQueue::TEvResponse> Response;

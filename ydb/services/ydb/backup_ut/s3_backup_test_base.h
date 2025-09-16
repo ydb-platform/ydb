@@ -83,7 +83,9 @@ protected:
 
     NYdb::TKikimrWithGrpcAndRootSchema& Server() {
         if (!Server_) {
-            Server_.ConstructInPlace(AppConfig());
+            auto config = AppConfig();
+            config.MutableFeatureFlags()->SetEnableResourcePools(true);
+            Server_.ConstructInPlace(config);
 
             auto& runtime = *Server_->GetRuntime();
             runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_TRACE);

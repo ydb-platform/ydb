@@ -127,6 +127,7 @@ static THashSet<TString> MakeServiceCountersExtraLabels() {
     extraLabels.insert(DATABASE_LABEL);
     extraLabels.insert(SLOT_LABEL);
     extraLabels.insert(HOST_LABEL);
+    extraLabels.insert("monitoring_project");
     extraLabels.insert(DATABASE_ATTRIBUTE_LABELS.begin(),
                        DATABASE_ATTRIBUTE_LABELS.end());
     return extraLabels;

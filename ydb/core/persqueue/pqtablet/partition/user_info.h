@@ -276,15 +276,13 @@ struct TUserInfo: public TUserInfoBase {
 
         bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
 
-        auto partitionSubgroup = fcc
+        auto consumerSubgroup = fcc
             ? subgroup->GetSubgroup("consumer", User)
-                      ->GetSubgroup("partition_id", ToString(Partition))
             : subgroup->GetSubgroup("Client", User)
-                      ->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx))
-                      ->GetSubgroup("Partition", ToString(Partition));
+                      ->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx));
 
         auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
-            return partitionSubgroup->GetExpiringNamedCounter(
+            return consumerSubgroup->GetExpiringNamedCounter(
                 "name",
                 fcc ? "topic.partition." + forFCC : forFederation + "PerPartition",
                 deriv);

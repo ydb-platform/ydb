@@ -167,30 +167,29 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
     if (!counters) {
         return nullptr;
     }
+    // if (MonitoringProject.empty()) {
+    //     return nullptr;
+    // }
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        auto s = counters
+        return counters
             ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")
-            ->GetSubgroup("host", "");
-        if (MonitoringProject) {
-            s = s->GetSubgroup("monitoring_project", MonitoringProject);
-        }
-        return s
+            ->GetSubgroup("host", "")
+            ->GetSubgroup("monitoring_project", MonitoringProject)
             ->GetSubgroup("database", Config.GetYdbDatabasePath())
             ->GetSubgroup("cloud_id", CloudId)
             ->GetSubgroup("folder_id", FolderId)
             ->GetSubgroup("database_id", DbId)
-            ->GetSubgroup("topic", TopicConverter->GetClientsideName());
+            ->GetSubgroup("topic", TopicConverter->GetClientsideName())
+            ->GetSubgroup("partition_id", ToString(Partition));
     } else {
-        auto s = counters
+        return counters
             ->GetSubgroup("counters", "topics_per_partition")
-            ->GetSubgroup("host", "cluster");
-        if (MonitoringProject) {
-            s = s->GetSubgroup("monitoring_project", MonitoringProject);
-        }
-        return s
+            ->GetSubgroup("host", "cluster")
+            ->GetSubgroup("monitoring_project", MonitoringProject)
             ->GetSubgroup("Account", TopicConverter->GetAccount())
             ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
-            ->GetSubgroup("OriginDC", TopicConverter->GetCluster());
+            ->GetSubgroup("OriginDC", TopicConverter->GetCluster())
+            ->GetSubgroup("Partition", ToString(Partition));
     }
 }
 

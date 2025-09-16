@@ -5,11 +5,16 @@ Account=asdfgs:
 
         OriginDC=dc1:
 
-            Client=user:
+            Partition=0:
+                name=BytesWrittenPerPartition: 540
+                name=MessagesWrittenPerPartition: 30
+                name=SourceIdCount: 3
+                name=TimeSinceLastWriteMs: 0
+                name=WriteTimeLagMsByLastWrite: 0
 
-                ConsumerPath=shared/user:
+                Client=user:
 
-                    Partition=0:
+                    ConsumerPath=shared/user:
                         name=BytesReadPerPartition: 0
                         name=MessageLagByCommittedPerPartition: 30
                         name=MessageLagByLastReadPerPartition: 29
@@ -19,7 +24,16 @@ Account=asdfgs:
                         name=WriteTimeLagMsByCommittedPerPartition: 0
                         name=WriteTimeLagMsByLastReadPerPartition: 0
 
-                    Partition=1:
+            Partition=1:
+                name=BytesWrittenPerPartition: 360
+                name=MessagesWrittenPerPartition: 20
+                name=SourceIdCount: 2
+                name=TimeSinceLastWriteMs: 0
+                name=WriteTimeLagMsByLastWrite: 0
+
+                Client=user:
+
+                    ConsumerPath=shared/user:
                         name=BytesReadPerPartition: 0
                         name=MessageLagByCommittedPerPartition: 20
                         name=MessageLagByLastReadPerPartition: 19
@@ -28,18 +42,4 @@ Account=asdfgs:
                         name=TimeSinceLastReadMsPerPartition: 0
                         name=WriteTimeLagMsByCommittedPerPartition: 0
                         name=WriteTimeLagMsByLastReadPerPartition: 0
-
-            Partition=0:
-                name=BytesWrittenPerPartition: 540
-                name=MessagesWrittenPerPartition: 30
-                name=SourceIdCount: 3
-                name=TimeSinceLastWriteMs: 0
-                name=WriteTimeLagMsByLastWrite: 0
-
-            Partition=1:
-                name=BytesWrittenPerPartition: 360
-                name=MessagesWrittenPerPartition: 20
-                name=SourceIdCount: 2
-                name=TimeSinceLastWriteMs: 0
-                name=WriteTimeLagMsByLastWrite: 0
 </pre>

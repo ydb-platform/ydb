@@ -97,6 +97,10 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 tabletConfig->SetMetricsLevel(static_cast<decltype(tabletConfig->GetMetricsLevel())>(*parameters.metricsLevel));
             }
 
+            if (parameters.monitoringProject) {
+                tabletConfig->SetMonitoringProject(*parameters.monitoringProject);
+            }
+
             for (auto& u : users) {
                 auto* consumer = tabletConfig->AddConsumers();
                 consumer->SetName(u.first);

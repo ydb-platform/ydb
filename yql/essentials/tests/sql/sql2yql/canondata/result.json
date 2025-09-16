@@ -3989,6 +3989,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_expr-yql-20205_/sql.yql"
         }
     ],
+    "test_sql2yql.test[file-eval_over_pending_file_path]": [
+        {
+            "checksum": "4175a5ec852c055ea2d36b089c15263f",
+            "size": 1209,
+            "uri": "https://{canondata_backend}/1936997/254a883a5f7893192d20c38f7df7c30e99ac912e/resource.tar.gz#test_sql2yql.test_file-eval_over_pending_file_path_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[file-file_list_bools]": [
         {
             "checksum": "5f7d718ab0bb99c5147867c7a4a01b47",
@@ -4010,11 +4017,25 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_file-folder_path_/sql.yql"
         }
     ],
+    "test_sql2yql.test[file-nested_eval_over_pending_file_path]": [
+        {
+            "checksum": "0f9372a8b7dd78b76e9ef785c54dc0a0",
+            "size": 1453,
+            "uri": "https://{canondata_backend}/1777230/bdad664e5f4e03cb2adf0e6f8a2287b6378bdc7f/resource.tar.gz#test_sql2yql.test_file-nested_eval_over_pending_file_path_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[file-parse_file_bad_type_fail]": [
         {
             "checksum": "9a60a3a06c9386fe17dbd1f0e003fcf8",
             "size": 1108,
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_file-parse_file_bad_type_fail_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[file-pending_file_path]": [
+        {
+            "checksum": "a71a88d75e77045a796426c84ac7b148",
+            "size": 1194,
+            "uri": "https://{canondata_backend}/1031349/d6bc6321a94cfdd335f3882d6f23ade85145fa6b/resource.tar.gz#test_sql2yql.test_file-pending_file_path_/sql.yql"
         }
     ],
     "test_sql2yql.test[file-second_pass_parse_file_fail]": [
@@ -5121,6 +5142,13 @@
             "checksum": "80ead6231737f8f72d3ee517c5161c3b",
             "size": 1626,
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_optimizers-normalize_depends_on_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[optimizers-normalize_eq_filter_opts]": [
+        {
+            "checksum": "f81d710d31518b64e76ebbaf59014c6a",
+            "size": 2499,
+            "uri": "https://{canondata_backend}/1936273/9da41275b1f6068607625d1acf388b79d6f67ae5/resource.tar.gz#test_sql2yql.test_optimizers-normalize_eq_filter_opts_/sql.yql"
         }
     ],
     "test_sql2yql.test[optimizers-or_absorption]": [
@@ -11256,6 +11284,11 @@
             "uri": "file://test_sql_format.test_expr-yql-20205_/formatted.sql"
         }
     ],
+    "test_sql_format.test[file-eval_over_pending_file_path]": [
+        {
+            "uri": "file://test_sql_format.test_file-eval_over_pending_file_path_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[file-file_list_bools]": [
         {
             "uri": "file://test_sql_format.test_file-file_list_bools_/formatted.sql"
@@ -11271,9 +11304,19 @@
             "uri": "file://test_sql_format.test_file-folder_path_/formatted.sql"
         }
     ],
+    "test_sql_format.test[file-nested_eval_over_pending_file_path]": [
+        {
+            "uri": "file://test_sql_format.test_file-nested_eval_over_pending_file_path_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[file-parse_file_bad_type_fail]": [
         {
             "uri": "file://test_sql_format.test_file-parse_file_bad_type_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[file-pending_file_path]": [
+        {
+            "uri": "file://test_sql_format.test_file-pending_file_path_/formatted.sql"
         }
     ],
     "test_sql_format.test[file-second_pass_parse_file_fail]": [
@@ -12064,6 +12107,11 @@
     "test_sql_format.test[optimizers-normalize_depends_on]": [
         {
             "uri": "file://test_sql_format.test_optimizers-normalize_depends_on_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-normalize_eq_filter_opts]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-normalize_eq_filter_opts_/formatted.sql"
         }
     ],
     "test_sql_format.test[optimizers-or_absorption]": [

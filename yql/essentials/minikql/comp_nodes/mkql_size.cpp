@@ -63,8 +63,8 @@ public:
         const auto embType = FixedVectorType::get(type, 16);
         const auto cast = CastInst::Create(Instruction::BitCast, data, embType, "cast", block);
 
-        const auto mark = ExtractElementInst::Create(cast, {ConstantInt::get(type, 15)}, "mark", block);
-        const auto bsize = ExtractElementInst::Create(cast, {ConstantInt::get(type, 14)}, "bsize", block);
+        const auto mark = ExtractElementInst::Create(cast, ConstantInt::get(type, 15), "mark", block);
+        const auto bsize = ExtractElementInst::Create(cast, ConstantInt::get(type, 14), "bsize", block);
 
         const auto emb = BasicBlock::Create(context, "emb", ctx.Func);
         const auto str = BasicBlock::Create(context, "str", ctx.Func);
@@ -91,7 +91,7 @@ public:
             const auto type32 = Type::getInt32Ty(context);
             const auto strType = FixedVectorType::get(type32, 4);
             const auto four = CastInst::Create(Instruction::BitCast, data, strType, "four", block);
-            const auto ssize = ExtractElementInst::Create(four, {ConstantInt::get(type, 2)}, "ssize", block);
+            const auto ssize = ExtractElementInst::Create(four, ConstantInt::get(type, 2), "ssize", block);
             const auto full = SetterFor<ui32>(ssize, context, block);
 
             const auto half = CastInst::Create(Instruction::Trunc, data, Type::getInt64Ty(context), "half", block);

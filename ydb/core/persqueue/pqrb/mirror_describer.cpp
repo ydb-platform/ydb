@@ -72,7 +72,7 @@ void TMirrorDescriber::HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription:
         return req.ShortUtf8DebugString();
     };
     LOG_T("topic description: " << debugTopicDescriptionString(description.value().GetTopicDescription()));
-    ctx.Send(ReadBalancerActorId, ev->Release());
+    ctx.Send(TabletActorId, ev->Release());
     ctx.Schedule(DESCRIBE_RETRY_TIMEOUT_MAX, new TEvents::TEvWakeup());
 }
 

@@ -1134,7 +1134,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
             SimplePanel(str, "Backup Configuration", [&backupProgress](IOutputStream& str) {
                 HTML(str) {
-                    TAG_ATTRS(TFormC, {{"id", "backupForm"}, {"method", "GET"}}) {
+                    TAG_ATTRS(TFormC, {{"id", "backupForm"}, {"method", "POST"}}) {
                         DIV_CLASS("form-group") {
                             LABEL_CLASS_FOR("control-label", "backupPath") {
                                 str << "File Path";
@@ -1202,57 +1202,58 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                             $btn.prop('disabled', true);
 
                             $.ajax({
-                                url: window.location.pathname + '?startBackup=1&' + formData,
-                                method: 'GET',
-                                complete: function() {
-                                    if (window.history && window.history.replaceState) {
-                                        window.history.replaceState(null, '', window.location.pathname);
-                                    }
-                                    $('#backupStatus').text('Status: starting')
-                                        .removeClass('alert-danger alert-success')
-                                        .addClass('alert-info');
-                                    updateBackupProgress();
+                                url: window.location.pathname,
+                                method: 'POST',
+                                data: formData,
+                                success: function(response) {
+                                    $('body').html(response);
+                                },
+                                error: function(xhr, status, error) {
+                                    $btn.prop('disabled', false);
+                                    alert('Failed to start backup: ' + error);
                                 }
                             });
                         });
 
+                        function updateBackupProgress() {
+                            $.ajax({
+                                url: window.location.pathname + '?backupProgress=1',
+                                dataType: 'json',
+                                success: function(data) {
+                                    var status = data.status.toLowerCase();
+                                    var progress = data.progress;
+                                    var processed = data.processed;
+                                    var total = data.total;
+
+                                    if (status === 'running' || status === 'starting') {
+                                        $('#backupProgress .progress-bar').css('width', progress + '%')
+                                            .text(progress.toFixed(1) + '%');
+                                        $('#backupStatus').text('Status: ' + status);
+                                        $('#backupDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                        setTimeout(updateBackupProgress, 1000);
+                                    } else if (status === 'completed') {
+                                        $('#backupProgress .progress-bar').css('width', '100%')
+                                            .text('100%');
+                                        $('#backupStatus').text('Status: backup completed successfully')
+                                            .removeClass('alert-info alert-danger').addClass('alert-success');
+                                        $('#backupDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                        $('button[name="startBackup"]').prop('disabled', false);
+                                    } else if (status.startsWith('error:')) {
+                                        $('#backupStatus').text('Status: ' + status)
+                                            .removeClass('alert-info alert-success').addClass('alert-danger');
+                                        $('button[name="startBackup"]').prop('disabled', false);
+                                    } else {
+                                        $('button[name="startBackup"]').prop('disabled', false);
+                                    }
+                                },
+                                error: function() {
+                                    setTimeout(updateBackupProgress, 1000);
+                                }
+                            });
+                        }
+
                         )" << (backupProgress.IsRunning() ? "updateBackupProgress();" : "") << R"(
                     });
-
-                    function updateBackupProgress() {
-                        $.ajax({
-                            url: window.location.pathname + '?backupProgress=1',
-                            dataType: 'json',
-                            success: function(data) {
-                                var status = data.status.toLowerCase();
-                                var progress = data.progress;
-                                var processed = data.processed;
-                                var total = data.total;
-
-                                if (status === 'running' || status === 'starting') {
-                                    $('#backupProgress .progress-bar').css('width', progress + '%')
-                                        .text(progress.toFixed(1) + '%');
-                                    $('#backupStatus').text('Status: ' + status);
-                                    $('#backupDetails').text('Processed: ' + processed + ' / Total: ' + total);
-                                    setTimeout(updateBackupProgress, 1000);
-                                } else if (status === 'completed') {
-                                    $('#backupProgress .progress-bar').css('width', '100%')
-                                        .text('100%');
-                                    $('#backupStatus').text('Status: backup completed successfully')
-                                        .removeClass('alert-info alert-danger').addClass('alert-success');
-                                    $('#backupDetails').text('Processed: ' + processed + ' / Total: ' + total);
-                                    $('button[name="startBackup"]').prop('disabled', false);
-                                } else if (status.startsWith('error:')) {
-                                    $('#backupStatus').text('Status: ' + status)
-                                        .removeClass('alert-info alert-success').addClass('alert-danger');
-                                    $('button[name="startBackup"]').prop('disabled', false);
-                                }
-                            },
-                            error: function() {
-                                setTimeout(updateBackupProgress, 1000);
-                            }
-                        });
-                    }
                     </script>
                     )";
                 }
@@ -1293,7 +1294,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
             SimplePanel(str, "Restore Configuration", [&restoreProgress](IOutputStream& str) {
                 HTML(str) {
-                    TAG_ATTRS(TFormC, {{"id", "restoreForm"}, {"method", "GET"}}) {
+                    TAG_ATTRS(TFormC, {{"id", "restoreForm"}, {"method", "POST"}}) {
                         DIV_CLASS("form-group") {
                             LABEL_CLASS_FOR("control-label", "restorePath") {
                                 str << "Backup File Path";
@@ -1359,56 +1360,60 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                             $btn.prop('disabled', true);
 
                             $.ajax({
-                                url: window.location.pathname + '?startRestore=1&' + formData,
-                                method: 'GET',
-                                complete: function() {
-                                    $('#restoreStatus').text('Status: starting')
-                                        .removeClass('alert-success')
-                                        .addClass('alert-warning');
-                                    updateRestoreProgress();
+                                url: window.location.pathname,
+                                method: 'POST',
+                                data: formData,
+                                success: function(response) {
+                                    $('body').html(response);
+                                },
+                                error: function(xhr, status, error) {
+                                    $btn.prop('disabled', false);
+                                    alert('Failed to start restore: ' + error);
                                 }
                             });
                         });
 
+                        function updateRestoreProgress() {
+                            $.ajax({
+                                url: window.location.pathname + '?restoreProgress=1',
+                                dataType: 'json',
+                                success: function(data) {
+                                    var status = data.status.toLowerCase();
+                                    var progress = data.progress;
+                                    var processed = data.processed;
+                                    var total = data.total;
+
+                                    if (status === 'running' || status === 'starting') {
+                                        $('#restoreProgress .progress-bar').css('width', progress + '%')
+                                            .text(progress.toFixed(1) + '%');
+                                        $('#restoreStatus').text('Status: ' + status);
+                                        $('#restoreDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                        setTimeout(updateRestoreProgress, 1000);
+                                    } else if (status === 'completed') {
+                                        $('#restoreProgress .progress-bar').css('width', '100%')
+                                            .text('100%')
+                                            .removeClass('progress-bar-danger')
+                                            .addClass('progress-bar-success');
+                                        $('#restoreStatus').text('Status: restore completed successfully')
+                                            .removeClass('alert-warning alert-danger').addClass('alert-success');
+                                        $('#restoreDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                        $('button[name="startRestore"]').prop('disabled', false);
+                                    } else if (status.startsWith('error:')) {
+                                        $('#restoreStatus').text('Status: ' + status)
+                                            .removeClass('alert-warning alert-success').addClass('alert-danger');
+                                        $('button[name="startRestore"]').prop('disabled', false);
+                                    } else {
+                                        $('button[name="startRestore"]').prop('disabled', false);
+                                    }
+                                },
+                                error: function() {
+                                    setTimeout(updateRestoreProgress, 1000);
+                                }
+                            });
+                        }
+
                         )" << (restoreProgress.IsRunning() ? "updateRestoreProgress();" : "") << R"(
                     });
-
-                    function updateRestoreProgress() {
-                        $.ajax({
-                            url: window.location.pathname + '?restoreProgress=1',
-                            dataType: 'json',
-                            success: function(data) {
-                                var status = data.status.toLowerCase();
-                                var progress = data.progress;
-                                var processed = data.processed;
-                                var total = data.total;
-
-                                if (status === 'running' || status === 'starting') {
-                                    $('#restoreProgress .progress-bar').css('width', progress + '%')
-                                        .text(progress.toFixed(1) + '%');
-                                    $('#restoreStatus').text('Status: ' + status);
-                                    $('#restoreDetails').text('Processed: ' + processed + ' / Total: ' + total);
-                                    setTimeout(updateRestoreProgress, 1000);
-                                } else if (status === 'completed') {
-                                    $('#restoreProgress .progress-bar').css('width', '100%')
-                                        .text('100%')
-                                        .removeClass('progress-bar-danger')
-                                        .addClass('progress-bar-success');
-                                    $('#restoreStatus').text('Status: restore completed successfully')
-                                        .removeClass('alert-warning').addClass('alert-success');
-                                    $('#restoreDetails').text('Processed: ' + processed + ' / Total: ' + total);
-                                    $('button[name="startRestore"]').prop('disabled', false);
-                                } else if (status.startsWith('error:')) {
-                                    $('#restoreStatus').text('Status: ' + status)
-                                        .removeClass('alert-warning').addClass('alert-danger');
-                                    $('button[name="startRestore"]').prop('disabled', false);
-                                }
-                            },
-                            error: function() {
-                                setTimeout(updateRestoreProgress, 1000);
-                            }
-                        });
-                    }
                     </script>
                     )";
                 }
@@ -1624,6 +1629,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
         const auto& request = ev->Get()->Request;
         const auto& params = request.GetParams();
+        const auto& postParams = request.GetPostParams();
 
         switch (ParseRequestType(request.GetPathInfo())) {
         case ERequestType::Index:
@@ -1659,14 +1665,14 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             break;
 
         case ERequestType::Backup:
-            if (params.Has("startBackup")) {
+            if (postParams.Has("backupPath")) {
                 if (BackupProgress.IsRunning()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderBackup(BackupProgress, false, "Backup is already running")
                     ));
                 }
 
-                const TString filePath = params.Get("backupPath");
+                const TString filePath = postParams.Get("backupPath");
                 if (filePath.empty()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderBackup(BackupProgress, false, "Backup file path is required")
@@ -1674,8 +1680,8 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 }
 
                 ui32 inFlightLimit = BackupLimits.DefaultInFlight;
-                if (params.Has("inFlightLimit")) {
-                    if (!TryFromString(params.Get("inFlightLimit"), inFlightLimit)) {
+                if (postParams.Has("inFlightLimit")) {
+                    if (!TryFromString(postParams.Get("inFlightLimit"), inFlightLimit)) {
                         return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                             RenderBackup(BackupProgress, false, "Invalid in-flight limit value")
                         ));
@@ -1703,14 +1709,14 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderBackup(BackupProgress)));
 
         case ERequestType::Restore:
-            if (params.Has("startRestore")) {
+            if (postParams.Has("restorePath")) {
                 if (RestoreProgress.IsRunning()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderRestore(RestoreProgress, false, "Restore is already running")
                     ));
                 }
 
-                const TString filePath = params.Get("restorePath");
+                const TString filePath = postParams.Get("restorePath");
                 if (filePath.empty()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderRestore(RestoreProgress, false, "Restore file path is required")
@@ -1718,15 +1724,15 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 }
 
                 ui64 schemeShardId = 0;
-                if (!TryFromString(params.Get("schemeShardId"), schemeShardId)) {
+                if (!TryFromString(postParams.Get("schemeShardId"), schemeShardId)) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderRestore(RestoreProgress, false, "Invalid Scheme Shard ID")
                     ));
                 }
 
                 ui64 generation = 1;
-                if (params.Has("generation")) {
-                    TryFromString(params.Get("generation"), generation);
+                if (postParams.Has("generation")) {
+                    TryFromString(postParams.Get("generation"), generation);
                 }
 
                 RestoreProgress = TRestoreProgress();

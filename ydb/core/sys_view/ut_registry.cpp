@@ -675,7 +675,7 @@ struct Schema : NIceDb::Schema {
             LastAccessedAt, 
             Warnings>;
     };
-};
+
     struct PrimaryIndexStats : Table<22> {
         struct PathId           : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Kind             : Column<2, NScheme::NTypeIds::Utf8> {};

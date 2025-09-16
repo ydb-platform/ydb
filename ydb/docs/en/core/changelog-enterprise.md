@@ -6,7 +6,7 @@
 
 Release date: July 29, 2025.
 
-#### Functionality
+#### New Features
 
 * [Added](https://github.com/ydb-platform/ydb/pull/13251) support for restart without downtime in [a minimal fault-tolerant configuration of a cluster](./concepts/topology.md#reduced) that uses the three-node variant of `mirror-3-dc`.
 * [Added](https://github.com/ydb-platform/ydb/pull/13220) new UDF Roaring Bitmap functions: AndNotWithBinary, FromUint32List, RunOptimize.
@@ -75,13 +75,13 @@ Release date: March 6, 2025.
 
 Release date: December 24, 2024.
 
-#### Functionality
+#### New Features
 
 * Introduced [query tracing](./reference/observability/tracing/setup), a tool that allows you to view the detailed path of a request through a distributed system.
 * Added support for [asynchronous replication](./concepts/async-replication), that allows synchronizing data between YDB databases in near real time. It can also be used for data migration between databases with minimal downtime for applications interacting with these databases.
 * Added support for [views](./concepts/datamodel/view), which can be enabled by the cluster administrator using the `enable_views` setting in [dynamic configuration](./maintenance/manual/dynamic-config#updating-dynamic-configuration).
 * Extended [federated query](./concepts/federated_query/) capabilities to support new external data sources: MySQL, Microsoft SQL Server, and Greenplum.
-* Published [documentation](./devops/deployment-options/manual/federated-queries/connector-deployment.md) on deploying YDB with [federated query](./concepts/federated_query/) functionality (manual setup).
+* Published [documentation](./devops/deployment-options/manual/federated-queries/connector-deployment.md) on deploying YDB with [federated query](./concepts/federated_query/) New Features (manual setup).
 * Added a new launch parameter `FQ_CONNECTOR_ENDPOINT` for YDB Docker containers that specifies an external data source connector address. Added support for TLS encryption for connections to the connector and the ability to expose the connector service port locally on the same host as the dynamic YDB node.
 * Added an [auto-partitioning mode](./concepts/topic#autopartitioning) for topics, where partitions can dynamically split based on load while preserving message read-order and exactly-once guarantees. The mode can be enabled by the cluster administrator using the settings `enable_topic_split_merge` and `enable_pqconfig_transactions_at_scheme_shard` in [dynamic configuration](./maintenance/manual/dynamic-config#updating-dynamic-configuration).
 * Added support for transactions involving [topics](./concepts/topic) and row-based tables, enabling transactional data transfer between tables and topics, or between topics, ensuring no data loss or duplication. Transactions can be enabled by the cluster administrator using the settings `enable_topic_service_tx` and `enable_pqconfig_transactions_at_scheme_shard` in [dynamic configuration](./maintenance/manual/dynamic-config#updating-dynamic-configuration).
@@ -120,7 +120,7 @@ Release date: December 24, 2024.
 * [Separated](https://github.com/ydb-platform/ydb-embedded-ui/pull/1422) donor disks from other disks in the UI.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1154) support for InterruptInheritance ACL and improved visualization of active ACLs.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/889) a display of the current UI version.
-* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1229) a tab with information about the status of settings for enabling experimental functionality.
+* [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1229) a tab with information about the status of settings for enabling experimental New Features.
 
 #### Performance
 
@@ -159,7 +159,7 @@ Release date: December 24, 2024.
 
 Release date: August 20, 2024.
 
-### Functionality
+### New Features
 
 * Added the ability to set [maintenance task priorities](./devops/concepts/maintenance-without-downtime.md#priority) in the [cluster management system](./concepts/glossary.md#cms).
 * Added a setting to enable [stable names](./reference/configuration/#node-broker-config) for cluster nodes within a tenant.
@@ -207,7 +207,7 @@ Release date: August 20, 2024.
 
 Release date: July 31, 2024.
 
-### Functionality
+### New Features
 
 * The [Knn UDF](./yql/reference/udf/list/knn.md) function for precise nearest vector search has been implemented.
 * The gRPC Query service has been developed, enabling the execution of all types of queries (DML, DDL) and retrieval of unlimited amounts of data.
@@ -265,17 +265,17 @@ Release date: May 14, 2024.
 
 Release date: October 12, 2023.
 
-### Functionality
+### New Features
 
-* Implemented visibility of own changes. With this feature enabled you can read changed values from the current transaction, which has not been committed yet. This functionality also allows multiple modifying operations in one transaction on a table with secondary indexes.
+* Implemented visibility of own changes. With this feature enabled you can read changed values from the current transaction, which has not been committed yet. This New Features also allows multiple modifying operations in one transaction on a table with secondary indexes.
 * Added support for [column tables](concepts/datamodel/table.md#column-tables). It is now possible to create analytical reports based on stored data in YDB with performance comparable to specialized analytical DBMS.
 * Added support for Kafka API for topics. YDB topics can now be accessed via a Kafka-compatible API designed for migrating existing applications. Support for Kafka protocol version 3.4.0 is provided.
 * Added the ability to [write to a topic without deduplication](concepts/topic.md#no-dedup). This is important in cases where message processing order is not critical.
 * YQL has added the capabilities to [create](yql/reference/syntax/create-topic.md), [modify](yql/reference/syntax/alter-topic.md), and [delete](yql/reference/syntax/delete.md) topics.
 * Added support of assigning and revoking access rights using the YQL `GRANT` and `REVOKE` commands.
 * Added support of DML-operations logging in the audit log.
-* **_(Experimental)_** When writing messages to a topic, it is now possible to pass metadata. To enable this functionality, add `enable_topic_message_meta: true` to the [configuration file](reference/configuration/index.md).
-* **_(Experimental)_** Added support for [reading from topics in a transaction](reference/ydb-sdk/topic.md#read-tx). It is now possible to read from topics and write to tables within a transaction, simplifying the data transfer scenario from a topic to a table. To enable this functionality, add `enable_topic_service_tx: true` to the [configuration file](reference/configuration/index.md).
+* **_(Experimental)_** When writing messages to a topic, it is now possible to pass metadata. To enable this New Features, add `enable_topic_message_meta: true` to the [configuration file](reference/configuration/index.md).
+* **_(Experimental)_** Added support for [reading from topics in a transaction](reference/ydb-sdk/topic.md#read-tx). It is now possible to read from topics and write to tables within a transaction, simplifying the data transfer scenario from a topic to a table. To enable this New Features, add `enable_topic_service_tx: true` to the [configuration file](reference/configuration/index.md).
 * **_(Experimental)_** Added support for PostgreSQL compatibility. This involves executing SQL queries in PostgreSQL dialect on the YDB infrastructure using the PostgreSQL network protocol. With this capability, familiar PostgreSQL tools such as psql and drivers (e.g., pq for Golang and psycopg2 for Python) can be used. Queries can be developed using the familiar PostgreSQL syntax and take advantage of YDB's benefits such as horizontal scalability and fault tolerance.
 * **_(Experimental)_** Added support for federated queries. This enables retrieving information from various data sources without the need to move the data into YDB. Federated queries support interaction with ClickHouse and PostgreSQL databases, as well as S3 class data stores (Object Storage). YQL queries can be used to access these databases without duplicating data between systems.
 
@@ -283,7 +283,7 @@ Release date: October 12, 2023.
 
 * A new option `PostgreSQL` has been added to the query type selector settings, which is available when the `Enable additional query modes` parameter is enabled. Also, the query history now takes into account the syntax used when executing the query.
 * The YQL query template for creating a table has been updated. Added a description of the available parameters.
-* Now sorting and filtering for Storage and Nodes tables takes place on the server. To use this functionality, you need to enable the parameter `Offload tables filters and sorting to backend` in the experiments section.
+* Now sorting and filtering for Storage and Nodes tables takes place on the server. To use this New Features, you need to enable the parameter `Offload tables filters and sorting to backend` in the experiments section.
 * Buttons for creating, changing and deleting [topics](concepts/topic.md) have been added to the context menu.
 * Added sorting by criticality for all issues in the tree in `Healthcheck`.
 

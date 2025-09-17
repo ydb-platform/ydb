@@ -221,11 +221,20 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
     
     total_teams = len(teams)
     sent_count = 0
+    processed_count = 0
+    failed_teams = []
     
     if dry_run:
         print(f"🔍 Dry run - showing formatted messages for {total_teams} teams...")
     else:
         print(f"📤 Sending messages for {total_teams} teams...")
+        
+        # Check Telegram API availability before starting to send messages
+        print("🔍 Checking Telegram API availability before sending messages...")
+        if not wait_for_telegram_api_availability(bot_token, max_wait_minutes=30, max_checks=10):
+            print("❌ Telegram API is not available. Aborting message sending.")
+            print("💡 Messages will not be sent. Please try again later when API is available.")
+            return
     
     for team_name, issues in teams.items():
         if not issues:
@@ -246,6 +255,8 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
         if not message.strip():
             continue
         
+        processed_count += 1
+        
         if dry_run:
             print(f"\n--- Team: {team_name} ---")
             print(f"📨 Channel: {team_chat_id}" + (f" (thread {team_thread_id})" if team_thread_id else ""))
@@ -259,15 +270,19 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                 print(f"✅ Message sent for team: {team_name}")
             else:
                 print(f"❌ Failed to send message for team: {team_name} after {max_retries} retries")
+                failed_teams.append(team_name)
             
-            # Add delay between messages
-            if sent_count < total_teams:
+            # Add delay between message attempts (not just successful ones)
+            if processed_count < total_teams:
                 time.sleep(delay)
     
     if dry_run:
         print(f"🎉 Dry run completed: {sent_count}/{total_teams} team messages formatted!")
     else:
         print(f"🎉 Sent {sent_count}/{total_teams} team messages successfully!")
+        if failed_teams:
+            print(f"⚠️ Failed to send messages for teams: {', '.join(failed_teams)}")
+            print(f"💡 Consider re-running the script for failed teams only")
 
 
 def parse_chat_and_thread_id(chat_id_str):
@@ -336,6 +351,74 @@ def test_telegram_connection(bot_token, chat_id, message_thread_id=None):
     except requests.exceptions.RequestException as e:
         print(f"❌ Telegram connection failed: {e}")
         return False
+
+
+def wait_for_telegram_api_availability(bot_token, max_wait_minutes=30, max_checks=10):
+    """
+    Wait for Telegram API to become available with limited attempts.
+    
+    Args:
+        bot_token (str): Telegram bot token
+        max_wait_minutes (int): Maximum time to wait in minutes (default: 30)
+        max_checks (int): Maximum number of API checks (default: 10)
+        
+    Returns:
+        bool: True if API becomes available, False if timeout or max checks exceeded
+    """
+    
+    print(f"🔍 Checking Telegram API availability (max {max_wait_minutes} minutes, max {max_checks} checks)...")
+    
+    # Calculate wait interval: distribute checks evenly across the wait period
+    wait_interval_seconds = (max_wait_minutes * 60) // max_checks
+    # But ensure minimum 30 seconds between checks to avoid spam
+    wait_interval_seconds = max(30, wait_interval_seconds)
+    
+    print(f"⏱️ Will check every {wait_interval_seconds} seconds")
+    
+    start_time = time.time()
+    max_wait_seconds = max_wait_minutes * 60
+    
+    for attempt in range(max_checks):
+        print(f"🔄 API availability check {attempt + 1}/{max_checks}...")
+        
+        # Use getMe API to check bot token and API availability
+        url = f"https://api.telegram.org/bot{bot_token}/getMe"
+        
+        try:
+            response = requests.get(url, timeout=15)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('ok'):
+                    elapsed_time = time.time() - start_time
+                    print(f"✅ Telegram API is available! (checked after {elapsed_time:.1f} seconds)")
+                    return True
+                else:
+                    print(f"❌ API responded but with error: {result.get('description', 'Unknown error')}")
+            else:
+                print(f"❌ API check failed with HTTP {response.status_code}")
+                
+        except requests.exceptions.RequestException as e:
+            print(f"❌ API check failed: {e}")
+        
+        # Check if we've exceeded the time limit
+        elapsed_time = time.time() - start_time
+        if elapsed_time >= max_wait_seconds:
+            print(f"⏰ Time limit reached ({max_wait_minutes} minutes)")
+            break
+            
+        # Wait before next attempt (except for the last attempt)
+        if attempt < max_checks - 1:
+            remaining_time = max_wait_seconds - elapsed_time
+            actual_wait = min(wait_interval_seconds, remaining_time)
+            
+            if actual_wait > 0:
+                print(f"⏳ Waiting {actual_wait:.0f} seconds before next check...")
+                time.sleep(actual_wait)
+    
+    elapsed_time = time.time() - start_time
+    print(f"❌ Telegram API is not available after {max_checks} checks in {elapsed_time:.1f} seconds")
+    return False
 
 
 def load_team_channels(team_channels_json):

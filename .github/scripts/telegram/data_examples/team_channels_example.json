@@ -1,0 +1,62 @@
+{
+  "channels": {
+    "main": "1234567890",
+    "dev_alerts": "9876543210/123",
+    "team_notifications": "5555555555"
+  },
+  "teams": {
+    "Unknown": {
+      "channel": "main",
+      "responsible": "@unknownresponsible"
+    },
+    "appteam": {
+      "channel": "team_notifications",
+      "responsible": "@appteamresponsible"
+    },
+    "engineering": {
+      "channel": "team_notifications",
+      "responsible": ["@engineeringlead1", "@engineeringlead2"]
+    },
+    "fq": {
+      "channel": "team_notifications",
+      "responsible": "@fqresponsible"
+    },
+    "qp": {
+      "channel": "team_notifications",
+      "responsible": ["@qplead", "@qptechlead"]
+    },
+    "system-infra": {
+      "channel": "team_notifications",
+      "responsible": "@systeminfraresponsible"
+    },
+    "platform": {
+      "channel": "team_notifications",
+      "responsible": ["@platformlead", "@platformarchitect"]
+    },
+    "storage": {
+      "channel": "team_notifications",
+      "responsible": "@storageresponsible"
+    },
+    "analytics": {
+      "channel": "team_notifications",
+      "responsible": "@analyticsresponsible"
+    },
+    "security": {
+      "channel": "dev_alerts",
+      "responsible": ["@securitylead", "@securityengineer"]
+    },
+    "devops": {
+      "channel": "dev_alerts",
+      "responsible": "@devopsresponsible"
+    },
+    "qa": {
+      "channel": "team_notifications",
+      "responsible": ["@qalead", "@qaautomationlead"]
+    },
+    "infrastructure": {
+      "channel": "dev_alerts",
+      "responsible": "@infrastructureresponsible"
+    }
+  },
+  "default_channel": "main"
+}

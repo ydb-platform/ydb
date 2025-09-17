@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 
+
 def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="Markdown", message_thread_id=None, disable_web_page_preview=True, max_retries=5, retry_delay=10, delay=1):
     """
     Send a message to Telegram channel with retry mechanism.
@@ -108,15 +109,32 @@ def _send_single_message(bot_token, chat_id, message, parse_mode, message_thread
             data['message_thread_id'] = message_thread_id
         
         try:
-            response = requests.post(url, data=data, timeout=30)
+            response = requests.post(url, data=data, timeout=60)  # Increased timeout
             
             # Always print response for debugging
             print(f"🔍 Telegram API Response: {response.status_code}")
             
-            if response.status_code != 200:
+            if response.status_code == 429:
+                # Handle rate limiting specifically
+                result = response.json()
+                retry_after = result.get('parameters', {}).get('retry_after', retry_delay)
+                print(f"❌ HTTP Error 429: Rate limited. Retry after {retry_after} seconds")
+                if attempt < max_retries:
+                    print(f"⏳ Waiting {retry_after} seconds before retry...")
+                    time.sleep(retry_after)
+                    continue
+                else:
+                    return False
+            elif response.status_code != 200:
                 print(f"❌ HTTP Error {response.status_code}: {response.text}")
                 if attempt < max_retries:
-                    print(f"⏳ Waiting {retry_delay} seconds before retry...")
+                    # Use exponential backoff for server errors (5xx) with maximum cap
+                    if response.status_code >= 500:
+                        wait_time = min(retry_delay * (2 ** (attempt - 1)), 60)  # Cap at 60 seconds
+                    else:
+                        wait_time = retry_delay
+                    print(f"⏳ Waiting {wait_time} seconds before retry...")
+                    time.sleep(wait_time)
                     continue
                 else:
                     return False
@@ -150,12 +168,21 @@ def _send_single_message(bot_token, chat_id, message, parse_mode, message_thread
             else:
                 return False
     
-    # If all retries failed, print the message that couldn't be sent
-    print(f"❌ Failed to send message after {max_retries} retries. Message content:")
+    # If all retries failed, print the message details for logging
+    print(f"❌ Failed to send message after {max_retries} retries.")
+    print(f"📋 FAILED MESSAGE LOG:")
+    print(f"   Chat ID: {chat_id}")
+    if message_thread_id:
+        print(f"   Thread ID: {message_thread_id}")
+    print(f"   Message Length: {len(message)} characters")
+    print("   Message content:")
     print("=" * 80)
     print(message)
     print("=" * 80)
+    
     return False
+
+
 
 
 def split_message(message, max_length=4000):

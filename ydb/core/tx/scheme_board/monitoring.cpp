@@ -1142,6 +1142,16 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 Danger(str, errorMessage);
             }
 
+            DIV_CLASS_ID("alert alert-warning", "backupWarning") {
+                if (!backupProgress.Warning.empty()) {
+                    STRONG() { str << "Warning:"; }
+                    str << " failed to backup paths:";
+                    PRE() { str << backupProgress.Warning; }
+                } else {
+                    str << "<script>$('#backupWarning').hide();</script>";
+                }
+            }
+
             SimplePanel(str, "Backup Configuration", [&backupProgress](IOutputStream& str) {
                 HTML(str) {
                     FORM_CLASS("form-horizontal") {
@@ -1239,12 +1249,20 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                     var progress = data.progress;
                                     var processed = data.processed;
                                     var total = data.total;
+                                    var warning = data.warning;
 
                                     if (status === 'running' || status === 'starting') {
                                         $('#backupProgress .progress-bar').css('width', progress + '%')
                                             .text(progress.toFixed(1) + '%');
                                         $('#backupStatus').text('Status: ' + status);
                                         $('#backupDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                        if (warning && warning.length > 0) {
+                                            $('#backupWarning')
+                                                .show()
+                                                .html('<strong>Warning:</strong><pre>' + warning + '</pre>');
+                                        } else {
+                                            $('#backupWarning').hide().empty();
+                                        }
                                         setTimeout(updateBackupProgress, 1000);
                                     } else if (status === 'completed') {
                                         $('#backupProgress .progress-bar').css('width', '100%')
@@ -1253,6 +1271,13 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                             .removeClass('alert-info alert-danger').addClass('alert-success');
                                         $('#backupDetails').text('Processed: ' + processed + ' / Total: ' + total);
                                         $('button[name="startBackup"]').prop('disabled', false);
+                                        if (warning && warning.length > 0) {
+                                            $('#backupWarning')
+                                                .show()
+                                                .html('<strong>Warning:</strong><pre>' + warning + '</pre>');
+                                        } else {
+                                            $('#backupWarning').hide().empty();
+                                        }
                                     } else if (status.startsWith('error:')) {
                                         $('#backupStatus').text('Status: ' + status)
                                             .removeClass('alert-info alert-success').addClass('alert-danger');

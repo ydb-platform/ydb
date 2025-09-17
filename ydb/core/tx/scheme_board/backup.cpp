@@ -35,7 +35,8 @@ TCommonProgress::TCommonProgress(const TEvCommonResult& ev)
     : TotalPaths(0)
     , ProcessedPaths(0)
     , Status(ev.Error ? EStatus::Error : EStatus::Completed)
-    , ErrorMessage(ev.Error.GetOrElse(""))
+    , Error(ev.Error.GetOrElse(""))
+    , Warning(ev.Warning.GetOrElse(""))
 {
 }
 
@@ -45,7 +46,7 @@ TString TCommonProgress::StatusToString() const {
         case EStatus::Starting: return "starting";
         case EStatus::Running: return "running";
         case EStatus::Completed: return "completed";
-        case EStatus::Error: return TStringBuilder() << "error: " << ErrorMessage;
+        case EStatus::Error: return TStringBuilder() << "error: " << Error;
     }
 }
 
@@ -55,6 +56,7 @@ TString TCommonProgress::ToJson() const {
     json["total"] = TotalPaths;
     json["progress"] = GetProgress();
     json["status"] = StatusToString();
+    json["warning"] = Warning;
 
     return WriteJson(json);
 }
@@ -201,7 +203,7 @@ private:
         PathByCookie.erase(it);
     }
 
-    void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
         const ui64 cookie = ev->Get()->Tag;
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
@@ -209,18 +211,26 @@ private:
             SBB_LOG_D("Timeout with inactive cookie: " << cookie);
             return;
         }
-        SBB_LOG_I("Timeout");
+        SBB_LOG_I("Timeout"
+            << ", path: " << it->second
+        );
+        Timeouts.emplace(it->second);
         MarkPathCompleted(it);
     }
 
-    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
-        SBB_LOG_I("Undelivered");
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         const ui64 cookie = ev->Cookie;
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
-            SBB_LOG_N("Unexpected cookie: " << cookie);
+            SBB_LOG_N("Undelivered"
+                << ", unexpected cookie: " << cookie
+            );
             return;
         }
+        SBB_LOG_I("Undelivered"
+            << ", path: " << it->second
+        );
+        Undelivered.emplace(it->second);
         MarkPathCompleted(it);
     }
 
@@ -230,17 +240,37 @@ private:
             << ", processed paths: " << ProcessedPaths
             << ", total paths: " << TotalPaths
             << ", pending paths: " << PendingPaths.size()
+            << ", timeouts: " << Timeouts.size()
+            << ", delivery problems: " << Undelivered.size()
         );
         Send(Parent, new TSchemeBoardMonEvents::TEvBackupProgress(TotalPaths, ProcessedPaths));
     }
 
+    TMaybe<TString> BuildWarning() const {
+        TStringBuilder warning;
+        if (!Timeouts.empty()) {
+            for (const auto& path : Timeouts) {
+                warning << "Timeout, path: " << path << '\n';
+            }
+        }
+        if (!Undelivered.empty()) {
+            for (const auto& path : Undelivered) {
+                warning << "Undelivered, path: " << path << '\n';
+            }
+        }
+        if (warning.empty()) {
+            return Nothing();
+        }
+        return warning;
+    }
+
     void ReplyError(const TString& error) {
-        Send(Parent, new TSchemeBoardMonEvents::TEvBackupResult(error));
+        Send(Parent, new TSchemeBoardMonEvents::TEvBackupResult(error, BuildWarning()));
         PassAway();
     }
 
     void ReplySuccess() {
-        Send(Parent, new TSchemeBoardMonEvents::TEvBackupResult());
+        Send(Parent, new TSchemeBoardMonEvents::TEvBackupResult(Nothing(), BuildWarning()));
         PassAway();
     }
 
@@ -249,8 +279,8 @@ private:
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeResponse, Handle);
 
-            hFunc(TEvents::TEvWakeup, HandleTimeout);
-            hFunc(TEvents::TEvUndelivered, HandleUndelivered);
+            hFunc(TEvents::TEvWakeup, Handle);
+            hFunc(TEvents::TEvUndelivered, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         }
     }
@@ -263,6 +293,8 @@ private:
     const TActorId Parent;
     TQueue<TString> PendingPaths;
     THashMap<ui64, TString> PathByCookie;
+    TSet<TString> Timeouts;
+    TSet<TString> Undelivered;
     TMaybe<TFileOutput> OutputFile;
     ui32 ProcessedPaths = 0;
     ui32 TotalPaths = 0;

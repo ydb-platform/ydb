@@ -123,7 +123,7 @@ std::optional<TTypeError> ValidateParquetIoType(const TTypeAnnotationNode* type,
             if (IsDataTypeNumeric(dataSlot) || IsDataTypeDateOrTzDate(dataSlot) || IsDataTypeDecimal(dataSlot) || IsDataTypeBigDate(dataSlot)) {
                 return std::nullopt;
             }
-            if (IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8, EDataSlot::Json, EDataSlot::JsonDocument, EDataSlot::Uuid}, dataSlot)) {
+            if (IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8, EDataSlot::Json, EDataSlot::Uuid}, dataSlot)) {
                 return std::nullopt;
             }
             return TTypeError{type};
@@ -145,7 +145,7 @@ std::optional<TTypeError> ValidateParquetIoType(const TTypeAnnotationNode* type,
                 return TTypeError{type, "tuple under optional is not supported"};
             }
             for (const auto* item : type->Cast<TTupleExprType>()->GetItems()) {
-                if (const auto error = ValidateParquetIoType(item)) {
+                if (const auto error = ValidateIoDataType(item->Cast<TDataExprType>())) {
                     return error;
                 }
             }

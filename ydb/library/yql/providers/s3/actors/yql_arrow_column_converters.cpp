@@ -758,7 +758,6 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
         case NUdf::EDataSlot::Timestamp64:
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
-        case NUdf::EDataSlot::JsonDocument:
             return ArrowComputeConvertor(columnName, yqlArrowType, s3OutputType);
         case NUdf::EDataSlot::TzDate:
         case NUdf::EDataSlot::TzDatetime:
@@ -862,7 +861,6 @@ bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataT
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
-        case NUdf::EDataSlot::JsonDocument:
             type = arrow::binary();
             return true;
         case NUdf::EDataSlot::Decimal:

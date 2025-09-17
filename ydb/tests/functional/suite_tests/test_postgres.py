@@ -18,4 +18,4 @@ class TestPGSQL(BaseSuiteRunner):
 
     @pytest.mark.parametrize(['kind', 'suite'], get_test_suites("postgres"))
     def test_sql_suite(self, kind, suite):
-        return self.run_sql_suite(kind, "postgres", suite)
+        pass

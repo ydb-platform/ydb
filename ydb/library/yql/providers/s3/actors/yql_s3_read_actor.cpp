@@ -1554,7 +1554,7 @@ public:
         IsWaitingFileQueueResponse = true;
     }
 
-    [[maybe_unused]] static constexpr char ActorName[] = "S3_STREAM_READ_ACTOR";
+    static constexpr char ActorName[] = "S3_STREAM_READ_ACTOR";
 
 private:
     class TBoxedBlock : public TComputationValue<TBoxedBlock> {

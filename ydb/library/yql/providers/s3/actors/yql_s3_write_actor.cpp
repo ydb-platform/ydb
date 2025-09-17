@@ -196,7 +196,7 @@ public:
         }
     }
 
-    [[maybe_unused]] static constexpr char ActorName[] = "S3_FILE_WRITE_ACTOR";
+    static constexpr char ActorName[] = "S3_FILE_WRITE_ACTOR";
 
     void Handle(TEvPrivate::TEvUploadFinished::TPtr& ev) {
         InFlight -= ev->Get()->UploadSize;
@@ -533,7 +533,7 @@ public:
         EgressStats.Level = params.StatsLevel;
     }
 
-    [[maybe_unused]] static constexpr char ActorName[] = "S3_WRITE_ACTOR";
+    static constexpr char ActorName[] = "S3_WRITE_ACTOR";
 
     void Bootstrap() {
         LOG_D("TS3WriteActor", "Bootstrap");

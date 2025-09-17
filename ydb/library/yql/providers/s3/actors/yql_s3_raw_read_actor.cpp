@@ -203,7 +203,7 @@ public:
         IsWaitingFileQueueResponse = true;
     }
 
-    [[maybe_unused]] static constexpr char ActorName[] = "S3_READ_ACTOR";
+    static constexpr char ActorName[] = "S3_READ_ACTOR";
 
 private:
     void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {}

@@ -27,9 +27,9 @@ private:
         TConclusionStatus InitCurrentData();
 
     public:
-        TIterator(const TStringBuf values, const std::shared_ptr<arrow::Schema>& schema)
+        TIterator(const TStringBuf values, const arrow::Schema& schema)
             : Values(values)
-            , Schema(schema->fields()) {
+            , Schema(schema.fields()) {
         }
 
         [[nodiscard]] TConclusionStatus Start() {
@@ -77,7 +77,7 @@ private:
     };
 
     template <class TActor>
-    [[nodiscard]] TConclusionStatus Scan(const std::shared_ptr<arrow::Schema>& schema, TActor& actor) const {
+    [[nodiscard]] TConclusionStatus Scan(const arrow::Schema& schema, TActor& actor) const {
         TIterator it(Values, schema);
         auto startConclusion = it.Start();
         if (startConclusion.IsFail()) {
@@ -110,10 +110,10 @@ public:
     };
     [[nodiscard]] TConclusionStatus Validate(const std::shared_ptr<arrow::Schema>& schema) const {
         TActorValidator actorValidation;
-        return Scan(schema, actorValidation);
+        return Scan(*schema, actorValidation);
     }
 
-    [[nodiscard]] bool DoValidate(const std::shared_ptr<arrow::Schema>& schema) const {
+    [[nodiscard]] bool DoValidate(const arrow::Schema& schema) const {
         TActorValidator actorValidation;
         auto conclusion = Scan(schema, actorValidation);
         if (conclusion.IsFail()) {
@@ -127,6 +127,7 @@ public:
     class TWriter {
     private:
         TString Data;
+
     public:
         TWriter(const ui32 reserveSize = 0) {
             Data.reserve(reserveSize + sizeof(ui8));
@@ -160,8 +161,9 @@ public:
     [[nodiscard]] TConclusionStatus AddToBuilders(
         const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const std::shared_ptr<arrow::Schema>& schema) const;
     [[nodiscard]] TConclusion<std::partial_ordering> Compare(
-        const TSimpleRowViewV0& item, const std::shared_ptr<arrow::Schema>& schema, const std::optional<ui32> columnsCount = {}) const;
+        const TSimpleRowViewV0& item, const arrow::Schema& schema, const std::optional<ui32> columnsCount = {}) const;
     [[nodiscard]] TConclusion<TString> DebugString(const std::shared_ptr<arrow::Schema>& schema) const;
+    [[nodiscard]] TConclusion<TString> DebugString(const arrow::Schema& schema) const;
 
     template <class T>
     class TGetValueActor {
@@ -204,7 +206,7 @@ public:
     template <class T>
     TConclusion<std::optional<T>> GetValue(const ui32 columnIndex, const std::shared_ptr<arrow::Schema>& schema) const {
         TGetValueActor<T> resultActor(columnIndex);
-        auto conclusion = Scan(schema, resultActor);
+        auto conclusion = Scan(*schema, resultActor);
         if (conclusion.IsFail()) {
             return conclusion;
         }

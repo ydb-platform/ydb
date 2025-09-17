@@ -23,7 +23,7 @@ public:
         AFL_VERIFY(Data);
     }
 
-    explicit TAccessorCollectedContainer(const arrow::Datum& data);
+    explicit TAccessorCollectedContainer(arrow::Datum&& data);
 
     const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& GetData() const {
         return Data;
@@ -37,12 +37,12 @@ public:
 class TAccessorsCollection {
 private:
     THashMap<ui32, TAccessorCollectedContainer> Accessors;
-    THashMap<ui32, std::shared_ptr<arrow::Scalar>> Constants;
+    THashMap<ui32, arrow::Datum> Constants;
     std::vector<ui32> ColumnIdsSequence;
     std::shared_ptr<TColumnFilter> Filter = std::make_shared<TColumnFilter>(TColumnFilter::BuildAllowFilter());
     bool UseFilter = true;
     std::optional<ui32> RecordsCountActual;
-    const std::optional<ui32> RecordsCountOriginal;
+    std::optional<ui32> RecordsCountOriginal;
     THashSet<i64> Markers;
 
 public:
@@ -155,8 +155,8 @@ public:
         return Accessors.contains(id) || Constants.contains(id);
     }
 
-    void AddCalculated(const ui32 columnId, const arrow::Datum& data);
-    void AddInput(const ui32 columnId, const arrow::Datum& data, const bool withFilter);
+    void AddCalculated(const ui32 columnId, arrow::Datum&& data);
+    void AddInput(const ui32 columnId, arrow::Datum&& data, const bool withFilter);
     void AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter);
     void AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter);
     void Upsert(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter);
@@ -165,6 +165,12 @@ public:
         AFL_VERIFY(columnId);
         AFL_VERIFY(scalar);
         AFL_VERIFY(Constants.emplace(columnId, scalar).second);
+    }
+
+    void AddConstantVerified(const ui32 columnId, arrow::Datum&& scalar) {
+        AFL_VERIFY(columnId);
+        AFL_VERIFY(scalar.is_scalar());
+        AFL_VERIFY(Constants.emplace(columnId, std::move(scalar)).second);
     }
 
     class TChunksMerger {
@@ -384,7 +390,7 @@ public:
         }
     }
 
-    void RemainOnly(const std::vector<ui32>& columns, const bool useAsSequence);
+    void InitResultSequence(const std::vector<ui32>& columns);
 
     arrow::Datum GetDatumVerified(const ui32 columnId) const {
         auto chunked = GetAccessorVerified(columnId)->GetChunkedArray();
@@ -443,6 +449,12 @@ public:
 
     std::shared_ptr<NArrow::TColumnFilter> GetNotAppliedFilter() const {
         return UseFilter ? nullptr : Filter;
+    }
+
+    void InitializeRecordsCount(const ui32 count) {
+        AFL_VERIFY(!HasData());
+        RecordsCountActual = count;
+        RecordsCountOriginal = count;
     }
 
     void AddFilter(const TColumnFilter& filter) {

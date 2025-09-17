@@ -30,41 +30,33 @@ class TFetchingScriptCursor;
 
 class TExecutionContext {
 private:
-    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator> ProgramIterator;
-    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor> ExecutionVisitor;
+    std::unique_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator> ProgramIterator;
 
     std::optional<ui32> CurrentProgramNodeId;
-    std::shared_ptr<TFetchingStepSignals> CurrentStepSignals;
     std::optional<TMonotonic> CurrentNodeStart;
-
     std::optional<TFetchingScriptCursor> CursorStep;
 
 public:
-    void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals) {
+    void OnStartProgramStepExecution(const ui32 nodeId) {
         if (!CurrentProgramNodeId) {
             CurrentNodeStart = TMonotonic::Now();
             CurrentProgramNodeId = nodeId;
-            AFL_VERIFY(!CurrentStepSignals);
-            CurrentStepSignals = signals;
         } else {
             AFL_VERIFY(CurrentProgramNodeId == nodeId);
-            AFL_VERIFY(!!CurrentStepSignals);
             AFL_VERIFY(!!CurrentNodeStart);
         }
     }
 
-    void OnFinishProgramStepExecution() {
+    void OnFinishProgramStepExecution(const std::shared_ptr<TFetchingStepSignals>& signals) {
         AFL_VERIFY(!!CurrentProgramNodeId);
-        AFL_VERIFY(!!CurrentStepSignals);
         AFL_VERIFY(!!CurrentNodeStart);
-        CurrentStepSignals->AddTotalDuration(TMonotonic::Now() - *CurrentNodeStart);
+        signals->AddTotalDuration(TMonotonic::Now() - *CurrentNodeStart);
         CurrentProgramNodeId.reset();
-        CurrentStepSignals = nullptr;
         CurrentNodeStart.reset();
     }
 
-    void OnFailedProgramStepExecution() {
-        OnFinishProgramStepExecution();
+    void OnFailedProgramStepExecution(const std::shared_ptr<TFetchingStepSignals>& signals) {
+        OnFinishProgramStepExecution(signals);
     }
 
     void Start(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program,
@@ -72,27 +64,13 @@ public:
 
     void Stop();
 
-    const TFetchingStepSignals& GetCurrentStepSignalsVerified() const {
-        AFL_VERIFY(!!CurrentStepSignals);
-        return *CurrentStepSignals;
-    }
-
-    const TFetchingStepSignals* GetCurrentStepSignalsOptional() const {
-        if (!CurrentStepSignals) {
-            return nullptr;
-        }
-        return &*CurrentStepSignals;
-    }
-
     bool HasProgramIterator() const {
         return !!ProgramIterator;
     }
 
-    void SetProgramIterator(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& it,
-        const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& visitor) {
+    void SetProgramIterator(std::unique_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>&& it) {
         AFL_VERIFY(!ProgramIterator);
-        ProgramIterator = it;
-        ExecutionVisitor = visitor;
+        ProgramIterator = std::move(it);
     }
 
     void SetCursorStep(const TFetchingScriptCursor& step) {
@@ -105,14 +83,14 @@ public:
         return *CursorStep;
     }
 
-    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& GetProgramIteratorVerified() const {
+    NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator& MutableProgramIteratorVerified() const {
         AFL_VERIFY(!!ProgramIterator);
-        return ProgramIterator;
+        return *ProgramIterator;
     }
 
-    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& GetExecutionVisitorVerified() const {
-        AFL_VERIFY(!!ExecutionVisitor);
-        return ExecutionVisitor;
+    NArrow::NSSA::NGraph::NExecution::TExecutionVisitor& MutableExecutionVisitorVerified() const {
+        AFL_VERIFY(!!ProgramIterator);
+        return *static_cast<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor*>(&ProgramIterator->MutableVisitor());
     }
 };
 

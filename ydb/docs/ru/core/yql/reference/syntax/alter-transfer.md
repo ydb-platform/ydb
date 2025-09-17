@@ -35,7 +35,7 @@ ALTER TRANSFER <name> [SET USING lambda | SET (option = value [, ...])]
 $new_lambda = ($msg) -> {
     return [
         <|
-            partition:$msg._partition,
+            partition: $msg._partition,
             offset: $msg._offset,
             message: CAST($msg._data || ' altered' AS Utf8)
         |>

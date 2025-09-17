@@ -11,6 +11,9 @@
         },
         {
             "uri": "file://test_canonical_records.test_create_drop_and_alter_database/audit_log.3.json"
+        },
+        {
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_database/audit_log.4.json"
         }
     ],
     "test_canonical_records.test_create_drop_and_alter_table": [

@@ -82,11 +82,12 @@ selector_config: []
     '''
 
 
-def test_create_and_drop_database(ydb_cluster):
+def test_create_drop_and_alter_database(ydb_cluster):
     capture_audit_create_console = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path, ['console'])
     capture_audit_create_schemeshard = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path, ['schemeshard'])
     capture_audit_drop_console = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path, ['console'])
     capture_audit_drop_schemeshard = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path, ['schemeshard'])
+    capture_audit_alter = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     with capture_audit_create_console, capture_audit_create_schemeshard:
         database = '/Root/Database'
         ydb_cluster.create_database(
@@ -97,10 +98,42 @@ def test_create_and_drop_database(ydb_cluster):
         database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
     ydb_cluster.wait_tenant_up(database, token=TOKEN)
 
+    with capture_audit_alter:
+        alter_subdomain_enable_scheme_shard_audit = '''
+            ModifyScheme {
+                OperationType: ESchemeOpAlterExtSubDomain
+                WorkingDir: "/Root"
+                SubDomain {
+                    Name: "Database"
+                    AuditSettings {
+                        EnableDmlAudit: true
+                        ExpectedSubjects: ["expected_subject@as"]
+                    }
+                }
+            }
+        '''
+
+        alter_subdomain_disable_scheme_shard_audit = '''
+            ModifyScheme {
+                OperationType: ESchemeOpAlterExtSubDomain
+                WorkingDir: "/Root"
+                SubDomain {
+                    Name: "Database"
+                    AuditSettings {
+                        EnableDmlAudit: false
+                        ExpectedSubjects: [""]
+                    }
+                }
+            }
+        '''
+
+        execute_ydbd(ydb_cluster, TOKEN, ['db', 'schema', 'exec', make_test_file_with_content('enable_scheme_shard_audit.pb.txt', alter_subdomain_enable_scheme_shard_audit)])
+        execute_ydbd(ydb_cluster, TOKEN, ['db', 'schema', 'exec', make_test_file_with_content('disable_scheme_shard_audit.pb.txt', alter_subdomain_disable_scheme_shard_audit)])
+
     with capture_audit_drop_console, capture_audit_drop_schemeshard:
         ydb_cluster.remove_database(database, token=TOKEN)
     ydb_cluster.unregister_and_stop_slots(database_nodes)
-    return capture_audit_create_console.canonize(), capture_audit_create_schemeshard.canonize(), capture_audit_drop_console.canonize(), capture_audit_drop_schemeshard.canonize()
+    return capture_audit_create_console.canonize(), capture_audit_create_schemeshard.canonize(), capture_audit_alter.canonize(), capture_audit_drop_console.canonize(), capture_audit_drop_schemeshard.canonize()
 
 
 def test_replace_config(ydb_cluster):
@@ -123,7 +156,7 @@ def test_replace_config(ydb_cluster):
     return capture_audit.canonize()
 
 
-def test_create_and_drop_table(ydb_cluster):
+def test_create_drop_and_alter_table(ydb_cluster):
     capture_audit_create = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     capture_audit_alter = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     capture_audit_drop = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)

@@ -76,6 +76,237 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 //         tester.Execute();
 //     }
 
+    class DirtyReads : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            // tx1 reads all the KV2 (capturing the snapshot)
+            auto result = session1.ExecuteQuery(Q1_(R"(
+                select * from KV2;
+                )"), TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto tx1 = result.GetTransaction();
+
+            // tx2 reads all the Test (capturing the snapshot)
+            result = session2.ExecuteQuery(Q1_(R"(
+                select * from Test;
+                )"), TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto tx2 = result.GetTransaction();
+
+            // tx1 inserts into KV2
+            result = session1.ExecuteQuery(Q1_(R"(
+                upsert into KV2 (Key, Value) values (1u, "1");
+                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+
+            // tx2 reads all the KV, it should not see the the 1u key.
+            result = session2.ExecuteQuery(Q1_(R"(
+                SELECT * FROM KV2;
+                )"), TTxControl::Tx(*tx2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+
+            // tx2 inserts into KV
+            result = session2.ExecuteQuery(Q1_(R"(
+                upsert into KV2 (Key, Value) values (2u, "2");
+                )"), TTxControl::Tx(*tx2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            // tx2 reads all the KV, it should see 2u.
+            result = session2.ExecuteQuery(Q1_(R"(
+                SELECT * FROM KV2;
+                )"), TTxControl::Tx(*tx2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[2u;["2"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+
+            // tx1 reads the new row (make kqp flush its changes)
+            result = session1.ExecuteQuery(Q1_(R"(
+                select * from KV2;
+                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[1u;["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            tx1 = result.GetTransaction();
+
+            // tx2 reads all the KV, it should see 2u
+            result = session2.ExecuteQuery(Q1_(R"(
+                SELECT * FROM KV2;
+                )"), TTxControl::Tx(*tx2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[2u;["2"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+
+            // tx2 inserts into KV
+            result = session2.ExecuteQuery(Q1_(R"(
+                upsert into KV2 (Key, Value) values (3u, "3");
+                )"), TTxControl::Tx(*tx2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            // tx2 reads all the KV, it should see 2u and 3u.
+            result = session2.ExecuteQuery(Q1_(R"(
+                SELECT * FROM KV2 order by Key;
+                )"), TTxControl::Tx(*tx2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[2u;["2"]];[3u;["3"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+
+            // tx1 commits
+            result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            // after the commit, reads are not "dirty" strictly speaking,
+            // but tx2 still should not see the 1u key.
+
+            // tx2 reads all the KV, it should not see the the 2u and 3u keys.
+            result = session2.ExecuteQuery(Q1_(R"(
+                SELECT * FROM KV2 order by Key;
+                )"), TTxControl::Tx(*tx2)).ExtractValueSync();
+            if (!GetIsOlap()) {
+                // oltp tables can detect that the tx2 will fail for sure, so they abort the transaction right away. But maybe it is a bug.
+                // looks like olap should do the same.
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), result.GetIssues().ToString());
+                return;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[2u;["2"]];[3u;["3"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+
+            // tx2 inserts into KV
+            result = session2.ExecuteQuery(Q1_(R"(
+                upsert into KV2 (Key, Value) values (4u, "4");
+                )"), TTxControl::Tx(*tx2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            // tx2 reads all the KV2, it should see 2u, 3u and 4u.
+            result = session2.ExecuteQuery(Q1_(R"(
+                SELECT * FROM KV2 order by Key;
+                )"), TTxControl::Tx(*tx2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[2u;["2"]];[3u;["3"]];[4u;["4"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+
+            // tx2 commits, it should fail because the read set is changed since the start of the transaction.
+            result = tx2->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(DirtyReadsOltp) {
+        DirtyReads tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(DirtyReadsOlap) {
+        DirtyReads tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    class LostUpdate : public TTableDataModificationTester {
+        YDB_ACCESSOR(TString, WriteOp, "replace");
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            // tx1 reads all the KV2
+            auto result = session1.ExecuteQuery(Q1_(R"(
+                select * from KV2;
+                )"), TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto tx1 = result.GetTransaction();
+
+            // tx1 writes into KV2, but not commit yet.
+            result = session1.ExecuteQuery(
+                GetWriteOp() + " into KV2 (Key, Value) values (1u, \"1\");",
+                TTxControl::Tx(*tx1)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+
+            // tx2 reads all the KV2
+            // that is crutial for reproducing the anomaly for olap for tx2 read the table after tx1 writes.
+            // looks like writes break locks properly but commit does not (for olap).
+            result = session2.ExecuteQuery(Q1_(R"(
+                select * from KV2;
+                )"), TTxControl::BeginTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto tx2 = result.GetTransaction();
+
+            // tx2 writes into KV2, but not commit yet.
+            result = session2.ExecuteQuery(
+                GetWriteOp() + " into KV2 (Key, Value) values (2u, \"2\");",
+                TTxControl::Tx(*tx2)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx2 = result.GetTransaction();
+
+            // tx1 commits
+            result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            // tx2 tries to commit and fails
+            result = tx2->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(LostUpdate_olap_insert) {
+        LostUpdate tester;
+        tester.SetIsOlap(true);
+        tester.SetWriteOp("insert");
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(LostUpdate_oltp_insert) {
+        LostUpdate tester;
+        tester.SetIsOlap(false);
+        tester.SetWriteOp("insert");
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(LostUpdate_olap_upsert) {
+        LostUpdate tester;
+        tester.SetIsOlap(true);
+        tester.SetWriteOp("upsert");
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(LostUpdate_oltp_upsert) {
+        LostUpdate tester;
+        tester.SetIsOlap(false);
+        tester.SetWriteOp("upsert");
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(LostUpdate_olap_replace) {
+        LostUpdate tester;
+        tester.SetIsOlap(true);
+        tester.SetWriteOp("replace");
+        tester.Execute();
+    }
+    
+    Y_UNIT_TEST(LostUpdate_oltp_replace) {
+        LostUpdate tester;
+        tester.SetIsOlap(false);
+        tester.SetWriteOp("replace");
+        tester.Execute();
+    }
+
     class TReadOnlyTxCommitsOnConcurrentWrite : public TTableDataModificationTester {
     protected:
         void DoExecute() override {

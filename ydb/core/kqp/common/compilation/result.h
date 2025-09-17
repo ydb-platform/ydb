@@ -40,8 +40,9 @@ struct TKqpCompileResult {
 
     void IncUsage() const { UsageFrequency++; }
     ui64 GetAccessCount() const { return UsageFrequency.load(); }
+    TString SerializeIssues() const {return Issues.ToOneLineString(); }
 
-    void SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to) const;
+    void SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to, std::optional<ui64> lastAccessedAt = std::nullopt) const;
 
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;

@@ -94,7 +94,17 @@ class RestartToAnotherVersionFixture:
         self.all_binary_paths = request.param
         self.versions = [path_to_version[path] for path in self.all_binary_paths]
 
-    def setup_cluster(self, **kwargs):
+    def create_driver(self):
+        driver = ydb.Driver(
+            ydb.DriverConfig(
+                database=self.database_path,
+                endpoint=self.endpoint,
+            )
+        )
+        driver.wait(timeout=60)
+        return driver
+
+    def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags = kwargs.pop("extra_feature_flags", {})
         extra_feature_flags = copy.copy(extra_feature_flags)
         extra_feature_flags["suppress_compatibility_check"] = True
@@ -110,14 +120,16 @@ class RestartToAnotherVersionFixture:
         self.cluster.start()
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
 
-        self.driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=self.endpoint
-            )
-        )
-        self.driver.wait(timeout=60)
-        yield
+        if tenant_db is not None:
+            with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
+                self.database_path = db_path
+                self.driver = self.create_driver()
+                yield
+        else:
+            self.database_path = "/Root"
+            self.driver = self.create_driver()
+            yield
+
         self.cluster.stop()
 
     def change_cluster_version(self):
@@ -125,13 +137,7 @@ class RestartToAnotherVersionFixture:
         new_binary_paths = self.all_binary_paths[self.current_binary_paths_index]
         self.config.set_binary_paths([new_binary_paths])
         self.cluster.update_configurator_and_restart(self.config)
-        self.driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=self.endpoint
-            )
-        )
-        self.driver.wait(timeout=60)
+        self.driver = self.create_driver()
         # TODO: remove sleep
         # without sleep there are errors like
         # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)

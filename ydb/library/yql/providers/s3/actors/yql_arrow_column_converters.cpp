@@ -751,9 +751,14 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
         case NUdf::EDataSlot::Date:
         case NUdf::EDataSlot::Datetime:
         case NUdf::EDataSlot::Timestamp:
-            return {};
+        case NUdf::EDataSlot::Decimal:
+        return {};
+        case NUdf::EDataSlot::Date32:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::JsonDocument:
             return ArrowComputeConvertor(columnName, yqlArrowType, s3OutputType);
         case NUdf::EDataSlot::TzDate:
         case NUdf::EDataSlot::TzDatetime:
@@ -835,6 +840,7 @@ bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataT
         case NUdf::EDataSlot::Int32:
             type = arrow::int32();
             return true;
+        case NUdf::EDataSlot::Date32:
         case NUdf::EDataSlot::Datetime:
         case NUdf::EDataSlot::TzDatetime:
         case NUdf::EDataSlot::Uint32:
@@ -844,6 +850,7 @@ bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataT
             type = arrow::int64();
             return true;
         case NUdf::EDataSlot::Uint64:
+        case NUdf::EDataSlot::Datetime64:
             type = arrow::uint64();
             return true;
         case NUdf::EDataSlot::Float:
@@ -855,9 +862,14 @@ bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataT
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::JsonDocument:
             type = arrow::binary();
             return true;
+        case NUdf::EDataSlot::Decimal:
+            type = arrow::fixed_size_binary(16);
+            return true;
         case NUdf::EDataSlot::Timestamp:
+        case NUdf::EDataSlot::Timestamp64:
         case NUdf::EDataSlot::TzTimestamp:
             type = arrow::timestamp(arrow::TimeUnit::MICRO, "UTC");
             return true;

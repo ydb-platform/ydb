@@ -10,6 +10,8 @@ description = 'Move vdisks out from overpopulated pdisks.'
 def add_options(p):
     p.add_argument('--max-replicating-pdisks', type=int, help='Limit number of maximum replicating PDisks in the cluster')
     p.add_argument('--only-from-overpopulated-pdisks', action='store_true', help='Move vdisks out only from pdisks with over expected slot count')
+    p.add_argument('--prefer-less-occupied-rack', action='store_true', help='Take into account racks\' free slots picking pdisk from rack with more free slots first')
+    p.add_argument('--with-attention-to-replication', action='store_true', help='Take into account replicating vdisks picking node and pdisk with less amount of them')
     common.add_basic_format_options(p)
 
 
@@ -122,6 +124,8 @@ def do(args):
                 cmd.FailRealmIdx = vslot.FailRealmIdx
                 cmd.FailDomainIdx = vslot.FailDomainIdx
                 cmd.VDiskIdx = vslot.VDiskIdx
+                cmd.PreferLessOccupiedRack = args.prefer_less_occupied_rack
+                cmd.WithAttentionToReplication = args.with_attention_to_replication
 
             request = common.kikimr_bsconfig.TConfigRequest(Rollback=True)
             index = len(request.Command)

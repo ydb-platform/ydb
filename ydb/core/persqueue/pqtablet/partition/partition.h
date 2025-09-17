@@ -1,32 +1,29 @@
 #pragma once
 
-#include "sourceid.h"
-#include "user_info.h"
-
-#include <ydb/core/persqueue/pqtablet/blob/blob.h>
-#include <ydb/core/persqueue/pqtablet/blob/header.h>
-#include <ydb/core/persqueue/common/key.h>
+#include "partition_blob_encoder.h"
+#include "partition_compactification.h"
 #include "partition_init.h"
 #include "partition_sourcemanager.h"
 #include "partition_types.h"
-#include "subscriber.h"
-#include <ydb/core/persqueue/public/utils.h>
 #include "read_quoter.h"
-#include "partition_blob_encoder.h"
+#include "sourceid.h"
+#include "subscriber.h"
+#include "user_info.h"
 
-#include "partition_compactification.h"
-
-#include <ydb/core/keyvalue/keyvalue_events.h>
+#include <library/cpp/sliding_window/sliding_window.h>
+#include <util/generic/set.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/pqtablet/blob/blob.h>
+#include <ydb/core/persqueue/pqtablet/blob/header.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/feature_flags.pb.h>
-#include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
-
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <library/cpp/sliding_window/sliding_window.h>
-
-#include <util/generic/set.h>
+#include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
 #include <variant>
 
@@ -124,10 +121,9 @@ struct TTransaction {
 };
 class TPartitionCompaction;
 
-#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletID)("partition_id", Partition)
+#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
 
-class TPartition : public TActorBootstrapped<TPartition>
-                 , public IActorExceptionHandler {
+class TPartition : public TBaseActor<TPartition> {
     friend TInitializer;
     friend TInitializerStep;
     friend TInitConfigStep;
@@ -488,6 +484,7 @@ private:
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
 
     TString LogPrefix() const;
+    const TString& GetLogPrefix() const override;
 
     void Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr& ev, const TActorContext& ctx);
     void StartProcessChangeOwnerRequests(const TActorContext& ctx);
@@ -516,8 +513,6 @@ public:
                bool newPartition = false);
 
     void Bootstrap(const TActorContext& ctx);
-    bool OnUnhandledException(const std::exception&) override;
-
     ui64 Size() const {
         return CompactionBlobEncoder.GetSize() + BlobEncoder.GetSize();
     }
@@ -555,7 +550,7 @@ private:
     template <typename TEv>
     TString EventStr(const char * func, const TEv& ev) {
         TStringStream ss;
-        ss << func << " event# " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << "), Tablet " << Tablet << ", Partition " << Partition
+        ss << func << " event# " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << "), Tablet " << TabletActorId << ", Partition " << Partition
            << ", Sender " << ev->Sender.ToString() << ", Recipient " << ev->Recipient.ToString() << ", Cookie: " << ev->Cookie;
         return ss.Str();
     }
@@ -700,7 +695,6 @@ private:
     static TString GetConsumerDeletedMessage(TStringBuf consumerName);
 
 private:
-    ui64 TabletID;
     ui32 TabletGeneration;
     TPartitionId Partition;
     NKikimrPQ::TPQTabletConfig Config;
@@ -758,7 +752,6 @@ private:
     TInstant PendingWriteTimestamp;
 
     ui64 WriteInflightSize;
-    TActorId Tablet;
     TActorId BlobCache;
 
     TMessageQueue PendingRequests;
@@ -780,6 +773,10 @@ private:
     TString FolderId;
 
     TMaybe<TUsersInfoStorage> UsersInfoStorage;
+
+    mutable TMaybe<TString> IdleLogPrefix;
+    mutable TMaybe<TString> InitLogPrefix;
+    mutable TMaybe<TString> UnknownLogPrefix;
 
     // template <class T> T& GetUserActionAndTransactionEventsFront();
     // template <class T> T& GetCurrentEvent();

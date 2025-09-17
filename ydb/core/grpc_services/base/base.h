@@ -1736,12 +1736,13 @@ class TEvRequestAuthAndCheck
     : public IRequestProxyCtx
     , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
 public:
-    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode)
+    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode, TString peerName = {})
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
         , AuthState(true)
         , AuditMode(auditMode)
+        , PeerName(std::move(peerName))
     {}
 
     // IRequestProxyCtx
@@ -1895,7 +1896,7 @@ public:
     }
 
     TString GetPeerName() const override {
-        return {};
+        return PeerName;
     }
 
     const TString& GetRequestName() const override {
@@ -1940,6 +1941,7 @@ public:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
     TAuditMode AuditMode;
+    TString PeerName;
 
     inline static const TString EmptySerializedTokenMessage;
 };

@@ -386,38 +386,87 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
 
         # Проверяем основные проблемы (рестарт, падение)
         if node_error.message and node_error.message not in ['diagnostic info collected']:
-            issues.append(node_error.message.replace('was ', '').replace('is ', ''))
+            if 'is down' in node_error.message:
+                issues.append("node_down")
+            elif 'was restarted' in node_error.message:
+                issues.append("restarted")
+            else:
+                issues.append(node_error.message.replace('was ', '').replace('is ', ''))
+        
         # Добавляем cores если есть (критичная проблема)
         if node_error.core_hashes:
             issues.append(f"cores:{len(node_error.core_hashes)}")
+        
         # Добавляем oom если есть (критичная проблема)
         if node_error.was_oom:
             issues.append("oom")
+        
         has_critical_issues = node_error.was_oom or node_error.core_hashes
         has_issues = len(issues) > 0
 
         if has_issues:
             # Красный только для критичных проблем (cores/oom)
-            # Зеленый для обычных проблем (restarted/down)
-            color = "#ffcccc" if has_critical_issues else "#ccffcc"
+            # Желтый для node_down (нода не восстановилась)
+            # Зеленый для обычных проблем (restarted)
+            if has_critical_issues:
+                color = "#ffcccc"  # 🔴 Красный
+            elif "node_down" in issues:
+                color = "#ffffcc"  # 🟡 Желтый
+            else:
+                color = "#ccffcc"  # 🟢 Зеленый
+            
             value = ", ".join(issues) if issues else "issues"
         else:
-            color = "#ccffcc"  # Зеленый
+            color = "#ccffcc"  # 🟢 Зеленый
             value = "ok"
 
         return color, value, has_critical_issues
 
     def __get_workload_status(iteration) -> tuple[str, str]:
-        """Возвращает статус workload: (цвет, значение)"""
+        """
+        Возвращает статус workload с временем выполнения: (цвет, значение)
+        
+        Логика:
+        - 🟢 OK (зеленый): workload выполнился успешно, нет ошибок
+        - 🟡 TIMEOUT (желтый): workload был прерван по timeout, но завершился без ошибок
+        - 🔴 ERROR (красный): workload завершился с ошибками
+        
+        Время выполнения добавляется в скобках: "ok (191s)", "timeout (205s)", "error (180s)"
+        """
+        # Получаем время выполнения
+        execution_time = None
+        if hasattr(iteration, 'time') and iteration.time:
+            execution_time = iteration.time
+        elif hasattr(iteration, 'stats') and iteration.stats:
+            for stat_key, stat_value in iteration.stats.items():
+                if isinstance(stat_value, dict) and stat_key == 'iteration_info' and 'actual_execution_time' in stat_value:
+                    execution_time = stat_value['actual_execution_time']
+                    break
+        
+        # Форматируем время
+        time_suffix = f" ({execution_time:.1f}s)" if execution_time else ""
+        
+        # Проверяем stderr на наличие ошибок
+        has_errors = False
+        if hasattr(iteration, 'stderr') and iteration.stderr:
+            stderr_clean = iteration.stderr.strip()
+            # Исключаем SSH warnings и пустые строки
+            if stderr_clean and stderr_clean != "warning: permanently added":
+                has_errors = True
+        
+        # Проверяем timeout
+        is_timeout = False
         if hasattr(iteration, 'error_message') and iteration.error_message:
-            # Проверяем, содержит ли ошибка информацию о timeout
-            error_msg_lower = iteration.error_message.lower()
-            if ("timeout" in error_msg_lower or "timed out" in error_msg_lower or "command timed out" in error_msg_lower):
-                return "#ffffcc", "timeout"  # Светло-желтый
-            else:
-                return "#ffffcc", "warning"  # Светло-желтый
+            if "timeout" in iteration.error_message.lower():
+                is_timeout = True
+        
+        # Определяем статус по приоритету с добавлением времени
+        if has_errors:
+            return "#ffcccc", f"error{time_suffix}"      # 🔴 Красный - есть ошибки в workload
+        elif is_timeout:
+            return "#ffffcc", f"timeout{time_suffix}"    # 🟡 Желтый - timeout без ошибок
         else:
-            return "#ccffcc", "ok"  # Светло-зеленый
+            return "#ccffcc", f"ok{time_suffix}"         # 🟢 Зеленый - все хорошо
 
     # Собираем информацию о нодах, группируя по хостам
     node_info_map = {}  # host -> NodeErrors (объединенная информация по хосту)
@@ -702,8 +751,19 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
                 node_info = iter_info['nodes'].get(host, {})
                 if node_info:
                     workload_color, workload_value = node_info['status']
+                    # Получаем время выполнения для этой ноды
+                    iteration = node_info.get('iteration')
+                    if iteration and hasattr(iteration, 'time') and iteration.time:
+                        execution_time = iteration.time
+                        time_str = f"{execution_time:.1f}s"
+                        time_color = "#e0f0e0"  # Светло-зеленый для времени выполнения
+                    else:
+                        time_str = "N/A"
+                        time_color = "#ffffcc"  # Светло-желтый для неизвестного времени
                 else:
                     workload_color, workload_value = "#f0f0f0", "-"
+                    time_str = "N/A"
+                    time_color = "#ffffcc"
 
                 # Получаем статус ноды
                 node_error = node_info_map.get(host)
@@ -715,6 +775,7 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
                 table_html += f"""
                     <td style='background-color: {workload_color};'>{workload_value}</td>
                     <td style='background-color: {node_color};'>{node_value}</td>
+                    <td style='background-color: {time_color};'>{time_str}</td>
                 """
 
         else:

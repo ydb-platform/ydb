@@ -1,27 +1,27 @@
 {
-    "test_canonical_records.test_create_and_drop_database": [
+    "test_canonical_records.test_create_drop_and_alter_database": [
         {
-            "uri": "file://test_canonical_records.test_create_and_drop_database/audit_log.json"
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_database/audit_log.json"
         },
         {
-            "uri": "file://test_canonical_records.test_create_and_drop_database/audit_log.1.json"
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_database/audit_log.1.json"
         },
         {
-            "uri": "file://test_canonical_records.test_create_and_drop_database/audit_log.2.json"
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_database/audit_log.2.json"
         },
         {
-            "uri": "file://test_canonical_records.test_create_and_drop_database/audit_log.3.json"
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_database/audit_log.3.json"
         }
     ],
-    "test_canonical_records.test_create_and_drop_table": [
+    "test_canonical_records.test_create_drop_and_alter_table": [
         {
-            "uri": "file://test_canonical_records.test_create_and_drop_table/audit_log.json"
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_table/audit_log.json"
         },
         {
-            "uri": "file://test_canonical_records.test_create_and_drop_table/audit_log.1.json"
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_table/audit_log.1.json"
         },
         {
-            "uri": "file://test_canonical_records.test_create_and_drop_table/audit_log.2.json"
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_table/audit_log.2.json"
         }
     ],
     "test_canonical_records.test_dml": {

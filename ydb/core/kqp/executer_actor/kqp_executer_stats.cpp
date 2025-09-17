@@ -1858,7 +1858,7 @@ void TQueryExecutionStats::Finish() {
     // Result->SetResultRows(ResultRows);
 
     ExtraStats.SetAffectedShards(AffectedShards.size());
-    if (CollectStatsByLongTasks || CollectProfileStats(StatsMode)) {
+    if (CollectProfileStats(StatsMode)) {
         for (auto&& s : UseLlvmByStageId) {
             for (auto&& pbs : *Result->MutableStages()) {
                 if (pbs.GetStageId() == s.first) {

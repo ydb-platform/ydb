@@ -1,5 +1,6 @@
 #include "blobstorage_pdisk_requestimpl.h"
 #include "blobstorage_pdisk_completion_impl.h"
+#include "blobstorage_pdisk_impl.h"
 
 namespace NKikimr {
 namespace NPDisk {
@@ -64,6 +65,11 @@ TChunkWrite::TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender
     SlackSize = Max<ui32>();
 }
 
+void TChunkWrite::Abort(TActorSystem* actorSystem) {
+    if (!AtomicSwap(&Aborted, true)) {
+        actorSystem->Send(Sender, new NPDisk::TEvChunkWriteResult(NKikimrProto::CORRUPTED, ChunkIdx, Cookie, 0, "TChunkWrite is being aborted"));
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkRead
@@ -87,6 +93,38 @@ void TChunkRead::Abort(TActorSystem* actorSystem) {
 }
 
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TChunkWritePiece
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span)
+    : TRequestBase(write->Sender, write->ReqId, write->Owner, write->OwnerRound, write->PriorityClass, std::move(span))
+    , PDisk(pdisk)
+    , ChunkWrite(write)
+    , PieceShift(pieceShift)
+    , PieceSize(pieceSize)
+    , Completion(MakeHolder<TCompletionChunkWritePiece>(this, ChunkWrite->Completion))
+{
+    ChunkWrite->RegisterPiece();
+    GateId = ChunkWrite->GateId;
+    ChunkWrite->Orbit.Fork(Orbit);
+}
+
+TChunkWritePiece::~TChunkWritePiece() {
+    ChunkWrite->Orbit.Join(Orbit);
+}
+
+void TChunkWritePiece::Process(void*) {
+    this->ChunkWriteResult = MakeHolder<TChunkWriteResult>(PDisk->ChunkWritePiece(this));
+    PDisk->PushChunkWrite(this);
+}
+
+void TChunkWritePiece::MarkReady(const TString& logPrefix) {
+    auto evChunkWrite = ChunkWrite.Get();
+    evChunkWrite->ReadyForBlockDevice++;
+    if (evChunkWrite->ReadyForBlockDevice == evChunkWrite->Pieces) {
+        Y_VERIFY_S(evChunkWrite->RemainingSize == 0, logPrefix);
+    }
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkReadPiece
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

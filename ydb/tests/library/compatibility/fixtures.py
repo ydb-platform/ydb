@@ -164,7 +164,17 @@ class MixedClusterFixture:
         self.all_binary_paths = request.param
         self.versions = list([path_to_version[path] for path in self.all_binary_paths])
 
-    def setup_cluster(self, **kwargs):
+    def create_driver(self):
+        driver = ydb.Driver(
+            ydb.DriverConfig(
+                database=self.database_path,
+                endpoint=self.endpoint
+            )
+        )
+        driver.wait(timeout=60)
+        return driver
+
+    def setup_cluster(self, tenant_db=None, **kwargs):
         self.config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             binary_paths=self.all_binary_paths,
@@ -175,14 +185,16 @@ class MixedClusterFixture:
         self.cluster.start()
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
 
-        self.driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=self.endpoint
-            )
-        )
-        self.driver.wait(timeout=60)
-        yield
+        if tenant_db is not None:
+            with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
+                self.database_path = db_path
+                self.driver = self.create_driver()
+                yield
+        else:
+            self.database_path = "/Root"
+            self.driver = self.create_driver()
+            yield
+
         self.cluster.stop()
 
 

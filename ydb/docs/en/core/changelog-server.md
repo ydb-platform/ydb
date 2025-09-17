@@ -2,6 +2,38 @@
 
 ## Version 25.1 {#25-1}
 
+### Version 25.1.4.7 {#25-1-4-7}
+
+Release date: September 15, 2025.
+
+#### Functionality
+
+* [Added](https://github.com/ydb-platform/ydb/pull/21119) support for the Kafka frameworks, such as Kafka Connect, Kafka Streams, Confluent Schema Registry, Kafka Streams, Apache Flink, etc. Now [YDB Topics Kafka API](./reference/kafka-api/index.md) supports the following features:
+  * client-side consumer balancing. To enable it, use the `enable_kafka_native_balancing` flag in the [cluster configuration](./reference/configuration/index.md). For for information, see [How consumer balancing works in Apache Kafka](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb/). When enabled, consumer balancing will work the same way in YDB Topics.
+  * [compacted topics](https://docs.confluent.io/kafka/design/log_compaction.html). To enable topic compaction, use the `enable_topic_compactification_by_key` flag.
+  * [transactions](https://www.confluent.io/blog/transactions-apache-kafka/). To enable transactions, use the `enable_kafka_transactions` flag.
+* [Added](https://github.com/ydb-platform/ydb/pull/20982) a [new protocol](https://github.com/ydb-platform/ydb/issues/11064) to [Node Broker](./concepts/glossary.md#node-broker) that eliminates the long startup of nodes on large clusters (more than 1000 servers).
+
+#### YDB UI
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/17839) an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/18615) where not all tablets are shown for pers queue group on the tablets tab in diagnostics.
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18735) where the storage tab on the diagnostics page displayed nodes of other types in addition to storage nodes.
+* Fixed a [serialization issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164) that caused an error when opening query execution statistics.
+* Changed the logic for nodes transitioning to critical state – the CPU pool, which is 75-99% full, now triggers a warning, not a critical state.
+
+#### Performance
+
+* [Optimized](https://github.com/ydb-platform/ydb/pull/20197) processing of empty inputs when performing JOIN operations.
+
+#### Bug fixes
+
+* [Added support](https://github.com/ydb-platform/ydb/pull/21918) for a new kind of change record in asynchronous replication — `reset` record (in addition to `update` & `erase` records).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/21836) an [issue](https://github.com/ydb-platform/ydb/issues/21814) where a replication instance with an unspecified `COMMIT_INTERVAL` option caused the process to crash.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/21652) rare errors when reading from a topic during partition balancing.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/22455) an [issue](https://github.com/ydb-platform/ydb/issues/19842) where dedicated database deletion might leave database system tablets improperly cleaned.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/22203) an [issue](https://github.com/ydb-platform/ydb/issues/22030) that caused tablets to hang when nodes experienced critical memory shortage. Now tablets will automatically start as soon as any of the nodes frees up sufficient resources.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/24278) an issue where only the first message from a batch was saved when writing Kafka messages, with all other messages in the batch being ignored.
+
 ### Release candidate 25.1.2.7 {#25-1-2-7-rc}
 
 Release date: July 14, 2025.

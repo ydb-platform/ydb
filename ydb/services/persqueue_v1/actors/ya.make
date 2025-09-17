@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/library/aclib
     ydb/library/persqueue/topic_parser
+    ydb/library/cloud_permissions
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/services/lib/actors

@@ -147,15 +147,6 @@
                         "plan_step": "not-zero-number-text",
                         "tx_id": "not-zero-number-text"
                     },
-                    "name": ".metadata",
-                    "owner": "metadata@system",
-                    "type": "DIRECTORY"
-                },
-                {
-                    "created_at": {
-                        "plan_step": "not-zero-number-text",
-                        "tx_id": "not-zero-number-text"
-                    },
                     "name": "table1",
                     "owner": "root@builtin",
                     "type": "TABLE"
@@ -239,15 +230,6 @@
         },
         "3-get": {
             "children": [
-                {
-                    "created_at": {
-                        "plan_step": "not-zero-number-text",
-                        "tx_id": "not-zero-number-text"
-                    },
-                    "name": ".metadata",
-                    "owner": "metadata@system",
-                    "type": "DIRECTORY"
-                },
                 {
                     "created_at": {
                         "plan_step": "not-zero-number-text",
@@ -345,15 +327,6 @@
         },
         "5-get": {
             "children": [
-                {
-                    "created_at": {
-                        "plan_step": "not-zero-number-text",
-                        "tx_id": "not-zero-number-text"
-                    },
-                    "name": ".metadata",
-                    "owner": "metadata@system",
-                    "type": "DIRECTORY"
-                },
                 {
                     "created_at": {
                         "plan_step": "not-zero-number-text",
@@ -2593,10 +2566,6 @@
             "Result": {
                 "Entities": [
                     {
-                        "Name": ".metadata",
-                        "Type": "dir"
-                    },
-                    {
                         "Name": "shared_db",
                         "Type": "ext_sub_domain"
                     },
@@ -2609,7 +2578,7 @@
                         "Type": "ext_sub_domain"
                     }
                 ],
-                "Total": 4
+                "Total": 3
             },
             "Success": true,
             "Version": 2
@@ -2620,13 +2589,9 @@
                     {
                         "Name": "table1",
                         "Type": "table"
-                    },
-                    {
-                        "Name": ".metadata",
-                        "Type": "dir"
                     }
                 ],
-                "Total": 2
+                "Total": 1
             },
             "Success": true,
             "Version": 2
@@ -2650,13 +2615,9 @@
                     {
                         "Name": "table1",
                         "Type": "table"
-                    },
-                    {
-                        "Name": ".metadata",
-                        "Type": "dir"
                     }
                 ],
-                "Total": 2
+                "Total": 1
             },
             "Success": true,
             "Version": 2
@@ -2896,20 +2857,6 @@
                 "Children": [
                     {
                         "ACL": "",
-                        "ChildrenExist": true,
-                        "CreateFinished": true,
-                        "CreateStep": "not-zero-number-text",
-                        "CreateTxId": "not-zero-number-text",
-                        "Name": ".metadata",
-                        "Owner": "metadata@system",
-                        "ParentPathId": "1",
-                        "PathId": "not-zero-number-text",
-                        "PathState": 2,
-                        "PathType": 1,
-                        "SchemeshardId": "72057594046678944"
-                    },
-                    {
-                        "ACL": "",
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
@@ -2965,7 +2912,7 @@
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
                     "PathId_Depricated": "1",
-                    "PathsInside": "7",
+                    "PathsInside": "3",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3114,7 +3061,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 1,
-                    "PathVersion": "16",
+                    "PathVersion": "13",
                     "SchemeshardId": "72057594046678944"
                 }
             },
@@ -3128,20 +3075,6 @@
             "Path": "/Root/dedicated_db",
             "PathDescription": {
                 "Children": [
-                    {
-                        "ACL": "",
-                        "ChildrenExist": true,
-                        "CreateFinished": true,
-                        "CreateStep": "not-zero-number-text",
-                        "CreateTxId": "not-zero-number-text",
-                        "Name": ".metadata",
-                        "Owner": "metadata@system",
-                        "ParentPathId": "1",
-                        "PathId": "not-zero-number-text",
-                        "PathState": 2,
-                        "PathType": 1,
-                        "SchemeshardId": "72075186224037897"
-                    },
                     {
                         "ACL": "",
                         "ChildrenExist": false,
@@ -3173,8 +3106,8 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "6",
-                    "PathsInside": "5",
+                    "PathId_Depricated": "2",
+                    "PathsInside": "1",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3244,7 +3177,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
-                    "PathVersion": "10",
+                    "PathVersion": "7",
                     "SchemeshardId": "72075186224037897"
                 }
             },
@@ -3289,7 +3222,7 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "8",
+                    "PathId_Depricated": "4",
                     "PathsInside": "1",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
@@ -3374,20 +3307,6 @@
                 "Children": [
                     {
                         "ACL": "",
-                        "ChildrenExist": true,
-                        "CreateFinished": true,
-                        "CreateStep": "not-zero-number-text",
-                        "CreateTxId": "not-zero-number-text",
-                        "Name": ".metadata",
-                        "Owner": "metadata@system",
-                        "ParentPathId": "1",
-                        "PathId": "not-zero-number-text",
-                        "PathState": 2,
-                        "PathType": 1,
-                        "SchemeshardId": "72075186224038898"
-                    },
-                    {
-                        "ACL": "",
                         "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
@@ -3417,8 +3336,8 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "7",
-                    "PathsInside": "5",
+                    "PathId_Depricated": "3",
+                    "PathsInside": "1",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3488,7 +3407,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
-                    "PathVersion": "10",
+                    "PathVersion": "7",
                     "SchemeshardId": "72075186224038898"
                 }
             },
@@ -4238,7 +4157,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -4255,7 +4174,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -4603,7 +4522,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -4627,7 +4546,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -4644,7 +4563,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         }
@@ -4809,7 +4728,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         }
@@ -4833,7 +4752,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         },
@@ -4850,7 +4769,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -5005,7 +4924,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         }
@@ -5029,7 +4948,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         },
@@ -5046,7 +4965,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -5215,7 +5134,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -5232,7 +5151,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -5622,7 +5541,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         }
@@ -5646,7 +5565,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         },
@@ -5663,7 +5582,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -5818,7 +5737,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -5842,7 +5761,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -5859,7 +5778,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         }
@@ -7624,7 +7543,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -7641,7 +7560,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -7993,7 +7912,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -8010,7 +7929,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -8362,7 +8281,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -8379,7 +8298,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -8731,7 +8650,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -8748,7 +8667,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -9100,7 +9019,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "6"
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -9117,7 +9036,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "7"
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -11106,7 +11025,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-6",
+                "Id": "72057594046678944-2",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -11173,12 +11092,12 @@
             {
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-8",
+                "Id": "72057594046678944-4",
                 "Metrics": "not-empty-object",
                 "Name": "/Root/serverless_db",
                 "Overall": "Green",
                 "Owner": "root",
-                "ResourceId": "72057594046678944-7",
+                "ResourceId": "72057594046678944-3",
                 "State": "RUNNING",
                 "StateStats": [
                     {
@@ -11193,7 +11112,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-7",
+                "Id": "72057594046678944-3",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -11311,7 +11230,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-6",
+                    "Id": "72057594046678944-2",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11382,11 +11301,11 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-8",
+                    "Id": "72057594046678944-4",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Owner": "root",
-                    "ResourceId": "72057594046678944-7",
+                    "ResourceId": "72057594046678944-3",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11405,7 +11324,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-7",
+                    "Id": "72057594046678944-3",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11518,7 +11437,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-6",
+                    "Id": "72057594046678944-2",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11585,12 +11504,12 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-8",
+                    "Id": "72057594046678944-4",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Overall": "Green",
                     "Owner": "root",
-                    "ResourceId": "72057594046678944-7",
+                    "ResourceId": "72057594046678944-3",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11605,7 +11524,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-7",
+                    "Id": "72057594046678944-3",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",

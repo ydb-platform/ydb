@@ -617,6 +617,7 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
     THolder<TPartitionKeyCompactionCounters> compactionCounters;
     labeledCounters.Reset(new TPartitionLabeledCounters("topic", 0, DatabasePath));
     labeledConsumerCounters.Reset(new TConsumerLabeledCounters("topic|x|consumer", 0, DatabasePath));
+    compactionCounters.Reset(new TPartitionKeyCompactionCounters("topic", 0, DatabasePath));
 
     if (AggregatedCounters.empty()) {
         for (ui32 i = 0; i < labeledCounters->GetCounters().Size(); ++i) {
@@ -637,6 +638,8 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
                 AggregatedCompactionCounters.push_back(name.empty() ? nullptr : DynamicCounters->GetExpiringNamedCounter("name", name, false));
             }
         }
+    } else {
+        AggregatedCompactionCounters.clear();
     }
     for (auto& [consumer, info]: Consumers) {
         info.Aggr.Reset(new TTabletLabeledCountersBase{});
@@ -698,7 +701,9 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
         AggregatedCounters[i]->Set(val);
     }
 
-    for (ui32 i = 0; compactionAggr->HasCounters() && i < compactionAggr->GetCounters().Size(); ++i) {
+    for (ui32 i = 0; compactionAggr->HasCounters() && i < compactionAggr->GetCounters().Size()
+                     && i < AggregatedCompactionCounters.size(); ++i
+        ) {
         if (!AggregatedCompactionCounters[i]) {
             continue;
         }

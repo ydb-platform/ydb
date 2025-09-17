@@ -996,8 +996,8 @@ private:
     TMultiCounter CompactionUnprocessedBytes;
     TMultiCounter CompactionTimeLag;
 
-    NKikimr::NPQ::TMultiCounter KeyCompactionReadCyclesTotal;
-    NKikimr::NPQ::TMultiCounter KeyCompactionWriteCyclesTotal;
+    // NKikimr::NPQ::TMultiCounter KeyCompactionReadCyclesTotal;
+    // NKikimr::NPQ::TMultiCounter KeyCompactionWriteCyclesTotal;
 
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;

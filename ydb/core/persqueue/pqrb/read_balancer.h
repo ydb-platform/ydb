@@ -233,20 +233,6 @@ private:
         ui64 MaxAvgWriteSpeedPerDay = 0;
     };
 
-    struct TPartitionKeyCompactionMetrics {
-        ui64 TotalUncompactedSize = 0;
-        ui64 MaxUncompactedSize = 0;
-        ui64 TotalCompactedSize = 0;
-        ui64 MaxCompactedSize = 0;
-        ui64 MaxUncompactedRatio = 0;
-
-        ui64 TotalCompactedKeys = 0;
-        ui64 TotalUncompactedMesssages = 0;
-        ui64 MaxTimeSinceCycleStart = 0;
-        ui64 MaxNewKeysCountInLastCycle = 0;
-
-    };
-
     struct TAggregatedStats {
         std::unordered_map<ui32, TPartitionStats> Stats;
         std::unordered_map<ui64, ui64> Cookies;

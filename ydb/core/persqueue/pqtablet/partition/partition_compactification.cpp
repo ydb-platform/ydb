@@ -59,9 +59,7 @@ void TPartitionCompaction::TryCompactionIfPossible() {
             Y_ENSURE(FirstUncompactedOffset < ReadState->GetLastOffset());
             FirstUncompactedOffset = ReadState->GetLastOffset();
             Counters.CurrentReadCycleKeys = CompactState->TopicData.size();
-            if (Counters.CurrentReadCycleKeys) {
-                Counters.ReadCyclesCount += 1;
-            }
+            Counters.ReadCyclesCount += 1;
             ReadState.Clear();
             ReadCycleStart = TInstant::Zero();
         } else {
@@ -544,8 +542,6 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
             }
             auto iter = TopicData.find(key);
             bool keepMessage = (iter.IsEnd() || iter->second == offset);
-            PQ_LOG_D("Compaction for topic LastPart '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
-                                      << "restored messaged with key '" << key << "' on offset " << res.GetOffset() << ", should keep: " << keepMessage);
 
             PQ_LOG_D("Compaction for topic LastPart '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
                                       << PartitionActor->Partition << " processed read result in CompState starting from: "
@@ -564,7 +560,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
             }
 
             if (!keepMessage) {
-                for (auto& key : CurrMsgMiggleBlobKeys) {
+                for (auto& key : CurrMsgMiddleBlobKeys) {
                     AddDeleteRange(key);
                 }
                 for (auto& blob: currentMessageBlobs) {
@@ -572,7 +568,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
                 }
             }
             TotalMessagesWritten += static_cast<ui32>(keepMessage);
-            CurrMsgMiggleBlobKeys.clear();
+            CurrMsgMiddleBlobKeys.clear();
             for (auto& blob: currentMessageBlobs) {
                 currentBatch->AddBlob(std::move(blob));
             }
@@ -594,7 +590,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
     }
 
     if (isMiddlePartOfMessage) {
-        CurrMsgMiggleBlobKeys.emplace_back(KeysIter->Key);
+        CurrMsgMiddleBlobKeys.emplace_back(KeysIter->Key);
         KeysIter++;
         return true;
     }
@@ -755,10 +751,10 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody(TKeyCompactionCount
     UpdatedKeys.clear();
     DeletedKeys.clear();
 
-    if (counters.UncompactedSize > 0) {
-        counters.UncompactedRatio = 1.0 * counters.CompactedSize / counters.UncompactedSize;
+    if (counters.UncompactedSize != 0 || counters.CompactedSize != 0) {
+        counters.UncompactedRatio = 100 * counters.UncompactedSize / (counters.CompactedSize + counters.UncompactedSize);
     } else {
-        counters.UncompactedRatio = 0.0;
+        counters.UncompactedRatio = 0;
     }
     counters.CompactedCount = TotalMessagesWritten;
     counters.UncompactedCount = MaxOffset - LastProcessedOffset.GetOrElse(0);

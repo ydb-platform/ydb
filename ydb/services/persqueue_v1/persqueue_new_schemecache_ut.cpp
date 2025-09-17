@@ -518,12 +518,11 @@ namespace NKikimr::NPersQueueTests {
                                       "api.grpc.topic.stream_read.messages",
                                       "topic.read.bytes",
                                       "topic.read.messages",
-                                      "topic.compaction.lag_milliseconds_max",
-                                      "topic.compaction.unprocessed_bytes_max",
-                                      "topic.compaction.unprocessed_count_max",
+                                      "topic.partition.blobs.compaction_lag_milliseconds_max",
+                                      "topic.partition.blobs.uncompacted_bytes_max",
+                                      "topic.partition.blobs.uncompacted_count_max",
                                   },
-                                  topicName, "", "", ""
-                                  );
+                                  topicName, "", "", "");
 
                     checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
                                   {
@@ -731,12 +730,11 @@ namespace NKikimr::NPersQueueTests {
                                       "api.grpc.topic.stream_read.messages",
                                       "topic.read.bytes",
                                       "topic.read.messages",
-                                      "topic.compaction.lag_milliseconds_max",
-                                      "topic.compaction.unprocessed_bytes_max",
-                                      "topic.compaction.unprocessed_count_max",
+                                      "topic.partition.blobs.compaction_lag_milliseconds_max",
+                                      "topic.partition.blobs.uncompacted_bytes_max",
+                                      "topic.partition.blobs.uncompacted_count_max",
                                   },
-                                  topicName, "", "", ""
-                                  );
+                                  topicName, "", "", "");
 
                     checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
                                   {

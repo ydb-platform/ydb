@@ -33,7 +33,7 @@ struct TKeyCompactionCounters {
     ui64 CompactedSize = 0;
     ui64 UncompactedCount = 0;
     ui64 CompactedCount = 0;
-    float UncompactedRatio = 1.0;
+    ui64 UncompactedRatio = 100;
     TDuration CurrReadCycleDuration = TDuration::Zero();
     ui64 CurrentReadCycleKeys = 0;
     ui64 ReadCyclesCount = 0;
@@ -98,7 +98,7 @@ public:
         TMaybe<TBatch> LastBatch;
         TKey LastBatchKey;
         TVector<TClientBlob> CurrMsgPartsFromLastBatch;
-        TVector<TKey> CurrMsgMiggleBlobKeys;
+        TVector<TKey> CurrMsgMiddleBlobKeys;
         ui64 BlobsToWriteInRequest = 0;
 
         ui64 FirstHeadOffset;

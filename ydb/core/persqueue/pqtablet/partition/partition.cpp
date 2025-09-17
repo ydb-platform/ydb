@@ -1748,9 +1748,9 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
         CompacterPartitionRequestInflight = false;
         if (Compacter) {
             Compacter->ProcessResponse(ev);
-            auto compacterCounters = Compacter->GetCounters();
-            KeyCompactionReadCyclesTotal.Set(compacterCounters.ReadCyclesCount);
-            KeyCompactionWriteCyclesTotal.Set(compacterCounters.WriteCyclesCount);
+            // auto compacterCounters = Compacter->GetCounters();
+            // KeyCompactionReadCyclesTotal.Set(compacterCounters.ReadCyclesCount);
+            // KeyCompactionWriteCyclesTotal.Set(compacterCounters.WriteCyclesCount);
         }
     }
     ReadingTimestamp = false;
@@ -2022,12 +2022,20 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     }
     if (PartitionCompactionCounters && Compacter) {
         auto counters = Compacter->GetCounters();
-        if (counters.UncompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE].Get()) {
-            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE].Set(counters.UncompactedSize);
+        if (counters.UncompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_MAX].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_MAX].Set(counters.UncompactedSize);
             haveChanges = true;
         }
-        if (counters.CompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE].Get()) {
-            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE].Set(counters.CompactedSize);
+        if (counters.UncompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_SUM].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_SUM].Set(counters.UncompactedSize);
+            haveChanges = true;
+        }
+        if (counters.CompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_MAX].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_MAX].Set(counters.CompactedSize);
+            haveChanges = true;
+        }
+        if (counters.CompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_SUM].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_SUM].Set(counters.CompactedSize);
             haveChanges = true;
         }
         if (counters.UncompactedCount != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_COUNT].Get()) {
@@ -2038,8 +2046,8 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_COUNT].Set(counters.CompactedCount);
             haveChanges = true;
         }
-        if (abs(counters.UncompactedRatio - PartitionCompactionCounters->GetCounters()[METRIC_COMPACTION_RATIO].Get()) > 1e-5) {
-            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTION_RATIO].Set(counters.UncompactedRatio);
+        if (counters.UncompactedRatio != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_RATIO].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_RATIO].Set(counters.UncompactedRatio);
             haveChanges = true;
         }
         if (counters.CurrReadCycleDuration.Seconds() != PartitionCompactionCounters->GetCounters()[METRIC_CURR_CYCLE_DURATION].Get()) {
@@ -2085,6 +2093,9 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         if (Compacter) {
             Compacter->ProcessResponse(ev);
+            // auto compacterCounters = Compacter->GetCounters();
+            // KeyCompactionReadCyclesTotal.Set(compacterCounters.ReadCyclesCount);
+            // KeyCompactionWriteCyclesTotal.Set(compacterCounters.WriteCyclesCount);
         }
         return;
     }

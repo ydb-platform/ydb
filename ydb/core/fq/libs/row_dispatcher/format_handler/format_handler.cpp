@@ -314,7 +314,7 @@ private:
         void FinishPacking() {
             if (!DataPacker->IsEmpty() || Watermark) {
                 LOG_ROW_DISPATCHER_TRACE("FinishPacking, batch size: " << DataPackerSize << ", number rows: " << FilteredOffsets.size());
-                ClientData.emplace(NYql::MakeReadOnlyRope(DataPacker->Finish()), FilteredOffsets, Watermark ? TVector<ui64> {Watermark->MicroSeconds()} : TVector<ui64> {}); // TODO TVector -> TMaybe
+                ClientData.emplace(NYql::MakeReadOnlyRope(DataPacker->Finish()), FilteredOffsets, Watermark);
                 NumberRows = 0;
                 NewNumberRows = 0;
                 DataPackerSize = 0;

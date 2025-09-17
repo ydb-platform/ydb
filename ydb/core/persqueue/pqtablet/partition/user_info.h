@@ -278,8 +278,7 @@ struct TUserInfo: public TUserInfoBase {
 
         auto consumerSubgroup = fcc
             ? subgroup->GetSubgroup("consumer", User)
-            : subgroup->GetSubgroup("Client", User)
-                      ->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx));
+            : subgroup->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx));
 
         auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
             return consumerSubgroup->GetExpiringNamedCounter(

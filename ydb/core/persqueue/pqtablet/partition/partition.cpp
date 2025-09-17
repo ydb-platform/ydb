@@ -198,11 +198,11 @@ TString TPartition::LogPrefix() const {
 }
 
 const TString& TPartition::GetLogPrefix() const {
-    TMaybe<TString>& logPrefix = UnknownLogPrefix;
+    TMaybe<TString>* logPrefix = &UnknownLogPrefix;
     if (CurrentStateFunc() == &TThis::StateInit) {
-        logPrefix = InitLogPrefix;
+        logPrefix = &InitLogPrefix;
     } else if (CurrentStateFunc() == &TThis::StateIdle) {
-        logPrefix = IdleLogPrefix;
+        logPrefix = &IdleLogPrefix;
     }
 
     if (!logPrefix.Defined()) {

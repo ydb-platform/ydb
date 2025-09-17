@@ -300,7 +300,7 @@ private:
 
     TActorId SnapshotWriter;
     ui32 TableId;
-    THashMap<ui32, TColumn> Columns; // TODO(pixcc): fix type
+    THashMap<ui32, TColumn> Columns;
 
     TBuffer Buffer;
 };

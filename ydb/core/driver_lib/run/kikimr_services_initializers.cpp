@@ -613,7 +613,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             setup->LocalServices.emplace_back(MakePollerActorId(),
                 TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, systemPoolId));
             setup->LocalServices.emplace_back(MakeCqActorId(),
-                TActorSetupCmd(CreateCqActor(-1), TMailboxType::ReadAsFilled, interconnectPoolId));
+                TActorSetupCmd(CreateCqActor(-1, icConfig.GetRdmaMaxWr()), TMailboxType::ReadAsFilled, interconnectPoolId));
 
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 

@@ -143,7 +143,9 @@ TEST(RdmaLow, ReadInOneProcessWithQpInterruption) {
 
 TEST(RdmaLow, CqOverflow) {
     auto [actorSystem, ctx] = PrepareTestRuntime("::1");
-    auto cqActorId = actorSystem->Register(CreateCqActor(1));
+    // Create CQ with hardware limited max_cqe - 1 item, but with big wr pool - 1024
+    // we need this configuration to simulate hardware cq overflow error
+    auto cqActorId = actorSystem->Register(CreateCqActor(1, 1024));
 
     auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool(nullptr);
     

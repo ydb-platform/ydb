@@ -22,16 +22,21 @@
 
 namespace NKikimr::NDataShard {
 using namespace NTableIndex::NFulltext;
+using namespace NKikimr::NFulltext;
 
 class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IActorExceptionHandler, public NTable::IScan {
     IDriver* Driver = nullptr;
-    TTags ScanTags;
 
     ui64 TabletId = 0;
     ui64 BuildId = 0;
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
+
+    TTags ScanTags;
+    TString TextColumn;
+    Ydb::Table::FulltextIndexSettings::Analyzers TextAnalyzers;
+    std::function<TCell(TArrayRef<const TCell>, TArrayRef<const TCell>)> TextGetter;
 
     TBatchRowsUploader Uploader;
     TBufferData* UploadBuf = nullptr;
@@ -58,11 +63,47 @@ public:
     {
         LOG_I("Create " << Debug());
 
-        // TODO:
-        Y_UNUSED(table);
-        // ScanTags = BuildTags(tableInfo, targetIndexColumns, targetDataColumns);
-        std::shared_ptr<NTxProxy::TUploadTypes> uploadTypes;
-        UploadBuf = Uploader.AddDestination(request.GetIndexName(), std::move(uploadTypes));
+        Y_ENSURE(Request.settings().columns().size() == 1);
+        TextColumn = Request.settings().columns().at(0).column();
+        TextAnalyzers = Request.settings().columns().at(0).analyzers();
+        Y_ENSURE(Request.GetKeyColumns().size() == 1);
+        Y_ENSURE(Request.GetKeyColumns().at(0) == TextColumn);
+
+        auto tags = GetAllTags(table);
+        auto types = GetAllTypes(table);
+
+        {
+            ScanTags.push_back(tags.at(TextColumn));
+
+            for (auto dataColumn : Request.GetDataColumns()) {
+                ScanTags.push_back(tags.at(dataColumn));
+            }
+        }
+
+        {
+            auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
+            auto addType = [&](const auto& column) {
+                auto it = types.find(column);
+                if (it != types.end()) {
+                    Ydb::Type type;
+                    NScheme::ProtoFromTypeInfo(it->second, type);
+                    uploadTypes->emplace_back(it->first, type);
+                    types.erase(it);
+                }
+            };
+            {
+                Ydb::Type type;
+                type.set_type_id(TokenType);
+                uploadTypes->emplace_back(TokenColumn, type);
+            }
+            for (const auto& column : table.KeyColumnIds) {
+                addType(table.Columns.at(column).Name);
+            }
+            for (auto dataColumn : Request.GetDataColumns()) {
+                addType(dataColumn);
+            }
+            UploadBuf = Uploader.AddDestination(Request.GetIndexName(), std::move(uploadTypes));
+        }
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
@@ -97,6 +138,17 @@ public:
 
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
+
+        TVector<TCell> uploadKey(::Reserve(key.size() + 1));
+        
+        TString text((*row).at(0).AsBuf());
+        auto tokens = Analyze(text, TextAnalyzers);
+        for (const auto& token : tokens) {
+            uploadKey.clear();
+            uploadKey.push_back(TCell(token));
+            uploadKey.insert(uploadKey.end(), key.begin(), key.end());
+            UploadBuf->AddRow(uploadKey, (*row).Slice(1));
+        }
 
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
     }

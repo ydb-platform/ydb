@@ -23,19 +23,18 @@ static const TString kIndexTable = "/Root/table-index";
 
 Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
 
-    void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
-        std::function<void(NKikimrTxDataShard::TEvBuildFulltextIndexRequest&)> setupRequest,
-        const TString& expectedError, bool expectedErrorSubstring = false, NKikimrIndexBuilder::EBuildStatus expectedStatus = NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST)
+    ui64 FillRequest(Tests::TServer::TPtr server, TActorId sender,
+        NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request, 
+        std::function<void(NKikimrTxDataShard::TEvBuildFulltextIndexRequest&)> setupRequest)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
+
         auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
         auto datashards = GetTableShards(server, sender, kMainTable);
         TTableId tableId = ResolveTableId(server, sender, kMainTable);
 
         UNIT_ASSERT(datashards.size() == 1);
 
-        auto ev = std::make_unique<TEvDataShard::TEvBuildFulltextIndexRequest>();
-        auto& request = ev->Record;
         request.SetId(1);
         request.SetSeqNoGeneration(id);
         request.SetSeqNoRound(1);
@@ -56,45 +55,33 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         request.SetIndexName(kIndexTable);
 
         request.AddKeyColumns("text");
-        request.AddDataColumns("data");
 
         setupRequest(request);
 
-        NKikimr::DoBadRequest<TEvDataShard::TEvBuildFulltextIndexResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring, expectedStatus);
+        return datashards[0];
     }
 
-    TString DoBuild(Tests::TServer::TPtr server, TActorId sender, NKikimrTxDataShard::TEvBuildFulltextIndexRequest request) {
-        auto id = sId.fetch_add(1, std::memory_order_relaxed);
-        auto& runtime = *server->GetRuntime();
-        auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
-        auto datashards = GetTableShards(server, sender, kMainTable);
-        UNIT_ASSERT(datashards.size() == 1);
-        TTableId tableId = ResolveTableId(server, sender, kMainTable);
+    void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
+        std::function<void(NKikimrTxDataShard::TEvBuildFulltextIndexRequest&)> setupRequest,
+        const TString& expectedError, bool expectedErrorSubstring = false, NKikimrIndexBuilder::EBuildStatus expectedStatus = NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST)
+    {
+        auto ev = std::make_unique<TEvDataShard::TEvBuildFulltextIndexRequest>();
 
-        request.SetId(1);
-        request.SetSeqNoGeneration(id);
-        request.SetSeqNoRound(1);
+        auto tabletId = FillRequest(server, sender, ev->Record, setupRequest);
 
-        request.SetTabletId(datashards[0]);
-        tableId.PathId.ToProto(request.MutablePathId());
+        NKikimr::DoBadRequest<TEvDataShard::TEvBuildFulltextIndexResponse>(server, sender, std::move(ev), tabletId, expectedError, expectedErrorSubstring, expectedStatus);
+    }
 
-        request.SetSnapshotTxId(snapshot.TxId);
-        request.SetSnapshotStep(snapshot.Step);
-
-        request.AddKeyColumns("text");
-        request.AddKeyColumns("key");
-        request.AddDataColumns("data");
-
-        request.SetIndexName(kIndexTable);
-
+    TString DoBuild(Tests::TServer::TPtr server, TActorId sender, std::function<void(NKikimrTxDataShard::TEvBuildFulltextIndexRequest&)> setupRequest) {
         auto ev1 = std::make_unique<TEvDataShard::TEvBuildFulltextIndexRequest>();
-        ev1->Record.CopyFrom(request);
-        
-        auto ev2 = std::make_unique<TEvDataShard::TEvBuildFulltextIndexRequest>();
-        ev1->Record.CopyFrom(request);
+        auto tabletId = FillRequest(server, sender, ev1->Record, setupRequest);
 
-        runtime.SendToPipe(datashards[0], sender, ev1.release(), 0, GetPipeConfigWithRetries());
-        runtime.SendToPipe(datashards[0], sender, ev2.release(), 0, GetPipeConfigWithRetries());
+        auto ev2 = std::make_unique<TEvDataShard::TEvBuildFulltextIndexRequest>();
+        ev2->Record.CopyFrom(ev1->Record);
+
+        auto& runtime = *server->GetRuntime();
+        runtime.SendToPipe(tabletId, sender, ev1.release(), 0, GetPipeConfigWithRetries());
+        runtime.SendToPipe(tabletId, sender, ev2.release(), 0, GetPipeConfigWithRetries());
 
         TAutoPtr<IEventHandle> handle;
         auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvBuildFulltextIndexResponse>(handle);
@@ -220,96 +207,91 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         }, "[ { <main>: Error: Empty index table name } { <main>: Error: Unknown key column: some } ]");
     }
 
-    // Y_UNIT_TEST(MainToPosting) {
-    //     TPortManager pm;
-    //     TServerSettings serverSettings(pm.GetPort(2134));
-    //     serverSettings.SetDomainName("Root");
+    Y_UNIT_TEST(Build) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
 
-    //     Tests::TServer::TPtr server = new TServer(serverSettings);
-    //     auto& runtime = *server->GetRuntime();
-    //     auto sender = runtime.AllocateEdgeActor();
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
 
-    //     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-    //     runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        Setup(server, sender);
+        
+        auto result = DoBuild(server, sender, [](auto&){});
 
-    //     InitRoot(server, sender);
+        UNIT_ASSERT_VALUES_EQUAL(result, R"(__ydb_token = apple, key = 1, data = (empty maybe)
+__ydb_token = apple, key = 2, data = (empty maybe)
+__ydb_token = apple, key = 3, data = (empty maybe)
+__ydb_token = car, key = 4, data = (empty maybe)
+__ydb_token = green, key = 1, data = (empty maybe)
+__ydb_token = red, key = 2, data = (empty maybe)
+__ydb_token = red, key = 4, data = (empty maybe)
+__ydb_token = yellow, key = 3, data = (empty maybe)
+)");
+    }
 
-    //     TShardedTableOptions options;
-    //     options.EnableOutOfOrder(true);
-    //     options.Shards(1);
+    Y_UNIT_TEST(BuildWithData) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
 
-    //     CreateMainTable(server, sender, options);
-    //     // Upsert some initial values
-    //     ExecSQL(server, sender,
-    //             R"(
-    //     UPSERT INTO `/Root/table-main`
-    //         (key, embedding, data)
-    //     VALUES )"
-    //             "(1, \"\x30\x30\3\", \"one\"),"
-    //             "(2, \"\x31\x31\3\", \"two\"),"
-    //             "(3, \"\x32\x32\3\", \"three\"),"
-    //             "(4, \"\x65\x65\3\", \"four\"),"
-    //             "(5, \"\x75\x75\3\", \"five\");");
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
 
-    //     auto create = [&] {
-    //         CreateLevelTable(server, sender, options);
-    //         CreatePostingTable(server, sender, options);
-    //     };
-    //     create();
-    //     auto recreate = [&] {
-    //         DropTable(server, sender, "table-level");
-    //         DropTable(server, sender, "table-posting");
-    //         create();
-    //     };
+        Setup(server, sender);
+        
+        auto result = DoBuild(server, sender, [](auto& request) {
+            request.AddDataColumns("data");
+        });
 
-    //     ui64 seed, k;
-    //     k = 2;
+        UNIT_ASSERT_VALUES_EQUAL(result, R"(__ydb_token = apple, key = 1, data = one
+__ydb_token = apple, key = 2, data = two
+__ydb_token = apple, key = 3, data = three
+__ydb_token = car, key = 4, data = four
+__ydb_token = green, key = 1, data = one
+__ydb_token = red, key = 2, data = two
+__ydb_token = red, key = 4, data = four
+__ydb_token = yellow, key = 3, data = three
+)");
+    }
 
-    //     seed = 0;
-    //     for (auto distance : {FulltextIndexSettings::DISTANCE_MANHATTAN, FulltextIndexSettings::DISTANCE_EUCLIDEAN}) {
-    //         auto [level, posting] = DoLocalKMeans(server, sender, 0, 0, seed, k,
-    //                                               NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
-    //                                               FulltextIndexSettings::VECTOR_TYPE_UINT8, distance);
-    //         UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 9223372036854775809, __ydb_centroid = mm\3\n"
-    //                                         "__ydb_parent = 0, __ydb_id = 9223372036854775810, __ydb_centroid = 11\3\n");
-    //         UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775809, key = 4, data = four\n"
-    //                                           "__ydb_parent = 9223372036854775809, key = 5, data = five\n"
-    //                                           "__ydb_parent = 9223372036854775810, key = 1, data = one\n"
-    //                                           "__ydb_parent = 9223372036854775810, key = 2, data = two\n"
-    //                                           "__ydb_parent = 9223372036854775810, key = 3, data = three\n");
-    //         recreate();
-    //     }
+    Y_UNIT_TEST(BuildWithTextData) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
 
-    //     seed = 111;
-    //     for (auto distance : {FulltextIndexSettings::DISTANCE_MANHATTAN, FulltextIndexSettings::DISTANCE_EUCLIDEAN}) {
-    //         auto [level, posting] = DoLocalKMeans(server, sender, 0, 0, seed, k,
-    //                                               NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
-    //                                               FulltextIndexSettings::VECTOR_TYPE_UINT8, distance);
-    //         UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 9223372036854775809, __ydb_centroid = 11\3\n"
-    //                                         "__ydb_parent = 0, __ydb_id = 9223372036854775810, __ydb_centroid = mm\3\n");
-    //         UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775809, key = 1, data = one\n"
-    //                                           "__ydb_parent = 9223372036854775809, key = 2, data = two\n"
-    //                                           "__ydb_parent = 9223372036854775809, key = 3, data = three\n"
-    //                                           "__ydb_parent = 9223372036854775810, key = 4, data = four\n"
-    //                                           "__ydb_parent = 9223372036854775810, key = 5, data = five\n");
-    //         recreate();
-    //     }
-    //     seed = 32;
-    //     for (auto similarity : {FulltextIndexSettings::SIMILARITY_INNER_PRODUCT, FulltextIndexSettings::SIMILARITY_COSINE,
-    //                             FulltextIndexSettings::DISTANCE_COSINE})
-    //     {
-    //         auto [level, posting] = DoLocalKMeans(server, sender, 0, 0, seed, k,
-    //                                               NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
-    //                                               FulltextIndexSettings::VECTOR_TYPE_UINT8, similarity);
-    //         UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 9223372036854775809, __ydb_centroid = II\3\n");
-    //         UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775809, key = 1, data = one\n"
-    //                                           "__ydb_parent = 9223372036854775809, key = 2, data = two\n"
-    //                                           "__ydb_parent = 9223372036854775809, key = 3, data = three\n"
-    //                                           "__ydb_parent = 9223372036854775809, key = 4, data = four\n"
-    //                                           "__ydb_parent = 9223372036854775809, key = 5, data = five\n");
-    //         recreate();
-    //     }
-    // }
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+
+        InitRoot(server, sender);
+
+        CreateMainTable(server, sender);
+        FillMainTable(server, sender);
+
+        { // CreateIndexTable with text column
+            TShardedTableOptions options;
+            options.EnableOutOfOrder(true);
+            options.Shards(1);
+            options.AllowSystemColumnNames(true);
+            options.Columns({
+                {TokenColumn, NTableIndex::NFulltext::TokenTypeName, true, true},
+                {"key", "Uint32", true, true},
+                {"text", "String", false, false},
+                {"data", "String", false, false},
+            });
+            CreateShardedTable(server, sender, "/Root", "table-index", options);
+        }
+        
+        auto result = DoBuild(server, sender, [](auto& request) {
+            request.AddDataColumns("text");
+            request.AddDataColumns("data");
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(result, R"(???)");
+    }
+
+    Y_UNIT_TEST(BuildWithTextFromKey) {
+    }
 }
 
 }

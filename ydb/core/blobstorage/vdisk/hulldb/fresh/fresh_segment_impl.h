@@ -192,19 +192,20 @@ namespace NKikimr {
 
     template <typename TKey, typename TMemRec>
     inline void TFreshIndexAndData<TKey, TMemRec>::PutLogoBlobWithData(ui64 /*lsn*/, const TKey& /*key*/, ui8 /*partId*/,
-            const TIngress& /*ingress*/, TRope /*buffer*/) {
+            const TIngress& /*ingress*/, TRope /*buffer*/, std::optional<ui64> /*checksum*/) {
         static_assert(!std::is_same_v<TKey, TKeyLogoBlob>, "not implemented");
     }
 
     template <>
     inline void TFreshIndexAndData<TKeyLogoBlob, TMemRecLogoBlob>::PutLogoBlobWithData(ui64 lsn,
-            const TKeyLogoBlob &key, ui8 partId, const TIngress &ingress, TRope buffer) {
+            const TKeyLogoBlob &key, ui8 partId, const TIngress &ingress, TRope buffer,
+            std::optional<ui64> checksum) {
         TMemRecLogoBlob memRec(ingress);
         buffer = TRope::CopySpaceOptimized(std::move(buffer), 128, *Arena);
         const ui64 fullDataSize = key.LogoBlobID().BlobSize();
         const size_t delta = buffer.size();
-        TRope blob = TDiskBlob::Create(fullDataSize, partId, HullCtx->VCtx->Top->GType.TotalPartCount(), std::move(buffer), *Arena,
-            HullCtx->AddHeader);
+        TRope blob = TDiskBlob::Create(fullDataSize, partId, HullCtx->VCtx->Top->GType.TotalPartCount(),
+            std::move(buffer), *Arena, HullCtx->VCfg->BlobHeaderMode, checksum);
         FreshDataMemConsumer.Add(delta);
         const ui32 blobSize = blob.GetSize();
 

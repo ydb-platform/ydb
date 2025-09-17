@@ -883,8 +883,7 @@ namespace NKikimr {
             return sum;
         }
 
-        void StorePayload(const TRcBuf &buffer);
-
+        void StorePayload(const TRcBuf &buffer, NKikimrBlobStorage::TVMultiPutItem *item);
 
         TRope GetItemBuffer(ui64 itemIdx) const;
 
@@ -893,7 +892,7 @@ namespace NKikimr {
             NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
             LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
             item->SetFullDataSize(logoBlobId.BlobSize());
-            StorePayload(buffer);
+            StorePayload(buffer, item);
             item->SetFullDataSize(logoBlobId.BlobSize());
             if (cookie) {
                 item->SetCookie(*cookie);

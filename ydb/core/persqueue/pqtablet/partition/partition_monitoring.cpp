@@ -55,8 +55,8 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
 
                     PROPERTIES("Information") {
                         PROPERTY("Total partition size, bytes", Size());
-                        PROPERTY("Total message count", (BlobEncoder.Head.GetNextOffset() - BlobEncoder.StartOffset));
-                        PROPERTY("StartOffset", BlobEncoder.StartOffset);
+                        PROPERTY("Total message count", (BlobEncoder.Head.GetNextOffset() - CompactionBlobEncoder.StartOffset));
+                        PROPERTY("StartOffset", CompactionBlobEncoder.StartOffset);
                         PROPERTY("EndOffset", BlobEncoder.EndOffset);
                         PROPERTY("LastOffset", BlobEncoder.Head.GetNextOffset());
                         PROPERTY("Last message WriteTimestamp", EndWriteTimestamp.ToRfc822String());

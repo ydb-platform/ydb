@@ -230,6 +230,7 @@ private:
                     rowId = value->GetElement(0).Get<ui64>();
                 } else if (value->GetListLength() == 2) {
                     rowId = value->GetElement(0).Get<ui64>();
+                    Offset = Self.Offsets->at(rowId);
                     if (const auto maybeWatermark = value->GetElement(1)) {
                         auto watermark = TInstant::MicroSeconds(maybeWatermark.Get<ui64>());
                         if (Watermark < watermark) {

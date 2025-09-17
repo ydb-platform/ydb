@@ -32,7 +32,7 @@ class Workload(unittest.TestCase):
         self._unpack_resource('ydb_cli')
 
     def _unpack_resource(self, name):
-        working_dir = os.path.join(tempfile.gettempdir(), "kafka_ydb_cli")
+        working_dir = os.path.join(os.getcwd(), "kafka_ydb_cli")
         self.tmp_dirs.append(working_dir)
         os.makedirs(working_dir, exist_ok=True)
         res = resource.find(name)

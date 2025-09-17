@@ -261,7 +261,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         # 1. Устанавливаем права на выполнение для nemesis
                         chmod_cmd = "sudo chmod +x /Berkanavt/nemesis/bin/nemesis"
                         chmod_result = execute_command(
-                            host=host, cmd=chmod_cmd, raise_on_error=False
+                            host=host, cmd=chmod_cmd, raise_on_error=False, timeout=10
                         )
 
                         chmod_stderr = (
@@ -410,7 +410,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 try:
                     cmd = f"sudo service nemesis {action}"
                     result = execute_command(
-                        host=host, cmd=cmd, raise_on_error=False)
+                        host=host, cmd=cmd, raise_on_error=False, timeout=10)
 
                     stdout = result.stdout if result.stdout else ""
                     stderr = result.stderr if result.stderr else ""
@@ -585,7 +585,8 @@ class WorkloadTestBase(LoadSuiteBase):
             result = execute_command(
                 host=host,
                 cmd=f"sudo cp {fallback_source} {remote_path}",
-                raise_on_error=False
+                raise_on_error=False,
+                timeout=10
             )
 
         # Проверяем результат

@@ -283,7 +283,7 @@ struct TUserInfo: public TUserInfoBase {
 
         auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
             return consumerSubgroup->GetExpiringNamedCounter(
-                "name",
+                fcc ? "name" : "sensor",
                 fcc ? "topic.partition." + forFCC : forFederation + "PerPartition",
                 deriv);
         };

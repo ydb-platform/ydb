@@ -4377,7 +4377,7 @@ void TPartition::SetupDetailedMetrics() {
     auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
         bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
         return subgroup->GetExpiringNamedCounter(
-            "name",
+            fcc ? "name" : "sensor",
             fcc ? forFCC : forFederation,
             deriv);
     };

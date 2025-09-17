@@ -20,12 +20,8 @@ TWriteQuoter::TWriteQuoter(
 {
 }
 
-const TString& TWriteQuoter::GetLogPrefix() const {
-    if (!LogPrefix) {
-        LogPrefix = TStringBuilder() << "[WriteQuoter][" << Partition << "] ";
-    }
-
-    return *LogPrefix;
+TString TWriteQuoter::BuildLogPrefix() const {
+    return TStringBuilder() << "[WriteQuoter][" << Partition << "] ";
 }
 
 void TWriteQuoter::Bootstrap(const TActorContext& ctx) {
@@ -120,4 +116,3 @@ TAccountQuoterHolder* TWriteQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::
 }
 
 } //namespace
-

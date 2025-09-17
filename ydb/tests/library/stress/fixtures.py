@@ -19,8 +19,15 @@ class StressFixture:
         )
 
         self.cluster = KiKiMR(self.config)
-        self.cluster.start()
-        self.database = "/Root"
+        self.cluster.start()        
+        self.database = "/Root/db"
+        self.cluster.create_database(self.database,
+                                storage_pool_units_count={
+                                    'hdd': 1
+                                })
+        self.cluster.register_and_start_slots(self.database, 1)
+        self.cluster.wait_tenant_up(self.database)
+
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
         self.mon_endpoint = f"http://localhost:{self.cluster.nodes[1].mon_port}"
 

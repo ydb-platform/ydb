@@ -132,6 +132,7 @@ namespace NKikimr {
 
     }
 
+    const ui32 TVDiskConfig::TinyDiskHugeBlobOverhead = 2u;
     const ui32 TVDiskConfig::TinyDiskHullCompLevel0MaxSstsAtOnce = 2u;
     const ui32 TVDiskConfig::TinyDiskHullCompSortedPartsNum = 2u;
 

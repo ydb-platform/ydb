@@ -148,7 +148,7 @@ public:
         TMaybe<ui64> AcquireLocksTxId;
         TDuration Timeout;
         TMaybe<TDuration> CancelAfter;
-        ui32 MaxComputeActors = 10'000;
+        ui32 MaxComputeActors = 100'000;
         ui32 MaxAffectedShards = 0;
         ui64 TotalReadSizeLimitBytes = 0;
         ui64 MkqlMemoryLimit = 0; // old engine compatibility

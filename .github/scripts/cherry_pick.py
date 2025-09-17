@@ -89,7 +89,7 @@ class CherryPickCreator:
         summary_path = os.getenv('GITHUB_STEP_SUMMARY')
         if summary_path:
             with open(summary_path, 'a') as summary:
-                summary.write(f'{msg}\n')
+                summary.write(f'{msg}\n\n')
 
     def git_run(self, *args):
         args = ["git"] + list(args)

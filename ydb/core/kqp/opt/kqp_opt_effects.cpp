@@ -209,16 +209,8 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
-            TExprBase inputRows = [&]() -> TExprBase {
-                if (useStreamWrite) {
-                    return node.Input();
-                } else {
-                    return BuildPrecomputeStage(node.Input(), ctx);
-                }
-            }();
-
             stageInput = RebuildPureStageWithSink(
-                inputRows, node.Table(),
+                node.Input(), node.Table(),
                 settings.AllowInconsistentWrites, useStreamWrite,
                 node.IsBatch() == "true", settings.Mode, isIndexImplTable, {}, priority, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
@@ -244,9 +236,6 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     }
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
-    auto stage = dqUnion.Output().Stage();
-    auto program = stage.Program();
-    auto input = program.Body();
 
     if (sinkEffect) {
         auto sink = Build<TDqSink>(ctx, node.Pos())
@@ -303,19 +292,9 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             // so we use union all + one sink. It's important for write optimizations support.
             // NOTE: OLTP large writes expected to fail anyway due to problems with locks/splits.
 
-            TExprBase inputRows = [&]() -> TExprBase {
-                if (useStreamWrite) {
-                    return dqUnion;
-                } else {
-                    return Build<TDqPhyPrecompute>(ctx, node.Pos())
-                        .Connection(dqUnion)
-                        .Done();
-                }
-            }();
-
             stageInput = Build<TDqStage>(ctx, node.Pos())
                 .Inputs()
-                    .Add(inputRows)
+                    .Add(dqUnion)
                     .Build()
                 .Program()
                     .Args({rowArgument})
@@ -373,15 +352,8 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
-            TExprBase inputRows = [&]() -> TExprBase {
-                if (useStreamWrite) {
-                    return node.Input();
-                } else {
-                    return BuildPrecomputeStage(node.Input(), ctx);
-                }
-            }();
             stageInput = RebuildPureStageWithSink(
-                inputRows, node.Table(),
+                node.Input(), node.Table(),
                 false, useStreamWrite, node.IsBatch() == "true",
                 "delete", isIndexImplTable, {}, priority, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
@@ -407,7 +379,6 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
 
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
-    auto input = dqUnion.Output().Stage().Program().Body();
 
     if (sinkEffect) {
         auto sink = Build<TDqSink>(ctx, node.Pos())
@@ -457,19 +428,9 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                 .Settings().Build()
                 .Done();
         } else {
-            TExprBase inputRows = [&]() -> TExprBase {
-                if (useStreamWrite) {
-                    return dqUnion;
-                } else {
-                    return Build<TDqPhyPrecompute>(ctx, node.Pos())
-                        .Connection(dqUnion)
-                        .Done();
-                }
-            }();
-
             stageInput = Build<TDqStage>(ctx, node.Pos())
                 .Inputs()
-                    .Add(inputRows)
+                    .Add(dqUnion)
                     .Build()
                 .Program()
                     .Args({rowArgument})

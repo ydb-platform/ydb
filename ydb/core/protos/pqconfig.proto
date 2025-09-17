@@ -450,7 +450,7 @@ message TPQTabletConfig {
     optional Ydb.MetricsLevel MetricsLevel = 40;
 
     // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
-    optional string MonitoringProject = 41;
+    optional string MonitoringProjectId = 41;
 }
 
 message THeartbeat {

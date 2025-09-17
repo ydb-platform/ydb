@@ -263,7 +263,7 @@ struct TTabletPreparationParameters {
     ::NKikimrPQ::TPQTabletConfig_EMeteringMode meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY;
     bool enableCompactificationByKey{false};
     std::optional<uint32_t> metricsLevel;
-    std::optional<TString> monitoringProject;
+    std::optional<TString> monitoringProjectId;
 };
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,

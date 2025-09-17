@@ -97,8 +97,8 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 tabletConfig->SetMetricsLevel(static_cast<decltype(tabletConfig->GetMetricsLevel())>(*parameters.metricsLevel));
             }
 
-            if (parameters.monitoringProject) {
-                tabletConfig->SetMonitoringProject(*parameters.monitoringProject);
+            if (parameters.monitoringProjectId) {
+                tabletConfig->SetMonitoringProjectId(*parameters.monitoringProjectId);
             }
 
             for (auto& u : users) {

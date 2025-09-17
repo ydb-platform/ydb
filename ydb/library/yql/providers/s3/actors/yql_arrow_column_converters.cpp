@@ -752,7 +752,7 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
         case NUdf::EDataSlot::Datetime:
         case NUdf::EDataSlot::Timestamp:
         case NUdf::EDataSlot::Decimal:
-        return {};
+            return {};
         case NUdf::EDataSlot::Date32:
         case NUdf::EDataSlot::Datetime64:
         case NUdf::EDataSlot::Timestamp64:

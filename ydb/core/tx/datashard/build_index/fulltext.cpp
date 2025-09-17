@@ -76,7 +76,9 @@ public:
             ScanTags.push_back(tags.at(TextColumn));
 
             for (auto dataColumn : Request.GetDataColumns()) {
-                ScanTags.push_back(tags.at(dataColumn));
+                if (dataColumn != TextColumn) {
+                    ScanTags.push_back(tags.at(dataColumn));
+                }
             }
         }
 
@@ -140,6 +142,7 @@ public:
         ReadBytes += CountRowCellBytes(key, *row);
 
         TVector<TCell> uploadKey(::Reserve(key.size() + 1));
+        TVector<TCell> uploadValue;
         
         TString text((*row).at(0).AsBuf());
         auto tokens = Analyze(text, TextAnalyzers);
@@ -147,7 +150,18 @@ public:
             uploadKey.clear();
             uploadKey.push_back(TCell(token));
             uploadKey.insert(uploadKey.end(), key.begin(), key.end());
-            UploadBuf->AddRow(uploadKey, (*row).Slice(1));
+            
+            uploadValue.clear();
+            size_t index = 1; // skip text column
+            for (auto dataColumn : Request.GetDataColumns()) {
+                if (dataColumn != TextColumn) {
+                    uploadValue.push_back(row.Get(index++));
+                } else {
+                    uploadValue.push_back(TCell(text));
+                }
+            }
+
+            UploadBuf->AddRow(uploadKey, uploadValue);
         }
 
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;

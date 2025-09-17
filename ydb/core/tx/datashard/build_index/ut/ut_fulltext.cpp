@@ -287,7 +287,15 @@ __ydb_token = yellow, key = 3, data = three
             request.AddDataColumns("data");
         });
 
-        UNIT_ASSERT_VALUES_EQUAL(result, R"(???)");
+        UNIT_ASSERT_VALUES_EQUAL(result, R"(__ydb_token = apple, key = 1, text = green apple, data = one
+__ydb_token = apple, key = 2, text = red apple, data = two
+__ydb_token = apple, key = 3, text = yellow apple, data = three
+__ydb_token = car, key = 4, text = red car, data = four
+__ydb_token = green, key = 1, text = green apple, data = one
+__ydb_token = red, key = 2, text = red apple, data = two
+__ydb_token = red, key = 4, text = red car, data = four
+__ydb_token = yellow, key = 3, text = yellow apple, data = three
+)");
     }
 
     Y_UNIT_TEST(BuildWithTextFromKey) {

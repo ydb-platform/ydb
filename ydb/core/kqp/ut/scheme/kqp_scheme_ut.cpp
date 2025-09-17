@@ -7516,7 +7516,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive", result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -7579,6 +7579,53 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided", result.GetIssues().ToOneLineString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    SERVICE_ACCOUNT_ID = "foo",
+                    INITIAL_TOKEN = "bar",
+                    INITIAL_TOKEN_SECRET_NAME = "baz"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "INITIAL_TOKEN and INITIAL_TOKEN_SECRET_NAME are mutually exclusive", result.GetIssues().ToOneLineString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    SERVICE_ACCOUNT_ID = "foo"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Neither INITIAL_TOKEN nor INITIAL_TOKEN_SECRET_NAME are provided", result.GetIssues().ToOneLineString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    INITIAL_TOKEN = "foo"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "SERVICE_ACCOUNT_ID is not provided", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -7755,6 +7802,40 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )", kikimr.GetEndpoint().c_str());
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithIamAuth, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
+        // ok
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpcs://localhost:2135/?database=/Root",
+                    SERVICE_ACCOUNT_ID = "foo",
+                    INITIAL_TOKEN_SECRET_NAME = "bar"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = executeQuery(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
@@ -8105,7 +8186,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive", result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
 
         // TOKEN and TOKEN_SECRET_NAME are mutually exclusive
@@ -8502,7 +8583,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -8790,7 +8871,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -9208,7 +9289,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
 
         // TOKEN and TOKEN_SECRET_NAME are mutually exclusive
@@ -9594,7 +9675,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
 
         // TOKEN and TOKEN_SECRET_NAME are mutually exclusive

@@ -124,8 +124,8 @@ def do(args):
                 cmd.FailRealmIdx = vslot.FailRealmIdx
                 cmd.FailDomainIdx = vslot.FailDomainIdx
                 cmd.VDiskIdx = vslot.VDiskIdx
-                cmd.PreferLessOccupiedRack = self.args.prefer_less_occupied_rack
-                cmd.WithAttentionToReplication = self.args.with_attention_to_replication
+                cmd.PreferLessOccupiedRack = args.prefer_less_occupied_rack
+                cmd.WithAttentionToReplication = args.with_attention_to_replication
 
             request = common.kikimr_bsconfig.TConfigRequest(Rollback=True)
             index = len(request.Command)

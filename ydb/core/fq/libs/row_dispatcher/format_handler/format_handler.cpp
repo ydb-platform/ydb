@@ -315,7 +315,10 @@ private:
         void FinishPacking() {
             if (!DataPacker->IsEmpty() || Watermark) {
                 LOG_ROW_DISPATCHER_TRACE("FinishPacking, batch size: " << DataPackerSize << ", number rows: " << FilteredOffsets.size());
-                ClientData.emplace(NYql::MakeReadOnlyRope(DataPacker->Finish()), FilteredOffsets, Watermark);
+                if (FilteredOffsets.empty()) {
+                    FilteredOffsets.emplace(Offset);
+                }
+                ClientData.emplace(NYql::MakeReadOnlyRope(DataPacker->Finish()), std::move(FilteredOffsets), Watermark);
                 NumberRows = 0;
                 NewNumberRows = 0;
                 DataPackerSize = 0;

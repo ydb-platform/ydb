@@ -331,7 +331,7 @@ public:
     TJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters)
         : TBase(std::move(consumer), __LOCATION__, config.FunctionRegistry, counters)
         , Config(config)
-        , MaxNumberRows(GetMaxNumberRows())
+        , MaxNumberRows(CalculateMaxNumberRows())
         , LogPrefix("TJsonParser: ")
     {
         FillColumnsBuffers();
@@ -402,7 +402,7 @@ public:
             return status;
         }
 
-        MaxNumberRows = GetMaxNumberRows();
+        MaxNumberRows = CalculateMaxNumberRows();
         FillColumnsBuffers();
         LOG_ROW_DISPATCHER_DEBUG("Parser columns count changed from " << Columns.size() << " to " << Consumer->GetColumns().size());
 
@@ -494,6 +494,7 @@ protected:
         Buffer.Clear();
     }
 
+private:
     void FillColumnsBuffers() {
         const auto& consumerColumns = Consumer->GetColumns();
 
@@ -512,7 +513,7 @@ protected:
         }
     }
 
-    ui64 GetMaxNumberRows() const {
+    ui64 CalculateMaxNumberRows() const {
         return (Config.BufferCellCount - 1) / Consumer->GetColumns().size() + 1;
     }
 

@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         UNIT_ASSERT(tables.size() == 3);
 
         for (const auto& table : tables) {
-            TString content = TFileInput(table.Child("data.json")).ReadAll();
+            TString content = TFileInput(table).ReadAll();
             UNIT_ASSERT(content.empty());
         }
     }
@@ -284,20 +284,20 @@ Y_UNIT_TEST_SUITE(Backup) {
         });
 
         {
-            UNIT_ASSERT_VALUES_EQUAL(tables[0].Basename(), "BinaryData");
-            TString content = TFileInput(tables[0].Child("data.json")).ReadAll();
+            UNIT_ASSERT_VALUES_EQUAL(tables[0].Basename(), "BinaryData.json");
+            TString content = TFileInput(tables[0]).ReadAll();
             UNIT_ASSERT_VALUES_EQUAL(content, "{\"Key\":3,\"Value\":\"YWJjZGVm\"}\n");
         }
 
         {
-            UNIT_ASSERT_VALUES_EQUAL(tables[1].Basename(), "CompositePKData");
-            TString content = TFileInput(tables[1].Child("data.json")).ReadAll();
+            UNIT_ASSERT_VALUES_EQUAL(tables[1].Basename(), "CompositePKData.json");
+            TString content = TFileInput(tables[1]).ReadAll();
             UNIT_ASSERT_VALUES_EQUAL(content, "{\"Key\":4,\"SubKey\":5,\"Value\":100}\n");
         }
 
         {
-            UNIT_ASSERT_VALUES_EQUAL(tables[2].Basename(), "Data");
-            TString content = TFileInput(tables[2].Child("data.json")).ReadAll();
+            UNIT_ASSERT_VALUES_EQUAL(tables[2].Basename(), "Data.json");
+            TString content = TFileInput(tables[2]).ReadAll();
             UNIT_ASSERT_VALUES_EQUAL(
                 content,
                 "{\"Key\":1,\"Value\":10}\n"

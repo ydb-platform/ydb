@@ -51,10 +51,9 @@ public:
         }
 
         for (auto& [_, table] : Tables) {
-            TFsPath tablePath = SnapshotPath.Child(table.Name);
+            auto tablePath = SnapshotPath.Child(table.Name + ".json");
             try {
-                tablePath.MkDir();
-                table.File = TFile(tablePath.Child("data.json"), EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
+                table.File = TFile(tablePath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
             } catch (const TIoException& e) {
                 return ReplyAndDie(false, TStringBuilder() << "Failed to create table snapshot file " << tablePath << ": " << e.what());
             }

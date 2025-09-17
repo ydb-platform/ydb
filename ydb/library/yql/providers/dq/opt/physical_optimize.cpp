@@ -215,7 +215,8 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
-        return DqBuildAggregationResultStage(node, ctx, optCtx);
+        const TAggregationResultStageOptions options{true, false};
+        return DqBuildAggregationResultStage(node, ctx, optCtx, options);
     }
 
     template <bool IsGlobal>

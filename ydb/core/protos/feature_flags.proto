@@ -151,7 +151,7 @@ message TFeatureFlags {
     optional bool EnableExternalSourceSchemaInference = 126 [default = false];
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = true];
-    optional bool EnableResourcePools = 129 [default = true];
+    optional bool EnableResourcePools = 129 [default = false];
     optional bool EnableColumnStatistics = 130 [default = false];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
@@ -215,7 +215,7 @@ message TFeatureFlags {
     optional bool RequireDbPrefixInSecretName = 189 [default = false];
     optional bool EnableSystemNamesProtection = 190 [default = false];
     optional bool EnableRealSystemViewPaths = 191 [default = false, (RequireRestart) = true];
-    optional bool EnableCSSchemasCollapsing = 192 [default = true];
+    optional bool EnableCSSchemasCollapsing = 192 [default = false];
     optional bool EnableMoveColumnTable = 193 [default = true];
     optional bool EnableArrowResultSetFormat = 194 [default = false];
     optional bool EnableCsOverloadsSubscriptionRetries = 195 [default = true];

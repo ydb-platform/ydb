@@ -316,7 +316,7 @@ private:
             .Add(NOpt::CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .AddCommonOptimization()
-            .Add(CreateKqpConstantFoldingTransformer(OptimizeCtx, *typesCtx, Config), "ConstantFolding")
+            .Add(CreateKqpConstantFoldingTransformer(*typesCtx, Config), "ConstantFolding")
             .Add(CreateKqpColumnStatisticsRequester(Config, *typesCtx, SessionCtx->Tables(), Cluster, ActorSystem), "ColumnStatisticsRequester")
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")

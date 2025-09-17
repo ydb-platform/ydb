@@ -19,8 +19,6 @@ class IOutputStream;
 
 namespace NInterconnect::NRdma {
 
-constexpr ui32 DEFAULT_MAX_WR_CNT = 1024;
-
 class TRdmaCtx;
 class TCqCommon;
 class TCqActor;

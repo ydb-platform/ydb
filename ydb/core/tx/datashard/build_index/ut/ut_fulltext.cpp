@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
                 (2, "red apple", "two"),
                 (3, "yellow apple", "three"),
                 (4, "red car", "four")
-        )"); 
+        )");
     }
 
     void CreateIndexTable(Tests::TServer::TPtr server, TActorId sender) {
@@ -299,6 +299,68 @@ __ydb_token = yellow, key = 3, text = yellow apple, data = three
     }
 
     Y_UNIT_TEST(BuildWithTextFromKey) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+
+        server->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        server->GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        { // CreateMainTable
+            TShardedTableOptions options;
+            options.EnableOutOfOrder(true);
+            options.Shards(1);
+            options.AllowSystemColumnNames(false);
+            options.Columns({
+                {"key", "Uint32", true, true},
+                {"text", "String", true, true},
+                {"subkey", "Uint32", true, true},
+                {"data", "String", false, false},
+            });
+            CreateShardedTable(server, sender, "/Root", "table-main", options);
+        }
+        { // FillMainTable
+            ExecSQL(server, sender, R"(
+                UPSERT INTO `/Root/table-main` (key, text, subkey, data) VALUES
+                    (1, "green apple", 11, "one"),
+                    (2, "red apple", 22, "two"),
+                    (3, "yellow apple", 33, "three"),
+                    (4, "red car", 44, "four")
+            )");
+        }
+        { // CreateIndexTable
+            TShardedTableOptions options;
+            options.EnableOutOfOrder(true);
+            options.Shards(1);
+            options.AllowSystemColumnNames(true);
+            options.Columns({
+                {TokenColumn, NTableIndex::NFulltext::TokenTypeName, true, true},
+                {"key", "Uint32", true, true},
+                {"text", "String", true, true},
+                {"subkey", "Uint32", true, true},
+                {"data", "String", false, false},
+            });
+            CreateShardedTable(server, sender, "/Root", "table-index", options);
+        }
+        
+        auto result = DoBuild(server, sender, [](auto& request) {
+            request.AddDataColumns("data");
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(result, R"(__ydb_token = apple, key = 1, text = green apple, subkey = 11, data = one
+__ydb_token = apple, key = 2, text = red apple, subkey = 22, data = two
+__ydb_token = apple, key = 3, text = yellow apple, subkey = 33, data = three
+__ydb_token = car, key = 4, text = red car, subkey = 44, data = four
+__ydb_token = green, key = 1, text = green apple, subkey = 11, data = one
+__ydb_token = red, key = 2, text = red apple, subkey = 22, data = two
+__ydb_token = red, key = 4, text = red car, subkey = 44, data = four
+__ydb_token = yellow, key = 3, text = yellow apple, subkey = 33, data = three
+)");
     }
 }
 

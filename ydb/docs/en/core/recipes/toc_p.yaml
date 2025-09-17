@@ -1,4 +1,6 @@
 items:
+- name: Backup collections recipes
+  href: backup-collections.md
 - name: YDB SDK
   include:
     mode: link

@@ -147,6 +147,15 @@
                         "plan_step": "not-zero-number-text",
                         "tx_id": "not-zero-number-text"
                     },
+                    "name": ".metadata",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
                     "name": "table1",
                     "owner": "root@builtin",
                     "type": "TABLE"
@@ -230,6 +239,15 @@
         },
         "3-get": {
             "children": [
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": ".metadata",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
                 {
                     "created_at": {
                         "plan_step": "not-zero-number-text",
@@ -327,6 +345,15 @@
         },
         "5-get": {
             "children": [
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": ".metadata",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
                 {
                     "created_at": {
                         "plan_step": "not-zero-number-text",
@@ -1179,6 +1206,18 @@
                     "OriginalSize": 9,
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 3,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0z",
+                    "Offset": 3,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 4,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
@@ -2566,6 +2605,10 @@
             "Result": {
                 "Entities": [
                     {
+                        "Name": ".metadata",
+                        "Type": "dir"
+                    },
+                    {
                         "Name": "shared_db",
                         "Type": "ext_sub_domain"
                     },
@@ -2578,7 +2621,7 @@
                         "Type": "ext_sub_domain"
                     }
                 ],
-                "Total": 3
+                "Total": 4
             },
             "Success": true,
             "Version": 2
@@ -2589,9 +2632,13 @@
                     {
                         "Name": "table1",
                         "Type": "table"
+                    },
+                    {
+                        "Name": ".metadata",
+                        "Type": "dir"
                     }
                 ],
-                "Total": 1
+                "Total": 2
             },
             "Success": true,
             "Version": 2
@@ -2615,9 +2662,13 @@
                     {
                         "Name": "table1",
                         "Type": "table"
+                    },
+                    {
+                        "Name": ".metadata",
+                        "Type": "dir"
                     }
                 ],
-                "Total": 1
+                "Total": 2
             },
             "Success": true,
             "Version": 2
@@ -2857,6 +2908,20 @@
                 "Children": [
                     {
                         "ACL": "",
+                        "ChildrenExist": true,
+                        "CreateFinished": true,
+                        "CreateStep": "not-zero-number-text",
+                        "CreateTxId": "not-zero-number-text",
+                        "Name": ".metadata",
+                        "Owner": "metadata@system",
+                        "ParentPathId": "1",
+                        "PathId": "not-zero-number-text",
+                        "PathState": 2,
+                        "PathType": 1,
+                        "SchemeshardId": "72057594046678944"
+                    },
+                    {
+                        "ACL": "",
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
@@ -2912,7 +2977,7 @@
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
                     "PathId_Depricated": "1",
-                    "PathsInside": "3",
+                    "PathsInside": "7",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3061,7 +3126,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 1,
-                    "PathVersion": "13",
+                    "PathVersion": "16",
                     "SchemeshardId": "72057594046678944"
                 }
             },
@@ -3075,6 +3140,20 @@
             "Path": "/Root/dedicated_db",
             "PathDescription": {
                 "Children": [
+                    {
+                        "ACL": "",
+                        "ChildrenExist": true,
+                        "CreateFinished": true,
+                        "CreateStep": "not-zero-number-text",
+                        "CreateTxId": "not-zero-number-text",
+                        "Name": ".metadata",
+                        "Owner": "metadata@system",
+                        "ParentPathId": "1",
+                        "PathId": "not-zero-number-text",
+                        "PathState": 2,
+                        "PathType": 1,
+                        "SchemeshardId": "72075186224037897"
+                    },
                     {
                         "ACL": "",
                         "ChildrenExist": false,
@@ -3106,8 +3185,8 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "2",
-                    "PathsInside": "1",
+                    "PathId_Depricated": "6",
+                    "PathsInside": "5",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3177,7 +3256,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
-                    "PathVersion": "7",
+                    "PathVersion": "10",
                     "SchemeshardId": "72075186224037897"
                 }
             },
@@ -3222,7 +3301,7 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "4",
+                    "PathId_Depricated": "8",
                     "PathsInside": "1",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
@@ -3307,6 +3386,20 @@
                 "Children": [
                     {
                         "ACL": "",
+                        "ChildrenExist": true,
+                        "CreateFinished": true,
+                        "CreateStep": "not-zero-number-text",
+                        "CreateTxId": "not-zero-number-text",
+                        "Name": ".metadata",
+                        "Owner": "metadata@system",
+                        "ParentPathId": "1",
+                        "PathId": "not-zero-number-text",
+                        "PathState": 2,
+                        "PathType": 1,
+                        "SchemeshardId": "72075186224038898"
+                    },
+                    {
+                        "ACL": "",
                         "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
@@ -3336,8 +3429,8 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "3",
-                    "PathsInside": "1",
+                    "PathId_Depricated": "7",
+                    "PathsInside": "5",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3407,7 +3500,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
-                    "PathVersion": "7",
+                    "PathVersion": "10",
                     "SchemeshardId": "72075186224038898"
                 }
             },
@@ -4157,7 +4250,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -4174,7 +4267,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -4522,7 +4615,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -4546,7 +4639,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -4563,7 +4656,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         }
@@ -4728,7 +4821,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         }
@@ -4752,7 +4845,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         },
@@ -4769,7 +4862,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -4924,7 +5017,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         }
@@ -4948,7 +5041,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         },
@@ -4965,7 +5058,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -5134,7 +5227,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -5151,7 +5244,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -5541,7 +5634,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         }
@@ -5565,7 +5658,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         },
@@ -5582,7 +5675,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -5737,7 +5830,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -5761,7 +5854,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -5778,7 +5871,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         }
@@ -7543,7 +7636,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -7560,7 +7653,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -7912,7 +8005,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -7929,7 +8022,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -8281,7 +8374,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -8298,7 +8391,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -8650,7 +8743,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -8667,7 +8760,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -9019,7 +9112,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "2"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -9036,7 +9129,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "3"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }

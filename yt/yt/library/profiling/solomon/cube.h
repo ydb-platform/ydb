@@ -69,6 +69,13 @@ bool IsZeroValue(const T& value)
 }
 
 template <class T>
+bool IsZeroValue(const TSummarySnapshot<T>& value)
+{
+    T zeroValue{};
+    return value.Min() == zeroValue && value.Max() == zeroValue;
+}
+
+template <class T>
 class TCube
 {
 public:

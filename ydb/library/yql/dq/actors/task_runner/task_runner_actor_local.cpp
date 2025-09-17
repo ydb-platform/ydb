@@ -226,8 +226,8 @@ private:
                 if (TaskRunner->GetWatermark().WatermarkIn < watermarkRequest && ReadyToWatermark()) {
                     LOG_T("Task runner. Inject watermark " << watermarkRequest);
                     TaskRunner->SetWatermarkIn(watermarkRequest);
+                    res = TaskRunner->Run();
                 }
-                res = TaskRunner->Run();
             }
         }
 

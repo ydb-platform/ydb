@@ -231,11 +231,7 @@ private:
                     rowId = value->GetElement(0).Get<ui64>();
                 } else if (value->GetListLength() == 2) {
                     rowId = value->GetElement(0).Get<ui64>();
-                    const auto maybeWatermark = value->GetElement(1);
-                    if (!maybeWatermark.IsEmbedded()) {
-                        return;
-                    }
-                    watermarkUs = maybeWatermark.Get<ui64>();
+                    watermarkUs = value->GetElement(1).Get<ui64>();
                 } else {
                     Y_ENSURE(false, "Unexpected output schema size");
                 }

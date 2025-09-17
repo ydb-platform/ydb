@@ -32,12 +32,8 @@ public:
         return Cq;
     }
 
-    int Init(const TRdmaCtx* ctx, int max_cqe) noexcept {
-        const ibv_device_attr& attr = ctx->GetDevAttr();
-        if (max_cqe <= 0) {
-            max_cqe = attr.max_cqe;
-        }
-        Cq = ibv_create_cq(ctx->GetContext(), max_cqe, nullptr, nullptr, 0);
+    int Init(const TRdmaCtx* ctx, int maxCqe) noexcept {
+        Cq = ibv_create_cq(ctx->GetContext(), maxCqe, nullptr, nullptr, 0);
         if (!Cq) {
             return errno;
         }
@@ -345,9 +341,16 @@ ICqMockControl* TryGetCqMockControl(ICq* cq) {
 }
 
 template<class TCq>
-static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int max_cqe) noexcept {
-    auto p = std::make_shared<TCq>(as, MAX_WR_CNT);
-    int err = p->Init(ctx, max_cqe);
+static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr) noexcept {
+    if (maxCqe <= 0) {
+        const ibv_device_attr& attr = ctx->GetDevAttr();
+        maxCqe = attr.max_cqe;
+    }
+    if (maxWr <= 0) {
+        maxWr = maxCqe;
+    }
+    auto p = std::make_shared<TCq>(as, maxWr);
+    int err = p->Init(ctx, maxCqe);
     if (err) {
         return nullptr;
     }
@@ -359,12 +362,12 @@ static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int ma
     return p;
 }
 
-ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int max_cqe) noexcept {
-    return CreateCq<TSimpleCq>(ctx, as, max_cqe);
+ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr) noexcept {
+    return CreateCq<TSimpleCq>(ctx, as, maxCqe, maxWr);
 }
 
-ICq::TPtr CreateSimpleCqMock(const TRdmaCtx* ctx, NActors::TActorSystem* as, int max_cqe) noexcept {
-    return CreateCq<TSimpleCqMock>(ctx, as, max_cqe);
+ICq::TPtr CreateSimpleCqMock(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr) noexcept {
+    return CreateCq<TSimpleCqMock>(ctx, as, maxCqe, maxWr);
 }
 
 const int TQueuePair::UnknownQpState = IBV_QPS_UNKNOWN;

@@ -13,7 +13,7 @@ namespace NInterconnect::NRdma {
  * creates at least one CQ per rdma context
  * maxCqe - max capacity of single queue under CQ actor abstruction. -1 - use limit from rdma context
  */
-NActors::IActor* CreateCqActor(int maxCqe);
+NActors::IActor* CreateCqActor(int maxCqe, int maxWr);
 NActors::IActor* CreateCqMockActor(int maxCqe);
 NActors::TActorId MakeCqActorId();
 

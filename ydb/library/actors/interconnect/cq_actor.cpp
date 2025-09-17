@@ -219,15 +219,15 @@ private:
     TCqFactory CqFactory;
 };
 
-NActors::IActor* CreateCqActor(int max_cqe) {
-    return new TCqActor([max_cqe](const TRdmaCtx* ctx) {
-        return CreateSimpleCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), max_cqe);
+NActors::IActor* CreateCqActor(int maxCqe, int maxWr) {
+    return new TCqActor([maxCqe, maxWr](const TRdmaCtx* ctx) {
+        return CreateSimpleCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), maxCqe, maxWr);
     });
 }
 
-NActors::IActor* CreateCqMockActor(int max_cqe) {
-    return new TCqActor([max_cqe](const TRdmaCtx* ctx) {
-        return CreateSimpleCqMock(ctx, TlsActivationContext->AsActorContext().ActorSystem(), max_cqe);
+NActors::IActor* CreateCqMockActor(int maxCqe) {
+    return new TCqActor([maxCqe](const TRdmaCtx* ctx) {
+        return CreateSimpleCqMock(ctx, TlsActivationContext->AsActorContext().ActorSystem(), maxCqe, maxCqe);
     });
 }
 

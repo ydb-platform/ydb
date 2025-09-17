@@ -104,6 +104,8 @@ void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) co
     if (!LockId) {
         return;
     }
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "!!! HERE 2");
+
     auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(TableMetadataAccessor->GetPathIdVerified(),
         GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetConflictableLockIds());
     owner.GetOperationsManager().AddEventForLock(owner, *LockId, evWriter);

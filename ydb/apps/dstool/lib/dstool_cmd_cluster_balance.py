@@ -242,6 +242,8 @@ class BalancingStrategy(IBalancingStrategy):
         cmd.FailRealmIdx = vslot.FailRealmIdx
         cmd.FailDomainIdx = vslot.FailDomainIdx
         cmd.VDiskIdx = vslot.VDiskIdx
+        cmd.PreferLessOccupiedRack = self.args.prefer_less_occupied_rack
+        cmd.WithAttentionToReplication = self.args.with_attention_to_replication
 
     def reassign_vslot(self, vslot, try_blocking):
         pdisk_id = common.get_pdisk_id(vslot.VSlotId)

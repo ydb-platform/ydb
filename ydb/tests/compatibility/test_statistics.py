@@ -19,6 +19,7 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster(
+            tenant_db="mydb",
         )
 
     def write_data(self):
@@ -32,14 +33,7 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
                     commit_tx=True
                 )
 
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=self.endpoint
-            )
-        )
-        driver.wait()
-
+        driver = self.create_driver()
         with ydb.QuerySessionPool(driver) as session_pool:
             session_pool.retry_operation_sync(operation)
 
@@ -67,14 +61,7 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
                 for query in queries:
                     session.transaction().execute(query, commit_tx=True)
 
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=self.endpoint
-            )
-        )
-        driver.wait()
-
+        driver = self.create_driver()
         with ydb.QuerySessionPool(driver) as session_pool:
             session_pool.retry_operation_sync(operation)
 

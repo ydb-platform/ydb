@@ -1117,7 +1117,7 @@ private:
     bool ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime);
 
     bool CompactionInProgress = false;
-    TVector<std::pair<TKey, size_t>> KeysForCompaction;
+    TVector<std::tuple<TDataKey, size_t>> KeysForCompaction;
     size_t CompactionBlobsCount = 0;
 
     void DumpZones(const char* file = nullptr, unsigned line = 0) const;
@@ -1143,10 +1143,16 @@ private:
     bool CanProcessUserActionAndTransactionEvents() const;
     ui64 GetCompactedBlobSizeLowerBound() const;
 
-    void CompactRequestedBlob(const TRequestedBlob& requestedBlob,
+    bool CompactRequestedBlob(const TRequestedBlob& requestedBlob,
                               TProcessParametersBase& parameters,
                               TEvKeyValue::TEvRequest* compactionRequest,
-                              ui64& blobCreationUnixTime);
+                              ui64& blobCreationUnixTime,
+                              bool wasThePreviousBlobBig);
+    void RenameCompactedBlob(TDataKey& k,
+                             const size_t size,
+                             const bool needToCompactHead,
+                             TProcessParametersBase& parameters,
+                             TEvKeyValue::TEvRequest* compactionRequest);
 };
 
 inline ui64 TPartition::GetStartOffset() const {

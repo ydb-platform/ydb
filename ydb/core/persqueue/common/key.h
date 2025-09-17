@@ -276,6 +276,7 @@ public:
     }
 
     void SetFastWrite();
+    void SetBody();
 
 private:
     TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const TMaybe<char> suffix)

@@ -1483,10 +1483,7 @@ class GnuCompiler(Compiler):
                 # Enable aligned allocation, unless explicitly disabled
                 self.c_foptions.append('-faligned-allocation')
         elif self.tc.is_gcc:
-            if self.target.is_tc32:
-                # tc32 toolchain does not support this flag
-                pass
-            else:
+            if self.tc.version_at_least(4, 9):
                 self.c_foptions += [
                     # Set up output colorization
                     '-fdiagnostics-color=always',

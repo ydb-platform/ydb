@@ -255,8 +255,6 @@ bool IsBuildImplTable(std::string_view tableName) {
 
 namespace NKMeans {
 
-inline constexpr TClusterId PostingParentFlag = (1ull << 63ull);
-
 bool HasPostingParentFlag(TClusterId parent) {
     return bool(parent & PostingParentFlag);
 }

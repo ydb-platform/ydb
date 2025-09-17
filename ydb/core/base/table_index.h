@@ -75,6 +75,8 @@ inline constexpr const char* PrefixTable = "indexImplPrefixTable";
 
 inline constexpr const int DefaultKMeansRounds = 3;
 
+inline constexpr TClusterId PostingParentFlag = (1ull << 63ull);
+
 bool HasPostingParentFlag(TClusterId parent);
 void EnsureNoPostingParentFlag(TClusterId parent);
 TClusterId SetPostingParentFlag(TClusterId parent);

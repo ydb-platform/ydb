@@ -425,7 +425,7 @@ public:
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
-        NSchemeShard::TPath dstPath = parentPath.Child(name);
+        NSchemeShard::TPath dstPath = parentPath.Child(name, TPath::TSplitChildTag{});
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();

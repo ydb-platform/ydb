@@ -21,6 +21,7 @@ TEST_SRCS(
 )
 
 DEPENDS(
+    ydb/apps/dstool
 )
 
 PEERDIR(

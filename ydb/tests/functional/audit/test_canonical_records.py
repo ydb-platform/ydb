@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
+import json
 
 from ydb import Driver, DriverConfig, SessionPool, TableClient, TableDescription, Column, OptionalType, PrimitiveType
 from ydb.topic import TopicClient, TopicAlterConsumer
@@ -9,7 +10,7 @@ from ydb.query import QuerySessionPool
 from ydb.tests.library.harness.util import LogLevels
 
 import http_helpers
-from helpers import cluster_endpoint, make_test_file_with_content, execute_ydbd, CanonicalCaptureAuditFileOutput
+from helpers import cluster_endpoint, make_test_file_with_content, execute_ydbd, execute_dstool_grpc, execute_dstool_http, CanonicalCaptureAuditFileOutput
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ CLUSTER_CONFIG = dict(
     enforce_user_token_requirement=True,
     default_clusteradmin=TOKEN,
     auth_config_path=make_test_file_with_content('auth_config.yaml', AUTH_CONFIG),
+    dynamic_pdisks=[{'user_kind': 0}],
     # extra_feature_flags=['enable_grpc_audit'],
 )
 
@@ -333,4 +335,28 @@ def test_execute_minikql(ydb_cluster):
     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     with capture_audit:
         execute_ydbd(ydb_cluster, TOKEN, ['admin', 'tablet', ss_tablet_id, 'execute', make_test_file_with_content('minikql.query', query)])
+    return capture_audit.canonize()
+
+
+def test_dstool_evict_vdisk_grpc(ydb_cluster):
+    list_result = json.loads(execute_dstool_grpc(ydb_cluster, TOKEN, ['vdisk', 'list', '--format', 'json']))
+    assert len(list_result) > 0
+    vdisk_id = list_result[0]["VDiskId"]
+    assert vdisk_id
+
+    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    with capture_audit:
+        execute_dstool_grpc(ydb_cluster, TOKEN, ['vdisk', 'evict', '--vdisk-ids', vdisk_id, '--ignore-degraded-group-check', '--ignore-failure-model-group-check'])
+    return capture_audit.canonize()
+
+
+def test_dstool_add_group_http(ydb_cluster):
+    list_result = json.loads(execute_dstool_http(ydb_cluster, TOKEN, ['pool', 'list', '--format', 'json']))
+    assert len(list_result) > 0
+    pool_name = list_result[0]["PoolName"]
+    assert pool_name
+
+    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    with capture_audit:
+        execute_dstool_http(ydb_cluster, TOKEN, ['group', 'add', '--pool-name', pool_name, '--groups', '1'])
     return capture_audit.canonize()

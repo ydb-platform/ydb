@@ -33,6 +33,12 @@
     "test_canonical_records.test_dml_through_http": {
         "uri": "file://test_canonical_records.test_dml_through_http/audit_log.json"
     },
+    "test_canonical_records.test_dstool_add_group_http": {
+        "uri": "file://test_canonical_records.test_dstool_add_group_http/audit_log.json"
+    },
+    "test_canonical_records.test_dstool_evict_vdisk_grpc": {
+        "uri": "file://test_canonical_records.test_dstool_evict_vdisk_grpc/audit_log.json"
+    },
     "test_canonical_records.test_execute_minikql": {
         "uri": "file://test_canonical_records.test_execute_minikql/audit_log.json"
     },

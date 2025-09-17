@@ -863,8 +863,18 @@ THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpPhyTable
     return PrunePartitions(operation, stageInfo, *HolderFactory, *TypeEnv, Config, isFullScan);
 }
 
-THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan) const {
-    return PrunePartitions(source, stageInfo, *HolderFactory, *TypeEnv, Config, isFullScan);
+const THashMap<ui64, TShardInfo>& TPartitionPruner::Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan) {
+    const auto& stageId = stageInfo.Id;
+    auto partition = SourceScanStageIdToParititions.find(stageId);
+
+    if (partition == SourceScanStageIdToParititions.end()) {
+        partition = SourceScanStageIdToParititions.emplace(stageId, std::make_pair(PrunePartitions(source, stageInfo, *HolderFactory, *TypeEnv, Config, isFullScan), false)).first;
+        partition->second.second = isFullScan;
+    } else {
+        isFullScan = partition->second.second;
+    }
+
+    return partition->second.first;
 }
 
 THashMap<ui64, TShardInfo> TPartitionPruner::PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo) {

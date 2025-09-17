@@ -134,6 +134,7 @@ namespace NKikimr {
         ui64 AnubisOsirisMaxInFly;
         bool AddHeader;
 
+        static const ui32 TinyDiskHugeBlobOverhead;
         static const ui32 TinyDiskHullCompLevel0MaxSstsAtOnce;
         static const ui32 TinyDiskHullCompSortedPartsNum;
 

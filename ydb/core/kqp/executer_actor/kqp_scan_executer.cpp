@@ -63,13 +63,13 @@ public:
         size_t resultsSize = Request.Transactions[0].Body->ResultsSize();
         YQL_ENSURE(resultsSize != 0);
 
-        StreamResult = Request.Transactions[0].Body->GetResults(0).GetIsStream();
+        TasksGraph.GetMeta().StreamResult = Request.Transactions[0].Body->GetResults(0).GetIsStream();
 
-        if (StreamResult) {
+        if (TasksGraph.GetMeta().StreamResult) {
             YQL_ENSURE(resultsSize == 1);
         } else {
             for (size_t i = 1; i < resultsSize; ++i) {
-                YQL_ENSURE(Request.Transactions[0].Body->GetResults(i).GetIsStream() == StreamResult);
+                YQL_ENSURE(Request.Transactions[0].Body->GetResults(i).GetIsStream() == TasksGraph.GetMeta().StreamResult);
             }
         }
     }
@@ -134,7 +134,7 @@ private:
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
         TSet<ui64> shardIds;
-        for (auto& [stageId, stageInfo] : GetTasksGraph().GetStagesInfo()) {
+        for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
             if (stageInfo.Meta.ShardKey) {
                 for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
                     shardIds.insert(partition.ShardId);
@@ -177,10 +177,12 @@ private:
             }
         }
 
-        BuildAllTasks<true>(false, LlvmSettings);
+        TasksGraph.BuildAllTasks(true, EnableReadsMerge, LlvmSettings,
+            Request.Transactions, ResourcesSnapshot, CollectProfileStats(Request.StatsMode), Stats.get(), ShardsOnNode.size(), nullptr);
+        OnEmptyResult();
 
         TIssue validateIssue;
-        if (!ValidateTasks(GetTasksGraph(), EExecType::Scan, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, validateIssue)) {
+        if (!ValidateTasks(TasksGraph, EExecType::Scan, TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
             TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, validateIssue);
             return;
         }
@@ -189,8 +191,8 @@ private:
         TVector<ui64> computeTasks;
 
         // calc stats
-        for (const auto& task : GetTasksGraph().GetTasks()) {
-            const auto& stageInfo = GetTasksGraph().GetStageInfo(task.StageId);
+        for (const auto& task : TasksGraph.GetTasks()) {
+            const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
 
             if (task.Meta.NodeId || stageInfo.Meta.IsSysView()) {
                 // Task with source
@@ -208,12 +210,12 @@ private:
             }
         }
 
-        if (GetTasksGraph().GetTasks().size() > Request.MaxComputeActors) {
+        if (TasksGraph.GetTasks().size() > Request.MaxComputeActors) {
             // LOG_N("Too many compute actors: computeTasks=" << computeTasks.size() << ", scanTasks=" << nScanTasks);
-            LOG_N("Too many compute actors: totalTasks=" << GetTasksGraph().GetTasks().size());
+            LOG_N("Too many compute actors: totalTasks=" << TasksGraph.GetTasks().size());
             TBase::ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                    << "Requested too many execution units: " << GetTasksGraph().GetTasks().size()));
+                    << "Requested too many execution units: " << TasksGraph.GetTasks().size()));
             return;
         }
 

@@ -72,3 +72,4 @@
 * [CREATE TRANSFER](../yql/reference/syntax/create-transfer.md)
 * [ALTER TRANSFER](../yql/reference/syntax/alter-transfer.md)
 * [DROP TRANSFER](../yql/reference/syntax/drop-transfer.md)
+* [{#T}](../recipes/transfer/index.md)

@@ -1,19 +1,11 @@
 #include "mirrorer.h"
-#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
-#include <ydb/core/base/counters.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
-
-#include <library/cpp/time_provider/time_provider.h>
-#include <library/cpp/string_utils/base64/base64.h>
-
-#include <google/protobuf/util/message_differencer.h>
-
-#include <util/string/join.h>
+#include <ydb/public/lib/base/msgbus.h>
 
 #define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
 

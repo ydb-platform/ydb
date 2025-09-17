@@ -2,9 +2,9 @@
 
 В разделе приведены примеры файлов настройки коннекторов Kafka Connect для работы с {{ ydb-short-name }} по протоколу Kafka.
 
-## Из файла в {{ ydb-short-name }}
+## Из файла в {{ ydb-short-name }} {#file-to-topic}
 
-Пример файла настроек FileSource коннектора `/etc/kafka-connect-worker/file-sink.properties` для переноса данных из файла в топик:
+Пример файла настроек FileSource-коннектора `/etc/kafka-connect-worker/file-sink.properties` для переноса данных из файла в топик:
 
 ```ini
 name=local-file-source

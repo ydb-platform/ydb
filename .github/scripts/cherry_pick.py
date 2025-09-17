@@ -142,7 +142,14 @@ class CherryPickCreator:
             try:
                 self.create_pr_for_branch(target)
             except GithubException as e:
-                self.add_summary(f'{target} error {type(e)}\n```\n{e}\n```')
+                self.add_summary(f'{target} error GithubException:\n```\n{e}\n```\n')
+            except subprocess.CalledProcessError as e:
+                msg = f'{target} error subprocess.CalledProcessError: {e}'
+                if e.stdout:
+                    msg += f'\nOutput:\n```\n{e.stdout.decode()}\n```'
+                if e.stderr:
+                    msg += f'\Errors:\n```\n{e.stderr.decode()}\n```'
+                self.add_summary(msg)
             except BaseException as e:
                 self.add_summary(f'{target} error {type(e)}\n```\n{e}\n```')
 

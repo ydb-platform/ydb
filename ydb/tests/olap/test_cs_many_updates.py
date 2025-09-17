@@ -281,6 +281,9 @@ class TestCSManyUpdates(object):
                 f"SELECT id, value FROM `{table_path}`;"
             )
 
+        rows = [row for result_set in result_sets for row in result_set.rows]
+        assert not rows
+
         print(timer.report())
 
     @pytest.mark.parametrize(

@@ -1,9 +1,10 @@
 #include "joins.h"
 #include "construct_join_graph.h"
 #include "factories.h"
+#include <ranges>
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <ranges>
+
 namespace {
 TVector<ui64> GenerateIntegerKeyColumn(i32 size, i32 seed) {
     std::default_random_engine eng;
@@ -69,19 +70,20 @@ void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams& params, TTestResultColle
     };
     const int bigSize = 1 << 17;
     const int smallSize = bigSize >> 7;
-    auto addStringAndIntInputs = [&](TVector<std::pair<NYKQL::TInnerJoinDescription, std::string>>& all, int leftSize, int rightSize, std::string name){
-        all.emplace_back(PrepareDescription(&setup, GenerateIntegerKeyColumn(leftSize, 123), GenerateIntegerKeyColumn(rightSize, 111)),
-        name+"_Integer");
-        all.emplace_back(PrepareDescription(&setup, GenerateStringKeyColumn(leftSize, 123), GenerateStringKeyColumn(rightSize, 111)),
-        name+"_String");
+    auto addStringAndIntInputs = [&](TVector<std::pair<NYKQL::TInnerJoinDescription, std::string>>& all, int leftSize,
+                                     int rightSize, std::string name) {
+        all.emplace_back(PrepareDescription(&setup, GenerateIntegerKeyColumn(leftSize, 123),
+                                            GenerateIntegerKeyColumn(rightSize, 111)), name + "_Integer");
+        all.emplace_back(PrepareDescription(&setup, GenerateStringKeyColumn(leftSize, 123),
+                                            GenerateStringKeyColumn(rightSize, 111)), name + "_String");
     };
-    
+
     TVector<std::pair<NYKQL::TInnerJoinDescription, std::string>> scaled_inputs;
-    for(int scale_log: std::views::iota(1) | std::views::take(8)) {
+    for (int scale_log : std::views::iota(1) | std::views::take(8)) {
         int scale = 1 << scale_log;
-        int leftSize = bigSize*scale;
-        addStringAndIntInputs(scaled_inputs, leftSize , leftSize, Sprintf("SameSize_%i", leftSize));
-        addStringAndIntInputs(scaled_inputs, leftSize, smallSize*scale, Sprintf("BigLeft_%i", leftSize));
+        int leftSize = bigSize * scale;
+        addStringAndIntInputs(scaled_inputs, leftSize, leftSize, Sprintf("SameSize_%i", leftSize));
+        addStringAndIntInputs(scaled_inputs, leftSize, smallSize * scale, Sprintf("BigLeft_%i", leftSize));
     }
 
     for (auto [algo, algo_name] : algos) {

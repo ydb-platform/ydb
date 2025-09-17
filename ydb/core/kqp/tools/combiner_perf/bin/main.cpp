@@ -1,24 +1,23 @@
 #include <filesystem>
-#include <ydb/core/kqp/tools/combiner_perf/subprocess.h>
-#include <ydb/core/kqp/tools/combiner_perf/printout.h>
-#include <ydb/core/kqp/tools/combiner_perf/simple_last.h>
-#include <ydb/core/kqp/tools/combiner_perf/simple_grace_join.h>
-#include <ydb/core/kqp/tools/combiner_perf/simple.h>
-#include <ydb/core/kqp/tools/combiner_perf/simple_block.h>
 #include <ydb/core/kqp/tools/combiner_perf/dq_combine_vs.h>
 #include <ydb/core/kqp/tools/combiner_perf/joins.h>
+#include <ydb/core/kqp/tools/combiner_perf/printout.h>
+#include <ydb/core/kqp/tools/combiner_perf/simple.h>
+#include <ydb/core/kqp/tools/combiner_perf/simple_block.h>
+#include <ydb/core/kqp/tools/combiner_perf/simple_grace_join.h>
+#include <ydb/core/kqp/tools/combiner_perf/simple_last.h>
+#include <ydb/core/kqp/tools/combiner_perf/subprocess.h>
 
 #include <library/cpp/getopt/last_getopt.h>
-#include <library/cpp/lfalloc/alloc_profiler/profiler.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/lfalloc/alloc_profiler/profiler.h>
 
-#include <util/string/cast.h>
 #include <util/generic/buffer.h>
-#include <util/stream/output.h>
 #include <util/stream/file.h>
+#include <util/stream/output.h>
+#include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/system/compiler.h>
-
 
 using NKikimr::NMiniKQL::TRunParams;
 
@@ -36,11 +35,10 @@ TStringBuf HashMapTypeName(NKikimr::NMiniKQL::EHashMapImpl implType)
     }
 }
 
-class TPrintingResultCollector : public TTestResultCollector
-{
-public:
-    virtual void SubmitMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName, const std::optional<bool> llvm, const std::optional<bool> spilling) override
-    {
+class TPrintingResultCollector : public TTestResultCollector {
+  public:
+    virtual void SubmitMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName,
+                               const std::optional<bool> llvm, const std::optional<bool> spilling) override {
         Cout << "------------------------------" << Endl;
         Cout << testName;
         if (llvm.has_value()) {
@@ -59,14 +57,19 @@ public:
         Cout << "Join overlap: " << runParams.JoinOverlap << Endl;
         Cout << Endl;
 
-        Cout << "Graph runtime is: " << result.ResultTime << " vs. reference C++ implementation: " << result.ReferenceTime << Endl;
+        Cout << "Graph runtime is: " << result.ResultTime
+             << " vs. reference C++ implementation: " << result.ReferenceTime << Endl;
 
         if (result.GeneratorTime) {
             Cout << "Input stream own iteration time: " << result.GeneratorTime << Endl;
             Cout << "Graph time - stream own time = "
-                 << (result.GeneratorTime <= result.ResultTime ? result.ResultTime - result.GeneratorTime : TDuration::Zero()) << Endl;
+                 << (result.GeneratorTime <= result.ResultTime ? result.ResultTime - result.GeneratorTime
+                                                               : TDuration::Zero())
+                 << Endl;
             Cout << "C++ implementation time - devnull time = "
-                 << (result.GeneratorTime <= result.ReferenceTime ? result.ReferenceTime - result.GeneratorTime : TDuration::Zero()) << Endl;
+                 << (result.GeneratorTime <= result.ReferenceTime ? result.ReferenceTime - result.GeneratorTime
+                                                                  : TDuration::Zero())
+                 << Endl;
         }
 
         if (result.MaxRSSDelta >= 0) {
@@ -77,7 +80,9 @@ public:
         }
     }
 };
-NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName, const std::optional<bool> llvm, const std::optional<bool> spilling){
+
+NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName,
+                                  const std::optional<bool> llvm, const std::optional<bool> spilling) {
     NJson::TJsonValue out;
 
     out["testName"] = testName;
@@ -115,8 +120,7 @@ int FilesIn(std::filesystem::path path)
     return std::distance(directory_iterator(path), directory_iterator{});
 }
 
-
-void SaveJson(NJson::TJsonValue value){
+void SaveJson(NJson::TJsonValue value) {
 
     Cout << NJson::WriteJson(value, false, false, false) << Endl;
     Cout.Flush();
@@ -125,26 +129,24 @@ void SaveJson(NJson::TJsonValue value){
     file.Flush();
 }
 
-
-class TJsonResultCollector : public TTestResultCollector
-{
-public:
-    virtual void SubmitMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName, const std::optional<bool> llvm, const std::optional<bool> spilling) override
-    {
-        NJson::TJsonValue out = MakeJsonMetrics(runParams,result,testName, llvm, spilling);
+class TJsonResultCollector : public TTestResultCollector {
+  public:
+    virtual void SubmitMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName,
+                               const std::optional<bool> llvm, const std::optional<bool> spilling) override {
+        NJson::TJsonValue out = MakeJsonMetrics(runParams, result, testName, llvm, spilling);
         SaveJson(out);
     }
 };
 
-class TJsonArrayResultCollector : public TTestResultCollector{
-public:
-    virtual void SubmitMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName, const std::optional<bool> llvm, const std::optional<bool> spilling) override{
-        array.AppendValue(MakeJsonMetrics(runParams,result,testName,llvm,spilling));
+class TJsonArrayResultCollector : public TTestResultCollector {
+  public:
+    virtual void SubmitMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName,
+                               const std::optional<bool> llvm, const std::optional<bool> spilling) override {
+        array.AppendValue(MakeJsonMetrics(runParams, result, testName, llvm, spilling));
     }
+
     NJson::TJsonValue array;
-
 };
-
 
 void DoFullPass(TRunParams runParams, bool withSpilling)
 {
@@ -153,8 +155,8 @@ void DoFullPass(TRunParams runParams, bool withSpilling)
     TJsonResultCollector printout;
 
     const std::vector<size_t> numKeys = {4u, 1000u, 100'000u, 1'000'000u, 10'000'000};
-    //const std::vector<size_t> numKeys = {60'000'000, 120'000'000};
-    //const std::vector<size_t> numKeys = {30'000'000u};
+    // const std::vector<size_t> numKeys = {60'000'000, 120'000'000};
+    // const std::vector<size_t> numKeys = {30'000'000u};
     const std::vector<size_t> blockSizes = {128u, 8192u};
 
     auto doSimple = [&printout, numKeys](const TRunParams& params) {
@@ -193,7 +195,7 @@ void DoFullPass(TRunParams runParams, bool withSpilling)
         }
     };
 
-    auto doJoins = [&](const TRunParams& params){
+    auto doJoins = [&](const TRunParams& params) {
         RunJoinsBench(params, printout);
     };
 
@@ -256,7 +258,7 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
             params.NumRuns = 1;
         }
         NKikimr::NMiniKQL::RunTestGraceJoinSimple(params, printout);
-    } else if (testType == ETestType::AllJoins){
+    } else if (testType == ETestType::AllJoins) {
         NKikimr::NMiniKQL::RunJoinsBench(params, printout);
     }
     SaveJson(printout.array);
@@ -288,23 +290,47 @@ int main(int argc, const char* argv[])
     options.AddHelpOption('h');
     options.SetFreeArgsNum(0);
 
-    options.AddLongOption("rand-seed").RequiredArgument().StoreResult(&runParams.RandomSeed)
+    options.AddLongOption("rand-seed")
+        .RequiredArgument()
+        .StoreResult(&runParams.RandomSeed)
         .Help("Random seed for the input dataset generator");
-    options.AddLongOption("num-attempts").RequiredArgument().StoreResult(&runParams.NumAttempts).DefaultValue(runParams.NumAttempts)
+    options.AddLongOption("num-attempts")
+        .RequiredArgument()
+        .StoreResult(&runParams.NumAttempts)
+        .DefaultValue(runParams.NumAttempts)
         .Help("Number of time measurement runs to filter out random fluctuations");
-    options.AddLongOption("rows-per-run").RequiredArgument().StoreResult(&runParams.RowsPerRun).DefaultValue(runParams.RowsPerRun)
+    options.AddLongOption("rows-per-run")
+        .RequiredArgument()
+        .StoreResult(&runParams.RowsPerRun)
+        .DefaultValue(runParams.RowsPerRun)
         .Help("Rows per single loop of the input stream");
-    options.AddLongOption("run-count").RequiredArgument().StoreResult(&runParams.NumRuns).DefaultValue(runParams.NumRuns)
+    options.AddLongOption("run-count")
+        .RequiredArgument()
+        .StoreResult(&runParams.NumRuns)
+        .DefaultValue(runParams.NumRuns)
         .Help("Number of loops of the input stream");
-    options.AddLongOption("num-keys").RequiredArgument().StoreResult(&runParams.NumKeys).DefaultValue(runParams.NumKeys)
+    options.AddLongOption("num-keys")
+        .RequiredArgument()
+        .StoreResult(&runParams.NumKeys)
+        .DefaultValue(runParams.NumKeys)
         .Help("Number of distinct keys in the input set (uniformly distributed)");
-    options.AddLongOption("long-string-keys").NoArgument().SetFlag(&runParams.LongStringKeys)
+    options.AddLongOption("long-string-keys")
+        .NoArgument()
+        .SetFlag(&runParams.LongStringKeys)
         .Help("String keys are short and embedded by default; specify this option to use heap-allocated strings");
-    options.AddLongOption("measure-reference-ram").NoArgument().SetFlag(&runParams.MeasureReferenceMemory)
+    options.AddLongOption("measure-reference-ram")
+        .NoArgument()
+        .SetFlag(&runParams.MeasureReferenceMemory)
         .Help("Do a separate run to measure the MaxRSS delta of a reference implementation");
-    options.AddLongOption("block-size").RequiredArgument().StoreResult(&runParams.BlockSize).DefaultValue(runParams.BlockSize)
+    options.AddLongOption("block-size")
+        .RequiredArgument()
+        .StoreResult(&runParams.BlockSize)
+        .DefaultValue(runParams.BlockSize)
         .Help("Block size (rows = column height) for block operators, when applicable");
-    options.AddLongOption("mem-limit").RequiredArgument().StoreResult(&runParams.WideCombinerMemLimit).DefaultValue(runParams.WideCombinerMemLimit)
+    options.AddLongOption("mem-limit")
+        .RequiredArgument()
+        .StoreResult(&runParams.WideCombinerMemLimit)
+        .DefaultValue(runParams.WideCombinerMemLimit)
         .Help("Memory limit for the wide combiner, in MB, or 0 to disable");
 
     options.AddLongOption("sampler")
@@ -337,8 +363,7 @@ int main(int argc, const char* argv[])
         })
         .Help("Hash map type (std::unordered_map or absl::dense_hash_map)");
 
-    options
-        .AddLongOption('t', "test")
+    options.AddLongOption('t', "test")
         .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "grace-join", "all-join"})
         .RequiredArgument("TEST_TYPE")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
@@ -361,12 +386,12 @@ int main(int argc, const char* argv[])
         })
         .Help("Enable single test run mode");
 
-    options.AddLongOption("no-verify").NoArgument().Handler0([&](){
-        runParams.EnableVerification = false;
-    }).Help("Don't check that the graph and the reference results are actually equal");
+    options.AddLongOption("no-verify")
+        .NoArgument()
+        .Handler0([&]() { runParams.EnableVerification = false; })
+        .Help("Don't check that the graph and the reference results are actually equal");
 
-    options
-        .AddLongOption('m', "mode")
+    options.AddLongOption('m', "mode")
         .Choices({"gen", "ref", "graph", "all"})
         .DefaultValue("all")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
@@ -379,18 +404,23 @@ int main(int argc, const char* argv[])
                 runParams.TestMode = NKikimr::NMiniKQL::ETestMode::GraphOnly;
             }
         })
-        .Help("Specify partial test mode (gen = only generate input, ref = only run the reference implementation, graph = only run the compute graph implementation)");
+        .Help("Specify partial test mode (gen = only generate input, ref = only run the reference implementation, "
+              "graph = only run the compute graph implementation)");
 
-    options.AddLongOption("llvm").NoArgument().SetFlag(&llvm)
-        .Help("Enable LLVM for the single test mode, if applicable");
-    options.AddLongOption("spilling").NoArgument().SetFlag(&spilling)
-        .Help("Enable spilling for the single test mode, if applicable, or enable spilling tests in the full test suite");
+    options.AddLongOption("llvm").NoArgument().SetFlag(&llvm).Help(
+        "Enable LLVM for the single test mode, if applicable");
+    options.AddLongOption("spilling")
+        .NoArgument()
+        .SetFlag(&spilling)
+        .Help(
+            "Enable spilling for the single test mode, if applicable, or enable spilling tests in the full test suite");
 
     options.AddLongOption("join-overlap")
         .RequiredArgument()
         .DefaultValue(100.0)
         .StoreResult(&joinOverlap)
-        .Help("Percentage of overlapping keys in left and right tables for join tests (relative to the number of distinct keys)");
+        .Help("Percentage of overlapping keys in left and right tables for join tests (relative to the number of "
+              "distinct keys)");
 
     options.AddLongOption("join-right-rows")
         .RequiredArgument()
@@ -398,13 +428,11 @@ int main(int argc, const char* argv[])
         .Help("Size for the right table in the join; defaults to num-keys");
 
     auto colConfigs = NKikimr::NMiniKQL::GetColumnConfigurationNames();
-    options
-        .AddLongOption("dq-test-columns")
+    options.AddLongOption("dq-test-columns")
         .Choices(THashSet<TString>(colConfigs.begin(), colConfigs.end()))
         .DefaultValue(colConfigs.front())
         .StoreResult(&runParams.CombineVsTestColumnSet)
         .Help("Select the set of columns for the dq-hash-combiner test from a list of named configurations");
-
 
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 

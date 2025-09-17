@@ -370,7 +370,7 @@ void TPartition::BlobsForCompactionWereWrite()
     PQ_LOG_D("Blobs compaction is completed");
 
     AFL_ENSURE(CompactionInProgress);
-    AFL_ENSURE(BlobEncoder.DataKeysBody.size() >= CompactionBlobsCount);
+    AFL_ENSURE(BlobEncoder.DataKeysBody.size() >= KeysForCompaction.size());
 
     for (size_t i = 0; i < KeysForCompaction.size(); ++i) {
         BlobEncoder.BodySize -= BlobEncoder.DataKeysBody.front().Size;
@@ -419,10 +419,10 @@ void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request,
 {
     if (CompactionBlobEncoder.HeadCleared) {
         AFL_ENSURE(!CompactionBlobEncoder.CompactedKeys.empty() || CompactionBlobEncoder.Head.PackedSize == 0)
-                       ("CompactedKeys.size", CompactionBlobEncoder.CompactedKeys.size())
-                       ("Head.Offset", CompactionBlobEncoder.Head.Offset)
-                       ("Head.PartNo", CompactionBlobEncoder.Head.PartNo)
-                       ("Head.PackedSize", CompactionBlobEncoder.Head.PackedSize);
+            ("CompactedKeys.size", CompactionBlobEncoder.CompactedKeys.size())
+            ("Head.Offset", CompactionBlobEncoder.Head.Offset)
+            ("Head.PartNo", CompactionBlobEncoder.Head.PartNo)
+            ("Head.PackedSize", CompactionBlobEncoder.Head.PackedSize);
         for (ui32 i = 0; i < TotalLevels; ++i) {
             CompactionBlobEncoder.DataKeysHead[i].Clear();
         }
@@ -479,9 +479,11 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKeyImpl(const bool headCl
         res = std::make_pair(key, headSize + CompactionBlobEncoder.NewHead.PackedSize);
     } else {
         res = CompactionBlobEncoder.Compact(key, headCleared);
-        AFL_ENSURE(res.first.IsHead())("res.firsts", res.first.ToString()); //may compact some KV blobs from head, but new KV blob is from head too
-        AFL_ENSURE(res.second >= CompactionBlobEncoder.NewHead.PackedSize)  //at least new data must be writed
-            ("res.second", res.second)("NewHead.PackedSize", CompactionBlobEncoder.NewHead.PackedSize);
+        AFL_ENSURE(res.first.IsHead())
+            ("res.first", res.first.ToString()); //may compact some KV blobs from head, but new KV blob is from head too
+        AFL_ENSURE(res.second >= CompactionBlobEncoder.NewHead.PackedSize)
+            ("res.second", res.second)
+            ("NewHead.PackedSize", CompactionBlobEncoder.NewHead.PackedSize); //at least new data must be writed
     }
     AFL_ENSURE(res.second <= MaxBlobSize)
         ("headCleared", headCleared)
@@ -490,7 +492,7 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKeyImpl(const bool headCl
         ("Head.PackedSize", CompactionBlobEncoder.Head.PackedSize)
         ("NewHead.PackedSize", CompactionBlobEncoder.NewHead.PackedSize)
         ("key", res.first.ToString())
-        ("key2", res.second)
+        ("size", res.second)
         ("MaxBlobSize", MaxBlobSize)
         ("MaxSizeCheck", MaxSizeCheck);
 

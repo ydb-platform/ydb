@@ -34,6 +34,10 @@ public:
     TStatus DoTransform(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) final {
         outputExpr = inputExpr;
 
+        if (!KqpCtx->Config->EnableOltpSink) {
+            return TStatus::Ok;
+        }
+
         const auto stagesUsedForPrecomputesAndSinks = FindStagesUsedForPrecomputeAndSinks(outputExpr);
         Y_UNUSED(stagesUsedForPrecomputesAndSinks);
 
@@ -51,7 +55,6 @@ public:
             return TStatus::Ok;
         }
 
-        TNodeSet visited;
         // Find all stages that depend on non-deterministic stages
         // that are used for sinks or precomputes.
         {
@@ -59,6 +62,7 @@ public:
                 return !exprNode->IsLambda();
             };
 
+            TNodeSet visited;
             auto collector = [&](const TExprNode::TPtr& exprNode) {
                 if (TDqStage::Match(exprNode.Get())) {
                     bool foundMarked = false;

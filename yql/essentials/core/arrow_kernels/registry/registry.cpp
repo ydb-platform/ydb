@@ -31,7 +31,7 @@ namespace {
             Explorer_.Walk(Pgm_.GetNode(), Env_);
             NKikimr::NMiniKQL::TComputationPatternOpts opts(Alloc_.Ref(), Env_, nodeFactory,
                 &functionRegistry, NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, "OFF",
-                NKikimr::NMiniKQL::EGraphPerProcess::Multi, nullptr, nullptr, nullptr, nullptr, langver);
+                NKikimr::NMiniKQL::EGraphPerProcess::Multi, nullptr, nullptr, nullptr, nullptr, nullptr, langver);
             std::vector<NKikimr::NMiniKQL::TNode*> entryPoints;
             if (argsCallable->GetType()->GetName() == "BlockAsTuple") {
                 for (ui32 i = 0; i < argsCallable->GetInputsCount(); ++i) {

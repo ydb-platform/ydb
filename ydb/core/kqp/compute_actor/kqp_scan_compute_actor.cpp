@@ -34,6 +34,7 @@ TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableActorOptions 
         memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /* taskCounters = */ nullptr, std::move(traceId), std::move(arena))
     , ComputeCtx(settings.StatsMode)
     , BlockTrackingMode(mode)
+    , AllocCounters(std::make_shared<TAllocCountersProvider::TCountersMap>())
 {
     InitializeTask();
     YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
@@ -248,6 +249,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     execCtx.ApplyCtx = nullptr;
     execCtx.TypeEnv = nullptr;
     execCtx.PatternCache = GetKqpResourceManager()->GetPatternCache();
+    execCtx.AllocCounters = AllocCounters;
 
     const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 

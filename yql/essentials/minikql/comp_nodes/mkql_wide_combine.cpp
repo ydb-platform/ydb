@@ -460,6 +460,9 @@ public:
             // id will be assigned externally in future versions
             TString id = TString(Operator_Aggregation) + "0";
             CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+            if (TlsAllocState->CurrentCounter) {
+                TlsAllocState->CurrentCounter->BindCounter(ctx.CountersProvider->GetCounter(id, Counter_PeakBytes, false));
+            }
         }
     }
 
@@ -1445,6 +1448,9 @@ private:
             // id will be assigned externally in future versions
             TString id = TString(Operator_Aggregation) + "0";
             ptr->CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+            if (TlsAllocState->CurrentCounter) {
+                TlsAllocState->CurrentCounter->BindCounter(ctx.CountersProvider->GetCounter(id, Counter_PeakBytes, false));
+            }
         }
     }
 
@@ -1938,6 +1944,9 @@ template<bool Last>
 IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeFactoryContext& ctx, bool allowSpilling) {
     MKQL_ENSURE(callable.GetInputsCount() >= (Last ? 3U : 4U), "Expected more arguments.");
 
+    TAllocCounterId allocCounterId = (uintptr_t)&callable;
+    TAllocCounterGuard guard(ctx.AllocCountersProvider, allocCounterId);
+
     const auto inputType = AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType());
     const auto inputWidth = GetWideComponentsCount(inputType);
     const auto outputWidth = GetWideComponentsCount(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
@@ -2004,23 +2013,46 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         if constexpr (Last) {
             const auto inputItemTypes = GetWideComponents(inputType);
-            return new TWideLastCombinerWrapper(ctx.Mutables, wide, std::move(nodes),
+            auto* node = new TWideLastCombinerWrapper(ctx.Mutables, wide, std::move(nodes),
                 TMultiType::Create(inputItemTypes.size(), inputItemTypes.data(), ctx.Env),
                 std::move(keyTypes),
                 TMultiType::Create(keyAndStateItemTypes.size(),keyAndStateItemTypes.data(), ctx.Env),
                 allowSpilling
             );
+            if (ctx.AllocCountersProvider) {
+                ctx.AllocCountersProvider->ReplaceCounterId(allocCounterId, node);
+            }
+            return node;
         } else {
-            if (const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(1U))->AsValue().Get<i64>(); memLimit >= 0)
-                if (EGraphPerProcess::Single == ctx.GraphPerProcess)
-                    return new TWideCombinerWrapper<true, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
-                else
-                    return new TWideCombinerWrapper<false, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
-            else
-                if (EGraphPerProcess::Single == ctx.GraphPerProcess)
-                    return new TWideCombinerWrapper<true, true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(-memLimit));
-                else
-                    return new TWideCombinerWrapper<false, true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(-memLimit));
+            if (const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(1U))->AsValue().Get<i64>(); memLimit >= 0) {
+                if (EGraphPerProcess::Single == ctx.GraphPerProcess) {
+                    auto* node = new TWideCombinerWrapper<true, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
+                    if (ctx.AllocCountersProvider) {
+                        ctx.AllocCountersProvider->ReplaceCounterId(allocCounterId, node);
+                    }
+                    return node;
+                } else {
+                    auto* node = new TWideCombinerWrapper<false, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
+                    if (ctx.AllocCountersProvider) {
+                        ctx.AllocCountersProvider->ReplaceCounterId(allocCounterId, node);
+                    }
+                    return node;
+                }
+            } else {
+                if (EGraphPerProcess::Single == ctx.GraphPerProcess) {
+                    auto* node = new TWideCombinerWrapper<true, true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(-memLimit));
+                    if (ctx.AllocCountersProvider) {
+                        ctx.AllocCountersProvider->ReplaceCounterId(allocCounterId, node);
+                    }
+                    return node;
+                } else {
+                    auto* node = new TWideCombinerWrapper<false, true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(-memLimit));
+                    if (ctx.AllocCountersProvider) {
+                        ctx.AllocCountersProvider->ReplaceCounterId(allocCounterId, node);
+                    }
+                    return node;
+                }
+            }
         }
     }
 

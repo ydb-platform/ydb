@@ -70,6 +70,7 @@ private:
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TString Database;
+    NMiniKQL::TAllocCountersProvider::TCountersMapPtr AllocCounters;
 };
 
 } // namespace NKikimr::NKqp

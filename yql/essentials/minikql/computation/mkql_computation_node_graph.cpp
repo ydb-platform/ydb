@@ -237,6 +237,7 @@ public:
         : Env(opts.Env)
         , TypeInfoHelper(new TTypeInfoHelper())
         , CountersProvider(opts.CountersProvider)
+        , AllocCountersProvider(opts.AllocCountersProvider)
         , SecureParamsProvider(opts.SecureParamsProvider)
         , LogProvider(opts.LogProvider)
         , LangVer(opts.LangVer)
@@ -468,6 +469,7 @@ private:
                 Env,
                 TypeInfoHelper,
                 CountersProvider,
+                AllocCountersProvider,
                 SecureParamsProvider,
                 LogProvider,
                 LangVer,
@@ -566,6 +568,7 @@ private:
     const TTypeEnvironment& Env;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
     NUdf::ICountersProvider* CountersProvider;
+    TAllocCountersProvider* AllocCountersProvider;
     const NUdf::ISecureParamsProvider* SecureParamsProvider;
     const NUdf::ILogProvider* LogProvider;
     const NYql::TLangVersion LangVer;

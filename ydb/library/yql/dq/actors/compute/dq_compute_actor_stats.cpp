@@ -105,6 +105,11 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
             auto& op = *protoTask->MutableOperators()->Add();
             op.SetOperatorId(opStat.OperatorId);
             op.SetBytes(std::max<i64>(0, opStat.Bytes));
+            {
+                TStringStream ss;
+                ss << "opStat bytes: " << opStat.Bytes << Endl;
+                Cerr << ss.Str();
+            }
             op.SetRows(std::max<i64>(0, opStat.Rows));
             switch (opStat.OperatorType) {
                 case TOperatorType::Join: {

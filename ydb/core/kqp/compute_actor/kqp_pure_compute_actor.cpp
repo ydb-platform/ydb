@@ -29,6 +29,7 @@ TKqpComputeActor::TKqpComputeActor(
     , ArrayBufferMinFillPercentage(memoryLimits.ArrayBufferMinFillPercentage)
     , UserToken(std::move(userToken))
     , Database(database)
+    , AllocCounters(std::make_shared<TAllocCountersProvider::TCountersMap>())
 {
     InitializeTask();
     if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
@@ -61,6 +62,7 @@ void TKqpComputeActor::DoBootstrap() {
     execCtx.ApplyCtx = nullptr;
     execCtx.TypeEnv = nullptr;
     execCtx.PatternCache = GetKqpResourceManager()->GetPatternCache();
+    execCtx.AllocCounters = AllocCounters;
 
     TDqTaskRunnerSettings settings;
     settings.StatsMode = RuntimeSettings.StatsMode;

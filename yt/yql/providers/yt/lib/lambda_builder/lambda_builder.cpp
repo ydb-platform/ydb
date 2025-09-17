@@ -186,7 +186,7 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
 
     TComputationPatternOpts patternOpts(Alloc.Ref(), GetTypeEnvironment());
     patternOpts.SetOptions(factory, FunctionRegistry, validateMode, validatePolicy,
-        optLLVM, graphPerProcess, JobStats, Counters,
+        optLLVM, graphPerProcess, JobStats, Counters, nullptr,
         SecureParamsProvider, LogProvider, LangVer);
     auto preparePatternFunc = [&]() {
         if (serialized) {
@@ -209,7 +209,7 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     YQL_ENSURE(pattern);
 
     const TComputationOptsFull computeOpts(JobStats, Alloc.Ref(), GetTypeEnvironment(), *randomProvider, *timeProvider,
-        validatePolicy, SecureParamsProvider, Counters, LogProvider, LangVer);
+        validatePolicy, SecureParamsProvider, Counters, nullptr, LogProvider, LangVer);
     auto graph = pattern->Clone(computeOpts);
     return MakeHolder<TComputationGraphProxy>(std::move(pattern), std::move(graph));
 }

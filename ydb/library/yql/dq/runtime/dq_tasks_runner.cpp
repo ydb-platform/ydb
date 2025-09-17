@@ -245,6 +245,7 @@ public:
         : Context(context)
         , Settings(settings)
         , LogFunc(logFunc)
+        , AllocCountersProvider(context.AllocCounters ? std::make_unique<TAllocCountersProvider>(context.AllocCounters) : nullptr)
         , AllocatedHolder(std::make_optional<TAllocatedHolder>())
     {
         Stats = std::make_unique<TDqTaskRunnerStats>();
@@ -340,8 +341,8 @@ public:
 
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
-            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr,
-            ComputationLogProvider.Get(), task.GetProgram().GetLangVer());
+            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, CollectFull() && AllocCountersProvider ? AllocCountersProvider.get() : nullptr,
+            nullptr, ComputationLogProvider.Get(), task.GetProgram().GetLangVer());
 
         if (!SecureParamsProvider) {
             SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
@@ -796,6 +797,15 @@ public:
                 });
             }
 
+            if (AllocCountersProvider) {
+                {
+                    TStringStream ss;
+                    ss << "WUEEEE!!!" << Endl;
+                    Cerr << ss.Str();
+                }
+                AllocCountersProvider->UpdateAllCounters();
+            }
+
             Stats->OperatorStat.clear();
             for (auto& [_, opStat] : CountersProvider.OperatorStat) {
                 Stats->OperatorStat.push_back(opStat);
@@ -1034,6 +1044,7 @@ private:
     TLogFunc LogFunc;
     std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider;
     TDqTaskCountersProvider CountersProvider;
+    std::unique_ptr<TAllocCountersProvider> AllocCountersProvider;
     bool InputConsumed = false;
 
     struct TInputTransformInfo {

@@ -579,10 +579,28 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
             auto arg = Build<TCoArgument>(ctx, root.Node->Pos()).Name("arg").Done().Ptr();
 
             for (auto mapElement : map.MapElements()) {
+                TMaybeNode<TCoLambda> mapLambda;
+
+                if (mapElement.Maybe<TKqpOpMapElementLambda>()) {
+                    mapLambda = mapElement.Cast<TKqpOpMapElementLambda>().Lambda();
+                }
+                else {
+                    auto var = mapElement.Cast<TKqpOpMapElementRename>().From();
+                    // clang-format off
+                    mapLambda = Build<TCoLambda>(ctx, root.Node->Pos())
+                        .Args({arg})
+                        .Body<TCoMember>()
+                            .Struct(arg)
+                            .Name(var)
+                        .Build()
+                    .Done();
+                    // clang-format on
+                }
+
                 // clang-format off
                 auto tuple = Build<TCoNameValueTuple>(ctx, root.Node->Pos())
                     .Name().Build(mapElement.Variable())
-                    .Value(mapElement.Lambda().Body())
+                    .Value(mapLambda.Body())
                 .Done();
                 // clang-format on
                 

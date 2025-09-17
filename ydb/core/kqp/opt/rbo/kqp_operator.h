@@ -15,6 +15,7 @@ enum EOperator : ui32 {
     EmptySource,
     Source,
     Map,
+    Project,
     Filter,
     Join,
     Limit,
@@ -176,10 +177,13 @@ class IOperator {
 
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) = 0;
 
+    bool IsSingleConsumer() { return Parents.size() <= 1; }
+
     const EOperator Kind;
     TExprNode::TPtr Node;
     TPhysicalOpProps Props;
     TVector<std::shared_ptr<IOperator>> Children;
+    TVector<std::weak_ptr<IOperator>> Parents;
     TVector<TInfoUnit> OutputIUs;
 };
 
@@ -235,7 +239,20 @@ class TOpMap : public IUnaryOperator {
     public:
     TOpMap(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    bool HasRenames() const;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
 
+    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> MapElements;
+    bool Project = true;
+};
+
+class TOpProject : public IUnaryOperator {
+    public:
+    TOpProject(TExprNode::TPtr node);
+    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+
+    TVector<TInfoUnit> GetProjectList() const;
+    TVector<TInfoUnit> ProjectList;
 };
 
 class TOpFilter : public IUnaryOperator {
@@ -267,6 +284,7 @@ class TOpRoot : public IUnaryOperator {
     public:
     TOpRoot(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    void ComputeParents();
 
     TPlanProps PlanProps;
 

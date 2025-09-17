@@ -1,8 +1,6 @@
 #include "incr_restore_helpers.h"
 
 #include <ydb/core/protos/datashard_backup.pb.h>
-#include <library/cpp/string_utils/base64/base64.h>
-#include <util/string/escape.h>
 
 namespace NKikimr::NDataShard::NIncrRestoreHelpers {
 

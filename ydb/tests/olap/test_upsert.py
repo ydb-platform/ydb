@@ -2,7 +2,6 @@ import logging
 import os
 import yatest.common
 import ydb
-import json
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -82,16 +81,13 @@ class TestUpsert(object):
         row = result_sets[0].rows[0]
         assert 110 == row['cnt']
 
-    def test_not_replace(self):
+    # not replace
+    def test_partial_update(self):
         # given
         self.create_table()
         self.write_data()
 
-        self.ydb_client.query(
-            f"""
-            UPSERT INTO `{self.table_path}` (id, vs) VALUES (1, 'one');
-            """
-        )
+        self.ydb_client.query(f"UPSERT INTO `{self.table_path}` (id, vs) VALUES (1, 'one');")
 
         # when
         result_sets = self.ydb_client.query(f"SELECT vn, vs FROM `{self.table_path}` WHERE id = 1;")
@@ -101,6 +97,20 @@ class TestUpsert(object):
         row = result_sets[0].rows[0]
         assert 1 == row['vn']
         assert 'one' == row['vs']
+
+    def test_insert_nulls(self):
+        # given
+        self.create_table()
+        self.ydb_client.query(f"UPSERT INTO `{self.table_path}` (id) VALUES (1);")
+
+        # when
+        result_sets = self.ydb_client.query(f"SELECT * FROM `{self.table_path}` WHERE id = 1;")
+
+        # then
+        assert len(result_sets[0].rows) == 1
+        row = result_sets[0].rows[0]
+        assert None == row['vn']
+        assert None == row['vs']
 
     def test_copy_full(self):
         # given

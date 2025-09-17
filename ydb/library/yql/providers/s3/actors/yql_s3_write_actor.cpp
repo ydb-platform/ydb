@@ -29,9 +29,7 @@
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#ifdef THROW
 #undef THROW
-#endif
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/xml/document/xml-document.h>
 
@@ -643,13 +641,7 @@ private:
         auto status = result->Get()->Status;
         auto issues = std::move(result->Get()->Issues);
         LOG_W("TS3WriteActor", "TEvUploadError, status: " << NDqProto::StatusIds::StatusCode_Name(status) << ", issues: " << issues.ToOneLineString());
-
-        if (status == NDqProto::StatusIds::UNSPECIFIED) {
-            status = NDqProto::StatusIds::INTERNAL_ERROR;
-            issues.AddIssue("Got upload error with unspecified error code.");
-        }
-
-        Callbacks->OnAsyncOutputError(OutputIndex, issues, status);
+        OnFatalError(std::move(issues), status);
     }
 
     void FinishIfNeeded() const {
@@ -703,8 +695,13 @@ private:
         const auto usedSpace = GetUsedSpace(/* storedOnly */ false);
         if (usedSpace >= i64(MemoryLimit) && usedSpace == GetUsedSpace(/* storedOnly */ true)) {
             // If all data is not inflight and all uploads running now -- deadlock occurred
-            Callbacks->OnAsyncOutputError(OutputIndex, {NYql::TIssue(TStringBuilder() << "Writing deadlock occurred, please increase write actor memory limit (used " << usedSpace << " bytes for " << FileWriteActors.size() << " partitions)")}, NDqProto::StatusIds::INTERNAL_ERROR);
+            OnFatalError({NYql::TIssue(TStringBuilder() << "Writing deadlock occurred, please increase write actor memory limit (used " << usedSpace << " bytes for " << FileWriteActors.size() << " partitions)")}, NDqProto::StatusIds::INTERNAL_ERROR);
         }
+    }
+
+    void OnFatalError(TIssues&& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode, std::source_location location = std::source_location::current()) const {
+        TSourceErrorHandler::CanonizeFatalError(issues, fatalCode, location);
+        Callbacks->OnAsyncOutputError(OutputIndex, issues, fatalCode);
     }
 
     // IActor & IDqComputeActorAsyncOutput
@@ -943,9 +940,9 @@ private:
 };
 #endif
 
-} // namespace
+} // anonymous namespace
 
-std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
+std::pair<IDqComputeActorAsyncOutput*, IActor*> CreateS3WriteActor(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     IRandomProvider* randomProvider,

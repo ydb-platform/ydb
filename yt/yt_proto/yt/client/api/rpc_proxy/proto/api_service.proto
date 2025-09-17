@@ -3583,6 +3583,8 @@ message TReqListQueries
     optional string substr_filter = 9;
     optional uint64 limit = 10 [default = 100];
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 11;
+    optional bool search_by_token_prefix = 12 [default = false];
+    optional bool use_full_text_search = 13 [default = true];
 }
 
 message TRspListQueries

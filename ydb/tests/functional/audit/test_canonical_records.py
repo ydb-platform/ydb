@@ -125,6 +125,7 @@ def test_replace_config(ydb_cluster):
 
 def test_create_and_drop_table(ydb_cluster):
     capture_audit_create = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    capture_audit_alter = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     capture_audit_drop = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as driver:
         table_client = TableClient(driver)
@@ -135,9 +136,12 @@ def test_create_and_drop_table(ydb_cluster):
         with capture_audit_create:
             table_client.create_table('/Root/Table', description)
 
+        with capture_audit_alter:
+            table_client.alter_table('/Root/Table', add_columns=[Column('col', OptionalType(PrimitiveType.Uint64))])
+
         with capture_audit_drop:
             table_client.drop_table('/Root/Table')
-    return capture_audit_create.canonize(), capture_audit_drop.canonize()
+    return capture_audit_create.canonize(), capture_audit_alter.canonize(), capture_audit_drop.canonize()
 
 
 def test_dml(ydb_cluster):

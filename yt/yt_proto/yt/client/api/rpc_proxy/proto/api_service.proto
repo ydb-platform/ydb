@@ -3667,6 +3667,7 @@ message TReqFinishDistributedWriteSession
     required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteSessionPtr
     repeated bytes signed_write_results = 2; // vector of YSON-serialized TSignedWriteFragmentResultPtr
 
+    // TODO(achains): Remove after YT-26131
     required int32 max_children_per_attach_request = 3;
 }
 

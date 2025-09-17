@@ -273,6 +273,8 @@ struct TParquetFileInfo {
 class TS3ReadCoroImpl : public TActorCoroImpl, public TSourceErrorHandler {
     friend class TS3StreamReadActor;
 
+    static constexpr ui64 MAX_ERROR_TEXT_SIZE = 256_KB;
+
 public:
 
     class THttpRandomAccessFile : public arrow::io::RandomAccessFile {
@@ -940,10 +942,12 @@ public:
             }
         } else if (HttpResponseCode && !RetryStuff->IsCancelled() && !RetryStuff->NextRetryDelay) {
             ServerReturnedError = true;
-            if (ErrorText.size() < 256_KB) {
+            if (ErrorText.size() < MAX_ERROR_TEXT_SIZE) {
                 ErrorText.append(ev->Get()->Result.Extract());
-            } else if (!ErrorText.EndsWith(TruncatedSuffix)) {
-                ErrorText.append(TruncatedSuffix);
+                if (ErrorText.size() > MAX_ERROR_TEXT_SIZE) {
+                    ErrorText.resize(MAX_ERROR_TEXT_SIZE);
+                    ErrorText.append(TruncatedSuffix);
+                }
             }
             LOG_CORO_W("TEvDownloadData, ERROR: " << ErrorText << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
         }

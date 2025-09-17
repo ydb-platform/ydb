@@ -206,11 +206,11 @@ const TString& TPartition::GetLogPrefix() const {
         logPrefix = &IdleLogPrefix;
     }
 
-    if (!logPrefix.Defined()) {
-        logPrefix = LogPrefix();
+    if (!logPrefix->Defined()) {
+        *logPrefix = LogPrefix();
     }
 
-    return *logPrefix;
+    return *(*logPrefix);
 }
 
 bool TPartition::IsActive() const {

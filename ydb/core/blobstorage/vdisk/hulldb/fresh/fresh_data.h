@@ -89,6 +89,9 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     void TFreshData<TKey, TMemRec>::Put(ui64 lsn, const TKey &key, const TMemRec &memRec) {
         Cur->Put(lsn, key, memRec);
+
+        HullCtx->FreshDataSpaceGroup.DskSpaceFreshSize() += sizeof(TKey) + sizeof(TMemRec);
+
         SwapWithDregIfRequired();
     }
 
@@ -100,13 +103,21 @@ namespace NKikimr {
             const TIngress &ingress,
             TRope buffer)
     {
+        ui64 dataSize = buffer.GetSize();
+
         Cur->PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer));
+
+        HullCtx->FreshDataSpaceGroup.DskSpaceFreshSize() += sizeof(TKey) + sizeof(TMemRec) + dataSize;
+
         SwapWithDregIfRequired();
     }
 
     template <class TKey, class TMemRec>
     void TFreshData<TKey, TMemRec>::PutAppendix(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) {
         Y_DEBUG_ABORT_UNLESS(lastLsn >= firstLsn);
+
+        HullCtx->FreshDataSpaceGroup.DskSpaceFreshSize() += a->SizeApproximation();
+
         Cur->PutAppendix(std::move(a), firstLsn, lastLsn);
         SwapWithDregIfRequired();
     }
@@ -144,6 +155,13 @@ namespace NKikimr {
     void TFreshData<TKey, TMemRec>::CompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment) {
         // FIXME ref count = 2?
         Y_VERIFY_S(Old && Old.Get() == freshSegment.Get(), HullCtx->VCtx->VDiskLogPrefix);
+
+        ui64 indexBytes = Old->ElementsInserted() * (sizeof(TKey) + sizeof(TMemRec));
+        ui64 totalDataSize = Old->MemDataInplacedSize() + Old->MemDataHugeSize();
+        ui64 appendixSize = Old->MemDataAppendixSize();
+
+        HullCtx->FreshDataSpaceGroup.DskSpaceFreshSize() -= indexBytes + totalDataSize + appendixSize;
+
         freshSegment.Drop();
         Old.Drop();
         WaitForCommit = true;

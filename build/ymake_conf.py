@@ -1292,11 +1292,6 @@ class GnuToolchain(Toolchain):
             # to reduce code size
             self.c_flags_platform.append('-mthumb')
 
-        if target.is_arm or target.is_powerpc:
-            # On linux, ARM and PPC default to unsigned char
-            # However, Arcadia requires char to be signed
-            self.c_flags_platform.append('-fsigned-char')
-
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
 
@@ -1455,6 +1450,11 @@ class GnuCompiler(Compiler):
             '-ffunction-sections',
             '-fdata-sections'
         ]
+
+        if self.target.is_arm or self.target.is_powerpc:
+            # On linux, ARM and PPC default to unsigned char
+            # However, Arcadia requires char to be signed
+            self.c_foptions.append('-fsigned-char')
 
         if is_positive('NO_CXX_EXCEPTIONS'):
             self.c_foptions.append('-fno-exceptions')

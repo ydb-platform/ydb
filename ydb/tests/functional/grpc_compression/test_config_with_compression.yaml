@@ -1,0 +1,9 @@
+grpc_config:
+  host: "[::]"
+  default_compression_algorithm: YDB_GRPC_COMPRESS_GZIP
+  default_compression_level: YDB_GRPC_COMPRESS_LEVEL_MED
+  services:
+  - "table"
+  - "legacy"
+  - "scripting"
+  - "discovery"

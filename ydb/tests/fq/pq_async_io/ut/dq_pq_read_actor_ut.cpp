@@ -123,6 +123,19 @@ public:
         }
     }
 
+    void WaitGoodStart() {
+        // XXX still relies on luck
+        for (;;) {
+            auto now = TInstant::Now().MicroSeconds();
+            auto period = DefaultWatermarkPeriod.MicroSeconds();
+            auto delta = now % period;
+            if (delta < period / 8) {
+                break;
+            }
+            Sleep(TDuration::MicroSeconds(now + period - delta));
+        }
+    }
+
     void WaitForNextWatermark() {
         // We can't control write time in LB, so just sleep for watermarkPeriod to ensure the next written data
         // will obtain write_time which will move watermark forward.
@@ -408,6 +421,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         InitSource(std::move(settings));
 
         auto messages = std::vector{Message0, Message1};
+        WaitGoodStart();
         PQWrite(messages, topicName);
 
         WaitForNextWatermark();
@@ -443,6 +457,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             setup.InitSource(std::move(settings));
 
             auto messages = std::vector{Message0, Message1};
+            setup.WaitGoodStart();
             PQWrite(messages, topicName);
 
             auto expected = std::vector{

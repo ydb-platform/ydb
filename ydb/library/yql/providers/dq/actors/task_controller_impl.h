@@ -16,7 +16,9 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/core/fq/libs/checkpointing/events/events.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_pb.h>
@@ -53,6 +55,7 @@ public:
         const TString& traceId,
         const NActors::TActorId& executerId,
         const NActors::TActorId& resultId,
+        const NActors::TActorId& checkpointCoordinatorId,
         const TDqConfiguration::TPtr& settings,
         const NYql::NCommon::TServiceCounters& serviceCounters,
         const TDuration& pingPeriod,
@@ -62,6 +65,7 @@ public:
         : NActors::TActor<TDerived>(func)
         , ExecuterId(executerId)
         , ResultId(resultId)
+        , CheckpointCoordinatorId(checkpointCoordinatorId)
         , TraceId(traceId)
         , Settings(settings)
         , ServiceCounters(serviceCounters, "task_controller")
@@ -124,10 +128,6 @@ public:
         TIssues issues = ev->Get()->GetIssues();
         YQL_CLOG(DEBUG, ProviderDq) << "AbortExecution from " << ev->Sender << ":" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << " " << issues.ToOneLineString();
         OnError(statusCode, issues);
-    }
-
-    void OnInternalError(const TString& message, const TIssues& subIssues = {}) {
-        OnError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message, subIssues);
     }
 
 private:
@@ -532,14 +532,23 @@ public:
         if (AggrPeriod) {
             Schedule(AggrPeriod, new TEvents::TEvWakeup(AGGR_TIMER_TAG));
         }
-    }
+        if (CheckpointCoordinatorId) {
+            YQL_CLOG(DEBUG, ProviderDq) << "Forward: " << SelfId() << " to " << CheckpointCoordinatorId;
 
-    const NDq::TDqTaskSettings GetTask(size_t idx) const {
-        return Tasks.at(idx).first;
-    }
-
-    int GetTasksSize() const {
-        return Tasks.size();
+            auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+            for (const auto& [settings, actorId] : Tasks) {
+                auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
+                    settings.GetId(),
+                    NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
+                    NYql::NDq::IsIngress(settings),
+                    NYql::NDq::IsEgress(settings),
+                    NYql::NDq::HasState(settings),
+                    actorId
+                };
+                event->Tasks.emplace_back(std::move(task));
+            }                
+            Send(CheckpointCoordinatorId, event.release());
+        }
     }
 
 private:
@@ -581,16 +590,6 @@ public:
             Send(ExecuterId, ev->Release().Release());
             Finished = true;
         }
-    }
-
-    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message, const TIssues& subIssues) {
-        TIssue issue(message);
-        for (const TIssue& i : subIssues) {
-            issue.AddSubIssue(MakeIntrusive<TIssue>(i));
-        }
-        TIssues issues;
-        issues.AddIssue(std::move(issue));
-        OnError(statusCode, issues);
     }
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues) {
@@ -655,6 +654,7 @@ private:
     THashMap<ui64, ui64> Stages;
     const NActors::TActorId ExecuterId;
     const NActors::TActorId ResultId;
+    const NActors::TActorId CheckpointCoordinatorId;
     const TString TraceId;
     TDqConfiguration::TPtr Settings;
     bool Finished = false;

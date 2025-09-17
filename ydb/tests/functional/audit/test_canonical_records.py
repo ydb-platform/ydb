@@ -133,7 +133,11 @@ def test_create_drop_and_alter_database(ydb_cluster):
     with capture_audit_drop_console, capture_audit_drop_schemeshard:
         ydb_cluster.remove_database(database, token=TOKEN)
     ydb_cluster.unregister_and_stop_slots(database_nodes)
-    return capture_audit_create_console.canonize(), capture_audit_create_schemeshard.canonize(), capture_audit_alter.canonize(), capture_audit_drop_console.canonize(), capture_audit_drop_schemeshard.canonize()
+    return capture_audit_create_console.canonize(), \
+        capture_audit_create_schemeshard.canonize(), \
+        capture_audit_alter.canonize(), \
+        capture_audit_drop_console.canonize(), \
+        capture_audit_drop_schemeshard.canonize()
 
 
 def test_replace_config(ydb_cluster):

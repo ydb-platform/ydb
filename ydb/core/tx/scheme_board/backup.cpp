@@ -314,6 +314,7 @@ private:
             descriptions.emplace_back(pathId, std::move(description));
             if (TotalPaths % 1'000 == 0) {
                 SBB_LOG_D("Reading file, parsed paths descriptions: " << TotalPaths);
+                SendProgressUpdate();
             }
         }
 

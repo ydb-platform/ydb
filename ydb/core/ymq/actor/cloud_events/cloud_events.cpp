@@ -102,15 +102,6 @@ namespace NCloudEvents {
             auto status = google::protobuf::util::MessageToJsonString(ev, &jsonEv, printOpts);
             Y_ASSERT(status.ok());
             writer->Write(jsonEv);
-        } else {
-            TString jsonEv;
-            google::protobuf::util::JsonPrintOptions printOpts;
-            printOpts.preserve_proto_field_names = true;
-            auto status = google::protobuf::util::MessageToJsonString(ev, &jsonEv, printOpts);
-            std::cerr << "==================================================================" << std::endl;
-            std::cerr << "status.ok() = " << status.ok() << std::endl;
-            std::cerr << jsonEv << std::endl;
-            std::cerr << "==================================================================" << std::endl;
         }
     }
 

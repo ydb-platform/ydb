@@ -17,7 +17,6 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/data_events/common/error_codes.h>

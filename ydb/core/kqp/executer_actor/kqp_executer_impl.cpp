@@ -1,12 +1,7 @@
 #include "kqp_executer_impl.h"
 
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/kqp/runtime/kqp_transport.h>
-
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
-
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {

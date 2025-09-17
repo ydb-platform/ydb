@@ -55,6 +55,16 @@
 
 ## Транзакции с участием топиков и таблиц {#topic-table-transactions}
 
+{% note warning %}
+
+{% include [not_allow_for_olap](../../_includes/not_allow_for_olap_text.md) %}
+
+{% endnote %}
+
 {{ ydb-short-name }} поддерживает транзакции с участием [строковых таблиц](../glossary.md#row-oriented-table) и/или топиков. Таким образом, можно транзакционно перекладывать данные из таблиц в топики и в обратном направлении, а также между топиками, чтобы данные не терялись и не дублировались даже в случае непредвиденных обстоятельств.
 
 Подробнее о транзакционных операциях при работе с топиками см. в [{#T}](../topic.md#topic-transactions) и [{#T}](../../reference/ydb-sdk/topic.md).
+
+## Транзакции с участием строковых и столбцовых таблиц {#mixed-transactions}
+
+{% include [limitation](../../_includes/limitation-column-row-in-read-only-tx.md) %}

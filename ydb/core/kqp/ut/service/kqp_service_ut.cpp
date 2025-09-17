@@ -3,6 +3,7 @@
 #include <ydb/core/base/counters.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
+#include <ydb/core/tx/datashard/datashard_failpoints.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -64,6 +65,65 @@ Y_UNIT_TEST_SUITE(KqpService) {
         kikimr.Reset();
         Sleep(WaitDuration);
         driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(CloseSessionAbortQueryExecution) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        auto kikimr = TKikimrRunner(settings);
+
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
+
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+            auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+            kikimr.RunCall([&]() {CreateLargeTable(kikimr, 100, 2, 2, 10, 2);});
+        }
+
+        ui32 stateEvents = 0;
+        auto grab = [&stateEvents](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                ++stateEvents;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        runtime->SetObserverFunc(grab);
+        Y_DEFER {
+            runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        };
+
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+        Y_DEFER {
+            NDataShard::gSkipReadIteratorResultFailPoint.Disable();
+        };
+
+        auto session = kikimr.RunCall([&] { return db.GetSession().ExtractValueSync().GetSession(); } );
+
+        auto future = kikimr.RunInThreadPool([&] { return session.ExecuteQuery("select * from `/Root/LargeTable`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync(); });
+
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&stateEvents](IEventHandle&) {
+            return stateEvents > 0;
+        });
+        runtime->DispatchEvents(opts);
+
+        Cerr << "OK! Passed the test. Compute Actors are started" << Endl;
+
+        auto close = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+        close->Record.MutableRequest()->SetSessionId(TString(session.GetId()));
+        auto sender = kikimr.GetTestServer().GetRuntime()->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(MakeKqpProxyID(kikimr.GetTestServer().GetRuntime()->GetNodeId(0)), sender, close.release()));
+
+        auto result = kikimr.GetTestServer().GetRuntime()->WaitFuture(future);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::CANCELLED, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CloseSessionsWithLoad) {

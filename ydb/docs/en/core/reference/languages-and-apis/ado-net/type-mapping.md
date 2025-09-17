@@ -33,11 +33,24 @@ These are the return types when using `YdbCommand.ExecuteScalarAsync()`, `YdbDat
 
 ## Decimal {#decimal}
 
-Decimal is a parameterized {{ ydb-short-name }} type (see the [documentation for details](../../../yql/reference/types/primitive.md#numeric)). `Precision` is the total number of significant digits; `Scale` is the number of digits after the decimal point.
+`Decimal (Precision, Scale)` is a parameterized data type in {{ ydb-short-name }} that allows you to explicitly specify:
 
-By default, `Decimal(22, 9)` is used. To сhange it, set `Precision` and `Scale` attributes on the `YdbParameter` object.
+* `Precision` — the total number of significant digits;
+* `Scale` — the number of digits after the decimal point.
 
-Example: for `Decimal(5, 3)`, pass `new YdbParameter { Value = 1.5m, Precision = 5, Scale = 3 }`.
+For more details, see the [documentation](../../../yql/reference/types/primitive.md#numeric).
+
+By default, the Decimal(22, 9) type is used. If you need to set different values for `Precision` and `Scale`, you can do this in your code.
+
+The example below demonstrates how to store the value 1.5 in the database with the Decimal type and parameters Precision = 5 and Scale = 3.
+
+```c#
+await new YdbCommand(ydbConnection)
+{
+    CommandText = $"INSERT INTO {tableName}(Id, Decimal) VALUES (1, @Decimal);",
+    Parameters = new YdbParameter { Name = "Decimal", Value = 1.5m, Precision = 5, Scale = 3 }
+}.ExecuteNonQueryAsync();
+```
 
 ## Type Mapping Table for Writing
 

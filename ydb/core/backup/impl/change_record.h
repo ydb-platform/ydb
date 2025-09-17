@@ -9,7 +9,6 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tx/replication/service/lightweight_schema.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <library/cpp/string_utils/base64/base64.h>
 
 namespace NKikimr::NBackup::NImpl {
 

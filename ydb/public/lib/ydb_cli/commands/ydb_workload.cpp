@@ -534,7 +534,9 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
             Cout << Endl;
         }
     } else {
+        try {
         for (auto queryInfo : queryInfoList) {
+            Cerr << "<";
             auto result = QueryClient->ExecuteQuery(
                 queryInfo.Query.c_str(),
                 NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
@@ -544,6 +546,11 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
                     << "Query:\n" << queryInfo.Query << Endl;
                 return EXIT_FAILURE;
             }
+
+            Cerr << ">";
+        }
+        } catch (const std::exception& e) {
+            Cerr << "Exception in GetInitialData(): " << e.what() << Endl;
         }
     }
     return EXIT_SUCCESS;

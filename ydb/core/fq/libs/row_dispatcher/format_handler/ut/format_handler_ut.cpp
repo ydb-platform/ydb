@@ -712,12 +712,12 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         auto messages = TVector<TMessages>{
             {
-                {},
+                { firstOffset + 3 },
                 TInstant::Seconds(40),
                 TBatch()
             },
             {
-                {},
+                { firstOffset + 5 },
                 TInstant::Seconds(42),
                 TBatch()
             },
@@ -737,12 +737,12 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         messages = TVector<TMessages>{
             {
-                {},
+                { firstOffset + 5 },
                 TInstant::Seconds(42),
                 TBatch()
             },
             {
-                {},
+                { firstOffset + 7 },
                 TInstant::Seconds(44),
                 TBatch()
             },

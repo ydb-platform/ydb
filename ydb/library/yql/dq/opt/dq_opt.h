@@ -46,5 +46,12 @@ bool CanPushDqExpr(const NNodes::TExprBase& expr, const NNodes::TDqConnection& c
 
 IDqOptimization* GetDqOptCallback(const NNodes::TExprBase& providerCall, const TTypeAnnotationContext& typeAnnCtx);
 
+// This struct represents an options for scalar aggregations rules.
+struct TDoNotCreateScalarPrecomputeForAggResult {
+    bool IsEnabled{false};
+    bool IsKqpPipeline{false};
+};
+bool IsSuitableToBuildScalarPrecompute(const NNodes::TExprBase &node, const TParentsMap &parentsMap, bool allowStageMultiUsage,
+                                       const TDoNotCreateScalarPrecomputeForAggResult &options);
 
 } // namespace NYql::NDq

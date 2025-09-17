@@ -683,6 +683,25 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     }
                     data.ActorSystem->Send(whiteboardId, update.release());
                 };
+                class TNetworkUtilizationUpdater : public TActorBootstrapped<TNetworkUtilizationUpdater> {
+                    TIntrusivePtr<TInterconnectProxyCommon> Common;
+
+                public:
+                    TNetworkUtilizationUpdater(TIntrusivePtr<TInterconnectProxyCommon> common)
+                        : Common(std::move(common))
+                    {}
+
+                    void Bootstrap() {
+                        auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate>();
+                        ev->Record.SetNetworkUtilization(Common->CalculateNetworkUtilization());
+                        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), ev.release());
+                        Become(&TThis::StateFunc, TDuration::Seconds(10), new TEvents::TEvWakeup);
+                    }
+
+                    STRICT_STFUNC(StateFunc, cFunc(TEvents::TSystem::Wakeup, Bootstrap));
+                };
+                setup->LocalServices.emplace_back(TActorId(), TActorSetupCmd(new TNetworkUtilizationUpdater(icCommon),
+                    TMailboxType::ReadAsFilled, systemPoolId));
             }
 
             if (const auto& mon = appData->Mon) {

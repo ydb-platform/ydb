@@ -818,6 +818,8 @@ struct TEvBlobStorage {
         EvPreShredCompactVDiskResult,
         EvShredVDiskResult,
         EvYardResizeResult,
+        EvCommitVDiskMetadata,
+        EvCommitVDiskMetadataDone,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184
@@ -2605,6 +2607,7 @@ struct TEvBlobStorage {
             : SkipBlocksUpTo(origin.SkipBlocksUpTo)
             , SkipBarriersUpTo(origin.SkipBarriersUpTo)
             , SkipBlobsUpTo(origin.SkipBlobsUpTo)
+            , IgnoreDecommitState(origin.IgnoreDecommitState)
             , Reverse(origin.Reverse)
         {}
 

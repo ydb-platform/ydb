@@ -1483,10 +1483,7 @@ class GnuCompiler(Compiler):
                 # Enable aligned allocation, unless explicitly disabled
                 self.c_foptions.append('-faligned-allocation')
         elif self.tc.is_gcc:
-            if self.target.is_tc32:
-                # tc32 toolchain does not support this flag
-                pass
-            else:
+            if self.tc.version_at_least(4, 9):
                 self.c_foptions += [
                     # Set up output colorization
                     '-fdiagnostics-color=always',
@@ -2104,6 +2101,10 @@ class MSVCCompiler(MSVC, Compiler):
                 '-Wno-invalid-offsetof',
                 '-Wno-undefined-var-template',
                 '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
+                '-Wno-deprecated-literal-operator',
+                '-Wno-explicit-specialization-storage-class',
+                '-Wno-missing-template-arg-list-after-template-kw',
+                '-Wno-nontrivial-memcall',
             ]
 
         defines.append('/D_WIN32_WINNT={0}'.format(WINDOWS_VERSION_MIN))

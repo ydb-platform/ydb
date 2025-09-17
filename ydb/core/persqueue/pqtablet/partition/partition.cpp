@@ -828,7 +828,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
     if (DiskIsFull || WaitingForSubDomainQuota()) {
         result.SetStatus(NKikimrPQ::TStatusResponse::STATUS_DISK_IS_FULL);
-    } else if (BlobEncoder.EndOffset - BlobEncoder.StartOffset >= static_cast<ui64>(Config.GetPartitionConfig().GetMaxCountInPartition()) ||
+    } else if (BlobEncoder.EndOffset - CompactionBlobEncoder.StartOffset >= static_cast<ui64>(Config.GetPartitionConfig().GetMaxCountInPartition()) ||
                Size() >= static_cast<ui64>(Config.GetPartitionConfig().GetMaxSizeInPartition())) {
         result.SetStatus(NKikimrPQ::TStatusResponse::STATUS_PARTITION_IS_FULL);
     } else {
@@ -948,7 +948,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         }
     }
 
-    result.SetStartOffset(BlobEncoder.StartOffset);
+    result.SetStartOffset(CompactionBlobEncoder.StartOffset);
     result.SetEndOffset(BlobEncoder.EndOffset);
 
     if (filterConsumers) {
@@ -1045,7 +1045,7 @@ void TPartition::Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActor
     THolder<TEvPersQueue::TEvPartitionClientInfoResponse> response = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>();
     NKikimrPQ::TClientInfoResponse& result(response->Record);
     result.SetPartition(Partition.InternalPartitionId);
-    result.SetStartOffset(BlobEncoder.StartOffset);
+    result.SetStartOffset(CompactionBlobEncoder.StartOffset);
     result.SetEndOffset(BlobEncoder.EndOffset);
     result.SetResponseTimestamp(ctx.Now().MilliSeconds());
     for (auto& pr : UsersInfoStorage->GetAll()) {
@@ -1121,8 +1121,8 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
         return TInstant::Zero();
     }
 
-    const std::deque<TDataKey>& container =
-        GetContainer(GetBlobEncoder(offset), offset);
+    const TPartitionBlobEncoder& blobEncoder = GetBlobEncoder(offset);
+    const std::deque<TDataKey>& container = GetContainer(blobEncoder, offset);
     PQ_ENSURE(!container.empty());
 
     auto it = std::upper_bound(container.begin(), container.end(), offset,
@@ -1131,8 +1131,9 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
                                         offset == p.Key.GetOffset() && p.Key.GetPartNo() > 0;
                     });
     // Always greater
-    PQ_ENSURE(it != container.begin())("StartOffset", BlobEncoder.StartOffset)("HeadOffset", BlobEncoder.Head.Offset)
-        ("offset", offset)("containter size", container.size())("first-elem", container.front().Key.ToString());
+    PQ_ENSURE(it != container.begin())("StartOffset", blobEncoder.StartOffset)("HeadOffset", blobEncoder.Head.Offset)
+        ("offset", offset)("containter size", container.size())("first-elem", container.front().Key.ToString())
+        ("is-fast-write", blobEncoder.ForFastWrite);
     PQ_ENSURE(it == container.end() ||
                    offset < it->Key.GetOffset() ||
                    it->Key.GetOffset() == offset && it->Key.GetPartNo() > 0);
@@ -1661,7 +1662,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
                                 const TActorContext& ctx)
 {
     TReadAnswer answer = info.FormAnswer(
-        ctx, blobResponse, BlobEncoder.StartOffset, BlobEncoder.EndOffset, Partition, userInfo,
+        ctx, blobResponse, CompactionBlobEncoder.StartOffset, BlobEncoder.EndOffset, Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive(),
         GetResultPostProcessor<NKikimrClient::TCmdReadResult>(info.User)
     );
@@ -3466,7 +3467,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
         ScheduleReplyError(act.Cookie, act.IsInternal,
                            NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
-                           TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " actual start offset is " << BlobEncoder.StartOffset);
+                           TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " actual start offset is " << CompactionBlobEncoder.StartOffset);
 
         return;
     }
@@ -3594,12 +3595,12 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         PQ_ENSURE(offset <= (ui64)Max<i64>())("Unexpected Offset", offset);
         PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition << " user " << user
                     << (createSession || dropSession ? " session" : " offset")
-                    << " is set to " << offset << " (startOffset " << BlobEncoder.StartOffset << ") session " << session
+                    << " is set to " << offset << " (startOffset " << CompactionBlobEncoder.StartOffset << ") session " << session
         );
 
         userInfo.Offset = offset;
         userInfo.CommittedMetadata = committedMetadata;
-        userInfo.AnyCommits = userInfo.Offset > (i64)BlobEncoder.StartOffset;
+        userInfo.AnyCommits = userInfo.Offset > (i64)CompactionBlobEncoder.StartOffset;
 
         if (LastOffsetHasBeenCommited(userInfo)) {
             SendReadingFinished(user);
@@ -4260,7 +4261,7 @@ bool TPartition::OnUnhandledException(const std::exception& exc) {
 IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration,
     const TActorId& blobCache, const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace,
-               ui32 numChannels, const TActorId& writeQuoterActorId, 
+               ui32 numChannels, const TActorId& writeQuoterActorId,
                TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition) {
 
     return new TPartition(tabletId, partition, tablet, tabletGeneration, blobCache, topicConverter, dcId, isServerless,

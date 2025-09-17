@@ -390,6 +390,10 @@ class ScenarioTestHelper:
             self._run_with_expected_status(
                 lambda: _upsert(),
                 expected_status,
+                {
+                    ydb.StatusCode.BAD_REQUEST  # Cannot write data into shard(Incorrect request: unknown schema version)
+                },
+                3,
             )
 
     @staticmethod

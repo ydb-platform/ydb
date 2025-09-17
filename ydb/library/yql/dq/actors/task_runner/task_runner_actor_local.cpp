@@ -20,6 +20,7 @@
 #include <util/generic/queue.h>
 
 #include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+#include <util/string/join.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
 #define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
@@ -512,6 +513,7 @@ private:
             return;
         }
         for (const auto& inputId : InputsWithCheckpoints) {
+            LOG_D("ResumeByCp" <<  inputId);
             TaskRunner->GetInputChannel(inputId)->ResumeByCheckpoint();
         }
     }
@@ -629,6 +631,14 @@ private:
         }
         std::sort(Outputs.begin(), Outputs.end());
         Y_ENSURE(std::unique(Outputs.begin(), Outputs.end()) == Outputs.end());
+
+        LOG_D("Inputs " << JoinSeq(' ', Inputs)
+                << " WithWatetmarks " << JoinSeq(' ', InputsWithWatermarks)
+                << " WithCheckpoints " << JoinSeq(' ', InputsWithCheckpoints));
+        LOG_D("Outputs " << JoinSeq(' ', Outputs)
+                << " WithWatetmarks " << JoinSeq(' ', OutputsWithWatermarks));
+        LOG_D("Sources: " << JoinSeq(' ', Sources)
+              << " WithWatetmarks " << JoinSeq(' ', SourcesWithWatermarks));
 
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? TMaybe<ui64>(MemoryQuota->GetMkqlMemoryLimit()) : Nothing());
         if (MemoryQuota) {

@@ -490,12 +490,6 @@ namespace NKikimr {
                 LocRecCtx->VCtx->VDiskLogPrefix);
 
             ui32 hugeBlobOverhead = Config->HugeBlobOverhead;
-
-            if (MetadataEntryPoint.HasHugeBlobOverhead()) {
-                hugeBlobOverhead = MetadataEntryPoint.GetHugeBlobOverhead();
-            } else if (IsTinyDisk) {
-                hugeBlobOverhead = TVDiskConfig::TinyDiskHugeBlobOverhead;
-            }
             MetadataEntryPoint.SetHugeBlobOverhead(hugeBlobOverhead);
 
             auto logFunc = [&] (const TString &msg) {

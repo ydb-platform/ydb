@@ -50,6 +50,8 @@
 #if ! HAVE_STACK_T && ! defined stack_t
 typedef struct sigaltstack stack_t;
 #endif
+#undef SIGSTKSZ
+
 #ifndef SIGSTKSZ
 # define SIGSTKSZ 16384
 #elif HAVE_LIBSIGSEGV && SIGSTKSZ < 16384

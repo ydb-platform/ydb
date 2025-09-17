@@ -2,6 +2,38 @@
 
 ## Версия 25.1 {#25-1}
 
+### Версия 25.1.4.7 {#25-1-4-7}
+
+Дата выхода: 15 сентября 2025.
+
+#### Функциональность
+
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/21119) возможность использовать привычные инструменты потоковой обработки данных –  Kafka Connect, Confluent Schema Registry, Kafka Streams, Apache Flink, AKH через [Kafka API](./reference/kafka-api/index.md) при работе с YDB Topics. Теперь YDB Topics Kafka API поддерживает:
+  * клиентскую балансировку читателей – включается установкой флага `enable_kafka_native_balancing` в [конфигурации кластера](./reference/configuration/feature_flags.md). [Как работает балансировка читателей в Apache Kafka](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb). Теперь балансировка читателей в Kafka API YDB Topics будет работать точно так же,
+  * [компактифицированные топики](https://docs.confluent.io/kafka/design/log_compaction.html) – включается установкой флага `enable_topic_compactification_by_key`,
+  * [транзакции](https://www.confluent.io/blog/transactions-apache-kafka) – включается установкой флага `enable_kafka_transactions`.
+* [Добавлен](https://github.com/ydb-platform/ydb/pull/20982) [новый протокол](https://github.com/ydb-platform/ydb/issues/11064) в [Node Broker](./concepts/glossary.md#node-broker), устраняющий всплески сетевого трафика на больших кластерах (более 1000 серверов), связанного с рассылкой информации об узлах.
+
+#### YDB UI
+
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/17839) [ошибка](https://github.com/ydb-platform/ydb/issues/15230), из-за которой не все таблетки отображались на вкладке Tablets в разделе диагностики.
+* Исправлена [ошибка](https://github.com/ydb-platform/ydb/issues/18735), из-за которой на вкладке Storage в разделе диагностики базы данных отображались не только узлы хранения.
+* Исправлена [ошибка сериализации](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164), которая могла приводить к падению при открытии статистики выполнения запроса.
+* Изменена логика перехода узлов в критическое состояние – заполненный на 75-99% CPU pool теперь вызывает предупреждение, а не критическое состояние.
+
+#### Производительность
+
+* [Оптимизирована](https://github.com/ydb-platform/ydb/pull/20197) обработка пустых входов при выполнении JOIN-операций.
+
+#### Исправления ошибок
+
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/21918) поддержка в асинхронной репликации нового типа записи об изменениях — `reset`-записи (в дополнение к `update`- и `erase`-записям).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/21836) [ошибка](https://github.com/ydb-platform/ydb/issues/21814), из-за которой экземпляр репликации с неуказанным параметром `COMMIT_INTERVAL` приводил к сбою процесса.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/21652) редкие ошибки при чтении из топика во время балансировки партиций.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/22455) ошибка, из-за которой при удалении dedicated-базы данных системные таблетки базы могли остаться неудалёнными.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/22203) ошибка, из-за которой таблетки могли зависать при недостатки памяти на узлах. Теперь таблетки будут автоматически запускаться, как только на каком-либо из узлов освободится достаточное количество ресурсов.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/24278) ошибка, из-за которой при записи сообщений Kafka сохранялось только первое сообщение из батча, а остальные сообщения игнорировались.
+
 ### Релиз кандидат 25.1.2.7 {#25-1-2-7-rc}
 
 Дата выхода: 14 июля 2025.

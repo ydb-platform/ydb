@@ -189,13 +189,13 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         }, "{ <main>: Error: Missing fulltext index settings }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.MutableSettings()->clear_columns();
-        }, "{ <main>: Error: fulltext index should have single column settings but have 0 of them }");
+        }, "{ <main>: Error: fulltext index should have a single text key column settings but have 0 of them }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.MutableSettings()->mutable_columns()->at(0).mutable_analyzers()->clear_tokenizer();
         }, "{ <main>: Error: tokenizer should be set }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.MutableSettings()->mutable_columns()->at(0).set_column("data");
-        }, "{ <main>: Error: fulltext index should have key column text settings but have data }");
+        }, "{ <main>: Error: fulltext index should have a single text key column text settings but have data }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.ClearIndexName();
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.ClearKeyColumns();
-        }, "{ <main>: Error: fulltext index should have single key column but have 0 of them }");
+        }, "{ <main>: Error: fulltext index should have a single text key column but have 0 of them }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.ClearKeyColumns();
             request.AddKeyColumns("some");

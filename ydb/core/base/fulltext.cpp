@@ -143,6 +143,17 @@ bool ValidateSettings(const NProtoBuf::RepeatedPtrField<TString>& keyColumns, co
         return false;
     }
 
+    for (auto column : settings.columns()) {
+        if (!column.has_column()) {
+            error = "fulltext index settings should have a column name";
+            return false;
+        }
+        if (!column.has_analyzers()) {
+            error = "fulltext index settings should have analyzers";
+            return false;
+        }
+    }
+
     if (keyColumns.size() != 1) {
         error = TStringBuilder() << "fulltext index should have a single text key column"
             << " but have " << keyColumns.size() << " of them";
@@ -160,14 +171,6 @@ bool ValidateSettings(const NProtoBuf::RepeatedPtrField<TString>& keyColumns, co
     }
 
     for (auto column : settings.columns()) {
-        if (!column.has_column()) {
-            error = "column should be set";
-            return false;
-        }
-        if (!column.has_analyzers()) {
-            error = "column analyzers should be set";
-            return false;
-        }
         if (!ValidateSettings(column.analyzers(), error)) {
             return false;
         }

@@ -24,17 +24,9 @@ namespace NKikimr {
             ui32 Size;
         };
 
-        void StartOffsetTest(std::span<const TMessageGroup> groups) {
-            TTopicSdkTestSetup setup = CreateSetup();
-            TTopicClient client = setup.MakeClient();
-
-            TCreateTopicSettings createSettings = TCreateTopicSettings().PartitioningSettings(1, 1);
-
-            client.CreateTopic(TEST_TOPIC, createSettings).GetValueSync();
-
+        static size_t WriteGeneratedMessagesToTestTopic(TTopicClient& client, const std::span<const TMessageGroup> groups) {
             auto writeSession = CreateWriteSession(client, "producer-1", 0, TString{TEST_TOPIC}, false);
-
-            ui32 totalCount = 0;
+            size_t totalCount = 0;
             for (const auto& g : groups) {
                 for (ui32 i = 0; i < g.Count; ++i) {
                     UNIT_ASSERT(writeSession->Write(TWriteMessage(TString("@") * g.Size)));
@@ -42,6 +34,15 @@ namespace NKikimr {
                 totalCount += g.Count;
             }
             UNIT_ASSERT(writeSession->Close());
+            return totalCount;
+        }
+
+        void StartOffsetTest(std::span<const TMessageGroup> groups) {
+            TTopicSdkTestSetup setup = CreateSetup();
+            TTopicClient client = setup.MakeClient();
+            TCreateTopicSettings createSettings = TCreateTopicSettings().PartitioningSettings(1, 1);
+            client.CreateTopic(TEST_TOPIC, createSettings).GetValueSync();
+            const size_t totalCount = WriteGeneratedMessagesToTestTopic(client, groups);
             Sleep(TDuration::Seconds(3)); // wait for compaction iteration
 
             const auto describe = client.DescribeTopic(TEST_TOPIC, TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
@@ -70,5 +71,31 @@ namespace NKikimr {
             };
             StartOffsetTest(messages);
         }
+
+        Y_UNIT_TEST(RetentionChangesStartOffset) {
+            constexpr TMessageGroup groups[]{
+                {789, 1},
+                {2, 8_MB},
+                {567, 1},
+            };
+            TTopicSdkTestSetup setup = CreateSetup();
+            TTopicClient client = setup.MakeClient();
+            TCreateTopicSettings createSettings = TCreateTopicSettings().PartitioningSettings(1, 1).RetentionStorageMb(4);
+            client.CreateTopic(TEST_TOPIC, createSettings).GetValueSync();
+            const size_t totalCount = WriteGeneratedMessagesToTestTopic(client, groups);
+
+            const auto describe = client.DescribeTopic(TEST_TOPIC, TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), NYdb::EStatus::SUCCESS, describe.GetIssues().ToString());
+            const TTopicDescription& description = describe.GetTopicDescription();
+            UNIT_ASSERT_VALUES_EQUAL(description.GetPartitions().size(), 1);
+            const TPartitionInfo& partition0Info = description.GetPartitions().at(0);
+            UNIT_ASSERT(partition0Info.GetPartitionStats().has_value());
+            const NYdb::NTopic::TPartitionStats& partition0Stats = partition0Info.GetPartitionStats().value();
+            const TString textComment = TStringBuilder() << LabeledOutput(partition0Stats.GetStartOffset(), partition0Stats.GetEndOffset(), totalCount);
+            UNIT_ASSERT_VALUES_EQUAL_C(partition0Stats.GetEndOffset(), totalCount, textComment);
+            UNIT_ASSERT_LT_C(partition0Stats.GetStartOffset(), totalCount - 567, textComment);
+            UNIT_ASSERT_GE_C(partition0Stats.GetStartOffset(), 789, textComment);
+        }
+
     } // Y_UNIT_TEST_SUITE(TopicDescribe)
 } // namespace NKikimr

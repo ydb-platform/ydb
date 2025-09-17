@@ -37,6 +37,16 @@ def make_test_file_with_content(human_readable_file_name, content):
     return file_path
 
 
+def execute_ydbd(cluster, token, cmd, check_exit_code=True):
+    ydbd_binary_path = cluster.nodes[1].binary_path
+    full_cmd = [ydbd_binary_path, '-s', f'grpc://{cluster_endpoint(cluster)}']
+    full_cmd += cmd
+
+    proc_result = yatest.common.process.execute(full_cmd, check_exit_code=False, env={'YDB_TOKEN': token})
+    if check_exit_code and proc_result.exit_code != 0:
+        assert False, f'Command\n{full_cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err}\n\nstdout:\n{proc_result.std_out}'
+
+
 class CaptureFileOutput:
     def __init__(self, filename):
         self.filename = filename

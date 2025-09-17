@@ -8,10 +8,8 @@ from ydb.draft import DynamicConfigClient
 from ydb.query import QuerySessionPool
 from ydb.tests.library.harness.util import LogLevels
 
-from yatest.common import process
-
 import http_helpers
-from helpers import cluster_endpoint, make_test_file_with_content, CanonicalCaptureAuditFileOutput
+from helpers import cluster_endpoint, make_test_file_with_content, execute_ydbd, CanonicalCaptureAuditFileOutput
 
 logger = logging.getLogger(__name__)
 
@@ -290,11 +288,8 @@ def test_execute_minikql(ydb_cluster):
             ))
         )
     '''
-    ydbd_binary_path = ydb_cluster.nodes[1].binary_path
-    cmd = [ydbd_binary_path, '-s', f'grpc://{cluster_endpoint(ydb_cluster)}', 'admin', 'tablet', ss_tablet_id, 'execute', make_test_file_with_content('minikql.query', query)]
+
     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     with capture_audit:
-        proc_result = process.execute(cmd, check_exit_code=False, env={'YDB_TOKEN': TOKEN})
-        if proc_result.exit_code != 0:
-            assert False, f'Command\n{cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err}\n\nstdout:\n{proc_result.std_out}'
+        execute_ydbd(ydb_cluster, TOKEN, ['admin', 'tablet', ss_tablet_id, 'execute', make_test_file_with_content('minikql.query', query)])
     return capture_audit.canonize()

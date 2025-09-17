@@ -221,6 +221,7 @@ void TExecutor::Broken() {
         BootLogic->Cancel();
 
     if (Owner) {
+        ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
             Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
         Owner->Detach(OwnerCtx());
@@ -836,6 +837,7 @@ TExecutorCaches TExecutor::CleanupState() {
 
 void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     if (Stats->IsFollower()) {
+        ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
             Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
     }
@@ -926,6 +928,7 @@ void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &
 }
 
 void TExecutor::DetachTablet() {
+    ForceSendCounters();
     TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
         Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
     return PassAway();
@@ -4038,6 +4041,30 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
         }
     }
     Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateCounters());
+}
+
+void TExecutor::ForceSendCounters() {
+    TAutoPtr<TTabletCountersBase> executorCounters;
+    TAutoPtr<TTabletCountersBase> externalTabletCounters;
+
+    if (Counters && Owner && Stats) {
+        executorCounters = Counters->MakeDiffForAggr(*CountersBaseline);
+        Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
+
+        if (AppCounters) {
+            externalTabletCounters = AppCounters->MakeDiffForAggr(*AppCountersBaseline);
+            AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
+        }
+
+        // tablet id + tablet type
+        ui64 tabletId = Owner->TabletID();
+        auto tabletType = Owner->TabletType();
+        auto tenantPathId = Owner->Info()->TenantPathId;
+
+        TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
+        Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+    }
 }
 
 float TExecutor::GetRejectProbability() const {

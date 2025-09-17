@@ -26,6 +26,9 @@
 
 namespace NKikimr {
 
+using TGRpcServers = TVector<std::pair<TString, TAutoPtr<NYdbGrpc::TGRpcServer>>>;
+using TGRpcServersFactory = std::function<TGRpcServers()>;
+
 class TKikimrRunner : public virtual TThrRefBase, private IGlobalObjectStorage {
 protected:
     static TProgramShouldContinue KikimrShouldContinue;
@@ -56,8 +59,6 @@ protected:
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
     TAutoPtr<TAppData> AppData;
 
-    TVector<std::pair<TString, TAutoPtr<NYdbGrpc::TGRpcServer>>> GRpcServers;
-
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
     std::shared_ptr<TLogBackend> LogBackend;
     TAutoPtr<TActorSystem> ActorSystem;
@@ -67,6 +68,9 @@ protected:
     TVector<NYdb::NGlobalPlugins::IPlugin::TPtr> Plugins;
 
     TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {});
+
+    TGRpcServersFactory GRpcServersFactory;
+    TActorId GRpcServersManager;
 
     virtual ~TKikimrRunner();
 
@@ -85,6 +89,7 @@ protected:
     void InitializeMonitoringLogin(const TKikimrRunConfig& runConfig);
 
     void InitializeGRpc(const TKikimrRunConfig& runConfig);
+    TGRpcServers CreateGRpcServers(const TKikimrRunConfig& runConfig);
 
     void InitializeKqpController(const TKikimrRunConfig& runConfig);
 

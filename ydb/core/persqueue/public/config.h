@@ -1,5 +1,13 @@
 #pragma once
-#include <ydb/core/protos/msgbus_pq.pb.h>
+
+#include <util/generic/fwd.h>
+
+namespace NKikimrPQ {
+
+class TPQTabletConfig;
+class TMirrorPartitionConfig;
+
+};
 
 namespace NKikimr {
 

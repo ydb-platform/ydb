@@ -717,11 +717,9 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
         //const auto& with = node.GetBlock4();
         auto& index = indexes.back();
         if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree) {
-            index.IndexSettings.emplace<TVectorIndexSettings>();
-            if (!CreateIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.Type, index.IndexSettings)) {
+            if (!FillIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.IndexSettings)) {
                 return false;
             }
-
         } else {
             AltNotImplemented("with", indexType);
             return false;
@@ -826,16 +824,15 @@ bool TSqlTranslation::ParseDatabaseSetting(const TRule_database_setting& in, THa
     return true;
 }
 
-bool TSqlTranslation::CreateIndexSettings(const TRule_with_index_settings& settingsNode,
-        TIndexDescription::EType indexType,
+bool TSqlTranslation::FillIndexSettings(const TRule_with_index_settings& settingsNode,
         TIndexDescription::TIndexSettings& indexSettings) {
     const auto& firstEntry = settingsNode.GetRule_index_setting_entry3();
-    if (!CreateIndexSettingEntry(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_index_setting_value3(), indexType, indexSettings)) {
+    if (!AddIndexSetting(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_index_setting_value3(), indexSettings)) {
         return false;
     }
     for (auto& block : settingsNode.GetBlock4()) {
         const auto& entry = block.GetRule_index_setting_entry2();
-        if (!CreateIndexSettingEntry(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_index_setting_value3(), indexType, indexSettings)) {
+        if (!AddIndexSetting(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_index_setting_value3(), indexSettings)) {
             return false;
         }
     }
@@ -860,109 +857,26 @@ TString TSqlTranslation::GetIndexSettingStringValue(const TRule_index_setting_va
     }
 }
 
-template<typename T>
-std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    T value{};
-    const TString stringValue = GetIndexSettingStringValue(node);
-    if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue1
-        && node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue2
-        || stringValue.empty())
-    {
-        return {false, value, stringValue};
-    }
-    if (!TryFromString<T>(to_lower(stringValue), value)) {
-        return {false, value, stringValue};
-    }
-    return {true, value, stringValue};
-}
-
-template<>
-std::tuple<bool, ui32, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    ui32 value = 0;
-    const TString stringValue = GetIndexSettingStringValue(node);
-    if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue3 || stringValue.empty()) {
-        return {false, value, stringValue};
-    }
-    TString suffix;
-    ui64 value64;
-    if (!ParseNumbers(Ctx_, stringValue, value64, suffix) || value64 > Max<ui32>()) {
-        return {false, value, stringValue};
-    }
-    return {true, value = static_cast<ui32>(value64), stringValue};
-}
-
-template<>
-std::tuple<bool, bool, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    bool value = false;
-    const TString stringValue = GetIndexSettingStringValue(node);
-    if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue4 || stringValue.empty()) {
-        return {false, value, stringValue};
-    }
-    if (!TryFromString<bool>(to_lower(stringValue), value)) {
-        return {false, value, stringValue};
-    }
-    return {true, value, stringValue};
-}
-
-bool TSqlTranslation::CreateIndexSettingEntry(const TIdentifier &id,
+bool TSqlTranslation::AddIndexSetting(const TIdentifier &id,
         const TRule_index_setting_value& node,
-        TIndexDescription::EType indexType,
         TIndexDescription::TIndexSettings& indexSettings) {
 
+    // TODO: remove to_lower transformation after the next release to keep backward compatibility
+    const auto name = to_lower(id.Name);
+    const auto value = to_lower(GetIndexSettingStringValue(node));
 
-    if (indexType == TIndexDescription::EType::GlobalVectorKmeansTree) {
-        TVectorIndexSettings &vectorIndexSettings = std::get<TVectorIndexSettings>(indexSettings);
+    TIndexDescription::TIndexSetting indexSetting {
+        .Name = name,
+        .NamePosition = id.Pos,
+        .Value = value,
+        .ValuePosition = Ctx_.Pos()
+    };
 
-        if (to_lower(id.Name) == "distance") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EDistance>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid distance: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.Distance = value;
-        } else if (to_lower(id.Name) == "similarity") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::ESimilarity>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid similarity: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.Similarity = value;
-        } else if (to_lower(id.Name) == "vector_type") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EVectorType>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid vector_type: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.VectorType = value;
-        } else if (to_lower(id.Name) == "vector_dimension") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui32>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid vector_dimension: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.VectorDimension = value;
-        } else if (to_lower(id.Name) == "clusters") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui32>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid clusters: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.Clusters = value;
-        } else if (to_lower(id.Name) == "levels") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui32>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid levels: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.Levels = value;
-        } else {
-            Ctx_.Error() << "Unknown index setting: " << id.Name;
-            return false;
-        }
-    } else {
-        Ctx_.Error() << "Unknown index setting: " << id.Name;
+    if (!indexSettings.emplace(name, indexSetting).second) {
+        Ctx_.Error() << "Duplicated " << name;
         return false;
     }
+
     return true;
 
 }

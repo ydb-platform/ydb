@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20.1.8)
+VERSION(21.1.0)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/compiler-rt-20.1.8.src.tar.xz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.0/compiler-rt-21.1.0.src.tar.xz)
 
 NO_COMPILER_WARNINGS()
 
@@ -217,6 +217,7 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         enable_execute_stack.c
         eprintf.c
         extenddftf2.c
+        extendhfdf2.c
         extendhfsf2.c
         extendhftf2.c
         extendsfdf2.c
@@ -325,7 +326,6 @@ ELSEIF (ARCH_AARCH64)
         aarch64/fp_mode.c
         aarch64/sme-abi-assert.c
         aarch64/sme-abi.S
-        aarch64/sme-libc-mem-routines.S
         absvdi2.c
         absvsi2.c
         absvti2.c
@@ -372,6 +372,7 @@ ELSEIF (ARCH_AARCH64)
         enable_execute_stack.c
         eprintf.c
         extenddftf2.c
+        extendhfdf2.c
         extendhfsf2.c
         extendhftf2.c
         extendsfdf2.c
@@ -480,7 +481,8 @@ ELSEIF (ARCH_AARCH64)
     )
     IF (NOT OS_DARWIN)
         SRCS(
-            aarch64/sme-libc-routines.c
+            aarch64/sme-libc-opt-memcpy-memmove.S
+            aarch64/sme-libc-opt-memset-memchr.S
         )
     ENDIF()
 ELSEIF (ARCH_X86_64)
@@ -531,6 +533,7 @@ ELSEIF (ARCH_X86_64)
         enable_execute_stack.c
         eprintf.c
         extenddftf2.c
+        extendhfdf2.c
         extendhfsf2.c
         extendhftf2.c
         extendsfdf2.c
@@ -702,6 +705,7 @@ ELSE()
         divtf3.c
         divti3.c
         extenddftf2.c
+        extendhfdf2.c
         extendhfsf2.c
         extendhftf2.c
         extendsfdf2.c

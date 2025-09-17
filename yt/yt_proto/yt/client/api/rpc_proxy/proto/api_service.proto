@@ -423,6 +423,9 @@ message TReqStartTransaction
 
     optional TReplicateToMasterCellTags replicate_to_master_cell_tags = 15;
 
+    // Address of the last client that pinged transaction.
+    optional string pinger_address = 16;
+
     optional TMutatingOptions mutating_options = 103;
 }
 
@@ -1863,6 +1866,8 @@ message TReqAttachTransaction
     optional uint64 ping_period = 4; // TDuration
     optional bool ping = 5 [default = true];
     optional bool ping_ancestors = 6 [default = false];
+    // Address of the last client that pinged transaction.
+    optional string pinger_address = 7;
 }
 
 message TRspAttachTransaction
@@ -2986,6 +2991,7 @@ message TReqCheckPermissionByAcl
     required string acl = 3;
 
     optional bool ignore_missing_subjects = 4 [default = false];
+    optional bool ignore_pending_removal_subjects = 5 [default = false];
 
     optional TPrerequisiteOptions prerequisite_options = 101;
     optional TMasterReadOptions master_read_options = 102;
@@ -3423,6 +3429,7 @@ message TCheckPermissionByAclResult
     required NYT.NProto.TGuid subject_id = 2;
     optional string subject_name = 3;
     repeated string missing_subjects = 4;
+    repeated string pending_removal_subjects = 5;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3622,6 +3629,7 @@ message TRspGetQueryTrackerInfo
     optional string query_tracker_stage = 4;
     repeated string clusters = 5;
     optional bytes engines_info = 6; // YSON
+    optional int32 expected_tables_version = 7;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

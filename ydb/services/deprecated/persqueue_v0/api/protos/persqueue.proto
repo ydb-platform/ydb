@@ -321,6 +321,7 @@ message ReadResponse {
         uint64 committed_offset = 4;
         uint64 end_offset = 5;
         uint64 write_watermark_ms = 6;
+        uint64 read_offset = 7;
     }
 
     oneof response {

@@ -89,11 +89,11 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
 }
 
 arrow::Result<arrow::FieldVector> MakeArrowFields(
-    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, const std::set<std::string>& notNullColumns) {
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::set<std::string>& notNullColumns) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(columns.size());
+    fields.reserve(ydbColumns.size());
     TVector<TString> errors;
-    for (auto& [name, ydbType] : columns) {
+    for (auto& [name, ydbType] : ydbColumns) {
         std::string colName(name.data(), name.size());
         auto arrowType = GetArrowType(ydbType);
         if (arrowType.ok()) {

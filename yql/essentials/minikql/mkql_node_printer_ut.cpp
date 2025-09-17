@@ -79,6 +79,8 @@ namespace {
         structBuilder.Add("44", TRuntimeNode(TBlockType::Create(dtype1, TBlockType::EShape::Scalar, env), true));
         structBuilder.Add("45", TRuntimeNode(TBlockType::Create(dtype2, TBlockType::EShape::Many, env), true));
         structBuilder.Add("46", TRuntimeNode(TPgType::Create(23, env), true)); // int4 type
+        structBuilder.Add("47", TRuntimeNode(TLinearType::Create(dtype1, false, env), true));
+        structBuilder.Add("48", TRuntimeNode(TLinearType::Create(dtype1, true, env), true));
         return structBuilder.Build();
     }
 }

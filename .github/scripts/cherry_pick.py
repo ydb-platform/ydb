@@ -148,7 +148,7 @@ class CherryPickCreator:
                 if e.output:
                     msg += f'\nOutput:\n```\n{e.output.decode()}\n```'
                 if e.stderr:
-                    msg += f'\Errors:\n```\n{e.stderr.decode()}\n```'
+                    msg += f'\nErrors:\n```\n{e.stderr.decode()}\n```'
                 self.add_summary(msg)
             except BaseException as e:
                 self.add_summary(f'{target} error {type(e)}\n```\n{e}\n```')

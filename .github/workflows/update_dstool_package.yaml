@@ -1,0 +1,43 @@
+name: Update dstool package
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        type: string
+        default: ""
+
+jobs:
+  update-dstool:
+    name: Update dstool package
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8.12'
+
+      - name: Install dependencies
+        run: |
+          set -ex
+          python -m pip install --upgrade pip
+          pip install build twine grpcio-tools setuptools
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+
+      - name: Compile proto files and build package
+        run: |
+          set -ex
+          ${{ github.workspace }}/ydb/apps/dstool/compile_protos.py --ydb-root ${{ github.workspace }}
+          mv ${{ github.workspace }}/ydb/apps/dstool/setup.py ${{ github.workspace }}
+          python -m build
+
+      - name: Upload package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1.8

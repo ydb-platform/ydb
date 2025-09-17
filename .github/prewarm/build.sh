@@ -16,6 +16,7 @@ echo "::group::cmake"
 cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
 -DCCACHE_PATH=/usr/local/bin/ccache \
 -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
+-DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=./cmake/conan_provider.cmake \
 ../ydb
 echo "::endgroup::"
 

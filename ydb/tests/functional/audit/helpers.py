@@ -109,6 +109,7 @@ class CanonicalCaptureAuditFileOutput:
             component = json_record.get('component')
             if component not in self.components:
                 return None
+        self.__validate_audit_record(json_record)
         self.__canonize_field(json_record, 'start_time')
         self.__canonize_field(json_record, 'end_time')
         self.__canonize_field(json_record, 'remote_address')
@@ -122,6 +123,30 @@ class CanonicalCaptureAuditFileOutput:
         # source_location is used only in debug builds like relwithdebinfo and debug
         self.__canonize_apply_regex(json_record, r', source_location: [A-Za-z0-9_/.]+\.(cpp|h):\d+', '')
         return json.dumps(json_record, sort_keys=True) + '\n'
+
+    def __validate_field(self, json_record, field_name):
+        value = json_record.get(field_name)
+        assert value is not None, f'Field "{field_name}" is expected to be in audit log. Line: {json.dumps(json_record, sort_keys=True)}'
+        assert isinstance(value, str), f'Field "{field_name}" is expected to be string. Line: {json.dumps(json_record, sort_keys=True)}'
+        assert value, f'Field "{field_name}" is empty. Line: {json.dumps(json_record, sort_keys=True)}'
+        return value
+
+    def __validate_field_exists_and_not_empty(self, json_record, field_name):
+        value = self.__validate_field(json_record, field_name)
+        assert value != '{none}', f'Field "{field_name}" is expected to have nontrivial value. Line: {json.dumps(json_record, sort_keys=True)}'
+
+    def __validate_field_has_value(self, json_record, field_name, values):
+        value = self.__validate_field(json_record, field_name)
+        assert value in values, f'Field "{field_name}" is expected to have one of the following values: {values}, but has value "{value}". Line: {json.dumps(json_record, sort_keys=True)}'
+
+    def __validate_audit_record(self, json_record):
+        self.__validate_field_exists_and_not_empty(json_record, 'component')
+        self.__validate_field_exists_and_not_empty(json_record, 'operation')
+        self.__validate_field_exists_and_not_empty(json_record, 'subject')
+        self.__validate_field_has_value(json_record, 'status', ['SUCCESS', 'ERROR', 'IN-PROCESS'])
+        if json_record.get('subject') != 'metadata@system':
+            self.__validate_field_exists_and_not_empty(json_record, 'sanitized_token')
+            self.__validate_field_exists_and_not_empty(json_record, 'remote_address')
 
     def __exit__(self, *exc):
         last_read_time = time.time()

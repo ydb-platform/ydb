@@ -1023,6 +1023,7 @@ enum ECdcStreamFormat {
     ECdcStreamFormatJson = 2;
     ECdcStreamFormatDynamoDBStreamsJson = 3;
     ECdcStreamFormatDebeziumJson = 4;
+    ECdcStreamFormatLongInteger = 5;
 }
 
 message TCdcStreamScanProgress {

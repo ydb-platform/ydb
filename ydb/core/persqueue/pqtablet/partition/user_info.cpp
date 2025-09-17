@@ -47,7 +47,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     const TString& dbPath,
     const bool isServerless,
     const TString& folderId,
-    const TString& monitoringProject
+    const TString& monitoringProjectId
 )
     : DCId(std::move(dcId))
     , TopicConverter(topicConverter)
@@ -58,7 +58,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     , DbPath(dbPath)
     , IsServerless(isServerless)
     , FolderId(folderId)
-    , MonitoringProject(monitoringProject)
+    , MonitoringProjectId(monitoringProjectId)
     , CurReadRuleGeneration(0)
 {
 }
@@ -167,14 +167,14 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
     if (!counters) {
         return nullptr;
     }
-    // if (MonitoringProject.empty()) {
-    //     return nullptr;
-    // }
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        return counters
+        auto s = counters
             ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")
-            ->GetSubgroup("host", "")
-            ->GetSubgroup("monitoring_project", MonitoringProject)
+            ->GetSubgroup("host", "");
+        if (!MonitoringProjectId.empty()) {
+            s = s->GetSubgroup("monitoring_project_id", MonitoringProjectId);
+        }
+        return s
             ->GetSubgroup("database", Config.GetYdbDatabasePath())
             ->GetSubgroup("cloud_id", CloudId)
             ->GetSubgroup("folder_id", FolderId)
@@ -182,10 +182,13 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
             ->GetSubgroup("topic", TopicConverter->GetClientsideName())
             ->GetSubgroup("partition_id", ToString(Partition));
     } else {
-        return counters
+        auto s = counters
             ->GetSubgroup("counters", "topics_per_partition")
-            ->GetSubgroup("host", "cluster")
-            ->GetSubgroup("monitoring_project", MonitoringProject)
+            ->GetSubgroup("host", "cluster");
+        if (!MonitoringProjectId.empty()) {
+            s = s->GetSubgroup("monitoring_project_id", MonitoringProjectId);
+        }
+        return s
             ->GetSubgroup("Account", TopicConverter->GetAccount())
             ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
             ->GetSubgroup("OriginDC", TopicConverter->GetCluster())

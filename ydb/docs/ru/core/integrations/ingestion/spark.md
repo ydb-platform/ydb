@@ -149,13 +149,13 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
    - Экземпляр облачной базы данных с токеном:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?tokenFile=~/my_token`
    - Экземпляр облачной базы данных с файлом сервисного аккаунта:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?saKeyFile=~/sa_key.json`
 
+* `ca.text` — указывает значение [сертификата](../../concepts/connect.md#tls-cert) для установки TLS-соединения.
+* `ca.file` — указывает путь к [сертификату](../../concepts/connect.md#tls-cert) для установки TLS-соединения. Может быть указан прямо в `url` в виде опции `secureConnectionCertificate`.
 * `auth.use_env` — если указано `true`, используется режим аутентификации на основе [переменных среды окружения](../../reference/ydb-sdk/auth.md#env).
 * `auth.use_metadata` — если указано `true`, используется режим аутентификации [Metadata](../../security/authentication.md#iam). Может быть указан прямо в `url` в виде опции `useMetadata`.
 * `auth.login` и `auth.password` — логин и пароль для [статической аутентификации](../../security/authentication.md#static-credentials).
 * `auth.token` — аутентификация с использованием указанного [Access Token](../../security/authentication.md#iam).
 * `auth.token.file` — аутентификация с использованием [Access Token](../../security/authentication.md#iam) из указанного файла. Может быть указан прямо в `url` в виде опции `tokenFile`.
-* `auth.ca.text` — указывает значение [сертификата](../../concepts/connect.md#tls-cert) для установки TLS-соединения.
-* `auth.ca.file` — указывает путь к [сертификату](../../concepts/connect.md#tls-cert) для установки TLS-соединения. Может быть указан прямо в `url` в виде опции `secureConnectionCertificate`.
 * `auth.sakey.text` — можно указать содержимое ключа для аутентификации [по ключу сервисного аккаунта](../../security/authentication.md#iam).
 * `auth.sakey.file` — можно указать путь к файлу ключа для аутентификации [по ключу сервисного аккаунта](../../security/authentication.md#iam). Может быть указан прямо в `url` в виде опции `saKeyFile`.
 

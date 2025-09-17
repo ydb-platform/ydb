@@ -18,7 +18,6 @@
 #include "flat_boot_oven.h"
 #include "flat_executor_tx_env.h"
 #include "flat_executor_counters.h"
-#include "flat_executor_backup.h"
 #include "logic_snap_main.h"
 #include "logic_alter_main.h"
 #include "flat_abi_evol.h"
@@ -208,8 +207,6 @@ void TExecutor::PassAway() {
     Owner = nullptr;
 
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister());
-
-    Send(BackupWriter, new TEvents::TEvPoisonPill());
 
     return TActor::PassAway();
 }
@@ -4348,6 +4345,7 @@ STFUNC(TExecutor::StateWork) {
         hFunc(NMemory::TEvMemTableRegistered, Handle);
         hFunc(NMemory::TEvMemTableCompact, Handle);
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
+        hFunc(NBackup::TEvSnapshotCompleted, Handle);
     default:
         break;
     }
@@ -5070,9 +5068,21 @@ void TExecutor::StartBackup() {
     const auto& backupConfig = AppData()->SystemTabletBackupConfig;
     TTabletTypes::EType tabletType = Owner->TabletType();
     ui64 tabletId = Owner->TabletID();
-    if (auto* writer = CreateBackupWriter(backupConfig, tabletType, tabletId, Generation0); writer != nullptr) {
-        BackupWriter = Register(writer, TMailboxType::HTSwap, AppData()->IOPoolId);
+    const auto& tables = Database->GetScheme().Tables;
+
+    if (auto* writer = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType, tabletId, Generation0)) {
+        auto writerActor = Register(writer, TMailboxType::HTSwap, AppData()->IOPoolId);
+
+        for (const auto& [tableId, table] : tables) {
+           auto opts = TScanOptions().DisableResourceBroker();
+           QueueScan(tableId, NBackup::CreateSnapshotScan(writerActor, tableId, table.Columns), 0, opts);
+        }
     }
+}
+
+void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
+    Y_ENSURE(ev->Get()->Success, ev->Get()->Error);
+    Owner->BackupSnapshotComplete(OwnerCtx());
 }
 
 }

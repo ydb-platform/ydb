@@ -490,8 +490,8 @@ enum class ETableType : ui32 {
 
 ETableType GetTableTypeFromString(const TStringBuf& tableType);
 
-bool GetTopicMeteringModeFromString(const TString& meteringMode,
-                                                        Ydb::Topic::MeteringMode& result);
+bool GetMetricsLevelFromString(const TString& metricsLevel, Ydb::MetricsLevel& result);
+bool GetTopicMeteringModeFromString(const TString& meteringMode, Ydb::Topic::MeteringMode& result);
 TVector<Ydb::Topic::Codec> GetTopicCodecsFromString(const TStringBuf& codecsStr);
 bool GetTopicAutoPartitioningStrategyFromString(const TString& strategy, Ydb::Topic::AutoPartitioningStrategy& result);
 

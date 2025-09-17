@@ -8527,6 +8527,9 @@ Y_UNIT_TEST_SUITE(TopicsDDL) {
         TestQuery(R"(
             CREATE TOPIC topic1 WITH (metering_mode = "str_value", partition_count_limit = 123, retention_period = Interval('PT1H'));
         )");
+        TestQuery(R"(
+            CREATE TOPIC topic1 WITH (metrics_level = "detailed");
+        )");
     }
 
     Y_UNIT_TEST(CreateTopicConsumer) {
@@ -8549,7 +8552,13 @@ Y_UNIT_TEST_SUITE(TopicsDDL) {
             ALTER TOPIC topic1 SET (retention_storage_mb = 3, partition_count_limit = 50);
         )");
         TestQuery(R"(
+            ALTER TOPIC topic1 SET (metrics_level = "database");
+        )");
+        TestQuery(R"(
             ALTER TOPIC topic1 RESET (supported_codecs, retention_period);
+        )");
+        TestQuery(R"(
+            ALTER TOPIC topic1 RESET (metrics_level);
         )");
         TestQuery(R"(
             ALTER TOPIC topic1 RESET (partition_write_speed_bytes_per_second),

@@ -607,6 +607,14 @@ namespace {
                 );
                 YQL_ENSURE(result);
                 request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(strategy);
+            } else if (name == "setMetricsLevel") {
+                Ydb::MetricsLevel metricsLevel;
+                auto result = GetMetricsLevelFromString(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()),
+                        metricsLevel
+                );
+                YQL_ENSURE(result);
+                request->set_metrics_level(metricsLevel);
             }
         }
     }

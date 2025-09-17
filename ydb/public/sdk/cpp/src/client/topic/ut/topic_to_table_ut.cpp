@@ -307,6 +307,8 @@ protected:
     virtual EClientType GetClientType() const = 0;
     virtual ~TFixture() = default;
 
+    void TestWriteAndReadMessages(size_t count, size_t size, bool restart);
+
 private:
     class TTableSession : public ISession {
     public:
@@ -3359,21 +3361,63 @@ Y_UNIT_TEST_F(The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other, TFixt
     RestartPQTablet("topic_A", 1);
 }
 
-Y_UNIT_TEST_F(Foo, TFixtureNoClient)
+void TFixture::TestWriteAndReadMessages(size_t count, size_t size, bool restart)
 {
     CreateTopic("topic_A");
 
     SetPartitionWriteSpeed("topic_A", 50'000'000);
 
-    for (int i = 0; i < 320; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(64'000, 'x'), nullptr);
+    for (size_t i = 0; i < count; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(size, 'x'), nullptr);
     }
     CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID);
 
-    RestartPQTablet("topic_A", 0);
+    if (restart) {
+        RestartPQTablet("topic_A", 0);
+    }
 
-    auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 320);
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 320);
+    auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, count);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), count);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Small_Messages_1, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(320, 64'000, false);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Small_Messages_2, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(320, 64'000, true);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Big_Messages_1, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(27, 64'000 * 12, false);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Big_Messages_2, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(27, 64'000 * 12, true);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Huge_Messages_1, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(4, 9'000'000, false);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Huge_Messages_2, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(4, 9'000'000, true);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Gigant_Messages_1, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(4, 61'000'000, false);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Gigant_Messages_2, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(4, 61'000'000, true);
 }
 
 }

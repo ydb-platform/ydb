@@ -70,29 +70,31 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         }
 
         auto settings = TKikimrSettings(*appConfig);
+        const auto& queryServiceConfig = appConfig->GetQueryServiceConfig();
 
         NYql::IHTTPGateway::TPtr httpGateway;
         if (initializeHttpGateway) {
-            httpGateway = MakeHttpGateway(appConfig->GetQueryServiceConfig().GetHttpGateway(), settings.CountersRoot);
+            httpGateway = MakeHttpGateway(queryServiceConfig.GetHttpGateway(), settings.CountersRoot);
         }
         auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig());
 
+        const auto& s3Config = queryServiceConfig.GetS3();
         auto federatedQuerySetupFactory = std::make_shared<TKqpFederatedQuerySetupFactoryMock>(
             httpGateway,
             connectorClient,
             options.CredentialsFactory,
             databaseAsyncResolver,
-            appConfig->GetQueryServiceConfig().GetS3(),
-            appConfig->GetQueryServiceConfig().GetGeneric(),
-            appConfig->GetQueryServiceConfig().GetYt(),
+            s3Config,
+            queryServiceConfig.GetGeneric(),
+            queryServiceConfig.GetYt(),
             nullptr,
-            appConfig->GetQueryServiceConfig().GetSolomon(),
+            queryServiceConfig.GetSolomon(),
             nullptr,
             nullptr,
-            NYql::NDq::CreateReadActorFactoryConfig(appConfig->GetQueryServiceConfig().GetS3()),
+            NYql::NDq::CreateReadActorFactoryConfig(s3Config),
             nullptr,
             NYql::TPqGatewayConfig{},
-            options.PqGateway ? options.PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+            options.PqGateway ? options.PqGateway : NKqp::MakePqGateway(driver, queryServiceConfig.GetExternalYdbTopics()).first,
             nullptr,
             driver);
 

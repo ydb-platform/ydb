@@ -22,6 +22,8 @@
 #include <ydb/library/logger/actor.h>
 
 namespace NKikimrConfig {
+    class TExternalYdbTopicsConfig_TYdbDriverConfig;
+    class TExternalYdbTopicsConfig;
     class TQueryServiceConfig;
 }  // namespace NKikimrConfig
 
@@ -37,8 +39,9 @@ namespace NKikimr::NKqp {
 
     NYql::IHTTPGateway::TPtr MakeHttpGateway(const NYql::THttpGatewayConfig& httpGatewayConfig, NMonitoring::TDynamicCounterPtr countersRoot);
 
-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const NYql::TPqGatewayConfig& pqGatewayConfig);
+    std::shared_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr, const NKikimrConfig::TExternalYdbTopicsConfig_TYdbDriverConfig& config);
 
+    std::pair<NYql::IPqGateway::TPtr, NYql::TPqGatewayConfig> MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const NKikimrConfig::TExternalYdbTopicsConfig& topicsConfig);
 
     struct TKqpFederatedQuerySetup {
         NYql::IHTTPGateway::TPtr HttpGateway;

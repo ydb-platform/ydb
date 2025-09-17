@@ -210,7 +210,7 @@ class TestTypesAndFormats(S3ImportTestBase):
 
         logger.info("Exporting into s3...")
         self.ydb_client.query(f"""
-            PRAGMA s3.UseBlocksSink = "true";        
+            PRAGMA s3.UseBlocksSink = "true";
 
             INSERT INTO {s3_table_name} SELECT * FROM {olap_table_name};
         """)

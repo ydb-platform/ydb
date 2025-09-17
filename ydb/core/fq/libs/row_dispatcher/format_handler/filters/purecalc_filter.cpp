@@ -11,7 +11,7 @@ namespace NFq::NRowDispatcher {
 namespace {
 
 constexpr std::string_view OFFSET_FIELD_NAME = "_offset";
-constexpr std::string_view WATERMARK_FIELD_NAME = "watermark";
+constexpr std::string_view WATERMARK_FIELD_NAME = "_watermark";
 
 NYT::TNode CreateNamedNode(std::string_view name, NYT::TNode&& node) {
     return NYT::TNode::CreateList().Add(NYT::TNode(name)).Add(std::move(node));
@@ -19,10 +19,6 @@ NYT::TNode CreateNamedNode(std::string_view name, NYT::TNode&& node) {
 
 NYT::TNode CreateTypeNode(NYT::TNode&& typeNode) {
     return CreateNamedNode("DataType", std::move(typeNode));
-}
-
-NYT::TNode CreateOptionalTypeNode(NYT::TNode&& typeNode) {
-    return CreateNamedNode("OptionalType", std::move(typeNode));
 }
 
 NYT::TNode CreateStructTypeNode(NYT::TNode&& membersNode) {
@@ -74,7 +70,7 @@ NYT::TNode MakeWatermarkOutputSchema() {
     return CreateStructTypeNode(
         NYT::TNode::CreateList()
             .Add(CreateFieldNode(OFFSET_FIELD_NAME, CreateTypeNode("Uint64")))
-            .Add(CreateFieldNode(WATERMARK_FIELD_NAME, CreateOptionalTypeNode(CreateTypeNode("Timestamp"))))
+            .Add(CreateFieldNode(WATERMARK_FIELD_NAME, CreateTypeNode("Timestamp")))
     );
 }
 
@@ -460,10 +456,21 @@ private:
 
     TStringBuilder sb;
     sb << R"(PRAGMA config.flags("LLVM", ")" << (settings.EnabledLLVM ? "ON" : "OFF") << R"(");)" << '\n';
+    sb << "$input ="
+        << " SELECT "
+            << OFFSET_FIELD_NAME << ", "
+            << watermarkExpr << " AS " << WATERMARK_FIELD_NAME
+        << " FROM Input;\n";
+    sb << "$output ="
+        << " SELECT "
+            << OFFSET_FIELD_NAME << ", "
+            << WATERMARK_FIELD_NAME
+        << " FROM $input"
+        << " WHERE " << WATERMARK_FIELD_NAME << " IS NOT NULL;\n";
     sb << "SELECT "
         << OFFSET_FIELD_NAME << ", "
-        << watermarkExpr << " AS " << WATERMARK_FIELD_NAME
-    << " FROM Input;\n";
+        << "Unwrap(" << WATERMARK_FIELD_NAME << ") AS " << WATERMARK_FIELD_NAME
+    << " FROM $output;\n";
 
     TString result = sb;
     LOG_ROW_DISPATCHER_DEBUG("Generated sql:\n" << result);

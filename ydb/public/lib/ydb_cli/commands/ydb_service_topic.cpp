@@ -35,6 +35,18 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NYdb::NTopic::ECodec>("zstd", NYdb::NTopic::ECodec::ZSTD),
         };
 
+        THashMap<TString, NTopic::EMetricsLevel> ExistingMetricsLevels = {
+            std::pair<TString, NTopic::EMetricsLevel>("database", NTopic::EMetricsLevel::Database),
+            std::pair<TString, NTopic::EMetricsLevel>("object", NTopic::EMetricsLevel::Object),
+            std::pair<TString, NTopic::EMetricsLevel>("detailed", NTopic::EMetricsLevel::Detailed),
+        };
+
+        THashMap<NTopic::EMetricsLevel, TString> MetricsLevelsDescriptions = {
+            std::pair<NTopic::EMetricsLevel, TString>(NTopic::EMetricsLevel::Database, "Database level metrics."),
+            std::pair<NTopic::EMetricsLevel, TString>(NTopic::EMetricsLevel::Object, "Database and object level metrics."),
+            std::pair<NTopic::EMetricsLevel, TString>(NTopic::EMetricsLevel::Detailed, "Database, object, and detailed level metrics."),
+        };
+
         THashMap<TString, NTopic::EMeteringMode> ExistingMeteringModes = {
             std::pair<TString, NTopic::EMeteringMode>("request-units", NTopic::EMeteringMode::RequestUnits),
             std::pair<TString, NTopic::EMeteringMode>("reserved-capacity", NTopic::EMeteringMode::ReservedCapacity),
@@ -157,6 +169,43 @@ namespace NYdb::NConsoleClient {
             .RequiredArgument("STRING")
             .StoreResult(&SupportedCodecsStr_);
         AllowedCodecs_ = supportedCodecs;
+    }
+
+    void TCommandWithMetricsLevel::AddMetricsLevels(TClientCommand::TConfig& config) {
+        TStringStream description;
+        description << "Available metrics levels: ";
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        for (const auto& level: ExistingMetricsLevels) {
+            auto findResult = MetricsLevelsDescriptions.find(level.second);
+            Y_ABORT_UNLESS(findResult != MetricsLevelsDescriptions.end(),
+                     "Couldn't find description for %s metrics level", (TStringBuilder() << level.second).c_str());
+            description << "\n  " << colors.BoldColor() << level.first << colors.OldColor()
+                        << "\n    " << findResult->second;
+            if (level.second == NTopic::EMetricsLevel::Database) {
+                description << colors.CyanColor() << " (default)" << colors.OldColor();
+            }
+        }
+        config.Opts->AddLongOption("metrics-level", description.Str())
+            .Optional()
+            .StoreResult(&MetricsLevelStr_);
+    }
+
+    void TCommandWithMetricsLevel::ParseMetricsLevel() {
+        if (MetricsLevelStr_.empty()) {
+            return;
+        }
+
+        TString toLowerMetricsLevel = to_lower(MetricsLevelStr_);
+        if (auto it = ExistingMetricsLevels.find(toLowerMetricsLevel); it != ExistingMetricsLevels.end()) {
+            MetricsLevel_ = it->second;
+            return;
+        }
+
+        throw TMisuseException() << "Metering mode " << MetricsLevelStr_ << " is not available for this command";
+    }
+
+    TMaybe<NTopic::EMetricsLevel> TCommandWithMetricsLevel::GetMetricsLevel() const {
+        return MetricsLevel_;
     }
 
     void TCommandWithSupportedCodecs::ParseCodecs() {
@@ -323,6 +372,7 @@ namespace NYdb::NConsoleClient {
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
+        AddMetricsLevels(config);
 
         config.Opts->AddLongOption("auto-partitioning-max-partitions-count", "Maximum number of partitions for topic")
             .Optional()
@@ -340,6 +390,7 @@ namespace NYdb::NConsoleClient {
         ParseTopicName(config, 0);
         ParseCodecs();
         ParseMeteringMode();
+        ParseMetricsLevel();
         ParseAutoPartitioningStrategy();
     }
 
@@ -379,6 +430,10 @@ namespace NYdb::NConsoleClient {
             settings.AddAttribute("_partitions_per_tablet", ToString(*PartitionsPerTablet_));
         }
 
+        if (auto level = GetMetricsLevel(); level.Defined()) {
+            settings.MetricsLevel(*level);
+        }
+
         auto status = topicClient.CreateTopic(TopicName, settings).GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
@@ -406,6 +461,7 @@ namespace NYdb::NConsoleClient {
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
+        AddMetricsLevels(config);
 
         config.Opts->AddLongOption("auto-partitioning-max-partitions-count", "Maximum number of partitions for topic")
             .Optional()
@@ -418,6 +474,7 @@ namespace NYdb::NConsoleClient {
         ParseTopicName(config, 0);
         ParseCodecs();
         ParseMeteringMode();
+        ParseMetricsLevel();
         ParseAutoPartitioningStrategy();
     }
 
@@ -474,6 +531,10 @@ namespace NYdb::NConsoleClient {
 
         if (RetentionStorageMb_.Defined() && describeResult.GetTopicDescription().GetRetentionStorageMb() != *RetentionStorageMb_) {
             settings.SetRetentionStorageMb(*RetentionStorageMb_);
+        }
+
+        if (MetricsLevel_.Defined()) {
+            settings.MetricsLevel(*MetricsLevel_);
         }
 
         return settings;

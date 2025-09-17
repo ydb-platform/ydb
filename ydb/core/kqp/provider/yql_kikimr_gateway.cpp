@@ -424,6 +424,28 @@ static std::shared_ptr<THashMap<TString, Ydb::Topic::MeteringMode>> GetMeteringM
     return metModesMapping;
 }
 
+static std::shared_ptr<THashMap<TString, Ydb::MetricsLevel>> GetMetricsLevelMapping() {
+    static std::shared_ptr<THashMap<TString, Ydb::MetricsLevel>> metricsLevelMapping;
+    if (metricsLevelMapping == nullptr) {
+        metricsLevelMapping = MakeEnumMapping<Ydb::MetricsLevel>(
+                Ydb::MetricsLevel_descriptor(), "metrics_level_"
+        );
+    }
+    return metricsLevelMapping;
+}
+
+bool GetMetricsLevelFromString(const TString& metricsLevel, Ydb::MetricsLevel& result) {
+    auto mapping = GetMetricsLevelMapping();
+    auto normLevel = to_lower(metricsLevel);
+    auto iter = mapping->find(normLevel);
+    if (iter.IsEnd()) {
+        return false;
+    } else {
+        result = iter->second;
+        return true;
+    }
+}
+
 bool GetTopicMeteringModeFromString(const TString& meteringMode, Ydb::Topic::MeteringMode& result) {
     auto mapping = GetMeteringModesMapping();
     auto normMode = to_lower(meteringMode);

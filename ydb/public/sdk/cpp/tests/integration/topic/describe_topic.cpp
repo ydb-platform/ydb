@@ -119,4 +119,63 @@ TEST_F(Describe, TEST_NAME(Location)) {
     }
 }
 
+TEST_F(Describe, TEST_NAME(MetricsLevel)) {
+    TTopicClient client(MakeDriver());
+
+    auto createTopic = [&](std::string topic, EMetricsLevel countersLevel) {
+        auto res = client.CreateTopic(topic, TCreateTopicSettings().MetricsLevel(countersLevel)).GetValueSync();
+        ASSERT_TRUE(res.IsSuccess());
+    };
+
+    auto alterTopic = [&](std::string topic, EMetricsLevel countersLevel) {
+        auto res = client.AlterTopic(topic, TAlterTopicSettings().MetricsLevel(countersLevel)).GetValueSync();
+        ASSERT_TRUE(res.IsSuccess());
+    };
+
+    auto checkFlag = [&](std::string topic, std::optional<EMetricsLevel> expectedCountersLevel) {
+        auto res = client.DescribeTopic(topic, {}).GetValueSync();
+        Y_ENSURE(res.IsSuccess());
+        return res.GetTopicDescription().GetMetricsLevel() == expectedCountersLevel;
+    };
+
+    {
+        const std::string topic("topic-with-counters");
+        createTopic(topic, EMetricsLevel::Detailed);
+        checkFlag(topic, EMetricsLevel::Detailed);
+        alterTopic(topic, EMetricsLevel::Object);
+        Y_ENSURE(checkFlag(topic, EMetricsLevel::Object));
+
+        {
+            // Empty alter should change nothing.
+            auto res = client.AlterTopic(topic).GetValueSync();
+            ASSERT_TRUE(res.IsSuccess());
+            Y_ENSURE(checkFlag(topic, EMetricsLevel::Object));
+        }
+    }
+
+    {
+        const std::string topic("topic-without-counters-by-default");
+        auto res = client.CreateTopic(topic).GetValueSync();
+        ASSERT_TRUE(res.IsSuccess());
+        Y_ENSURE(checkFlag(topic, {}));
+        alterTopic(topic, EMetricsLevel::Detailed);
+        Y_ENSURE(checkFlag(topic, EMetricsLevel::Detailed));
+
+        {
+            // Empty alter should change nothing.
+            auto res = client.AlterTopic(topic).GetValueSync();
+            ASSERT_TRUE(res.IsSuccess());
+            Y_ENSURE(checkFlag(topic, EMetricsLevel::Detailed));
+        }
+    }
+
+    {
+        const std::string topic("topic-without-counters");
+        createTopic(topic, EMetricsLevel::Object);
+        Y_ENSURE(checkFlag(topic, EMetricsLevel::Object));
+        alterTopic(topic, EMetricsLevel::Detailed);
+        Y_ENSURE(checkFlag(topic, EMetricsLevel::Detailed));
+    }
+}
+
 }

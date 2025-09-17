@@ -411,8 +411,10 @@ namespace NKikimr::NAutoConfigInitializer {
 
 namespace NKikimr {
     bool NeedToUseAutoConfig(const NKikimrConfig::TActorSystemConfig& config) {
-        return config.GetUseAutoConfig()
-            || config.HasNodeType()
-            || config.HasCpuCount();
+        bool hasSpecialFields = config.HasNodeType() || config.HasCpuCount();
+        if (!config.HasUseAutoConfig() && hasSpecialFields) {
+            return true;
+        }
+        return config.GetUseAutoConfig();
     }
 }

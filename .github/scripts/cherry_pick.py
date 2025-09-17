@@ -144,7 +144,7 @@ class CherryPickCreator:
             except GithubException as e:
                 self.add_summary(f'{target} error GithubException:\n```\n{e}\n```\n')
             except subprocess.CalledProcessError as e:
-                msg = f'{target} error subprocess.CalledProcessError: {e}'
+                msg = f'`{target}` error `subprocess.CalledProcessError`: `{e}`'
                 if e.stdout:
                     msg += f'\nOutput:\n```\n{e.stdout.decode()}\n```'
                 if e.stderr:

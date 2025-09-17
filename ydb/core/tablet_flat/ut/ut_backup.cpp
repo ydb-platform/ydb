@@ -160,7 +160,7 @@ struct TEnv : public TMyEnvBase {
 Y_UNIT_TEST_SUITE(Backup) {
     ui32 TestTabletFlags = ui32(NFake::TDummy::EFlg::Backup)
         | ui32(NFake::TDummy::EFlg::Comp)
-        | ui32(NFake::TDummy::EFlg::Clean);
+        | ui32(NFake::TDummy::EFlg::Vac);
 
     Y_UNIT_TEST(FileStructure) {
         TEnv env;

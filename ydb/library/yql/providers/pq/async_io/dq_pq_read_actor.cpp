@@ -540,7 +540,7 @@ private:
 
         i64 usedSpace = 0;
         if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
-            return usedSpace;
+            freeSpace = 0;
         }
 
         bool recheckBatch = false;

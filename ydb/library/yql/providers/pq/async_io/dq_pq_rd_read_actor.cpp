@@ -226,6 +226,7 @@ private:
     // Set on Children
     std::queue<TReadyBatch> ReadyBuffer;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
+    TMaybe<TInstant> NextIdlenessCheckAt;
     // Set on Parent
     EState State = EState::INIT;
     bool Inited = false;
@@ -310,6 +311,7 @@ private:
     IFederatedTopicClient::TPtr FederatedTopicClient;
     const i64 MaxBufferSize;
     i64 ReadyBufferSizeBytes = 0;
+    TDuration LateArrivalDelay;
     // Set on Parent
     ui64 NextGeneration = 0;
     ui64 NextEventQueueId = 0;
@@ -461,6 +463,7 @@ public:
     IFederatedTopicClient& GetFederatedTopicClient();
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const;
     ITopicClient& GetTopicClient(TClusterState& clusterState);
+    void MaybeScheduleNextIdleCheck(TInstant systemTime);
 };
 
 IFederatedTopicClient& TDqPqRdReadActor::GetFederatedTopicClient() {
@@ -531,6 +534,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , MaxBufferSize(bufferSize)
+        , LateArrivalDelay(TDuration::MicroSeconds(SourceParams.GetWatermarks().GetLateArrivalDelayUs()))
 {
 
     SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())
@@ -755,12 +759,15 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     buffer.clear();
     watermark = Nothing();
 
-    if (freeSpace == 0 || ReadyBuffer.empty()) {
+    const auto now = TInstant::Now();
+    MaybeScheduleNextIdleCheck(now);
+
+    if (freeSpace == 0) {
         return 0;
     }
 
     i64 usedSpace = 0;
-    do {
+    while (!ReadyBuffer.empty()) {
         auto readyBatch = std::move(ReadyBuffer.front());
         ReadyBuffer.pop();
 
@@ -773,7 +780,25 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         freeSpace -= readyBatch.UsedSpace;
         PartitionToOffset[readyBatch.PartitionKey] = readyBatch.NextOffset;
         SRC_LOG_T("NextOffset " << readyBatch.NextOffset);
-    } while (freeSpace > 0 && !ReadyBuffer.empty() && watermark.Empty());
+        if (freeSpace <= 0 || !watermark.Empty()) {
+            break;
+        }
+    }
+
+    if (WatermarkTracker) {
+        const auto idleWatermark = WatermarkTracker->HandleIdleness(now);
+
+        if (idleWatermark) {
+            SRC_LOG_D("SessionId: " << GetSessionId() << " Fake watermark " << idleWatermark << " was produced");
+            if (ReadyBuffer.empty()) {
+                Y_ENSURE(watermark < *idleWatermark);
+                watermark = *idleWatermark;
+            } else {
+                Y_ENSURE(ReadyBuffer.back().Watermark < *idleWatermark);
+                ReadyBuffer.back().Watermark = *idleWatermark;
+            }
+        }
+    }
 
     ReadyBufferSizeBytes -= usedSpace;
     SRC_LOG_T("Return " << buffer.RowCount() << " rows, watermark " << watermark << ", buffer size " << ReadyBufferSizeBytes << ", free space " << freeSpace << ", result size " << usedSpace);
@@ -794,13 +819,35 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     return usedSpace;
 }
 
+// TODO avoid copypaste with TPqReadActor
+void TDqPqRdReadActor::MaybeScheduleNextIdleCheck(TInstant systemTime) {
+    if (!WatermarkTracker) {
+        return;
+    }
+
+    const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
+    if (!nextIdleCheckAt) {
+        return;
+    }
+
+    if (!NextIdlenessCheckAt.Defined() || nextIdleCheckAt != *NextIdlenessCheckAt) {
+        NextIdlenessCheckAt = *nextIdleCheckAt;
+        SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
+        Schedule(*nextIdleCheckAt, new TEvPrivate::TEvNotifyCA());
+    }
+}
+
+
 TDuration TDqPqRdReadActor::GetCpuTime() {
     return TDuration::MicroSeconds(CpuMicrosec);
 }
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
     SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
-        << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds");
+        << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds"
+        << " lateArrivalDelay: " << SourceParams.GetWatermarks().GetLateArrivalDelayUs() << " microseconds"
+        << ", idle: " << SourceParams.GetWatermarks().GetIdlePartitionsEnabled()
+        );
 
     if (!SourceParams.GetWatermarks().GetEnabled()) {
         return;
@@ -809,7 +856,7 @@ void TDqPqRdReadActor::InitWatermarkTracker() {
     WatermarkTracker.ConstructInPlace(
         TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
         SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
-        TDuration::Zero(),
+        LateArrivalDelay,
         TInstant::Now()
     );
 }
@@ -1139,7 +1186,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
             const auto watermark = TInstant::MicroSeconds(watermarkUs);
             const auto maybeNewWatermark = Parent->WatermarkTracker->NotifyNewPartitionTime(
                 partitionKey,
-                watermark,
+                watermark + LateArrivalDelay, // XXX dirty hack: add here to compensate subtraction inside WT
                 TInstant::Now()
             );
             if (!maybeNewWatermark) {

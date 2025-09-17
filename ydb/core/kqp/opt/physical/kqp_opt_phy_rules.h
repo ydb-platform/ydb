@@ -67,6 +67,9 @@ NYql::NNodes::TExprBase KqpPropagatePrecomuteScalarRowset(NYql::NNodes::TExprBas
 NYql::NNodes::TExprBase KqpBuildWriteConstraint(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     NYql::IOptimizationContext& optCtx, const NYql::TParentsMap& parentsMap, bool allowStageMultiUsage);
 
+NYql::NNodes::TExprBase KqpAddColumnForEmptyColumnsOlapRead(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx, 
+    const TKqpOptimizeContext& kqpCtx);
+
 bool AllowFuseJoinInputs(NYql::NNodes::TExprBase node);
 
 bool UseSource(const TKqpOptimizeContext& kqpCtx, const NYql::TKikimrTableDescription& tableDesc);

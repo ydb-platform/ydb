@@ -1122,7 +1122,7 @@ TStatus AnnotateOlapFilter(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 3U, ctx)) {
+    if (!EnsureArgsCount(*node, 4U, ctx)) {
         return TStatus::Error;
     }
 
@@ -1142,7 +1142,8 @@ TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     const auto structType = argsType->Cast<TStructExprType>();
-    TTypeAnnotationNode::TListType argsTypes(columns->ChildrenSize());
+    std::vector<const NYql::TTypeAnnotationNode*> argsTypes(columns->ChildrenSize());
+
     for (auto i = 0U; i < argsTypes.size(); ++i) {
         if (const auto argType = structType->FindItemType(columns->Child(i)->Content()))
             argsTypes[i] = argType;
@@ -1152,6 +1153,22 @@ TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
             ));
             return TStatus::Error;
         }
+    }
+
+    TExprList parameters = TExprList(node->Child(TKqpOlapApply::idx_Parameters));
+
+    for(auto expr: parameters) {
+        if (!EnsureArgsCount(*expr.Ptr(), 2U, ctx)) {
+            return TStatus::Error;
+        }
+
+        TCoParameter param = TMaybeNode<TCoParameter>(expr.Ptr()).Cast();
+        const auto& paramType = expr.Ptr()->Child(TCoParameter::idx_Type);
+        if (!EnsureType(*paramType, ctx)) {
+            return TStatus::Error;
+        }
+
+        argsTypes.push_back(paramType->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
     }
 
     if (!EnsureLambda(node->Tail(), ctx)) {

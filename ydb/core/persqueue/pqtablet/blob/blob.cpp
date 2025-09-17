@@ -559,7 +559,7 @@ auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
     return res;
 }
 
-auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size, TInstant timestamp) -> std::optional<TFormedBlobInfo>
+auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size, TInstant timestamp, bool isFastWrite) -> std::optional<TFormedBlobInfo>
 {
     if (HeadSize + BlobsSize == 0) { //if nothing to compact at all
         NeedCompactHead = false;
@@ -576,7 +576,11 @@ auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size, TInstant timestamp) ->
     }
 
     auto newKey = TKey::FromKey(oldKey, TKeyPrefix::TypeData, Partition, StartOffset);
-    newKey.SetFastWrite();
+    if (isFastWrite) {
+        newKey.SetFastWrite();
+    } else {
+        newKey.SetBody();
+    }
 
     FormedBlobs.emplace_back(oldKey, newKey, size, timestamp);
 

@@ -106,7 +106,7 @@ private:
             PendingPaths.pop();
 
             const ui64 cookie = ++NextCookie;
-            PathByCookie[cookie] = path;
+            PathByCookie.emplace(cookie, path);
 
             Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvResolveSchemeBoard(path), 0, cookie);
             Schedule(DefaultTimeout, new TEvents::TEvWakeup(cookie));
@@ -122,20 +122,25 @@ private:
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr& ev) {
-        const ui64 cookie = ev->Cookie;
+        ui64 cookie = ev->Cookie;
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
             SBB_LOG_N("Unexpected cookie: " << cookie);
             return;
         }
 
-        const TString& path = it->second;
+        TString& path = it->second;
         SBB_LOG_D("Handle " << ev->Get()->ToString() << ", path: " << path);
 
         const auto replicas = ev->Get()->GetPlainReplicas();
         if (replicas.empty()) {
             return MarkPathCompleted(it);
         }
+
+        // issue new cookie to handle replicas resolution and path description timeouts separately
+        cookie = ++NextCookie;
+        path = PathByCookie.emplace(cookie, path).first->second;
+        PathByCookie.erase(it);
 
         Send(SelectReplica(replicas), new TSchemeBoardMonEvents::TEvDescribeRequest(path), 0, cookie);
         Schedule(DefaultTimeout, new TEvents::TEvWakeup(cookie));

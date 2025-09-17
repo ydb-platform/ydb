@@ -14,6 +14,7 @@ package NKikimrBlobStorage;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TMessageId {
+    // Fake remove me later
     // (SequenceId, MsgId) pair identifies message order, used to implement flow control (i.e. windows)
     optional uint64 SequenceId = 1;
     optional uint64 MsgId = 2;

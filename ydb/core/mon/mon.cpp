@@ -526,14 +526,7 @@ public:
                 << " " << request->Method
                 << " " << request->URL);
         }
-        TString serializedToken;
-        if (result) {
-            AuditCtx.AddAuditLogParts(result->AuditLogParts);
-            if (result->UserToken) {
-                AuditCtx.SetSubjectType(result->UserToken->GetSubjectType());
-                serializedToken = result->UserToken->GetSerializedToken();
-            }
-        }
+        TString serializedToken = result && result->UserToken ? result->UserToken->GetSerializedToken() : TString();
         AuditCtx.LogOnReceived();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
             Container, serializedToken), IEventHandle::FlagTrackDelivery);
@@ -560,6 +553,11 @@ public:
 
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        AuditCtx.AddAuditLogParts(result.AuditLogParts);
+        if (result.UserToken) {
+            AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
+            Event->Get()->UserToken = result.UserToken->GetSerializedToken();
+        }
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
@@ -1177,13 +1175,6 @@ public:
                 << " " << request->Method
                 << " " << request->URL);
         }
-        if (result) {
-            AuditCtx.AddAuditLogParts(result->AuditLogParts);
-            if (result->UserToken) {
-                AuditCtx.SetSubjectType(result->UserToken->GetSubjectType());
-                Event->Get()->UserToken = result->UserToken->GetSerializedToken();
-            }
-        }
         AuditCtx.LogOnReceived();
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }
@@ -1207,6 +1198,11 @@ public:
 
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        AuditCtx.AddAuditLogParts(result.AuditLogParts);
+        if (result.UserToken) {
+            AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
+            Event->Get()->UserToken = result.UserToken->GetSerializedToken();
+        }
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }

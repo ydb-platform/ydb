@@ -75,7 +75,7 @@ namespace NKikimr {
         Y_UNIT_TEST(RetentionChangesStartOffset) {
             constexpr TMessageGroup groups[]{
                 {789, 1},
-                {2, 8_MB},
+                {4, 8_MB},
                 {567, 1},
             };
             TTopicSdkTestSetup setup = CreateSetup();

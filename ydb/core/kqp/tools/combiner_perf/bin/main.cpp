@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <ydb/core/kqp/tools/combiner_perf/subprocess.h>
 #include <ydb/core/kqp/tools/combiner_perf/printout.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple_last.h>
@@ -76,43 +77,72 @@ public:
         }
     }
 };
+NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName, const std::optional<bool> llvm, const std::optional<bool> spilling){
+    NJson::TJsonValue out;
+
+    out["testName"] = testName;
+    if (llvm.has_value()) {
+        out["llvm"] = *llvm;
+    }
+    if (spilling.has_value()) {
+        out["spilling"] = *spilling;
+    }
+    out["rowsPerRun"] = runParams.RowsPerRun;
+    out["numRuns"] = runParams.NumRuns;
+    if (TStringBuf(testName).Contains("Block")) {
+        out["blockSize"] = runParams.BlockSize;
+    }
+    out["longStringKeys"] = runParams.LongStringKeys;
+    out["numKeys"] = runParams.NumKeys;
+    out["joinOverlap"] = runParams.JoinOverlap;
+    out["joinRightRows"] = runParams.JoinRightRows;
+    out["combinerMemLimit"] = runParams.WideCombinerMemLimit;
+    out["hashType"] = HashMapTypeName(runParams.ReferenceHashType);
+
+    out["generatorTime"] = result.GeneratorTime.MilliSeconds();
+    out["resultTime"] = result.ResultTime.MilliSeconds();
+    out["refTime"] = result.ReferenceTime.MilliSeconds();
+    out["maxRssDelta"] = result.MaxRSSDelta;
+    out["referenceMaxRssDelta"] = result.ReferenceMaxRSSDelta;
+    out["dqTestColumns"] = runParams.CombineVsTestColumnSet;
+
+    return out;
+}
+
+int FilesIn(std::filesystem::path path)
+{
+    using std::filesystem::directory_iterator;
+    return std::distance(directory_iterator(path), directory_iterator{});
+}
+
+
+void SaveJson(NJson::TJsonValue value){
+
+    Cout << NJson::WriteJson(value, false, false, false) << Endl;
+    Cout.Flush();
+    auto file = TFixedBufferFileOutput{Sprintf("bench_results/%i.json", FilesIn("./bench_results"))};
+    file << NJson::WriteJson(value, false, false, false) << Endl;
+    file.Flush();
+}
+
 
 class TJsonResultCollector : public TTestResultCollector
 {
 public:
     virtual void SubmitMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName, const std::optional<bool> llvm, const std::optional<bool> spilling) override
     {
-        NJson::TJsonValue out;
-
-        out["testName"] = testName;
-        if (llvm.has_value()) {
-            out["llvm"] = *llvm;
-        }
-        if (spilling.has_value()) {
-            out["spilling"] = *spilling;
-        }
-        out["rowsPerRun"] = runParams.RowsPerRun;
-        out["numRuns"] = runParams.NumRuns;
-        if (TStringBuf(testName).Contains("Block")) {
-            out["blockSize"] = runParams.BlockSize;
-        }
-        out["longStringKeys"] = runParams.LongStringKeys;
-        out["numKeys"] = runParams.NumKeys;
-        out["joinOverlap"] = runParams.JoinOverlap;
-        out["joinRightRows"] = runParams.JoinRightRows;
-        out["combinerMemLimit"] = runParams.WideCombinerMemLimit;
-        out["hashType"] = HashMapTypeName(runParams.ReferenceHashType);
-
-        out["generatorTime"] = result.GeneratorTime.MilliSeconds();
-        out["resultTime"] = result.ResultTime.MilliSeconds();
-        out["refTime"] = result.ReferenceTime.MilliSeconds();
-        out["maxRssDelta"] = result.MaxRSSDelta;
-        out["referenceMaxRssDelta"] = result.ReferenceMaxRSSDelta;
-        out["dqTestColumns"] = runParams.CombineVsTestColumnSet;
-
-        Cout << NJson::WriteJson(out, false, false, false) << Endl;
-        Cout.Flush();
+        NJson::TJsonValue out = MakeJsonMetrics(runParams,result,testName, llvm, spilling);
+        SaveJson(out);
     }
+};
+
+class TJsonArrayResultCollector : public TTestResultCollector{
+public:
+    virtual void SubmitMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName, const std::optional<bool> llvm, const std::optional<bool> spilling) override{
+        array.AppendValue(MakeJsonMetrics(runParams,result,testName,llvm,spilling));
+    }
+    NJson::TJsonValue array;
+
 };
 
 
@@ -187,7 +217,7 @@ enum class ETestType {
 
 void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spilling)
 {
-    TJsonResultCollector printout;
+    TJsonArrayResultCollector printout;
 
     if (testType == ETestType::SimpleCombiner) {
         if (llvm) {
@@ -229,6 +259,7 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
     } else if (testType == ETestType::AllJoins){
         NKikimr::NMiniKQL::RunJoinsBench(params, printout);
     }
+    SaveJson(printout.array);
 }
 
 int main(int argc, const char* argv[])

@@ -3,7 +3,7 @@
 #include "factories.h"
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-
+#include <ranges>
 namespace {
 TVector<ui64> GenerateIntegerKeyColumn(i32 size, i32 seed) {
     std::default_random_engine eng;
@@ -62,25 +62,30 @@ void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams& params, TTestResultColle
 
     const TVector<const ui32> keyColumns{0};
 
-    TVector<std::pair<NYKQL::ETestedJoinAlgo, std::string_view>> cases = {
+    TVector<std::pair<NYKQL::ETestedJoinAlgo, std::string_view>> algos = {
         {NYKQL::ETestedJoinAlgo::kScalarGrace, "ScalarGrace"},
         {NYKQL::ETestedJoinAlgo::kScalarMap, "ScalarMap"},
         {NYKQL::ETestedJoinAlgo::kBlockMap, "BlockMap"},
     };
-    const int bigSize = 1 << 16;
+    const int bigSize = 1 << 17;
     const int smallSize = bigSize >> 7;
-    TVector<std::pair<NYKQL::TInnerJoinDescription, std::string_view>> inputs = {
-        {PrepareDescription(&setup, GenerateIntegerKeyColumn(bigSize, 123), GenerateIntegerKeyColumn(bigSize, 111)),
-         "SameSizeInteger"},
-        {PrepareDescription(&setup, GenerateIntegerKeyColumn(bigSize, 123), GenerateIntegerKeyColumn(smallSize, 111)),
-         "SmallRightInteger"},
-        {PrepareDescription(&setup, GenerateStringKeyColumn(bigSize, 123), GenerateStringKeyColumn(bigSize, 111)),
-         "SameSizeString"},
-        {PrepareDescription(&setup, GenerateStringKeyColumn(bigSize, 123), GenerateStringKeyColumn(smallSize, 111)),
-         "SmallRightString"}};
+    auto addStringAndIntInputs = [&](TVector<std::pair<NYKQL::TInnerJoinDescription, std::string>>& all, int leftSize, int rightSize, std::string name){
+        all.emplace_back(PrepareDescription(&setup, GenerateIntegerKeyColumn(leftSize, 123), GenerateIntegerKeyColumn(rightSize, 111)),
+        name+"_Integer");
+        all.emplace_back(PrepareDescription(&setup, GenerateStringKeyColumn(leftSize, 123), GenerateStringKeyColumn(rightSize, 111)),
+        name+"_String");
+    };
+    
+    TVector<std::pair<NYKQL::TInnerJoinDescription, std::string>> scaled_inputs;
+    for(int scale_log: std::views::iota(1) | std::views::take(8)) {
+        int scale = 1 << scale_log;
+        int leftSize = bigSize*scale;
+        addStringAndIntInputs(scaled_inputs, leftSize , leftSize, Sprintf("SameSize_%i", leftSize));
+        addStringAndIntInputs(scaled_inputs, leftSize, smallSize*scale, Sprintf("BigLeft_%i", leftSize));
+    }
 
-    for (auto [algo, algo_name] : cases) {
-        for (auto [descr, descr_name] : inputs) {
+    for (auto [algo, algo_name] : algos) {
+        for (auto [descr, descr_name] : scaled_inputs) {
             descr.LeftSource.KeyColumnIndexes = keyColumns;
             descr.RightSource.KeyColumnIndexes = keyColumns;
 

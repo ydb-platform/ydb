@@ -115,6 +115,16 @@ class CherryPickCreator:
         pr = self.repo.create_pull(
             target_branch, dev_branch_name, title=self.pr_title(target_branch), body=self.pr_body(True), maintainer_can_modify=True
         )
+
+        try:
+            pr.enable_automerge(merge_method='MERGE')
+        except BaseException as e:
+            logging.warning(f'Error while enable automerge with method MERGE: {e}')
+            try:
+                pr.enable_automerge(merge_method='SQUASH')
+            except BaseException as f:
+                logging.warning(f'Error while enable automerge with method SQUASH: {f}')
+
         self.add_summary(f'{target_branch}: PR {pr.html_url} created')
 
     def process(self):

@@ -276,7 +276,6 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
             request.SetIgnoreGroupFailModelChecks(true);
             request.SetIgnoreGroupSanityChecks(true);
             request.SetIgnoreDegradedGroupsChecks(true);
-            request.SetIgnoreDisintegratedGroupsChecks(true);
             for (ui32 i = 0; i < drives; ++i) {
                 auto* cmd = request.AddCommand();
                 auto* drive = cmd->MutableUpdateDriveStatus();

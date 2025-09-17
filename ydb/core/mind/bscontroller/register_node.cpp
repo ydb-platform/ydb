@@ -176,7 +176,7 @@ public:
         }
 
         TString error;
-        if (!updateIsSuccessful || (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error))) {
+        if (!updateIsSuccessful || (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, txc, &error))) {
             State->Rollback();
             State.reset();
         }

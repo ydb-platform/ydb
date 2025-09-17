@@ -2101,6 +2101,10 @@ class MSVCCompiler(MSVC, Compiler):
                 '-Wno-invalid-offsetof',
                 '-Wno-undefined-var-template',
                 '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
+                '-Wno-deprecated-literal-operator',
+                '-Wno-explicit-specialization-storage-class',
+                '-Wno-missing-template-arg-list-after-template-kw',
+                '-Wno-nontrivial-memcall',
             ]
 
         defines.append('/D_WIN32_WINNT={0}'.format(WINDOWS_VERSION_MIN))

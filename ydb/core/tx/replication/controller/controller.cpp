@@ -66,6 +66,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvAlterDstResult, Handle);
         HFunc(TEvPrivate::TEvDropDstResult, Handle);
         HFunc(TEvPrivate::TEvResolveSecretResult, Handle);
+        HFunc(TEvPrivate::TEvResolveResourceIdResult, Handle);
         HFunc(TEvPrivate::TEvResolveTenantResult, Handle);
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvPrivate::TEvProcessQueues, Handle);
@@ -246,6 +247,11 @@ void TController::Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorCon
 void TController::Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxResolveSecretResult(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxResolveResourceIdResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx) {

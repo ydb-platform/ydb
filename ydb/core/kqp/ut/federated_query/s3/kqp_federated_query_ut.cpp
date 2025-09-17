@@ -2129,6 +2129,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UploadObject(bucket, table2 + "/" + object2, content2, s3Client);
 
         auto kikimr = NTestUtils::MakeKikimrRunner();
+        WaitResourcesPublish(*kikimr);
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();

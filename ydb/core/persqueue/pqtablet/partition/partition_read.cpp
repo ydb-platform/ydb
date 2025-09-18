@@ -45,17 +45,17 @@ ui64 TPartition::GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) cons
     if (!readTimestamp) {
         return offset;
     }
-    auto estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.DataKeysBody, *readTimestamp, Max<ui64>());
-    if (estimatedOffset == Max<ui64>()) {
-        estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp, Max<ui64>());
+    TMaybe<ui64> estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.DataKeysBody, *readTimestamp);
+    if (!estimatedOffset.Defined() && AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+        estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, *readTimestamp);
     }
-    if (estimatedOffset == Max<ui64>() && AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
-        estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, *readTimestamp, Max<ui64>());
+    if (!estimatedOffset.Defined()) {
+        estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp);
     }
-    if (estimatedOffset == Max<ui64>()) {
+    if (!estimatedOffset.Defined()) {
         estimatedOffset = Min(BlobEncoder.Head.Offset, BlobEncoder.EndOffset - 1);
     }
-    return Max(estimatedOffset, offset);
+    return Max(*estimatedOffset, offset);
 }
 
 void TPartition::SendReadingFinished(const TString& consumer) {

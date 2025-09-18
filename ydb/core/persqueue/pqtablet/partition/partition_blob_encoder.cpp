@@ -1,5 +1,6 @@
 #include "partition_blob_encoder.h"
 #include "partition_util.h"
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -76,12 +77,21 @@ TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 start
                                                                 ui64 lastOffset,
                                                                 TBlobKeyTokens* blobKeyTokens) const
 {
+    DBGTRACE("TPartitionBlobEncoder::GetBlobsFromBody");
+    DBGTRACE_LOG("startOffset=" << startOffset <<
+                 ", partNo=" << partNo <<
+                 ", maxCount=" << maxCount <<
+                 ", maxSize=" << maxSize <<
+                 ", lastOffset=" << lastOffset);
+    DBGTRACE_LOG("DataKeysBody.size=" << DataKeysBody.size());
     TVector<TRequestedBlob> blobs;
     if (!DataKeysBody.empty() && PositionInBody(startOffset, partNo)) { //will read smth from body
         auto it = std::upper_bound(DataKeysBody.begin(), DataKeysBody.end(), std::make_pair(startOffset, partNo),
             [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
-        if (it == DataKeysBody.begin()) //could be true if data is deleted or gaps are created
+        if (it == DataKeysBody.begin()) { //could be true if data is deleted or gaps are created
+            DBGTRACE_LOG("empty blobs");
             return blobs;
+        }
         AFL_ENSURE(it != DataKeysBody.begin()); //always greater, startoffset can't be less that StartOffset
         AFL_ENSURE(it == DataKeysBody.end() || it->Key.GetOffset() > startOffset || it->Key.GetOffset() == startOffset && it->Key.GetPartNo() > partNo);
         --it;
@@ -99,10 +109,13 @@ TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 start
             cnt = it->Key.GetCount() - (startOffset - it->Key.GetOffset()); //don't count all elements from first blob
             sz = (cnt == it->Key.GetCount() ? it->Size : 0); //not readed client blobs can be of ~8Mb, so don't count this size at all
         }
+        DBGTRACE_LOG("sz=" << sz << ", cnt=" << cnt);
+        DBGTRACE_LOG("size=" << size << ", count=" << count);
         while (it != DataKeysBody.end()
                && (size < maxSize && count < maxCount || count == 0) //count== 0 grants that blob with offset from ReadFromTimestamp will be readed
                && (lastOffset == 0 || it->Key.GetOffset() < lastOffset)
         ) {
+            DBGTRACE_LOG("size=" << size << ", count=" << count << ", key=" << it->Key.ToString());
             size += sz;
             count += cnt;
             TRequestedBlob reqBlob(it->Key.GetOffset(), it->Key.GetPartNo(), it->Key.GetCount(),
@@ -134,13 +147,12 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
     TVector<TClientBlob> res;
     std::optional<ui64> firstAddedBlobOffset{};
     ui32 pos = 0;
-    if (PositionInHead(startOffset, partNo)) {
+    if (!Head.GetBatches().empty() && PositionInHead(startOffset, partNo)) {
         pos = Head.FindPos(startOffset, partNo);
         AFL_ENSURE(pos != Max<ui32>());
     }
     ui32 lastBlobSize = 0;
     for (; pos < Head.GetBatches().size(); ++pos) {
-
         TVector<TClientBlob> blobs;
         Head.GetBatch(pos).UnpackTo(&blobs);
         ui32 i = 0;
@@ -554,68 +566,68 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
     return res;
 }
 
-//void TPartitionBlobEncoder::Dump() const
-//{
-//    auto dumpCompactedKeys = [this](const std::deque<std::pair<TKey, ui32>>& keys, const char* prefix) {
-//        Y_UNUSED(this);
-//        Y_UNUSED(prefix);
-//        for (size_t i = 0; i < keys.size(); ++i) {
-//            DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].first.ToString() << " (" << keys[i].second << ")");
-//        }
-//    };
-//    auto dumpKeys = [this](const std::deque<TDataKey>& keys, const char* prefix) {
-//        Y_UNUSED(this);
-//        Y_UNUSED(prefix);
-//        if (keys.size() > 10) {
-//            auto dumpSubkeys = [this](const std::deque<TDataKey>& keys, size_t begin, size_t end, const char* prefix) {
-//                Y_UNUSED(this);
-//                Y_UNUSED(keys);
-//                Y_UNUSED(prefix);
-//                for (size_t i = begin; i < end; ++i) {
-//                    DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
-//                                 ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
-//                }
-//            };
-//            dumpSubkeys(keys, 0, 3, prefix);
-//            DBGTRACE_LOG("...");
-//            dumpSubkeys(keys, keys.size() - 3, keys.size(), prefix);
-//            return;
-//        }
-//        for (size_t i = 0; i < keys.size(); ++i) {
-//            DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
-//                         ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
-//        }
-//    };
-//    auto dumpHead = [this](const THead& head, const char* prefix) {
-//        Y_UNUSED(this);
-//        Y_UNUSED(head);
-//        Y_UNUSED(prefix);
-//        DBGTRACE_LOG(prefix <<
-//                     ": Offset=" << head.Offset << ", PartNo=" << head.PartNo <<
-//                     ", PackedSize=" << head.PackedSize <<
-//                     ", Batches.size=" << head.GetBatches().size());
-//    };
-//    auto dumpDataKeysHead = [this](const TVector<TKeyLevel>& levels, const char* prefix) {
-//        Y_UNUSED(this);
-//        Y_UNUSED(prefix);
-//        for (size_t i = 0; i < levels.size(); ++i) {
-//            const auto& level = levels[i];
-//            DBGTRACE_LOG(prefix << "[" << i << "] " << level.Sum() << " / " << level.Border());
-//            for (ui32 j = 0; j < level.KeysCount(); ++j) {
-//                DBGTRACE_LOG("    [" << j << "] " << level.GetKey(j).ToString() << " (" << level.GetSize(j) << ")");
-//            }
-//        }
-//    };
-//
-//    DBGTRACE_LOG("StartOffset=" << StartOffset << ", EndOffset=" << EndOffset);
-//    dumpCompactedKeys(CompactedKeys, "CompactedKeys");
-//    DBGTRACE_LOG("BodySize=" << BodySize);
-//    dumpKeys(DataKeysBody, "Body");
-//    dumpKeys(HeadKeys, "Head");
-//    dumpHead(Head, "Head");
-//    dumpDataKeysHead(DataKeysHead, "Levels");
-//    dumpHead(NewHead, "NewHead");
-//    DBGTRACE_LOG("NewHeadKey=" << NewHeadKey.Key.ToString() << " (" << NewHeadKey.Size << ")");
-//}
+void TPartitionBlobEncoder::Dump() const
+{
+    auto dumpCompactedKeys = [this](const std::deque<std::pair<TKey, ui32>>& keys, const char* prefix) {
+        Y_UNUSED(this);
+        Y_UNUSED(prefix);
+        for (size_t i = 0; i < keys.size(); ++i) {
+            DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].first.ToString() << " (" << keys[i].second << ")");
+        }
+    };
+    auto dumpKeys = [this](const std::deque<TDataKey>& keys, const char* prefix) {
+        Y_UNUSED(this);
+        Y_UNUSED(prefix);
+        if (keys.size() > 10) {
+            auto dumpSubkeys = [this](const std::deque<TDataKey>& keys, size_t begin, size_t end, const char* prefix) {
+                Y_UNUSED(this);
+                Y_UNUSED(keys);
+                Y_UNUSED(prefix);
+                for (size_t i = begin; i < end; ++i) {
+                    DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
+                                 ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
+                }
+            };
+            dumpSubkeys(keys, 0, 3, prefix);
+            DBGTRACE_LOG("...");
+            dumpSubkeys(keys, keys.size() - 3, keys.size(), prefix);
+            return;
+        }
+        for (size_t i = 0; i < keys.size(); ++i) {
+            DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
+                         ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
+        }
+    };
+    auto dumpHead = [this](const THead& head, const char* prefix) {
+        Y_UNUSED(this);
+        Y_UNUSED(head);
+        Y_UNUSED(prefix);
+        DBGTRACE_LOG(prefix <<
+                     ": Offset=" << head.Offset << ", PartNo=" << head.PartNo <<
+                     ", PackedSize=" << head.PackedSize <<
+                     ", Batches.size=" << head.GetBatches().size());
+    };
+    auto dumpDataKeysHead = [this](const TVector<TKeyLevel>& levels, const char* prefix) {
+        Y_UNUSED(this);
+        Y_UNUSED(prefix);
+        for (size_t i = 0; i < levels.size(); ++i) {
+            const auto& level = levels[i];
+            DBGTRACE_LOG(prefix << "[" << i << "] " << level.Sum() << " / " << level.Border());
+            for (ui32 j = 0; j < level.KeysCount(); ++j) {
+                DBGTRACE_LOG("    [" << j << "] " << level.GetKey(j).ToString() << " (" << level.GetSize(j) << ")");
+            }
+        }
+    };
+
+    DBGTRACE_LOG("StartOffset=" << StartOffset << ", EndOffset=" << EndOffset);
+    dumpCompactedKeys(CompactedKeys, "CompactedKeys");
+    DBGTRACE_LOG("BodySize=" << BodySize);
+    dumpKeys(DataKeysBody, "Body");
+    dumpKeys(HeadKeys, "Head");
+    dumpHead(Head, "Head");
+    dumpDataKeysHead(DataKeysHead, "Levels");
+    dumpHead(NewHead, "NewHead");
+    DBGTRACE_LOG("NewHeadKey=" << NewHeadKey.Key.ToString() << " (" << NewHeadKey.Size << ")");
+}
 
 }

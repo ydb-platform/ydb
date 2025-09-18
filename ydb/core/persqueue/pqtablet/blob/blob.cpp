@@ -437,7 +437,13 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
     , MaxBlobSize(maxBlobSize)
     , FastWrite(fastWrite)
 {
-    AFL_ENSURE(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0); // if head not cleared, then NewHead is going after Head
+    AFL_ENSURE(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0) // if head not cleared, then NewHead is going after Head
+        ("Head.NextOffset", Head.GetNextOffset())
+        ("Head.PackedSize", Head.PackedSize);
+        ("NewHead.Offset", NewHead.Offset)
+        ("NewHead.PartNo", NewHead.PartNo)
+        ("headCleared", headCleared)
+        ("needCompactHead", needCompactHead);
     if (!headCleared) {
         HeadSize = Head.PackedSize + NewHead.PackedSize;
         InternalPartsCount = Head.GetInternalPartsCount() + NewHead.GetInternalPartsCount();

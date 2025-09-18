@@ -106,6 +106,16 @@ namespace NActors {
         CONFIRMING,           // confirmation inflight
     };
 
+    struct TRdmaReadContext : public TAtomicRefCount<TRdmaReadContext> {
+        using TPtr = TIntrusivePtr<TRdmaReadContext>;
+        TRdmaReadContext(std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp)
+            : SizeLeft(0)
+            , Qp(qp)
+        {}
+        std::atomic<size_t> SizeLeft;
+        std::shared_ptr<NInterconnect::NRdma::TQueuePair> Qp;
+    };
+
     struct TReceiveContext: public TAtomicRefCount<TReceiveContext> {
         ui64 ControlPacketSendTimer = 0;
         ui64 ControlPacketId = 0;
@@ -141,7 +151,7 @@ namespace NActors {
                 size_t XdcSizeLeft = 0;
 
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
-                std::shared_ptr<std::atomic<size_t>> RdmaSizeLeft = nullptr;
+                TRdmaReadContext::TPtr RdmaReadContext = nullptr;
                 size_t RdmaSize = 0;
                 ui32 RdmaCheckSum = 0;
             };
@@ -161,8 +171,7 @@ namespace NActors {
 
             struct TRdmaReadReqOk {};
             using ScheduleRdmaReadRequestsResult = std::variant<TRdmaReadReqOk, NInterconnect::NRdma::ICq::TBusy, NInterconnect::NRdma::ICq::TErr>;
-            ScheduleRdmaReadRequestsResult ScheduleRdmaReadRequests(
-                const NActorsInterconnect::TRdmaCreds& creds, std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp,
+            ScheduleRdmaReadRequestsResult ScheduleRdmaReadRequests(const NActorsInterconnect::TRdmaCreds& creds,
                 NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel);
         };
 

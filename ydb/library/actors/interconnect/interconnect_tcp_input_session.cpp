@@ -97,9 +97,9 @@ namespace NActors {
     }
 
     static TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult SendRdmaReadRequest(
-        std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp, NInterconnect::NRdma::ICq::TPtr cq,
-        const NActorsInterconnect::TRdmaCred& cred, const NInterconnect::NRdma::TMemRegionSlice& memReg, ui32 offset,
-        std::shared_ptr<std::atomic<size_t>> rdmaSizeLeft, TActorId notify, ui16 channel) {
+        NInterconnect::NRdma::ICq::TPtr cq, const NActorsInterconnect::TRdmaCred& cred,
+        const NInterconnect::NRdma::TMemRegionSlice& memReg, ui32 offset,
+        TRdmaReadContext::TPtr readCtx , TActorId notify, ui16 channel) {
         using namespace NInterconnect::NRdma;
 
         Y_DEBUG_ABORT_UNLESS(memReg.GetSize() >= offset + cred.GetSize(),
@@ -112,26 +112,27 @@ namespace NActors {
         };
 
         // We need to capture qp to guarantee it will be alive until we have rdma reads inflight
-        auto cb = [left=rdmaSizeLeft, size=cred.GetSize(), reply, qp](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
+        // QP is part of TRdmaReadContext which is captured here
+        auto cb = [readCtx, size=cred.GetSize(), reply, memReg](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
             if (!ioDone->IsSuccess()) {
                 reply(as, ioDone);
                 return;
             }
 
-            size_t before = left->fetch_sub(size, std::memory_order_relaxed);
+            size_t before = readCtx->SizeLeft.fetch_sub(size, std::memory_order_relaxed);
             Y_ABORT_UNLESS(before >= size);
             if (before == size) {
                 reply(as, ioDone);
             } else {
                 delete ioDone; // Clean up the event
             }
-            Y_UNUSED(qp);
+            Y_UNUSED(memReg);
         };
 
-        auto wrTask = [memReg, qp, offset, cred](ICq::IWr* wr) {
+        auto wrTask = [memReg, readCtx, offset, cred](ICq::IWr* wr) {
             void* addr = static_cast<char*>(memReg.GetAddr()) + offset;
-            qp->SendRdmaReadWr(wr->GetId(),
-                addr, memReg.GetLKey(qp->GetCtx()->GetDeviceIndex()),
+            readCtx->Qp->SendRdmaReadWr(wr->GetId(),
+                addr, memReg.GetLKey(readCtx->Qp->GetCtx()->GetDeviceIndex()),
                 reinterpret_cast<void*>(cred.GetAddress()), cred.GetRkey(), cred.GetSize()
             );
         };
@@ -145,8 +146,7 @@ namespace NActors {
     }
 
     TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequests(
-        const NActorsInterconnect::TRdmaCreds& creds, std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp,
-        NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel) {
+        const NActorsInterconnect::TRdmaCreds& creds, NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel) {
         auto& pendingEvent = PendingEvents.back();
 
         ui32 mrOffset = 0;
@@ -161,7 +161,7 @@ namespace NActors {
 
                 credCopy.SetAddress(cred.GetAddress() + credOffset);
                 credCopy.SetSize(std::min(cred.GetSize() - credOffset, (ui64)curMemReg.GetSize() - mrOffset));
-                auto err = SendRdmaReadRequest(qp, cq, credCopy, curMemReg, mrOffset, pendingEvent.RdmaSizeLeft, notify, channel);
+                auto err = SendRdmaReadRequest(cq, credCopy, curMemReg, mrOffset, pendingEvent.RdmaReadContext, notify, channel);
                 if (!std::holds_alternative<TRdmaReadReqOk>(err)) {
                     return err;
                 }
@@ -720,11 +720,11 @@ namespace NActors {
                                 if (size) {
                                     pendingEvent.RdmaBuffers.push_back(NInterconnect::NRdma::TryExtractFromRcBuf(buffer));
                                 }
-                                if (!pendingEvent.RdmaSizeLeft) {
-                                    pendingEvent.RdmaSizeLeft = std::make_shared<std::atomic<size_t>>(0);
+                                if (!pendingEvent.RdmaReadContext) {
+                                    pendingEvent.RdmaReadContext = MakeIntrusive<TRdmaReadContext>(RdmaQp);
                                     pendingEvent.RdmaSize = 0;
                                 }
-                                *pendingEvent.RdmaSizeLeft += size;
+                                pendingEvent.RdmaReadContext->SizeLeft += size;
                                 pendingEvent.RdmaSize += size;
                             } else {
                                 if (size) {
@@ -803,7 +803,7 @@ namespace NActors {
                     ptr += credsSerializedSize;
                     context.PendingEvents.back().RdmaCheckSum = ReadUnaligned<ui32>(ptr);
                     ptr += sizeof(ui32);
-                    auto err = context.ScheduleRdmaReadRequests(creds, RdmaQp, RdmaCq, SelfId(), channel);
+                    auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
                     if (std::holds_alternative<NInterconnect::NRdma::ICq::TBusy>(err)) {
                         LOG_CRIT_IC_SESSION("ICIS20", "RDMA_READ error: can not allocate cq work request: busy");
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
@@ -829,7 +829,7 @@ namespace NActors {
     void TInputSessionTCP::ProcessEvents(TReceiveContext::TPerChannelContext& context, bool processPacketQueue) {
         for (; !context.PendingEvents.empty(); context.PendingEvents.pop_front()) {
             auto& pendingEvent = context.PendingEvents.front();
-            size_t rdmaSizeLeft = pendingEvent.RdmaSizeLeft ? pendingEvent.RdmaSizeLeft->load() : 0;
+            size_t rdmaSizeLeft = pendingEvent.RdmaReadContext ? pendingEvent.RdmaReadContext->SizeLeft.load() : 0;
             if (!pendingEvent.EventData || pendingEvent.XdcSizeLeft || rdmaSizeLeft) {
                 break; // event is not ready yet
             }

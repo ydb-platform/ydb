@@ -1506,7 +1506,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ExecStatsPlan) {
-        auto kikimr = DefaultKikimrRunner();
+        TKikimrSettings kikimrSettings;
+        kikimrSettings.AppConfig.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
+        TKikimrRunner kikimr(kikimrSettings);
         auto db = kikimr.GetQueryClient();
 
         auto params = TParamsBuilder()

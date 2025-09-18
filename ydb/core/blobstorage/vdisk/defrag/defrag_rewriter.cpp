@@ -166,7 +166,8 @@ namespace NKikimr {
                 << rec.LogoBlobId << " from Location# " << rec.OldDiskPart);
 
             auto writeEvent = std::make_unique<TEvBlobStorage::TEvVPut>(rec.LogoBlobId, std::move(rope),
-                    SelfVDiskId, true, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob);
+                SelfVDiskId, true, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
+                DCtx->VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER);
             writeEvent->RewriteBlob = true;
             Send(DCtx->SkeletonId, writeEvent.release());
         }

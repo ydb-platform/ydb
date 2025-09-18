@@ -36,14 +36,19 @@ namespace NKikimr {
         }
     }
 
-    void TEvBlobStorage::TEvVPut::StorePayload(TRope&& buffer) {
-        Record.SetChecksum(TDiskBlob::CalculateChecksum(buffer));
+    void TEvBlobStorage::TEvVPut::StorePayload(TRope&& buffer, bool checksumming) {
+        if (checksumming) {
+            Record.SetChecksum(TDiskBlob::CalculateChecksum(buffer));
+        }
         AddPayload(std::move(buffer));
     }
 
-    void TEvBlobStorage::TEvVMultiPut::StorePayload(const TRcBuf& buffer, NKikimrBlobStorage::TVMultiPutItem *item) {
+    void TEvBlobStorage::TEvVMultiPut::StorePayload(const TRcBuf& buffer, NKikimrBlobStorage::TVMultiPutItem *item,
+            bool checksumming) {
         TRope rope(buffer);
-        item->SetChecksum(TDiskBlob::CalculateChecksum(rope));
+        if (checksumming) {
+            item->SetChecksum(TDiskBlob::CalculateChecksum(rope));
+        }
         AddPayload(std::move(rope));
         Y_DEBUG_ABORT_UNLESS(Record.ItemsSize() == GetPayloadCount());
     }

@@ -29,6 +29,7 @@ public:
                 const auto range = ctx.UniqueNodes.equal_range(hash);
                 for (auto jt = range.first; range.second != jt;) {
                     if (jt->second == dead) {
+                        YQL_ENSURE(jt->second->UseCount()==0);
                         jt = ctx.UniqueNodes.erase(jt);
                     } else {
                         ++jt;

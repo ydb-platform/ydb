@@ -1,7 +1,7 @@
 items:
 - name: Глоссарий
   href: glossary.md
-- name: Аналитика
+- name: Аналитические возможности
   include:
     path: analytics/toc_p.yaml
     mode: link

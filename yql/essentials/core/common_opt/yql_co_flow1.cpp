@@ -2077,11 +2077,6 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     };
 
     map[TCoMember::CallableName()] = map[TCoNth::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        YQL_ENSURE(optCtx.Types);
-        static const char optName[] = "MemberNthOverFlatMap";
-        if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
-            return node;
-        }
         if (!optCtx.IsSingleUsage(node->Head())) {
             return node;
         }

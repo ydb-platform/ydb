@@ -77,7 +77,7 @@ void TPartitionCompaction::TryCompactionIfPossible() {
 void TPartitionCompaction::ProcessResponse(TEvPQ::TEvError::TPtr& ev) {
     PQ_LOG_ERROR("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
                                       << PartitionActor->Partition << " proxy ERROR response: " << ev->Get()->Error);
-    PartitionActor->Send(PartitionActor->Tablet, new TEvents::TEvPoisonPill());
+    PartitionActor->Send(PartitionActor->TabletActorId, new TEvents::TEvPoison());
     Step = EStep::PENDING;
     return;
 }
@@ -106,7 +106,7 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
             Y_ABORT();
     }
     if (!processResponseResult) {
-        PartitionActor->Send(PartitionActor->Tablet, new TEvents::TEvPoisonPill());
+        PartitionActor->Send(PartitionActor->TabletActorId, new TEvents::TEvPoison());
         return;
     }
     TryCompactionIfPossible();
@@ -122,7 +122,7 @@ void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
             PQ_LOG_ERROR("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
                                               << PartitionActor->Partition << " Process KV response: BAD Status");
 
-            PartitionActor->Send(PartitionActor->Tablet, new TEvents::TEvPoisonPill());
+            PartitionActor->Send(PartitionActor->TabletActorId, new TEvents::TEvPoison());
         }
     }
 }

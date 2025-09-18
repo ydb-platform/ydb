@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#define PQ_INIT_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", Partition()->TabletID)("partition_id", Partition()->Partition)
+#define PQ_INIT_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", Partition()->TabletId)("partition_id", Partition()->Partition)
 
 namespace NKikimr::NPQ {
 
@@ -113,7 +113,7 @@ const TPartitionId& TInitializerStep::PartitionId() const {
 }
 
 void TInitializerStep::PoisonPill(const TActorContext& ctx) {
-    ctx.Send(Partition()->Tablet, new TEvents::TEvPoisonPill());
+    ctx.Send(Partition()->TabletActorId, new TEvents::TEvPoisonPill());
 }
 
 const TString& TInitializerStep::TopicName() const {
@@ -162,7 +162,7 @@ void TInitConfigStep::Execute(const TActorContext& ctx) {
     auto read = event->Record.AddCmdRead();
     read->SetKey(Partition()->GetKeyConfig());
 
-    ctx.Send(Partition()->Tablet, event.Release());
+    ctx.Send(Partition()->TabletActorId, event.Release());
 }
 
 void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -242,7 +242,7 @@ void TInitDiskStatusStep::Execute(const TActorContext& ctx) {
 
     AddCheckDiskRequest(request.Get(), Partition()->NumChannels);
 
-    ctx.Send(Partition()->Tablet, request.Release());
+    ctx.Send(Partition()->TabletActorId, request.Release());
 }
 
 void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -283,7 +283,7 @@ void TInitMetaStep::Execute(const TActorContext& ctx) {
     addKey(request->Record, TKeyPrefix::TypeMeta, PartitionId());
     addKey(request->Record, TKeyPrefix::TypeTxMeta, PartitionId());
 
-    ctx.Send(Partition()->Tablet, request.Release());
+    ctx.Send(Partition()->TabletActorId, request.Release());
 }
 
 void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
@@ -382,7 +382,7 @@ TInitInfoRangeStep::TInitInfoRangeStep(TInitializer* initializer)
 }
 
 void TInitInfoRangeStep::Execute(const TActorContext &ctx) {
-    RequestInfoRange(ctx, Partition()->Tablet, PartitionId(), "");
+    RequestInfoRange(ctx, Partition()->TabletActorId, PartitionId(), "");
 }
 
 void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
@@ -437,7 +437,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             //make next step
             if (range.GetStatus() == NKikimrProto::OVERRUN) {
                 PQ_INIT_ENSURE(key);
-                RequestInfoRange(ctx, Partition()->Tablet, PartitionId(), *key);
+                RequestInfoRange(ctx, Partition()->TabletActorId, PartitionId(), *key);
             } else {
                 PostProcessing(ctx);
             }
@@ -475,7 +475,7 @@ TInitDataRangeStep::TInitDataRangeStep(TInitializer* initializer)
 }
 
 void TInitDataRangeStep::Execute(const TActorContext &ctx) {
-    RequestDataRange(ctx, Partition()->Tablet, PartitionId(), "");
+    RequestDataRange(ctx, Partition()->TabletActorId, PartitionId(), "");
 }
 
 void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
@@ -498,7 +498,7 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 
             if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
                 PQ_INIT_ENSURE(range.PairSize());
-                RequestDataRange(ctx, Partition()->Tablet, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
+                RequestDataRange(ctx, Partition()->TabletActorId, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
                 return;
             }
             FormHeadAndProceed();
@@ -830,7 +830,7 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
         auto read = request->Record.AddCmdRead();
         read->SetKey(key);
     }
-    ctx.Send(Partition()->Tablet, request.Release());
+    ctx.Send(Partition()->TabletActorId, request.Release());
 }
 
 void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
@@ -892,7 +892,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 Y_ABORT("NODATA can't be here");
                 return;
             case NKikimrProto::ERROR:
-                PQ_LOG_ERROR("tablet " << Partition()->TabletID << " HandleOnInit ReadResult "
+                PQ_LOG_ERROR("tablet " << Partition()->TabletId << " HandleOnInit ReadResult "
                         << i << " status NKikimrProto::ERROR result message: \"" << read.GetMessage()
                         << " \" errorReason: \"" << response.GetErrorReason() << "\""
                 );
@@ -965,9 +965,9 @@ void TPartition::Initialize(const TActorContext& ctx) {
         TopicConverter,
         Config,
         Partition,
-        Tablet,
+        TabletActorId,
         SelfId(),
-        TabletID,
+        TabletId,
         Counters
     ));
 
@@ -1005,7 +1005,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
         }
     }
 
-    UsersInfoStorage->Init(Tablet, SelfId(), ctx);
+    UsersInfoStorage->Init(TabletActorId, SelfId(), ctx);
 
     PQ_ENSURE(AppData(ctx)->PQConfig.GetMaxBlobsPerLevel() > 0);
     ui32 border = LEVEL0;
@@ -1029,10 +1029,10 @@ void TPartition::Initialize(const TActorContext& ctx) {
     }
 
     if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {
-        OffloadActor = Register(CreateOffloadActor(Tablet, TabletID, Partition, Config.GetOffloadConfig()));
+        OffloadActor = Register(CreateOffloadActor(TabletActorId, TabletId, Partition, Config.GetOffloadConfig()));
     }
 
-    PQ_LOG_I("bootstrapping " << Partition << " " << ctx.SelfID);
+    LOG_I("bootstrapping " << Partition << " " << ctx.SelfID);
 
     if (AppData(ctx)->Counters) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {

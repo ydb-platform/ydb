@@ -130,6 +130,21 @@ namespace NActors {
         std::optional<ui32> OutgoingHandshakeInflightLimit;
         std::vector<TActorId> ConnectionCheckerActorIds; // a list of actors used for checking connection params
 
+        std::atomic_uint64_t NumSessionsWithDataInQueue = 0;
+        std::atomic_uint64_t CyclesOnLastSwitch = 0;
+        std::atomic_uint64_t CyclesWithNonzeroSessions = 0;
+        std::atomic_uint64_t CyclesWithZeroSessions = 0;
+
+        double CalculateNetworkUtilization() {
+            const ui64 sessions = NumSessionsWithDataInQueue.load();
+            const ui64 ts = GetCycleCountFast();
+            const ui64 prevts = CyclesOnLastSwitch.exchange(ts);
+            const ui64 passed = ts - prevts;
+            const ui64 zero = CyclesWithZeroSessions.exchange(0) + (sessions ? 0 : passed);
+            const ui64 nonzero = CyclesWithNonzeroSessions.exchange(0) + (sessions ? passed : 0);
+            return (double)nonzero / (zero + nonzero);
+        }
+
         struct TVersionInfo {
             TString Tag; // version tag for this node
             TSet<TString> AcceptedTags; // we accept all enlisted version tags of peer nodes, but no others; empty = accept all

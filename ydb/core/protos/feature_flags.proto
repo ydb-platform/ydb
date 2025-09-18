@@ -204,7 +204,7 @@ message TFeatureFlags {
     optional bool EnableLoginCache = 178 [default = false];
     optional bool SwitchToConfigV2 = 179 [default = false];
     optional bool SwitchToConfigV1 = 180 [default = false];
-    optional bool EnableEncryptedExport = 181 [default = false];
+    optional bool EnableEncryptedExport = 181 [default = true];
     optional bool EnableAlterDatabase = 182 [default = false];
     optional bool EnableExportAutoDropping = 183 [default = true];
     optional bool EnableThrottlingReport = 184 [default = true];

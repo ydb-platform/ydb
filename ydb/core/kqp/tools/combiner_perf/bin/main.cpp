@@ -117,16 +117,19 @@ NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult&
 int FilesIn(std::filesystem::path path)
 {
     using std::filesystem::directory_iterator;
+    std::filesystem::create_directory(path);
     return std::distance(directory_iterator(path), directory_iterator{});
 }
 
-void SaveJson(NJson::TJsonValue value) {
+void SaveJsonAt(NJson::TJsonValue value, std::optional<std::filesystem::path> jsonlSavePath) {
 
     Cout << NJson::WriteJson(value, false, false, false) << Endl;
     Cout.Flush();
-    auto file = TFixedBufferFileOutput{Sprintf("bench_results/%i.json", FilesIn("./bench_results"))};
-    file << NJson::WriteJson(value, false, false, false) << Endl;
-    file.Flush();
+    if (jsonlSavePath.has_value()) {
+        auto file = TFixedBufferFileOutput{*jsonlSavePath / Sprintf("%i.json", FilesIn(*jsonlSavePath)).ConstRef()};
+        file << NJson::WriteJson(value, false, false, false) << Endl;
+        file.Flush();
+    }
 }
 
 class TJsonResultCollector : public TTestResultCollector {
@@ -134,18 +137,9 @@ class TJsonResultCollector : public TTestResultCollector {
     virtual void SubmitMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName,
                                const std::optional<bool> llvm, const std::optional<bool> spilling) override {
         NJson::TJsonValue out = MakeJsonMetrics(runParams, result, testName, llvm, spilling);
-        SaveJson(out);
+        SaveJsonAt(out,
+                   std::filesystem::path{"bench_results"} / Sprintf("%i.json", FilesIn("bench_results")).ConstRef());
     }
-};
-
-class TJsonArrayResultCollector : public TTestResultCollector {
-  public:
-    virtual void SubmitMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName,
-                               const std::optional<bool> llvm, const std::optional<bool> spilling) override {
-        array.AppendValue(MakeJsonMetrics(runParams, result, testName, llvm, spilling));
-    }
-
-    NJson::TJsonValue array;
 };
 
 void DoFullPass(TRunParams runParams, bool withSpilling)
@@ -219,7 +213,7 @@ enum class ETestType {
 
 void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spilling)
 {
-    TJsonArrayResultCollector printout;
+    TJsonResultCollector printout;
 
     if (testType == ETestType::SimpleCombiner) {
         if (llvm) {
@@ -261,7 +255,6 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
     } else if (testType == ETestType::AllJoins) {
         NKikimr::NMiniKQL::RunJoinsBench(params, printout);
     }
-    SaveJson(printout.array);
 }
 
 int main(int argc, const char* argv[])

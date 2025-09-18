@@ -121,25 +121,27 @@ int FilesIn(std::filesystem::path path)
     return std::distance(directory_iterator(path), directory_iterator{});
 }
 
-void SaveJsonAt(NJson::TJsonValue value, std::optional<std::filesystem::path> jsonlSavePath) {
+void SaveJsonAt(NJson::TJsonValue value, TFixedBufferFileOutput* jsonlSaveFile) {
 
     Cout << NJson::WriteJson(value, false, false, false) << Endl;
-    Cout.Flush();
-    if (jsonlSavePath.has_value()) {
-        auto file = TFixedBufferFileOutput{*jsonlSavePath / Sprintf("%i.json", FilesIn(*jsonlSavePath)).ConstRef()};
-        file << NJson::WriteJson(value, false, false, false) << Endl;
-        file.Flush();
+    if (jsonlSaveFile != nullptr) {
+        *jsonlSaveFile << NJson::WriteJson(value, false, false, false) << Endl;
     }
 }
 
 class TJsonResultCollector : public TTestResultCollector {
   public:
+    TJsonResultCollector()
+        : OutFile(std::filesystem::path{"bench_results"} / Sprintf("%i.jsonl", FilesIn("bench_results")).ConstRef())
+    {}
+
     virtual void SubmitMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName,
                                const std::optional<bool> llvm, const std::optional<bool> spilling) override {
         NJson::TJsonValue out = MakeJsonMetrics(runParams, result, testName, llvm, spilling);
-        SaveJsonAt(out,
-                   std::filesystem::path{"bench_results"} / Sprintf("%i.json", FilesIn("bench_results")).ConstRef());
+        SaveJsonAt(out, &OutFile);
     }
+
+    TFixedBufferFileOutput OutFile;
 };
 
 void DoFullPass(TRunParams runParams, bool withSpilling)

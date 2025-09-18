@@ -249,14 +249,10 @@ private:
     TMaybe<TString> BuildWarning() const {
         TStringBuilder warning;
         if (!Timeouts.empty()) {
-            for (const auto& path : Timeouts) {
-                warning << "Timeout, path: " << path << '\n';
-            }
+            warning << "Timeout:\n  " << JoinSeq("\n  ", Timeouts) << "\n";
         }
         if (!Undelivered.empty()) {
-            for (const auto& path : Undelivered) {
-                warning << "Undelivered, path: " << path << '\n';
-            }
+            warning << "Undelivered:\n  " << JoinSeq("\n  ", Undelivered) << "\n";
         }
         if (warning.empty()) {
             return Nothing();

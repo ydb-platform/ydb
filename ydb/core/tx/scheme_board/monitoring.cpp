@@ -1124,10 +1124,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         return str.Str();
     }
 
-    TString RenderBackup(
-        bool backupStarted,
-        const TString& error = ""
-    ) {
+    TString RenderBackup(bool backupStarted, const TString& error = "") {
         TStringStream str;
 
         HTML(str) {
@@ -1302,10 +1299,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         return str.Str();
     }
 
-    TString RenderRestore(
-        bool restoreStarted,
-        const TString& error = ""
-    ) {
+    TString RenderRestore(bool restoreStarted, const TString& error = "") {
         TStringStream str;
 
         HTML(str) {
@@ -1752,9 +1746,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 ));
             }
 
-            return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                RenderBackup(false)
-            ));
+            return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderBackup(false)));
 
         case ERequestType::Restore:
             if (params.Has("startRestore")) {
@@ -1805,9 +1797,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 ));
             }
 
-            return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                RenderRestore(false)
-            ));
+            return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderRestore(false)));
 
         case ERequestType::Unknown:
             break;

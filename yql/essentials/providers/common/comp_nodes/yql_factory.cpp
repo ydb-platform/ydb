@@ -32,6 +32,9 @@ struct TYqlCallableComputationNodeBuilderFuncMapFiller {
         Map["DataTypeHandle"] = &WrapMakeType<NYql::ETypeAnnotationKind::Data>;
         Map["OptionalItemType"] = &WrapSplitType<NYql::ETypeAnnotationKind::Optional>;
         Map["OptionalTypeHandle"] = &WrapMakeType<NYql::ETypeAnnotationKind::Optional>;
+        Map["LinearItemType"] = &WrapSplitType<NYql::ETypeAnnotationKind::Linear>;
+        Map["LinearTypeHandle"] = &WrapMakeType<NYql::ETypeAnnotationKind::Linear>;
+        Map["DynamicLinearTypeHandle"] = &WrapMakeType<NYql::ETypeAnnotationKind::DynamicLinear>;
         Map["ListItemType"] = &WrapSplitType<NYql::ETypeAnnotationKind::List>;
         Map["ListTypeHandle"] = &WrapMakeType<NYql::ETypeAnnotationKind::List>;
         Map["StreamItemType"] = &WrapSplitType<NYql::ETypeAnnotationKind::Stream>;

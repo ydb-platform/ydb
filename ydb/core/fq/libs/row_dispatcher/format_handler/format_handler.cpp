@@ -231,10 +231,7 @@ private:
                     rowId = value->GetElement(0).Get<ui64>();
                 } else if (value->GetListLength() == 2) {
                     rowId = value->GetElement(0).Get<ui64>();
-                    if (const auto maybeWatermark = value->GetElement(1);
-                        maybeWatermark.IsEmbedded()) {
-                        watermarkUs = maybeWatermark.Get<ui64>();
-                    }
+                    watermarkUs = value->GetElement(1).Get<ui64>();
                 } else {
                     Y_ENSURE(false, "Unexpected output schema size");
                 }
@@ -271,7 +268,7 @@ private:
 
             ++NewNumberRows;
             NewDataPackerSize = DataPacker->PackedSizeEstimate();
-            LOG_ROW_DISPATCHER_TRACE("OnData, row id: " << rowId << ", offset: " << Offset << ", new packer size: " << NewDataPackerSize);
+            LOG_ROW_DISPATCHER_TRACE("OnData, row id: " << rowId << ", offset: " << Offset << ", new number rows: " << NewNumberRows << ", new row size: " << NewDataPackerSize);
         }
 
         void OnBatchFinish() override {

@@ -442,7 +442,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     EndProcessWritesForCompaction(compactionRequest.Get(), blobCreationUnixTime, ctx);
 
     // for debugging purposes
-    DumpKeyValueRequest(compactionRequest->Record);
+    //DumpKeyValueRequest(compactionRequest->Record);
 
     ctx.Send(BlobCache, compactionRequest.Release(), 0, 0);
 }

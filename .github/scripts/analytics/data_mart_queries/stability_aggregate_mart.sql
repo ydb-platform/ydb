@@ -58,6 +58,7 @@ $aggregate_data = SELECT
     JSON_VALUE(Info, '$.cluster.endpoint') AS ClusterEndpoint,
     JSON_VALUE(Info, '$.cluster.database') AS ClusterDatabase,
     CAST(JSON_VALUE(Info, '$.cluster.nodes_count') AS Int32) AS NodesCount,
+    JSON_VALUE(Info, '$.cluster.nodes_info') AS NodesInfo, -- JSON массив с информацией о нодах
     JSON_VALUE(Info, '$.ci_version') AS CiVersion,
     JSON_VALUE(Info, '$.test_tools_version') AS TestToolsVersion,
     JSON_VALUE(Info, '$.report_url') AS ReportUrl,
@@ -124,6 +125,7 @@ SELECT
     ClusterEndpoint,
     ClusterDatabase,
     NodesCount,
+    NodesInfo,
     CiVersion,
     TestToolsVersion,
     ReportUrl,

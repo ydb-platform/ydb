@@ -17,40 +17,112 @@ class TJsonDescribe : public TViewerPipeClient {
     using TBase::ReplyAndPassAway;
     TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult> SchemeShardResult;
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
-    TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> DescribeResult;
     bool ExpandSubElements = true;
+
+    enum class EAskSchemeCache {
+        First,
+        Second,
+        Never,
+        Only,
+    };
+
+    EAskSchemeCache AskSchemeCache = EAskSchemeCache::Second;
 
 public:
     TJsonDescribe(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TViewerPipeClient(viewer, ev)
     {}
 
-    void FillParams(NKikimrSchemeOp::TDescribePath* record, const TCgiParameters& params) {
-        if (params.Has("path")) {
-            record->SetPath(params.Get("path"));
+    TTabletId GetSchemeShardId() {
+        if (Params.Has("schemeshard_id")) {
+            return FromStringWithDefault<TTabletId>(Params.Get("schemeshard_id"));
         }
-        if (params.Has("path_id")) {
-            record->SetPathId(FromStringWithDefault<ui64>(params.Get("path_id")));
+        if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
+            auto self = DatabaseNavigateResponse->Get()->Request->ResultSet.front().Self;
+            if (self && self->Info.GetSchemeshardId()) {
+                return self->Info.GetSchemeshardId();
+            }
         }
-        if (params.Has("schemeshard_id")) {
-            record->SetSchemeshardId(FromStringWithDefault<ui64>(params.Get("schemeshard_id")));
+        // i'm not sure we actually need this branch
+        if (ResourceNavigateResponse && ResourceNavigateResponse->IsOk()) {
+            auto self = ResourceNavigateResponse->Get()->Request->ResultSet.front().Self;
+            if (self && self->Info.GetSchemeshardId()) {
+                return self->Info.GetSchemeshardId();
+            }
         }
-        record->MutableOptions()->SetBackupInfo(FromStringWithDefault<bool>(params.Get("backup"), true));
-        record->MutableOptions()->SetShowPrivateTable(FromStringWithDefault<bool>(params.Get("private"), true));
-        record->MutableOptions()->SetReturnChildren(FromStringWithDefault<bool>(params.Get("children"), true));
-        record->MutableOptions()->SetReturnBoundaries(FromStringWithDefault<bool>(params.Get("boundaries"), false));
-        record->MutableOptions()->SetReturnPartitionConfig(FromStringWithDefault<bool>(params.Get("partition_config"), true));
-        record->MutableOptions()->SetReturnPartitionStats(FromStringWithDefault<bool>(params.Get("partition_stats"), false));
-        record->MutableOptions()->SetReturnPartitioningInfo(FromStringWithDefault<bool>(params.Get("partitioning_info"), true));
+        return {};
+    }
+
+    void FillParams(NKikimrSchemeOp::TDescribePath& record) {
+        if (Params.Has("path")) {
+            record.SetPath(Params.Get("path"));
+        }
+        if (Params.Has("path_id")) {
+            record.SetPathId(FromStringWithDefault<ui64>(Params.Get("path_id")));
+            record.SetSchemeshardId(GetSchemeShardId());
+        }
+        record.MutableOptions()->SetBackupInfo(FromStringWithDefault<bool>(Params.Get("backup"), true));
+        record.MutableOptions()->SetShowPrivateTable(FromStringWithDefault<bool>(Params.Get("private"), true));
+        record.MutableOptions()->SetReturnChildren(FromStringWithDefault<bool>(Params.Get("children"), true));
+        record.MutableOptions()->SetReturnBoundaries(FromStringWithDefault<bool>(Params.Get("boundaries"), false));
+        record.MutableOptions()->SetReturnPartitionConfig(FromStringWithDefault<bool>(Params.Get("partition_config"), true));
+        record.MutableOptions()->SetReturnPartitionStats(FromStringWithDefault<bool>(Params.Get("partition_stats"), false));
+        record.MutableOptions()->SetReturnPartitioningInfo(FromStringWithDefault<bool>(Params.Get("partitioning_info"), true));
+    }
+
+    void RequestSchemeShard() {
+        NKikimrSchemeOp::TDescribePath options;
+        FillParams(options);
+        if (options.GetSchemeshardId()) {
+            THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>();
+            request->Record = options;
+            SchemeShardResult = MakeRequestToTablet<TEvSchemeShard::TEvDescribeSchemeResult>(request->Record.GetSchemeshardId(), request.Release());
+        } else {
+            THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+            request->Record.MutableDescribePath()->CopyFrom(options);
+            auto tokenObj = GetRequest().GetUserTokenObject();
+            if (tokenObj) {
+                request->Record.SetUserToken(tokenObj);
+            }
+            SchemeShardResult = MakeRequest<TEvSchemeShard::TEvDescribeSchemeResult>(MakeTxProxyID(), request.Release());
+        }
+    }
+
+    void RequestSchemeCache() {
+        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+        entry.ShowPrivatePath = FromStringWithDefault<bool>(Params.Get("private"), true);
+        entry.SyncVersion = false;
+        if (Params.Has("path")) {
+            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
+            entry.Path = SplitPath(Params.Get("path"));
+        } else if (Params.Has("path_id")) {
+            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+            entry.TableId = TTableId(GetSchemeShardId(), FromStringWithDefault<ui64>(Params.Get("path_id")));
+        }
+        request->ResultSet.emplace_back(entry);
+        auto tokenObj = GetRequest().GetUserTokenObject();
+        if (tokenObj) {
+            request->UserToken = new NACLib::TUserToken(tokenObj);
+        }
+        CacheResult = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
     }
 
     void Bootstrap() override {
         if (NeedToRedirect()) {
             return;
         }
-        if (Params.Has("path_id") && !Params.Has("schemeshard_id")) {
-            // path_id is not enough to describe path, we need schemeshard_id
-            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "schemeshard_id is required when path_id is specified"));
+        if (Params.Has("path_id")) {
+            if (!Viewer->CheckAccessMonitoring(GetRequest())) {
+                // it's dangerous because we don't check access to specific path here
+                ReplyAndPassAway(GetHTTPFORBIDDEN("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
+                return;
+            }
+        }
+        if (Params.Has("path_id") && !Params.Has("schemeshard_id") && (!DatabaseNavigateResponse || !DatabaseNavigateResponse->IsOk())) {
+            // path_id is not enough to describe path, we need schemeshard_id, we try to get it from database
+            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "schemeshard_id is required for non-database requests when path_id is specified"));
             return;
         }
         // for describe we keep old behavior where enums is false by default - for compatibility reasons
@@ -60,28 +132,21 @@ public:
             Proto2JsonConfig.EnumMode = TProto2JsonConfig::EnumValueMode::EnumNumber;
         }
         ExpandSubElements = FromStringWithDefault<ui32>(Params.Get("subs"), ExpandSubElements);
-        if (Params.Has("schemeshard_id")) {
-            THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>();
-            FillParams(&request->Record, Params);
-            ui64 schemeShardId = FromStringWithDefault<ui64>(Params.Get("schemeshard_id"));
-            SchemeShardResult = MakeRequestToTablet<TEvSchemeShard::TEvDescribeSchemeResult>(schemeShardId, request.Release());
+        auto askSchemeCache = Params.Get("ask_scheme_cache");
+        if (askSchemeCache == "first") {
+            AskSchemeCache = EAskSchemeCache::First;
+        } else if (askSchemeCache == "never") {
+            AskSchemeCache = EAskSchemeCache::Never;
+        } else if (askSchemeCache == "only") {
+            AskSchemeCache = EAskSchemeCache::Only;
         } else {
-            THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
-            FillParams(request->Record.MutableDescribePath(), Params);
-            request->Record.SetUserToken(Event->Get()->UserToken);
-            SchemeShardResult = MakeRequest<TEvSchemeShard::TEvDescribeSchemeResult>(MakeTxProxyID(), request.Release());
+            AskSchemeCache = EAskSchemeCache::Second;
         }
-
-        if (Params.Has("path")) {
-            TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
-            entry.SyncVersion = false;
-            entry.Path = SplitPath(Params.Get("path"));
-            request->ResultSet.emplace_back(entry);
-            CacheResult = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+        if (AskSchemeCache == EAskSchemeCache::First || AskSchemeCache == EAskSchemeCache::Only) {
+            RequestSchemeCache();
+        } else {
+            RequestSchemeShard();
         }
-
         Become(&TThis::StateRequestedDescribe, Timeout, new TEvents::TEvWakeup());
     }
 
@@ -95,13 +160,21 @@ public:
     }
 
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        SchemeShardResult.Set(std::move(ev));
-        RequestDone();
+        if (SchemeShardResult.Set(std::move(ev))) {
+            if (!SchemeShardResult.IsOk() && AskSchemeCache == EAskSchemeCache::Second) {
+                RequestSchemeCache();
+            }
+            RequestDone();
+        }
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        CacheResult.Set(std::move(ev));
-        RequestDone();
+        if (CacheResult.Set(std::move(ev))) {
+            if (!CacheResult.IsOk() && AskSchemeCache == EAskSchemeCache::First) {
+                RequestSchemeShard();
+            }
+            RequestDone();
+        }
     }
 
     void FillDescription(NKikimrSchemeOp::TDirEntry* descr, ui64 schemeShardId) {
@@ -188,11 +261,8 @@ public:
 
     TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> GetCacheDescribeSchemeInfo() {
         const auto& entry = CacheResult->Request.Get()->ResultSet.front();
-        const auto& path = Event->Get()->Request.GetParams().Get("path");
-        const auto& schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
-
         TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> result(new NKikimrViewer::TEvDescribeSchemeInfo());
-        result->SetPath(path);
+        result->SetPath(CanonizePath(entry.Path));
         auto* pathDescription = result->MutablePathDescription();
         auto* self = pathDescription->MutableSelf();
         if (entry.Self) {
@@ -210,37 +280,32 @@ public:
                 result->SetPathOwnerId(entry.Self->Info.GetSchemeshardId());
             }
         }
-        FillDescription(self, schemeShardId);
-
         if (entry.ListNodeEntry) {
             for (const auto& child : entry.ListNodeEntry->Children) {
                 auto descr = pathDescription->AddChildren();
                 descr->SetName(child.Name);
                 descr->SetPathType(ConvertType(child.Kind));
-                FillDescription(descr, schemeShardId);
             }
         };
-        const auto *descriptor = NKikimrScheme::EStatus_descriptor();
-        auto status = descriptor->FindValueByNumber(NKikimrScheme::StatusSuccess)->name();
-        result->SetStatus(status);
+        if (entry.DomainDescription) {
+            pathDescription->MutableDomainDescription()->CopyFrom(entry.DomainDescription->Description);
+        }
+        result->SetStatus(NKikimrScheme::EStatus_Name(NKikimrScheme::StatusSuccess));
         result->SetSource(NKikimrViewer::TEvDescribeSchemeInfo::Cache);
         return result;
     }
 
     void ReplyAndPassAway() override {
-        NJson::TJsonValue json;
+        TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> describe;
         if (SchemeShardResult.IsOk()) {
-            DescribeResult = GetSchemeShardDescribeSchemeInfo();
+            describe = GetSchemeShardDescribeSchemeInfo();
         } else if (CacheResult.IsOk()) {
-            NSchemeCache::TSchemeCacheNavigate *navigate = CacheResult->Request.Get();
-            Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
-            if (navigate->ErrorCount == 0) {
-                DescribeResult = GetCacheDescribeSchemeInfo();
-            }
+            describe = GetCacheDescribeSchemeInfo();
         }
-        if (DescribeResult != nullptr) {
-            if (DescribeResult->HasPathDescription()) {
-                auto& pathDescription = *DescribeResult->MutablePathDescription();
+        NJson::TJsonValue json;
+        if (describe != nullptr) {
+            if (describe->HasPathDescription()) {
+                auto& pathDescription = *describe->MutablePathDescription();
                 if (pathDescription.HasTable()) {
                     auto& table = *pathDescription.MutableTable();
                     for (auto& column : *table.MutableColumns()) {
@@ -267,11 +332,11 @@ public:
             }
             const auto *descriptor = NKikimrScheme::EStatus_descriptor();
             auto accessDeniedStatus = descriptor->FindValueByNumber(NKikimrScheme::StatusAccessDenied)->name();
-            if (DescribeResult->GetStatus() == accessDeniedStatus) {
+            if (describe->GetStatus() == accessDeniedStatus) {
                 ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Forbidden"));
                 return;
             }
-            for (auto& child : *DescribeResult->MutablePathDescription()->MutableChildren()) {
+            for (auto& child : *describe->MutablePathDescription()->MutableChildren()) {
                 if (child.GetPathId() == InvalidLocalPathId) {
                     child.ClearPathId();
                 }
@@ -279,29 +344,29 @@ public:
                     child.ClearParentPathId();
                 }
             }
-            Proto2Json(*DescribeResult, json);
-            DecodeExternalTableContent(json);
+            Proto2Json(*describe, json);
+            DecodeExternalTableContent(describe, json);
         }
 
         ReplyAndPassAway(GetHTTPOKJSON(json));
     }
 
-    void DecodeExternalTableContent(NJson::TJsonValue& json) const {
-        if (!DescribeResult) {
+    void DecodeExternalTableContent(TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo>& describe, NJson::TJsonValue& json) const {
+        if (!describe) {
             return;
         }
 
-        if (!DescribeResult->GetPathDescription().HasExternalTableDescription()) {
+        if (!describe->GetPathDescription().HasExternalTableDescription()) {
             return;
         }
 
-        const auto& content = DescribeResult->GetPathDescription().GetExternalTableDescription().GetContent();
+        const auto& content = describe->GetPathDescription().GetExternalTableDescription().GetContent();
         if (!content) {
             return;
         }
 
         NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, true, NYql::GetAllExternalDataSourceTypes())};
-        const auto& sourceType = DescribeResult->GetPathDescription().GetExternalTableDescription().GetSourceType();
+        const auto& sourceType = describe->GetPathDescription().GetExternalTableDescription().GetSourceType();
         try {
             json["PathDescription"]["ExternalTableDescription"].EraseValue("Content");
             auto source = externalSourceFactory->GetOrCreate(sourceType);
@@ -341,15 +406,9 @@ public:
             .Type = "integer",
         });
         yaml.AddParameter({
-            .Name = "enums",
-            .Description = "convert enums to strings",
-            .Type = "boolean",
-            .Default = "false",
-        });
-        yaml.AddParameter({
-            .Name = "ui64",
-            .Description = "return ui64 as number",
-            .Type = "boolean",
+            .Name = "ask_scheme_cache",
+            .Description = "how to use scheme cache: first, second (default), never, only",
+            .Type = "string",
         });
         yaml.AddParameter({
             .Name = "backup",
@@ -392,11 +451,6 @@ public:
             .Description = "return partitioning information",
             .Type = "boolean",
             .Default = "true",
-        });
-        yaml.AddParameter({
-            .Name = "timeout",
-            .Description = "timeout in ms",
-            .Type = "integer",
         });
         yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TEvDescribeSchemeInfo>());
         return yaml;

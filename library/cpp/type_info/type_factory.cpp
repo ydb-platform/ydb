@@ -241,6 +241,30 @@ namespace NTi {
         return TTimestamp64Type::InstanceRaw();
     }
 
+    TTzDate32TypePtr ITypeFactory::TzDate32() {
+        return TTzDate32Type::Instance();
+    }
+
+    const TTzDate32Type* IPoolTypeFactory::TzDate32Raw() {
+        return TTzDate32Type::InstanceRaw();
+    }
+
+    TTzDatetime64TypePtr ITypeFactory::TzDatetime64() {
+        return TTzDatetime64Type::Instance();
+    }
+
+    const TTzDatetime64Type* IPoolTypeFactory::TzDatetime64Raw() {
+        return TTzDatetime64Type::InstanceRaw();
+    }
+
+    TTzTimestamp64TypePtr ITypeFactory::TzTimestamp64() {
+        return TTzTimestamp64Type::Instance();
+    }
+
+    const TTzTimestamp64Type* IPoolTypeFactory::TzTimestamp64Raw() {
+        return TTzTimestamp64Type::InstanceRaw();
+    }
+
     TInterval64TypePtr ITypeFactory::Interval64() {
         return TInterval64Type::Instance();
     }

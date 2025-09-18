@@ -563,11 +563,11 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKeyImpl(const bool headCl
         res = std::make_pair(key, headSize + CompactionBlobEncoder.NewHead.PackedSize);
     } else {
         res = CompactionBlobEncoder.Compact(key, headCleared);
-        AFL_ENSURE(res.first.IsHead())
-            ("res.first", res.first.ToString()); //may compact some KV blobs from head, but new KV blob is from head too
-        AFL_ENSURE(res.second >= CompactionBlobEncoder.NewHead.PackedSize)
+        AFL_ENSURE(res.first.IsHead()) //may compact some KV blobs from head, but new KV blob is from head too
+            ("res.first", res.first.ToString());
+        AFL_ENSURE(res.second >= CompactionBlobEncoder.NewHead.PackedSize) //at least new data must be writed
             ("res.second", res.second)
-            ("NewHead.PackedSize", CompactionBlobEncoder.NewHead.PackedSize); //at least new data must be writed
+            ("NewHead.PackedSize", CompactionBlobEncoder.NewHead.PackedSize);
     }
     AFL_ENSURE(res.second <= MaxBlobSize)
         ("headCleared", headCleared)

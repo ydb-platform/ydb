@@ -13,6 +13,7 @@ PY3TEST()
         test_overloads.py
         zip_bomb.py
         test_delete.py
+        test_insert.py
         test_upsert.py
     )
     FORK_SUBTESTS()

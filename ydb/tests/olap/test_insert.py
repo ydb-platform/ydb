@@ -10,8 +10,8 @@ from ydb.tests.olap.common.ydb_client import YdbClient
 logger = logging.getLogger(__name__)
 
 
-class TestUpsert(object):
-    test_name = "upsert"
+class TestInsert(object):
+    test_name = "insert"
 
     @classmethod
     def setup_class(cls):
@@ -65,53 +65,36 @@ class TestUpsert(object):
             data,
         )
 
-    def test_count(self):
-        # given
-        self.create_table()
-        self.write_data()
-
-        # when
-        for i in range(20):
-            self.ydb_client.query(f"UPSERT INTO `{self.table_path}` (id, vn, vs) VALUES ({i + 90}, {i}, '{i}');")
-
-        # then
-        result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`")
-
-        assert len(result_sets[0].rows) == 1
-        row = result_sets[0].rows[0]
-        assert 110 == row['cnt']
-
-    # not replace
-    def test_partial_update(self):
-        # given
-        self.create_table()
-        self.write_data()
-
-        # when
-        self.ydb_client.query(f"UPSERT INTO `{self.table_path}` (id, vs) VALUES (1, 'one');")
-
-        # then
-        result_sets = self.ydb_client.query(f"SELECT vn, vs FROM `{self.table_path}` WHERE id = 1;")
-
-        assert len(result_sets[0].rows) == 1
-        row = result_sets[0].rows[0]
-        assert 1 == row['vn']
-        assert 'one' == row['vs']
-
-    def test_insert_nulls(self):
+    def test_plain(self):
         # given
         self.create_table()
 
         # when
-        self.ydb_client.query(f"UPSERT INTO `{self.table_path}` (id) VALUES (1);")
+        # full
+        self.ydb_client.query(f"INSERT INTO `{self.table_path}` (id, vn, vs) VALUES (0, 0, 'Zero');")
+        # partial
+        self.ydb_client.query(f"INSERT INTO `{self.table_path}` (id, vs) VALUES (1, 'One');")
+        # just id
+        self.ydb_client.query(f"INSERT INTO `{self.table_path}` (id) VALUES (2);")
+
+        result_sets = self.ydb_client.query(f"SELECT * FROM `{self.table_path}`")
 
         # then
-        result_sets = self.ydb_client.query(f"SELECT * FROM `{self.table_path}` WHERE id = 1;")
+        rows = []
+        for result_set in result_sets:
+            rows.extend(result_set.rows)
+        rows.sort(key=lambda x: x.id)
 
-        assert len(result_sets[0].rows) == 1
-        row = result_sets[0].rows[0]
-        assert None == row['vn']
-        assert None == row['vs']
+        assert len(rows) == 3
+        assert 0 == rows[0]['id']
+        assert 0 == rows[0]['vn']
+        assert 'Zero' == rows[0]['vs']
+        assert 1 == rows[1]['id']
+        assert None == rows[1]['vn']
+        assert 'One' == rows[1]['vs']
+        assert 2 == rows[2]['id']
+        assert None == rows[2]['vn']
+        assert None == rows[2]['vs']
 
     def test_copy_full(self):
         # given
@@ -133,21 +116,13 @@ class TestUpsert(object):
         )
 
         # when
-        self.ydb_client.query(f"UPSERT INTO `{t2}` SELECT * FROM `{self.table_path}`;")
+        self.ydb_client.query(f"INSERT INTO `{t2}` SELECT * FROM `{self.table_path}`;")
 
         # then
-        result_sets = self.ydb_client.query(f"SELECT * FROM `{t2}`")
-        rows = []
-        for result_set in result_sets:
-            rows.extend(result_set.rows)
-        rows.sort(key=lambda x: x.id)
+        result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{t2}`")
 
-        assert len(rows) == 100
-        for i in range(100):
-            row = rows[i]
-            assert i == row['id']
-            assert i == row['vn']
-            assert f"{i}" == row['vs']
+        assert len(result_sets[0].rows) == 1
+        assert 100 == result_sets[0].rows[0]['cnt']
 
     def test_copy_partial(self):
         # given
@@ -168,7 +143,7 @@ class TestUpsert(object):
         )
 
         # when
-        self.ydb_client.query(f"UPSERT INTO `{t2}` SELECT id, vs FROM `{self.table_path}`;")
+        self.ydb_client.query(f"INSERT INTO `{t2}` SELECT id, vs FROM `{self.table_path}`;")
 
         # then
         result_sets = self.ydb_client.query(f"SELECT * FROM `{t2}`")
@@ -183,13 +158,36 @@ class TestUpsert(object):
             assert i == row['id']
             assert f"{i}" == row['vs']
 
+    def test_duplicate(self):
+        # given
+        self.create_table()
+
+        # when
+        # should pass
+        self.ydb_client.query(f"INSERT INTO `{self.table_path}` (id, vn, vs) VALUES (0, 0, 'Zero');")
+        # should fail
+        try:
+            self.ydb_client.query(f"INSERT INTO `{self.table_path}` (id, vn, vs) VALUES (0, 1, 'One');")
+            assert False, 'Should Fail'
+        except ydb.issues.PreconditionFailed:
+            pass
+
+        # then
+        result_sets = self.ydb_client.query(f"SELECT * FROM `{self.table_path}`")
+
+        rows = result_sets[0].rows
+        assert len(rows) == 1
+        assert 0 == rows[0]['id']
+        assert 0 == rows[0]['vn']
+        assert 'Zero' == rows[0]['vs']
+
     def test_incorrect(self):
         # given
         self.create_table()
 
         try:
         # when wrong table name
-            self.ydb_client.query(f"UPSERT INTO `wrongTable` (id, vn, vs) VALUES (0, 0, 'A');")
+            self.ydb_client.query("INSERT INTO `wrongTable` (id, vn, vs) VALUES (0, 0, 'A');")
         # then
             assert False, 'Should Fail'
         except ydb.issues.SchemeError:
@@ -197,7 +195,7 @@ class TestUpsert(object):
 
         try:
         # when wrong column name
-            self.ydb_client.query(f"UPSERT INTO `{self.table_path}` (id, wrongColumn, vs) VALUES (0, 0, 'A');")
+            self.ydb_client.query(f"INSERT INTO `{self.table_path}` (id, wrongColumn, vs) VALUES (0, 0, 'A');")
         # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError:
@@ -205,9 +203,8 @@ class TestUpsert(object):
 
         try:
         # when wrong data type
-            self.ydb_client.query(f"UPSERT INTO `{self.table_path}` (id, vn, vs) VALUES (0, 'A', 0);")
+            self.ydb_client.query(f"INSERT INTO `{self.table_path}` (id, vn, vs) VALUES (0, 'A', 0);")
         # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError:
             pass
-

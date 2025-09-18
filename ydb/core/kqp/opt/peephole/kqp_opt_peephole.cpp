@@ -101,6 +101,7 @@ public:
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));
+        AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapForLargeOlapTable));
 #undef HNDL
     }
 
@@ -138,6 +139,12 @@ protected:
     TMaybeNode<TExprBase> RewritePureJoin(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqPeepholeRewritePureJoin(node, ctx);
         DumpAppliedRule("RewritePureJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> EliminateWideMapForLargeOlapTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpEliminateWideMapForLargeOlapTable(node, ctx, *Types);
+        DumpAppliedRule("EliminateWideMapForLargeOlapTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

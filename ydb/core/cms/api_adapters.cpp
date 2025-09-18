@@ -950,7 +950,7 @@ public:
         auto& actionInfo = *GetActionState(result, actionIdx);
         const auto& record = ev->Get()->Record;
 
-        auto nodeId = record.GetNodeId();
+        const auto nodeId = record.GetNodeId();
         if (nodeId == 0) {
             actionInfo.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_UNSPECIFIED);
         }
@@ -1134,7 +1134,7 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) {
-        TEvTabletPipe::TEvClientConnected* msg = ev->Get();
+        const TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
             THiveInteractor::Close(SelfId());
             Reply(Ydb::StatusIds::UNAVAILABLE, "Hive request failed");

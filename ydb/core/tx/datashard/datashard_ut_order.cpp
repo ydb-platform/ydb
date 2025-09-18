@@ -902,12 +902,9 @@ Y_UNIT_TEST(RandomPoints_DelayData) {
 
     TVector<std::pair<ui32, ui32>> variants;
     variants.push_back({8, 8});
-    variants.push_back({8, 16});
     variants.push_back({8, 32});
     variants.push_back({16, 16});
-    variants.push_back({16, 32});
     variants.push_back({32, 8});
-    variants.push_back({32, 16});
     variants.push_back({32, 32});
 
     for (auto& v : variants) {

@@ -1782,7 +1782,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             ts = Max<i64>();
         }
         if (userInfo.WriteTimeLagMsByCommittedPerPartition) {
-            userInfo.WriteTimeLagMsByCommittedPerPartition->Set(nowMs < ts ? 0 : nowMs - ts));
+            userInfo.WriteTimeLagMsByCommittedPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
         }
         if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_WRITE_TIME].Get() != ts) {
             haveChanges = true;

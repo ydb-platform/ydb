@@ -194,10 +194,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             * Config.GetActivePagesReservationPercent() / 100;
 
         THashSet<TCollection*> recheck;
+        ui64 evictedInMemoryBytes = 0;
         while (GetStatAllBytes() > MemLimitBytes
             || GetStatAllBytes() > (Config.HasMemoryLimit() ? Config.GetMemoryLimit() : Max<ui64>()) && StatActiveBytes > configActiveReservedBytes)
         {
             if (TPage* evictedPage = Cache.EvictNext()) {
+                if (evictedPage->CacheMode == ECacheMode::TryKeepInMemory) {
+                    evictedInMemoryBytes += TPageTraits::GetSize(evictedPage);
+                }
                 EvictNow(evictedPage, recheck);
             } else {
                 break;
@@ -216,6 +220,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             << " Active: " << HumanReadableBytes(StatActiveBytes)
             << " Passive: " << HumanReadableBytes(StatPassiveBytes)
             << " LoadInFly: " << HumanReadableBytes(StatLoadInFlyBytes)
+            << " EvictedInMemoryBytes: " << HumanReadableBytes(evictedInMemoryBytes)
         );
     }
 
@@ -1138,6 +1143,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
         }
 
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Try move collection " << collection.Id
+                << " in memory, total pages: " << pageCollection->Total() << " (" << HumanReadableBytes(collection.TotalSize) << "), "
+                << "pages already loaded: " << loadedPages.size() << " , "
+                << "pages to request: " << pagesToRequest.size() << " (" << HumanReadableBytes(pagesToRequestBytes) << "), "
+                << "pages out of memory limit: " << (pageCollection->Total() - loadedPages.size() - pagesToRequest.size()));
+
         if (loadedPages) {
             NotifyOwners(pageCollection, loadedPages, owner);
         }
@@ -1165,6 +1176,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 Cache.Erase(page);
                 page->EnsureNoCacheFlags();
                 page->CacheMode = targetMode;
+                switch (page->CacheMode) {
+                case ECacheMode::Regular:
+                    Counters.ActiveKeepInMemoryBytes->Sub(TPageTraits::GetSize(page));
+                    break;
+                case ECacheMode::TryKeepInMemory:
+                    Counters.ActiveKeepInMemoryBytes->Add(TPageTraits::GetSize(page));
+                    break;
+                }
                 Evict(Cache.Insert(page));
                 break;
             default:
@@ -1240,6 +1259,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         StatActiveBytes += sizeof(TPage) + page->Size;
         Counters.ActivePages->Inc();
         Counters.ActiveBytes->Add(sizeof(TPage) + page->Size);
+        if (page->CacheMode == ECacheMode::TryKeepInMemory) {
+            Counters.ActiveKeepInMemoryBytes->Add(sizeof(TPage) + page->Size);
+        }
     }
 
     inline void RemoveActivePage(const TPage* page) {
@@ -1247,6 +1269,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         StatActiveBytes -= sizeof(TPage) + page->Size;
         Counters.ActivePages->Dec();
         Counters.ActiveBytes->Sub(sizeof(TPage) + page->Size);
+        if (page->CacheMode == ECacheMode::TryKeepInMemory) {
+            Counters.ActiveKeepInMemoryBytes->Sub(sizeof(TPage) + page->Size);
+        }
     }
 
     inline void AddPassivePage(const TPage* page) {

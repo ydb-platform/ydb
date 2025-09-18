@@ -106,7 +106,7 @@ TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 start
             size += sz;
             count += cnt;
             TRequestedBlob reqBlob(it->Key.GetOffset(), it->Key.GetPartNo(), it->Key.GetCount(),
-                                   it->Key.GetInternalPartsCount(), it->Size, TString(), it->Key);
+                                   it->Key.GetInternalPartsCount(), it->Size, TString(), it->Key, it->Timestamp.Seconds());
             blobs.push_back(reqBlob);
 
             blobKeyTokens->Append(it->BlobKeyToken);

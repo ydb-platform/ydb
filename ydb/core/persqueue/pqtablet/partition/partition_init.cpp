@@ -658,6 +658,11 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
                                   TInstant::Seconds(pair.GetCreationUnixTime()),
                                   dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size,
                                   Partition()->MakeBlobKeyToken(k.ToString()));
+        if (dataKeysBody.size() >= 2) {
+            const auto& prev = dataKeysBody[dataKeysBody.size() - 2];
+            const auto& curr = dataKeysBody[dataKeysBody.size() - 1];
+            PQ_INIT_ENSURE(prev.Timestamp <= curr.Timestamp)("prevTimestamp", prev.Timestamp)("currTimestamp", curr.Timestamp);
+        }
     }
 
     PQ_INIT_ENSURE(endOffset >= startOffset);

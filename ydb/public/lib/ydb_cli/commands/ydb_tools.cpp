@@ -38,6 +38,21 @@ void TToolsCommand::Config(TConfig& config) {
     TYdbCommand::Config(config);
 }
 
+ELogPriority TToolsCommand::ToLogLevel(TClientCommand::TConfig::EVerbosityLevel lvl) const {
+    switch (lvl) {
+        case TClientCommand::TConfig::EVerbosityLevel::NONE:
+            return ELogPriority::TLOG_ERR;
+        case TClientCommand::TConfig::EVerbosityLevel::DEBUG:
+            return ELogPriority::TLOG_DEBUG;
+        case TClientCommand::TConfig::EVerbosityLevel::INFO:
+            return ELogPriority::TLOG_INFO;
+        case TClientCommand::TConfig::EVerbosityLevel::WARN:
+            return ELogPriority::TLOG_WARNING;
+        default:
+            return ELogPriority::TLOG_ERR;
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 //  Dump
 ////////////////////////////////////////////////////////////////////////////////
@@ -109,7 +124,7 @@ int TCommandDump::Run(TConfig& config) {
         .PreservePoolKinds(PreservePoolKinds)
         .Ordered(Ordered);
 
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", ToLogLevel(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     NDump::TClient client(CreateDriver(config), std::move(log));
@@ -225,6 +240,12 @@ void TCommandRestore::Config(TConfig& config) {
         " instead of silently skipping its removal.")
         .StoreTrue(&VerifyExistence);
 
+    config.Opts->AddLongOption("retries", "Max retry count for every request.")
+        .DefaultValue(10)
+        .Handler([this](const TString& arg) {
+            Retries = FromString<ui32>(arg);
+        });
+
     config.Opts->MutuallyExclusive("bandwidth", "rps");
     config.Opts->MutuallyExclusive("import-data", "bulk-upsert");
     config.Opts->MutuallyExclusive("import-data", "upload-batch-rows");
@@ -247,7 +268,8 @@ int TCommandRestore::Run(TConfig& config) {
         .SavePartialResult(SavePartialResult)
         .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest))
         .Replace(Replace)
-        .VerifyExistence(VerifyExistence);
+        .VerifyExistence(VerifyExistence)
+        .MaxRetries(Retries);
 
     if (InFlight) {
         settings.MaxInFlight(InFlight);
@@ -288,7 +310,7 @@ int TCommandRestore::Run(TConfig& config) {
             << "The --verify-existence option must be used together with the --replace option.";
     }
 
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", ToLogLevel(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     NDump::TClient client(CreateDriver(config), std::move(log));

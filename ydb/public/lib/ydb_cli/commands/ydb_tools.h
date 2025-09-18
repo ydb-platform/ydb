@@ -26,6 +26,7 @@ public:
     );
 
     virtual void Config(TConfig& config) override;
+    virtual ELogPriority ToLogLevel(TClientCommand::TConfig::EVerbosityLevel lvl) const;
 };
 
 class TCommandDump : public TToolsCommand, public TCommandWithPath {
@@ -72,6 +73,7 @@ private:
     ui32 InFlight;
     bool UseBulkUpsert = false;
     bool UseImportData = false;
+    ui32 Retries;
 };
 
 class TCommandCopy : public TTableCommand {

@@ -17,6 +17,7 @@ from ydb.tests.olap.lib.remote_execution import (
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
+from ydb.tests.olap.lib.allure_utils import allure_test_description
 
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
@@ -2281,8 +2282,7 @@ class WorkloadTestBase(LoadSuiteBase):
             end_time = time_module.time()
             start_time = result.start_time if result.start_time else end_time - 1
 
-            # Добавляем информацию о workload в отчет
-            from ydb.tests.olap.lib.allure_utils import allure_test_description
+            
 
             # Добавляем дополнительную информацию для отчета
             additional_table_strings = {}
@@ -2345,23 +2345,17 @@ class WorkloadTestBase(LoadSuiteBase):
                     "nodes_with_issues",
                     len(node_errors))
 
-            # --- Формирование summary-флагов ПЕРЕД выгрузкой ---
+            # 3. Формирование summary/статистики
             self._update_summary_flags(result, workload_name)
 
-            # Выгружаем результаты даже если тест broken (с полными данными)
-            try:
-                self._upload_results(result, workload_name)
-                self._upload_results_per_workload_run(result, workload_name)
-            except Exception as e:
-                # Логируем ошибку выгрузки, но не прерываем выполнение
-                logging.error(f"Failed to upload results: {e}")
-                result.add_warning(f"Failed to upload results: {e}")
-                # После добавления warning нужно пересчитать summary флаги
-                self._update_summary_flags(result, workload_name)
-                with allure.step("Upload results failed"):
-                    allure.attach(str(e), "Upload error", allure.attachment_type.TEXT)
+            # 4. Формирование allure-отчёта
+            self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols)
 
-            # --- Обработка финального статуса (может выбросить исключение) ---
+            # 5. Загрузка результатов (ВСЕГДА, даже если тест broken)
+            self._upload_results(result, workload_name)
+            self._upload_results_per_workload_run(result, workload_name)
+
+            # 6. Обработка ошибок/статусов (fail, broken, etc) - может выбросить исключение
             self._handle_final_status(result, workload_name, node_errors)
 
     def _upload_results(self, result, workload_name):

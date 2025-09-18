@@ -58,7 +58,7 @@ namespace {
         return true;
     }
 
-    template<typename T>
+    template <typename T>
     concept CApiAction = std::same_as<T, Ydb::Maintenance::LockAction>
                       || std::same_as<T, Ydb::Maintenance::DrainAction>
                       || std::same_as<T, Ydb::Maintenance::CordonAction>;
@@ -659,28 +659,28 @@ class TCreateMaintenanceTask
     }
 
     void Handle(TEvHive::TEvDrainNodeAck::TPtr& ev) {
-        int actionNo = ev->Cookie;
+        const int actionNo = ev->Cookie;
         if (!PendingHiveActions.erase(actionNo)) {
             return;
         }
-        ui64 drainSeqNo = ev->Get()->Record.GetSeqNo();
+        const ui64 drainSeqNo = ev->Get()->Record.GetSeqNo();
         CmsRequest->Record.MutableActions(actionNo)->SetMaintenanceTaskContext(ToString(drainSeqNo));
         CheckPendingHiveActions();
     }
 
     void Handle(TEvHive::TEvDrainNodeResult::TPtr& ev) {
-        auto status = ev->Get()->Record.GetStatus();
+        const auto status = ev->Get()->Record.GetStatus();
         if (status != NKikimrProto::OK) {
             Reply(Ydb::StatusIds::GENERIC_ERROR, "Drain failed");
         }
     }
 
     void Handle(TEvHive::TEvSetDownReply::TPtr& ev) {
-        int actionNo = ev->Cookie;
+        const int actionNo = ev->Cookie;
         if (!PendingHiveActions.erase(actionNo)) {
             return;
         }
-        auto status = ev->Get()->Record.GetStatus();
+        const auto status = ev->Get()->Record.GetStatus();
         if (status != NKikimrProto::OK) {
             Reply(Ydb::StatusIds::GENERIC_ERROR, "Cordon failed");
         }
@@ -693,7 +693,7 @@ class TCreateMaintenanceTask
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) {
-        TEvTabletPipe::TEvClientConnected* msg = ev->Get();
+        const TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
             THiveInteractor::Close(SelfId());
             Reply(Ydb::StatusIds::UNAVAILABLE, "Hive request failed");

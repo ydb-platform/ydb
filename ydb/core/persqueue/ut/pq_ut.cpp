@@ -1099,7 +1099,6 @@ Y_UNIT_TEST(TestWritePQBigMessage) {
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
-        tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
 
         PQTabletPrepare({.lowWatermark=(8_MB - 512_KB)}, {{"user1", true}}, tc); //nothing dropped
                 //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
@@ -2417,50 +2416,6 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
             UNIT_ASSERT_STRING_CONTAINS_C(readResult->Record.GetErrorReason(), "Consumer user1 is gone from partition", readResult->Record.Utf8DebugString());
         }
     });
-}
-
-Y_UNIT_TEST(Foo)
-{
-    TTestContext tc;
-    TFinalizer finalizer(tc);
-    //tc.EnableDetailedPQLog = true;
-    tc.Prepare();
-
-    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
-    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(60_MB);
-
-    PQTabletPrepare({.partitions = 1, .storageLimitBytes = 50_MB}, {}, tc);
-
-    TVector<std::pair<ui64, TString>> data;
-    data.emplace_back(1, TString(39_MB, 'x'));
-    CmdWrite(0, "sourceId", data, tc, false, {}, true, "", -1, 0); // seqno=1, offset=0
-
-    auto keys = GetTabletKeys(tc);
-    for (const auto& key : keys) {
-        UNIT_ASSERT(!key.empty());
-        if (key.front() != TKeyPrefix::TypeData) {
-            continue;
-        }
-        Cerr << "--> " << key << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(key.back(), '?');
-    }
-
-    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
-    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(8_MB);
-
-    PQTabletRestart(tc);
-
-    Sleep(TDuration::Seconds(5));
-
-    keys = GetTabletKeys(tc);
-    for (const auto& key : keys) {
-        UNIT_ASSERT(!key.empty());
-        if (key.front() != TKeyPrefix::TypeData) {
-            continue;
-        }
-        Cerr << "==> " << key << Endl;
-        UNIT_ASSERT_UNEQUAL(key.back(), '?');
-    }
 }
 
 Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)

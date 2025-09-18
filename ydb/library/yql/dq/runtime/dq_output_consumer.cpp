@@ -70,9 +70,17 @@ struct THashV2 : public THashBase {
         const NKikimr::NMiniKQL::TType* outputType
     )
     {
-        auto multiType = static_cast<const NMiniKQL::TMultiType*>(outputType);
-        for (const auto& column : keyColumns) {
-            Hashers.emplace_back(MakeHashImpl(multiType->GetElementType(column.Index)));
+        if (outputType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Multi) {
+            auto multiType = static_cast<const NMiniKQL::TMultiType*>(outputType);
+            for (const auto& column : keyColumns) {
+                Hashers.emplace_back(MakeHashImpl(multiType->GetElementType(column.Index)));
+            }
+        } else {
+            YQL_ENSURE(outputType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
+            auto structType = static_cast<const TStructType*>(outputType);
+            for (const auto& column : keyColumns) {
+                Hashers.emplace_back(MakeHashImpl(structType->GetMemberType(column.Index)));
+            }
         }
     }
 

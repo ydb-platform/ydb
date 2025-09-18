@@ -4141,6 +4141,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(IndexAutochooserTopSort) {
         TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableTopSortSelectIndex(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePointPredicateSortAutoSelectIndex(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();

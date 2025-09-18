@@ -247,6 +247,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST_TWIN(ComputeActorMemoryAllocationFailureQueryService, useSink) {
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
 

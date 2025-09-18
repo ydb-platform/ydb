@@ -1,0 +1,15 @@
+{
+  "Unknown": "@unknownresponsible",
+  "appteam": "@appteamresponsible",
+  "engineering": ["@engineeringlead1", "@engineeringlead2"],
+  "fq": "@fqresponsible",
+  "qp": ["@qplead", "@qptechlead"],
+  "system-infra": "@systeminfraresponsible",
+  "platform": ["@platformlead", "@platformarchitect"],
+  "storage": "@storageresponsible",
+  "analytics": "@analyticsresponsible",
+  "security": ["@securitylead", "@securityengineer"],
+  "devops": "@devopsresponsible",
+  "qa": ["@qalead", "@qaautomationlead"],
+  "infrastructure": "@infrastructureresponsible"
+}

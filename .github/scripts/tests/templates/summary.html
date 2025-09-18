@@ -1,16 +1,67 @@
 <html>
 <head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism-themes/1.9.0/prism-vs.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
     <style>
+        body {
+            font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            width: 100%;
+        }
+        h1 { 
+            font-size: 20px; 
+        }
+        .report-header {
+            background-color: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        .report-header h2 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .report-header p {
+            margin: 4px 0;
+            font-size: 14px;
+        }
+        .report-header a {
+            color: #0969da;
+            text-decoration: none;
+        }
+        .report-header a:hover {
+            text-decoration: underline;
+        }
         th {
             text-transform: uppercase;
         }
 
         th, td {
             padding: 5px;
+            word-break: break-word; /* Allow breaking long words */
+            font-size: 14px;
+            min-width: 80px;
+        }
+        td.test_name{
+            min-width: 72.5vw;
+            max-width: 72.5vw;
+        }
+        td.test_name.with_history{
+            min-width: 62vw;
+            max-width: 62vw;
         }
 
         table {
             border-collapse: collapse;
+            width: 100%;
+            left: 5;
         }
 
         span.test_status {
@@ -28,64 +79,994 @@
         span.test_mute {
             color: blue;
         }
-        button.copy {
-            float: right;
+        
+        span.test_fail_sanitizer {
+            color: #ff4500;  /* Dark orange to distinguish from regular red */
+            background-color: #fff5ee;  /* Light orange background */
+            padding: 2px 4px;
+            border-radius: 3px;
+            border-left: 3px solid #ff4500;
         }
+        
+        span.test_error_sanitizer {
+            color: #ff4500;  /* Dark orange to distinguish from regular red */
+            background-color: #fff5ee;  /* Light orange background */
+            padding: 2px 4px;
+            border-radius: 3px;
+            border-left: 3px solid #ff4500;
+        }
+        .svg_passed {
+            fill: green;
+        }
+    
+        .svg_failure {
+            fill: red;
+        }
+    
+        .svg_skipped {
+            fill: gray;
+        }
+    
+        .svg_mute {
+            fill: blue;
+        }
+
+        .issue-button {
+            display: inline-block;
+            background-color: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            color: #0969da;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: 500;
+            text-decoration: none;
+            margin-left: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+
+        .issue-button:hover {
+            background-color: #f3f4f6;
+            border-color: #d0d7de;
+            text-decoration: none;
+        }
+
+        .svg-icon {
+            float: left;
+            width: 14px;
+            height: 14px;
+            padding-left: 1px;
+            padding-right: 1px;
+            margin-right: 0px;
+            border-radius: 50%;
+            position: relative; /* Essential for tooltips */
+            cursor: pointer;
+        }
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: left;
+            padding: 4px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .button svg {
+            fill: #4b535c;
+            fill-rule: evenodd;
+        }
+
+        .button svg:hover {
+            fill: #0366d6;
+            fill-rule: evenodd;
+        }
+
+        .button-group {
+            display: inline-flex;
+            float: right;
+            align-items: center;
+            position: relative; /* Added for positioning the dropdown */
+            white-space: nowrap;
+        }
+
+        .button-group > button {
+            margin-left: 5px;
+            padding: 4px 8px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .button-group > button svg {
+            fill: #4b535c;
+            fill-rule: evenodd;
+        }
+
+        .button-group > button svg:hover {
+            fill: #0366d6;
+            fill-rule: evenodd;
+        }
+
+        .button-group  .icon-container .show_history_svg {
+            fill: #ffffff;
+            stroke: #000;
+            stroke-width: 2.5;
+            fill-rule: evenodd;
+         }
+
+        .button-group  .icon-container .show_history_svg:hover {
+            stroke: #0366d6;
+         }
+
+        .button-group .button-text {
+            color: #4b535c;
+        }
+        .button-group .button-text:hover {
+            color: #0366d6;
+        }
+
+        .button-group .dropdown {
+            display: none; /* Hide the dropdown by default */
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 8px;
+            z-index: 10; /* Ensure the dropdown is above other content */
+            width: 160;
+        }
+
+        .button-group .dropdown.show {
+            display: block; /* Show the dropdown when active */
+        }
+
+        .button-group .dropdown > button {
+            display: table; /* Make each button in the dropdown take up full width */
+            margin-bottom: 3px; /* Add spacing between dropdown buttons */
+        }
+        .button-group button .icon-container {
+            display: inline-block; /* Align SVG with text */
+            vertical-align: middle; /* Center SVG vertically */
+            margin-right: 3px; /* Add spacing between SVG and text */
+        }
+
+        .button-group button .button-text {
+            margin-left: 5px; /* Add spacing between icon and text */
+            cursor: pointer; /* Make text clickable */
+            
+        }
+        .button-group button::after { /* Target the "Copy" button specifically */
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #7d7d92; /* Same as your tooltip background */
+            color: white;
+            padding: 2px 5px;
+            border-radius: 3px;
+            visibility: hidden; /* Hide by default */
+            opacity: 0;
+            transition: visibility 0.2s, opacity 0.2s;
+        }
+
+        .button-group button:hover::after {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .tooltip {
+            visibility: hidden;
+            max-width: 340px;
+            min-width: 260px;
+            word-break: break-word;
+            background-color: #7d7d92;
+            color: #fff;
+            text-align: left;
+            border-radius: 5px;
+            padding: 5px;
+            position: absolute;
+            z-index: 3;
+            bottom: 100%; /* Positioned above the svg icon */
+            left: 50%; /* Center the tooltip */
+            margin-left: -95px; /* Use negative margin to actually center the tooltip */
+            opacity: 0;
+            transition: opacity 0.3s;
+            overflow: hidden;
+            white-space: nowrap; /* Don't forget this one */
+            text-overflow: ellipsis;
+        }
+
+        .tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%; /* Arrow will be positioned at the bottom of the tooltip */
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #7d7d92 transparent transparent transparent; /* Arrow color */
+        }
+
+        .tooltip.visible {
+            visibility: visible;
+            opacity: 1;
+        }
+  
         table > tbody > tr > td:nth-child(2),
         table > tbody > tr > td:nth-child(3),
         table > tbody > tr > td:nth-child(4) {
-            text-align: center;
+            text-align: left;
         }
-    </style>
-    <script>
-        function copyTestNameToClipboard(text) {
-            const full_name = text.trim();
-            const pieces = /(.+)\/([^$]+)$/.exec(full_name);
+    
+        .collapsible-content {
+            display: table-row-group;
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+            height: 0;
+            overflow: hidden;
+        }
+    
+        .collapsible-content.active {
+            position: relative;
+            top: 0;
+            left: 5;
+            height: auto;
+        }
 
-            if (!pieces) {
-                console.error("Unable to split path/test for %o", full_name);
-                return;
+        .collapsible-header {
+            cursor: pointer;
+            background-color: #f2f2f2;
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-bottom: 5px;
+        }
+
+        .toggle-visibility-buttons {
+            margin-bottom: 10px;
+            overflow:hidden;
+            float: right;
+        }
+
+        .error-button {
+            border: none;
+            cursor: pointer;
+            background: url("data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjM0IiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSIzNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOC41OSAxNi4zNGw0LjU4LTQuNTktNC41OC00LjU5TDEwIDUuNzVsNiA2LTYgNnoiLz48L3N2Zz4=") no-repeat 50% 50% / 1em 1em;
+            width: 1em;
+            height: 1em;  
+            content: "";
+            transition: transform .5s;
+        }
+
+        pre>code[class*=language-] {
+            font-size: x-small;
+        }
+
+        .console-frame {
+            font-size: x-small;
+            display: grid;
+            border-radius: 4px;
+            overscroll-behavior: none;
+            background: #ddd;
+            padding: 5px;
+            color: #f1f2f3;
+            overflow-y: auto;
+            font-family: monospace;
+            word-break: keep-all;
+            font-size: x-small;
+        }
+
+        .console-frame::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .console-frame::-webkit-scrollbar-track {
+            background: #c5c6c8;
+        }
+
+        .console-frame::-webkit-scrollbar-thumb {
+            background: #838485;
+            border-radius: 4px;
+        }
+        pre[class*=language-] {
+            padding: 1em;
+            margin: 0;
+            overflow: auto;
+        }
+
+        /* Стили для модального окна */
+        #errorModal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+        }
+    
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            border-radius: 5px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+    
+        .close-modal {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .modal-header {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            font-size: smaller;
+        }
+        
+        .modal-info {
+            font-size: small;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+        
+        .modal-info-item {
+            margin-bottom: 5px;
+        }
+        
+        .modal-info-label {
+            font-weight: bold;
+            display: inline-block;
+            width: 80px;
+        }
+</style>
+<script>
+    function findParentBySelector(elm, selector) {
+        var all = document.querySelectorAll(selector);
+        var cur = elm.parentNode;
+        while(cur && !collectionHas(all, cur)) { //keep going up until you find a match
+            cur = cur.parentNode; //go up
+        }
+        return cur; //will return null if not found
+    }
+
+    function collectionHas(a, b) { //helper function (see below)
+        for(var i = 0, len = a.length; i < len; i ++) {
+            if(a[i] == b) return true;
+        }
+        return false;
+    }
+
+    function copyTestNameToClipboard(text) {
+        const cmdArg = getTestRunCommand(text);
+        if (!cmdArg) return;
+
+        console.log(cmdArg);
+
+        navigator.clipboard.writeText(cmdArg).then(
+            () => {
+                console.log("Copied!");
+                showCopiedTooltip();
+            },
+            () => {
+                console.error("Unable to copy %o to clipboard", cmdArg);
             }
-            let [path, testName] = [pieces[1], pieces[2]];
+        );
+    }
+    function copyTestNameForMuteToClipboard(text) {
+        const parsed = parseTestName(text);
+        if (!parsed) return;
+        
+        const [path, testName] = parsed;
+        const cmdArg = `${path} ${testName}`;
 
-            const namePieces = testName.split('.');
+        console.log(cmdArg);
 
-            if (namePieces.length === 2) {
-                testName = namePieces[0] + '::' + namePieces[1];
-            } else {
-                testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
+        navigator.clipboard.writeText(cmdArg).then(
+            () => {
+                console.log("Copied!");
+                showCopiedTooltip();
+            },
+            () => {
+                console.error("Unable to copy %o to clipboard", cmdArg);
             }
+        );
+    }
 
-            const cmdArg = `${path} -F '${testName}'`;
+    // Configuration constants
+    const MAX_URL_LENGTH = 8000; // GitHub URL limit is 8201, stay under 8000 to be safe
+    const GITHUB_ISSUE_BASE_URL = "https://github.com/ydb-platform/ydb/issues/new"; // Base URL for GitHub issues
 
-            console.log(cmdArg);
+    // Utility functions
+    function buildGitHubIssueUrl(title, body, labels) {
+        return GITHUB_ISSUE_BASE_URL + "?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
+    }
 
-            navigator.clipboard.writeText(cmdArg).catch(
-                () => {
-                    console.error("Unable to copy %o to clipboard", cmdArg);
+    // Show tooltip stub to avoid runtime errors (visual feedback provided by icon swap)
+    function showCopiedTooltip() {}
+
+    // Safe percent-encoded truncation helpers
+    function isDecodable(s) {
+        try { decodeURIComponent(s); return true; } catch (e) { return false; }
+    }
+
+    function safeTruncateEncoded(encoded, maxLen) {
+        if (encoded.length <= maxLen) return encoded;
+        let cut = encoded.slice(0, maxLen);
+        // Remove incomplete % sequence at the tail
+        cut = cut.replace(/%(?:[0-9A-Fa-f]{0,2})$/, '');
+        while (cut && !isDecodable(cut)) {
+            if (/%[0-9A-Fa-f]{2}$/.test(cut)) cut = cut.slice(0, -3);
+            else cut = cut.slice(0, -1);
+        }
+        return cut;
+    }
+
+    function parseTestName(full_name) {
+        const trimmed = full_name.trim();
+        let pieces;
+        
+        if (trimmed.includes('.py.')) {
+            pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(trimmed);
+        } else {
+            pieces = /(.+)\/([^$]+)$/.exec(trimmed);
+        }
+
+        if (!pieces) {
+            console.error("Unable to split path/test name from %o", trimmed);
+            return null;
+        }
+        
+        return [pieces[1], pieces[2]];
+    }
+
+    function formatTestCommand(path, testName) {
+        const namePieces = testName.split('.');
+
+        if (namePieces.length === 2) {
+            testName = namePieces[0] + '::' + namePieces[1];
+        } else {
+            testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
+        }
+
+        return `./ya make -ttt {{ buid_preset_params }} -F '${testName}' ${path}`;
+    }
+
+    function getTestRunCommand(test) {
+        const parsed = parseTestName(test);
+        if (!parsed) return "";
+        
+        const [path, testName] = parsed;
+        return formatTestCommand(path, testName);
+    }
+
+    function getOwnerAreaLabel(owner) {
+        const ownerMapping = {{ owner_area_mapping | tojson }};
+        return ownerMapping[owner] || "";
+    }
+
+    function buildLabels(issueType, buildPreset, ownerAreaLabel) {
+        let labels = [];
+        
+        if (issueType === 'mute') {
+            labels.push('mute');
+        } else {
+            labels.push('bug');
+            
+            if (issueType === 'sanitizer') {
+                labels.push('sanitizer');
+                
+                if (buildPreset.includes("asan")) {
+                    labels.push("asan");
+                } else if (buildPreset.includes("msan")) {
+                    labels.push("msan");
+                } else if (buildPreset.includes("tsan")) {
+                    labels.push("tsan");
                 }
-            );
-        }
-        function copyOnPress(event) {
-            event.preventDefault();
-            copyTestNameToClipboard(event.target.previousElementSibling.textContent)
-        }
-
-        document.addEventListener("DOMContentLoaded", function() {
-            const els = document.getElementsByClassName("copy");
-            for (let i = 0; i < els.length; i++) {
-                els[i].addEventListener('click', copyOnPress);
             }
+        }
+        
+        if (ownerAreaLabel) {
+            labels.push(ownerAreaLabel);
+        }
+        
+        return labels.join(',');
+    }
+
+    function buildIssueBody(issueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText) {
+        let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
+        
+        // Add type-specific header
+        if (issueType === 'sanitizer') {
+            // No header for sanitizer issues as requested
+        } else if (issueType === 'mute') {
+            body += "**Test mute request**%0A%0A";
+        } else {
+            body += "**Test Failure**%0A%0A";
+        }
+        
+        // Build information
+        body += "**Build Information:**%0A";
+        if (commitSha && commitSha !== "") {
+            body += "- Version: " + encodeURIComponent(commitSha) + "%0A";
+        }
+        body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
+        body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
+        
+        // Run command
+        body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
+        
+        // Owner
+        body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
+        
+        // Summary history (only for non-sanitizer issues)
+        if (issueType !== 'sanitizer') {
+            if (success_count + fail_count != 0) {
+                body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+            } else {
+                body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+            }
+        }
+        
+        // Always include test run history link
+        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(path + "/" + testName) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+        
+        // Always include report link
+        body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
+        
+        return body;
+    }
+
+    function buildBodyWithLengthLimit(baseBody, logUrls, errorText, title, labels, maxUrlLength) {
+        let body = baseBody;
+        
+        // Add logs first
+        if (logUrls && Object.keys(logUrls).length > 0) {
+            let logsSection = "**Logs:**%0A";
+            for (const [logName, logUrl] of Object.entries(logUrls)) {
+                logsSection += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
+            }
+            logsSection += "%0A";
+            body += logsSection;
+        }
+        
+        // Try to add error text, checking actual URL length
+        if (errorText && errorText.trim() !== "") {
+            const errorPrefix = "**Error Summary:**%0A```%0A";
+            const errorSuffix = "%0A```%0A%0A";
+            const truncationMsg = "%0A<TRUNCATED>";
+            
+            const fullErrorText = errorText.trim();
+            const encodedFullError = encodeURIComponent(fullErrorText);
+
+            // Compute minimal overhead URL length (without error content)
+            const minimalSection = errorPrefix + errorSuffix;
+            const minimalUrl = buildGitHubIssueUrl(title, body + minimalSection, labels);
+            if (minimalUrl.length > maxUrlLength) {
+                // Can't include error section at all
+            } else {
+                const allowedDelta = maxUrlLength - minimalUrl.length;
+                if (encodedFullError.length <= allowedDelta) {
+                    body += errorPrefix + encodedFullError + errorSuffix;
+                } else {
+                    const allowedForEncoded = allowedDelta - truncationMsg.length;
+                    if (allowedForEncoded > 0) {
+                        const truncatedEncoded = safeTruncateEncoded(encodedFullError, allowedForEncoded);
+                        if (truncatedEncoded) {
+                            body += errorPrefix + truncatedEncoded + truncationMsg + errorSuffix;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return body;
+    }
+
+    function createIssueGeneric(issueType, test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
+        const parsed = parseTestName(test);
+        if (!parsed) return;
+        
+        const [path, testName] = parsed;
+        
+        // Get build preset and other contextual information
+        const buildPreset = "{{ build_preset }}";
+        const branch = "{{ branch }}";
+        const commitSha = "{{ commit_sha }}";
+        const testRunCommand = getTestRunCommand(test);
+        const ownerAreaLabel = getOwnerAreaLabel(owner);
+        
+        // Determine issue type based on parameters
+        let actualIssueType = issueType;
+        if (is_sanitizer && issueType === 'bug') {
+            actualIssueType = 'sanitizer';
+        }
+        
+        // Create title based on issue type
+        let title;
+        if (actualIssueType === 'sanitizer') {
+            title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+        } else if (actualIssueType === 'mute') {
+            title = "Mute test " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+        } else {
+            title = "Test failure in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+        }
+        
+        // Build body
+        const body = buildIssueBody(actualIssueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText);
+        
+        // Build labels
+        const labels = buildLabels(actualIssueType, buildPreset, ownerAreaLabel);
+        
+        // Build body with exact length limit checking
+        const finalBody = buildBodyWithLengthLimit(body, logUrls, errorText, title, labels, MAX_URL_LENGTH);
+        
+        // Create final URL and open
+        const finalUrl = buildGitHubIssueUrl(title, finalBody, labels);
+        window.open(finalUrl, '_blank');
+    }
+
+    function createIssue(test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
+        createIssueGeneric('bug', test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls);
+    }
+
+    function createMuteIssue(test, owner, success_count, fail_count, errorText = '', logUrls = {}) {
+        createIssueGeneric('mute', test, owner, success_count, fail_count, false, errorText, logUrls);
+    }
+
+    function openHistory(test) {
+        const full_name = test.trim();
+        const buildPreset = "{{ build_preset }}";
+        const branch = "{{ branch }}";
+        let url = "https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset);
+        window.open(url, '_blank');
+    }
+
+    // Функция для отображения информации о тесте в модальном окне
+    function showTestInfo(testInfo) {
+        const modal = document.getElementById('errorModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalStatus = document.getElementById('modalStatus');
+        const modalDate = document.getElementById('modalDate');
+        const modalSha = document.getElementById('modalSha');
+        const modalJob = document.getElementById('modalJob');
+        const modalErrorContent = document.getElementById('modalErrorContent');
+
+        // Заполняем информацию
+        modalTitle.textContent = 'Test details: ' + testInfo.testName;
+        modalStatus.textContent = testInfo.status;
+        modalDate.textContent = testInfo.date;
+        
+        // Обновляем ссылку на запуск
+        const jobLink = document.getElementById('modalJobLink');
+        jobLink.href = `https://github.com/ydb-platform/ydb/actions/runs/${testInfo.job_id}`;
+        jobLink.textContent = testInfo.job_name;
+        // Обновляем ссылку на коммит
+        const shaLink = document.getElementById('modalShaLink');
+        shaLink.href = `https://github.com/ydb-platform/ydb//commit/${testInfo.commit}`;
+        shaLink.textContent = testInfo.commit.substring(0, 8);
+        
+        // Класс для статуса
+        modalStatus.className = '';
+        if (testInfo.status === 'passed') {
+            modalStatus.classList.add('test_pass');
+        } else if (testInfo.status === 'failure') {
+            modalStatus.classList.add('test_fail');
+        } else if (testInfo.status === 'mute') {
+            modalStatus.classList.add('test_mute');
+        }
+        
+        // Обработка текста ошибки
+        if (testInfo.errorText && testInfo.errorText.trim() !== "") {
+            document.getElementById('modalErrorSection').style.display = 'block';
+            modalErrorContent.textContent = testInfo.errorText;
+            
+            // Определяем язык для подсветки синтаксиса
+            modalErrorContent.className = 'language-' + (testInfo.testName.includes('.py') ? 'python' : 'cpp');
+            
+            // Активируем подсветку синтаксиса
+            if (typeof Prism !== 'undefined') {
+                Prism.highlightElement(modalErrorContent);
+            }
+        } else {
+            document.getElementById('modalErrorSection').style.display = 'none';
+        }
+        
+        // Показываем модальное окно
+        modal.style.display = 'block';
+    }
+    
+    function toggleAllTables(action) {
+        const contents = document.querySelectorAll('.collapsible-content');
+        if (action === 'expand') {
+            contents.forEach(content => content.classList.add('active'));
+        } else if (action === 'collapse') {
+            contents.forEach(content => content.classList.remove('active'));
+        }
+    }
+    function ButtonIconsClick(button){
+        button.addEventListener('click', function() {
+                const iconContainer = button.querySelector('.icon-container');
+                const initialIcon = iconContainer.querySelector('svg:first-child');
+                const doneIcon = iconContainer.querySelector('svg:last-child');
+
+                // Swap icon visibility
+                initialIcon.style.display = 'none'; 
+                doneIcon.style.display = 'block';
+
+                // You can add any additional actions here, like:
+                // - Disabling the button
+                // - Changing the button's title
+                // - Triggering other effects
+            });
+         
+    }
+    
+    document.addEventListener("DOMContentLoaded", function() {
+        let openDropdown = null; // Track the currently open dropdown
+
+        const buttonGroups = document.querySelectorAll(".button-group");
+        buttonGroups.forEach(buttonGroup => {
+            const dropdown = buttonGroup.querySelector('.dropdown');
+            const toggleButton = buttonGroup.querySelector('button:first-child'); // The "..." button
+
+            toggleButton.addEventListener('click', function() {
+                // Close any previously open dropdown
+                if (openDropdown && openDropdown !== dropdown) {
+                    openDropdown.classList.remove('show');
+                }
+                dropdown.classList.toggle('show');
+                openDropdown = dropdown.classList.contains('show') ? dropdown : null;
+                const iconContainer = dropdown.querySelectorAll('.icon-container');
+                iconContainer.forEach(element=>{
+                    const initialIcon = element.querySelector('svg:first-child');
+                    const doneIcon = element.querySelector('svg:last-child');
+
+                // Swap icon visibility
+                initialIcon.style.display = 'block'; 
+                doneIcon.style.display = 'none';
+                });
+            });
+            
+            // Close the dropdown when clicking outside of it
+            document.addEventListener('click', function(event) {
+                if (!event.target.closest('.button-group')) {
+                    dropdown.classList.remove('show');
+                    openDropdown = null;
+                }
+            });
+            buttonGroup.querySelectorAll('.button-group .dropdown  .button').forEach(button => {
+                ButtonIconsClick(button)
+            });
         });
-    </script>
+
+        document.addEventListener('keydown', function(event) {
+            if ((event.ctrlKey && event.keyCode == 70) || (event.metaKey && event.keyCode == 70)) { 
+                toggleAllTables('expand');
+            }    
+        });
+
+        const svgIcons = document.querySelectorAll('.svg-icon');
+        svgIcons.forEach(icon => {
+            icon.addEventListener('click', function(event) {
+                event.stopPropagation();
+                
+                // Получаем данные для модального окна
+                const testName = icon.getAttribute('data-test-name');
+                const status = icon.getAttribute('data-status');
+                const date = icon.getAttribute('data-date');
+                const errorText = icon.getAttribute('data-error');
+                const commit = icon.getAttribute('data-commit');
+                const job_name = icon.getAttribute('data-job-name');
+                const job_id = icon.getAttribute('data-job-id');
+                
+                // Открываем модальное окно с данными
+                showTestInfo({
+                    testName: testName,
+                    status: status,
+                    date: date,
+                    errorText: errorText,
+                    commit: commit,
+                    job_name: job_name,
+                    job_id: job_id
+                });
+            });
+        });
+        
+        const copyButtons = document.querySelectorAll(".copy");
+        copyButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                copyTestNameToClipboard(findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText);
+            });
+        });
+        const muteButtons = document.querySelectorAll(".mute");
+        muteButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                copyTestNameForMuteToClipboard(findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText);
+            });
+        });
+        const historyButton = document.querySelectorAll(".open_history");
+        historyButton.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                openHistory(findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText);
+            });
+        });
+        const createIssueButton = document.querySelectorAll(".create_issue");
+        createIssueButton.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const testRow = findParentBySelector(event.target,'tr');
+                const success_count = testRow.querySelectorAll('.svg_passed').length;
+                const fail_count = testRow.querySelectorAll('.svg_failure').length + testRow.querySelectorAll('.svg_mute').length;
+                const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
+                const owner = testRow.querySelector('.test_owner').innerText;
+                
+                // Check if this is a sanitizer issue by looking for the SANITIZER badge
+                const is_sanitizer = testRow.querySelector('.test_name span[style*="background-color: #ff4500"]') !== null;
+                
+                // Get error text from the test description if available
+                let errorText = '';
+                const errorButton = testRow.querySelector('.error-button');
+                if (errorButton && errorButton.nextElementSibling) {
+                    const errorContent = errorButton.nextElementSibling.querySelector('pre code');
+                    if (errorContent) {
+                        errorText = errorContent.textContent;
+                    }
+                }
+                
+                // Extract log URLs from the test row
+                let logUrls = {};
+                const logCells = testRow.querySelectorAll('td:last-child a');
+                logCells.forEach(link => {
+                    const logName = link.textContent.trim();
+                    const logUrl = link.href;
+                    if (logName && logUrl) {
+                        logUrls[logName] = logUrl;
+                    }
+                });
+
+                createIssue(testName, owner, success_count, fail_count, is_sanitizer, errorText, logUrls);
+            });
+        });
+        
+        const createMuteIssueButton = document.querySelectorAll(".create_mute_issue");
+        createMuteIssueButton.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const testRow = findParentBySelector(event.target,'tr');
+                const success_count = testRow.querySelectorAll('.svg_passed').length;
+                const fail_count = testRow.querySelectorAll('.svg_failure').length + testRow.querySelectorAll('.svg_mute').length;
+                const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
+                const owner = testRow.querySelector('.test_owner').innerText;
+                
+                // Get error text from the test description if available
+                let errorText = '';
+                const errorButton = testRow.querySelector('.error-button');
+                if (errorButton && errorButton.nextElementSibling) {
+                    const errorContent = errorButton.nextElementSibling.querySelector('pre code');
+                    if (errorContent) {
+                        errorText = errorContent.textContent;
+                    }
+                }
+                
+                // Extract log URLs from the test row
+                let logUrls = {};
+                const logCells = testRow.querySelectorAll('td:last-child a');
+                logCells.forEach(link => {
+                    const logName = link.textContent.trim();
+                    const logUrl = link.href;
+                    if (logName && logUrl) {
+                        logUrls[logName] = logUrl;
+                    }
+                });
+
+                createMuteIssue(testName, owner, success_count, fail_count, errorText, logUrls);
+            });
+        });
+
+
+        const headers = document.querySelectorAll(".collapsible-header");
+        headers.forEach(header => {
+            header.addEventListener('click', function() {
+                const content = this.nextElementSibling;
+                if (content.classList.contains('active')) {
+                    content.classList.remove('active');
+                } else {
+                    content.classList.add('active');
+                }
+            });
+        });
+
+        document.getElementById('expand-all').addEventListener('click', function(event) {
+             toggleAllTables('expand');
+        });
+        document.getElementById('collapse-all').addEventListener('click',  function(event) {
+            toggleAllTables('collapse');
+        });
+        
+        // Обработчик для закрытия модального окна
+        document.querySelector('.close-modal').onclick = function() {
+            document.getElementById('errorModal').style.display = 'none';
+        }
+        
+        // Закрытие при клике вне модального окна
+        window.onclick = function(event) {
+            const modal = document.getElementById('errorModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+    });
+    function toggleError(button) {
+    const errorContent = button.nextElementSibling;
+    const consoleFrame = errorContent.querySelector('.console-frame');
+    if (errorContent.style.display === 'none') {
+        errorContent.style.display = 'block';
+        consoleFrame.style.display = 'block';
+        button.style.transform = "rotate(90deg)"
+    } else {
+        errorContent.style.display = 'none';
+        consoleFrame.style.display = 'none';
+        button.style.transform = "rotate(0deg)"
+    }
+  }
+</script>
 </head>
 <body>
+    {% if pr_url or workflow_url %}
+    <div class="report-header">
+        <h2>Test Report Information</h2>
+        {% if pr_url %}
+        <p><strong>Pull Request:</strong> <a href="{{ pr_url }}" target="_blank">PR #{{ pr_number }}</a></p>
+        {% endif %}
+        {% if workflow_url %}
+        <p><strong>Workflow Run:</strong> <a href="{{ workflow_url }}" target="_blank">{{ workflow_run_id }}</a></p>
+        {% endif %}
+        <p><strong>Build Preset:</strong> {{ build_preset }}</p>
+        <p><strong>Branch:</strong> {{ branch }}</p>
+    </div>
+    {% endif %}
+    <div class="toggle-visibility-buttons">
+        <button id="expand-all">Expand All</button>
+        <button id="collapse-all">Collapse All</button>
+    </div>
 {% for status in status_order %}
-<h1 id="{{ status.name}}">{{ status.name }} ({{ tests[status] | length }})</h1>
-<table style="width:100%;" border="1">
+{% set sanitizer_count = tests[status] | selectattr('is_sanitizer_issue') | list | length %}
+<h1 id="{{ status.name}}" class="collapsible-header">
+    {{ status.name }} ({{ tests[status] | length }})
+    {% if sanitizer_count > 0 %}
+        <span style="color: #ff4500; font-weight: bold;">- {{ sanitizer_count }} SANITIZER ISSUE{{ 's' if sanitizer_count != 1 else '' }}</span>
+    {% endif %}
+</h1>
+<table class="collapsible-content active" border="1">
     <thead>
     <tr>
+        <th>test owner</th>
         <th>test name</th>
+    {% if status.is_error  and history%}
+        <th>history<br>
+            old->new
+        </th>
+    {% endif %}
         <th>elapsed</th>
         <th>status</th>
     {% if status in has_any_log %}
@@ -96,10 +1077,134 @@
     <tbody>
     {% for t in tests[status] %}
     <tr>
-        <td>
-            <span>{{ t.full_name }}</span>
-            {% if status.is_error %}<button class="copy" title="Copy test filter to clipboard">Copy test filter</button>{% endif %}
+        <td class="test_owner">
+            <a href="https://github.com/orgs/ydb-platform/teams/{{ t.owners.replace('TEAM:@ydb-platform/','')}}" target="_blank">{{ t.owners.replace('TEAM:@ydb-platform/','')}}</a>
         </td>
+        {% if status.is_error %} 
+        <td class="test_name with_history">
+        {% else %} 
+        <td class="test_name">
+        {% endif %}
+            <span>{{ t.full_name }}</span>
+            {% if status.is_error %}
+                <button class="issue-button create_issue" title="Create issue">+ ISSUE</button>
+            {% endif %}
+            {% if t.is_sanitizer_issue %}
+                <span style="background-color: #ff4500; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">SANITIZER</span>
+            {% endif %}
+            {% if status.is_error %}
+            <div class="button-group">
+                <button class="button" title="Show options">
+                    <svg  class="more"  xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" stroke="none" aria-hidden="true" viewBox="0 0 448 512">
+                        <path  d="M8 256a56 56 0 1 1 112 0A56 56 0 1 1 8 256zm160 0a56 56 0 1 1 112 0 56 56 0 1 1 -112 0zm216-56a56 56 0 1 1 0 112 56 56 0 1 1 0-112z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+                <div class="dropdown">
+                    <button class="button copy" title="Copy test filter to clipboard" >
+                        <div class="icon-container"> 
+                            <svg  class="copy_svg"  xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" stroke="none" aria-hidden="true" viewBox="0 0 16 16">
+                                <path  d="M12 2.5H8A1.5 1.5 0 0 0 6.5 4v1H8a3 3 0 0 1 3 3v1.5h1A1.5 1.5 0 0 0 13.5 8V4A1.5 1.5 0 0 0 12 2.5M11 11h1a3 3 0 0 0 3-3V4a3 3 0 0 0-3-3H8a3 3 0 0 0-3 3v1H4a3 3 0 0 0-3 3v4a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3zM4 6.5h4A1.5 1.5 0 0 1 9.5 8v4A1.5 1.5 0 0 1 8 13.5H4A1.5 1.5 0 0 1 2.5 12V8A1.5 1.5 0 0 1 4 6.5" clip-rule="evenodd"></path>
+                            </svg>
+                            <svg class="done-icon" width="16" height="16" viewBox="0 0 26 26" fill="green" display="none">
+                                <path class="cls-2" d="M12,2A10,10,0,1,0,22,12,10,10,0,0,0,12,2Zm0,18a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z"/>
+                                <path class="cls-2" d="M14.7,8.39l-3.78,5L9.29,11.28a1,1,0,0,0-1.58,1.23l2.43,3.11a1,1,0,0,0,.79.38h0a1,1,0,0,0,.79-.39l4.57-6a1,1,0,1,0-1.6-1.22Z"/>
+                            </svg>
+                        </div>
+                        <span class="button-text">Copy run command</span>
+                    </button>
+                    {% if status.is_error %} 
+                    <button class="button mute" title="Copy mute string to clipboard" >
+                        <div class="icon-container"> 
+                            <svg  class="mute_svg"  xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left" stroke="none" viewBox="2 0 30 17">
+                                <!-- First icon: copied squares -->
+                                <path transform="translate(20, 0)" d="M12 2.5H8A1.5 1.5 0 0 0 6.5 4v1H8a3 3 0 0 1 3 3v1.5h1A1.5 1.5 0 0 0 13.5 8V4A1.5 1.5 0 0 0 12 2.5M11 11h1a3 3 0 0 0 3-3V4a3 3 0 0 0-3-3H8a3 3 0 0 0-3 3v1H4a3 3 0 0 0-3 3v4a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3zM4 6.5h4A1.5 1.5 0 0 1 9.5 8v4A1.5 1.5 0 0 1 8 13.5H4A1.5 1.5 0 0 1 2.5 12V8A1.5 1.5 0 0 1 4 6.5"  />
+                                <!-- Second icon: microphone -->
+                                <path transform="translate(0, 0)" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z"  />
+                            </svg>
+                            <svg class="done-icon" width="16" height="16" viewBox="0 0 26 26" fill="green" display="none">
+                                <path class="cls-2" d="M12,2A10,10,0,1,0,22,12,10,10,0,0,0,12,2Zm0,18a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z"/>
+                                <path class="cls-2" d="M14.7,8.39l-3.78,5L9.29,11.28a1,1,0,0,0-1.58,1.23l2.43,3.11a1,1,0,0,0,.79.38h0a1,1,0,0,0,.79-.39l4.57-6a1,1,0,1,0-1.6-1.22Z"/>
+                            </svg>
+                        </div>
+                        <span class="button-text">Copy mute string</span>
+                    </button>
+                    <button class="button create_mute_issue" title="Create mute issue">
+                        <div class="icon-container"> 
+                            <svg class="issue_svg" xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left"  stroke="none" viewBox="2 0 30 17">
+                                <!-- First icon: plus -->
+                                <path transform="translate(20, 0)" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M8.75 5.5a.75.75 0 0 0-1.5 0v1.75H5.5a.75.75 0 0 0 0 1.5h1.75v1.75a.75.75 0 0 0 1.5 0V8.75h1.75a.75.75 0 0 0 0-1.5H8.75z"  />
+                                <!-- Second icon: microphone -->
+                                <path transform="translate(0, 0)" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z"  />
+                            </svg>
+                            <svg class="done-icon" width="16" height="16" viewBox="0 0 26 26" fill="green" display="none">
+                                <path class="cls-2" d="M12,2A10,10,0,1,0,22,12,10,10,0,0,0,12,2Zm0,18a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z"/>
+                                <path class="cls-2" d="M14.7,8.39l-3.78,5L9.29,11.28a1,1,0,0,0-1.58,1.23l2.43,3.11a1,1,0,0,0,.79.38h0a1,1,0,0,0,.79-.39l4.57-6a1,1,0,1,0-1.6-1.22Z"/>
+                            </svg>
+                        </div>
+                        <span class="button-text">Create mute issue</span>
+                    </button>
+
+                     {% endif %}
+                    <button class="button open_history" title="Show history">
+                        <div class="icon-container"> 
+                            <svg class="show_history_svg" width="18" height="18" viewBox="0 0 48 48" fill="none"  xmlns="http://www.w3.org/2000/svg">
+                                <path d="M42 24V9C42 7.34315 40.6569 6 39 6H9C7.34315 6 6 7.34315 6 9V39C6 40.6569 7.34315 42 9 42H24"  stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle cx="32" cy="32" r="6" />
+                                <path d="M37 36L42 40"  stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M14 16H34"  stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M14 24L22 24"   stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <svg class="done-icon" width="16" height="16" viewBox="0 0 26 26" fill="green" display="none">
+                                <path class="cls-2" d="M12,2A10,10,0,1,0,22,12,10,10,0,0,0,12,2Zm0,18a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z"/>
+                                <path class="cls-2" d="M14.7,8.39l-3.78,5L9.29,11.28a1,1,0,0,0-1.58,1.23l2.43,3.11a1,1,0,0,0,.79.38h0a1,1,0,0,0,.79-.39l4.57-6a1,1,0,1,0-1.6-1.22Z"/>
+                            </svg>
+                        </div>
+                        <span class="button-text">Open test history</span>
+                    </button>
+           
+                    </div>
+                </div>
+            {% endif %}
+            {% if t.status_description %}
+            <button class="error-button" onclick="toggleError(this)"></button>
+            <div style="display: none;" class="error-content">
+                <div class="console-frame" style="display: none;">
+                    <pre><code class="language-{{ 'python' if '.py' in t.full_name else 'cpp'}}">{{ t.status_description | default("Status description missed") }}</code></pre>
+                </div>
+            </div>
+            {% endif %}
+        </td>
+        {% if (status.is_error and t.full_name in history) %}
+        <td>
+            {% for h in history[t.full_name] %}
+                <span class="svg-icon" 
+                      data-test-name="{{ t.full_name }}" 
+                      data-status="{{ history[t.full_name][h].status }}" 
+                      data-date="{{ history[t.full_name][h].datetime }}" 
+                      data-error="{{ history[t.full_name][h].status_description }}" 
+                      data-commit="{{ history[t.full_name][h].commit }}"
+                      data-job-name="{{ history[t.full_name][h].job_name }}[{{ history[t.full_name][h].branch}}:{{ build_preset }}]"
+                      data-job-id="{{ history[t.full_name][h].job_id }}">
+                    {% if history[t.full_name][h].status == 'failure' %}
+                    <svg class="svg_failure" viewBox="0 0 16 16" >
+                        <path  fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
+                    </svg>
+                    {% elif history[t.full_name][h].status == 'passed' %}
+                    <svg class="svg_passed" viewBox="0 0 16 16" >
+                        <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
+                    </svg>
+                    {% elif history[t.full_name][h].status == 'mute' %}
+                    <svg class="svg_mute" viewBox="0 0 17 16" >
+                        <path  fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>                    </svg>
+                    </svg>
+                    {% endif %}
+                </span>
+            {% endfor %}
+        </td> 
+        {% elif (status.is_error and  history) %}
+        <td></td>
+        {% elif status.is_error %}
+        {% endif %}
         <td><span title="{{ t.elapsed }}s">{{ t.elapsed_display }}</span></td>
         <td>
             <span class="test_status test_{{ t.status_display }}">{{ t.status_display }}</span>
@@ -108,7 +1213,7 @@
         <td>
             {% if t.log_urls %}
                 {% for log_name, log_url in t.log_urls.items() %}
-                <a href="{{ log_url }}">{{ log_name.upper() }}</a>{% if not loop.last %} | {% endif %}
+                <a href="{{ log_url }}">{{ log_name }}</a>{% if not loop.last %} | {% endif %}
 
                 {% endfor %}
             {% else %}
@@ -121,5 +1226,39 @@
     </tbody>
 </table>
 {% endfor %}
+
+<!-- Модальное окно для детального отображения ошибок -->
+<div id="errorModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal">&times;</span>
+        <div class="modal-header">
+            <h3 id="modalTitle">Test Details</h3>
+        </div>
+        <div class="modal-info">
+            <div class="modal-info-item">
+                <span class="modal-info-label">Run:</span>
+                <a id="modalJobLink" href="#" target="_blank"></a>
+            </div>
+            <div class="modal-info-item">
+                <span class="modal-info-label">Status:</span>
+                <span id="modalStatus"></span>
+            </div>
+            <div class="modal-info-item">
+                <span class="modal-info-label">Date:</span>
+                <span id="modalDate"></span>
+            </div>
+            <div class="modal-info-item">
+                <span class="modal-info-label">Commit:</span>
+                <a id="modalShaLink" href="#" target="_blank"></a>
+            </div>
+        </div>
+        <div id="modalErrorSection">
+            <div class="console-frame">
+                <pre><code id="modalErrorContent"></code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>

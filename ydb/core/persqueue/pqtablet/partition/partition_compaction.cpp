@@ -181,7 +181,7 @@ void TPartition::TryRunCompaction()
 
     if (BlobEncoder.DataKeysBody.size() >= blobsKeyCountLimit) {
         CompactionInProgress = true;
-        Send(SelfId(), new TEvPQ::TEvRunCompaction(blobsKeyCountLimit));
+        Send(SelfId(), new TEvPQ::TEvRunCompaction(BlobEncoder.DataKeysBody.size()));
         return;
     }
 

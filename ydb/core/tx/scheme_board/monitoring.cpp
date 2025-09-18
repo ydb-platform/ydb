@@ -1170,9 +1170,10 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
                         DIV_CLASS("form-group") {
                             DIV_CLASS("col-sm-offset-2 col-sm-10") {
-                                str << "<button type='submit' name='startBackup' class='btn btn-primary' "
-                                    << (backupProgress.IsRunning() ? "disabled" : "")
-                                    << ">Start Backup</button>";
+                                const char* state = backupProgress.IsRunning() ? "disabled" : "";
+                                str << "<button type='submit' name='startBackup' class='btn btn-primary' " << state << ">"
+                                    << "Start Backup"
+                                << "</button>";
                             }
                         }
                     }
@@ -1338,9 +1339,10 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
                         DIV_CLASS("form-group") {
                             DIV_CLASS("col-sm-offset-2 col-sm-10") {
-                                str << "<button type='submit' name='startRestore' class='btn btn-danger' "
-                                    << (restoreProgress.IsRunning() ? "disabled" : "")
-                                    << ">Start Emergency Restore</button>";
+                                const char* state = restoreProgress.IsRunning() ? "disabled" : ""
+                                str << "<button type='submit' name='startRestore' class='btn btn-danger' " << state << ">"
+                                    << "Start Emergency Restore"
+                                << "</button>";
                             }
                         }
                     }
@@ -1683,7 +1685,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             }
             break;
 
-        case ERequestType::Backup: {
+        case ERequestType::Backup:
             if (params.Has("startBackup")) {
                 if (BackupProgress.IsRunning()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
@@ -1728,9 +1730,8 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             }
 
             return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderBackup(BackupProgress)));
-        }
 
-        case ERequestType::Restore: {
+        case ERequestType::Restore:
             if (params.Has("startRestore")) {
                 if (RestoreProgress.IsRunning()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
@@ -1780,7 +1781,6 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             }
 
             return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderRestore(RestoreProgress)));
-        }
 
         case ERequestType::Unknown:
             break;

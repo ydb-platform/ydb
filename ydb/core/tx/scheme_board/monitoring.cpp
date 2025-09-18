@@ -1339,7 +1339,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
                         DIV_CLASS("form-group") {
                             DIV_CLASS("col-sm-offset-2 col-sm-10") {
-                                const char* state = restoreProgress.IsRunning() ? "disabled" : ""
+                                const char* state = restoreProgress.IsRunning() ? "disabled" : "";
                                 str << "<button type='submit' name='startRestore' class='btn btn-danger' " << state << ">"
                                     << "Start Emergency Restore"
                                 << "</button>";

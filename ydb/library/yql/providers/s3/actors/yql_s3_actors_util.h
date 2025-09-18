@@ -11,6 +11,7 @@
 #include <util/generic/string.h>
 
 #include <optional>
+#include <source_location>
 
 namespace NYql::NDq {
 

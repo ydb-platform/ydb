@@ -262,7 +262,8 @@ namespace {
         }
 
         const TString tmpTableName = TStringBuilder()
-            << "ctas_"
+            << CanonizePath(sessionCtx->GetDatabase())
+            << "/ctas_"
             << TAppData::RandomProvider->GenUuid4().AsUuidString();
 
         const TString createTableName = (TStringBuilder()

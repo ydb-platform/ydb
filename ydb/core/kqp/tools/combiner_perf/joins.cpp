@@ -100,7 +100,6 @@ void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams& params, TTestResultColle
             ui32 cols = NKikimr::NMiniKQL::ResultColumnCount(algo, descr);
             fetchBuff.resize(cols);
             Cerr << "Compute graph result for algorithm '" << algo_name << "' and input data '" << descr_name << "'";
-            Cerr.Flush();
 
             NYql::NUdf::EFetchStatus fetchStatus;
             i64 lineCount = 0;
@@ -115,7 +114,6 @@ void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams& params, TTestResultColle
 
             thisNodeResult.ResultTime = GetThreadCPUTimeDelta(graphTimeStart);
             Cerr << ". Output line count(block considered to be 1 line): " << lineCount << Endl;
-            Cerr.Flush();
             std::string testname = std::string{algo_name} + "_" + std::string{descr_name};
             printout.SubmitMetrics(params, thisNodeResult, testname.data(), false, false);
         }

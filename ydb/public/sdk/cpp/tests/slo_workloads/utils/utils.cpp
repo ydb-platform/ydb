@@ -120,6 +120,7 @@ int DoMain(int argc, char** argv, TCreateCommand create, TRunCommand run, TClean
     std::string tokenFile;
     std::string iamSaKeyFile;
     std::string statConfigFile;
+    std::string balancingPolicy;
 
     opts.AddLongOption('c', "connection-string", "YDB connection string").Required().RequiredArgument("SCHEMA://HOST:PORT/?DATABASE=DATABASE")
         .StoreResult(&connectionString);
@@ -133,6 +134,8 @@ int DoMain(int argc, char** argv, TCreateCommand create, TRunCommand run, TClean
         .StoreResult(&iamSaKeyFile);
     opts.AddLongOption('s', "stat-config", "statistics config file").Optional().RequiredArgument("PATH")
         .StoreResult(&statConfigFile);
+    opts.AddLongOption('b', "balancing-policy", "Balancing policy").Optional().DefaultValue("use-all-nodes").RequiredArgument("(use-all-nodes|prefer-local-dc|prefer-primary-pile)")
+        .StoreResult(&balancingPolicy);
     opts.AddHelpOption('h');
     opts.SetFreeArgsMin(1);
     opts.SetFreeArgTitle(0, "<COMMAND>", GetCmdList());
@@ -167,6 +170,17 @@ int DoMain(int argc, char** argv, TCreateCommand create, TRunCommand run, TClean
         config.SetCredentialsProviderFactory(CreateOAuthCredentialsProviderFactory(token));
     } else {
         Cerr << "Warning: No authentication methods provided." << Endl;
+    }
+
+    if (balancingPolicy == "use-all-nodes") {
+        config.SetBalancingPolicy(TBalancingPolicy::UseAllNodes());
+    } else if (balancingPolicy == "prefer-local-dc") {
+        config.SetBalancingPolicy(TBalancingPolicy::UsePreferableLocation());
+    } else if (balancingPolicy == "prefer-primary-pile") {
+        config.SetBalancingPolicy(TBalancingPolicy::UsePreferablePileState());
+    } else {
+        Cerr << "Unknown balancing policy: " << balancingPolicy << Endl;
+        return EXIT_FAILURE;
     }
 
     TDriver driver(config);

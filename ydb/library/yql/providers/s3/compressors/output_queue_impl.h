@@ -1,8 +1,10 @@
 #pragma once
 
 #include "output_queue.h"
-#include <util/generic/size_literals.h>
+
 #include <yql/essentials/utils/yql_panic.h>
+
+#include <util/generic/size_literals.h>
 
 #include <numeric>
 #include <deque>
@@ -23,8 +25,9 @@ public:
             if (!Queue.empty() && Queue.back().size() < MinItemSize) {
                 if constexpr (MaxItemSize > 0ULL) {
                     if (Queue.back().size() + item.size() > MaxItemSize) {
-                        Queue.back().append(item.substr(0U, MaxItemSize - Queue.back().size()));
-                        item = item.substr(item.size() + Queue.back().size() - MaxItemSize);
+                        const auto sizeToAdd = MaxItemSize - Queue.back().size();
+                        Queue.back().append(item.substr(0U, sizeToAdd));
+                        item = item.substr(item.size() - sizeToAdd);
                     } else {
                         Queue.back().append(std::move(item));
                         item.clear();
@@ -49,8 +52,9 @@ public:
     }
 
     TString Pop() override {
-        if (Queue.empty() || 1U == Queue.size() && !Sealed)
+        if (Queue.empty() || (1U == Queue.size() && !Sealed)) {
             return {};
+        }
 
         auto out = std::move(Queue.front());
         Queue.pop_front();
@@ -59,6 +63,35 @@ public:
 
     void Seal() override {
         Sealed = true;
+
+        if constexpr (MinItemSize > 0ULL) {
+            if (Queue.size() <= 1U || Queue.back().size() >= MinItemSize) {
+                return;
+            }
+
+            TString lastItem = std::move(Queue.back());
+            Queue.pop_back();
+
+            if constexpr (MaxItemSize > 0ULL) {
+                const auto endSize = Queue.back().size();
+                if (endSize + lastItem.size() <= MaxItemSize) {
+                    Queue.back().append(std::move(lastItem));
+                    return;
+                }
+
+                // In case then last item is smaller than MinItemSize and item before it + Last item bigger than MaxItemSize
+                // we can not guarantee that all requirements are met if 2 * MinItemSize > MaxItemSize
+                if (endSize > MinItemSize) {
+                    const auto appendSize = endSize - std::min(endSize - MinItemSize, MinItemSize - lastItem.size());
+                    lastItem = Queue.back().substr(appendSize) + lastItem;
+                    Queue.back().resize(appendSize);
+                }
+
+                Queue.push_back(std::move(lastItem));
+            } else {
+                Queue.back().append(std::move(lastItem));
+            }
+        }
     }
 
     size_t Size() const override {
@@ -76,9 +109,10 @@ public:
     size_t Volume() const override {
         return std::accumulate(Queue.cbegin(), Queue.cend(), 0ULL, [](size_t sum, const TString& item) { return sum += item.size(); });
     }
+
 private:
     std::deque<TString> Queue;
     bool Sealed = false;
 };
 
-}
+} // namespace NYql

@@ -27,6 +27,7 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKafka {
 
@@ -2571,22 +2572,22 @@ bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
 //    DBGTRACE_LOG("===========================");
 //}
 
-//void TPartition::DumpZones(const char* file, unsigned line) const
-//{
-//    DBGTRACE("TPartition::DumpZones");
-//
-//    if (file) {
-//        Y_UNUSED(line);
-//        DBGTRACE_LOG(file << "(" << line << ")");
-//    }
-//
-//    DBGTRACE_LOG("=== DumpPartitionZones ===");
-//    DBGTRACE_LOG("--- Compaction -----------");
-//    CompactionBlobEncoder.Dump();
-//    DBGTRACE_LOG("--- FastWrite ------------");
-//    BlobEncoder.Dump();
-//    DBGTRACE_LOG("==========================");
-//}
+void TPartition::DumpZones(const char* file, unsigned line) const
+{
+    DBGTRACE("TPartition::DumpZones");
+
+    if (file) {
+        Y_UNUSED(line);
+        DBGTRACE_LOG(file << "(" << line << ")");
+    }
+
+    DBGTRACE_LOG("=== DumpPartitionZones ===");
+    DBGTRACE_LOG("--- Compaction -----------");
+    CompactionBlobEncoder.Dump();
+    DBGTRACE_LOG("--- FastWrite ------------");
+    BlobEncoder.Dump();
+    DBGTRACE_LOG("==========================");
+}
 
 TBlobKeyTokenPtr TPartition::MakeBlobKeyToken(const TString& key)
 {

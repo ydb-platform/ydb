@@ -12,7 +12,7 @@ namespace NKikimr::NPersQueueTests {
 Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
     Y_UNIT_TEST(TestBasicRemote) {
         // TODO(abcdef): temporarily deleted
-        return;
+        //return;
 
         NPersQueue::TTestServer server;
         const auto& settings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();

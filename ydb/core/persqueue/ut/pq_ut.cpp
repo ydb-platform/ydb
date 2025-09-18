@@ -12,6 +12,7 @@
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -100,6 +101,9 @@ Y_UNIT_TEST(TestCmdReadWithLastOffset) {
                 readSettings.Offset = offset;
                 readSettings.LastOffset = lastOffset;
                 readSettings.ResCount = lastOffset < offset ? 0 : static_cast<ui32>(lastOffset - offset);
+                DBGTRACE_LOG("Offset=" << readSettings.Offset <<
+                             ", LastOffset=" << readSettings.LastOffset <<
+                             ", ResCount=" << readSettings.ResCount);
                 BeginCmdRead(readSettings, tc);
 
                 TAutoPtr<IEventHandle> handle;
@@ -809,7 +813,7 @@ Y_UNIT_TEST(TestMessageNo) {
 
 Y_UNIT_TEST(TestPartitionedBlobFails) {
     // TODO(abcdef): temporarily deleted
-    return;
+    //return;
 
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1002,7 +1006,7 @@ Y_UNIT_TEST(TestAlreadyWritten) {
 
 Y_UNIT_TEST(TestAlreadyWrittenWithoutDeduplication) {
     // TODO(abcdef): temporarily deleted
-    return;
+    //return;
 
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1089,7 +1093,7 @@ Y_UNIT_TEST(TestWritePQCompact) {
 
 Y_UNIT_TEST(TestWritePQBigMessage) {
     // TODO(abcdef): temporarily deleted
-    return;
+    //return;
 
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1536,7 +1540,7 @@ Y_UNIT_TEST(TestPQPartialRead) {
 
 Y_UNIT_TEST(TestPQRead) {
     // TODO(abcdef): temporarily deleted
-    return;
+    //return;
 
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1634,7 +1638,7 @@ Y_UNIT_TEST(TestPQSmallRead) {
 
 Y_UNIT_TEST(TestPQReadAhead) {
     // TODO(abcdef): temporarily deleted
-    return;
+    //return;
 
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1973,7 +1977,7 @@ Y_UNIT_TEST(TestReadSubscription) {
 
 Y_UNIT_TEST(TestPQCacheSizeManagement) {
     // TODO(abcdef): temporarily deleted
-    return;
+    //return;
 
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {

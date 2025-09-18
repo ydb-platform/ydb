@@ -5,6 +5,7 @@
 #include <util/string/escape.h>
 #include <util/system/unaligned_mem.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -220,6 +221,7 @@ IOutputStream& operator <<(IOutputStream& out, const THead& value)
 
 ui32 THead::FindPos(const ui64 offset, const ui16 partNo) const {
     if (Batches.empty()) {
+        DBGTRACE_LOG("Batches is empty");
         return Max<ui32>();
     }
 
@@ -230,6 +232,7 @@ ui32 THead::FindPos(const ui64 offset, const ui16 partNo) const {
 
     if (i == 0) {
         if (Batches[i].IsGreaterThan(offset, partNo)) {
+            DBGTRACE_LOG("i=" << i << ", offset=" << offset << ", partNo=" << partNo);
             return Max<ui32>();
         } else {
             return 0;

@@ -57,7 +57,7 @@
 ## Правила конфигурирования StateStorage
 
     Неправильная конфигурация [домена кластера State Storage](../../../reference/configuration/index.md#domains-state) может привести к отказу кластера.
-    Данные правила применимы как для параметра `state_storage` так и для раздельной конфигурации `explicit_state_storage_config`, `explicit_state_storage_board_config`, `explicit_scheme_board_config`
+    Перечисленные ниже правила применяются как для параметра `state_storage` так и для раздельной конфигурации `explicit_state_storage_config`, `explicit_state_storage_board_config`, `explicit_scheme_board_config`
 
     1. Чтобы изменить конфигурацию StateStorage без отказов кластера необходимо производить это путем добавления и удаления групп колец.
     1. Добавлять и удалять можно только группы колец с параметром `WriteOnly: true`.

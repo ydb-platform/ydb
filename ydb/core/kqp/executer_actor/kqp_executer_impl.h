@@ -155,9 +155,7 @@ public:
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
         , TasksGraph(Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId)
     {
-        if (executerConfig.TableServiceConfig.HasArrayBufferMinFillPercentage()) {
-            ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
-        }
+        ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
 
         if (executerConfig.TableServiceConfig.HasBufferPageAllocSize()) {
             BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();

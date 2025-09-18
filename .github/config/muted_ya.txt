@@ -85,6 +85,7 @@ ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Ma
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
+ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.CreateTableInTemp
 ydb/core/tx/sequenceproxy/ut sole chunk chunk
 ydb/core/util/ut TCircularOperationQueueTest.ShouldShuffle
 ydb/core/viewer/tests test.py.test_async_replication_describe

@@ -248,13 +248,12 @@ enum EPartitionCompactionLabeledCounters {
     option (GlobalGroupNamesOpts) = {
         Names: "topic"
     };
-    METRIC_UNCOMPACTED_SIZE_MAX = 0                               [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.key_compaction.uncompacted_body_size_max"}];
-    METRIC_UNCOMPACTED_SIZE_SUM = 1                               [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.key_compaction.uncompacted_body_size"}];
-    METRIC_COMPACTED_SIZE_MAX = 2                                 [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.key_compaction.compacted_body_size_max"}];
-    METRIC_COMPACTED_SIZE_SUM = 3                                 [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.key_compaction.compacted_body_size"}];
-    METRIC_UNCOMPACTED_COUNT = 4                                  [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.key_compaction.uncompacted_messsages_count_max"}];
-    METRIC_COMPACTED_COUNT = 5                                    [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.key_compaction.compacted_messsages_count_max"}];
-    METRIC_UNCOMPACTED_RATIO = 6                                  [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.key_compaction.uncompacted_body_ratio_pct_max"}];
-    METRIC_CURR_CYCLE_DURATION = 7                                [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.key_compaction.seconds_since_current_cycle_start_max"}];
-    METRIC_CURR_READ_CYCLE_KEYS = 8                               [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.key_compaction.new_keys_count_in_last_cycle_max"}];
+    METRIC_UNCOMPACTED_SIZE_MAX = 0                               [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.keys.uncompacted_bytes_max"}];
+    METRIC_UNCOMPACTED_SIZE_SUM = 1                               [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.keys.uncompacted_bytes"}];
+    METRIC_COMPACTED_SIZE_MAX = 2                                 [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.keys.compacted_bytes_max"}];
+    METRIC_COMPACTED_SIZE_SUM = 3                                 [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.keys.compacted_bytes"}];
+    METRIC_UNCOMPACTED_COUNT = 4                                  [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.keys.uncompacted_messages_max"}];
+    METRIC_COMPACTED_COUNT = 5                                    [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.keys.compacted_messages_max"}];
+    METRIC_CURR_CYCLE_DURATION = 6                                [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.keys.time_since_compaction_iteration_start_milliseconds_max"}];
+    METRIC_CURR_READ_CYCLE_KEYS = 7                               [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.keys.compaction_iteration_keys_count_max"}];
 }

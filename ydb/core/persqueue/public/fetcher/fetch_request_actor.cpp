@@ -16,6 +16,9 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
+#define LOG_E(stream) LOG_ERROR_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, stream)
+#define LOG_I(stream) LOG_INFO_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, stream)
+#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, stream)
 
 namespace NKikimr::NPQ {
 
@@ -159,13 +162,13 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Fetch request actor boostrapped. Request is valid: " << (!Response));
+        LOG_I("Fetch request actor boostrapped. Request is valid: " << (!Response));
 
         // handle error from constructor
         if (Response) {
             return SendReplyAndDie(std::move(Response), ctx);
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "scheduling HasDataInfoResponse in " << Settings.MaxWaitTimeMs);
+        LOG_D("scheduling HasDataInfoResponse in " << Settings.MaxWaitTimeMs);
         ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(Settings.MaxWaitTimeMs, 30000)), new TEvPersQueue::TEvHasDataInfoResponse);
 
         SendSchemeCacheRequest(ctx);
@@ -174,7 +177,7 @@ public:
     }
 
     void SendSchemeCacheRequest(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "SendSchemeCacheRequest");
+        LOG_D("SendSchemeCacheRequest");
 
         auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>(1);
         schemeCacheRequest->DatabaseName = Settings.Database;
@@ -207,7 +210,7 @@ public:
     }
 
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Handle SchemeCache response");
+        LOG_D("Handle SchemeCache response");
         auto& result = ev->Get()->Request;
         bool anyCdcTopicInRequest = false;
         for (const auto& entry : result->ResultSet) {
@@ -296,7 +299,7 @@ public:
     }
 
     void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr&, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got HasDatainfoResponse");
+        LOG_D("got HasDatainfoResponse");
         ProceedFetchRequest(ctx);
     }
 
@@ -339,7 +342,7 @@ public:
             } else {
                 const auto& tabletInfo = TabletInfo[tabletId];
                 auto& fetchInfo = it->second.FetchInfo[part];
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "sending HasDataInfoResponse " << fetchInfo->Record.DebugString());
+                LOG_D("sending HasDataInfoResponse " << fetchInfo->Record.DebugString());
 
                 NTabletPipe::SendData(ctx, tabletInfo.PipeClient, it->second.FetchInfo[part].Release());
                 ++PartTabletsRequested;
@@ -452,6 +455,9 @@ public:
             return;
         }
 
+        LOG_D("Send request. Topic " << topic << " partition " << part << " offset " << offset
+            << " clientId " << clientId << " tabletId " << tabletId);
+
         //Form read request
         TAutoPtr<TEvPersQueue::TEvRequest> preq(new TEvPersQueue::TEvRequest);
         TStringBuilder reqId;
@@ -477,11 +483,10 @@ public:
         auto& record = ev->Get()->Record;
         AFL_ENSURE(record.HasPartitionResponse());
         if (record.GetPartitionResponse().GetCookie() != CurrentCookie || FetchRequestCurrentReadTablet == 0) {
-            LOG_ERROR_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "proxy fetch error: got response from tablet " << record.GetPartitionResponse().GetCookie()
+            LOG_E("proxy fetch error: got response from tablet " << record.GetPartitionResponse().GetCookie()
                                 << " while waiting from " << CurrentCookie << " and requested tablet is " << FetchRequestCurrentReadTablet);
             return;
         }
-
 
         if (FetchRequestBytesLeft >= (ui32)record.ByteSize())
             FetchRequestBytesLeft -= (ui32)record.ByteSize();

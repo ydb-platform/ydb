@@ -1462,6 +1462,7 @@ void TKafkaBalancerActor::SendJoinGroupResponseOk(const TActorContext& ctx, ui64
         }
     }
 
+    Send(Context->ConnectionId, new TEvKafka::TEvReadSessionInfo(GroupId));
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(correlationId, response, EKafkaErrors::NONE_ERROR));
     Die(ctx);
 }

@@ -1138,37 +1138,42 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             if (backupStarted) {
                 Info(str, "Backup started successfully!");
             }
-
             if (!errorMessage.empty()) {
                 Danger(str, errorMessage);
             }
 
             SimplePanel(str, "Backup Configuration", [&backupProgress](IOutputStream& str) {
                 HTML(str) {
-                    TAG_ATTRS(TFormC, {{"id", "backupForm"}, {"method", "POST"}}) {
+                    FORM_CLASS("form-horizontal") {
                         DIV_CLASS("form-group") {
-                            LABEL_CLASS_FOR("control-label", "backupPath") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "backupPath") {
                                 str << "File Path";
                             }
-                            str << "<input type='text' id='backupPath' name='backupPath' class='form-control' "
-                                << "placeholder='/tmp/scheme_board_backup.jsonl' required>";
+                            DIV_CLASS("col-sm-10") {
+                                str << "<input type='text' id='backupPath' name='backupPath' class='form-control' "
+                                    << "placeholder='/tmp/scheme_board_backup.jsonl' required>";
+                            }
                         }
 
                         DIV_CLASS("form-group") {
-                            LABEL_CLASS_FOR("control-label", "inFlightLimit") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "inFlightLimit") {
                                 str << "In-Flight Limit";
                             }
-                            str << "<input type='number' id='inFlightLimit' name='inFlightLimit' class='form-control' "
-                                << "value='" << BackupLimits.DefaultInFlight << "'>";
-                            str << "<small class='form-text text-muted'>Recommended range: "
-                                << BackupLimits.MinInFlight << " - " << BackupLimits.MaxInFlight
-                                << ". You can enter any value, but values outside this range may cause performance issues.</small>";
+                            DIV_CLASS("col-sm-10") {
+                                str << "<input type='number' id='inFlightLimit' name='inFlightLimit' class='form-control' "
+                                    << "value='" << BackupLimits.DefaultInFlight << "'>";
+                                str << "<small class='form-text text-muted'>Recommended range: "
+                                    << BackupLimits.MinInFlight << " - " << BackupLimits.MaxInFlight
+                                    << ". Values outside this range may cause performance issues.</small>";
+                            }
                         }
 
                         DIV_CLASS("form-group") {
-                            str << "<button type='submit' name='startBackup' value='1' class='btn btn-primary' "
-                                << (backupProgress.IsRunning() ? "disabled" : "")
-                                << ">Start Backup</button>";
+                            DIV_CLASS("col-sm-offset-2 col-sm-10") {
+                                str << "<button type='submit' name='startBackup' class='btn btn-primary' "
+                                    << (backupProgress.IsRunning() ? "disabled" : "")
+                                    << ">Start Backup</button>";
+                            }
                         }
                     }
 
@@ -1191,36 +1196,34 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                     str << R"(
                     <script>
                     $(document).ready(function() {
-                        $('#backupForm').on('submit', function(e) {
+                        $('button[name="startBackup"]').click(function(e) {
                             e.preventDefault();
 
+                            var btn = this;
+                            var form = $(btn.form);
+
                             var inFlightLimit = parseInt($('#inFlightLimit').val());
-                            var minLimit = )" << BackupLimits.MinInFlight << R"(;
-                            var maxLimit = )" << BackupLimits.MaxInFlight << R"(;
-
-                            if (inFlightLimit < minLimit || inFlightLimit > maxLimit) {
-                                var warningMessage = 'Warning: The in-flight limit (' + inFlightLimit +
-                                    ') is outside the recommended range (' + minLimit + ' - ' + maxLimit +
-                                    '). This may cause performance issues. Are you sure you want to continue?';
-
-                                if (!confirm(warningMessage)) {
+                            var min = )" << BackupLimits.MinInFlight << R"(;
+                            var max = )" << BackupLimits.MaxInFlight << R"(;
+                            if (inFlightLimit < min || inFlightLimit > max) {
+                                var msg = 'Warning: in-flight limit (' + inFlightLimit +
+                                    ') is outside the recommended range (' + min + ' - ' + max + '). Proceed?';
+                                if (!confirm(msg))
                                     return;
-                                }
                             }
 
-                            var formData = $(this).serialize();
-                            var $btn = $('button[name="startBackup"]');
-                            $btn.prop('disabled', true);
-
                             $.ajax({
+                                type: "GET",
                                 url: window.location.pathname,
-                                method: 'POST',
-                                data: formData,
+                                data: form.serialize() + '&startBackup=1',
                                 success: function(response) {
                                     $('body').html(response);
+                                    if (window.history && window.history.replaceState) {
+                                        window.history.replaceState(null, '', window.location.pathname);
+                                    }
                                 },
                                 error: function(xhr, status, error) {
-                                    $btn.prop('disabled', false);
+                                    $(btn).prop('disabled', false);
                                     alert('Failed to start backup: ' + error);
                                 }
                             });
@@ -1670,15 +1673,15 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             }
             break;
 
-        case ERequestType::Backup:
-            if (postParams.Has("backupPath")) {
+        case ERequestType::Backup: {
+            if (params.Has("startBackup")) {
                 if (BackupProgress.IsRunning()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderBackup(BackupProgress, false, "Backup is already running")
                     ));
                 }
 
-                const TString filePath = postParams.Get("backupPath");
+                const TString filePath = params.Get("backupPath");
                 if (filePath.empty()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderBackup(BackupProgress, false, "Backup file path is required")
@@ -1686,8 +1689,8 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 }
 
                 ui32 inFlightLimit = BackupLimits.DefaultInFlight;
-                if (postParams.Has("inFlightLimit")) {
-                    if (!TryFromString(postParams.Get("inFlightLimit"), inFlightLimit)) {
+                if (params.Has("inFlightLimit")) {
+                    if (!TryFromString(params.Get("inFlightLimit"), inFlightLimit)) {
                         return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                             RenderBackup(BackupProgress, false, "Invalid in-flight limit value")
                         ));
@@ -1697,7 +1700,9 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 BackupProgress = TBackupProgress();
                 BackupProgress.Status = TBackupProgress::EStatus::Starting;
 
-                SBB_LOG_I("Starting backup to " << filePath << " with in-flight limit " << inFlightLimit);
+                SBB_LOG_I("Starting backup to " << filePath
+                    << " with in-flight limit " << inFlightLimit
+                );
                 Register(CreateSchemeBoardBackuper(filePath, inFlightLimit, SelfId()));
 
                 return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
@@ -1713,6 +1718,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             }
 
             return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderBackup(BackupProgress)));
+        }
 
         case ERequestType::Restore:
             if (postParams.Has("restorePath")) {

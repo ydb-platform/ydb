@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/testlib
     ydb/core/testlib/actors
     ydb/tests/fq/pq_async_io
+    yql/essentials/minikql/invoke_builtins
     yql/essentials/sql/pg_dummy
     ydb/library/yql/providers/pq/gateway/dummy
 )

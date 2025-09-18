@@ -62,10 +62,10 @@ using namespace NKikimr;
 NYdb::NTopic::TTopicClientSettings GetCommonTopicClientSettings(const NFq::NConfig::TCommonConfig& config) {
     NYdb::NTopic::TTopicClientSettings settings;
     if (config.GetTopicClientHandlersExecutorThreadsNum()) {
-        settings.DefaultHandlersExecutor(NYdb::NTopic::CreateThreadPoolExecutor(config.GetTopicClientHandlersExecutorThreadsNum()));
+        settings.DefaultHandlersExecutor(NYdb::CreateThreadPoolExecutor(config.GetTopicClientHandlersExecutorThreadsNum()));
     }
     if (config.GetTopicClientCompressionExecutorThreadsNum()) {
-        settings.DefaultCompressionExecutor(NYdb::NTopic::CreateThreadPoolExecutor(config.GetTopicClientCompressionExecutorThreadsNum()));
+        settings.DefaultCompressionExecutor(NYdb::CreateThreadPoolExecutor(config.GetTopicClientCompressionExecutorThreadsNum()));
     }
     return settings;
 }

@@ -123,7 +123,7 @@ public:
         makeDir->SetName(GetSessionDirName());
 
         NACLib::TDiffACL diffAcl;
-        diffAcl.ClearAccess();
+        diffAcl.SetInterruptInheritance(true);
         auto* modifyAcl = modifyScheme->MutableModifyACL();
         modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
 

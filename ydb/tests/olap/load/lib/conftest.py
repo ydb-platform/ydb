@@ -798,13 +798,22 @@ class LoadSuiteBase:
         # 4. Формирование allure-отчёта
         self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols)
 
-        # 5. Обработка ошибок/статусов (fail, broken, etc)
-        self._handle_final_status(result, workload_name, node_errors)
+        # 5. Загрузка результатов (ПОСЛЕ формирования summary, ПЕРЕД обработкой финального статуса)
+        # Важно: выгружаем с полными данными (with_warnings/with_errors) даже если тест broken
+        try:
+            self._upload_results(result, workload_name)
+            self._upload_results_per_workload_run(result, workload_name)
+        except Exception as e:
+            # Логируем ошибку выгрузки, но не прерываем выполнение
+            logging.error(f"Failed to upload results: {e}")
+            result.add_warning(f"Failed to upload results: {e}")
+            # После добавления warning нужно пересчитать summary флаги
+            self._update_summary_flags(result, workload_name)
+            with allure.step("Upload results failed"):
+                allure.attach(str(e), "Upload error", allure.attachment_type.TEXT)
 
-        # 6. Загрузка агрегированных результатов
-        self._upload_results(result, workload_name)
-        # 7. Загрузка результатов по каждому запуску workload
-        self._upload_results_per_workload_run(result, workload_name)
+        # 6. Обработка ошибок/статусов (fail, broken, etc)
+        self._handle_final_status(result, workload_name, node_errors)
 
 
 class LoadSuiteParallel(LoadSuiteBase):

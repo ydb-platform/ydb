@@ -2345,16 +2345,27 @@ class WorkloadTestBase(LoadSuiteBase):
                     "nodes_with_issues",
                     len(node_errors))
 
-            # --- Обработка финального статуса (используем методы из базового класса) ---
+            # --- Формирование summary-флагов ПЕРЕД выгрузкой ---
             self._update_summary_flags(result, workload_name)
+
+            # Выгружаем результаты даже если тест broken (с полными данными)
+            try:
+                self._upload_results(result, workload_name)
+                self._upload_results_per_workload_run(result, workload_name)
+            except Exception as e:
+                # Логируем ошибку выгрузки, но не прерываем выполнение
+                logging.error(f"Failed to upload results: {e}")
+                result.add_warning(f"Failed to upload results: {e}")
+                # После добавления warning нужно пересчитать summary флаги
+                self._update_summary_flags(result, workload_name)
+                with allure.step("Upload results failed"):
+                    allure.attach(str(e), "Upload error", allure.attachment_type.TEXT)
+
+            # --- Обработка финального статуса (может выбросить исключение) ---
             self._handle_final_status(result, workload_name, node_errors)
 
-            # --- Загрузка результатов ---
-            self._upload_results(result, workload_name)
-            self._upload_results_per_workload_run(result, workload_name)
-
     def _upload_results(self, result, workload_name):
-        """Переопределенный метод для workload тестов с kind='Stability'"""
+        """Переопределенный метод для workload тестов"""
         stats = result.get_stats(workload_name)
         if stats is not None:
             stats["aggregation_level"] = "aggregate"
@@ -2370,7 +2381,7 @@ class WorkloadTestBase(LoadSuiteBase):
         )
 
     def _upload_results_per_workload_run(self, result, workload_name):
-        """Переопределенный метод для workload тестов с kind='Stability'"""
+        """Переопределенный метод для workload тестов"""
         suite = type(self).suite()
         agg_stats = result.get_stats(workload_name)
         nemesis_enabled = agg_stats.get(

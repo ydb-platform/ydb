@@ -162,7 +162,7 @@ void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
     NKikimrHive::TEvStopTablet& rec = ev->Get()->Record;
     const TActorId actorToNotify = rec.HasActorToNotify() ? ActorIdFromProto(rec.GetActorToNotify()) : ev->Sender;
     if (rec.HasTabletID()) {
-
+        Execute(CreateStopTablet(rec.GetTabletID(), actorToNotify));
     } else {
         Y_ENSURE_LOG(rec.HasTabletID(), rec.ShortDebugString());
         Send(actorToNotify, new TEvHive::TEvStopTabletResult(NKikimrProto::ERROR, 0), 0, ev->Cookie);

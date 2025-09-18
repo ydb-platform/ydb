@@ -69,7 +69,7 @@ protected:
     virtual i64 GetWeight(const TValuePtr& value) const;
     virtual void OnAdded(const TValuePtr& value);
     virtual void OnRemoved(const TValuePtr& value);
-    virtual void OnWeightUpdated(i64 weightDelta);
+    virtual void OnTotalWeightUpdated(i64 weightDelta);
 
 private:
     struct TItem
@@ -139,9 +139,7 @@ public:
 protected:
     using TValuePtr = typename TSyncSlruCacheBase<TKey, TValue, THash>::TValuePtr;
 
-    void OnAdded(const TValuePtr& value) override;
-    void OnRemoved(const TValuePtr& value) override;
-    void OnWeightUpdated(i64 weightChanged) override;
+    void OnTotalWeightUpdated(i64 weightDelta) override;
 
 private:
     const IMemoryUsageTrackerPtr MemoryTracker_;

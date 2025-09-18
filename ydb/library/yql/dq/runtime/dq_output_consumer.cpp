@@ -33,7 +33,23 @@ using namespace NUdf;
 
 // TODO: maybe use common interface without templates?
 
-struct THashV1 {
+struct THashBase {
+    void Start() {
+        Hash = 0;
+    }
+
+    template <class TValue>
+    void Update(const TValue& value, size_t keyIdx) {
+        Hash = CombineHashes(Hash, value.HasValue() ? Hashers.at(keyIdx)->Hash(value) : 0);
+    }
+protected:
+    THashBase() = default;
+
+    TVector<NUdf::IHash::TPtr> Hashers;
+    ui64 Hash;
+};
+
+struct THashV1 : public THashBase {
     explicit THashV1(
         const TVector<TColumnInfo>& keyColumns
     )
@@ -43,30 +59,22 @@ struct THashV1 {
         }
     }
 
-    void Start() {
-        Hash = 0;
-    }
-
-    template <class TValue>
-    void Update(const TValue& value, size_t keyIdx) {
-        Hash = CombineHashes(Hash, value.HasValue() ? Hashers.at(keyIdx)->Hash(value) : 0);
-    }
-
     ui64 Finish(ui64 outputsSize) {
         return Hash % outputsSize;
     }
-
-protected:
-    TVector<NUdf::IHash::TPtr> Hashers;
-    ui64 Hash;
 };
 
-struct THashV2 : public THashV1 {
+struct THashV2 : public THashBase {
     explicit THashV2(
-        const TVector<TColumnInfo>& keyColumns
+        const TVector<TColumnInfo>& keyColumns,
+        const NKikimr::NMiniKQL::TType* outputType
     )
-        : THashV1(keyColumns)
-    {}
+    {
+        auto multiType = static_cast<const NMiniKQL::TMultiType*>(outputType);
+        for (const auto& column : keyColumns) {
+            Hashers.emplace_back(MakeHashImpl(multiType->GetElementType(column.Index)));
+        }
+    }
 
     static inline ui64 SpreadHash(ui64 hash) {
         // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
@@ -926,7 +934,7 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
         }
         case NDqProto::TTaskOutputHashPartition::kHashV2: {
             if (AnyOf(keyColumns, [](const auto& info) { return !info.IsBlockOrScalar(); })) {
-                THashV2 hashFunc(keyColumns);
+                THashV2 hashFunc(keyColumns, outputType);
                 return MakeIntrusive<TDqOutputHashPartitionConsumer<THashV2>>(std::move(outputs), std::move(keyColumns), outputWidth, std::move(hashFunc));
             }
 

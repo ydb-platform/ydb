@@ -85,7 +85,6 @@ class ResultsProcessor:
         return os.path.join(YdbCluster.ydb_endpoint, YdbCluster.ydb_database, run_id)
 
     @classmethod
-    @allure.step
     def upload_results(
         cls,
         kind: str,
@@ -103,71 +102,72 @@ class ResultsProcessor:
     ):
         if not cls.send_results:
             return
+        
+        with allure.step("Upload results to YDB"):
+            def _get_duration(dur: float | None):
+                if dur is not None:
+                    return int(1000000 * dur)
+                if duration is not None:
+                    return int(1000000 * duration)
+                return None
 
-        def _get_duration(dur: float | None):
-            if dur is not None:
-                return int(1000000 * dur)
-            if duration is not None:
-                return int(1000000 * duration)
-            return None
+            info = {'cluster': YdbCluster.get_cluster_info()}
 
-        info = {'cluster': YdbCluster.get_cluster_info()}
+            # Добавляем дополнительную информацию о кластере
+            try:
+                nodes = YdbCluster.get_cluster_nodes(db_only=True)
+                cluster_info = info['cluster']
+                cluster_info['endpoint'] = YdbCluster.ydb_endpoint
+                cluster_info['nodes_count'] = len(nodes)
+                cluster_info['nodes_info'] = []
 
-        # Добавляем дополнительную информацию о кластере
-        try:
-            nodes = YdbCluster.get_cluster_nodes(db_only=True)
-            cluster_info = info['cluster']
-            cluster_info['endpoint'] = YdbCluster.ydb_endpoint
-            cluster_info['nodes_count'] = len(nodes)
-            cluster_info['nodes_info'] = []
+                # Собираем информацию о нодах
+                for node in nodes:
+                    node_info = {
+                        'host': node.host,
+                        'role': str(node.role),
+                        'version': node.version,
+                        'start_time': node.start_time,
+                        'disconnected': node.disconnected
+                    }
+                    cluster_info['nodes_info'].append(node_info)
 
-            # Собираем информацию о нодах
-            for node in nodes:
-                node_info = {
-                    'host': node.host,
-                    'role': str(node.role),
-                    'version': node.version,
-                    'start_time': node.start_time,
-                    'disconnected': node.disconnected
-                }
-                cluster_info['nodes_info'].append(node_info)
+            except Exception as e:
+                logging.warning(f"Could not collect detailed cluster info: {e}")
+                # Добавляем базовую информацию
+                info['cluster']['endpoint'] = YdbCluster.ydb_endpoint
+                info['cluster']['error'] = str(e)
 
-        except Exception as e:
-            logging.warning(f"Could not collect detailed cluster info: {e}")
-            # Добавляем базовую информацию
-            info['cluster']['endpoint'] = YdbCluster.ydb_endpoint
-            info['cluster']['error'] = str(e)
+            report_url = os.getenv('ALLURE_RESOURCE_URL', None)
+            if report_url is None:
+                sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
+                if sandbox_task_id is not None:
+                    report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
+            if report_url is not None:
+                info['report_url'] = report_url
 
-        report_url = os.getenv('ALLURE_RESOURCE_URL', None)
-        if report_url is None:
-            sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
-            if sandbox_task_id is not None:
-                report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
-        if report_url is not None:
-            info['report_url'] = report_url
+            ci_launch_id = os.getenv('CI_LAUNCH_ID', None)
+            if ci_launch_id:
+                info['ci_launch_id'] = ci_launch_id
+            if get_ci_version():
+                info['ci_version'] = get_ci_version()
+            info['test_tools_version'] = get_self_version()
 
-        ci_launch_id = os.getenv('CI_LAUNCH_ID', None)
-        if ci_launch_id:
-            info['ci_launch_id'] = ci_launch_id
-        if get_ci_version():
-            info['ci_version'] = get_ci_version()
-        info['test_tools_version'] = get_self_version()
-
-        data = {
-            'Db': cls.get_cluster_id(),
-            'Kind': kind,
-            'Suite': suite,
-            'Test': test,
-            'Timestamp': int(1000000 * timestamp),
-            'RunId': cls.get_run_id(),
-            'Success': 1 if is_successful else 0,
-            'MinDuration': _get_duration(min_duration),
-            'MaxDuration': _get_duration(max_duration),
-            'MeanDuration': _get_duration(mean_duration),
-            'MedianDuration': _get_duration(median_duration),
-            'Attempt': attempt,
-            'Stats': json.dumps(statistics) if statistics is not None else None,
-            'Info': json.dumps(info),
-        }
-        for endpoint in cls.get_endpoints():
-            endpoint.send_data(data)
+            data = {
+                'Db': cls.get_cluster_id(),
+                'Kind': kind,
+                'Suite': suite,
+                'Test': test,
+                'Timestamp': int(1000000 * timestamp),
+                'RunId': cls.get_run_id(),
+                'Success': 1 if is_successful else 0,
+                'MinDuration': _get_duration(min_duration),
+                'MaxDuration': _get_duration(max_duration),
+                'MeanDuration': _get_duration(mean_duration),
+                'MedianDuration': _get_duration(median_duration),
+                'Attempt': attempt,
+                'Stats': json.dumps(statistics) if statistics is not None else None,
+                'Info': json.dumps(info),
+            }
+            for endpoint in cls.get_endpoints():
+                endpoint.send_data(data)

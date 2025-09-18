@@ -32,18 +32,18 @@ $aggregate_data = SELECT
     CAST(JSON_VALUE(Stats, '$.nodes_with_issues') AS Int32) AS NodesWithIssues,
     
     -- Настройки теста
-    CAST(JSON_VALUE(Stats, '$.use_iterations') AS Bool) AS UseIterations,
-    CAST(JSON_VALUE(Stats, '$.nemesis') AS Bool) AS Nemesis,
-    CAST(JSON_VALUE(Stats, '$.nemesis_enabled') AS Bool) AS NemesisEnabled,
+    CAST(JSON_VALUE(Stats, '$.use_iterations') AS Uint8) AS UseIterations,
+    CAST(JSON_VALUE(Stats, '$.nemesis') AS Uint8) AS Nemesis,
+    CAST(JSON_VALUE(Stats, '$.nemesis_enabled') AS Uint8) AS NemesisEnabled,
     JSON_VALUE(Stats, '$.workload_type') AS WorkloadType,
     JSON_VALUE(Stats, '$.path_template') AS PathTemplate,
     
     -- Статус ошибок и предупреждений
-    CAST(JSON_VALUE(Stats, '$.with_errors') AS Bool) AS WithErrors,
-    CAST(JSON_VALUE(Stats, '$.with_warnings') AS Bool) AS WithWarnings,
-    CAST(JSON_VALUE(Stats, '$.with_warrnings') AS Bool) AS WithWarrnings, -- опечатка в исходных данных
-    CAST(JSON_VALUE(Stats, '$.workload_errors') AS Bool) AS WorkloadErrors,
-    CAST(JSON_VALUE(Stats, '$.workload_warnings') AS Bool) AS WorkloadWarnings,
+    CAST(JSON_VALUE(Stats, '$.with_errors') AS Uint8) AS WithErrors,
+    CAST(JSON_VALUE(Stats, '$.with_warnings') AS Uint8) AS WithWarnings,
+    CAST(JSON_VALUE(Stats, '$.with_warrnings') AS Uint8) AS WithWarrnings, -- опечатка в исходных данных
+    CAST(JSON_VALUE(Stats, '$.workload_errors') AS Uint8) AS WorkloadErrors,
+    CAST(JSON_VALUE(Stats, '$.workload_warnings') AS Uint8) AS WorkloadWarnings,
     JSON_VALUE(Stats, '$.errors') AS ErrorsJson,
     
     -- Дополнительные поля
@@ -154,9 +154,9 @@ SELECT
     
     -- Общий статус выполнения
     CASE
-        WHEN Success = 1U AND WithErrors = false THEN 'success'
-        WHEN Success = 1U AND WithErrors = true THEN 'success_with_errors'
-        WHEN Success = 0U AND WithErrors = true THEN 'failure'
+        WHEN Success = 1U AND WithErrors = 0U THEN 'success'
+        WHEN Success = 1U AND WithErrors = 1U THEN 'success_with_errors'
+        WHEN Success = 0U AND WithErrors = 1U THEN 'failure'
         WHEN Success = 0U THEN 'failure'
         ELSE 'unknown'
     END AS OverallStatus

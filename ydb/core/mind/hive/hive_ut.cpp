@@ -3269,9 +3269,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             for (ui64 i = 0; i < NUM_TABLETS; ++i) {
                 SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 100500 + i, 0), 0, std::nullopt);
             }
-            TInstant now = runtime.GetCurrentTime();
             runtime.SimulateSleep(TDuration::MilliSeconds(100));
-            TInstant later = runtime.GetCurrentTime();
             if (deleteCount == NUM_TABLETS) {
                 break;
             }

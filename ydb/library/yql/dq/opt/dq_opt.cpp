@@ -114,18 +114,30 @@ void FindDqConnections(const TExprBase& node, TVector<TDqConnection>& connection
     });
 }
 
-bool IsDqPureExpr(const TExprBase& node, bool isPrecomputePure) {
+bool IsDqPureExpr(const TExprBase& node, bool isPrecomputePure, bool isToOptional) {
     auto filter = [](const TExprNode::TPtr& node) {
         return !TMaybeNode<TDqPhyPrecompute>(node).IsValid();
     };
+
+    /*
+    auto toOptional = [](const TExprNode::TPtr& node) {
+        return !TMaybeNode<TCoToOptional>(node).IsValid();
+    };
+    */
 
     auto predicate = [](const TExprNode::TPtr& node) {
         return !IsDqPureNode(TExprBase(node));
     };
 
     if (isPrecomputePure) {
-        return !FindNode(node.Ptr(), filter, predicate);
+        return !FindNode(node.Ptr(), filter, predicate);     
     }
+
+    (void) isToOptional;
+    /*
+    if (isToOptional) {
+      return !FindNode(node.Ptr(), toOptional, predicate);
+    }*/
 
     return !FindNode(node.Ptr(), predicate);
 }

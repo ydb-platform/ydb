@@ -264,6 +264,7 @@ class TestCSManyUpdates(object):
             result_sets = self.ydb_client.query(
                 f"SELECT id, value FROM `{table_path}`;"
             )
+        print(timer.report())
 
         rows = [row for result_set in result_sets for row in result_set.rows]
         assert len(rows) == rows_num
@@ -273,17 +274,17 @@ class TestCSManyUpdates(object):
         timer = Timer("delete from table")
         with timer:
             self._delete_all(table_path, timer)
+        print(timer.report())
 
         timer = Timer("select all after delete")
         with timer:
             result_sets = self.ydb_client.query(
                 f"SELECT id, value FROM `{table_path}`;"
             )
+        print(timer.report())
 
         rows = [row for result_set in result_sets for row in result_set.rows]
         assert not rows
-
-        print(timer.report())
 
     @pytest.mark.parametrize(
         "rows_num,operation_sequence",

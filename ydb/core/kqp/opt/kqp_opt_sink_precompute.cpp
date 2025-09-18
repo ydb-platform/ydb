@@ -43,7 +43,7 @@ public:
 
         TNodeOnNodeOwnedMap marked;
         for (const auto& [_, exprNode] : stagesUsedForPrecomputesAndSinks) {
-            Y_ABORT_UNLESS(exprNode);
+            AFL_ENSURE(exprNode);
             TExprBase node(exprNode);
             const auto stage = node.Cast<TDqStage>();
             if (HasNonDeterministicFunction(stage)) {

@@ -161,6 +161,7 @@ public:
                 NACLib::EAccessType::Allow,
                 access,
                 UserToken->GetUserSID());
+            diffAcl.SetInterruptInheritance(true);
             auto* modifyAcl = modifyScheme->MutableModifyACL();
             modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
         }

@@ -79,7 +79,7 @@ class TestUpsert(object):
 
         assert len(result_sets[0].rows) == 1
         row = result_sets[0].rows[0]
-        assert 110 == row['cnt']
+        assert row['cnt'] == 110
 
     # not replace
     def test_partial_update(self):
@@ -110,8 +110,8 @@ class TestUpsert(object):
 
         assert len(result_sets[0].rows) == 1
         row = result_sets[0].rows[0]
-        assert None == row['vn']
-        assert None == row['vs']
+        assert row['vn'] is None
+        assert row['vs'] is None
 
     def test_copy_full(self):
         # given
@@ -145,9 +145,9 @@ class TestUpsert(object):
         assert len(rows) == 100
         for i in range(100):
             row = rows[i]
-            assert i == row['id']
-            assert i == row['vn']
-            assert f"{i}" == row['vs']
+            assert row['id'] == i
+            assert row['vn'] == i
+            assert row['vs'] == f"{i}"
 
     def test_copy_partial(self):
         # given
@@ -180,34 +180,33 @@ class TestUpsert(object):
         assert len(rows) == 100
         for i in range(100):
             row = rows[i]
-            assert i == row['id']
-            assert f"{i}" == row['vs']
+            assert row['id'] == i
+            assert row['vs'] == f"{i}"
 
     def test_incorrect(self):
         # given
         self.create_table()
 
         try:
-        # when wrong table name
-            self.ydb_client.query(f"UPSERT INTO `wrongTable` (id, vn, vs) VALUES (0, 0, 'A');")
-        # then
+            # when wrong table name
+            self.ydb_client.query("UPSERT INTO `wrongTable` (id, vn, vs) VALUES (0, 0, 'A');")
+            # then
             assert False, 'Should Fail'
         except ydb.issues.SchemeError:
             pass
 
         try:
-        # when wrong column name
+            # when wrong column name
             self.ydb_client.query(f"UPSERT INTO `{self.table_path}` (id, wrongColumn, vs) VALUES (0, 0, 'A');")
-        # then
+            # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError:
             pass
 
         try:
-        # when wrong data type
+            # when wrong data type
             self.ydb_client.query(f"UPSERT INTO `{self.table_path}` (id, vn, vs) VALUES (0, 'A', 0);")
-        # then
+            # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError:
             pass
-

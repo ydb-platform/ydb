@@ -78,8 +78,8 @@ class TestUpdate(object):
 
         assert len(result_sets[0].rows) == 1
         row = result_sets[0].rows[0]
-        assert 103 == row['vn']
-        assert '103' == row['vs']
+        assert row['vn'] == 103
+        assert row['vs'] == '103'
 
     def test_update_single_column(self):
         # given
@@ -107,7 +107,6 @@ class TestUpdate(object):
         assert len(result_sets[0].rows) == 1
         assert 50 == result_sets[0].rows[0]['cnt']
 
-    # not replace
     def test_partial_update(self):
         # given
         self.create_table()
@@ -139,7 +138,7 @@ class TestUpdate(object):
         # then 0
         result_sets = self.ydb_client.query(f"SELECT vs FROM `{self.table_path}` WHERE id = 50;")
         assert len(result_sets[0].rows) == 1
-        assert '50' == result_sets[0].rows[0]['vs']
+        assert result_sets[0].rows[0]['vs'] == '50'
 
         # when 1 (all)
         session = self.ydb_client.session_acquire()
@@ -151,33 +150,32 @@ class TestUpdate(object):
         # then 1
         result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}` WHERE vs = 'xyz';")
         assert len(result_sets[0].rows) == 1
-        assert 0 == result_sets[0].rows[0]['cnt']
-
+        assert result_sets[0].rows[0]['cnt'] == 0
 
     def test_incorrect(self):
         # given
         self.create_table()
 
         try:
-        # when wrong table name
+            # when wrong table name
             self.ydb_client.query(f"UPDATE `wrongTable` SET vs = 'A' WHERE id = 1;")
-        # then
+            # then
             assert False, 'Should Fail'
         except ydb.issues.SchemeError:
             pass
 
         try:
-        # when wrong column name
+            # when wrong column name
             self.ydb_client.query(f"UPDATE `{self.table_path}` wrongColumn = 'A' WHERE id = 1;")
-        # then
+            # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError:
             pass
 
         try:
-        # when wrong data type
+            # when wrong data type
             self.ydb_client.query(f"UPDATE `{self.table_path}` vn = 'A' WHERE id = 1;")
-        # then
+            # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError:
             pass
@@ -188,9 +186,9 @@ class TestUpdate(object):
         self.write_data()
 
         try:
-        # when
+            # when
             self.ydb_client.query(f"UPDATE `{self.table_path}` SET id = 0;")
-        # then
+            # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError:
             pass

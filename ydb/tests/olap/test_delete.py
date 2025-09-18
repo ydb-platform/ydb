@@ -76,7 +76,7 @@ class TestDelete(object):
         # then 0
         result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`")
         assert len(result_sets[0].rows) == 1
-        assert 100 == result_sets[0].rows[0]['cnt']
+        assert result_sets[0].rows[0]['cnt'] == 100
 
         # when 1 (equal)
         self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE id = 42;")
@@ -84,7 +84,7 @@ class TestDelete(object):
         # then 1
         result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`")
         assert len(result_sets[0].rows) == 1
-        assert 99 == result_sets[0].rows[0]['cnt']
+        assert result_sets[0].rows[0]['cnt'] == 99
 
         # when 2 (condition)
         self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE id > 50;")
@@ -92,7 +92,7 @@ class TestDelete(object):
         # then 2
         result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`")
         assert len(result_sets[0].rows) == 1
-        assert 50 == result_sets[0].rows[0]['cnt']
+        assert result_sets[0].rows[0]['cnt'] == 50
 
     def test_delete_by_column(self):
         # given
@@ -105,7 +105,7 @@ class TestDelete(object):
         # then 0
         result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`")
         assert len(result_sets[0].rows) == 1
-        assert 100 == result_sets[0].rows[0]['cnt']
+        assert result_sets[0].rows[0]['cnt'] == 100
 
         # when 1 (equal)
         self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE vf > 41.5 AND vf < 42.5;")
@@ -113,7 +113,7 @@ class TestDelete(object):
         # then 1
         result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`")
         assert len(result_sets[0].rows) == 1
-        assert 99 == result_sets[0].rows[0]['cnt']
+        assert result_sets[0].rows[0]['cnt'] == 99
 
         # when 2 (condition)
         self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE vf > 50.5;")
@@ -121,7 +121,7 @@ class TestDelete(object):
         # then 2
         result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`")
         assert len(result_sets[0].rows) == 1
-        assert 50 == result_sets[0].rows[0]['cnt']
+        assert result_sets[0].rows[0]['cnt'] == 50
 
     def test_delete_rollback(self):
         # given
@@ -138,7 +138,7 @@ class TestDelete(object):
         # then 0
         result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}` WHERE id = 50;")
         assert len(result_sets[0].rows) == 1
-        assert 1 == result_sets[0].rows[0]['cnt']
+        assert result_sets[0].rows[0]['cnt'] == 1
 
         # when 1 (all)
         session = self.ydb_client.session_acquire()
@@ -150,4 +150,4 @@ class TestDelete(object):
         # then 1
         result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`;")
         assert len(result_sets[0].rows) == 1
-        assert 100 == result_sets[0].rows[0]['cnt']
+        assert result_sets[0].rows[0]['cnt'] == 100

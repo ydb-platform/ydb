@@ -86,15 +86,15 @@ class TestInsert(object):
         rows.sort(key=lambda x: x.id)
 
         assert len(rows) == 3
-        assert 0 == rows[0]['id']
-        assert 0 == rows[0]['vn']
-        assert 'Zero' == rows[0]['vs']
-        assert 1 == rows[1]['id']
-        assert None == rows[1]['vn']
-        assert 'One' == rows[1]['vs']
-        assert 2 == rows[2]['id']
-        assert None == rows[2]['vn']
-        assert None == rows[2]['vs']
+        assert rows[0]['id'] == 0
+        assert rows[0]['vn'] == 0
+        assert rows[0]['vs'] == 'Zero'
+        assert rows[1]['id'] == 1
+        assert rows[1]['vn'] is None
+        assert rows[1]['vs'] == 'One'
+        assert rows[2]['id'] == 2
+        assert rows[2]['vn'] is None
+        assert rows[2]['vs'] is None
 
     def test_copy_full(self):
         # given
@@ -122,7 +122,7 @@ class TestInsert(object):
         result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{t2}`")
 
         assert len(result_sets[0].rows) == 1
-        assert 100 == result_sets[0].rows[0]['cnt']
+        assert result_sets[0].rows[0]['cnt'] == 100
 
     def test_copy_partial(self):
         # given
@@ -155,8 +155,8 @@ class TestInsert(object):
         assert len(rows) == 100
         for i in range(100):
             row = rows[i]
-            assert i == row['id']
-            assert f"{i}" == row['vs']
+            assert row['id'] == i
+            assert row['vs'] == f"{i}"
 
     def test_duplicate(self):
         # given
@@ -177,9 +177,9 @@ class TestInsert(object):
 
         rows = result_sets[0].rows
         assert len(rows) == 1
-        assert 0 == rows[0]['id']
-        assert 0 == rows[0]['vn']
-        assert 'Zero' == rows[0]['vs']
+        assert rows[0]['id'] == 0
+        assert rows[0]['vn'] == 0
+        assert rows[0]['vs'] == 'Zero'
 
     def test_incorrect(self):
         # given

@@ -17,6 +17,8 @@ public:
     bool IsAsync() const override;
     void Post(TFunction&& f) override;
 
+    void Stop() override;
+
     void StartFuncs(const std::vector<size_t>& indicies);
 
     size_t GetFuncsCount() const;
@@ -41,7 +43,7 @@ private:
     std::atomic<size_t> Executed = 0;
 };
 
-TIntrusivePtr<TManagedExecutor> CreateThreadPoolManagedExecutor(size_t threads);
-TIntrusivePtr<TManagedExecutor> CreateSyncManagedExecutor();
+std::shared_ptr<TManagedExecutor> CreateThreadPoolManagedExecutor(size_t threads);
+std::shared_ptr<TManagedExecutor> CreateSyncManagedExecutor();
 
 }

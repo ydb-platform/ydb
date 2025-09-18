@@ -3189,11 +3189,17 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         runtime.Register(CreateTabletKiller(hiveTablet));
 
-        for (ui64 i = 0; i < NUM_TABLETS; ++i) {
-            SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 100500 + i, 0), 0, std::nullopt);
+        for (int iter = 0; iter < 10; ++iter) {
+            for (ui64 i = 0; i < NUM_TABLETS; ++i) {
+                SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 100500 + i, 0), 0, std::nullopt);
+            }
+            TInstant now = runtime.GetCurrentTime();
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            TInstant later = runtime.GetCurrentTime();
+            if (deleteCount == NUM_TABLETS) {
+                break;
+            }
         }
-
-        runtime.WaitFor("everything is deleted", [&] { return deleteCount == NUM_TABLETS; }, TDuration::Minutes(1));
 
         UNIT_ASSERT_VALUES_EQUAL(deleteCount, NUM_TABLETS);
     }

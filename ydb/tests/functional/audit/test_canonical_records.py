@@ -61,7 +61,6 @@ CLUSTER_CONFIG = dict(
     default_clusteradmin=TOKEN,
     auth_config_path=make_test_file_with_content('auth_config.yaml', AUTH_CONFIG),
     dynamic_pdisks=[{'user_kind': 0}],
-    # extra_feature_flags=['enable_grpc_audit'],
 )
 
 

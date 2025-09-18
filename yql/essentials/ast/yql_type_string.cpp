@@ -93,6 +93,8 @@ enum EToken
     TOKEN_TZTIMESTAMP64 = -58,
     TOKEN_MULTI = -59,
     TOKEN_ERROR = -60,
+    TOKEN_LINEAR = -61,
+    TOKEN_DYNAMICLINEAR = -62,
 
     // identifiers
     TOKEN_IDENTIFIER = -100,
@@ -166,6 +168,8 @@ EToken TokenTypeFromStr(TStringBuf str)
         { TStringBuf("TzDatetime64"), TOKEN_TZDATETIME64},
         { TStringBuf("TzTimestamp64"), TOKEN_TZTIMESTAMP64 },
         { TStringBuf("Error"), TOKEN_ERROR},
+        { TStringBuf("Linear"), TOKEN_LINEAR},
+        { TStringBuf("DynamicLinear"), TOKEN_DYNAMICLINEAR},
     };
 
     auto it = map.find(str);
@@ -347,6 +351,14 @@ private:
 
         case TOKEN_ERROR:
             type = ParseErrorType();
+            break;
+
+        case TOKEN_LINEAR:
+            type = ParseLinearType(false);
+            break;
+
+        case TOKEN_DYNAMICLINEAR:
+            type = ParseLinearType(true);
             break;
 
         default:
@@ -752,6 +764,17 @@ private:
         GetNextToken();
         EXPECT_AND_SKIP_TOKEN('>', nullptr);
         return MakeErrorType(file, line, column, message);
+    }
+
+    TAstNode* ParseLinearType(bool isDynamic) {
+        GetNextToken(); // eat keyword
+        EXPECT_AND_SKIP_TOKEN('<', nullptr);
+
+        auto itemType = ParseType();
+        if (!itemType) return nullptr;
+
+        EXPECT_AND_SKIP_TOKEN('>', nullptr);
+        return MakeLinearType(itemType, isDynamic);
     }
 
     TAstNode* ParseDecimalType() {
@@ -1213,6 +1236,16 @@ private:
         return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
+    TAstNode* MakeLinearType(TAstNode* type, bool isDynamic) {
+        TAstNode* items[] = {
+            MakeLiteralAtom(isDynamic ?
+                TStringBuf("DynamicLinearType") :
+                TStringBuf("LinearType")),
+            type,
+        };
+        return MakeList(items, Y_ARRAY_SIZE(items));
+    }
+
     TAstNode* MakeAtom(TStringBuf content, ui32 flags = TNodeFlags::Default) {
         return TAstNode::NewAtom(Position_, content, Pool_, flags);
     }
@@ -1372,6 +1405,20 @@ private:
     void Visit(const TScalarExprType& type) final {
         TopLevel_ = false;
         Out_ << TStringBuf("Scalar<");
+        type.GetItemType()->Accept(*this);
+        Out_ << '>';
+    }
+
+    void Visit(const TLinearExprType& type) final {
+        TopLevel_ = false;
+        Out_ << TStringBuf("Linear<");
+        type.GetItemType()->Accept(*this);
+        Out_ << '>';
+    }
+
+    void Visit(const TDynamicLinearExprType& type) final {
+        TopLevel_ = false;
+        Out_ << TStringBuf("DynamicLinear<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }

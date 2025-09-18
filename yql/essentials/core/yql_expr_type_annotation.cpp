@@ -6120,6 +6120,20 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
         return ret;
     }
 
+    case ETypeAnnotationKind::Linear:
+    {
+        auto ret = ctx.NewCallable(position, "LinearType",
+            { ExpandType(position, *type.Cast<TLinearExprType>()->GetItemType(), ctx) });
+        return ret;
+    }
+
+    case ETypeAnnotationKind::DynamicLinear:
+    {
+        auto ret = ctx.NewCallable(position, "DynamicLinearType",
+            { ExpandType(position, *type.Cast<TDynamicLinearExprType>()->GetItemType(), ctx) });
+        return ret;
+    }
+
     default:
         YQL_ENSURE(false, "Unsupported kind: " << (ui32)type.GetKind());
     }

@@ -113,4 +113,9 @@ NYql::NNodes::TExprBase BuildVectorIndexPrefixRows(const NYql::TKikimrTableDescr
     bool withData, const NYql::TIndexDescription* indexDesc, const NYql::NNodes::TExprBase& inputRows,
     TVector<TStringBuf>& indexTableColumns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
+std::pair<NYql::NNodes::TExprBase, NYql::NNodes::TExprBase> BuildVectorIndexPrefixRowsWithNew(
+    const NYql::TKikimrTableDescription& table, const NYql::TKikimrTableDescription& prefixTable,
+    const NYql::TIndexDescription* indexDesc, const NYql::NNodes::TExprBase& inputRows,
+    TVector<TStringBuf>& indexTableColumns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
 } // NKikimr::NKqp::NOpt

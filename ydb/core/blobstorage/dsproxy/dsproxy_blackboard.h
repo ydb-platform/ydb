@@ -184,7 +184,7 @@ struct TBlackboard {
     TBlobStates DoneBlobStates;
     TGroupDiskRequests GroupDiskRequests;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
-    TIntrusivePtr<TGroupQueues> GroupQueues; // To obtain FlowRecords only
+    TIntrusivePtr<TGroupQueues> GroupQueues;
     EAccelerationMode AccelerationMode;
     const NKikimrBlobStorage::EPutHandleClass PutHandleClass;
     const NKikimrBlobStorage::EGetHandleClass GetHandleClass;

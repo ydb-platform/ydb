@@ -234,11 +234,15 @@ public:
             auto [begin, end] = puts.equal_range(it->first);
             Y_ABORT_UNLESS(it == begin);
 
+            const TVDiskID vdiskId = Info->GetVDiskId(it->first);
+            const bool checksumming = Blackboard.GroupQueues->ChecksumExpected(Info->GetTopology(), vdiskId,
+                TGroupQueues::TVDisk::TQueues::VDiskQueueId(Blackboard.PutHandleClass));
+
             if (std::next(it) == end) { // TEvVPut
                 auto [orderNumber, ptr] = *it++;
                 TBlobInfo& blob = Blobs[ptr->BlobIdx];
-                auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(ptr->Id, ptr->Buffer, Info->GetVDiskId(orderNumber),
-                    false, nullptr, blob.Deadline, Blackboard.PutHandleClass, blob.WriteSource);
+                auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(ptr->Id, ptr->Buffer, vdiskId, false, nullptr,
+                    blob.Deadline, Blackboard.PutHandleClass, checksumming, blob.WriteSource);
 
                 auto& record = ev->Record;
                 for (const auto& [tabletId, generation] : blob.ExtraBlockChecks) {
@@ -261,8 +265,8 @@ public:
                     deadline = Max(deadline, Blobs[ptr->BlobIdx].Deadline);
                     ++itemsCount;
                 }
-                auto ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(Info->GetVDiskId(it->first), deadline,
-                    Blackboard.PutHandleClass, false);
+                auto ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, deadline, Blackboard.PutHandleClass,
+                    false);
 
                 ui8 orderNumber = it->first;
                 auto vput = History.CreateVPut(itemsCount, orderNumber);
@@ -270,7 +274,7 @@ public:
                     auto [orderNumber, ptr] = *it++;
                     TBlobInfo& blob = Blobs[ptr->BlobIdx];
                     ev->AddVPut(ptr->Id, TRcBuf(ptr->Buffer), nullptr, &blob.ExtraBlockChecks,
-                        blob.Span.GetTraceId(), blob.WriteSource);
+                        blob.Span.GetTraceId(), blob.WriteSource, checksumming);
                     HandoffPartsSent += ptr->IsHandoff;
                     vput.AddSubrequest(ptr->Id);
                 }

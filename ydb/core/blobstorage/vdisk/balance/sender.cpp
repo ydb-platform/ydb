@@ -165,11 +165,12 @@ namespace {
                     auto vDiskId = GetMainReplicaVDiskId(*GInfo, key);
 
                     if (Ctx->HugeBlobCtx->IsHugeBlob(GInfo->GetTopology().GType, part.Key, Ctx->MinHugeBlobInBytes)) {
+                        // TODO(alexvru): checksumming here
                         auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
                             key, std::move(data), vDiskId,
                             true, nullptr,
                             TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
-                            TWriteSource::BlobBalancer
+                            false, TWriteSource::BlobBalancer
                         );
                         SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), dataSize);
                     } else {
@@ -181,8 +182,9 @@ namespace {
                             ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vDiskId, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob, true, nullptr);
                         }
 
+                        // TODO(alexvru): checksumming here
                         ev->AddVPut(key, TRcBuf(std::move(data)), nullptr, nullptr, NWilson::TTraceId(),
-                            TWriteSource::BlobBalancer);
+                            TWriteSource::BlobBalancer, false);
                     }
                 }
             }

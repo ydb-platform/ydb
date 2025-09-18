@@ -751,7 +751,7 @@ private:
     ::NMonitoring::TMetricRegistry* MetricRegistryPtr_ = nullptr;
 
     const std::size_t ClientThreadsNum_;
-    std::shared_ptr<NExec::IExecutor> ResponseQueue_;
+    std::shared_ptr<IExecutor> ResponseQueue_;
 
     const std::string DefaultDiscoveryEndpoint_;
     const TSslCredentials SslCredentials_;

@@ -184,7 +184,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
         ResponseQueue_ = params->GetExecutor();
     } else {
         // TAdaptiveThreadPool ignores params
-        ResponseQueue_ = NExec::CreateThreadPoolExecutor(ClientThreadsNum_, MaxQueuedRequests_);
+        ResponseQueue_ = CreateThreadPoolExecutor(ClientThreadsNum_, MaxQueuedRequests_);
     }
 
     ResponseQueue_->Start();

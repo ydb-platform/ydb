@@ -71,9 +71,52 @@ public:
         return "backup"sv;
     }
 
-    TBackupActor(const TString& filePath, ui32 inFlightLimit, const TActorId& parent)
+    struct TPathDescriptionAggregate {
+        struct TDescriptionCounts {
+            ui32 Received = 0;
+            ui32 Required = 0;
+
+            explicit TDescriptionCounts(ui32 required) : Required(required) {}
+        };
+
+        TVector<TDescriptionCounts> DescriptionsByReplicaGroup;
+        ui64 MostRecentVersion = 0;
+        TString MostRecentDescription;
+
+        explicit TPathDescriptionAggregate(const TVector<ui32>& requiredDescriptions)
+        {
+            DescriptionsByReplicaGroup.reserve(requiredDescriptions.size());
+            for (const auto& required : requiredDescriptions) {
+                DescriptionsByReplicaGroup.emplace_back(required);
+            }
+        }
+
+        bool AddDescription(const TString& description, ui64 version, size_t replicaGroupIndex) {
+            if (DescriptionsByReplicaGroup.size() <= replicaGroupIndex) {
+                return false;
+            }
+            ++DescriptionsByReplicaGroup[replicaGroupIndex].Received;
+            if (version > MostRecentVersion) {
+                MostRecentVersion = version;
+                MostRecentDescription = description;
+            }
+            return true;
+        }
+
+        bool IsMajorityReached() const {
+            for (const auto& counts : DescriptionsByReplicaGroup) {
+                if (counts.Received < counts.Required) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    };
+
+    TBackupActor(const TString& filePath, ui32 inFlightLimit, bool requireMajority, const TActorId& parent)
         : FilePath(filePath)
         , InFlightLimit(inFlightLimit)
+        , RequireMajority(requireMajority)
         , Parent(parent)
     {
     }
@@ -123,6 +166,22 @@ private:
         SendProgressUpdate();
     }
 
+    // first 10 bits in the cookie are used to store the index of the replica group
+    static ui64 AddReplicaGroupIndex(ui64 cookie, size_t index) {
+        Y_ABORT_UNLESS(cookie < 1ull << 54);
+        Y_ABORT_UNLESS(index < 1ull << 10);
+        return cookie | index << 54;
+    }
+
+    // reverse the AddReplicaGroupIndex
+    static ui64 GetOriginalCookie(ui64 cookie) {
+        return cookie & std::numeric_limits<ui64>::max() >> 10;
+    }
+
+    static ui64 GetReplicaGroupIndex(ui64 cookie) {
+        return cookie >> 54;
+    }
+
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr& ev) {
         const ui64 cookie = ev->Cookie;
         auto it = PathByCookie.find(cookie);
@@ -131,15 +190,35 @@ private:
             return;
         }
 
-        const TString& path = it->second;
+        const TString path = std::move(it->second);
         SBB_LOG_D("Handle " << ev->Get()->ToString() << ", path: " << path);
 
         const auto replicas = ev->Get()->GetPlainReplicas();
         if (replicas.empty()) {
+            SBB_LOG_I("Empty replica list"
+                << ", path: " << path
+            );
+            EmptyReplicaList.emplace(path);
             return MarkPathCompleted(it);
         }
 
-        Send(SelectReplica(replicas), new TSchemeBoardMonEvents::TEvDescribeRequest(path), 0, cookie);
+        if (RequireMajority) {
+            auto requiredDescriptions = TVector<ui32>(Reserve(ev->Get()->ReplicaGroups.size()));
+            for (size_t i = 0; i < ev->Get()->ReplicaGroups.size(); ++i) {
+                const auto& replicaGroup = ev->Get()->ReplicaGroups[i];
+                // require descriptions from majority of replicas
+                requiredDescriptions.emplace_back((replicaGroup.Replicas.size() + 1) / 2);
+
+                for (const auto& replica : replicaGroup.Replicas) {
+                    const ui64 cookieWithReplicaGroupIndex = AddReplicaGroupIndex(cookie, i);
+                    Send(replica, new TSchemeBoardMonEvents::TEvDescribeRequest(path), 0, cookieWithReplicaGroupIndex);
+                }
+            }
+            DescriptionsByCookie.emplace(cookie, TPathDescriptionAggregate(requiredDescriptions));
+        } else {
+            Send(SelectReplica(replicas), new TSchemeBoardMonEvents::TEvDescribeRequest(path), 0, cookie);
+        }
+
         Schedule(DefaultTimeout, new TEvents::TEvWakeup(cookie));
     }
 
@@ -149,41 +228,69 @@ private:
     }
 
     void Handle(TSchemeBoardMonEvents::TEvDescribeResponse::TPtr& ev) {
-        const ui64 cookie = ev->Cookie;
+        const ui64 cookie = GetOriginalCookie(ev->Cookie);
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
-            SBB_LOG_N("Unexpected cookie: " << cookie);
+            SBB_LOG_D("Received description with inactive cookie: " << cookie);
             return;
         }
 
         const TString path = it->second;
         SBB_LOG_D("Handle " << ev->Get()->ToString() << ", path: " << path);
-        MarkPathCompleted(it);
 
         const TString& jsonDescription = ev->Get()->Record.GetJson();
-
         if (!jsonDescription.empty()) {
-            (*OutputFile) << jsonDescription << "\n";
-            ++ProcessedPaths;
-
-            // parse children and add to pending queue
             try {
                 TJsonValue parsedJson;
                 if (NJson::ReadJsonFastTree(jsonDescription, &parsedJson)) {
-                    if (parsedJson.Has("PathDescription") && parsedJson["PathDescription"].Has("Children")) {
-                        const auto& children = parsedJson["PathDescription"]["Children"];
-                        SBB_LOG_T("Queue children: " << WriteJson(&children, false));
-                        for (const auto& child : children.GetArraySafe()) {
-                            if (child.Has("Name")) {
-                                TString childPath = TStringBuilder() << path << "/" << child["Name"].GetStringSafe();
-                                PendingPaths.emplace(std::move(childPath));
-                                ++TotalPaths;
+                    if (parsedJson.Has("PathDescription")) {
+                        const auto& pathDescription = parsedJson["PathDescription"];
+                        // parse children and add to pending queue
+                        if (pathDescription.Has("Children")) {
+                            const auto& children = parsedJson["PathDescription"]["Children"];
+                            SBB_LOG_T("Queue children: " << WriteJson(&children, false));
+                            for (const auto& child : children.GetArraySafe()) {
+                                if (child.Has("Name")) {
+                                    TString childPath = TStringBuilder() << path << "/" << child["Name"].GetStringSafe();
+                                    PendingPaths.emplace(std::move(childPath));
+                                    ++TotalPaths;
+                                }
                             }
+                        }
+                        if (RequireMajority) {
+                            if (pathDescription.Has("Self") && pathDescription["Self"].Has("PathVersion")) {
+                                const auto version = std::stoull(pathDescription["Self"]["PathVersion"].GetStringSafe());
+                                auto aggregate = DescriptionsByCookie.find(cookie);
+                                if (aggregate == DescriptionsByCookie.end()) {
+                                    SBB_LOG_N("No description aggregate for cookie: " << cookie);
+                                    return;
+                                }
+                                if (!aggregate->second.AddDescription(jsonDescription, version, GetReplicaGroupIndex(ev->Cookie))) {
+                                    SBB_LOG_N("Invalid replica group: " << GetReplicaGroupIndex(ev->Cookie)
+                                        << ", cookie: " << ev->Cookie
+                                    );
+                                    return;
+                                }
+                                if (aggregate->second.IsMajorityReached()) {
+                                    (*OutputFile) << aggregate->second.MostRecentDescription << "\n";
+                                    ++ProcessedPaths;
+                                    DescriptionsByCookie.erase(aggregate);
+                                    MarkPathCompleted(it);
+                                }
+                            } else {
+                                SBB_LOG_I("No version in path description");
+                            }
+                        } else {
+                            (*OutputFile) << jsonDescription << "\n";
+                            ++ProcessedPaths;
+                            MarkPathCompleted(it);
                         }
                     }
                 }
-            } catch (...) {
-                // ignore parsing errors
+            } catch (const std::exception& e) {
+                SBB_LOG_I("Parsing error: " << e.what()
+                    << ", path: " << path
+                );
             }
         }
 
@@ -199,7 +306,7 @@ private:
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev) {
-        const ui64 cookie = ev->Get()->Tag;
+        const ui64 cookie = GetOriginalCookie(ev->Get()->Tag);
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
             // assume already processed
@@ -211,10 +318,13 @@ private:
         );
         Timeouts.emplace(it->second);
         MarkPathCompleted(it);
+        if (RequireMajority) {
+            DescriptionsByCookie.erase(cookie);
+        }
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        const ui64 cookie = ev->Cookie;
+        const ui64 cookie = GetOriginalCookie(ev->Cookie);
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
             SBB_LOG_N("Undelivered"
@@ -237,6 +347,7 @@ private:
             << ", pending paths: " << PendingPaths.size()
             << ", timeouts: " << Timeouts.size()
             << ", delivery problems: " << Undelivered.size()
+            << ", empty replica list: " << EmptyReplicaList.size()
         );
         Send(Parent, new TSchemeBoardMonEvents::TEvBackupProgress(TotalPaths, ProcessedPaths));
     }
@@ -248,6 +359,9 @@ private:
         }
         if (!Undelivered.empty()) {
             warning << "Undelivered:\n  " << JoinSeq("\n  ", Undelivered) << "\n";
+        }
+        if (!EmptyReplicaList.empty()) {
+            warning << "Empty replica list:\n  " << JoinSeq("\n  ", EmptyReplicaList) << '\n';
         }
         if (warning.empty()) {
             return Nothing();
@@ -281,11 +395,14 @@ private:
 
     const TString FilePath;
     const ui32 InFlightLimit;
+    bool RequireMajority;
     const TActorId Parent;
     TQueue<TString> PendingPaths;
     THashMap<ui64, TString> PathByCookie;
+    THashMap<ui64, TPathDescriptionAggregate> DescriptionsByCookie;
     TSet<TString> Timeouts;
     TSet<TString> Undelivered;
+    TSet<TString> EmptyReplicaList;
     TMaybe<TFileOutput> OutputFile;
     ui32 ProcessedPaths = 0;
     ui32 TotalPaths = 0;
@@ -375,6 +492,7 @@ private:
         SBB_LOG_D("Handle " << ev->Get()->ToString());
         if (ev->Sender != Populator || !ev->Get()->Record.HasPopulatorResponse()) {
             SBB_LOG_N("Unexpected info response");
+            return;
         }
 
         const auto& info = ev->Get()->Record.GetPopulatorResponse();
@@ -429,8 +547,8 @@ private:
     TVector<TPathId> PathsToProcess;
 };
 
-IActor* CreateSchemeBoardBackuper(const TString& filePath, ui32 inFlightLimit, const TActorId& parent) {
-    return new TBackupActor(filePath, inFlightLimit, parent);
+IActor* CreateSchemeBoardBackuper(const TString& filePath, ui32 inFlightLimit, bool requireMajority, const TActorId& parent) {
+    return new TBackupActor(filePath, inFlightLimit, requireMajority, parent);
 }
 
 IActor* CreateSchemeBoardRestorer(const TString& filePath, ui64 schemeShardId, ui64 generation, const TActorId& parent) {

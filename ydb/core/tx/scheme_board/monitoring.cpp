@@ -1175,6 +1175,24 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                         }
 
                         DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "requireMajority") {
+                                str << "Replica Selection";
+                            }
+                            DIV_CLASS("col-sm-10") {
+                                DIV_CLASS("checkbox") {
+                                    LABEL_CLASS_FOR("", "requireMajority") {
+                                        str << "<input type='checkbox' id='requireMajority' name='requireMajority' value='true' checked> "
+                                            << "Require majority of replicas";
+                                    }
+                                }
+                                str << "<small class='form-text text-muted'>"
+                                    "If checked: backup will query enough replicas to form a majority and select the newest version available.<br>"
+                                    "If unchecked: backup will query just one randomly chosen replica, which can be faster but less reliable."
+                                    "</small>";
+                            }
+                        }
+
+                        DIV_CLASS("form-group") {
                             DIV_CLASS("col-sm-offset-2 col-sm-10") {
                                 const char* state = backupProgress.IsRunning() ? "disabled" : "";
                                 str << "<button type='submit' name='startBackup' class='btn btn-primary' " << state << ">"
@@ -1726,13 +1744,20 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                     }
                 }
 
+                bool requireMajority = true;
+                if (params.Has("requireMajority")) {
+                    requireMajority = FromString<bool>(params.Get("requireMajority"));
+                }
+
                 BackupProgress = TBackupProgress();
                 BackupProgress.Status = TBackupProgress::EStatus::Starting;
 
-                SBB_LOG_I("Starting backup to " << filePath
-                    << " with in-flight limit " << inFlightLimit
+                SBB_LOG_I("Starting backup to file: " << filePath
+                    << " , in-flight limit: " << inFlightLimit
+                    << " , requireMajority: " << requireMajority
                 );
-                Register(CreateSchemeBoardBackuper(filePath, inFlightLimit, SelfId()));
+
+                Register(CreateSchemeBoardBackuper(filePath, inFlightLimit, requireMajority, SelfId()));
 
                 return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderBackup(true)));
             }

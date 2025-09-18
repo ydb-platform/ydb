@@ -1761,6 +1761,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     }
 
     const auto now = ctx.Now();
+    const auto nowMs = now.MilliSeconds();
     if ((now - LastCountersUpdate < MIN_UPDATE_COUNTERS_DELAY) && !force)
         return false;
 
@@ -1777,9 +1778,11 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         auto snapshot = CreateSnapshot(userInfo);
 
         auto ts = snapshot.LastCommittedMessage.WriteTimestamp.MilliSeconds();
-        if (ts < MIN_TIMESTAMP_MS) ts = Max<i64>();
+        if (ts < MIN_TIMESTAMP_MS) {
+            ts = Max<i64>();
+        }
         if (userInfo.WriteTimeLagMsByCommittedPerPartition) {
-            userInfo.WriteTimeLagMsByCommittedPerPartition->Set(ts == Max<i64>() ? 0 : (Now().MilliSeconds() - ts));
+            userInfo.WriteTimeLagMsByCommittedPerPartition->Set(nowMs < ts ? 0 : nowMs - ts));
         }
         if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_WRITE_TIME].Get() != ts) {
             haveChanges = true;
@@ -1787,7 +1790,9 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         }
 
         ts = snapshot.LastCommittedMessage.CreateTimestamp.MilliSeconds();
-        if (ts < MIN_TIMESTAMP_MS) ts = Max<i64>();
+        if (ts < MIN_TIMESTAMP_MS) {
+            ts = Max<i64>();
+        }
         if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_CREATE_TIME].Get() != ts) {
             haveChanges = true;
             userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_CREATE_TIME].Set(ts);
@@ -1805,7 +1810,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
 
         ts = snapshot.LastReadTimestamp.MilliSeconds();
         if (userInfo.TimeSinceLastReadMsPerPartition) {
-            userInfo.TimeSinceLastReadMsPerPartition->Set(Now().MilliSeconds() - ts);
+            userInfo.TimeSinceLastReadMsPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
         }
         if (userInfo.LabeledCounters->GetCounters()[METRIC_LAST_READ_TIME].Get() != ts) {
             haveChanges = true;
@@ -2007,7 +2012,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         ui64 ts = (WriteTimestamp.MilliSeconds() < MIN_TIMESTAMP_MS) ? Max<i64>() : WriteTimestamp.MilliSeconds();
 
         if (TimeSinceLastWriteMsPerPartition) {
-            TimeSinceLastWriteMsPerPartition->Set(ts == Max<i64>() ? 0 : (Now().MilliSeconds() - ts));
+            TimeSinceLastWriteMsPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
         }
 
         if (PartitionCountersLabeled->GetCounters()[METRIC_LAST_WRITE_TIME].Get() != ts) {

@@ -1,8 +1,12 @@
 #include "common.h"
 
-#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/tls_backend.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp::NFederatedQueryTest {
     TString GetSymbolsString(char start, char end, const TString& skip) {
@@ -66,6 +70,9 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
         const TKikimrRunnerOptions& options)
     {
+        // Logger should be initialized before http gateway creation
+        NYql::NLog::InitLogger(new NYql::NLog::TTlsLogBackend(NActors::CreateNullBackend()));
+
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableExternalDataSources(true);
         featureFlags.SetEnableScriptExecutionOperations(true);

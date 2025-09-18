@@ -67,16 +67,11 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
         column.SetNotNull(false);
     }
     
-    auto* columnStatesCol = desc.AddColumns();
-    columnStatesCol->SetName("__ydb_incrBackupImpl_columnStates");
-    columnStatesCol->SetType("String");
-    columnStatesCol->SetNotNull(false);
+    auto* changeMetadataCol = desc.AddColumns();
+    changeMetadataCol->SetName("__ydb_incrBackupImpl_changeMetadata");
+    changeMetadataCol->SetType("String");
+    changeMetadataCol->SetNotNull(false);
     // TODO: cleanup all sequences
-
-    auto* col = desc.AddColumns();
-    col->SetName("__ydb_incrBackupImpl_deleted");
-    col->SetType("Bool");
-    col->SetNotNull(false);
 
     result.push_back(CreateNewTable(NextPartId(opId, result), outTx));
 }

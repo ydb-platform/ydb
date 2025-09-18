@@ -65,17 +65,17 @@ public:
         Y_ENSURE(table->Columns.size() >= 2);
         TVector<TTag> valueTags;
         valueTags.reserve(table->Columns.size() - 1);
-        bool deletedMarkerColumnFound = false;
+        bool changeMetadataColumnFound = false;
         for (const auto& [tag, column] : table->Columns) {
             if (!column.IsKey) {
                 valueTags.push_back(tag);
-                if (column.Name == "__ydb_incrBackupImpl_deleted") {
-                    deletedMarkerColumnFound = true;
+                if (column.Name == "__ydb_incrBackupImpl_changeMetadata") {
+                    changeMetadataColumnFound = true;
                 }
             }
         }
 
-        Y_ENSURE(deletedMarkerColumnFound);
+        Y_ENSURE(changeMetadataColumnFound);
 
         return valueTags;
     }

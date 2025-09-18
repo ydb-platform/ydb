@@ -93,6 +93,7 @@ struct TScriptExecutionsYdbSetup {
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort);
         ServerSettings->SetEnableScriptExecutionOperations(true);
         ServerSettings->SetEnableScriptExecutionBackgroundChecks(enableScriptExecutionBackgroundChecks);
+        ServerSettings->SetEnableDataShardCreateTableAs(true);
         ServerSettings->SetGrpcPort(GrpcPort);
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);

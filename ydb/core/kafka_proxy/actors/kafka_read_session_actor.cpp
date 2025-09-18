@@ -481,6 +481,8 @@ void TKafkaReadSessionActor::HandleAuthOk(NGRpcProxy::V1::TEvPQProxy::TEvAuthRes
         FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
     }
 
+    Send(Context->ConnectionId, new TEvKafka::TEvReadSessionInfo(GroupId));
+
     for (auto& [topicName, topicInfo] : TopicsInfo) {
         topicInfo.PipeClient = CreatePipeClient(topicInfo.TabletID, ctx);
         RegisterBalancerSession(topicInfo.FullConverter->GetInternalName(), topicInfo.PipeClient, topicInfo.Groups, ctx);

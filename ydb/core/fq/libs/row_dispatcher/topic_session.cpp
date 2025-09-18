@@ -292,12 +292,13 @@ private:
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
 
 public:
-    explicit TTopicSession(
+    TTopicSession(
         const TString& readGroup,
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
         const NKikimrConfig::TSharedReadingConfig& config,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TActorId rowDispatcherActorId,
         TActorId compileServiceActorId,
         ui32 partitionId,
@@ -380,6 +381,7 @@ TTopicSession::TTopicSession(
     const TString& endpoint,
     const TString& database,
     const NKikimrConfig::TSharedReadingConfig& config,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TActorId rowDispatcherActorId,
     TActorId compileServiceActorId,
     ui32 partitionId,
@@ -400,7 +402,7 @@ TTopicSession::TTopicSession(
     , PqGateway(pqGateway)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , Config(config)
-    , FormatHandlerConfig(CreateFormatHandlerConfig(config, compileServiceActorId))
+    , FormatHandlerConfig(CreateFormatHandlerConfig(config, functionRegistry, compileServiceActorId))
     , BufferSize(maxBufferSize)
     , LogPrefix("TopicSession")
     , Counters(counters)
@@ -990,6 +992,7 @@ std::unique_ptr<IActor> NewTopicSession(
     const TString& endpoint,
     const TString& database,
     const NKikimrConfig::TSharedReadingConfig& config,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TActorId rowDispatcherActorId,
     TActorId compileServiceActorId,
     ui32 partitionId,
@@ -999,7 +1002,7 @@ std::unique_ptr<IActor> NewTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize) {
-    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
+    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
 }
 
 }  // namespace NFq

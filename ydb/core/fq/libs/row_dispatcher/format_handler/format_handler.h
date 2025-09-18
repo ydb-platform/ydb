@@ -75,12 +75,13 @@ protected:
 
 // Static properties for all format handlers
 struct TFormatHandlerConfig {
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TJsonParserConfig JsonParserConfig;
     TTopicFiltersConfig FiltersConfig;
 };
 
 ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters);
-TFormatHandlerConfig CreateFormatHandlerConfig(const NKikimrConfig::TSharedReadingConfig& rowDispatcherConfig, NActors::TActorId compileServiceId);
+TFormatHandlerConfig CreateFormatHandlerConfig(const NKikimrConfig::TSharedReadingConfig& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId);
 
 namespace NTests {
 

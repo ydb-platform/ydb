@@ -2975,7 +2975,12 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(ExecuteWriteQuery) {
         using namespace fmt::literals;
 
-        TKikimrRunner kikimr;
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
 
         {   // Just generate table

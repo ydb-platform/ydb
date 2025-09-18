@@ -53,7 +53,8 @@ struct TKqpCompileRequest {
         TKqpTempTablesState::TConstPtr tempTablesState = {},
         TMaybe<TQueryAst> queryAst = {},
         std::shared_ptr<NYql::TExprContext> splitCtx = nullptr,
-        NYql::TExprNode::TPtr splitExpr = nullptr)
+        NYql::TExprNode::TPtr splitExpr = nullptr,
+        TMaybe<NJson::TJsonValue>&& meta = Nothing())
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
@@ -72,6 +73,7 @@ struct TKqpCompileRequest {
         , QueryAst(std::move(queryAst))
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
+        , Metadata(std::move(meta))
     {}
 
     TActorId Sender;
@@ -99,7 +101,8 @@ struct TKqpCompileRequest {
     bool FindInCache = true;
 
     TInstant CompileQueueEnqueuedAt = TInstant::Now();
-
+    TMaybe<NJson::TJsonValue> Metadata;
+    
     bool IsIntrestedInResult() const {
         return IntrestedInResult->load();
     }
@@ -645,6 +648,7 @@ private:
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
                 std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState));
                 compileRequest.FindInCache = false;
+                compileRequest.Metadata = request.Metadata;
 
             if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
                 return CompileByAst(*request.QueryAst, compileRequest, ctx);
@@ -904,7 +908,7 @@ private:
         if (compileResult->GetAst() && QueryCache->FindByAst(query, *compileResult->GetAst(), keepInCache)) {
             return false;
         }
-        auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, std::move(query), compileResult->QueryAst,
+        auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, compileResult->CompilationDuration, std::move(query), compileResult->QueryAst,
             false, {}, compileResult->ReplayMessageUserView);
         newCompileResult->AllowCache = compileResult->AllowCache;
         newCompileResult->PreparedQuery = compileResult->PreparedQuery;
@@ -943,7 +947,7 @@ private:
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
-            request.CompileSettings.PerStatementResult, request.SplitCtx, request.SplitExpr);
+            request.CompileSettings.PerStatementResult, request.SplitCtx, request.SplitExpr, request.Metadata);
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 

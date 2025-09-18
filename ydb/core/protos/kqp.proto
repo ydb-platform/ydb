@@ -368,6 +368,8 @@ message TCompileCacheQueryInfo {
     optional string UserSID = 6;
     optional int64 LastAccessedAt = 7;
     optional string Warnings = 8;
+    optional google.protobuf.Duration CompilationDuration = 9;
+    optional string MetaInfo = 10;
 }
 
 message TSessionInfo {

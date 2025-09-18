@@ -195,7 +195,8 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     bool collectFullDiagnostics = false,
     bool PerStatementResult = false,
     std::shared_ptr<NYql::TExprContext> ctx = nullptr,
-    NYql::TExprNode::TPtr expr = nullptr);
+    NYql::TExprNode::TPtr expr = nullptr,
+    TMaybe<NJson::TJsonValue> meta = Nothing());
 
 IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
     TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters,

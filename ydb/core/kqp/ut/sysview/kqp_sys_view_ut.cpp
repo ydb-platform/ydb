@@ -858,28 +858,55 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST(CompileCacheBasic) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto tableClient = kikimr.GetTableClient();
         ui64 initial = SelectCompileCacheCount(tableClient);
         UNIT_ASSERT_EQUAL_C(initial, 0, "Compile cache is not empty at the beginning");
-        auto query = R"(DECLARE $v AS Int32;
-                                    SELECT $v + 1 AS sum;
-                                   )";
+        {
+            auto query = R"(DECLARE $v AS Int32;
+                            SELECT $v + 1 AS sum;
+                            )";
 
-        for (ui32 i = 0; i < 3; ++i) {
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto paramsBuilder = TParamsBuilder();
-            paramsBuilder.AddParam("$v").Int32(i).Build();
-            auto preparedResult = session.PrepareDataQuery(query).GetValueSync();
-            auto executedResult = session.ExecuteDataQuery(
-                query,
-                TTxControl::BeginTx().CommitTx(),
-                paramsBuilder.Build()
-            ).GetValueSync();
-            UNIT_ASSERT_C(executedResult.IsSuccess(), executedResult.GetIssues().ToString());
+            for (ui32 i = 0; i < 3; ++i) {
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto paramsBuilder = TParamsBuilder();
+                paramsBuilder.AddParam("$v").Int32(i).Build();
+                auto preparedResult = session.PrepareDataQuery(query).GetValueSync();
+                auto executedResult = session.ExecuteDataQuery(
+                    query,
+                    TTxControl::BeginTx().CommitTx(),
+                    paramsBuilder.Build()
+                ).GetValueSync();
+                UNIT_ASSERT_C(executedResult.IsSuccess(), executedResult.GetIssues().ToString());
+            }
+            ui64 afterQuery = SelectCompileCacheCount(tableClient);
+            UNIT_ASSERT_EQUAL_C(afterQuery, 2, "Got " << afterQuery << " instead"); // first for sys_view call, second for sum
         }
-        ui64 afterQuery = SelectCompileCacheCount(tableClient);
-        UNIT_ASSERT_EQUAL_C(afterQuery, 2, "Got " << afterQuery << " instead"); // first for sys_view call, second for sum
+
+        TString query = R"(
+            SELECT Metadata FROM `/Root/.sys/compile_cache_queries`;
+        )";
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+
+        NYdb::TResultSetParser parser(resultSet);
+        while(parser.TryNextRow()) {
+            auto maybeQuery = parser.ColumnParser("Query").GetOptionalUtf8();
+            UNIT_ASSERT(maybeQuery);
+            auto query = maybeQuery.value();
+            if (query.contains("sum")) {
+                auto maybeMeta = parser.ColumnParser("Metadata").GetOptionalUtf8();
+                UNIT_ASSERT(maybeMeta);
+                auto meta = maybeMeta.value();
+                UNIT_ASSERT_C(false, meta); // should be failed
+                UNIT_ASSERT_STRING_CONTAINS(meta, "Int32");
+            }
+        }
     }
 
     Y_UNIT_TEST(CompileCacheCheckWarnings) {
@@ -919,7 +946,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         auto resultSet = result.GetResultSet(0);
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 10);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
 
         NYdb::TResultSetParser parser(resultSet);
@@ -928,6 +955,59 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         UNIT_ASSERT(value);
         UNIT_ASSERT_VALUES_EQUAL_C(value, compileResult.GetIssues().ToOneLineString(), "one the one side we have: " << value << " on the other " << compileResult.GetIssues().ToOneLineString());
 
+    }
+
+    Y_UNIT_TEST(CompileCacheSeveralNodes) {
+        TKikimrRunner kikimr(TKikimrSettings().
+                            SetNodeCount(3));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync();
+
+        TVector<TString> queries = {
+            R"(SELECT COUNT(*) FROM EightShard WHERE Data >= 0;)",
+            R"(SELECT DIV, COUNT(*) FROM TwoShard GROUP BY (Value2 % 10) AS DIV;)",
+            R"(SELECT Key FROM EightShard ORDER BY Key DESC LIMIT 100;)",
+            R"(SELECT DISTINCT (Value2 % 100) AS D FROM TwoShard;)"
+        };
+
+        const ui32 sessionsNum = 12;
+        TVector<NYdb::NTable::TSession> sessions;
+        sessions.reserve(sessionsNum);
+        for (ui32 i = 0; i < sessionsNum; ++i) {
+            sessions.emplace_back(db.CreateSession().GetValueSync().GetSession());
+        }
+
+         for (auto& session : sessions) {
+            for (const auto& query : queries) {
+                auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx(),
+                                TExecDataQuerySettings().KeepInQueryCache(true)).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+
+        THashSet<std::string> unique;
+        ui64 duplicatesNum = 0;
+
+        const TString query = R"(SELECT * FROM `/Root/.sys/compile_cache_queries`;)";
+
+        auto result = session.GetSession().ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues());
+
+        auto resultSet = result.GetResultSet(0);
+        NYdb::TResultSetParser parser(resultSet);
+
+        while (parser.TryNextRow()) {
+            auto maybeId = parser.ColumnParser("QueryId").GetOptionalUtf8();
+            UNIT_ASSERT(maybeId);
+            auto id = maybeId.value();
+            if (unique.contains(id)) {
+                duplicatesNum += 1;
+            } else {
+                unique.insert(id);
+            }
+        }
+        UNIT_ASSERT_EQUAL_C(unique.size(), queries.size(), "expected to be " << unique.size() << " unique plans in cache");
+        UNIT_ASSERT_C(duplicatesNum > 0, "expected to be duplicatesNum > 0, did other nodes answer?");
     }
 }
 

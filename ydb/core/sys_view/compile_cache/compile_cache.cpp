@@ -1,5 +1,6 @@
 #include "compile_cache.h"
 
+#include <library/cpp/protobuf/interop/cast.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/registry.h>
@@ -49,7 +50,7 @@ public:
                 return TCell::Make<ui64>(info.GetAccessCount());
             }});
 
-            insert({TSchema::CompiledQueryAt::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 5
+            insert({TSchema::CompiledAt::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 5
                 return TCell::Make<ui64>(info.GetCompiledQueryAt());
             }});
 
@@ -61,8 +62,16 @@ public:
                 return TCell::Make<ui64>(info.GetLastAccessedAt());
             }});
 
-            insert({TSchema::Warnings::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 8
+            insert({TSchema::CompilationDuration::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 8
+                return TCell::Make<ui64>(NProtoInterop::CastFromProto(info.GetCompilationDuration()).MilliSeconds());
+            }});
+
+            insert({TSchema::Warnings::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 9
                 return TCell(info.GetWarnings());
+            }});
+
+            insert({TSchema::Metadata::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 10
+                return TCell(info.GetMetaInfo());
             }});
         }
     };
@@ -144,11 +153,16 @@ private:
             ReplyEmptyAndDie();
             return;
         }
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+                "PendingNodesInitialized=" << PendingNodesInitialized);
 
         if (!PendingNodesInitialized) {
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKikimr::NKqp::TEvKqp::TEvListProxyNodesRequest());
             return;
         }
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+                "PendingNodes.empty()=" << PendingNodes.empty() << ", PendingRequest=" << PendingRequest);
 
         if (!PendingNodes.empty() && !PendingRequest)  {
             const auto& nodeId = PendingNodes.front();
@@ -181,6 +195,8 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvListProxyNodesResponse::TPtr& ev) {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+                "got TEvListProxyNodesResponse from " << ev->Sender.NodeId());
         auto& proxies = ev->Get()->ProxyNodes;
         std::sort(proxies.begin(), proxies.end());
         PendingNodes = std::deque<ui32>(proxies.begin(), proxies.end());
@@ -189,11 +205,15 @@ private:
     }
 
     void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+                "got TEvScanDataAck from " << ev->Sender.NodeId());
         FreeSpace = ev->Get()->FreeSpace;
         StartScan();
     }
 
     void Handle(NKqp::TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& ev) {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+                "got TEvListQueryCacheQueriesResponse from " << ev->Sender.NodeId());
         auto& record = ev->Get()->Record;
         LastResponse = std::move(record);
         ProcessRows();

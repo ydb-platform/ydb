@@ -2855,6 +2855,31 @@ TExprNode::TPtr TExprContext::DeepCopyLambda(const TExprNode& node, TExprNode::T
     return NewLambda(node.Pos(), NewArguments(prevArgs.Pos(), std::move(newArgNodes)), std::move(newBody));
 }
 
+TExprNode::TPtr TExprContext::CopyLambdaWithTypes(const TExprNode& node) {
+    YQL_ENSURE(node.IsLambda());
+
+    const auto& args = node.Head();
+    auto argsChildren = args.ChildrenList();
+
+    TNodeOnNodeOwnedMap replaces;
+    replaces.reserve(args.ChildrenSize());
+
+    for (size_t i = 0U; i < args.ChildrenSize(); ++i) {
+        const auto arg = args.Child(i);
+        auto newArg = ShallowCopy(*arg);
+        newArg->SetTypeAnn(arg->GetTypeAnn());
+        YQL_ENSURE(replaces.emplace(arg, newArg).second);
+        argsChildren[i] = std::move(newArg);
+    }
+
+    auto newArgs = NewArguments(args.Pos(), std::move(argsChildren));
+    newArgs->SetTypeAnn(MakeType<TUnitExprType>());
+    auto lambda = NewLambda(node.Pos(), std::move(newArgs), ReplaceNodes<true>(GetLambdaBody(node), replaces));
+    lambda->SetTypeAnn(node.GetTypeAnn());
+    lambda->Head().ForEachChild(std::bind(&TExprNode::SetDependencyScope, std::placeholders::_1, lambda.Get(), lambda.Get()));
+    return lambda;
+}
+
 TExprNode::TPtr TExprContext::FuseLambdas(const TExprNode& outer, const TExprNode& inner) {
     YQL_ENSURE(outer.IsLambda() && inner.IsLambda());
     const auto& outerArgs = outer.Head();

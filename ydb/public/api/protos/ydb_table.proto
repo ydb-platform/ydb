@@ -243,9 +243,10 @@ message FulltextIndexSettings {
     // See Layout enum
     optional Layout layout = 1;
 
-    // List of columns and their fulltext settings
-    // Currently, this list should contain a single entry
-    // And provided column should be the only one in the TableIndex.index_columns list
+    // List of columns and their full-text search settings
+    // Currently, this list should contain a single entry with specified analyzers
+    // This list must always match TableIndex.index_columns
+    // Some columns may not use analyzers and will be indexed as-is
     repeated ColumnAnalyzers columns = 2;
 }
 

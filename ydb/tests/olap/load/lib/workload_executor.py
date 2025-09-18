@@ -125,6 +125,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     False, "Stopping nemesis during teardown", nemesis_log
                 )
                 cls._nemesis_started = False
+                YdbCluster.wait_ydb_alive(120)
 
             except Exception as e:
                 error_msg = f"Error stopping nemesis: {e}"

@@ -8,7 +8,6 @@ import time
 import unittest
 import urllib.request
 import tarfile
-import tempfile
 from library.python import resource
 import ydb
 

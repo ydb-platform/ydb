@@ -1,6 +1,5 @@
 import logging
 import subprocess
-import tempfile
 import os
 import stat
 from library.python import resource

@@ -1,5 +1,0 @@
-items:
-- name: Обзор
-  href: vector-indexes.md
-- name: Векторный индекс вида vector_kmeans_tree
-  href: vector-indexes-kmeans-tree-type.md

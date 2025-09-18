@@ -64,12 +64,6 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
         return false;
     }
 
-    // Empty partition may will be filling from offset great than zero from mirror actor if source partition old and was clean by retantion time
-    if (!CompactionBlobEncoder.Head.GetCount() && !CompactionBlobEncoder.NewHead.GetCount() && CompactionBlobEncoder.DataKeysBody.empty() && CompactionBlobEncoder.HeadKeys.empty() && p.Offset) {
-        // если это первое сообщение, то надо поправить StartOffset
-        CompactionBlobEncoder.StartOffset = *p.Offset;
-    }
-
     TMaybe<TPartData> partData;
     if (p.Msg.TotalParts > 1) { //this is multi-part message
         partData = TPartData(p.Msg.PartNo, p.Msg.TotalParts, p.Msg.TotalSize);
@@ -376,6 +370,18 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(blobs.size() == CompactionBlobsCount);
 
+    const auto& firstKey = KeysForCompaction.front().first.Key;
+
+    // Empty partition may will be filling from offset great than zero from mirror actor if source partition old and was clean by retantion time
+    if (!CompactionBlobEncoder.Head.GetCount() &&
+        !CompactionBlobEncoder.NewHead.GetCount() &&
+        CompactionBlobEncoder.DataKeysBody.empty() &&
+        CompactionBlobEncoder.HeadKeys.empty()) {
+        // если это первое сообщение, то надо поправить StartOffset
+        CompactionBlobEncoder.StartOffset = firstKey.GetOffset();
+        CompactionBlobEncoder.EndOffset = CompactionBlobEncoder.StartOffset;
+    }
+
     TProcessParametersBase parameters;
     parameters.CurOffset = CompactionBlobEncoder.PartitionedBlob.IsInited()
         ? CompactionBlobEncoder.PartitionedBlob.GetOffset()
@@ -383,8 +389,8 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     parameters.HeadCleared = (CompactionBlobEncoder.Head.PackedSize == 0);
 
     CompactionBlobEncoder.NewHead.Clear();
-    CompactionBlobEncoder.NewHead.Offset = parameters.CurOffset;
-    CompactionBlobEncoder.NewHead.PartNo = 0;
+    CompactionBlobEncoder.NewHead.Offset = firstKey.GetOffset();
+    CompactionBlobEncoder.NewHead.PartNo = firstKey.GetPartNo();
     CompactionBlobEncoder.NewHead.PackedSize = 0;
 
     auto compactionRequest = MakeHolder<TEvKeyValue::TEvRequest>();

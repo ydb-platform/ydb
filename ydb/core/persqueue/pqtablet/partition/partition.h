@@ -1118,7 +1118,7 @@ private:
     bool ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, TInstant blobCreationUnixTime);
 
     bool CompactionInProgress = false;
-    TVector<std::tuple<TDataKey, size_t>> KeysForCompaction;
+    TVector<std::pair<TDataKey, size_t>> KeysForCompaction;
     size_t CompactionBlobsCount = 0;
 
     void DumpZones(const char* file = nullptr, unsigned line = 0) const;

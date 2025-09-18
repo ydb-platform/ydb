@@ -138,7 +138,6 @@ class TestCSManyUpdates(object):
         DELETE FROM `{table_path}`
         """
         self.ydb_client.query(update_query)
-        timer.one_more()
 
     def _do_upsert(self, table_path, pks, mods, timer):
         """Apply modifications using individual UPSERT statements."""

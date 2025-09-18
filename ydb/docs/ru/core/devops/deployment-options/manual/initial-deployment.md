@@ -459,29 +459,36 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
 1. Получите аутентификационный токен для встроенной учетной записи `root`. На данном этапе пароль еще не задан:
 
-   ```bash
-   ydb -e grpcs://<node1.ydb.tech>:2135 -d /Root --ca-file ca.crt \
-        --user root --no-password auth get-token --force > token-file
-   ```
+    ```bash
+    ydb --ca-file ca.crt -e grpcs://<node1.ydb.tech>:2135 -d /Root \
+            --user root --no-password auth get-token --force > token-file
+    ```
 
-2. Подготовьте файл конфигурации для защищенного режима. Для этого скопируйте ваш исходный `config.yaml` в новый файл (например, `secure_config.yaml`) и измените в нем значение флага `enforce_user_token_requirement` на `true`:
+1. Получите текущую конфигурацию из кластера и сохраните ее в файл `secure_config.yaml`:
 
-   ```yaml
-   security_config:
-     enforce_user_token_requirement: true
-     ...
-   ```
+    ```bash
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 --token-file token-file  \
+        admin cluster config fetch > secure_config.yaml
+    ```
 
-3. Примените новую конфигурацию в кластер с помощью команды `replace`, используя полученный ранее токен:
+   Откройте файл `secure_config.yaml` и измените в нем значение флага `enforce_user_token_requirement` на `true`:
 
-   ```bash
-   ydb --token-file token-file --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 \
-       admin cluster config replace -f secure_config.yaml
-   ```
+    ```yaml
+    security_config:
+        enforce_user_token_requirement: true
+        ...
+    ```
 
-4. Перезапустите узлы кластера для применения конфигурации.
+1. Примените новую конфигурацию в кластер с помощью команды `replace`, используя полученный ранее токен:
 
-   Параметр `enforce_user_token_requirement` вступает в силу только после перезапуска узлов. Выполните процедуру [rolling restart](../../../reference/ydbops/rolling-restart-scenario.md) для всех статических узлов кластера.
+    ```bash
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 --token-file token-file \
+        admin cluster config replace -f secure_config.yaml
+    ```
+
+1. Перезапустите узлы кластера для применения конфигурации.
+
+    Параметр `enforce_user_token_requirement` вступает в силу только после перезапуска узлов. Выполните процедуру [rolling restart](../../../reference/ydbops/rolling-restart-scenario.md) для всех статических узлов кластера.
 
 ### Первоначальная настройка учетных записей
 
@@ -489,12 +496,12 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
 1. Установите пароль для учетной записи `root`, используя полученный ранее токен:
 
-   ```bash
-   ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file token-file \
-       yql -s 'ALTER USER root PASSWORD "passw0rd"'
-   ```
+    ```bash
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file token-file \
+        yql -s 'ALTER USER root PASSWORD "passw0rd"'
+    ```
 
-   Вместо значения `passw0rd` подставьте необходимый пароль. Сохраните пароль в отдельный файл. Последующие команды от имени пользователя `root` будут выполняться с использованием пароля, передаваемого с помощью ключа `--password-file <path_to_user_password>`. Также пароль можно сохранить в профиле подключения, как описано в [документации {{ ydb-short-name }} CLI](../../../reference/ydb-cli/profile/index.md).
+    Вместо значения `passw0rd` подставьте необходимый пароль. Сохраните пароль в отдельный файл. Последующие команды от имени пользователя `root` будут выполняться с использованием пароля, передаваемого с помощью ключа `--password-file <path_to_user_password>`. Также пароль можно сохранить в профиле подключения, как описано в [документации {{ ydb-short-name }} CLI](../../../reference/ydb-cli/profile/index.md).
 
 1. Создайте дополнительные учетные записи:
 
@@ -513,8 +520,6 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 В перечисленных выше примерах команд `<node.ydb.tech>` - FQDN сервера, на котором запущен любой динамический узел, обслуживающий базу `/Root/testdb`.
 
 При выполнении команд создания учетных записей и присвоения групп клиент {{ ydb-short-name }} CLI будет запрашивать ввод пароля пользователя `root`. Избежать многократного ввода пароля можно, создав профиль подключения, как описано в [документации {{ ydb-short-name }} CLI](../../../reference/ydb-cli/profile/index.md).
-
-При выполнении команд создания учётных записей и присвоения групп клиент {{ ydb-short-name }} CLI будет запрашивать ввод пароля пользователя `root`. Избежать многократного ввода пароля можно, создав профиль подключения, как описано в [документации {{ ydb-short-name }} CLI](../../../reference/ydb-cli/profile/index.md).
 
 ## Протестируйте работу с созданной базой {#try-first-db}
 

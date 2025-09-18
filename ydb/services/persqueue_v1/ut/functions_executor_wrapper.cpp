@@ -25,6 +25,11 @@ void FunctionExecutorWrapper::DoStart()
     Executor->Start();
 }
 
+void FunctionExecutorWrapper::Stop()
+{
+    Executor->Stop();
+}
+
 auto FunctionExecutorWrapper::MakeTask(TFunction func) -> TFunction
 {
     return [this, func = std::move(func)]() {
@@ -89,14 +94,14 @@ void FunctionExecutorWrapper::RunAllTasks()
     }
 }
 
-TIntrusivePtr<FunctionExecutorWrapper> CreateThreadPoolExecutorWrapper(size_t threads)
+std::shared_ptr<FunctionExecutorWrapper> CreateThreadPoolExecutorWrapper(size_t threads)
 {
-    return MakeIntrusive<FunctionExecutorWrapper>(NYdb::NPersQueue::CreateThreadPoolExecutor(threads));
+    return std::make_shared<FunctionExecutorWrapper>(NYdb::CreateThreadPoolExecutor(threads));
 }
 
-TIntrusivePtr<FunctionExecutorWrapper> CreateSyncExecutorWrapper()
+std::shared_ptr<FunctionExecutorWrapper> CreateSyncExecutorWrapper()
 {
-    return MakeIntrusive<FunctionExecutorWrapper>(NYdb::NPersQueue::CreateSyncExecutor());
+    return std::make_shared<FunctionExecutorWrapper>(NYdb::NTopic::CreateSyncExecutor());
 }
 
 }

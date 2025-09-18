@@ -186,7 +186,11 @@ def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_pre
 
         for case in suite.findall("testcase"):
             test_name = case.get("name")
-            test_classname = case.get("classname") + '.' + test_name
+            cls_name = case.get("classname")
+            if cls_name is not None:
+                test_classname = cls_name + '.' + test_name
+            else:
+                test_classname = test_name
             case.set("name", test_classname)
             case.set("classname", suite_name)
             test_name = test_classname

@@ -11,6 +11,7 @@
 
 namespace NKikimrReplication {
     class TStaticCredentials;
+    class TIamCredentials;
 }
 
 namespace NKikimr::NReplication {
@@ -292,6 +293,8 @@ IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ss
 IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TString& token);
 IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert,
     const NKikimrReplication::TStaticCredentials& credentials);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert,
+    const NKikimrReplication::TIamCredentials& credentials);
 
 IActor* CreateLocalYdbProxy(const TString& database);
 

@@ -298,8 +298,10 @@ namespace NKikimr::NBridge {
             for (size_t i = 0; i < numBlobs; ++i) {
                 q[i].Set(*jt++);
             }
-            IssueQuery(true, std::make_unique<TEvBlobStorage::TEvGet>(q, numBlobs, TInstant::Max(),
-                NKikimrBlobStorage::FastRead, true, true));
+            auto ev = std::make_unique<TEvBlobStorage::TEvGet>(q, numBlobs, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, true, true);
+            ev->DoNotReportIndexRestoreGetMissingBlobs = true; // they may be missing, do not report errors in this case
+            IssueQuery(true, std::move(ev));
 
             RestoreQueue.erase(RestoreQueue.begin(), it);
         }

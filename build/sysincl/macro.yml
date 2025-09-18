@@ -122,6 +122,10 @@
 - source_filter: "^contrib/libs/llvm(\\d+)"
   includes:
     - BACKTRACE_HEADER: $U/execinfo.h
+    - GET_PASS_REGISTRY:
+      - contrib/libs/llvm20/lib/Target/BPF/BPFPassRegistry.def
+      - contrib/libs/llvm20/lib/Target/NVPTX/NVPTXPassRegistry.def
+      - contrib/libs/llvm20/lib/Target/X86/X86PassRegistry.def
 
 - source_filter: "^contrib/libs/pycxx"
   includes:

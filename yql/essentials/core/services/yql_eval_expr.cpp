@@ -91,7 +91,7 @@ public:
     TNodeSet Reachable;
     TNodeMap<ui32> ExternalWorlds;
     TDeque<TExprNode::TPtr> ExternalWorldsList;
-    bool HasConfigPending = false;
+    TNodeMap<bool> Visited;
 
 public:
     void Scan(const TExprNode& node) {
@@ -117,15 +117,20 @@ public:
             }
             return true;
         });
-        ScanImpl(node);
+
+        bool hasConfigPending = false;
+        ScanImpl(node, hasConfigPending);
     }
 
 private:
-    void ScanImpl(const TExprNode& node) {
-        if (!Visited_.emplace(&node).second) {
+    void ScanImpl(const TExprNode& node, bool& hasConfigPending) {
+        auto [it, inserted] = Visited.emplace(&node, false);
+        if (!inserted) {
+            hasConfigPending = it->second;
             return;
         }
 
+        bool localConfigPending = false;
         if (node.IsCallable("Seq!")) {
             for (ui32 i = 1; i < node.ChildrenSize(); ++i) {
                 auto lambda = node.Child(i);
@@ -143,10 +148,7 @@ private:
                 auto withSlash = TString(prefix) + "/";
                 return alias.StartsWith(withSlash);
                 })) {
-                for (auto& curr: CurrentEvalNodes_) {
-                    Reachable.erase(curr);
-                }
-                HasConfigPending = true;
+                localConfigPending = true;
             }
         }
 
@@ -158,16 +160,14 @@ private:
         bool pop = false;
         if (node.IsCallable(EvaluationFuncs) || node.IsCallable(SubqueryExpandFuncs)) {
             Reachable.insert(&node);
-            CurrentEvalNodes_.insert(&node);
             pop = true;
         }
 
         if (node.IsCallable({ "EvaluateIf!", "EvaluateFor!", "EvaluateParallelFor!" })) {
             // scan predicate/list only
             if (node.ChildrenSize() > 1) {
-                CurrentEvalNodes_.insert(&node);
                 pop = true;
-                ScanImpl(*node.Child(1));
+                ScanImpl(*node.Child(1), localConfigPending);
             }
         } else if (node.IsCallable(SubqueryExpandFuncs)) {
             // scan list only if it's wrapped by evaluation func
@@ -177,30 +177,32 @@ private:
             }
             if (node.ChildrenSize() > index) {
                 if (node.Child(index)->IsCallable(EvaluationFuncs)) {
-                    CurrentEvalNodes_.insert(&node);
                     pop = true;
-                    ScanImpl(*node.Child(index));
+                    ScanImpl(*node.Child(index), localConfigPending);
                 } else {
                     for (const auto& child : node.Children()) {
-                        ScanImpl(*child);
+                        ScanImpl(*child, localConfigPending);
                     }
                 }
             }
         } else {
             for (const auto& child : node.Children()) {
-                ScanImpl(*child);
+                ScanImpl(*child, localConfigPending);
             }
         }
         if (pop) {
-            CurrentEvalNodes_.erase(&node);
+            if (localConfigPending) {
+                Reachable.erase(&node);
+            }
         }
+
+        hasConfigPending = hasConfigPending || localConfigPending;
+        it->second = hasConfigPending;
     }
 
 private:
-    TNodeSet Visited_;
     THashSet<TStringBuf> PendingFileAliases_;
     THashSet<TStringBuf> PendingFolderPrefixes_;
-    TNodeSet CurrentEvalNodes_;
 };
 
 struct TEvalScope {
@@ -910,10 +912,12 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         }
 
         if (marked.Reachable.find(node.Get()) == marked.Reachable.cend()) {
-            if (marked.HasConfigPending) {
+            bool withRestart = false;
+            if (auto it = marked.Visited.find(node.Get()); it != marked.Visited.end() && it->second) {
                 ctx.Step.Repeat(TExprStep::Configure);
+                withRestart = true;
             }
-            hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, marked.HasConfigPending));
+            hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, withRestart));
             return node;
         }
 

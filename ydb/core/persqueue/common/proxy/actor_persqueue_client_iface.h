@@ -25,7 +25,7 @@ public:
         NActors::TActorSystem* actorSystem,
         const NKikimrPQ::TPQConfig::TPQLibSettings& settings
     ) const {
-        Y_ABORT_UNLESS(!ActorSystemPtr->load(std::memory_order_relaxed), "Double init");
+        AFL_ENSURE(!ActorSystemPtr->load(std::memory_order_relaxed))("d", "Double init");
         ActorSystemPtr->store(actorSystem, std::memory_order_relaxed);
 
         auto driverConfig = NYdb::TDriverConfig()

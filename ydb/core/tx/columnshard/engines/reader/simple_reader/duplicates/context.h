@@ -8,6 +8,35 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
+class TFilterBuildingGuard: TMoveOnly {
+private:
+    const std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ProcessGuard;
+    const std::shared_ptr<NGroupedMemoryManager::TScopeGuard> ScopeGuard;
+    const std::shared_ptr<NGroupedMemoryManager::TGroupGuard> GroupGuard;
+
+    static std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> GetStageFeatures() {
+        static const std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> StageFeatures = {
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("INTERSECTIONS", 10000000),   // 10 MiB
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("ACCESSORS", 100000000),   // 100 MiB
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 10000000000),   // 10 GiB
+        };
+        return StageFeatures;
+    }
+
+public:
+    ui64 GetMemoryProcessId() const {
+        return ProcessGuard->GetProcessId();
+    }
+    ui64 GetMemoryScopeId() const {
+        return ScopeGuard->GetScopeId();
+    }
+    ui64 GetMemoryGroupId() const {
+        return GroupGuard->GetGroupId();
+    }
+
+    TFilterBuildingGuard();
+};
+
 class TFilterAccumulator: TMoveOnly {
 public:
     enum class EFetchingStage {
@@ -18,9 +47,6 @@ public:
 
 private:
     const TEvRequestFilter::TPtr OriginalRequest;
-    const std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ProcessGuard;
-    const std::shared_ptr<NGroupedMemoryManager::TScopeGuard> ScopeGuard;
-    const std::shared_ptr<NGroupedMemoryManager::TGroupGuard> GroupGuard;
     bool Done = false;
 
     std::vector<std::optional<NArrow::TColumnFilter>> Filters;
@@ -48,15 +74,6 @@ private:
     }
 
 public:
-    static std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> GetStageFeatures() {
-        static const std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> StageFeatures = {
-            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("INTERSECTIONS", 10000000),   // 10 MiB
-            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("ACCESSORS", 100000000),   // 100 MiB
-            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 10000000000),   // 10 GiB
-        };
-        return StageFeatures;
-    }
-
     void SetIntervalsCount(const ui32 cnt) {
         AFL_VERIFY(Filters.empty());
         AFL_VERIFY(cnt);
@@ -106,16 +123,6 @@ public:
         return sb;
     }
 
-    ui64 GetMemoryProcessId() const {
-        return ProcessGuard->GetProcessId();
-    }
-    ui64 GetMemoryScopeId() const {
-        return ScopeGuard->GetScopeId();
-    }
-    ui64 GetMemoryGroupId() const {
-        return GroupGuard->GetGroupId();
-    }
-
     ui64 GetDataSize() const {
         return Filters.capacity() * sizeof(std::optional<NArrow::TColumnFilter>);
     }
@@ -124,25 +131,25 @@ public:
 class TBuildFilterContext: NColumnShard::TMonitoringObjectsCounter<TBuildFilterContext>, TMoveOnly {
 private:
     using TFieldByColumn = std::map<ui32, std::shared_ptr<arrow::Field>>;
-    using TIntervals = std::vector<std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>>;
     using TPortionIndex = THashMap<ui64, TPortionInfo::TConstPtr>;
     YDB_READONLY_DEF(TActorId, Owner);
     YDB_READONLY_DEF(std::shared_ptr<TFilterAccumulator>, Context);
     YDB_READONLY_DEF(TPortionIndex, RequiredPortions);
-    YDB_READONLY_DEF(TIntervals, Intervals);
+    YDB_READONLY_DEF(std::vector<TIntervalInfo>, Intervals);
     YDB_READONLY_DEF(TFieldByColumn, Columns);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
     YDB_READONLY_DEF(std::shared_ptr<NColumnFetching::TColumnDataManager>, ColumnDataManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>, Counters);
+    YDB_READONLY_DEF(std::unique_ptr<TFilterBuildingGuard>, RequestGuard);
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> SelfMemory;
 
 public:
     TBuildFilterContext(const TActorId owner, const std::shared_ptr<TFilterAccumulator>& context, TPortionIndex&& portions,
-        std::vector<std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>>&& intervals, const TFieldByColumn& columns,
-        const std::shared_ptr<arrow::Schema>& pkSchema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
+        std::vector<TIntervalInfo>&& intervals, const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema,
+        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters,
+        const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory)
         : Owner(owner)
         , Context(context)
@@ -153,6 +160,7 @@ public:
         , ColumnDataManager(columnDataManager)
         , DataAccessorsManager(dataAccessorsManager)
         , Counters(counters)
+        , RequestGuard(std::move(requestGuard))
         , SelfMemory(contextMemory)
     {
         AFL_VERIFY(Owner);
@@ -163,7 +171,11 @@ public:
         AFL_VERIFY(ColumnDataManager);
         AFL_VERIFY(DataAccessorsManager);
         AFL_VERIFY(Counters);
-        // AFL_VERIFY(SelfMemory);  // may be null
+        AFL_VERIFY(SelfMemory);
+        for (ui64 i = 1; i < Intervals.size(); ++i) {
+            AFL_VERIFY_DEBUG(
+                Intervals[i - 1].GetEnd() < Intervals[i].GetBegin() || Intervals[i - 1].GetEnd().IsEquivalent(Intervals[i].GetBegin()));
+        }
     }
 
     std::set<ui32> GetFetchingColumnIds() const {
@@ -184,12 +196,11 @@ public:
 
     static ui64 GetApproximateDataSize(const ui64 intersectionCount) {
         return intersectionCount *
-               (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>) +
-                   sizeof(std::optional<NArrow::TColumnFilter>));
+               (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(TIntervalInfo) + sizeof(std::optional<NArrow::TColumnFilter>));
     }
     ui64 GetDataSize() const {
-        return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr)) +
-               Intervals.capacity() * sizeof(std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>) + Context->GetDataSize();
+        return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr)) + Intervals.capacity() * sizeof(TIntervalInfo) +
+               Context->GetDataSize();
     }
 };
 

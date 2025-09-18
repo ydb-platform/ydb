@@ -12,6 +12,7 @@
 #include <util/system/file.h>
 
 #include <atomic>
+#include <format>
 
 #define YLOG(logPriority, message, logger)                                        \
     do {                                                                          \

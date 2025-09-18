@@ -481,6 +481,26 @@ TEST(TSolomonRegistry, SparseGauge)
     CollectSensors(impl, 3);
 }
 
+TEST(TSolomonRegistry, SparseGaugeSummary)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+    TProfiler profiler(impl, "/d");
+
+    auto c = profiler.WithSparse().GaugeSummary("/sparse_gauge_summary", ESummaryPolicy::Max);
+
+    auto result = CollectSensors(impl).Gauges;
+    ASSERT_TRUE(result.empty());
+
+    c.Update(1.0);
+    result = CollectSensors(impl).Gauges;
+    ASSERT_EQ(result["yt.d.sparse_gauge_summary.max{}"], 1.0);
+
+    c.Update(0.0);
+    result = CollectSensors(impl).Gauges;
+    ASSERT_TRUE(result.empty());
+}
+
 TEST(TSolomonRegistry, InvalidSensors)
 {
     auto impl = New<TSolomonRegistry>();

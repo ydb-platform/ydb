@@ -77,7 +77,7 @@ class TIncrRestoreChangeSenderMain
     }
 
     void NextState(TResolveUserTableState::TStateTag) {
-        Y_ENSURE(MainColumnToTag.contains("__ydb_incrBackupImpl_deleted"));
+        Y_ENSURE(MainColumnToTag.contains("__ydb_incrBackupImpl_changeMetadata"));
         ResolveTargetTable();
     }
 

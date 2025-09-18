@@ -668,13 +668,21 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             raise RuntimeError("Failed to start node %s: %s" % (str(node_id), str(e)))
 
     def update_configurator_and_restart(self, configurator):
-        for node in self.nodes.values():
+        for node in itertools.chain(self.nodes.values(), self.slots.values()):
             node.stop()
+
         self.__configurator = configurator
         self.__initialy_prepared = False
+        # re-register nodes
         self._node_index_allocator = itertools.count(1)
         self.prepare()
-        for node in self.nodes.values():
+        # re-register slots
+        tenants = [s._tenant_affiliation for s in self.slots.values()]
+        self._slot_index_allocator = itertools.count(1)
+        for tenant in tenants:
+            self.__register_slot(tenant)
+
+        for node in itertools.chain(self.nodes.values(), self.slots.values()):
             node.start()
 
     def enable_config_dir(self, node_ids=None):

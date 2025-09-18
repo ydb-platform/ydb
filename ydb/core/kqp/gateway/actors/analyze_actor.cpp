@@ -15,16 +15,11 @@ enum {
 
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
-TString MakeOperationId() {
-    TULIDGenerator ulidGen;
-    return ulidGen.Next(TActivationContext::Now()).ToBinary();
-}
-
 TAnalyzeActor::TAnalyzeActor(TString tablePath, TVector<TString> columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise)
     : TablePath(tablePath)
     , Columns(columns) 
     , Promise(promise)
-    , OperationId(MakeOperationId())
+    , OperationId(UlidGen.Next(TActivationContext::Now()).ToBinary())
 {}
 
 void TAnalyzeActor::Bootstrap() {

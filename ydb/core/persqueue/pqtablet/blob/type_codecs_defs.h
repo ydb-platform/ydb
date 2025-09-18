@@ -10,6 +10,7 @@
 #include <util/system/unaligned_mem.h>
 
 #include <string.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NScheme {
@@ -330,13 +331,13 @@ public:
     template <bool IsNullable>
     const ICodec* GetDefaultCodec() const {
         const ICodec* codec = IsNullable ? DefaultNullable : DefaultNonNullable;
-        Y_ABORT_UNLESS(codec, "No default codec.");
+        AFL_ENSURE(codec)("description", "No default codec.");
         return codec;
     }
 
     const ICodec* GetCodec(TCodecSig sig) const {
         auto iter = Codecs.find(sig);
-        Y_ABORT_UNLESS(iter != Codecs.end(), "Unregistered codec (%u).", ui16(sig));
+        AFL_ENSURE(iter != Codecs.end())("Unregistered codec", ui16(sig));
         return iter->second;
     }
 
@@ -348,20 +349,21 @@ public:
     const ICodec* AddCodec() {
         auto codec = Singleton<TCodec>();
         auto inserted = Codecs.insert(std::make_pair(TCodec::Sig(), codec));
-        Y_ABORT_UNLESS(inserted.second, "Codec signature collision (%u).", ui16(TCodec::Sig()));
+        AFL_ENSURE(inserted.second)("Codec signature collision", ui16(TCodec::Sig()));
         return codec;
     }
 
     const ICodec* AddAlias(TCodecSig from, TCodecSig to, bool force = false) {
         auto iter = Codecs.find(to);
-        Y_ABORT_UNLESS(iter != Codecs.end(), "Aliasing an unregistered codec (%u -> %u).", ui16(from), ui16(to));
+        AFL_ENSURE(iter != Codecs.end())("description", "Aliasing an unregistered codec")
+            ("from", ui16(from))("to", ui16(to));
         return AddAlias(from, iter->second, force);
     }
 
     const ICodec* AddAlias(TCodecSig from, const ICodec* to, bool force = false) {
-        Y_ABORT_UNLESS(to, "Aliasing an unregistered codec (%u -> nullptr).", ui16(from));
+        AFL_ENSURE(to)("Aliasing an unregistered codec", ui16(from));
         auto& alias = Codecs[from];
-        Y_ABORT_UNLESS(force || !alias, "Codec signature collision (%u).", ui16(from));
+        AFL_ENSURE(force || !alias)("Codec signature collision", ui16(from));
         alias = to;
 
         // Cache the default codecs.
@@ -388,7 +390,7 @@ inline IChunkDecoder::TPtr IChunkDecoder::ReadChunk(const TDataRef& data, const 
     Y_DEBUG_ABORT_UNLESS(data.Size() >= sizeof(TCodecSig));
     const TCodecSig sig = ReadUnaligned<TCodecSig>(data.Data());
     auto codec = codecs->GetCodec(sig);
-    Y_ABORT_UNLESS(codec, "Unregistered codec (%u).", ui16(sig));
+    AFL_ENSURE(codec)("Unregistered codec", ui16(sig));
     return codec->ReadChunk(data);
 }
 

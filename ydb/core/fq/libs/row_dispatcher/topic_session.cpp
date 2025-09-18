@@ -4,6 +4,7 @@
 #include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -262,7 +263,7 @@ private:
     const NYdb::TDriver Driver;
     const NYql::IPqGateway::TPtr PqGateway;
     const std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    const NConfig::TRowDispatcherConfig Config;
+    const NKikimrConfig::TSharedReadingConfig Config;
     const TFormatHandlerConfig FormatHandlerConfig;
     const i64 BufferSize;
     TString LogPrefix;
@@ -291,12 +292,13 @@ private:
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
 
 public:
-    explicit TTopicSession(
+    TTopicSession(
         const TString& readGroup,
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
-        const NConfig::TRowDispatcherConfig& config,
+        const NKikimrConfig::TSharedReadingConfig& config,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TActorId rowDispatcherActorId,
         TActorId compileServiceActorId,
         ui32 partitionId,
@@ -378,7 +380,8 @@ TTopicSession::TTopicSession(
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
-    const NConfig::TRowDispatcherConfig& config,
+    const NKikimrConfig::TSharedReadingConfig& config,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TActorId rowDispatcherActorId,
     TActorId compileServiceActorId,
     ui32 partitionId,
@@ -399,7 +402,7 @@ TTopicSession::TTopicSession(
     , PqGateway(pqGateway)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , Config(config)
-    , FormatHandlerConfig(CreateFormatHandlerConfig(config, compileServiceActorId))
+    , FormatHandlerConfig(CreateFormatHandlerConfig(config, functionRegistry, compileServiceActorId))
     , BufferSize(maxBufferSize)
     , LogPrefix("TopicSession")
     , Counters(counters)
@@ -411,8 +414,7 @@ void TTopicSession::Bootstrap() {
     Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
-        << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec,  StatusPeriod " << Config.GetSendStatusPeriodSec() << " sec");
-    Y_ENSURE(Config.GetSendStatusPeriodSec() > 0);
+        << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec");
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
 }
 
@@ -989,7 +991,8 @@ std::unique_ptr<IActor> NewTopicSession(
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
-    const NConfig::TRowDispatcherConfig& config,
+    const NKikimrConfig::TSharedReadingConfig& config,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TActorId rowDispatcherActorId,
     TActorId compileServiceActorId,
     ui32 partitionId,
@@ -999,7 +1002,7 @@ std::unique_ptr<IActor> NewTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize) {
-    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
+    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
 }
 
 }  // namespace NFq

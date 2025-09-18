@@ -439,6 +439,19 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
         return res;
     }
 
+    case TType::EKind::Linear:
+    {
+        auto linType = static_cast<TLinearType*>(type);
+        auto itemType = ConvertMiniKQLType(position, linType->GetItemType(), ctx);
+        /*if (linType->IsDynamic()) {
+            return ctx.MakeType<TDynamicLinearExprType>(itemType);
+        } else {
+            return ctx.MakeType<TLinearExprType>(itemType);
+        }*/
+        Y_UNUSED(itemType);
+        ythrow yexception() << "TODO";
+    }
+
     }
 
     YQL_ENSURE(false, "Unknown kind");
@@ -498,6 +511,16 @@ ETypeAnnotationKind ConvertMiniKQLTypeKind(NKikimr::NMiniKQL::TType* type) {
         return ETypeAnnotationKind::Pg;
     case TType::EKind::Multi:
         return ETypeAnnotationKind::Multi;
+    case TType::EKind::Linear:
+    {
+        /*auto linType = static_cast<TLinearType*>(type);
+        if (linType->IsDynamic()) {
+            return ETypeAnnotationKind::DynamicLinear;
+        } else {
+            return ETypeAnnotationKind::Linear;
+        }*/
+        break;
+    }
     }
 
     YQL_ENSURE(false, "Unknown kind");

@@ -254,7 +254,7 @@ struct TConfig
     bool RedirectStdoutToStderr = false;
 
     /// Append job and operation IDs as shell command options.
-    bool EnableDebugCommandLineArguments = true;
+    bool EnableDebugCommandLineArguments = false;
 
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);

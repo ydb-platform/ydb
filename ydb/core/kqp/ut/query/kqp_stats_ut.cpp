@@ -489,12 +489,12 @@ Y_UNIT_TEST(SelfJoin) {
 }
 
 Y_UNIT_TEST(SysViewClientLost) {
-    TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));    
+    TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
 
     auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
     auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
 
-    kikimr.RunCall( [&] { 
+    kikimr.RunCall( [&] {
         CreateLargeTable(kikimr, 500000, 10, 100, 5000, 1);
         return true;
     });
@@ -515,12 +515,12 @@ Y_UNIT_TEST(SysViewClientLost) {
         SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "22222";
     )";
     TString timeoutedRequest = timeoutedRequestStream.Str();
-    
+
     auto settings = TStreamExecScanQuerySettings();
     settings.ClientTimeout(TDuration::MilliSeconds(50));
     auto resultFuture = kikimr.RunInThreadPool([&]{
         return db.StreamExecuteScanQuery(timeoutedRequest).GetValueSync();});
-    
+
     TDispatchOptions opts;
     opts.FinalEvents.emplace_back([&updateCount](IEventHandle&) {
         return updateCount > 0;
@@ -658,10 +658,9 @@ Y_UNIT_TEST_TWIN(OneShardLocalExec, UseSink) {
     UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), 0);
 }
 
-Y_UNIT_TEST_QUAD(OneShardNonLocalExec, UseSink, EnableParallelPointReadConsolidation) {
+Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-    app.MutableTableServiceConfig()->SetEnableParallelPointReadConsolidation(EnableParallelPointReadConsolidation);
     TKikimrRunner kikimr(TKikimrSettings(app).SetNodeCount(2));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -881,7 +880,7 @@ Y_UNIT_TEST_TWIN(CreateTableAsStats, IsOlap) {
     auto settings = NYdb::NQuery::TExecuteQuerySettings()
         .StatsMode(NYdb::NQuery::EStatsMode::Full);
 
-    {    
+    {
         auto result = client.ExecuteQuery(Sprintf(R"(
             CREATE TABLE `/Root/Destination` (
                 PRIMARY KEY (Col1)
@@ -916,11 +915,21 @@ Y_UNIT_TEST_TWIN(CreateTableAsStats, IsOlap) {
         auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         Cerr << stats.DebugString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 24);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().bytes(), 24);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).partitions_count(), 1);
+
+        if (IsOlap) {
+            // size of serialized may be a little different (because of arrow)
+            UNIT_ASSERT_GE(stats.query_phases(0).table_access(0).updates().bytes(), 400);
+            UNIT_ASSERT_LE(stats.query_phases(0).table_access(0).updates().bytes(), 500);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().bytes(), 40);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).partitions_count(), 0);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 24);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().bytes(), 24);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).partitions_count(), 1);
+        }
     }
 
     {

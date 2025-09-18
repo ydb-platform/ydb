@@ -23,6 +23,7 @@ namespace NKikimr {
             ui8 partId,
             const TIngress &ingress,
             TRope buffer,
+            std::optional<ui64> checksum,
             ui64 lsn,
             EOpMode mode)
     {
@@ -33,7 +34,7 @@ namespace NKikimr {
                     OpMode2Str(mode), id.ToString().data(), lsn, ui32(buffer.GetSize())));
 
         if (buffer) {
-            HullDs->LogoBlobs->PutToFresh(lsn, TKeyLogoBlob(id), partId, ingress, std::move(buffer));
+            HullDs->LogoBlobs->PutToFresh(lsn, TKeyLogoBlob(id), partId, ingress, std::move(buffer), checksum);
         } else {
             const TBlobStorageGroupType gtype = HullDs->HullCtx->VCtx->Top->GType;
             Y_DEBUG_ABORT_UNLESS(!gtype.PartSize(TLogoBlobID(id, partId)));

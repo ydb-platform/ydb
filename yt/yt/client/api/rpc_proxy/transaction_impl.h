@@ -43,6 +43,7 @@ public:
         NTransactionClient::EDurability durability,
         TDuration timeout,
         bool pingAncestors,
+        std::optional<std::string> pingerAddress,
         std::optional<TDuration> pingPeriod,
         std::optional<TStickyTransactionParameters> stickyParameters,
         i64 sequenceNumberSourceId,
@@ -281,6 +282,7 @@ private:
     const NTransactionClient::EDurability Durability_;
     const TDuration Timeout_;
     const bool PingAncestors_;
+    const std::optional<std::string> PingerAddress_;
     const std::optional<TDuration> PingPeriod_;
     const std::optional<std::string> StickyProxyAddress_;
     const i64 SequenceNumberSourceId_;

@@ -396,7 +396,8 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
         case TType::EKind::Resource:
         case TType::EKind::Flow:
         case TType::EKind::ReservedKind:
-        case TType::EKind::Multi: {
+        case TType::EKind::Multi:
+        case TType::EKind::Linear: {
             if (settings.DiscardUnsupportedTypes) {
                 return 0;
             }

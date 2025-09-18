@@ -334,6 +334,10 @@ private:
         VisitType<TOptionalType>(node);
     }
 
+    void Visit(TLinearType& node) override {
+        VisitType<TLinearType>(node);
+    }
+
     void Visit(TDictType& node) override {
         VisitType<TDictType>(node);
     }

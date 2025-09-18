@@ -246,6 +246,8 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
         if (source->GetContext()->IsAborted()) {
             return;
         }
+        AFL_VERIFY(filter.GetRecordsCountVerified() == source->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
+                                                         "source", source->GetRecordsCount());
         if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
             filter = filter.ApplyFilterFrom(*appliedFilter);
         }

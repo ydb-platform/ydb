@@ -20,6 +20,7 @@ SRCS(
 PEERDIR(
     yql/essentials/public/issue
     yql/essentials/public/issue/protos
+    ydb/library/backup
     ydb/public/api/grpc
     ydb/public/api/protos
     ydb/public/api/protos/annotations

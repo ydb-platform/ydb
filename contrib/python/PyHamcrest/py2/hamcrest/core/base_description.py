@@ -9,6 +9,7 @@ import six
 from hamcrest.core.description import Description
 from hamcrest.core.selfdescribingvalue import SelfDescribingValue
 from hamcrest.core.helpers.hasmethod import hasmethod
+from hamcrest.core.helpers.ismock import ismock
 
 class BaseDescription(Description):
     """Base class for all :py:class:`~hamcrest.core.description.Description`
@@ -21,7 +22,7 @@ class BaseDescription(Description):
         return self
 
     def append_description_of(self, value):
-        if hasmethod(value, 'describe_to'):
+        if not ismock(value) and hasmethod(value, 'describe_to'):
             value.describe_to(self)
         elif six.PY3 and isinstance(value, six.text_type):
             self.append(repr(value))

@@ -54,7 +54,8 @@ private:
 };
 
 
-class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTabletExecutedFlat {
+class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
+                               public TTabletExecutedFlat {
     struct TTxPreInit;
     struct TTxInit;
     struct TTxWrite;

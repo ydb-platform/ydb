@@ -120,5 +120,11 @@ void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId,
 
 void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId);
 
+ui64 GetRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId);
+void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId, size_t expectedRowCount);
+void WaitForRowCount(
+    TTestActorRuntime& runtime, ui32 nodeIndex,
+    TPathId pathId, size_t expectedRowCount, size_t timeoutSec = 130);
+
 } // namespace NStat
 } // namespace NKikimr

@@ -200,6 +200,9 @@ public:
     TRuntimeNode NewVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType);
     TRuntimeNode NewVariant(TRuntimeNode item, const std::string_view& member, TType* variantType);
 
+    TRuntimeNode ToDynamicLinear(TRuntimeNode item);
+    TRuntimeNode FromDynamicLinear(TRuntimeNode item, const std::string_view& file, ui32 row, ui32 column);
+
     // generic data transformation, some args could be optional
     TRuntimeNode Convert(TRuntimeNode data, TType* type);
     TRuntimeNode ToIntegral(TRuntimeNode data, TType* type);

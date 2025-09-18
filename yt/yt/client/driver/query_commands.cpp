@@ -311,6 +311,19 @@ void TListQueriesCommand::Register(TRegistrar registrar)
             return command->Options.Attributes;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "search_by_token_prefix",
+        [] (TThis* command) -> auto& {
+            return command->Options.SearchByTokenPrefix;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "use_full_text_search",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseFullTextSearch;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TListQueriesCommand::DoExecute(ICommandContextPtr context)
@@ -399,15 +412,20 @@ void TGetQueryTrackerInfoCommand::DoExecute(ICommandContextPtr context)
     auto result = WaitFor(context->GetClient()->GetQueryTrackerInfo(Options))
         .ValueOrThrow();
 
-    context->ProduceOutputValue(BuildYsonStringFluently()
+    auto serialized = BuildYsonStringFluently()
         .BeginMap()
             .Item("query_tracker_stage").Value(result.QueryTrackerStage)
             .Item("cluster_name").Value(result.ClusterName)
             .Item("supported_features").Value(result.SupportedFeatures)
             .Item("access_control_objects").Value(result.AccessControlObjects)
             .Item("clusters").Value(result.Clusters)
-            .Item("engines_info").Value(result.EnginesInfo.value_or(TYsonString(TString("{}"))))
-        .EndMap());
+            .Item("engines_info").Value(result.EnginesInfo.value_or(TYsonString(TString("{}"))));
+
+    if (result.ExpectedTablesVersion) {
+        serialized.Item("expected_tables_version").Value(result.ExpectedTablesVersion);
+    }
+
+    context->ProduceOutputValue(serialized.EndMap());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

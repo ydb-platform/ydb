@@ -67,7 +67,7 @@ namespace NKikimr {
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(TGroupId::FromValue(0), 1, 0, 0, 0),
                 nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
-            auto hugeBlobCtx = std::make_shared<THugeBlobCtx>("", nullptr, true);
+            auto hugeBlobCtx = std::make_shared<THugeBlobCtx>("", nullptr, EBlobHeaderMode::OLD_HEADER);
             auto replCtx = std::make_shared<TReplCtx>(
                 vctx,
                 nullptr, // HullCtx
@@ -175,7 +175,8 @@ namespace NKikimr {
                 auto& item = rbq.front();
                 UNIT_ASSERT_EQUAL(item.Id, id);
 
-                TRope buf = TDiskBlob::Create(id.BlobSize(), partIndex + 1, groupInfo->Type.TotalPartCount(), TRope(v[0]), arena, true);
+                TRope buf = TDiskBlob::Create(id.BlobSize(), partIndex + 1, groupInfo->Type.TotalPartCount(),
+                    TRope(v[0]), arena, EBlobHeaderMode::OLD_HEADER, std::nullopt);
 
                 UNIT_ASSERT_EQUAL(item.Data, buf);
             }

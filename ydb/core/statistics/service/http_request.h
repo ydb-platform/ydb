@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/util/ulid.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -85,6 +86,7 @@ private:
     std::unordered_map<EParamType, TString> Params;
     const EResponseContentType ContentType;
     const TActorId ReplyToActorId;
+    TULIDGenerator UlidGen;
 };
 
 } // NStat

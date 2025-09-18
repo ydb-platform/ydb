@@ -687,6 +687,7 @@ message TTestShardControlRequest {
         optional uint32 PutTraceFractionPPM = 13;
         optional uint32 PutTraceVerbosity = 14 [default = 15];
         optional uint32 SecondsBeforeLoadStart = 15; // number of seconds to wait before starting load
+        optional uint32 StallCounter = 16; // number of requests before issuing barrier and waiting for all of them to complete
     }
 
     optional uint64 TabletId = 1;

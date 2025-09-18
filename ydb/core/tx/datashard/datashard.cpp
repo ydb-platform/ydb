@@ -623,6 +623,14 @@ void TDataShard::SendCommittedReplies(std::vector<std::unique_ptr<IEventHandle>>
     }
 }
 
+void TDataShard::SendRestartNotification(TOperation* op) {
+    if (!op->HasFlag(TTxFlags::RestartNotificationSent)) {
+        auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(TabletID(), op->GetGlobalTxId());
+        Send(op->GetTarget(), notify.Release(), 0, op->GetCookie());
+        op->SetFlag(TTxFlags::RestartNotificationSent);
+    }
+}
+
 class TDataShard::TWaitVolatileDependencies final : public IVolatileTxCallback {
 public:
     TWaitVolatileDependencies(

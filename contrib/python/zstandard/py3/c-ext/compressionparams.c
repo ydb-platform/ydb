@@ -479,7 +479,7 @@ PyType_Slot ZstdCompressionParametersSlots[] = {
 };
 
 PyType_Spec ZstdCompressionParametersSpec = {
-    "zstd.ZstdCompressionParameters",
+    "zstandard.backend_c.ZstdCompressionParameters",
     sizeof(ZstdCompressionParametersObject),
     0,
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,

@@ -131,11 +131,9 @@ public:
         };
 
         auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
-        if (ev->Cookie) {
-            auto response = MakeHolder<TEvQueryResponse>();
-            response->Query = query;
-            Send(ev->Sender, response.Release(), 0, queryId);
-        }
+        auto response = MakeHolder<TEvQueryResponse>();
+        response->Query = query;
+        Send(ev->Sender, response.Release(), 0, queryId);
     }
 
     void Handle(TEvRemoveQuery::TPtr& ev) {

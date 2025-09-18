@@ -352,6 +352,7 @@ public:
         ui32 NumActiveSlots = 0; // sum of owners weights allocated on this PDisk
         ui32 SlotSizeInUnits = 0;
         ui64 InferPDiskSlotCountFromUnitSize = 0;
+        ui32 InferPDiskSlotCountMax = 0;
         TMap<Schema::VSlot::VSlotID::Type, TIndirectReferable<TVSlotInfo>::TPtr> VSlotsOnPDisk; // vslots over this PDisk
 
         bool Operational = false; // set to true when both containing node is connected and Operational is reported in Metrics
@@ -391,7 +392,8 @@ public:
                     Table::DecommitStatus,
                     Table::ShredComplete,
                     Table::MaintenanceStatus,
-                    Table::InferPDiskSlotCountFromUnitSize
+                    Table::InferPDiskSlotCountFromUnitSize,
+                    Table::InferPDiskSlotCountMax
                 > adapter(
                     &TPDiskInfo::Path,
                     &TPDiskInfo::Kind,
@@ -409,7 +411,8 @@ public:
                     &TPDiskInfo::DecommitStatus,
                     &TPDiskInfo::ShredComplete,
                     &TPDiskInfo::MaintenanceStatus,
-                    &TPDiskInfo::InferPDiskSlotCountFromUnitSize
+                    &TPDiskInfo::InferPDiskSlotCountFromUnitSize,
+                    &TPDiskInfo::InferPDiskSlotCountMax
                 );
             callback(&adapter);
         }
@@ -434,7 +437,8 @@ public:
                    ui32 staticSlotUsage,
                    bool shredComplete,
                    NKikimrBlobStorage::TMaintenanceStatus::E maintenanceStatus,
-                   ui64 inferPDiskSlotCountFromUnitSize)
+                   ui64 inferPDiskSlotCountFromUnitSize,
+                   ui32 inferPDiskSlotCountMax)
             : HostId(hostId)
             , Path(path)
             , Kind(kind)
@@ -446,6 +450,7 @@ public:
             , ShredComplete(shredComplete)
             , BoxId(boxId)
             , InferPDiskSlotCountFromUnitSize(inferPDiskSlotCountFromUnitSize)
+            , InferPDiskSlotCountMax(inferPDiskSlotCountMax)
             , Status(status)
             , StatusTimestamp(statusTimestamp)
             , DecommitStatus(decommitStatus)
@@ -970,6 +975,7 @@ public:
             Table::Kind::Type Kind;
             TMaybe<Table::PDiskConfig::Type> PDiskConfig;
             Table::InferPDiskSlotCountFromUnitSize::Type InferPDiskSlotCountFromUnitSize;
+            Table::InferPDiskSlotCountMax::Type InferPDiskSlotCountMax;
 
             template<typename T>
             static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -979,14 +985,16 @@ public:
                         Table::ReadCentric,
                         Table::Kind,
                         Table::PDiskConfig,
-                        Table::InferPDiskSlotCountFromUnitSize
+                        Table::InferPDiskSlotCountFromUnitSize,
+                        Table::InferPDiskSlotCountMax
                     > adapter(
                         &TDriveInfo::Type,
                         &TDriveInfo::SharedWithOs,
                         &TDriveInfo::ReadCentric,
                         &TDriveInfo::Kind,
                         &TDriveInfo::PDiskConfig,
-                        &TDriveInfo::InferPDiskSlotCountFromUnitSize
+                        &TDriveInfo::InferPDiskSlotCountFromUnitSize,
+                        &TDriveInfo::InferPDiskSlotCountMax
                     );
                 callback(&adapter);
             }
@@ -2485,6 +2493,7 @@ public:
         Schema::PDisk::PDiskConfig::Type PDiskConfig;
         ui32 ExpectedSlotCount = 0;
         ui64 InferPDiskSlotCountFromUnitSize = 0;
+        ui32 InferPDiskSlotCountMax = 0;
 
         // runtime info
         ui32 StaticSlotUsage = 0;
@@ -2498,6 +2507,7 @@ public:
             , Category(pdisk.GetPDiskCategory())
             , Guid(pdisk.GetPDiskGuid())
             , InferPDiskSlotCountFromUnitSize(pdisk.GetInferPDiskSlotCountFromUnitSize())
+            , InferPDiskSlotCountMax(pdisk.GetInferPDiskSlotCountMax())
         {
             if (pdisk.HasPDiskConfig()) {
                 const auto& cfg = pdisk.GetPDiskConfig();

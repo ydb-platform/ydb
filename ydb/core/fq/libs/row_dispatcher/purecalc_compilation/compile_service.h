@@ -1,11 +1,13 @@
 #pragma once
 
-#include <ydb/core/fq/libs/config/protos/row_dispatcher.pb.h>
-
 #include <ydb/library/actors/core/actor.h>
+
+namespace NKikimrConfig {
+class TSharedReadingConfig_TCompileServiceConfig;
+} // namespace NKikimrConfig
 
 namespace NFq::NRowDispatcher {
 
-NActors::IActor* CreatePurecalcCompileService(const NConfig::TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters);
+NActors::IActor* CreatePurecalcCompileService(const NKikimrConfig::TSharedReadingConfig_TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters);
 
 }  // namespace NFq::NRowDispatcher

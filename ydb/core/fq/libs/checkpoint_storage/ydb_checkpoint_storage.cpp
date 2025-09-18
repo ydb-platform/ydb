@@ -590,11 +590,11 @@ TFuture<TStatus> UpdateCheckpointWithCheckWrapper(
 
 class TCheckpointStorage : public ICheckpointStorage {
     TYdbConnectionPtr YdbConnection;
-    const NKikimrConfig::TCheckpointsConfig::TExternalStorage Config;
+    const NKikimrConfig::TExternalStorage Config;
 
 public:
     explicit TCheckpointStorage(
-        const NKikimrConfig::TCheckpointsConfig::TExternalStorage& config,
+        const NKikimrConfig::TExternalStorage& config,
         const IEntityIdGenerator::TPtr& entityIdGenerator,
         const TYdbConnectionPtr& ydbConnection);
 
@@ -659,7 +659,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TCheckpointStorage::TCheckpointStorage(
-    const NKikimrConfig::TCheckpointsConfig::TExternalStorage& config,
+    const NKikimrConfig::TExternalStorage& config,
     const IEntityIdGenerator::TPtr& entityIdGenerator,
     const TYdbConnectionPtr& ydbConnection)
     : YdbConnection(ydbConnection)
@@ -1186,7 +1186,7 @@ TExecDataQuerySettings TCheckpointStorage::DefaultExecDataQuerySettings() {
 ////////////////////////////////////////////////////////////////////////////////
 
 TCheckpointStoragePtr NewYdbCheckpointStorage(
-    const NKikimrConfig::TCheckpointsConfig::TExternalStorage& config,
+    const NKikimrConfig::TExternalStorage& config,
     const IEntityIdGenerator::TPtr& entityIdGenerator,
     const TYdbConnectionPtr& ydbConnection)
 {

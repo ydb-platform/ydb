@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         SetupTableDataServiceDiscovery(file, port);
         auto tableDataServiceClient = MakeTableDataServiceClient(port);
         auto tableDataServiceServer = MakeTableDataServiceServer(port);
-        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(false);
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
         IFmrJob::TPtr job = MakeFmrJob(file.Name(), ytJobService, jobLauncher);
 
         TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id", "test_part_id");
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         auto tableDataServiceClient = MakeTableDataServiceClient(port);
         auto tableDataServiceServer = MakeTableDataServiceServer(port);
 
-        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(false);
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
         IFmrJob::TPtr job = MakeFmrJob(file.Name(), ytJobService, jobLauncher);
 
         TYtTableRef output = TYtTableRef{.RichPath = NYT::TRichYPath().Path("test_path").Cluster("test_cluster")};
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         SetupTableDataServiceDiscovery(file, port);
         auto tableDataServiceClient = MakeTableDataServiceClient(port);
         auto tableDataServiceServer = MakeTableDataServiceServer(port);
-        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(false);
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
         IFmrJob::TPtr job = MakeFmrJob(file.Name(), ytJobService, jobLauncher);
 
         TTaskTableRef input_table_ref_1 = {input_1};
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TString talblDataServiceExpectedOutputChunkId = "0";
         TDownloadTaskParams params = TDownloadTaskParams(input, output);
         TTask::TPtr task = MakeTask(ETaskType::Download, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
-        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(false);
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
         ETaskStatus status = RunJob(task, file.Name(), ytJobService, jobLauncher, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         auto group = GetTableDataServiceGroup(input.TableId, "test_part_id");
         TString chunk = "0";
         tableDataServiceClient->Put(group, chunk, GetBinaryYson(TableContent_1));
-        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(false);
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
         ETaskStatus status = RunJob(task, file.Name(), ytJobService, jobLauncher, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
 
         TUploadTaskParams params = TUploadTaskParams(input, output);
         TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
-        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(false);
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
 
         // No tables in tableDataService
         UNIT_ASSERT_EXCEPTION_CONTAINS(
@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         auto group_3 = GetTableDataServiceGroup(input_3.TableId, "test_part_id");
         tableDataServiceClient->Put(group_1, chunk, GetBinaryYson(TableContent_1));
         tableDataServiceClient->Put(group_3, chunk, GetBinaryYson(TableContent_3));
-        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(false);
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
         ETaskStatus status = RunJob(task, file.Name(), ytJobService, jobLauncher, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);

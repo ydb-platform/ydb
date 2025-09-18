@@ -335,6 +335,31 @@ TAttributeFilter::TKeyToFilter TAttributeFilter::Normalize() const
     return result;
 }
 
+void TAttributeFilter::Remove(const std::vector<IAttributeDictionary::TKey>& keys)
+{
+    std::erase_if(
+        Keys_,
+        [&] (const auto& key) {
+            return std::find(keys.begin(), keys.end(), key) != keys.end();
+        }
+    );
+    auto keyPaths = keys | std::views::transform([] (const auto& key) {
+        return "/" + ToYPathLiteral(key);
+    });
+
+    std::erase_if(
+        Paths_,
+        [&] (const auto& path) {
+            for (const auto& keyPath : keyPaths) {
+                if (path.StartsWith(std::string_view(keyPath))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    );
+}
+
 std::unique_ptr<TAttributeFilter::IFilteringConsumer> TAttributeFilter::CreateFilteringConsumer(
     IYsonConsumer* targetConsumer,
     const TPathFilter& pathFilter)

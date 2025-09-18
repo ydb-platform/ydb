@@ -2285,13 +2285,12 @@ bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType) {
 
 void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
     TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
-    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler,
-    bool withOptionals)
+    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler)
 {
     auto kind = node->GetTypeAnn()->GetKind();
 
     // Ignore stream input, because it cannot be used multiple times
-    if (!(kind == ETypeAnnotationKind::List || (withOptionals && kind == ETypeAnnotationKind::Optional))) {
+    if (!(kind == ETypeAnnotationKind::List || kind == ETypeAnnotationKind::Optional)) {
         return;
     }
 

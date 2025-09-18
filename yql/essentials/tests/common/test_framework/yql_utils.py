@@ -588,7 +588,8 @@ def execute(
         output_tables=None,
         pretty_plan=True,
         parameters={},
-        langver=None
+        langver=None,
+        attrs={}
 ):
     '''
     Executes YQL/SQL
@@ -605,6 +606,7 @@ def execute(
     :param output_tables: list of Table (will be returned)
     :param pretty_plan: whether to use pretty printing for plan or not
     :param parameters: query parameters as dict like {name: json_value}
+    :param attrs: query operation attributes as dict like {attr_name: attr value}
     :return: YQLExecResult
     '''
 
@@ -628,7 +630,8 @@ def execute(
         tables=(output_tables + input_tables),
         pretty_plan=pretty_plan,
         parameters=parameters,
-        langver=langver
+        langver=langver,
+        attrs=attrs
     )
 
     try:

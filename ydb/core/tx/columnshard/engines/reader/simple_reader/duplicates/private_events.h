@@ -13,17 +13,24 @@ class TEvFilterRequestResourcesAllocated
 private:
     YDB_READONLY_DEF(std::shared_ptr<TFilterAccumulator>, Request);
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
+    std::unique_ptr<TFilterBuildingGuard> RequestGuard;
 
 public:
-    TEvFilterRequestResourcesAllocated(
-        const std::shared_ptr<TFilterAccumulator>& request, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard)
+    TEvFilterRequestResourcesAllocated(const std::shared_ptr<TFilterAccumulator>& request,
+        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard, std::unique_ptr<TFilterBuildingGuard>&& requestGuard)
         : Request(request)
         , AllocationGuard(guard)
+        , RequestGuard(std::move(requestGuard))
     {
+        AFL_VERIFY(RequestGuard);
     }
 
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& ExtractAllocationGuard() {
         return std::move(AllocationGuard);
+    }
+    std::unique_ptr<TFilterBuildingGuard>&& ExtractRequestGuard() {
+        AFL_VERIFY(RequestGuard);
+        return std::move(RequestGuard);
     }
 };
 

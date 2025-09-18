@@ -20,7 +20,8 @@ namespace NPQ {
 
 class TPartitionId;
 
-NActors::IActor* CreateMirrorer(const NActors::TActorId& tabletActor,
+NActors::IActor* CreateMirrorer(const ui64 tabletId,
+                                const NActors::TActorId& tabletActor,
                                 const NActors::TActorId& partitionActor,
                                 const NPersQueue::TTopicConverterPtr& topicConverter,
                                 const ui32 partition,

@@ -14,6 +14,7 @@ namespace NKikimr::NTestShard {
         const TActorId Tablet;
         TActorId TabletActorId;
         const NKikimrClient::TTestShardControlRequest::TCmdInitialize Settings;
+        bool IssuedConnect = false;
 
         ui64 ValidationRunningCount = 0;
 

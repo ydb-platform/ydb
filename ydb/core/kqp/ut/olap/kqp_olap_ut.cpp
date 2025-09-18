@@ -306,6 +306,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(ConstantIfPushDown) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        // Disable constant folding.
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableConstantFolding(false);
         settings.AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
 
@@ -342,7 +344,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto status = queryClient.ExecuteQuery(R"(
                 --!syntax_v1
                 select count(*) as cnt
-                from statistics2 where IF(len(String::Strip(' '))>0,username = ' ', True)
+                from statistics2 where IF(len(' ') > 0, username = ' ', True)
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
             ).GetValueSync();
 
@@ -4494,7 +4496,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
 
         TTestHelper testHelper(runnerSettings);
-        testHelper.GetKikimr().GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_TRACE);
         auto client = testHelper.GetKikimr().GetQueryClient();
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -4673,6 +4674,32 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 result.GetIssues().ToString(),
                 "Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes.",
                 result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(SysViewScanAfterDropTable) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 100);
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery("DROP TABLE `olapStore/olapTable`", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result =
+                client.ExecuteQuery("SELECT * FROM `/Root/olapStore/.sys/store_primary_index_optimizer_stats`", NQuery::TTxControl::NoTx())
+                    .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 }

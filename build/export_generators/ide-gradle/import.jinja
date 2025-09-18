@@ -13,3 +13,8 @@ import org.jetbrains.kotlin.gradle.internal.KaptGenerateStubsTask
 import io.freefair.gradle.plugins.lombok.tasks.Delombok
 {%-     endif %}
 {%  endif -%}
+
+{%- if proto_template -%}
+import com.google.protobuf.gradle.*
+
+{%  endif -%}

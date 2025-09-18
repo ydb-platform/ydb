@@ -101,6 +101,13 @@ TError CheckAceCorrect(const TAce& ace)
     return TError();
 }
 
+template <class TAce>
+void ValidateAceCorrect(const TAce& ace)
+{
+    CheckAceCorrect(ace)
+        .ThrowOnError();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NSecurityClient

@@ -9,6 +9,7 @@
 #include <library/cpp/charset/ci_string.h>
 
 #include <util/digest/fnv.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 using namespace NYql;
 
@@ -288,7 +289,7 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
     return settings;
 }
 
-static INode::TPtr CreateVectorIndexSettings(const TVectorIndexSettings& vectorIndexSettings, const INode& node) {
+static INode::TPtr CreateIndexSettings(const TIndexDescription::TIndexSettings& indexSettings, const INode& node) {
     // short aliases for member function calls
     auto Y = [&node](auto&&... args) { return node.Y(std::forward<decltype(args)>(args)...); };
     auto Q = [&node](auto&&... args) { return node.Q(std::forward<decltype(args)>(args)...); };
@@ -296,23 +297,10 @@ static INode::TPtr CreateVectorIndexSettings(const TVectorIndexSettings& vectorI
 
     auto settings = Y();
 
-    if (vectorIndexSettings.Distance) {
-        settings = L(settings, Q(Y(Q("distance"), Q(ToString(*vectorIndexSettings.Distance)))));
-    }
-    if (vectorIndexSettings.Similarity) {
-        settings = L(settings, Q(Y(Q("similarity"), Q(ToString(*vectorIndexSettings.Similarity)))));
-    }
-    if (vectorIndexSettings.VectorType) {
-        settings = L(settings, Q(Y(Q("vector_type"), Q(ToString(*vectorIndexSettings.VectorType)))));
-    }
-    if (vectorIndexSettings.VectorDimension) {
-        settings = L(settings, Q(Y(Q("vector_dimension"), Q(ToString(*vectorIndexSettings.VectorDimension)))));
-    }
-    if (vectorIndexSettings.Clusters) {
-        settings = L(settings, Q(Y(Q("clusters"), Q(ToString(*vectorIndexSettings.Clusters)))));
-    }
-    if (vectorIndexSettings.Levels) {
-        settings = L(settings, Q(Y(Q("levels"), Q(ToString(*vectorIndexSettings.Levels)))));
+    for (const auto& [_, indexSetting] : indexSettings) {
+        settings = L(settings, Q(Y(
+            BuildQuotedAtom(indexSetting.NamePosition, indexSetting.Name),
+            BuildQuotedAtom(indexSetting.ValuePosition, indexSetting.Value))));
     }
 
     return settings;
@@ -342,10 +330,10 @@ static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSetting
         ));
         indexNode = node.L(indexNode, tableSettings);
     }
-    if (const auto* indexSettingsPtr = std::get_if<TVectorIndexSettings>(&index.IndexSettings)) {
+    if (index.IndexSettings) {
         const auto& indexSettings = node.Q(node.Y(
             node.Q("indexSettings"),
-            node.Q(CreateVectorIndexSettings(*indexSettingsPtr, node))));
+            node.Q(CreateIndexSettings(index.IndexSettings, node))));
         indexNode = node.L(indexNode, indexSettings);
     }
     return indexNode;

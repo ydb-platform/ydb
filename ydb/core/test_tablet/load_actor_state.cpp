@@ -21,13 +21,15 @@ namespace NKikimr::NTestShard {
         Y_ABORT_UNLESS(from != ::NTestShard::TStateServer::DELETED);
         Y_ABORT_UNLESS(to != ::NTestShard::TStateServer::ABSENT);
 
+        if (from == ::NTestShard::TStateServer::CONFIRMED) { // key was confirmed, unconfirm it
+            MakeUnconfirmed(key);
+        }
+        if (from == ::NTestShard::TStateServer::WRITE_PENDING && to == ::NTestShard::TStateServer::CONFIRMED) {
+            BytesOfData += key.second.Len;
+        }
+
         if (!Settings.HasStorageServerHost()) {
-            if (from == ::NTestShard::TStateServer::WRITE_PENDING && to == ::NTestShard::TStateServer::CONFIRMED) {
-                BytesOfData += key.second.Len;
-            }
-            if (from == ::NTestShard::TStateServer::CONFIRMED) {
-                MakeUnconfirmed(key);
-            } else if (to == ::NTestShard::TStateServer::CONFIRMED) {
+            if (to == ::NTestShard::TStateServer::CONFIRMED) {
                 MakeConfirmed(key);
             }
             if (to == ::NTestShard::TStateServer::DELETED) {
@@ -79,6 +81,7 @@ namespace NKikimr::NTestShard {
                 Y_FAIL_S("ERROR from StateServer TabletId# " << TabletId);
 
             case ::NTestShard::TStateServer::RACE:
+                STLOG(PRI_ERROR, TEST_SHARD, TS35, "received RACE in TEvStateServerWriteResult", (TabletId, TabletId));
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                 PassAway();
                 return;
@@ -94,15 +97,9 @@ namespace NKikimr::NTestShard {
 
         // account data bytes if confirming written key
         Y_ABORT_UNLESS(key.second.ConfirmedState != key.second.PendingState);
-        if (key.second.ConfirmedState == ::NTestShard::TStateServer::WRITE_PENDING &&
-                key.second.PendingState == ::NTestShard::TStateServer::CONFIRMED) {
-            BytesOfData += key.second.Len;
-        }
 
         // switch to correct state
-        if (key.second.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED) {
-            MakeUnconfirmed(key);
-        } else if (key.second.PendingState == ::NTestShard::TStateServer::CONFIRMED) {
+        if (key.second.PendingState == ::NTestShard::TStateServer::CONFIRMED) {
             MakeConfirmed(key);
         }
         key.second.ConfirmedState = key.second.PendingState;

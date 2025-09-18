@@ -18,6 +18,7 @@ PEERDIR(
     ydb/library/testlib/pq_helpers
     ydb/library/yql/providers/pq/gateway/dummy
     ydb/tests/fq/pq_async_io
+    yql/essentials/minikql/invoke_builtins
     yql/essentials/sql/pg_dummy
 )
 

@@ -294,10 +294,10 @@ class TestAlterTiering(TieringTestBase):
             LOGGER.info('executing ADD COLUMN')
             sth.execute_scheme_query(
                 AlterTableStore(store).add_column(sth.Column(column_name, random.choice(data_types))),
-                retries=2,
+                retries=100,
             )
             LOGGER.info('executing DROP COLUMN')
-            sth.execute_scheme_query(AlterTableStore(store).drop_column(column_name), retries=2)
+            sth.execute_scheme_query(AlterTableStore(store).drop_column(column_name), retries=100)
 
     def scenario_many_tables(self, ctx: TestContext):
         skip_test.check_test_for_skipping(ctx)

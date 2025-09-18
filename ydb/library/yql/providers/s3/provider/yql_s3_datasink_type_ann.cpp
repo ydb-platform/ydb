@@ -92,7 +92,7 @@ private:
                 }
 
                 TExprNode::TPtr node = value.Ptr();
-                if (targetType && TryConvertTo(node, *targetType, ctx) == TStatus::Error) {
+                if (targetType && TryConvertTo(node, *targetType, ctx, *State_->Types) == TStatus::Error) {
                     ctx.AddError(TIssue(ctx.GetPosition(source->Pos()), "Failed to convert input columns types to scheme types"));
                     return TStatus::Error;
                 }
@@ -122,7 +122,7 @@ private:
         }
 
         if (targetType) {
-            const auto status = TryConvertTo(input->ChildRef(TS3WriteObject::idx_Input), *ctx.MakeType<TListExprType>(targetType), ctx);
+            const auto status = TryConvertTo(input->ChildRef(TS3WriteObject::idx_Input), *ctx.MakeType<TListExprType>(targetType), ctx, *State_->Types);
             if (status == TStatus::Error) {
                 ctx.AddError(TIssue(ctx.GetPosition(source->Pos()), "Row type mismatch for S3 external table"));
                 return TStatus::Error;

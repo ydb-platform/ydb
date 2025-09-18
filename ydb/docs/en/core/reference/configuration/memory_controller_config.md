@@ -1,12 +1,37 @@
 # memory_controller_config
 
-There are many components inside {{ ydb-short-name }} [database nodes](../../concepts/glossary.md#database-node) that utilize memory. Most of them need a fixed amount, but some are flexible and can use varying amounts of memory, typically to improve performance. If {{ ydb-short-name }} components allocate more memory than is physically available, the operating system is likely to [terminate](https://en.wikipedia.org/wiki/Out_of_memory#Recovery) the entire {{ ydb-short-name }} process, which is undesirable. The memory controller's goal is to allow {{ ydb-short-name }} to avoid out-of-memory situations while still efficiently using the available memory.
+There are many components inside {{ ydb-short-name }} [database nodes](../../concepts/glossary.md#database-node) that utilize memory. Most of them need a fixed amount, but some are flexible and can use varying amounts of memory, typically to improve performance.
+
+## General Overview of Memory Consumption by Components within a YDB process
+
+```mermaid
+---
+config:
+  sankey:
+    showValues: false
+---
+sankey-beta
+
+Activity Components,"KQP", 20
+Activity Components,Compaction, 10
+
+Cache Components,Shared cache, 40
+Cache Components,MemTable, 10
+
+YDB process memory,Cache Components,50
+YDB process memory,Activity Components, 30
+YDB process memory,Allocator caches, 10
+YDB process memory,Other,10
+```
+
+If {{ ydb-short-name }} components allocate more memory than is physically available, the operating system is likely to [terminate](https://en.wikipedia.org/wiki/Out_of_memory#Recovery) the entire {{ ydb-short-name }} process, which is undesirable. The memory controller's goal is to allow {{ ydb-short-name }} to avoid out-of-memory situations while still efficiently using the available memory.
 
 Examples of components managed by the memory controller:
 
 - [Shared cache](../../concepts/glossary.md#shared-cache): stores recently accessed data pages read from [distributed storage](../../concepts/glossary.md#distributed-storage) to reduce disk I/O and accelerate data retrieval.
 - [MemTable](../../concepts/glossary.md#memtable): holds data that has not yet been flushed to [SST](../../concepts/glossary.md#sst).
 - [KQP](../../concepts/glossary.md#kqp): stores intermediate query results.
+- [Compaction](../../concepts/glossary.md#compaction): The process of organizing and cleaning up data, which is performed automatically (in the background) to optimize storage space.
 - Allocator caches: keep memory blocks that have been released but not yet returned to the operating system.
 
 Memory limits can be configured to control overall memory usage, ensuring the database operates efficiently within the available resources.
@@ -80,6 +105,7 @@ memory_controller_config:
 The activity components include:
 
 - KQP
+- Compaction
 
 The memory limit for each activity component specifies the maximum amount of memory it can attempt to use. However, to prevent the {{ ydb-short-name }} process from exceeding the soft memory limit, the total consumption of activity components is further constrained by an additional limit known as the activities memory limit. If the total memory usage of the activity components exceeds this limit, any additional memory requests will be denied. When query execution approaches memory limits, {{ ydb-short-name }} activates [spilling](../../concepts/spilling.md) to temporarily save intermediate data to disk, preventing memory limit violations.
 
@@ -119,3 +145,4 @@ $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\
 | `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit. |
 | `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit. |
 | `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | KQP memory limit. |
+| `compaction_limit_percent`&nbsp;/<br/>`compaction_limit_bytes` | 10% | Compaction memory limit. |

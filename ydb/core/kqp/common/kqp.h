@@ -18,9 +18,6 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <yql/essentials/public/issue/yql_issue.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include <google/protobuf/util/message_differencer.h>
 
@@ -33,7 +30,7 @@
 namespace NKikimr::NKqp {
 
 TString ScriptExecutionRunnerActorIdString(const NActors::TActorId& actorId);
-bool ScriptExecutionRunnerActorIdFromString(const std::string& executionId, TActorId& actorId);
+bool ScriptExecutionRunnerActorIdFromString(const std::string& actorIdSerialized, TActorId& actorId);
 
 
 class TKqpRequestInfo {

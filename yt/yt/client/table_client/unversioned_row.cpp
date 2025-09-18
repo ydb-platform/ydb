@@ -70,7 +70,8 @@ TUnversionedOwningValue::TUnversionedOwningValue(const TUnversionedValue& other)
     , StringHolder_(nullptr)
 {
     if (IsStringLikeType(Value_.Type)) {
-        auto ref = TSharedRef::FromString(TString{Value_.Data.String, Value_.Length});
+        auto ref = TSharedMutableRef::Allocate<TOwningValueTag>(Value_.Length, {.InitializeStorage = false});
+        ::memcpy(ref.data(), Value_.Data.String, Value_.Length);
         Value_.Data.String = ref.data();
         StringHolder_ = ref.ReleaseHolder();
     }
@@ -109,6 +110,11 @@ TSharedRef TUnversionedOwningValue::GetStringRef() const
 {
     YT_VERIFY(IsStringLikeType(Value_.Type));
     return TSharedRef(Value_.Data.String, Value_.Length, StringHolder_);
+}
+
+TSharedRangeHolderPtr TUnversionedOwningValue::GetStringHolder() const
+{
+    return StringHolder_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

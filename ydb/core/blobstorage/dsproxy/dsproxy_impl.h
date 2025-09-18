@@ -229,11 +229,13 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
                 << ", dropping the queue (" << (ui64)InitQueue.size() << ")" << " Marker# DSP08");
             if (CurrentStateFunc() == &TThis::StateUnconfigured) {
                 ErrorDescription = TStringBuilder() << "Too many requests while waiting for configuration (DSPE2)."
+                        << " GroupId# " << GroupId
                         << " UnconfiguredStateTs# " << UnconfiguredStateTs
                         << " UnconfiguredStateReason " << UnconfiguredStateReasonStr(UnconfiguredStateReason);
                 SetStateUnconfiguredTimeout();
             } else if (CurrentStateFunc() == &TThis::StateEstablishingSessions) {
                 ErrorDescription = TStringBuilder() << "Too many requests while establishing sessions (DSPE5)."
+                        << " GroupId# " << GroupId
                         << " EstablishingSessionsStateTs# " << EstablishingSessionsStateTs;
                 SetStateEstablishingSessionsTimeout();
             }

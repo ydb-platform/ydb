@@ -82,7 +82,13 @@ void CustomTerminateHandler() noexcept {
     }
 
     if (!stackTracePrinted) {
+        ss << "======= terminate() call stack ========\n";
         FormatBackTrace(&ss);
+        if (auto backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
+            ss << "======== exception call stack =========\n";
+            backtrace.PrintTo(ss);
+        }
+        ss << "=======================================\n";
     }
 
     Cerr << ss.Str();

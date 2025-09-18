@@ -1720,23 +1720,52 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         }
     }
 
-    // TODO: #22459
-    /*
     Y_UNIT_TEST(EmptySet_2) {
         auto kikimr = DefaultKikimrRunner({}, AppCfg());
         auto db = kikimr.GetQueryClient();
 
+        auto settings = NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full);
+        auto params = NYdb::TParamsBuilder()
+            .AddParam("$key")
+                .Uint64(202)
+                .Build()
+            .Build();
         auto response = db.ExecuteQuery(R"(
-            SELECT Key FROM `/Root/EightShard` WHERE 1 = 2;
-        )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            declare $key as Uint64;
+            SELECT Key FROM `/Root/EightShard` WHERE 1 = $key;
+        )", NQuery::TTxControl::BeginTx().CommitTx(), params, settings).GetValueSync();
         UNIT_ASSERT_C(response.IsSuccess(), response.GetIssues().ToString());
+        Cerr << response.GetStats()->GetAst() << Endl;
 
         UNIT_ASSERT_VALUES_UNEQUAL(response.GetResultSets().size(), 0);
         for (const auto& resultSet : response.GetResultSets()) {
             UNIT_ASSERT_EQUAL(resultSet.RowsCount(), 0);
         }
     }
-    */
+
+    Y_UNIT_TEST(EmptySet_3) {
+        auto kikimr = DefaultKikimrRunner({}, AppCfg());
+        auto db = kikimr.GetQueryClient();
+
+        auto settings = NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full);
+        auto params = NYdb::TParamsBuilder()
+            .AddParam("$key")
+                .Uint64(202)
+                .Build()
+            .Build();
+        auto response = db.ExecuteQuery(R"(
+            declare $key as Uint64;
+            SELECT Key FROM `/Root/EightShard` WHERE 1 = $key;
+            SELECT Key FROM `/Root/EightShard` WHERE 1 = 2;
+        )", NQuery::TTxControl::BeginTx().CommitTx(), params, settings).GetValueSync();
+        UNIT_ASSERT_C(response.IsSuccess(), response.GetIssues().ToString());
+        Cerr << response.GetStats()->GetAst() << Endl;
+
+        UNIT_ASSERT_VALUES_UNEQUAL(response.GetResultSets().size(), 0);
+        for (const auto& resultSet : response.GetResultSets()) {
+            UNIT_ASSERT_EQUAL(resultSet.RowsCount(), 0);
+        }
+    }
 
     Y_UNIT_TEST(RestrictSqlV0) {
         auto kikimr = DefaultKikimrRunner({}, AppCfg());

@@ -10,7 +10,7 @@ namespace NPQ {
         TStringBuilder s;
         s << owner << "|" << CreateGuidAsString() << "_" << OwnerGeneration;
         ++OwnerGeneration;
-        Y_ABORT_UNLESS(OwnerCookie != s);
+        AFL_ENSURE(OwnerCookie != s)("topic_name", topicName)("partition", partition.ToString());
         OwnerCookie = s;
         NextMessageNo = 0;
         NeedResetOwner = false;

@@ -79,6 +79,10 @@ public:
         Out << "MultiType";
     }
 
+    void Visit(TLinearType&) override {
+        Out << "LinearType";
+    }
+
     // Values
     void Visit(TVoid&) override {
         Out << "void";

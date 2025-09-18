@@ -303,6 +303,9 @@ message TKqpVectorResolveSettings {
 
     // Output position of the cluster column
     optional uint32 ClusterColumnOutPos = 15;
+
+    // Input root cluster ID column (for the prefixed index)
+    optional uint32 RootClusterColumnIndex = 16;
 }
 
 message TKqpTaskInfo {
@@ -2358,14 +2361,13 @@ message TInMemoryLockVolatileDependency {
 }
 
 // In-memory prepared volatile transactions, i.e. those we have accepted for
-// execution and may be planned and executed later. This includes planned and
-// acknowledged transactions that haven't executed yet (including those that
-// have not been committed yet?)
+// execution and which may be planned and executed later. This includes planned
+// and acknowledged transactions that haven't executed yet.
 message TInMemoryPreparedVolatileTx {
     optional uint64 TxId = 1;
     optional NActorsProto.TActorId Source = 2;
     optional uint64 Cookie = 3;
-    optional uint64 Type = 4;
+    optional uint64 Kind = 4;
     optional bytes Body = 5;
     optional uint64 Flags = 6;
     // This is Min/Max step of a prepared transactions, mostly used for deadline cleanup
@@ -2374,6 +2376,8 @@ message TInMemoryPreparedVolatileTx {
     // Specified when the transaction has been planned already (including predictions)
     optional uint64 PredictedStep = 9;
     optional uint64 Step = 10;
+    // Auxillary state which needs to be preserved
+    optional uint64 ReceivedAt = 11; // TInstant in microseconds
 }
 
 // In-memory waiting volatile transactions, i.e. those that have not been

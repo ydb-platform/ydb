@@ -279,7 +279,8 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
 
         const TString sql = R"sql(
             PRAGMA ydb.OverridePlanner = @@ [
-                { "tx": 0, "stage": 0, "tasks": 42 }
+                { "tx": 0, "stage": 0, "tasks": 42 },
+                { "tx": 10, "stage": 10, "tasks": 1, "optional": 1 }
             ] @@;
 
             INSERT INTO insert_data_sink.`/test/`

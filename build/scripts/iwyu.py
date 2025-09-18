@@ -298,6 +298,16 @@ def _is_private_like(inc: str) -> bool:
     return bool(PRIVATE_MARKERS_RE.search(rest))
 
 
+def _is_external(inc: str) -> bool:
+    """Check if include is from external prefixes that should be filtered."""
+    if not inc:
+        return False
+    for pfx in EXTERNAL_PREFIXES:
+        if inc.startswith(pfx):
+            return True
+    return False
+
+
 def build_clean_output(raw_suggestions: str, headers_to_skip: Dict[str, Set[str]]) -> str:
     """Build cleaned IWYU suggestions with verbose and private-header filtering."""
     blocks = _stream_blocks_by_file(raw_suggestions)
@@ -318,10 +328,36 @@ def build_clean_output(raw_suggestions: str, headers_to_skip: Dict[str, Set[str]
             sect["full"]["lines"],
         )
 
-        # ADD: drop verbose-false-positives and private-like includes
         add_kept: List[str] = []
         removed_verbose: Set[str] = set()
         private_keys: Set[str] = set()
+
+        external_add_count: Dict[str, int] = {}
+        external_remove_count: Dict[str, int] = {}
+
+        # Count external headers in ADD section
+        if add_hdr:
+            for line in add_lines:
+                inc = parse_include_line(line)
+                if inc and _is_external(inc):
+                    key = get_matching_key(inc)
+                    if key:
+                        external_add_count[key] = external_add_count.get(key, 0) + 1
+
+        # Count external headers in REMOVE section
+        if rem_hdr:
+            for line in rem_lines:
+                inc = parse_include_line(line)
+                if inc and _is_external(inc):
+                    key = get_matching_key(inc)
+                    if key:
+                        external_remove_count[key] = external_remove_count.get(key, 0) + 1
+
+        # Determine valid 1:1 replacements
+        valid_external_replacements: Set[str] = set()
+        for key in external_add_count:
+            if external_add_count.get(key, 0) == 1 and external_remove_count.get(key, 0) == 1:
+                valid_external_replacements.add(key)
 
         if add_hdr:
             for line in add_lines:
@@ -332,6 +368,11 @@ def build_clean_output(raw_suggestions: str, headers_to_skip: Dict[str, Set[str]
                 if _in_headerset(inc, skip_full, skip_base):
                     removed_verbose.add(inc)
                     continue
+                # Allow external includes only for valid 1:1 replacements
+                if _is_external(inc):
+                    key = get_matching_key(inc)
+                    if key not in valid_external_replacements:
+                        continue
                 if _is_private_like(inc):
                     key = get_matching_key(inc)
                     if key:
@@ -340,8 +381,38 @@ def build_clean_output(raw_suggestions: str, headers_to_skip: Dict[str, Set[str]
                 add_kept.append(line)
 
         # REMOVE: keep as-is, except when replacing facade with private from same key
+        # Also filter out external headers that were filtered from ADD section
         rem_kept: List[str] = []
         facades_for_full: List[str] = []
+
+        # Collect all include paths that were filtered from ADD section
+        filtered_includes: Set[str] = set()
+        if add_hdr:
+            for line in add_lines:
+                inc = parse_include_line(line)
+                if inc and _is_external(inc):
+                    key = get_matching_key(inc)
+                    if key and key not in valid_external_replacements:
+                        filtered_includes.add(inc)
+
+        def should_filter_related_include(inc: str) -> bool:
+            """Check if include should be filtered due to related filtered include."""
+            if not _is_external(inc):
+                return False
+
+            for filtered_inc in filtered_includes:
+                inc_parts = set(inc.split('/'))
+                filtered_parts = set(filtered_inc.split('/'))
+
+                common_parts = inc_parts & filtered_parts
+                if len(common_parts) >= 2:
+                    return True
+
+                inc_basename = inc_parts - {''}
+                if inc_basename and any(part in filtered_inc for part in inc_basename if len(part) > 4):
+                    return True
+
+            return False
 
         if rem_hdr:
             for line in rem_lines:
@@ -350,6 +421,10 @@ def build_clean_output(raw_suggestions: str, headers_to_skip: Dict[str, Set[str]
                     rem_kept.append(line)
                     continue
                 key = get_matching_key(inc)
+
+                if should_filter_related_include(inc):
+                    continue
+
                 if key in private_keys and not _is_private_like(inc):
                     clean = COMMENT_PATTERN.sub("", line.lstrip("-").strip()).strip()
                     if clean:
@@ -365,7 +440,7 @@ def build_clean_output(raw_suggestions: str, headers_to_skip: Dict[str, Set[str]
         removed_full = set(removed_incs)
         removed_base = {_basename(x) for x in removed_incs}
 
-        # FULL: drop verbose-false-positives, removed ones, and private-like; restore facades
+        # FULL: drop verbose-false-positives, removed ones, external includes (except valid replacements), and private-like; restore facades
         full_kept: List[str] = []
         if full_hdr:
             for line in full_lines:
@@ -383,6 +458,11 @@ def build_clean_output(raw_suggestions: str, headers_to_skip: Dict[str, Set[str]
                         continue
                     if _in_headerset(inc, removed_full, removed_base):
                         continue
+                    # Allow external includes only for valid 1:1 replacements
+                    if _is_external(inc):
+                        key = get_matching_key(inc)
+                        if key not in valid_external_replacements:
+                            continue
                     if _is_private_like(inc):
                         continue
 

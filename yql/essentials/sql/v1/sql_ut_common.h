@@ -3419,22 +3419,25 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
     }
 
-    Y_UNIT_TEST(AlterTableAddIndexVectorIsNotCorrect) {
-        ExpectFailWithError(R"sql(USE plato;
+    Y_UNIT_TEST(AlterTableAddIndexDifferentSettings) {
+        // index settings and their types are checked in KQP
+        const auto result = SqlToYql(R"sql(USE plato;
             ALTER TABLE table ADD INDEX idx
                 GLOBAL USING vector_kmeans_tree
                 ON (col) COVER (col)
-                WITH (distance=cosine, vector_type="float", vector_dimension=asdf, levels=3, clusters=10)
-                )sql",
-            "<main>:5:78: Error: Invalid vector_dimension: asdf\n");
+                WITH (distance=42, vector_type="float", vector_dimension=True, levels=none, clusters=10, asdf=qwerty)
+                )sql");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
 
+    Y_UNIT_TEST(AlterTableAddIndexDuplicatedSetting) {
         ExpectFailWithError(R"sql(USE plato;
             ALTER TABLE table ADD INDEX idx
                 GLOBAL USING vector_kmeans_tree
                 ON (col) COVER (col)
-                WITH (distance=42, vector_type="float", vector_dimension=1024, levels=3, clusters=10)
+                WITH (distance=cosine, distance=42)
                 )sql",
-            "<main>:5:32: Error: Invalid distance: 42\n");
+            "<main>:5:49: Error: Duplicated distance\n");
     }
 
     Y_UNIT_TEST(AlterTableAddIndexUnknownSubtype) {

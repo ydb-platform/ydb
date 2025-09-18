@@ -29,6 +29,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     autoscaling_ut.cpp
+    describe_ut.cpp
     balancing_ut.cpp
     commitoffset_ut.cpp
     mirrorer_autoscaling_ut.cpp

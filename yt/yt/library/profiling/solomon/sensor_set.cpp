@@ -296,6 +296,7 @@ void TSensorSet::ReadSensors(
     readOptions.Global = Options_.Global;
     readOptions.DisableSensorsRename = Options_.DisableSensorsRename;
     readOptions.DisableDefault = Options_.DisableDefault;
+    readOptions.MemOnly = Options_.MemOnly;
     if (Options_.SummaryPolicy != ESummaryPolicy::Default) {
         readOptions.SummaryPolicy = Options_.SummaryPolicy;
     }

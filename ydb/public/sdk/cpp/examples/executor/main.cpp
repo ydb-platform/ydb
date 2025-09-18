@@ -11,7 +11,7 @@
 
 void ExecutorExample(const std::string& endpoint, const std::string& database) {
     auto driverConfig = NYdb::CreateFromEnvironment(endpoint + "/?database=" + database)
-        .SetExecutor(NYdb::NExec::CreateThreadPoolExecutorAdapter(
+        .SetExecutor(NYdb::CreateThreadPoolExecutorAdapter(
             std::make_shared<TThreadPool>(TThreadPool::TParams()
                 .SetBlocking(true)
                 .SetCatching(false)

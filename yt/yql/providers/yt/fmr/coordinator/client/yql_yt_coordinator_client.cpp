@@ -76,8 +76,9 @@ public:
         TStringStream outputStream;
 
         auto sendHeartbeatRequestFunc = [&]() {
-            httpClient.DoPost(sendHearbeatRequestUrl, protoSendHeartbeatRequest.SerializeAsString(), &outputStream, GetHeadersWithLogContext(Headers_, false));
+            auto statusCode = httpClient.DoPost(sendHearbeatRequestUrl, protoSendHeartbeatRequest.SerializeAsString(), &outputStream, GetHeadersWithLogContext(Headers_, false));
             TString serializedResponse = outputStream.ReadAll();
+            HandleHttpError(statusCode, serializedResponse);
             NProto::THeartbeatResponse protoHeartbeatResponse;
             YQL_ENSURE(protoHeartbeatResponse.ParseFromString(serializedResponse));
             return NThreading::MakeFuture(HeartbeatResponseFromProto(protoHeartbeatResponse));
@@ -132,6 +133,14 @@ private:
     std::function<void(const yexception&)> OnFail_ = [](const yexception& exc) {
         YQL_CLOG(DEBUG, FastMapReduce) << "Got exception, retrying: " << exc.what();
     };
+
+    void HandleHttpError(TKeepAliveHttpClient::THttpCode statusCode, TString serializedResponse) {
+        if (statusCode = HTTP_OK) return;
+        NProto::TErrorResponse protoErrorResponse;
+        YQL_ENSURE(protoErrorResponse.ParseFromString(serializedResponse));
+        ythrow yexception() << protoErrorResponse.GetErrorMessage();
+    }
+
 };
 
 } // namespace

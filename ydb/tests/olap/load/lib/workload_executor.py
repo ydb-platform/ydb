@@ -2282,8 +2282,6 @@ class WorkloadTestBase(LoadSuiteBase):
             end_time = time_module.time()
             start_time = result.start_time if result.start_time else end_time - 1
 
-            
-
             # Добавляем дополнительную информацию для отчета
             additional_table_strings = {}
 

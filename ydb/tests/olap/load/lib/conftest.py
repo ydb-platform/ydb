@@ -740,8 +740,6 @@ class LoadSuiteBase:
         )
 
 
-
-
 class LoadSuiteParallel(LoadSuiteBase):
     threads: int = 0
 

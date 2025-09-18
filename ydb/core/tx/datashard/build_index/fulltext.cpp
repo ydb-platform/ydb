@@ -36,7 +36,6 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     TTags ScanTags;
     TString TextColumn;
     Ydb::Table::FulltextIndexSettings::Analyzers TextAnalyzers;
-    std::function<TCell(TArrayRef<const TCell>, TArrayRef<const TCell>)> TextGetter;
 
     TBatchRowsUploader Uploader;
     TBufferData* UploadBuf = nullptr;
@@ -142,7 +141,7 @@ public:
         ReadBytes += CountRowCellBytes(key, *row);
 
         TVector<TCell> uploadKey(::Reserve(key.size() + 1));
-        TVector<TCell> uploadValue;
+        TVector<TCell> uploadValue(::Reserve(Request.GetDataColumns().size()));
         
         TString text((*row).at(0).AsBuf());
         auto tokens = Analyze(text, TextAnalyzers);
@@ -394,7 +393,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
             badRequest(TStringBuilder() << "Missing fulltext index settings");
         } else {
             TString error;
-            if (!NKikimr::NFulltext::ValidateSettings({request.keycolumns().begin(), request.keycolumns().end()}, request.GetSettings(), error)) {
+            if (!NKikimr::NFulltext::ValidateSettings(request.keycolumns(), request.GetSettings(), error)) {
                 badRequest(error);
             }
         }

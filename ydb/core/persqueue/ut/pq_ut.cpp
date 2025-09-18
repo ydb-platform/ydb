@@ -12,7 +12,6 @@
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -101,9 +100,6 @@ Y_UNIT_TEST(TestCmdReadWithLastOffset) {
                 readSettings.Offset = offset;
                 readSettings.LastOffset = lastOffset;
                 readSettings.ResCount = lastOffset < offset ? 0 : static_cast<ui32>(lastOffset - offset);
-                DBGTRACE_LOG("Offset=" << readSettings.Offset <<
-                             ", LastOffset=" << readSettings.LastOffset <<
-                             ", ResCount=" << readSettings.ResCount);
                 BeginCmdRead(readSettings, tc);
 
                 TAutoPtr<IEventHandle> handle;

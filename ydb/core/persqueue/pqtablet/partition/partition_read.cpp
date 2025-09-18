@@ -24,7 +24,6 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 #define VERIFY_RESULT_BLOB(blob, pos) \
     AFL_ENSURE(blob.SeqNo <= (ui64)Max<i64>())("SeqNo is too big", blob.SeqNo);
@@ -700,7 +699,6 @@ void CollectReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const
                                 TPartitionBlobEncoder& zone,
                                 TVector<TRequestedBlob>& result)
 {
-    DBGTRACE("TPartition::CollectReadRequestFromBody");
     AFL_ENSURE(rcount && rsize);
     auto blobs = zone.GetBlobsFromBody(startOffset,
                                        partNo,
@@ -718,7 +716,6 @@ void TPartition::GetReadRequestFromCompactedBody(const ui64 startOffset, const u
                                                  TBlobKeyTokens* blobKeyTokens,
                                                  TVector<TRequestedBlob>& blobs)
 {
-    DBGTRACE("TPartition::GetReadRequestFromCompactedBody");
     CollectReadRequestFromBody(startOffset, partNo,
                                maxCount, maxSize,
                                rcount, rsize,
@@ -733,7 +730,6 @@ void TPartition::GetReadRequestFromFastWriteBody(const ui64 startOffset, const u
                                                  TBlobKeyTokens* blobKeyTokens,
                                                  TVector<TRequestedBlob>& blobs)
 {
-    DBGTRACE("TPartition::GetReadRequestFromFastWriteBody");
     CollectReadRequestFromBody(startOffset, partNo,
                                maxCount, maxSize,
                                rcount, rsize,
@@ -1048,11 +1044,6 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
 }
 
 void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription) {
-    DumpZones(__FILE__, __LINE__);
-    DBGTRACE_LOG("info.Offset=" << info.Offset << ", info.PartNo=" << info.PartNo <<
-                 ", info.Count=" << info.Count << ", info.Size=" << info.Size <<
-                 ", info.LastOffset=" << info.LastOffset);
-
     ui32 count = 0;
     ui32 size = 0;
 
@@ -1067,11 +1058,9 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
 
     GetReadRequestFromCompactedBody(info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
                                     &info.BlobKeyTokens, blobs);
-    DBGTRACE_LOG("blobs.size=" << blobs.size());
     info.CompactedBlobsCount = blobs.size();
     GetReadRequestFromFastWriteBody(info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
                                     &info.BlobKeyTokens, blobs);
-    DBGTRACE_LOG("blobs.size=" << blobs.size());
 
     info.Blobs = blobs;
     ui64 lastOffset = blobs.empty() ? info.Offset : blobs.back().Key.GetOffset();
@@ -1079,14 +1068,9 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     LOG_D("read cookie " << cookie << " added " << info.Blobs.size()
                 << " blobs, size " << size << " count " << count << " last offset " << lastOffset << ", current partition end offset: " << GetEndOffset());
 
-    DBGTRACE_LOG("\ninfo.CompactedBlobsCount=" << info.CompactedBlobsCount <<
-                 "\nblobs.size=" << blobs.size() <<
-                 "\nCompactionBlobEncoder.DataKeysBody.size=" << CompactionBlobEncoder.DataKeysBody.size());
-
     if (blobs.empty() ||
         ((info.CompactedBlobsCount > 0) && (blobs[info.CompactedBlobsCount - 1].Key == CompactionBlobEncoder.DataKeysBody.back().Key))) { // read from head only when all blobs from body processed
         ui64 insideHeadOffset = 0;
-        DBGTRACE_LOG("invoke GetReadRequestFromHead");
         info.Cached = GetReadRequestFromHead(
                 info.Offset, info.PartNo, info.Count, info.Size, info.ReadTimestampMs, &count,
                 &size, &insideHeadOffset, info.LastOffset

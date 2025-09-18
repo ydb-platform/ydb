@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/persqueue/pqrb
     ydb/core/persqueue/pqtablet
     ydb/core/persqueue/writer
+    ydb/library/dbgtrace
 )
 
 END()

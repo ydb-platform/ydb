@@ -38,18 +38,17 @@ void TToolsCommand::Config(TConfig& config) {
     TYdbCommand::Config(config);
 }
 
-ELogPriority TToolsCommand::ToLogLevel(TClientCommand::TConfig::EVerbosityLevel lvl) const {
+ELogPriority TToolsCommand::ToLogLevel(ui32 lvl) const {
     switch (lvl) {
-        case TClientCommand::TConfig::EVerbosityLevel::NONE:
+        case 0:
             return ELogPriority::TLOG_ERR;
-        case TClientCommand::TConfig::EVerbosityLevel::DEBUG:
-            return ELogPriority::TLOG_DEBUG;
-        case TClientCommand::TConfig::EVerbosityLevel::INFO:
+        case 1:
+            return ELogPriority::TLOG_NOTICE;
+        case 2:
             return ELogPriority::TLOG_INFO;
-        case TClientCommand::TConfig::EVerbosityLevel::WARN:
-            return ELogPriority::TLOG_WARNING;
+        case 3:
         default:
-            return ELogPriority::TLOG_ERR;
+            return ELogPriority::TLOG_DEBUG;
     }
 }
 

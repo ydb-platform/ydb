@@ -26,7 +26,7 @@ public:
     );
 
     virtual void Config(TConfig& config) override;
-    virtual ELogPriority ToLogLevel(TClientCommand::TConfig::EVerbosityLevel lvl) const;
+    virtual ELogPriority ToLogLevel(ui32 lvl) const;
 };
 
 class TCommandDump : public TToolsCommand, public TCommandWithPath {

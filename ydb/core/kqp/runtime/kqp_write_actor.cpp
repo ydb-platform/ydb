@@ -609,9 +609,7 @@ public:
                 << getIssues().ToOneLineString());
 
             const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
-            YQL_ENSURE(metadata);
-
-            if (ev->Get()->Record.GetOverloadSubscribed() + 1 == metadata->NextOverloadSeqNo) {
+            if (metadata && ev->Get()->Record.GetOverloadSubscribed() + 1 == metadata->NextOverloadSeqNo) {
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
             }
 

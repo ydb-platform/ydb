@@ -30,7 +30,7 @@ print(only_needed)
 df = pd.DataFrame(only_needed)
 df = df.drop('run_name', axis=1)
 print(df)
-for data_flawour in ['SameSize', 'BigLeft']:
+for data_flavour in ['SameSize', 'BigLeft']:
     for key_type in ['Integer', 'String']:
         graph_name = data_flawour + "_" + key_type
         print(graph_name)

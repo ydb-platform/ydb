@@ -27,24 +27,25 @@ public:
                     if (Queue.back().size() + item.size() > MaxItemSize) {
                         const auto sizeToAdd = MaxItemSize - Queue.back().size();
                         Queue.back().append(item.substr(0U, sizeToAdd));
-                        item = item.substr(item.size() - sizeToAdd);
+                        item = item.substr(sizeToAdd);
                     } else {
-                        Queue.back().append(std::move(item));
+                        Queue.back().append(item);
                         item.clear();
                     }
                 } else {
-                    Queue.back().append(std::move(item));
+                    Queue.back().append(item);
                     item.clear();
                 }
             }
         }
 
-        if (!item.empty()) {
+        if (item) {
             if constexpr (MaxItemSize > 0ULL) {
-                while (item.size() > MaxItemSize) {
-                    Queue.emplace_back(item.substr(0U, MaxItemSize));
-                    item = item.substr(MaxItemSize);
+                ui64 i = 0;
+                for (; i + MaxItemSize < item.size(); i += MaxItemSize) {
+                    Queue.emplace_back(item.substr(i, MaxItemSize));
                 }
+                item = item.substr(i);
             }
 
             Queue.emplace_back(std::move(item));
@@ -75,7 +76,7 @@ public:
             if constexpr (MaxItemSize > 0ULL) {
                 const auto endSize = Queue.back().size();
                 if (endSize + lastItem.size() <= MaxItemSize) {
-                    Queue.back().append(std::move(lastItem));
+                    Queue.back().append(lastItem);
                     return;
                 }
 
@@ -89,7 +90,7 @@ public:
 
                 Queue.push_back(std::move(lastItem));
             } else {
-                Queue.back().append(std::move(lastItem));
+                Queue.back().append(lastItem);
             }
         }
     }

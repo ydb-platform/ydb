@@ -2751,6 +2751,7 @@ Y_UNIT_TEST(SmallMsgComactificationWithRebootsTest) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
+        tc.Runtime->SetScheduledLimit(1000);
         tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
         tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicCompactificationByKey(true);
         tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(1);

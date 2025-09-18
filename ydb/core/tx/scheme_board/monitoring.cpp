@@ -1296,45 +1296,52 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             if (restoreStarted) {
                 Info(str, "Restore started successfully!");
             }
-
             if (!errorMessage.empty()) {
                 Danger(str, errorMessage);
             }
 
             SimplePanel(str, "Restore Configuration", [&restoreProgress](IOutputStream& str) {
                 HTML(str) {
-                    TAG_ATTRS(TFormC, {{"id", "restoreForm"}, {"method", "POST"}}) {
+                    FORM_CLASS("form-horizontal") {
                         DIV_CLASS("form-group") {
-                            LABEL_CLASS_FOR("control-label", "restorePath") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "restorePath") {
                                 str << "Backup File Path";
                             }
-                            str << "<input type='text' id='restorePath' name='restorePath' class='form-control' "
-                                << "placeholder='/tmp/scheme_board_backup.jsonl' required>";
+                            DIV_CLASS("col-sm-10") {
+                                str << "<input type='text' id='restorePath' name='restorePath' class='form-control' "
+                                    << "placeholder='/tmp/scheme_board_backup.jsonl' required>";
+                            }
                         }
 
                         DIV_CLASS("form-group") {
-                            LABEL_CLASS_FOR("control-label", "schemeShardId") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "schemeShardId") {
                                 str << "Scheme Shard Tablet ID";
                             }
-                            str << "<input type='number' id='schemeShardId' name='schemeShardId' class='form-control' "
-                                << "placeholder='" << TTestTxConfig::SchemeShard << "' required>";
-                            str << "<small class='form-text text-muted'>"
-                                << "Only paths owned by this specific SchemeShard will be restored from the backup file"
-                                << "</small>";
+                            DIV_CLASS("col-sm-10") {
+                                str << "<input type='number' id='schemeShardId' name='schemeShardId' class='form-control' "
+                                    << "placeholder='" << TTestTxConfig::SchemeShard << "' required>";
+                                str << "<small class='form-text text-muted'>"
+                                    << "Only paths owned by this specific SchemeShard will be restored from the backup file"
+                                    << "</small>";
+                            }
                         }
 
                         DIV_CLASS("form-group") {
-                            LABEL_CLASS_FOR("control-label", "generation") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "generation") {
                                 str << "Generation";
                             }
-                            str << "<input type='number' id='generation' name='generation' class='form-control' "
-                                << "value='1' min='1' required>";
+                            DIV_CLASS("col-sm-10") {
+                                str << "<input type='number' id='generation' name='generation' class='form-control' "
+                                    << "value='1' min='1' required>";
+                            }
                         }
 
                         DIV_CLASS("form-group") {
-                            str << "<button type='submit' name='startRestore' value='1' class='btn btn-danger' "
-                                << (restoreProgress.IsRunning() ? "disabled" : "")
-                                << ">Start Emergency Restore</button>";
+                            DIV_CLASS("col-sm-offset-2 col-sm-10") {
+                                str << "<button type='submit' name='startRestore' class='btn btn-danger' "
+                                    << (restoreProgress.IsRunning() ? "disabled" : "")
+                                    << ">Start Emergency Restore</button>";
+                            }
                         }
                     }
 
@@ -1357,26 +1364,28 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                     str << R"(
                     <script>
                     $(document).ready(function() {
-                        $('#restoreForm').on('submit', function(e) {
+                        $('button[name="startRestore"]').click(function(e) {
                             e.preventDefault();
+
+                            var btn = this;
+                            var form = $(btn.form);
 
                             if (!confirm('Are you sure you want to start emergency restore? This will override existing data!')) {
                                 return;
                             }
 
-                            var formData = $(this).serialize();
-                            var $btn = $('button[name="startRestore"]');
-                            $btn.prop('disabled', true);
-
                             $.ajax({
+                                type: "GET",
                                 url: window.location.pathname,
-                                method: 'POST',
-                                data: formData,
+                                data: form.serialize() + '&startRestore=1',
                                 success: function(response) {
                                     $('body').html(response);
+                                    if (window.history && window.history.replaceState) {
+                                        window.history.replaceState(null, '', window.location.pathname);
+                                    }
                                 },
                                 error: function(xhr, status, error) {
-                                    $btn.prop('disabled', false);
+                                    $(btn).prop('disabled', false);
                                     alert('Failed to start restore: ' + error);
                                 }
                             });
@@ -1404,12 +1413,14 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                             .removeClass('progress-bar-danger')
                                             .addClass('progress-bar-success');
                                         $('#restoreStatus').text('Status: restore completed successfully')
-                                            .removeClass('alert-warning alert-danger').addClass('alert-success');
+                                            .removeClass('alert-warning alert-danger')
+                                            .addClass('alert-success');
                                         $('#restoreDetails').text('Processed: ' + processed + ' / Total: ' + total);
                                         $('button[name="startRestore"]').prop('disabled', false);
                                     } else if (status.startsWith('error:')) {
                                         $('#restoreStatus').text('Status: ' + status)
-                                            .removeClass('alert-warning alert-success').addClass('alert-danger');
+                                            .removeClass('alert-warning alert-success')
+                                            .addClass('alert-danger');
                                         $('button[name="startRestore"]').prop('disabled', false);
                                     } else {
                                         $('button[name="startRestore"]').prop('disabled', false);
@@ -1638,7 +1649,6 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
         const auto& request = ev->Get()->Request;
         const auto& params = request.GetParams();
-        const auto& postParams = request.GetPostParams();
 
         switch (ParseRequestType(request.GetPathInfo())) {
         case ERequestType::Index:
@@ -1720,15 +1730,15 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderBackup(BackupProgress)));
         }
 
-        case ERequestType::Restore:
-            if (postParams.Has("restorePath")) {
+        case ERequestType::Restore: {
+            if (params.Has("startRestore")) {
                 if (RestoreProgress.IsRunning()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderRestore(RestoreProgress, false, "Restore is already running")
                     ));
                 }
 
-                const TString filePath = postParams.Get("restorePath");
+                const TString filePath = params.Get("restorePath");
                 if (filePath.empty()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderRestore(RestoreProgress, false, "Restore file path is required")
@@ -1736,15 +1746,15 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 }
 
                 ui64 schemeShardId = 0;
-                if (!TryFromString(postParams.Get("schemeShardId"), schemeShardId)) {
+                if (!TryFromString(params.Get("schemeShardId"), schemeShardId)) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderRestore(RestoreProgress, false, "Invalid Scheme Shard ID")
                     ));
                 }
 
                 ui64 generation = 1;
-                if (postParams.Has("generation")) {
-                    TryFromString(postParams.Get("generation"), generation);
+                if (params.Has("generation")) {
+                    TryFromString(params.Get("generation"), generation);
                 }
 
                 RestoreProgress = TRestoreProgress();
@@ -1770,6 +1780,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             }
 
             return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderRestore(RestoreProgress)));
+        }
 
         case ERequestType::Unknown:
             break;

@@ -2498,7 +2498,7 @@ partitioning_settings {
         Env().TestWaitNotification(Runtime(), txId);
 
         // Verify checksums are created
-        UNIT_ASSERT_VALUES_EQUAL(S3Mock().GetData().size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(S3Mock().GetData().size(), 8);
 
         const auto* dataChecksum = S3Mock().GetData().FindPtr("/data_00.csv.sha256");
         UNIT_ASSERT(dataChecksum);
@@ -2506,11 +2506,15 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "fbb85825fb12c5f38661864db884ba3fd1512fc4b0a2a41960d7d62d19318ab6 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "29c79eb8109b4142731fc894869185d6c0e99c4b2f605ea3fc726b0328b8e316 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
         UNIT_ASSERT_VALUES_EQUAL(*schemeChecksum, "cb1fb80965ae92e6369acda2b3b5921fd5518c97d6437f467ce00492907f9eb6 scheme.pb");
+
+        const auto* permissionsChecksum = S3Mock().GetData().FindPtr("/permissions.pb.sha256");
+        UNIT_ASSERT(permissionsChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*permissionsChecksum, "b41fd8921ff3a7314d9c702dc0e71aace6af8443e0102add0432895c5e50a326 permissions.pb");
     }
 
     Y_UNIT_TEST(ChecksumsWithCompression) {
@@ -2711,7 +2715,7 @@ attributes {
         UNIT_ASSERT(HasS3File("/my_export/SchemaMapping/mapping.json"));
         UNIT_ASSERT(HasS3File("/my_export/Table1/scheme.pb"));
         UNIT_ASSERT(HasS3File("/my_export/table2_prefix/scheme.pb"));
-        UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/my_export/metadata.json"), "{\"kind\":\"SimpleExportV0\"}");
+        UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/my_export/metadata.json"), "{\"kind\":\"SimpleExportV0\",\"checksum\":\"sha256\"}");
     }
 
     Y_UNIT_TEST(SchemaMappingEncryption) {
@@ -2842,11 +2846,11 @@ attributes {
 
         THashSet<TString> ivs;
         for (auto [key, content] : S3Mock().GetData()) {
-            if (key == "/my_export/metadata.json") {
+            if (key == "/my_export/metadata.json" || key.EndsWith(".sha256")) {
                 continue;
             }
 
-            // All files except backup metadata must be encrypted
+            // All files except backup metadata and checksums must be encrypted
             UNIT_ASSERT_C(key.EndsWith(".enc"), key);
 
             // Check that we can decrypt content with our key (== it is really encrypted with our key)

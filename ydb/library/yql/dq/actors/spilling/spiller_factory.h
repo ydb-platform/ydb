@@ -1,6 +1,7 @@
 #pragma once
 
 #include "compute_storage.h"
+#include "spiller_memory_reporter.h"
 
 #include <yql/essentials/minikql/computation/mkql_spiller_factory.h>
 #include <yql/essentials/minikql/computation/mkql_spiller.h>
@@ -27,13 +28,14 @@ public:
     }
 
     ISpiller::TPtr CreateSpiller() override {
-        return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_, ActorSystem_);
+        return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_,
+                MakeSpillerMemoryUsageReporter(ReportAllocCallback_, ReportFreeCallback_), ActorSystem_);
     }
 
     void SetMemoryReportingCallbacks(ISpiller::TMemoryReportCallback reportAlloc,
             ISpiller::TMemoryReportCallback reportFree) override {
-        Y_UNUSED(reportAlloc);
-        Y_UNUSED(reportFree);
+        ReportAllocCallback_ = reportAlloc;
+        ReportFreeCallback_ = reportFree;
     }
 
 private:
@@ -42,6 +44,8 @@ private:
     TWakeUpCallback WakeUpCallback_;
     TErrorCallback ErrorCallback_;
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters_;
+    ISpiller::TMemoryReportCallback ReportAllocCallback_;
+    ISpiller::TMemoryReportCallback ReportFreeCallback_;
 };
 
 } // namespace NYql::NDq

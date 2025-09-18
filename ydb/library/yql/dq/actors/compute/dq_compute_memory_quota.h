@@ -73,6 +73,21 @@ namespace NYql::NDq {
             });
         }
 
+        void ReportAllocated(ui64 bytes, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+            RequestExtraMemory(bytes, alloc);
+        }
+
+        void ReportFreed(ui64 bytes, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+            if (!MkqlMemoryLimit) {
+                return;
+            }
+            MemoryLimits.MemoryQuotaManager->FreeQuota(bytes);
+            UpdateSpillingZones(alloc);
+            if (MkqlMemoryQuota) {
+                MkqlMemoryQuota->Sub(bytes);
+            }
+        }
+
         void TryShrinkMemory(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
             if (alloc->GetAllocated() - alloc->GetUsed() > MemoryLimits.MinMemFreeSize) {
                 alloc->ReleaseFreePages();
@@ -154,16 +169,17 @@ namespace NYql::NDq {
                 //                << ", requested: " << memory << ", host: " << HostName();
             }
 
-            if (MemoryLimits.MemoryQuotaManager->IsReasonableToUseSpilling()) {
-                alloc->SetMaximumLimitValueReached(true);
-            } else {
-                alloc->SetMaximumLimitValueReached(false);
-            }
+            UpdateSpillingZones(alloc);
 
             if (Y_UNLIKELY(ProfileStats)) {
                 ProfileStats->MkqlExtraMemoryBytes += memory;
                 ProfileStats->MkqlExtraMemoryRequests++;
             }
+        }
+
+        void UpdateSpillingZones(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+            bool isMaximumLimitValueReached = MemoryLimits.MemoryQuotaManager->IsReasonableToUseSpilling();
+            alloc->SetMaximumLimitValueReached(isMaximumLimitValueReached);
         }
 
         ui64 AlignMemorySizeToMbBoundary(ui64 memory) {

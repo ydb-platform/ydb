@@ -5388,6 +5388,11 @@ bool IsPureIsolatedLambdaImpl(const TExprNode& lambdaBody, TNodeSet& visited, TS
 
             return false;
         }
+
+        if (lambdaBody.IsCallable("WithWorld")) {
+            syncList->emplace(lambdaBody.ChildPtr(1), syncList->size());
+            return true;
+        }
     }
 
     if (!lambdaBody.GetTypeAnn()->IsComposable()) {

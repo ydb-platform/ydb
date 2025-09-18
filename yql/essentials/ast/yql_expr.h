@@ -2499,6 +2499,7 @@ struct TExprStep {
     enum ELevel {
         Params,
         ExpandApplyForLambdas,
+        ExpandSeq,
         ValidateProviders,
         Configure,
         ExprEval,
@@ -2813,6 +2814,8 @@ struct TExprContext : private TNonCopyable {
     TExprNode::TPtr DeepCopyLambda(const TExprNode& node, TExprNode::TListType&& body);
     [[nodiscard]]
     TExprNode::TPtr DeepCopyLambda(const TExprNode& node, TExprNode::TPtr&& body = TExprNode::TPtr());
+    [[nodiscard]]
+    TExprNode::TPtr CopyLambdaWithTypes(const TExprNode& node);
     [[nodiscard]]
     TExprNode::TPtr FuseLambdas(const TExprNode& outer, const TExprNode& inner);
 

@@ -548,6 +548,11 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 1);
         TString permissionId = approveResp.GetManuallyApprovedPermissions(0).GetId();
+
+        rec1 = env.CheckRequest("user", rid1, false, TStatus::ALLOW, 1);
+        UNIT_ASSERT_VALUES_EQUAL(rec1.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rec1.GetPermissions(0).GetId(), permissionId);
+
         auto rec2 = env.CheckGetPermission("user", permissionId);
         UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), permissionId);
@@ -635,8 +640,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), rec1.GetPermissions(0).GetId());
 
         auto rid1 = rec1.GetRequestId();
+
+        rec1 = env.CheckRequest("user", rid1, false, TStatus::ALLOW_PARTIAL, 1);
+        UNIT_ASSERT_VALUES_EQUAL(rec1.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rec1.GetPermissions(0).GetId(), rec2.GetPermissions(0).GetId());
         
-        // // Manual approval
+        // Manual approval
         auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 2);
         for (const auto& permission : approveResp.GetManuallyApprovedPermissions()) {

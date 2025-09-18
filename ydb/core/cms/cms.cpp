@@ -2146,7 +2146,8 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
     }
 
     auto &rec = ev->Get()->Record;
-    auto it = State->ScheduledRequests.find(rec.GetRequestId());
+    auto requestId = rec.GetRequestId();
+    auto it = State->ScheduledRequests.find(requestId);
 
     // Have to check request existence again because it could be
     // deleted after previous event check.
@@ -2159,6 +2160,33 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
     TString user = rec.GetUser();
     auto &request = it->second;
     TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
+
+    // Check if request is already fulfilled.
+    for (auto& [permissionId, permission] : State->Permissions) {
+        if (requestId == permission.RequestId) {
+            if (permission.Owner != user) {
+                resp->Record.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
+                resp->Record.MutableStatus()->SetReason(Sprintf("Permission %s doesn't belong to %s", requestId.data(), user.data()));
+                resp->Record.ClearPermissions();
+            } else {
+                permission.CopyTo(*resp->Record.AddPermissions());
+            }
+
+            if (resp->Record.PermissionsSize() < request.Request.ActionsSize()) {
+                if (request.Request.GetPartialPermissionAllowed()) {
+                    resp->Record.MutableStatus()->SetCode(TStatus::ALLOW_PARTIAL);
+                } else {
+                    resp->Record.MutableStatus()->SetCode(TStatus::DISALLOW_TEMP);
+                }
+            } else {
+                resp->Record.MutableStatus()->SetCode(TStatus::ALLOW);
+            }
+            
+            Reply(ev, std::move(resp), ctx);
+            return;
+        }
+    }
+
     TRequestInfo scheduled;
 
     auto requestStartTime = TInstant::Now();
@@ -2191,15 +2219,15 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
             scheduled.Owner = user;
             scheduled.Order = order;
             scheduled.Priority = priority;
-            scheduled.RequestId = rec.GetRequestId();
+            scheduled.RequestId = requestId;
             resp->Record.SetRequestId(scheduled.RequestId);
 
             ClusterInfo->ScheduleActions(scheduled, &ctx);
 
             copy = new TRequestInfo(scheduled);
-            State->ScheduledRequests.emplace(rec.GetRequestId(), std::move(scheduled));
+            State->ScheduledRequests.emplace(requestId, std::move(scheduled));
         } else {
-            scheduled.RequestId = rec.GetRequestId();
+            scheduled.RequestId = requestId;
             scheduled.Owner = user;
             copy = new TRequestInfo(scheduled);
         }

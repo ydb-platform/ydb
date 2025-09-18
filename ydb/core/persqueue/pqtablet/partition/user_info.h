@@ -186,7 +186,7 @@ struct TUserInfo: public TUserInfoBase {
         for (auto& avg : AvgReadBytes) {
             avg.Update(readSize, now);
         }
-        Y_ABORT_UNLESS(ActiveReads > 0);
+        AFL_ENSURE(ActiveReads > 0);
         --ActiveReads;
         UpdateReadingTimeAndState(endOffset, now);
         ReadTimestamp = now;
@@ -242,7 +242,7 @@ struct TUserInfo: public TUserInfoBase {
     }
 
     void SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {
-        Y_ABORT_UNLESS(subgroup);
+        AFL_ENSURE(subgroup);
         TVector<std::pair<TString, TString>> subgroups;
         if (!NoConsumer) {
             subgroups.push_back({"consumer", User});

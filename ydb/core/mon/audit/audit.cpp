@@ -59,6 +59,16 @@ namespace {
     }
 }
 
+bool TAuditCtx::AuditEnabled(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase, NACLibProto::ESubjectType subjectType)
+{
+    if (NKikimr::HasAppData()) {
+        return NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin,
+                                                             logPhase, subjectType);
+    }
+    return false;
+}
+
+
 void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
     Parts.emplace_back(name, value);
 }
@@ -151,9 +161,7 @@ void TAuditCtx::SetSubjectType(NACLibProto::ESubjectType subjectType) {
 }
 
 void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase) {
-    auto auditEnabled = NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, logPhase, SubjectType);
-
-    if (!Auditable || !auditEnabled) {
+    if (!Auditable || !AuditEnabled(logPhase, SubjectType)) {
         return;
     }
 

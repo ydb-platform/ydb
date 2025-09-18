@@ -107,6 +107,9 @@ struct TListQueriesOptions
     ui64 Limit = 100;
 
     NYTree::TAttributeFilter Attributes;
+
+    bool SearchByTokenPrefix = false;
+    bool UseFullTextSearch = true;
 };
 
 struct TQuery
@@ -177,6 +180,7 @@ struct TGetQueryTrackerInfoResult
     std::vector<std::string> AccessControlObjects;
     std::vector<std::string> Clusters;
     std::optional<NYson::TYsonString> EnginesInfo;
+    std::optional<int> ExpectedTablesVersion;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

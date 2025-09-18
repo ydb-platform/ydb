@@ -14,7 +14,6 @@ feature_flags:
 |---------------------------| ----------------------------------------------------|
 | `enable_vector_index`                                    | Support for [vector indexes](../../dev/vector-indexes.md) for approximate vector similarity search |
 | `enable_batch_updates`                                   | Support for `BATCH UPDATE` and `BATCH DELETE` statements |
-| `enable_kafka_native_balancing`                          | Client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
 | `enable_topic_autopartitioning_for_cdc`                  | [Auto-partitioning topics](../../concepts/cdc.md#topic-partitions) for row-oriented tables in CDC |
 | `enable_access_to_index_impl_tables`                     | Support for [followers (read replicas)](../../yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Support for changefeeds in backup and restore operations |
@@ -24,3 +23,6 @@ feature_flags:
 | `enable_strict_acl_check`                                | Strict ACL checks — do not allow granting rights to non-existent users and delete users with permissions |
 | `enable_strict_user_management`                          | Strict checks for local users — only the cluster or database administrator can administer local users |
 | `enable_database_admin`                                  | The role of a database administrator |
+| `enable_kafka_native_balancing`                          | Client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
+| `enable_topic_compactification_by_key`                   | Enabling topic compactification in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
+| `enable_kafka_transactions`                              | Enabling transactions in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |

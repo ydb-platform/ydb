@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "vdisk_performance_params.h"
+#include "blob_header_mode.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/repl/repl_quoter.h>
@@ -132,8 +133,9 @@ namespace NKikimr {
         TControlWrapper HullCompMaxInFlightReads;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;
-        bool AddHeader;
+        EBlobHeaderMode BlobHeaderMode;
 
+        static const ui32 TinyDiskHugeBlobOverhead;
         static const ui32 TinyDiskHullCompLevel0MaxSstsAtOnce;
         static const ui32 TinyDiskHullCompSortedPartsNum;
 

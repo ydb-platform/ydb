@@ -47,6 +47,7 @@ namespace NKikimr {
 namespace NKikimrReplication {
     class TOAuthToken;
     class TStaticCredentials;
+    class TIamCredentials;
     class TConsistencySettings_TGlobalConsistency;
 }
 
@@ -205,8 +206,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
-                // FIXME: Support updating prefixed vector indexes
-                return KeyColumns.size() == 1;
+                return true;
         }
     }
 
@@ -841,6 +841,14 @@ struct TReplicationSettingsBase {
         void Serialize(NKikimrReplication::TStaticCredentials& proto) const;
     };
 
+    struct TIamCredentials {
+        TString ServiceAccountId;
+        TOAuthToken InitialToken;
+        TString ResourceId;
+
+        void Serialize(NKikimrReplication::TIamCredentials& proto) const;
+    };
+
     struct TStateDone {
         enum class EFailoverMode: ui32 {
             Consistent = 1,
@@ -855,6 +863,7 @@ struct TReplicationSettingsBase {
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
+    TMaybe<TIamCredentials> IamCredentials;
     TMaybe<TString> CaCert;
     TMaybe<TStateDone> StateDone;
     bool StatePaused = false;
@@ -885,6 +894,14 @@ struct TReplicationSettingsBase {
         }
 
         return *StaticCredentials;
+    }
+
+    TIamCredentials& EnsureIamCredentials() {
+        if (!IamCredentials) {
+            IamCredentials = TIamCredentials();
+        }
+
+        return *IamCredentials;
     }
 };
 
@@ -1008,6 +1025,12 @@ struct TDropBackupCollectionSettings {
 
 struct TBackupSettings {
     TString Name;
+};
+
+struct TSecretSettings {
+    TString Name;
+    TString Value;
+    bool InheritPermissions = false;
 };
 
 struct TKikimrListPathItem {
@@ -1276,6 +1299,11 @@ public:
     virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 
     virtual TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, ui32 langVer, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
+
+    //secrets
+    virtual NThreading::TFuture<TGenericResult> CreateSecret(const TString& cluster, const TSecretSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> AlterSecret(const TString& cluster, const TSecretSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> DropSecret(const TString& cluster, const TSecretSettings& settings) = 0;
 
 public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;

@@ -22,6 +22,20 @@
 
 namespace NKikimr::NKqp::NOpt {
 
+std::unordered_set<std::string_view> GetNonDeterministicFunctions() {
+    static const std::unordered_set<std::string_view> nonDeterministicFunctions = {
+        "RandomNumber",
+        "Random",
+        "RandomUuid",
+        "Now",
+        "CurrentUtcDate",
+        "CurrentUtcDatetime",
+        "CurrentUtcTimestamp"
+    };
+
+    return nonDeterministicFunctions;
+}
+
 namespace {
 
 using namespace NYql;
@@ -33,16 +47,6 @@ using TStatus = IGraphTransformer::TStatus;
 TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& ctx,
     THashMap<TString, TKqpParamBinding>* paramBindings)
 {
-    static const std::unordered_set<std::string_view> nonDeterministicFunctions = {
-        "RandomNumber",
-        "Random",
-        "RandomUuid",
-        "Now",
-        "CurrentUtcDate",
-        "CurrentUtcDatetime",
-        "CurrentUtcTimestamp"
-    };
-
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
 
@@ -50,7 +54,7 @@ TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& c
     auto status = OptimizeExpr(input, output, [paramBindings](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (auto maybeCallable = TMaybeNode<TCallable>(node)) {
             auto callable = maybeCallable.Cast();
-            if (nonDeterministicFunctions.contains(callable.CallableName()) && callable.Ref().ChildrenSize() == 0) {
+            if (GetNonDeterministicFunctions().contains(callable.CallableName()) && callable.Ref().ChildrenSize() == 0) {
                 const auto paramName = TStringBuilder() << ParamNamePrefix
                     << NNaming::CamelToSnakeCase(TString(callable.CallableName()));
 
@@ -102,6 +106,7 @@ public:
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));
+        AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapForLargeOlapTable));
 #undef HNDL
     }
 
@@ -139,6 +144,12 @@ protected:
     TMaybeNode<TExprBase> RewritePureJoin(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqPeepholeRewritePureJoin(node, ctx);
         DumpAppliedRule("RewritePureJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> EliminateWideMapForLargeOlapTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpEliminateWideMapForLargeOlapTable(node, ctx, *GetTypes());
+        DumpAppliedRule("EliminateWideMapForLargeOlapTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

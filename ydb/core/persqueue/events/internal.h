@@ -7,7 +7,7 @@
 #include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/common/metering.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/persqueue/common/sourceid_info.h>
 #include <ydb/core/persqueue/public/write_id.h>
@@ -549,8 +549,8 @@ struct TEvPQ {
         void Check() const
         {
             //error or empty response(all from cache) or not empty response at all
-            Y_ABORT_UNLESS(Error.HasError() || Blobs.empty() || !Blobs[0].Value.empty(),
-                "Cookie %" PRIu64 " Error code: %" PRIu32 ", blobs count: %" PRIu64, Cookie, Error.ErrorCode, Blobs.size());
+            AFL_ENSURE(Error.HasError() || Blobs.empty() || !Blobs[0].Value.empty())
+                ("Cookie", Cookie)("Error code", NPersQueue::NErrorCode::EErrorCode_Name(Error.ErrorCode))("blobs count", Blobs.size());
         }
 
     private:

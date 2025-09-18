@@ -168,6 +168,8 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetEnabled(true);
         appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetCheckpointingPeriodMillis(200);
         appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetMaxInflight(1);
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->MutableExternalStorage()->SetEndpoint(GetEnv("YDB_ENDPOINT"));
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->MutableExternalStorage()->SetDatabase(GetEnv("YDB_DATABASE"));
     }
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
@@ -700,15 +702,22 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
         return true;
     });
 
-    if (settings.AuthToken) {
-        this->Client->GrantConnect(settings.AuthToken);
-    }
-
+    // Create sample tables in anonymous mode
     if (settings.WithSampleTables) {
         RunCall([this] {
             this->CreateSampleTables();
             return true;
         });
+    }
+
+    // Initial user becomes cluster admin.
+    if (settings.AuthToken) {
+        // Cluster admin does not require the explicit EAccessRights::ConnectDatabase right,
+        // but does require explicit EAccessRights::GenericFull rights.
+        // The order is important here, because grants from anonymous user are possible
+        // only while AdministrationAllowedSIDs is empty (which means that anyone is an admin).
+        this->Client->TestGrant("/", settings.DomainRoot, settings.AuthToken, NACLib::EAccessRights::GenericFull);
+        Server->GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back(settings.AuthToken);
     }
 }
 

@@ -45,6 +45,7 @@ struct TReadOptions
     bool Global = false;
     bool DisableSensorsRename = false;
     bool DisableDefault = false;
+    bool MemOnly = false;
 
     int LingerWindowSize = 0;
 
@@ -65,6 +66,13 @@ bool IsZeroValue(const T& value)
 {
     T zeroValue{};
     return value == zeroValue;
+}
+
+template <class T>
+bool IsZeroValue(const TSummarySnapshot<T>& value)
+{
+    T zeroValue{};
+    return value.Min() == zeroValue && value.Max() == zeroValue;
 }
 
 template <class T>

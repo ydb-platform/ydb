@@ -423,6 +423,9 @@ message TReqStartTransaction
 
     optional TReplicateToMasterCellTags replicate_to_master_cell_tags = 15;
 
+    // Address of the last client that pinged transaction.
+    optional string pinger_address = 16;
+
     optional TMutatingOptions mutating_options = 103;
 }
 
@@ -666,6 +669,7 @@ message TReqSelectRows
     //optional NYT.NProto.TGuid transaction_id = 2;
     optional uint64 timestamp = 3 [default = 0x3fffffffffffff01];
     optional uint64 retention_timestamp = 16 [default = 0];
+    optional int32 read_from = 34; // NHydra::EPeerKind
 
     optional uint64 input_row_limit = 4;
     optional uint64 output_row_limit = 5;
@@ -1862,6 +1866,8 @@ message TReqAttachTransaction
     optional uint64 ping_period = 4; // TDuration
     optional bool ping = 5 [default = true];
     optional bool ping_ancestors = 6 [default = false];
+    // Address of the last client that pinged transaction.
+    optional string pinger_address = 7;
 }
 
 message TRspAttachTransaction
@@ -2985,6 +2991,7 @@ message TReqCheckPermissionByAcl
     required string acl = 3;
 
     optional bool ignore_missing_subjects = 4 [default = false];
+    optional bool ignore_pending_removal_subjects = 5 [default = false];
 
     optional TPrerequisiteOptions prerequisite_options = 101;
     optional TMasterReadOptions master_read_options = 102;
@@ -3422,6 +3429,7 @@ message TCheckPermissionByAclResult
     required NYT.NProto.TGuid subject_id = 2;
     optional string subject_name = 3;
     repeated string missing_subjects = 4;
+    repeated string pending_removal_subjects = 5;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3575,6 +3583,8 @@ message TReqListQueries
     optional string substr_filter = 9;
     optional uint64 limit = 10 [default = 100];
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 11;
+    optional bool search_by_token_prefix = 12 [default = false];
+    optional bool use_full_text_search = 13 [default = true];
 }
 
 message TRspListQueries
@@ -3621,6 +3631,7 @@ message TRspGetQueryTrackerInfo
     optional string query_tracker_stage = 4;
     repeated string clusters = 5;
     optional bytes engines_info = 6; // YSON
+    optional int32 expected_tables_version = 7;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3656,6 +3667,7 @@ message TReqFinishDistributedWriteSession
     required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteSessionPtr
     repeated bytes signed_write_results = 2; // vector of YSON-serialized TSignedWriteFragmentResultPtr
 
+    // TODO(achains): Remove after YT-26131
     required int32 max_children_per_attach_request = 3;
 }
 

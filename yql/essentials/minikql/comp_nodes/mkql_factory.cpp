@@ -62,6 +62,7 @@
 #include "mkql_grace_join.h"
 #include "mkql_lazy_list.h"
 #include "mkql_length.h"
+#include "mkql_linear.h"
 #include "mkql_listfromrange.h"
 #include "mkql_logical.h"
 #include "mkql_lookup.h"
@@ -365,7 +366,9 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"NextValue", &WrapNextValue},
         {"Nop", &WrapNop},
         {"MatchRecognizeCore", &WrapMatchRecognizeCore},
-        {"TimeOrderRecover", WrapComputationBuilder(TimeOrderRecover)}
+        {"TimeOrderRecover", WrapComputationBuilder(TimeOrderRecover)},
+        {"ToDynamicLinear", &WrapToDynamicLinear},
+        {"FromDynamicLinear", &WrapFromDynamicLinear},
     };
 };
 

@@ -87,8 +87,7 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYTree::INodePtr node)
     } else {
         ace.InapplicableExpressionMode.reset();
     }
-    CheckAceCorrect(ace)
-        .ThrowOnError();
+    ValidateAceCorrect(ace);
 }
 
 void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCursor* cursor)
@@ -138,8 +137,7 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCur
     if (!(HasAction && HasSubjects && HasPermissions)) {
         THROW_ERROR_EXCEPTION("Error parsing ACE: \"action\", \"subject\" and \"permissions\" fields are required");
     }
-    CheckAceCorrect(ace)
-        .ThrowOnError();
+    ValidateAceCorrect(ace);
 }
 
 void TSerializableAccessControlEntry::Persist(const TStreamPersistenceContext& context)

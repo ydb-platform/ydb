@@ -22,7 +22,7 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/filestore_config.pb.h>
@@ -3035,6 +3035,21 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
     void AddNotifySubscriber(const TActorId& actorId);
 
+    struct TFillItemsFromSchemaMappingResult {
+        bool Success = true;
+        TString ErrorMessage;
+        size_t ErrorsCount = 0;
+
+        void AddError(const TString& err);
+    };
+
+    // Fills items from schema mapping:
+    // - if user specified no items, fills all from schema mapping;
+    // - if user specified explicit filtering, takes from schema mapping only those allowed by filter.
+    //
+    // Replaces current items list with a new list of items.
+    // Generates an error if there are no item explicitly specified by filter.
+    TFillItemsFromSchemaMappingResult FillItemsFromSchemaMapping(TSchemeShard* ss);
 }; // TImportInfo
 // } // NImport
 

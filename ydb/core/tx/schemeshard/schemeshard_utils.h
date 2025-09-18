@@ -44,6 +44,8 @@ public:
     ui64 Throughput;
 };
 
+bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain);
+
 } // NSchemeShard
 
 namespace NTableIndex {

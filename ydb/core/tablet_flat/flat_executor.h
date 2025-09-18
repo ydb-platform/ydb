@@ -605,6 +605,7 @@ class TExecutor
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);
+    void ForceSendCounters();
     void UpdateYellow();
     void UpdateCompactions();
     void Handle(TEvTablet::TEvCheckBlobstorageStatusResult::TPtr &ev);
@@ -637,6 +638,9 @@ class TExecutor
             TCompactionChangesCtx& ctx,
             const NTable::TCompactionChanges& changes,
             NKikimrCompaction::ECompactionStrategy strategy);
+
+    void RenderHtmlCounters(TStringStream& str) const;
+    void RenderJsonCounters(TStringStream& str) const;
 
 public:
     void Describe(IOutputStream &out) const override

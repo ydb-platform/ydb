@@ -1,24 +1,16 @@
 #pragma once
 
-#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
-
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/protos/counters_pq.pb.h>
-#include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/public/lib/base/msgbus.h>
-#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
-
 
 namespace NKikimr {
 namespace NPQ {
 
-class TMirrorer : public TActorBootstrapped<TMirrorer> {
+class TMirrorer : public TBaseActor<TMirrorer>, private TConstantLogPrefix {
 private:
     const ui64 MAX_READ_FUTURES_STORE = 25;
     const ui64 MAX_BYTES_IN_FLIGHT = 16_MB;
@@ -114,13 +106,14 @@ private:
     void ProcessNextReaderEvent(TEvPQ::TEvReaderEventArrived::TPtr& ev, const TActorContext& ctx);
     void DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup=false);
 
-    TString MirrorerDescription() const;
+    TString BuildLogPrefix() const override;
 
     TString GetCurrentState() const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();
     TMirrorer(
+        ui64 tabletId,
         TActorId tabletActor,
         TActorId partitionActor,
         const NPersQueue::TTopicConverterPtr& topicConverter,
@@ -152,11 +145,10 @@ public:
     void StartWaitNextReaderEvent(const TActorContext& ctx);
 
 private:
-    TActorId TabletActor;
-    TActorId PartitionActor;
-    NPersQueue::TTopicConverterPtr TopicConverter;
-    ui32 Partition;
-    bool IsLocalDC;
+    const TActorId PartitionActor;
+    const NPersQueue::TTopicConverterPtr TopicConverter;
+    const ui32 Partition;
+    const bool IsLocalDC;
     ui64 EndOffset;
     ui64 OffsetToRead;
     NKikimrPQ::TMirrorPartitionConfig Config;

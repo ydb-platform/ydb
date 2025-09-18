@@ -34,10 +34,7 @@ Y_UNIT_TEST_SUITE(TMonitoringTests) {
         HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
         TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
         TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
-        const TCgiParameters& GetPostParams() const override {
-            static TCgiParameters emptyParams;
-            return emptyParams;
-        }
+        const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
         TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
         const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
         TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }

@@ -305,6 +305,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(ConstantIfPushDown) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        // Disable constant folding.
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableConstantFolding(false);
         settings.AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
 
@@ -341,7 +343,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto status = queryClient.ExecuteQuery(R"(
                 --!syntax_v1
                 select count(*) as cnt
-                from statistics2 where IF(len(String::Strip(' '))>0,username = ' ', True)
+                from statistics2 where IF(len(' ') > 0, username = ' ', True)
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
             ).GetValueSync();
 

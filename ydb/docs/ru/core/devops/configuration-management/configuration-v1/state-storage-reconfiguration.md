@@ -14,7 +14,7 @@
 
 2. Внести требуемые изменения в секции `domains_config` конфигурационного файла `config.yaml`:
 
-    Можно указать единую конфигурацию сразу для всех компонент StateStorage, Board, SchemeBoard:
+    Единая конфигурацию для компонент StateStorage, Board, SchemeBoard задается следующим образом:
 
     ```yaml
     config:

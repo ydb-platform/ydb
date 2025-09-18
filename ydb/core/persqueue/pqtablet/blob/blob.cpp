@@ -439,7 +439,7 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
 {
     AFL_ENSURE(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0) // if head not cleared, then NewHead is going after Head
         ("Head.NextOffset", Head.GetNextOffset())
-        ("Head.PackedSize", Head.PackedSize);
+        ("Head.PackedSize", Head.PackedSize)
         ("NewHead.Offset", NewHead.Offset)
         ("NewHead.PartNo", NewHead.PartNo)
         ("headCleared", headCleared)

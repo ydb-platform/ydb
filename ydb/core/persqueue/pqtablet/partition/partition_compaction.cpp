@@ -160,21 +160,21 @@ ui64 TPartition::GetCompactedBlobSizeLowerBound() const
 void TPartition::TryRunCompaction()
 {
     if (CompactionInProgress) {
-        PQ_LOG_D("Blobs compaction in progress");
+        LOG_D("Blobs compaction in progress");
         return;
     }
 
     if (BlobEncoder.DataKeysBody.empty()) {
-        PQ_LOG_D("No data for blobs compaction");
+        LOG_D("No data for blobs compaction");
         return;
     }
 
-    PQ_LOG_D("==== keys for blobs compaction ====");
+    LOG_D("==== keys for blobs compaction ====");
     for (size_t i = 0; i < BlobEncoder.DataKeysBody.size(); ++i) {
         const auto& k = BlobEncoder.DataKeysBody[i];
-        PQ_LOG_D(((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*') << " " << k.Key.ToString() << " " << k.Size);
+        LOG_D(((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*') << " " << k.Key.ToString() << " " << k.Size);
     }
-    PQ_LOG_D("===================================");
+    LOG_D("===================================");
 
     const ui64 blobsKeyCountLimit = GetBodyKeysCountLimit();
     const ui64 compactedBlobSizeLowerBound = GetCompactedBlobSizeLowerBound();
@@ -196,21 +196,21 @@ void TPartition::TryRunCompaction()
                 blobsSize -= k.Size;
                 break;
             }
-            PQ_LOG_D("Blob key for append " << k.Key.ToString());
+            LOG_D("Blob key for append " << k.Key.ToString());
         } else {
-            PQ_LOG_D("Blob key for rename " << k.Key.ToString());
+            LOG_D("Blob key for rename " << k.Key.ToString());
         }
     }
-    PQ_LOG_D(blobsCount << " keys were taken away. Let's read " << blobsSize << " bytes");
+    LOG_D(blobsCount << " keys were taken away. Let's read " << blobsSize << " bytes");
 
     if (blobsSize < GetCumulativeSizeLimit()) {
-        PQ_LOG_D("Need more data for compaction. " <<
+        LOG_D("Need more data for compaction. " <<
                  "Blobs " << BlobEncoder.DataKeysBody.size() <<
                  ", size " << blobsSize);
         return;
     }
 
-    PQ_LOG_D("Run compaction for " << blobsCount << " blobs");
+    LOG_D("Run compaction for " << blobsCount << " blobs");
 
     CompactionInProgress = true;
 
@@ -221,7 +221,7 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
 {
     const ui64 blobsCount = ev->Get()->BlobsCount;
 
-    PQ_LOG_D("begin compaction for " << blobsCount << " blobs");
+    LOG_D("begin compaction for " << blobsCount << " blobs");
 
     TVector<TRequestedBlob> blobs;
     TBlobKeyTokens tokens;
@@ -234,7 +234,7 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
             continue;
         }
 
-        PQ_LOG_D("Request blob key " << k.Key.ToString());
+        LOG_D("Request blob key " << k.Key.ToString());
 
         KeysForCompaction.emplace_back(k, blobs.size());
 
@@ -258,18 +258,14 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
                                                      std::move(blobs));
     Send(BlobCache, request.Release());
 
-    PQ_LOG_D("Request " << CompactionBlobsCount << " blobs for compaction");
+    LOG_D("Request " << CompactionBlobsCount << " blobs for compaction");
 }
 
 bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
                                       TProcessParametersBase& parameters,
                                       TEvKeyValue::TEvRequest* compactionRequest,
-<<<<<<< HEAD
-                                      TInstant& blobCreationUnixTime)
-=======
-                                      ui64& blobCreationUnixTime,
+                                      TInstant& blobCreationUnixTime,
                                       bool wasThePreviousBlobBig)
->>>>>>> [+] keys for large blobs are renamed
 {
     TMaybe<ui64> firstBlobOffset = requestedBlob.Offset;
 
@@ -375,7 +371,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 {
     const auto& ctx = ActorContext();
 
-    PQ_LOG_D("Continue blobs compaction");
+    LOG_D("Continue blobs compaction");
 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(blobs.size() == CompactionBlobsCount);
@@ -405,10 +401,10 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
         if (pos == Max<size_t>()) {
             // большой блоб надо переименовать
-            PQ_LOG_D("Rename key " << k.Key.ToString());
+            LOG_D("Rename key " << k.Key.ToString());
 
             bool needToCompactHead = (headForCompaction->PackedSize != 0);
-            PQ_LOG_D("need to compact head " << needToCompactHead);
+            LOG_D("need to compact head " << needToCompactHead);
 
             RenameCompactedBlob(k, k.Size,
                                 needToCompactHead,
@@ -422,11 +418,11 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
             wasTheLastBlobBig = true;
         } else {
             // маленький блоб надо дописать
-            PQ_LOG_D("Append blob for key " << k.Key.ToString());
+            LOG_D("Append blob for key " << k.Key.ToString());
 
             const TRequestedBlob& requestedBlob = blobs[pos];
             if (!CompactRequestedBlob(requestedBlob, parameters, compactionRequest.Get(), blobCreationUnixTime, wasTheLastBlobBig)) {
-                PQ_LOG_D("Can't append blob for key " << k.Key.ToString());
+                LOG_D("Can't append blob for key " << k.Key.ToString());
                 Y_FAIL("Something went wrong");
                 return;
             }
@@ -455,7 +451,7 @@ void TPartition::BlobsForCompactionWereWrite()
 {
     const auto& ctx = ActorContext();
 
-    PQ_LOG_D("Blobs compaction is completed");
+    LOG_D("Blobs compaction is completed");
 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(BlobEncoder.DataKeysBody.size() >= KeysForCompaction.size());

@@ -353,7 +353,6 @@ void TPartition::RenameCompactedBlob(TDataKey& k,
 
     if (const auto& formedBlobs = CompactionBlobEncoder.PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
         ui32 curWrites = RenameTmpCmdWrites(compactionRequest);
-        // TODO(abcdef): надо учитывать время создания блоба
         RenameFormedBlobs(formedBlobs,
                           parameters,
                           curWrites,
@@ -423,8 +422,6 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
             CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
             CompactionBlobEncoder.NewHead.Clear();
             CompactionBlobEncoder.NewHead.Offset = parameters.CurOffset;
-
-            // TODO(abcdef): поправить CompactionBlobEncoder.StartOffset если это первое сообщение
 
             wasTheLastBlobBig = true;
         } else {

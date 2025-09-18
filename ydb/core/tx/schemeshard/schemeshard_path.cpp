@@ -910,6 +910,12 @@ const TPath::TChecker& TPath::TChecker::FailOnRestrictedCreateInTempZone(bool al
     }
 
     if (allowCreateInTemporaryDir) {
+        if (std::all_of(Path.Elements.begin(), Path.Elements.end(),
+                [](const auto& element) { return !element->IsTemporary(); })) {
+            return Fail(status, TStringBuilder() << "path is not temporary"
+                << " (" << BasicPathInfo(Path.Base()) << ")"
+            );
+        }
         return *this;
     }
 

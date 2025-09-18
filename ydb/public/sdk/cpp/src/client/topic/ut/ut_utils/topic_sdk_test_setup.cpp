@@ -151,8 +151,8 @@ std::string TTopicSdkTestSetup::GetDatabase() const {
     return Database_;
 }
 
-std::string TTopicSdkTestSetup::GetFullTopicPath() const {
-    return GetDatabase() + "/" + GetTopicPath();
+std::string TTopicSdkTestSetup::GetFullTopicPath(const std::string& name) const {
+    return GetDatabase() + "/" + GetTopicPath(name);
 }
 
 std::vector<std::uint32_t> TTopicSdkTestSetup::GetNodeIds() {

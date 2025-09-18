@@ -31,15 +31,22 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
     }
 
     void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount) {
+        const auto timeout = TInstant::Now() + TDuration::Seconds(10);
         std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager;
         while (true) {
             if (!resourceManager) {
                 resourceManager = NKikimr::NKqp::TryGetKqpResourceManager(nodeId);
             }
+
             if (resourceManager && resourceManager->GetClusterResources().size() == expectedNodeCount) {
                 return;
             }
-            Sleep(TDuration::MilliSeconds(10));
+
+            if (TInstant::Now() > timeout) {
+                UNIT_FAIL("Timeout waiting for resources to publish on node [" << nodeId << "], expectedNodeCount: " << expectedNodeCount << " has resourceManager: " << (resourceManager ? "true" : "false") << ", node count: " << (resourceManager ? resourceManager->GetClusterResources().size() : 0));
+            }
+
+            Sleep(TDuration::MilliSeconds(100));
         }
     }
 

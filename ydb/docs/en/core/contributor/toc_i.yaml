@@ -28,6 +28,8 @@ items:
       href: datashard-locks-and-change-visibility.md
     - name: Distributed transactions
       href: datashard-distributed-txs.md
+  - name: Spilling Service
+    href: spilling-service.md
   - name: Testing with load actors
     href: load-actors-overview.md
     items:

@@ -470,6 +470,19 @@ common:
   - from: /dev/troubleshooting/performance/infrastructure/dc-outage.md
     to: /troubleshooting/performance/infrastructure/dc-outage.md
 
+# Redirects for reference/configuration
+
+  - from: /reference/configuration/node-authentication.md
+    to: /reference/configuration/client_certificate_authorization.md
+
+# Redirects for the olap section
+
+  - from: /olap/(.*)$
+    to: /analyst/$1
+  - from: /olap/datasets/(.*)$
+    to: /analyst/datasets/$1
+
+
 ru:
   - from: /postgresql/index.md
     to: /postgresql/intro.md

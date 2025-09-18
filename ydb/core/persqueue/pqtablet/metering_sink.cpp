@@ -180,7 +180,7 @@ const TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMe
     }
 
     default:
-        Y_ABORT_UNLESS(false);
+        Y_ENSURE(false);
     };
 }
 

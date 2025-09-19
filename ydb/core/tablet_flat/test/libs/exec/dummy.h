@@ -32,6 +32,7 @@ namespace NFake {
         enum class EFlg : ui32 {
             Comp    = 0x01,
             Vac     = 0x02,
+            Backup  = 0x04,
         };
 
         TDummy(const TActorId &tablet, TInfo *info, const TActorId& owner,
@@ -143,6 +144,17 @@ namespace NFake {
             } else {
                 Y_TABLET_ERROR("Unsupported snapshot context");
             }
+        }
+
+        bool NeedBackup() const override
+        {
+            return Flags & ui32(EFlg::Backup);
+        }
+
+        void BackupSnapshotComplete(const TActorContext&) override
+        {
+            if (NeedBackup())
+                Send(Owner, new NFake::TEvSnapshotBackedUp());
         }
 
     private:

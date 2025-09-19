@@ -604,7 +604,7 @@ namespace NActors {
             return *this;
         }
 
-        ~TVerifyFormattedRecordWriter();
+        [[noreturn]] ~TVerifyFormattedRecordWriter();
     };
 
     class TEnsureFormattedRecordWriter: public TFormatedStreamWriter {
@@ -621,7 +621,7 @@ namespace NActors {
             return *this;
         }
 
-        ~TEnsureFormattedRecordWriter() noexcept(false);
+        [[noreturn]] ~TEnsureFormattedRecordWriter() noexcept(false);
     };
 }
 

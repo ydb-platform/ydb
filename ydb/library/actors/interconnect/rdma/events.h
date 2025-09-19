@@ -26,11 +26,18 @@ namespace NInterconnect::NRdma {
         struct TSuccess {
         };
 
+        // Error during work completion, i.e. rdma read timeout
         struct TWcErr {
             int Code;
         };
 
+        // Error of whole CQ
         struct TCqErr {
+        };
+
+        // Post wr error
+        struct TWrErr {
+            int Code;
         };
 
         static TEvRdmaIoDone* Success() {
@@ -44,6 +51,10 @@ namespace NInterconnect::NRdma {
         static TEvRdmaIoDone* CqError() {
             return new TEvRdmaIoDone(TCqErr());
         } 
+
+        static TEvRdmaIoDone* WrError(int code) {
+            return new TEvRdmaIoDone(TWrErr(code));
+        }
 
         TEvRdmaIoDone()
             : Record(TSuccess())
@@ -59,6 +70,10 @@ namespace NInterconnect::NRdma {
             : Record(err)
         {}
 
+        TEvRdmaIoDone(TWrErr err)
+            : Record(err)
+        {}
+
         bool IsSuccess() const noexcept {
             return Record.index() == 0; 
         }
@@ -70,16 +85,32 @@ namespace NInterconnect::NRdma {
         bool IsCqError() const noexcept {
             return Record.index() == 2;
         }
+
+        bool IsWrError() const noexcept {
+            return Record.index() == 3;
+        }
         
         int GetErrCode() const noexcept {
             if (IsWcError()) {
-                return std::get<1>(Record).Code;
+                return std::get<TWcErr>(Record).Code;
+            } else if (IsWrError()) {
+                return std::get<TWrErr>(Record).Code;
             } else {
                 return -1;
             }
         }
 
-        std::variant<TSuccess, TWcErr, TCqErr> Record;
+        std::string_view GetErrSource() const noexcept {
+            switch (Record.index()) {
+                case 0: return "Ok";
+                case 1: return "TWcErr";
+                case 2: return "TCqErr";
+                case 3: return "TWrErr";
+            }
+            return "unknown";
+        }
+
+        std::variant<TSuccess, TWcErr, TCqErr, TWrErr> Record;
     };
 
     struct TEvRdmaReadDone : NActors::TEventLocal<TEvRdmaReadDone, (ui32)ERdma::EvRdmaReadDone> {

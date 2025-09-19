@@ -109,11 +109,11 @@ private:
 class TSimpleCqBase : public TCqCommon {
 protected:
     struct TWaiterCtx {
-        TWaiterCtx(std::function<void(ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
+        TWaiterCtx(std::function<void(NActors::TActorSystem*, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
             : WrCb(std::move(wrCb))
             , IoCb(std::move(ioCb))
         {}
-        std::function<void(ICq::IWr*)> WrCb;
+        std::function<void(NActors::TActorSystem* as, ICq::IWr*)> WrCb;
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> IoCb;
     };
 public:
@@ -171,7 +171,7 @@ public:
                     wr->ReplyErr(As);
                 } else {
                     Allocated.fetch_add(1);
-                    ctx->WrCb(wr);
+                    ctx->WrCb(As, wr);
                 }
                 ctx.reset();
                 return true;
@@ -279,7 +279,7 @@ public:
         }
     }
 
-    std::optional<TErr> AllocWrAsync(std::function<void(ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept override {
+    std::optional<TErr> AllocWrAsync(std::function<void(NActors::TActorSystem* as, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept override {
         if (Err.load(std::memory_order_relaxed)) {
             return TErr();
         }
@@ -313,7 +313,7 @@ public:
         }
     }
 
-    std::optional<TErr> AllocWrAsync(std::function<void(ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept override {
+    std::optional<TErr> AllocWrAsync(std::function<void(NActors::TActorSystem* as, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept override {
         if (Err.load(std::memory_order_relaxed)) {
             return TErr();
         }

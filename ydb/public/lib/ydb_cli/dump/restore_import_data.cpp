@@ -853,7 +853,7 @@ class TDataWriter: public NPrivate::IDataWriter {
 
             if (retryNumber == MaxRetries) {
                 LOG_E("There is no retries left while importing data to " << Path.Quote()
-                      << " last result: " << importResult);
+                      << ", last result: " << importResult);
                 SetError(std::move(importResult));
                 return false;
             }

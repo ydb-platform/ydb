@@ -24,6 +24,8 @@ SRCS(
     kqp_tasks_runner.cpp
     kqp_transport.cpp
     kqp_vector_actor.cpp
+    kqp_vector_level_cache.cpp
+    kqp_vector_level_cache_manager.cpp
     kqp_write_actor_settings.cpp
     kqp_write_actor.cpp
     kqp_write_table.cpp
@@ -37,6 +39,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
+    library/cpp/cache
     library/cpp/threading/hot_swap
     ydb/core/actorlib_impl
     ydb/core/base

@@ -10,27 +10,51 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         Ydb::Table::FulltextIndexSettings settings;
         TString error;
 
-        UNIT_ASSERT(!ValidateSettings(settings, error));
+        NProtoBuf::RepeatedPtrField<TString> keyColumns;
+        keyColumns.Add("text");
+
+        UNIT_ASSERT(!ValidateSettings(keyColumns, settings, error));
         UNIT_ASSERT_VALUES_EQUAL(error, "layout should be set");
         settings.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
 
-        UNIT_ASSERT(!ValidateSettings(settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "fulltext index should have single column settings but have 0 of them");
+        UNIT_ASSERT(!ValidateSettings(keyColumns, settings, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "fulltext index should have a single text key column settings but have 0 of them");
         auto columnSettings = settings.add_columns();
 
-        UNIT_ASSERT(!ValidateSettings(settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "column should be set");
+        UNIT_ASSERT(!ValidateSettings(keyColumns, settings, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "fulltext index settings should have a column name");
         columnSettings->set_column("text");
 
-        UNIT_ASSERT(!ValidateSettings(settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "column analyzers should be set");
+        UNIT_ASSERT(!ValidateSettings(keyColumns, settings, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "fulltext index settings should have analyzers");
         auto columnAnalyzers = columnSettings->mutable_analyzers();
 
-        UNIT_ASSERT(!ValidateSettings(settings, error));
+        UNIT_ASSERT(!ValidateSettings(keyColumns, settings, error));
         UNIT_ASSERT_VALUES_EQUAL(error, "tokenizer should be set");
         columnAnalyzers->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
 
-        UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+        {
+            NProtoBuf::RepeatedPtrField<TString> keyColumns;
+            UNIT_ASSERT_C(!ValidateSettings(keyColumns, settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "fulltext index should have a single text key column but have 0 of them");
+        }
+
+        {
+            NProtoBuf::RepeatedPtrField<TString> keyColumns;
+            keyColumns.Add("text2");
+            UNIT_ASSERT_C(!ValidateSettings(keyColumns, settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "fulltext index should have a single text key column text2 settings but have text");
+        }
+
+        {
+            NProtoBuf::RepeatedPtrField<TString> keyColumns;
+            keyColumns.Add("text");
+            keyColumns.Add("text");
+            UNIT_ASSERT_C(!ValidateSettings(keyColumns, settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "fulltext index should have a single text key column but have 2 of them");
+        }
+
+        UNIT_ASSERT_C(ValidateSettings(keyColumns, settings, error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
     }
 

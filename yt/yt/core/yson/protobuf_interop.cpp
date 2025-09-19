@@ -194,7 +194,7 @@ void SetProtobufInteropConfig(TProtobufInteropConfigPtr config)
     GlobalProtobufInteropConfig()->Config.Store(std::move(config));
 }
 
-void WriteSchema(const TProtobufEnumType* enumType, IYsonConsumer* consumer);
+void WriteSchema(const TProtobufEnumType* enumType, IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -456,7 +456,8 @@ class TProtobufField
 {
 public:
     TProtobufField(TProtobufTypeRegistry* registry, const FieldDescriptor* descriptor)
-        : Underlying_(descriptor)
+        : Registry_(registry)
+        , Underlying_(descriptor)
         , YsonName_(registry->GetYsonName(descriptor))
         , FullName_(FromProto<TString>(Underlying_->full_name()))
         , YsonNameAliases_(registry->GetYsonNameAliases(descriptor))
@@ -600,17 +601,74 @@ public:
         return StrictEnumValueCheck_.value_or(true);
     }
 
-    void WriteSchema(IYsonConsumer* consumer) const
+    INodePtr GetDefaultValue() const
+    {
+        if (!Underlying_->has_default_value()) {
+            return nullptr;
+        }
+        switch (GetType()) {
+            case FieldDescriptor::TYPE_FIXED32:
+            case FieldDescriptor::TYPE_UINT32:
+                return ConvertTo<INodePtr>(Underlying_->default_value_uint32());
+            case FieldDescriptor::TYPE_FIXED64:
+            case FieldDescriptor::TYPE_UINT64:
+                return ConvertTo<INodePtr>(Underlying_->default_value_uint64());
+            case FieldDescriptor::TYPE_INT32:
+            case FieldDescriptor::TYPE_SINT32:
+            case FieldDescriptor::TYPE_SFIXED32:
+                return ConvertTo<INodePtr>(Underlying_->default_value_int32());
+            case FieldDescriptor::TYPE_INT64:
+            case FieldDescriptor::TYPE_SINT64:
+            case FieldDescriptor::TYPE_SFIXED64:
+                return ConvertTo<INodePtr>(Underlying_->default_value_int64());
+            case FieldDescriptor::TYPE_BOOL:
+                return ConvertTo<INodePtr>(Underlying_->default_value_bool());
+            case FieldDescriptor::TYPE_FLOAT:
+                return ConvertTo<INodePtr>(Underlying_->default_value_float());
+            case FieldDescriptor::TYPE_DOUBLE:
+                return ConvertTo<INodePtr>(Underlying_->default_value_double());
+            case FieldDescriptor::TYPE_STRING:
+            case FieldDescriptor::TYPE_BYTES:
+                return ConvertTo<INodePtr>(Underlying_->default_value_string());
+            case FieldDescriptor::TYPE_ENUM:
+                return ConvertTo<INodePtr>(Registry_->GetYsonLiteral(Underlying_->default_value_enum()));
+            default:
+                break;
+        }
+        return nullptr;
+    }
+
+    void WriteMemberSchema(IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
+    {
+        BuildYsonFluently(consumer)
+            .BeginMap()
+                .Item("name").Value(GetYsonName())
+                .Item("type").Do([&] (auto fluent) {
+                    WriteTypeSchema(fluent.GetConsumer(), options);
+                })
+                .DoIf(!IsYsonMap() && !IsRepeated() && !IsOptional(), [] (auto fluent) {
+                    fluent.Item("required").Value(true);
+                })
+                .DoIf(options.AddCppTypeNames && !IsRepeated() && !IsYsonMap(), [&] (auto fluent) {
+                    fluent.Item("cpp_type_name").Value(Underlying_->cpp_type_name());
+                })
+                .DoIf(options.AddDefaultValues && Underlying_->has_default_value(), [&] (auto fluent) {
+                    fluent.Item("default_value").Value(GetDefaultValue());
+                })
+            .EndMap();
+    }
+
+    void WriteTypeSchema(IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
     {
         if (IsYsonMap()) {
             BuildYsonFluently(consumer)
                 .BeginMap()
                     .Item("type_name").Value("dict")
                     .Item("key").Do([&] (auto fluent) {
-                        GetYsonMapKeyField()->WriteSchema(fluent.GetConsumer());
+                        GetYsonMapKeyField()->WriteTypeSchema(fluent.GetConsumer(), options);
                     })
                     .Item("value").Do([&] (auto fluent) {
-                        GetYsonMapValueField()->WriteSchema(fluent.GetConsumer());
+                        GetYsonMapValueField()->WriteTypeSchema(fluent.GetConsumer(), options);
                     })
                 .EndMap();
 
@@ -658,10 +716,10 @@ public:
                 consumer->OnStringScalar("string");
                 break;
             case FieldDescriptor::TYPE_ENUM:
-                NYson::WriteSchema(GetEnumType(), consumer);
+                NYson::WriteSchema(GetEnumType(), consumer, options);
                 break;
             case FieldDescriptor::TYPE_MESSAGE:
-                NYson::WriteSchema(GetMessageType(), consumer);
+                NYson::WriteSchema(GetMessageType(), consumer, options);
                 break;
             default:
                 break;
@@ -672,6 +730,7 @@ public:
     }
 
 private:
+    TProtobufTypeRegistry* const Registry_;
     const FieldDescriptor* const Underlying_;
     const TStringBuf YsonName_;
     const TString FullName_;
@@ -793,22 +852,24 @@ public:
         }
     }
 
-    void WriteSchema(IYsonConsumer* consumer) const
+    void WriteSchema(IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
     {
         BuildYsonFluently(consumer).BeginMap()
             .Item("type_name").Value("struct")
+            .DoIf(options.AddCppTypeNames, [&] (auto fluent) {
+                fluent.Item("cpp_type_name").Value(Underlying_->full_name());
+            })
+            .DoIf(options.AddSourceLocation, [&] (auto fluent) {
+                fluent.Item("source_location_file_name").Value(Underlying_->file()->name());
+                if (SourceLocation sourceLocation; Underlying_->GetSourceLocation(&sourceLocation)) {
+                    fluent.Item("source_location_line").Value(i64{sourceLocation.start_line + 1});
+                }
+            })
             .Item("members").DoListFor(0, Underlying_->field_count(), [&] (auto fluent, int index) {
                 auto* field = GetFieldByNumber(Underlying_->field(index)->number());
-                fluent.Item()
-                    .BeginMap()
-                        .Item("name").Value(field->GetYsonName())
-                        .Item("type").Do([&] (auto fluent) {
-                            field->WriteSchema(fluent.GetConsumer());
-                        })
-                        .DoIf(!field->IsYsonMap() && !field->IsRepeated() && !field->IsOptional(), [] (auto fluent) {
-                            fluent.Item("required").Value(true);
-                        })
-                    .EndMap();
+                fluent.Item().Do([&] (auto fluent) {
+                    field->WriteMemberSchema(fluent.GetConsumer(), options);
+                });
             })
             .EndMap();
     }
@@ -931,7 +992,7 @@ public:
         return it == ValueToLiteral_.end() ? TStringBuf() : it->second;
     }
 
-    void WriteSchema(IYsonConsumer* consumer) const
+    void WriteSchema(IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
     {
         BuildYsonFluently(consumer)
             .BeginMap()
@@ -940,6 +1001,17 @@ public:
                 .Item("item").Value("string")
                 .Item("enum").DoListFor(0, Underlying_->value_count(), [&] (auto fluent, int index) {
                     fluent.Item().Value(FindLiteralByValue(Underlying_->value(index)->number()));
+                })
+                .DoIf(options.AddCppTypeNames, [&] (auto fluent) {
+                    fluent.Item("cpp_type_name").Value(Underlying_->full_name());
+                })
+                .DoIf(options.AddSourceLocation, [&] (auto fluent) {
+                    SourceLocation sourceLocation;
+                    if (!Underlying_->GetSourceLocation(&sourceLocation)) {
+                        return;
+                    }
+                    fluent.Item("source_location_file_name").Value(Underlying_->file()->name());
+                    fluent.Item("source_location_line").Value(i64{sourceLocation.start_line + 1});
                 })
             .EndMap();
     }
@@ -3281,14 +3353,14 @@ TString YsonStringToProto(
     return FromProto<TString>(serializedProto);
 }
 
-void WriteSchema(const TProtobufEnumType* type, IYsonConsumer* consumer)
+void WriteSchema(const TProtobufEnumType* type, IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
-    type->WriteSchema(consumer);
+    type->WriteSchema(consumer, options);
 }
 
-void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer)
+void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
-    type->WriteSchema(consumer);
+    type->WriteSchema(consumer, options);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

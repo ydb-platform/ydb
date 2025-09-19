@@ -424,22 +424,22 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 "pqGroup is null"
                     << ", pathId " << txState->TargetPathId);
 
-    const auto attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
+    const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
     TString cloudId;
-    if (auto it = attrs.find("cloud_id"); it != attrs.end()) {
-        cloudId = it->second;
+    if (dbRootEl->UserAttrs->Attrs.contains("cloud_id")) {
+        cloudId = dbRootEl->UserAttrs->Attrs.at("cloud_id");
     }
     TString folderId;
-    if (auto it = attrs.find("folder_id"); it != attrs.end()) {
-        folderId = it->second;
+    if (dbRootEl->UserAttrs->Attrs.contains("folder_id")) {
+        folderId = dbRootEl->UserAttrs->Attrs.at("folder_id");
     }
     TString databaseId;
-    if (auto it = attrs.find("database_id"); it != attrs.end()) {
-        databaseId = it->second;
+    if (dbRootEl->UserAttrs->Attrs.contains("database_id")) {
+        databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
     }
     TString monitoringProjectId;
-    if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
-        monitoringProjectId = it->second;
+    if (dbRootEl->UserAttrs->Attrs.contains("monitoring_project_id")) {
+        monitoringProjectId = dbRootEl->UserAttrs->Attrs.at("monitoring_project_id");
     }
 
     TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();

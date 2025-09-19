@@ -1,7 +1,7 @@
 #include "util/system/cpu_id.h"
-#include <ydb/library/yql/utils/simd/simd_avx2.h>
-#include <ydb/library/yql/utils/simd/simd_fallback.h>
-#include <ydb/library/yql/utils/simd/simd_sse42.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd_avx2.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd_fallback.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd_sse42.h>
 #include <vector>
 
 using vl = std::vector<ui64>;

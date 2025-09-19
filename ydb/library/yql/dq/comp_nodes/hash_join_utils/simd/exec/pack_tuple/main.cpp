@@ -2,7 +2,7 @@
 #include <util/system/cpu_id.h>
 #include <util/system/types.h>
 
-#include <ydb/library/yql/utils/simd/simd.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd.h>
 
 struct TPerfomancer {
     TPerfomancer() = default;

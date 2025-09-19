@@ -7,7 +7,7 @@
 #include <immintrin.h>
 #include <avxintrin.h>
 #include <chrono>
-#include <ydb/library/yql/utils/simd/simd.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd.h>
 
 
 const size_t size = 64e5;

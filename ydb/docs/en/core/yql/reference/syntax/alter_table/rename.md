@@ -6,11 +6,11 @@ ALTER TABLE old_table_name RENAME TO new_table_name;
 
 {% if oss == true and backend_name == "YDB" %}
 
-{% cut "See table and column naming rules" %}
+{% note info %}
 
-{% include [table naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md) %}
+When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
 
-{% endcut %}
+{% endnote %}
 
 {% endif %}
 

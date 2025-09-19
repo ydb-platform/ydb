@@ -110,7 +110,7 @@ message TFeatureFlags {
     optional bool EnableDataShardVolatileTransactions = 85 [default = true];
     optional bool EnableTopicServiceTx = 86 [default = true];
     optional bool EnableLLVMCache = 87 [default = false];
-    optional bool EnableExternalDataSources = 88 [default = false];
+    optional bool EnableExternalDataSources = 88 [default = true];
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = true, (RequireRestart) = true];
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = true];
     optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = true];
@@ -165,7 +165,7 @@ message TFeatureFlags {
     optional bool EnableTieringInColumnShard = 140 [default = false];
     optional bool EnableMetadataObjectsOnServerless = 141 [default = true];
     optional bool EnableOlapCompression = 142 [default = false];
-    optional bool EnableExternalDataSourcesOnServerless = 143 [default = true];
+    optional bool EnableExternalDataSourcesOnServerless = 143 [default = false];
     optional bool EnableSparsedColumns = 144 [default = false];
     optional bool EnableParameterizedDecimal = 145 [default = true];
     optional bool EnableImmediateWritingOnBulkUpsert = 146 [default = true, deprecated = true];

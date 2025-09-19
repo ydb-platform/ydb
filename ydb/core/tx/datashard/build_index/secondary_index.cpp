@@ -401,7 +401,9 @@ private:
             WriteBuf.GetRowsData(),
             UploadMode,
             true /*writeToPrivateTable*/,
-            true /*writeToIndexImplTable*/);
+            true /*writeToIndexImplTable*/,
+            0 /*cookie*/,
+            TBackoff(ScanSettings.GetMaxBatchRetries(), TDuration::MilliSeconds(500), TDuration::Seconds(5)));
 
         Uploader = this->Register(actor);
     }

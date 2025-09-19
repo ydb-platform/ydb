@@ -6,56 +6,54 @@ namespace NKikimr::NFulltext {
 
 Y_UNIT_TEST_SUITE(NFulltext) {
 
+    Y_UNIT_TEST(ValidateColumnsMatches) {
+        TString error;
+        
+        Ydb::Table::FulltextIndexSettings settings;
+        settings.add_columns()->set_column("column1");
+        settings.add_columns()->set_column("column2");
+
+        UNIT_ASSERT(!ValidateColumnsMatches(TVector<TString>{"column2"}, settings, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "columns [ column1 column2 ] should be [ column2 ]");
+
+        UNIT_ASSERT(!ValidateColumnsMatches(TVector<TString>{"column2", "column1"}, settings, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "columns [ column1 column2 ] should be [ column2 column1 ]");
+
+        UNIT_ASSERT(ValidateColumnsMatches(TVector<TString>{"column1", "column2"}, settings, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+    }
+
     Y_UNIT_TEST(ValidateSettings) {
         Ydb::Table::FulltextIndexSettings settings;
         TString error;
 
-        NProtoBuf::RepeatedPtrField<TString> keyColumns;
-        keyColumns.Add("text");
-
-        UNIT_ASSERT(!ValidateSettings(keyColumns, settings, error));
+        UNIT_ASSERT(!ValidateSettings(settings, error));
         UNIT_ASSERT_VALUES_EQUAL(error, "layout should be set");
         settings.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
 
-        UNIT_ASSERT(!ValidateSettings(keyColumns, settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "fulltext index should have a single text key column settings but have 0 of them");
+        UNIT_ASSERT(!ValidateSettings(settings, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "columns should be set");
         auto columnSettings = settings.add_columns();
 
-        UNIT_ASSERT(!ValidateSettings(keyColumns, settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "fulltext index settings should have a column name");
+        UNIT_ASSERT(!ValidateSettings(settings, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "column name should be set");
         columnSettings->set_column("text");
 
-        UNIT_ASSERT(!ValidateSettings(keyColumns, settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "fulltext index settings should have analyzers");
+        UNIT_ASSERT(!ValidateSettings(settings, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "column analyzers should be set");
         auto columnAnalyzers = columnSettings->mutable_analyzers();
 
-        UNIT_ASSERT(!ValidateSettings(keyColumns, settings, error));
+        UNIT_ASSERT(!ValidateSettings(settings, error));
         UNIT_ASSERT_VALUES_EQUAL(error, "tokenizer should be set");
         columnAnalyzers->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
 
-        {
-            NProtoBuf::RepeatedPtrField<TString> keyColumns;
-            UNIT_ASSERT_C(!ValidateSettings(keyColumns, settings, error), error);
-            UNIT_ASSERT_VALUES_EQUAL(error, "fulltext index should have a single text key column but have 0 of them");
-        }
-
-        {
-            NProtoBuf::RepeatedPtrField<TString> keyColumns;
-            keyColumns.Add("text2");
-            UNIT_ASSERT_C(!ValidateSettings(keyColumns, settings, error), error);
-            UNIT_ASSERT_VALUES_EQUAL(error, "fulltext index should have a single text key column text2 settings but have text");
-        }
-
-        {
-            NProtoBuf::RepeatedPtrField<TString> keyColumns;
-            keyColumns.Add("text");
-            keyColumns.Add("text");
-            UNIT_ASSERT_C(!ValidateSettings(keyColumns, settings, error), error);
-            UNIT_ASSERT_VALUES_EQUAL(error, "fulltext index should have a single text key column but have 2 of them");
-        }
-
-        UNIT_ASSERT_C(ValidateSettings(keyColumns, settings, error), error);
+        UNIT_ASSERT_C(ValidateSettings(settings, error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        columnSettings = settings.add_columns();
+        columnSettings->set_column("text2");
+        UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "columns should have a single value");
     }
 
     Y_UNIT_TEST(FillSettings) {

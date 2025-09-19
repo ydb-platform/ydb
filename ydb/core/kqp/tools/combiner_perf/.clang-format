@@ -7,3 +7,4 @@ MaxEmptyLinesToKeep: 1
 SeparateDefinitionBlocks: Always
 ColumnLimit: 120
 AllowShortLambdasOnASingleLine: Inline
+AllowShortFunctionsOnASingleLine: Empty

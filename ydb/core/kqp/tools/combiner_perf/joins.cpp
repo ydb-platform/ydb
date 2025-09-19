@@ -57,8 +57,6 @@ int LineSize(NKikimr::NMiniKQL::ETestedJoinAlgo algo, std::span<const NYql::NUdf
 
 void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams& params, TTestResultCollector& printout) {
     Y_UNUSED(params);
-    Cout << "running joins bench" << Endl;
-    Cout.Flush();
     namespace NYKQL = NKikimr::NMiniKQL;
     TRunResult finalResult;
     NKikimr::NMiniKQL::TDqSetup<false> setup{NKikimr::NMiniKQL::GetPerfTestFactory()};
@@ -85,6 +83,9 @@ void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams& params, TTestResultColle
     for (int scale_log : std::views::iota(1) | std::views::take(8)) {
         int scale = 1 << scale_log;
         int leftSize = bigSize * scale;
+        // todo(becalm): there is a lot of input generation which can be optimised like: generate only the biggest list
+        // and add node that takes only first k lines of list for input size of k. it introduces some runtime overhead
+        // in benchmark tho.
         addStringAndIntInputs(scaled_inputs, leftSize, leftSize, Sprintf("SameSize_%i", leftSize));
         addStringAndIntInputs(scaled_inputs, leftSize, smallSize * scale, Sprintf("BigLeft_%i", leftSize));
     }

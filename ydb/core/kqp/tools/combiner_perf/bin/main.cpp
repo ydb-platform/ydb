@@ -117,7 +117,7 @@ NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult&
 int FilesIn(std::filesystem::path path)
 {
     using std::filesystem::directory_iterator;
-    std::filesystem::create_directory(path);
+    std::filesystem::create_directories(path);
     return std::distance(directory_iterator(path), directory_iterator{});
 }
 
@@ -130,9 +130,16 @@ void SaveJsonAt(NJson::TJsonValue value, TFixedBufferFileOutput* jsonlSaveFile) 
 }
 
 class TJsonResultCollector : public TTestResultCollector {
+    static std::filesystem::path MakePath() {
+        auto p = std::filesystem::path{std::getenv("HOME")} / ".combiner_perf" / "json";
+        std::filesystem::create_directories(p);
+        p = p / Sprintf("%i.jsonl", FilesIn(p)).ConstRef();
+        return p;
+    }
+
   public:
     TJsonResultCollector()
-        : OutFile(std::filesystem::path{"bench_results"} / Sprintf("%i.jsonl", FilesIn("bench_results")).ConstRef())
+        : Path(MakePath()), OutFile(Path)
     {}
 
     virtual void SubmitMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName,
@@ -141,6 +148,11 @@ class TJsonResultCollector : public TTestResultCollector {
         SaveJsonAt(out, &OutFile);
     }
 
+    ~TJsonResultCollector() {
+        Cout << "Saved results at " << Path.string();
+    }
+
+    std::filesystem::path Path;
     TFixedBufferFileOutput OutFile;
 };
 

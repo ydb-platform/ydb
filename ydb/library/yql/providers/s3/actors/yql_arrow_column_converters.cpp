@@ -143,13 +143,13 @@ std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime(const std::shared_ptr<
             throw parquet::ParquetException(TStringBuilder() << "null value for datetime could not be represented in non-optional type");
         }
 
-        const TArrowType baseValue = item.As<TArrowType>();
+        const i64 baseValue = item.As<i64>();
         if (baseValue < 0 && baseValue > static_cast<int64_t>(::NYql::NUdf::MAX_DATETIME)) {
             throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATETIME << "]: " << baseValue);
         }
 
         if (baseValue % multiplier) {
-            throw parquet::ParquetException(TStringBuilder() << "datetime in parquet should TODO");
+            throw parquet::ParquetException(TStringBuilder() << "datetime in parquet should have integer amount of seconds, have: " << baseValue * 1.0 / multiplier);
         }
         const TArrowType v = baseValue / static_cast<ui64>(multiplier);
         builder.Add(NUdf::TBlockItem(static_cast<TArrowType>(v)));

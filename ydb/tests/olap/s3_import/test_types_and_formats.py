@@ -155,10 +155,10 @@ class TestTypesAndFormats(S3ImportTestBase):
             c_utf8 Utf8,
             c_json Json,
             c_date Date,
-            c_datetime Datetime,
-            c_timestamp Timestamp,
             c_date32 Date32,
+            c_datetime Datetime,
             c_datetime64 Datetime64,
+            c_timestamp Timestamp,
             c_timestamp64 Timestamp64,
             c_decimal Decimal(22, 9)
         """
@@ -174,9 +174,71 @@ class TestTypesAndFormats(S3ImportTestBase):
 
         self.ydb_client.query(f"""
             UPSERT INTO {olap_table_name} (
-                c_int8, c_int16, c_int32, c_int64, c_uint8, c_uint16, c_uint32, c_uint64, c_float, c_double, c_string, c_utf8, c_json, c_date, c_datetime, c_timestamp, c_date32, c_datetime64, c_timestamp64, c_decimal
+                c_int8,
+                c_int16,
+                c_int32,
+                c_int64,
+                c_uint8,
+                c_uint16,
+                c_uint32,
+                c_uint64,
+                c_float,
+                c_double,
+                c_string,
+                c_utf8,
+                c_json,
+                c_date,
+                c_date32,
+                c_datetime,
+                c_datetime64,
+                c_timestamp,
+                c_timestamp64,
+                c_decimal
             ) VALUES
-                (1, 1, 1, 1, 1, 1, 1, 1, Float("0.5"), Double("-0.5"), "hello", "world", Json("[10, 20, 30]"), Date("2025-08-25"), Datetime("2025-08-25T10:00:00Z"), Timestamp("2025-08-25T10:00:00Z"), Date32("2025-08-25"), Datetime64("2025-08-25T10:00:00Z"), Timestamp64("2025-08-25T10:00:00Z"), CAST("12.34" AS Decimal(22, 9)));
+                (
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    Float("0.5"),
+                    Double("-0.5"),
+                    "hello",
+                    "world", 
+                    Json("[10, 20, 30]"),
+                    Date("2025-08-25"),
+                    Date32("2025-08-25"),
+                    Datetime("2025-08-25T10:00:00Z"),
+                    Datetime64("2025-08-25T10:00:00Z"),
+                    Timestamp("2025-08-25T10:00:00Z"),
+                    Timestamp64("2025-08-25T10:00:00Z"),
+                    CAST("12.34" AS Decimal(22, 9))
+                )
+                (
+                    NULL,
+                    NULL,
+                    2,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL
+                )
         """)
 
         test_bucket = "parquet_bucket"

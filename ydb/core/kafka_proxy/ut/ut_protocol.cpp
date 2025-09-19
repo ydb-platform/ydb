@@ -1014,6 +1014,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString topicName = "/Root/topic-0-test";
         TString shortTopicName = "topic-0-test";
         TString notExistsTopicName = "/Root/not-exists";
+        TString consumer1 = "consumer1";
 
         TString tableName = "/Root/table-0-test";
         TString feedName = "feed";
@@ -1051,7 +1052,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // Check empty topic (no records)
             std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
-            auto msg = client.Fetch(topics);
+где м            auto msg = client.Fetch(topics);
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
@@ -1584,6 +1585,179 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     } // Y_UNIT_TEST(BalanceScenarioCdc)
 
+    Y_UNIT_TEST(OffsetCommitConsumerAutocreationScenario) {
+        TInsecureTestServer testServer("2", false, true, false, true);
+        testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_TRACE);
+        testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
+
+        TString firstTopicName = "/Root/topic-0-test";
+        TString secondTopicName = "/Root/topic-1-test";
+        TString shortTopicName = "topic-1-test";
+        TString notExistsTopicName = "not-exists";
+        ui64 minActivePartitions = 3;
+
+        TString firstConsumerName = "consumer-0";
+        TString secondConsumerName = "consumer-1";
+        TString notExistsConsumerName1 = "notExists1";
+        TString notExistsConsumerName2 = "notExists2";
+        TString anotherConsumerName = "consumerSingle";
+
+        TString key = "record-key";
+        TString value = "record-value";
+        TString headerKey = "header-key";
+        TString headerValue = "header-value";
+
+        TString commitedMetaData = "additional-info";
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, firstTopicName, minActivePartitions, {firstConsumerName, secondConsumerName});
+        CreateTopic(pqClient, secondTopicName, minActivePartitions, {firstConsumerName});
+
+        TKafkaTestClient client(testServer.Port);
+
+        client.AuthenticateToKafka();
+
+        {
+            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+            std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
+            for (ui64 i = 0; i < minActivePartitions; ++i) {
+                // check that if a partition has a non-zero committed offset (that doesn't exceed endoffset) and committed metadata
+                // or a zero committed offset and metadata
+                // than no error is thrown and metadata is updated
+
+                // check that otherwise, if the committed offset exceeds current endoffset of the partition
+                // than an error is returned and passed committed metadata is not saved
+                partitionsAndOffsets.emplace_back(i, 0, commitedMetaData);
+            }
+
+            offsets[firstTopicName] = partitionsAndOffsets;
+            offsets[secondTopicName] = partitionsAndOffsets;
+            // offsets[secondTopicName] = partitionsAndOffsets;
+            auto msg = client.OffsetCommit(anotherConsumerName, offsets);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
+            for (const auto& topic : msg->Topics) {
+                UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
+                for (const auto& partition : topic.Partitions) {
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                }
+            }
+        }
+
+        {
+            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+            std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
+            for (ui64 i = 0; i < minActivePartitions; ++i) {
+                // check that if a partition has a non-zero committed offset (that doesn't exceed endoffset) and committed metadata
+                // or a zero committed offset and metadata
+                // than no error is thrown and metadata is updated
+
+                // check that otherwise, if the committed offset exceeds current endoffset of the partition
+                // than an error is returned and passed committed metadata is not saved
+                if (i == 0) {
+                    partitionsAndOffsets.emplace_back(i, 0, commitedMetaData);
+                } else {
+                    partitionsAndOffsets.emplace_back(i, 1, commitedMetaData);
+                }
+            }
+
+            offsets[firstTopicName] = partitionsAndOffsets;
+            // offsets[secondTopicName] = partitionsAndOffsets;
+            auto msg = client.OffsetCommit(notExistsConsumerName1, offsets);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            for (const auto& topic : msg->Topics) {
+                UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
+                for (const auto& partition : topic.Partitions) {
+                    if (partition.PartitionIndex == 0) {
+                        UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
+                    }
+                }
+            }
+        }
+
+        auto recordsCount = 5;
+        {
+            // Produce
+
+            TKafkaRecordBatch batch;
+            batch.BaseOffset = 3;
+            batch.BaseSequence = 5;
+            batch.Magic = 2; // Current supported
+            batch.Records.resize(recordsCount);
+            batch.ProducerId = -1;
+            batch.ProducerEpoch = -1;
+
+            for (auto i = 0; i < recordsCount; i++) {
+                batch.Records[i].Key = TKafkaRawBytes(key.data(), key.size());
+                batch.Records[i].Value = TKafkaRawBytes(value.data(), value.size());
+            }
+
+            auto msg = client.Produce(firstTopicName, 0, batch);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Name, firstTopicName);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].Index, 0);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode,
+                                     static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        {
+            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+            std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
+            for (ui64 i = 0; i < minActivePartitions; ++i) {
+                // check that if a partition has a non-zero committed offset (that doesn't exceed endoffset) and committed metadata
+                // or a zero committed offset and metadata
+                // than no error is thrown and metadata is updated
+
+                // check that otherwise, if the committed offset exceeds current endoffset of the partition
+                // than an error is returned and passed committed metadata is not saved
+                partitionsAndOffsets.emplace_back(i, 1, commitedMetaData);
+            }
+
+            offsets[firstTopicName] = partitionsAndOffsets;
+            // offsets[secondTopicName] = partitionsAndOffsets;
+            auto msg = client.OffsetCommit(notExistsConsumerName2, offsets);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            for (const auto& topic : msg->Topics) {
+                UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
+                for (const auto& partition : topic.Partitions) {
+                    if (partition.PartitionIndex == 0) {
+                        UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
+                    }
+                }
+            }
+        }
+        // {
+        //     std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+        //     std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
+        //     for (ui64 i = 0; i < minActivePartitions; ++i) {
+        //         // check that if a partition has a non-zero committed offset (that doesn't exceed endoffset) and committed metadata
+        //         // or a zero committed offset and metadata
+        //         // than no error is thrown and metadata is updated
+
+        //         // check that otherwise, if the committed offset exceeds current endoffset of the partition
+        //         // than an error is returned and passed committed metadata is not saved
+        //         partitionsAndOffsets.emplace_back(i, 0, commitedMetaData);
+        //     }
+
+        //     offsets[firstTopicName] = partitionsAndOffsets;
+        //     // offsets[secondTopicName] = partitionsAndOffsets;
+        //     auto msg = client.OffsetCommit(notExistsConsumerName2, offsets);
+        //     UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+        //     for (const auto& topic : msg->Topics) {
+        //         UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
+        //         for (const auto& partition : topic.Partitions) {
+        //             if (partition.PartitionIndex == 0) {
+        //                 UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
+        //             } else {
+        //                 UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        //             }
+        //         }
+        //     }
+        // }
+    }
     Y_UNIT_TEST(OffsetCommitAndFetchScenario) {
         TInsecureTestServer testServer("2", false, true, false, false);
         testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_TRACE);

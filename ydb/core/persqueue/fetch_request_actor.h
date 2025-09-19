@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/aclib/aclib.h>
 

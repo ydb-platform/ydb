@@ -20,7 +20,8 @@ namespace NPrivate {
     class ILogPrefixBase {
     public:
         virtual const TString& GetLogPrefix() const = 0;
-        virtual ~ILogPrefixBase() = default;
+    protected:
+        ~ILogPrefixBase() = default;
     };
 };
 

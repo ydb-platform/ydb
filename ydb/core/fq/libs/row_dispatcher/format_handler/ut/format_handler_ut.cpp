@@ -11,7 +11,7 @@ public:
     using TCallback = std::function<void(NActors::TActorId, TQueue<TDataBatch>&&)>;
     struct TMessages {
         TVector<ui64> Offsets;
-        TVector<ui64> Watermark;
+        TMaybe<TInstant> Watermark;
         TBatch Batch;
     };
 
@@ -555,14 +555,14 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         auto messages = TVector<TMessages>{
             {
                 {firstOffset + 2, firstOffset + 3},
-                {39'000'000, 40'000'000},
+                TInstant::Seconds(40),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:44Z"))
                     .AddRow(TRow().AddString("1970-01-01T00:00:45Z"))
             },
             {
                 {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z"))
                     .AddRow(TRow().AddString("1970-01-01T00:00:47Z"))
@@ -584,14 +584,14 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         messages = TVector<TMessages>{
             {
                 {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z"))
                     .AddRow(TRow().AddString("1970-01-01T00:00:47Z"))
             },
             {
                 {firstOffset + 6, firstOffset + 7},
-                {43'000'000, 44'000'000},
+                TInstant::Seconds(44),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:48Z"))
                     .AddRow(TRow().AddString("1970-01-01T00:00:49Z"))
@@ -635,14 +635,14 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         auto messages = TVector<TMessages>{
             {
-                {firstOffset + 2, firstOffset + 3},
-                {39'000'000, 40'000'000},
+                {firstOffset + 2},
+                TInstant::Seconds(40),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:44Z").AddUint64(1))
             },
             {
-                {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                {firstOffset + 4},
+                TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z").AddUint64(1))
             },
@@ -662,14 +662,14 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         messages = TVector<TMessages>{
             {
-                {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                {firstOffset + 4},
+                TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z").AddUint64(1))
             },
             {
-                {firstOffset + 6, firstOffset + 7},
-                {43'000'000, 44'000'000},
+                {firstOffset + 6},
+                TInstant::Seconds(44),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:48Z").AddUint64(1))
             },
@@ -712,13 +712,13 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         auto messages = TVector<TMessages>{
             {
-                {firstOffset + 2, firstOffset + 3},
-                {39'000'000, 40'000'000},
+                { firstOffset + 3 },
+                TInstant::Seconds(40),
                 TBatch()
             },
             {
-                {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                { firstOffset + 5 },
+                TInstant::Seconds(42),
                 TBatch()
             },
         };
@@ -737,13 +737,13 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         messages = TVector<TMessages>{
             {
-                {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                { firstOffset + 5 },
+                TInstant::Seconds(42),
                 TBatch()
             },
             {
-                {firstOffset + 6, firstOffset + 7},
-                {43'000'000, 44'000'000},
+                { firstOffset + 7 },
+                TInstant::Seconds(44),
                 TBatch()
             },
         };

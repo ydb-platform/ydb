@@ -46,8 +46,12 @@ def compose_gateways_config(solomon_endpoint):
     config_message = gateways_config_pb2.TGatewaysConfig()
     solomon_cluster = config_message.Solomon.ClusterMapping.add()
     solomon_cluster.Name = "local_solomon"
-    solomon_cluster.Cluster = solomon_endpoint
+    solomon_cluster.Cluster = os.environ.get("SOLOMON_HTTP_ENDPOINT")
     solomon_cluster.UseSsl = False
+
+    grpc_endpoint_setting = solomon_cluster.Settings.add()
+    grpc_endpoint_setting.Name = "grpc_location"
+    grpc_endpoint_setting.Value = os.environ.get("SOLOMON_GRPC_ENDPOINT")
 
     return text_format.MessageToString(config_message)
 

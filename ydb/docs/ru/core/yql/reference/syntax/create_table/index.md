@@ -87,6 +87,8 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 {% note info %}
 
+## Типы таблиц
+
 {{ ydb-short-name }} поддерживает два типа таблиц:
 
 * [Строковые](../../../../concepts/datamodel/table.md#row-oriented-tables).

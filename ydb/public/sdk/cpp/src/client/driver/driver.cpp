@@ -50,6 +50,7 @@ public:
     uint64_t GetMaxOutboundMessageSize() const override { return MaxOutboundMessageSize; }
     uint64_t GetMaxMessageSize() const override { return MaxMessageSize; }
     const TLog& GetLog() const override { return Log; }
+    std::shared_ptr<IExecutor> GetExecutor() const override { return Executor; }
 
     std::string Endpoint;
     size_t NetworkThreadsNum = 2;
@@ -78,6 +79,7 @@ public:
     uint64_t MaxOutboundMessageSize = 0;
     uint64_t MaxMessageSize = 0;
     TLog Log; // Null by default.
+    std::shared_ptr<IExecutor> Executor;
 };
 
 TDriverConfig::TDriverConfig(const std::string& connectionString)
@@ -211,6 +213,11 @@ TDriverConfig& TDriverConfig::SetMaxMessageSize(uint64_t maxMessageSize) {
 
 TDriverConfig& TDriverConfig::SetLog(std::unique_ptr<TLogBackend>&& log) {
     Impl_->Log.ResetBackend(THolder(log.release()));
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetExecutor(std::shared_ptr<IExecutor> executor) {
+    Impl_->Executor = executor;
     return *this;
 }
 

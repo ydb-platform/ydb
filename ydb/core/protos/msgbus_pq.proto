@@ -1,4 +1,5 @@
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/library/actors/protos/actors.proto";
 
@@ -176,7 +177,7 @@ message TPersQueuePartitionRequest {
     optional bool IsDirectWrite = 18 [default = false];
     optional uint64 PutUnitsSize = 19;
     optional int64 InitialSeqNo = 26;
-    optional bool MeteringV2Enabled = 27 [default = false]; 
+    optional bool MeteringV2Enabled = 27 [default = false];
 }
 
 message TPersQueueMetaRequest {
@@ -259,7 +260,7 @@ message TPersQueueRequest {
     optional TPersQueueFetchRequest FetchRequest = 3;
 
     //only one from data, meta or fetch request must be set.
-    optional string SecurityToken = 5;
+    optional string SecurityToken = 5 [(Ydb.sensitive) = true];
     optional string Ticket = 6; //if set, check for acl
 
     optional string RequestId = 100; //for logging

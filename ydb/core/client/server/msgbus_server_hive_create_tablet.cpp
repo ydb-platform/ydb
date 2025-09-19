@@ -1,4 +1,5 @@
 #include "msgbus_tabletreq.h"
+#include <ydb/core/client/server/msgbus_securereq.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/protos/hive.pb.h>
@@ -14,9 +15,9 @@ namespace {
 
 template <typename ResponseType>
 class TMessageBusHiveCreateTablet
-        : public TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>
-        , public TMessageBusSessionIdentHolder {
-using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
+        : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusHiveCreateTablet<ResponseType>>> {
+
+    using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusHiveCreateTablet<ResponseType>>>;
 
     struct TRequest {
         TEvHive::EEv Event;
@@ -71,12 +72,16 @@ public:
     }
 
     TMessageBusHiveCreateTablet(TBusMessageContext &msg)
-            : TMessageBusSessionIdentHolder(msg)
+            : TBase(msg)
             , Status(NKikimrProto::UNKNOWN)
             , ResponsesReceived(0)
             , DomainUid(0)
     {
         const auto &record = static_cast<TBusHiveCreateTablet *>(msg.GetMessage())->Record;
+
+        TBase::SetSecurityToken(record.GetSecurityToken());
+        TBase::SetPeerName(msg.GetPeerName());
+        TBase::SetRequireAdminAccess(true);
 
         bool isOk = true;
         ui32 cmdCount = record.CmdCreateTabletSize();
@@ -216,7 +221,7 @@ public:
         Y_UNUSED(ev);
         PipeClient = TActorId();
         ErrorReason = Sprintf("Client pipe to Hive destroyed (connection lost), Marker# HC9");
-        SendReplyMove(CreateErrorReply(MSTATUS_ERROR, ctx));
+        this->SendReplyMove(CreateErrorReply(MSTATUS_ERROR, ctx));
         return Die(ctx);
     }
 
@@ -230,7 +235,7 @@ public:
             NTabletPipe::CloseClient(ctx, PipeClient);
             PipeClient = TActorId();
         }
-        TActorBootstrapped<TMessageBusHiveCreateTablet>::Die(ctx);
+        TBase::Die(ctx);
     }
 
     virtual NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx) {
@@ -247,7 +252,7 @@ public:
     }
 
     void SendReplyAndDie(NBus::TBusMessage *reply, const TActorContext &ctx) {
-        SendReplyMove(reply);
+        this->SendReplyMove(reply);
         return Die(ctx);
     }
 

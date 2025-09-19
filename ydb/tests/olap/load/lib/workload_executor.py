@@ -1,3 +1,4 @@
+import traceback
 import allure
 import logging
 import os
@@ -124,6 +125,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     False, "Stopping nemesis during teardown", nemesis_log
                 )
                 cls._nemesis_started = False
+                YdbCluster.wait_ydb_alive(120)
 
             except Exception as e:
                 error_msg = f"Error stopping nemesis: {e}"
@@ -260,7 +262,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         # 1. Устанавливаем права на выполнение для nemesis
                         chmod_cmd = "sudo chmod +x /Berkanavt/nemesis/bin/nemesis"
                         chmod_result = execute_command(
-                            host=host, cmd=chmod_cmd, raise_on_error=False
+                            host=host, cmd=chmod_cmd, raise_on_error=False, timeout=10
                         )
 
                         chmod_stderr = (
@@ -409,7 +411,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 try:
                     cmd = f"sudo service nemesis {action}"
                     result = execute_command(
-                        host=host, cmd=cmd, raise_on_error=False)
+                        host=host, cmd=cmd, raise_on_error=False, timeout=10)
 
                     stdout = result.stdout if result.stdout else ""
                     stderr = result.stderr if result.stderr else ""
@@ -531,7 +533,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
         # Копируем cluster.yaml (если указан cluster_path)
         cluster_result = cls._copy_single_config(
-            host, cls.cluster_path, "/Berkanavt/kikimr/cfg/cluster.yaml",
+            host, cls.cluster_path, "/Berkanavt/nemesis/cfg/config.yaml",
             "cluster config", None, host_log
         )
         if not cluster_result["success"]:
@@ -584,7 +586,8 @@ class WorkloadTestBase(LoadSuiteBase):
             result = execute_command(
                 host=host,
                 cmd=f"sudo cp {fallback_source} {remote_path}",
-                raise_on_error=False
+                raise_on_error=False,
+                timeout=10
             )
 
         # Проверяем результат
@@ -1228,6 +1231,7 @@ class WorkloadTestBase(LoadSuiteBase):
                             node_host = node_plan["node"]["node"].host
                             logging.error(
                                 f"Error executing on {node_host}: {e}")
+                            logging.error(traceback.format_exc())
                             # Добавляем информацию об ошибке
                             node_results.append(
                                 {
@@ -1382,6 +1386,12 @@ class WorkloadTestBase(LoadSuiteBase):
 
             # Получаем бинарный файл
             with allure.step("Get workload binary"):
+                allure.attach(
+                    f"Environment variable: {self.workload_env_var}",
+                    "Binary Configuration",
+                    attachment_type=allure.attachment_type.TEXT,
+                )
+                logging.info(f"Binary path from env: {os.getenv(self.workload_env_var)}")
                 binary_files = [
                     yatest.common.binary_path(
                         os.getenv(
@@ -1393,11 +1403,6 @@ class WorkloadTestBase(LoadSuiteBase):
                         )
                     )
                 ]
-                allure.attach(
-                    f"Environment variable: {self.workload_env_var}",
-                    "Binary Configuration",
-                    attachment_type=allure.attachment_type.TEXT,
-                )
                 allure.attach(
                     f"Binary path: {binary_files[0]}",
                     "Binary Path",

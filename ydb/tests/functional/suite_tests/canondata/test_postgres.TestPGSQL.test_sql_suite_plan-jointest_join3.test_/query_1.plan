@@ -4,7 +4,7 @@
         "PlanNodeType": "Query",
         "Plans": [
             {
-                "Node Type": "ResultSet_1",
+                "Node Type": "ResultSet",
                 "PlanNodeId": 26,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
@@ -76,6 +76,7 @@
                                                         "Plans": [
                                                             {
                                                                 "Node Type": "UnionAll",
+                                                                "Parallel": "True",
                                                                 "PlanNodeId": 20,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
@@ -218,6 +219,7 @@
                                                             },
                                                             {
                                                                 "Node Type": "UnionAll",
+                                                                "Parallel": "True",
                                                                 "PlanNodeId": 10,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
@@ -280,18 +282,15 @@
                                                                                                         "PlanNodeId": 5,
                                                                                                         "Plans": [
                                                                                                             {
-                                                                                                                "Node Type": "TableRangeScan",
+                                                                                                                "Node Type": "TableFullScan",
                                                                                                                 "Operators": [
                                                                                                                     {
                                                                                                                         "Inputs": [],
-                                                                                                                        "Name": "TableRangeScan",
+                                                                                                                        "Name": "TableFullScan",
                                                                                                                         "Path": "/Root/postgres_jointest/join3.test_plan/int8_tbl",
                                                                                                                         "ReadColumns": [
-                                                                                                                            "q2"
-                                                                                                                        ],
-                                                                                                                        "ReadRangesExpectedSize": "1",
-                                                                                                                        "ReadRangesKeys": [
-                                                                                                                            "q1"
+                                                                                                                            "q1 (-\u221e, +\u221e)",
+                                                                                                                            "q2 (-\u221e, +\u221e)"
                                                                                                                         ],
                                                                                                                         "ReadRangesPointPrefixLen": "0",
                                                                                                                         "Scan": "Parallel",
@@ -313,18 +312,7 @@
                                                                                                 "PlanNodeType": "Connection",
                                                                                                 "Plans": [
                                                                                                     {
-                                                                                                        "Node Type": "Filter",
-                                                                                                        "Operators": [
-                                                                                                            {
-                                                                                                                "Inputs": [
-                                                                                                                    {
-                                                                                                                        "ExternalPlanNodeId": 1
-                                                                                                                    }
-                                                                                                                ],
-                                                                                                                "Name": "Filter",
-                                                                                                                "Predicate": "1 > 0"
-                                                                                                            }
-                                                                                                        ],
+                                                                                                        "Node Type": "Stage",
                                                                                                         "PlanNodeId": 2,
                                                                                                         "Plans": [
                                                                                                             {
@@ -424,9 +412,14 @@
                 },
                 {
                     "columns": [
+                        "q1",
                         "q2"
                     ],
-                    "type": "Scan"
+                    "scan_by": [
+                        "q1 (-\u221e, +\u221e)",
+                        "q2 (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         }

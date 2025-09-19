@@ -47,6 +47,7 @@ public:
     void AttachRemoteProcess(TCallback<TFuture<TSharedRef>()> dumpSensors);
 
     TSharedRef DumpSensors();
+    TSharedRef DumpSensors(TTagSet customTagSet);
 
     // There must be at most 1 running exporter per registry.
     void Start();

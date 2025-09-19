@@ -1,5 +1,6 @@
 #include "service_combiner.h"
 #include "ypath_client.h"
+#include "ypath_detail.h"
 #include "ypath_proxy.h"
 
 #include <yt/yt/core/concurrency/periodic_executor.h>
@@ -23,33 +24,36 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TDuration UpdateKeysFailedBackoff = TDuration::Seconds(1);
+constexpr auto UpdateKeysFailedBackoff = TDuration::Seconds(1);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServiceCombiner::TImpl
+class TServiceCombinerImpl
     : public TSupportsAttributes
 {
 public:
-    TImpl(
+    TServiceCombinerImpl(
         std::vector<IYPathServicePtr> services,
         std::optional<TDuration> keysUpdatePeriod,
         bool updateKeysOnMissingKey)
         : Services_(std::move(services))
         , KeysUpdatePeriod_(keysUpdatePeriod)
         , UpdateKeysOnMissingKey_(updateKeysOnMissingKey)
+    { }
+
+    void Initialize()
     {
         auto workerInvoker = TDispatcher::Get()->GetHeavyInvoker();
-        auto keysUpdateCallback = BIND(&TImpl::UpdateKeys, MakeWeak(this));
-        if (keysUpdatePeriod) {
-            UpdateKeysExecutor_ = New<TPeriodicExecutor>(workerInvoker, keysUpdateCallback, *keysUpdatePeriod);
+        auto keysUpdateCallback = BIND(&TServiceCombinerImpl::UpdateKeys, MakeWeak(this));
+        if (KeysUpdatePeriod_) {
+            UpdateKeysExecutor_ = New<TPeriodicExecutor>(workerInvoker, keysUpdateCallback, *KeysUpdatePeriod_);
             UpdateKeysExecutor_->Start();
         } else {
             workerInvoker->Invoke(keysUpdateCallback);
         }
     }
 
-    TFuture<void> GetInitialized()
+    TFuture<void> GetInitializedFuture() const
     {
         return InitializedPromise_.ToFuture();
     }
@@ -61,7 +65,10 @@ public:
                 UpdateKeysExecutor_->SetPeriod(period);
             } else {
                 auto workerInvoker = TDispatcher::Get()->GetHeavyInvoker();
-                UpdateKeysExecutor_ = New<TPeriodicExecutor>(workerInvoker, BIND(&TImpl::UpdateKeys, MakeWeak(this)), *period);
+                UpdateKeysExecutor_ = New<TPeriodicExecutor>(
+                    workerInvoker,
+                    BIND(&TServiceCombinerImpl::UpdateKeys, MakeWeak(this)),
+                    *period);
                 UpdateKeysExecutor_->Start();
             }
         } else {
@@ -76,17 +83,16 @@ private:
     const std::vector<IYPathServicePtr> Services_;
 
     std::optional<TDuration> KeysUpdatePeriod_;
-    bool UpdateKeysOnMissingKey_;
+    const bool UpdateKeysOnMissingKey_;
 
     NConcurrency::TPeriodicExecutorPtr UpdateKeysExecutor_;
 
-    TPromise<void> InitializedPromise_ = NewPromise<void>();
+    const TPromise<void> InitializedPromise_ = NewPromise<void>();
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, KeyMappingSpinLock_);
-    using TKeyMappingOrError = TErrorOr<THashMap<TString, IYPathServicePtr>>;
+    using TKeyMappingOrError = TErrorOr<THashMap<std::string, IYPathServicePtr>>;
     TKeyMappingOrError KeyMapping_;
 
-private:
     bool DoInvoke(const IYPathServiceContextPtr& context) override
     {
         DISPATCH_YPATH_SERVICE_METHOD(Get);
@@ -102,30 +108,27 @@ private:
         tokenizer.Expect(NYPath::ETokenType::Literal);
         const auto& key = tokenizer.GetLiteralValue();
 
-        IYPathServicePtr foundService = nullptr;
-        THashMap<TString, IYPathServicePtr>::const_iterator keyIterator;
+        IYPathServicePtr foundService;
         {
             auto guard = Guard(KeyMappingSpinLock_);
             const auto& keyMapping = KeyMapping_.ValueOrThrow();
-
-            keyIterator = keyMapping.find(key);
-            if (keyIterator == keyMapping.end()) {
+            auto it = keyMapping.find(key);
+            if (it == keyMapping.end()) {
                 if (UpdateKeysOnMissingKey_) {
                     guard.Release();
                     UpdateKeys();
                 }
             } else {
-                foundService = keyIterator->second;
+                foundService = it->second;
             }
         }
 
         if (!foundService && UpdateKeysOnMissingKey_) {
             auto guard = Guard(KeyMappingSpinLock_);
             const auto& keyMapping = KeyMapping_.ValueOrThrow();
-
-            keyIterator = keyMapping.find(key);
-            if (keyIterator != keyMapping.end()) {
-                foundService = keyIterator->second;
+            auto it = keyMapping.find(key);
+            if (it != keyMapping.end()) {
+                foundService = it->second;
             }
         }
 
@@ -133,8 +136,9 @@ private:
             if (context->GetMethod() == "Exists") {
                 return TResolveResultHere{path};
             }
-            THROW_ERROR_EXCEPTION("Node has no child with key %Qv", ToYPathLiteral(key));
+            THROW_ERROR_EXCEPTION("Node has no child with key %Qv", key);
         }
+
         return TResolveResultThere{foundService, "/" + path};
     }
 
@@ -149,10 +153,7 @@ private:
 
         context->SetRequestInfo("Limit: %v", limit);
 
-        std::atomic<bool> incomplete = false;
-
-        // TODO(max42): Make it more efficient :(
-        std::vector<TFuture<THashMap<TString, INodePtr>>> serviceResultFutures;
+        std::vector<TFuture<TYPathProxy::TRspGetPtr>> innerFutures;
         for (const auto& service : Services_) {
             auto innerRequest = TYPathProxy::Get(TYPath());
             innerRequest->set_limit(limit);
@@ -162,48 +163,43 @@ private:
             if (request->has_options()) {
                 innerRequest->mutable_options()->CopyFrom(request->options());
             }
-            auto asyncInnerResult = ExecuteVerb(service, innerRequest)
-                .Apply(BIND([&] (TYPathProxy::TRspGetPtr response) {
-                    auto node = ConvertToNode(TYsonString(response->value()));
-                    if (node->Attributes().Get("incomplete", false)) {
-                        incomplete = true;
-                    }
-                    return ConvertTo<THashMap<TString, INodePtr>>(node);
-                }));
-            serviceResultFutures.push_back(asyncInnerResult);
+            innerFutures.push_back(ExecuteVerb(service, innerRequest));
         }
-        auto asyncResult = AllSucceeded(serviceResultFutures);
-        auto serviceResults = WaitFor(asyncResult)
+
+        auto innerResponses = WaitFor(AllSucceeded(std::move(innerFutures)))
             .ValueOrThrow();
 
-        THashMap<TString, INodePtr> combinedServiceResults;
-        for (const auto& serviceResult : serviceResults) {
-            if (std::ssize(serviceResult) + std::ssize(combinedServiceResults) > limit) {
-                combinedServiceResults.insert(
-                    serviceResult.begin(),
-                    std::next(serviceResult.begin(), limit - std::ssize(serviceResult)));
+        bool incomplete = false;
+        THashMap<std::string, INodePtr> keyToChildNode;
+        for (const auto& innerResponse : innerResponses) {
+            auto innerNode = ConvertToNode(TYsonString(innerResponse->value()));
+            if (innerNode->GetType() != ENodeType::Map) {
+                THROW_ERROR_EXCEPTION("Inner service did not return a map");
+            }
+
+            if (innerNode->Attributes().Get("incomplete", false)) {
                 incomplete = true;
-                break;
-            } else {
-                combinedServiceResults.insert(serviceResult.begin(), serviceResult.end());
+            }
+
+            for (const auto& [key, child] : innerNode->AsMap()->GetChildren()) {
+                if (std::ssize(keyToChildNode) >= limit && !keyToChildNode.contains(key)) {
+                    incomplete = true;
+                    break;
+                }
+
+                keyToChildNode[key] = child;
             }
         }
 
         TStringStream stream;
         TYsonWriter writer(&stream);
-
         if (incomplete) {
-            BuildYsonFluently(&writer)
-                .BeginAttributes()
-                    .Item("incomplete").Value(true)
-                .EndAttributes();
+            writer.OnBeginAttributes();
+            writer.OnKeyedItem("incomplete");
+            writer.OnBooleanScalar(true);
+            writer.OnEndAttributes();
         }
-        BuildYsonFluently(&writer)
-            .DoMapFor(combinedServiceResults, [] (TFluentMap fluent, const decltype(combinedServiceResults)::value_type& item) {
-                fluent
-                    .Item(item.first).Value(item.second);
-            });
-
+        Serialize(keyToChildNode, &writer);
         writer.Flush();
         response->set_value(stream.Str());
         context->Reply();
@@ -219,66 +215,50 @@ private:
 
         context->SetRequestInfo("Limit: %v", limit);
 
-        std::atomic<bool> incomplete = false;
-
-        std::vector<TFuture<std::vector<IStringNodePtr>>> serviceResultFutures;
+        std::vector<TFuture<TYPathProxy::TRspListPtr>> innerFutures;
         for (const auto& service : Services_) {
             auto innerRequest = TYPathProxy::List(TYPath());
             innerRequest->set_limit(limit);
             if (request->has_attributes()) {
                 innerRequest->mutable_attributes()->CopyFrom(request->attributes());
             }
-            auto asyncInnerResult = ExecuteVerb(service, innerRequest)
-                .Apply(BIND([&] (TYPathProxy::TRspListPtr response) {
-                    auto node = ConvertToNode(TYsonString(response->value()));
-                    if (node->Attributes().Get("incomplete", false)) {
-                        incomplete = true;
-                    }
-                    return ConvertTo<std::vector<IStringNodePtr>>(node);
-                }));
-            serviceResultFutures.push_back(asyncInnerResult);
+            innerFutures.push_back(ExecuteVerb(service, innerRequest));
         }
-        auto asyncResult = AllSucceeded(serviceResultFutures);
-        auto serviceResults = WaitFor(asyncResult)
+
+        auto innerResponses = WaitFor(AllSucceeded(std::move(innerFutures)))
             .ValueOrThrow();
 
-        std::vector<IStringNodePtr> combinedServiceResults;
-        for (const auto& serviceResult : serviceResults) {
-            if (std::ssize(combinedServiceResults) + std::ssize(serviceResult) > limit) {
-                combinedServiceResults.insert(
-                    combinedServiceResults.end(),
-                    serviceResult.begin(),
-                    std::next(serviceResult.begin(), limit - std::ssize(combinedServiceResults)));
+        bool incomplete = false;
+        THashSet<std::string> keys;
+        for (const auto& innerResponse : innerResponses) {
+            auto innerNode = ConvertToNode(TYsonString(innerResponse->value()));
+            if (innerNode->GetType() != ENodeType::List) {
+                THROW_ERROR_EXCEPTION("Inner service did not return a list");
+            }
+
+            if (innerNode->Attributes().Get("incomplete", false)) {
                 incomplete = true;
-                break;
-            } else {
-                combinedServiceResults.insert(combinedServiceResults.end(), serviceResult.begin(), serviceResult.end());
+            }
+
+            for (const auto& key : ConvertTo<std::vector<std::string>>(innerNode)) {
+                if (std::ssize(keys) >= limit && !keys.contains(key)) {
+                    incomplete = true;
+                    break;
+                }
+
+                keys.insert(key);
             }
         }
 
         TStringStream stream;
         TYsonWriter writer(&stream);
-
         if (incomplete) {
-            BuildYsonFluently(&writer)
-                .BeginAttributes()
-                    .Item("incomplete").Value(true)
-                .EndAttributes();
+            writer.OnBeginAttributes();
+            writer.OnKeyedItem("incomplete");
+            writer.OnBooleanScalar(true);
+            writer.OnEndAttributes();
         }
-
-        // There is a small chance that while we waited for all services to respond, they moved into an inconsistent
-        // state and provided us with non-disjoint lists. In this case we force the list to contain only unique keys.
-        THashSet<TString> keys;
-
-        BuildYsonFluently(&writer)
-            .DoListFor(combinedServiceResults, [&] (TFluentList fluent, const IStringNodePtr& item) {
-                if (!keys.contains(item->GetValue())) {
-                    fluent
-                        .Item().Value(item);
-                    keys.insert(item->GetValue());
-                }
-            });
-
+        Serialize(keys, &writer);
         writer.Flush();
         response->set_value(stream.Str());
         context->Reply();
@@ -289,18 +269,16 @@ private:
     {
         std::vector<TFuture<std::vector<TString>>> serviceListFutures;
         for (const auto& service : Services_) {
-            auto asyncList = AsyncYPathList(service, TYPath() /*path*/, std::numeric_limits<i64>::max() /*limit*/);
-            serviceListFutures.push_back(asyncList);
+            serviceListFutures.push_back(AsyncYPathList(service, TYPath()));
         }
-        auto asyncResult = AllSucceeded(serviceListFutures);
-        auto serviceListsOrError = WaitFor(asyncResult);
 
+        auto serviceListsOrError = WaitFor(AllSucceeded(std::move(serviceListFutures)));
         if (!serviceListsOrError.IsOK()) {
             SetKeyMapping(TError(serviceListsOrError));
             if (!KeysUpdatePeriod_) {
                 auto workerInvoker = TDispatcher::Get()->GetHeavyInvoker();
                 TDelayedExecutor::Submit(
-                    BIND(&TImpl::UpdateKeys, MakeWeak(this)),
+                    BIND(&TServiceCombinerImpl::UpdateKeys, MakeWeak(this)),
                     UpdateKeysFailedBackoff,
                     std::move(workerInvoker));
             }
@@ -313,9 +291,9 @@ private:
 
         for (int index = 0; index < std::ssize(Services_); ++index) {
             for (const auto& key : serviceLists[index]) {
-                auto pair = newKeyMapping.emplace(key, Services_[index]);
-                if (!pair.second) {
-                    SetKeyMapping(TError("Key %Qv is operated by more than one YPathService",
+                auto [_, inserted] =  newKeyMapping.emplace(key, Services_[index]);
+                if (!inserted) {
+                    SetKeyMapping(TError("Key %Qv is operated by more than one of inner services",
                         key));
                     return;
                 }
@@ -342,39 +320,58 @@ private:
     }
 };
 
-////////////////////////////////////////////////////////////////////////////////
+class TServiceCombiner
+    : public TYPathServiceBase
+    , public IServiceCombiner
+{
+public:
+    TServiceCombiner(
+        std::vector<IYPathServicePtr> services,
+        std::optional<TDuration> keysUpdatePeriod,
+        bool updateKeysOnMissingKey)
+        : Impl_(New<TServiceCombinerImpl>(
+            std::move(services),
+            keysUpdatePeriod,
+            updateKeysOnMissingKey))
+    {
+        Impl_->Initialize();
+    }
 
-TServiceCombiner::TServiceCombiner(
+    void SetUpdatePeriod(std::optional<TDuration> period) override
+    {
+        Impl_->SetUpdatePeriod(period);
+    }
+
+    TResolveResult Resolve(const TYPath& path, const IYPathServiceContextPtr& /*context*/) override
+    {
+        return TResolveResultHere{path};
+    }
+
+    void Invoke(const IYPathServiceContextPtr& context) override
+    {
+        Impl_->GetInitializedFuture().Subscribe(
+            BIND([impl = Impl_, context = context] (const TError& error) {
+                if (error.IsOK()) {
+                    ExecuteVerb(impl, context);
+                } else {
+                    context->Reply(error);
+                }
+            }).Via(TDispatcher::Get()->GetHeavyInvoker()));
+    }
+
+private:
+    const TIntrusivePtr<TServiceCombinerImpl> Impl_;
+};
+
+IServiceCombinerPtr CreateServiceCombiner(
     std::vector<IYPathServicePtr> services,
     std::optional<TDuration> keysUpdatePeriod,
     bool updateKeysOnMissingKey)
-    : Impl_(New<TImpl>(std::move(services), keysUpdatePeriod, updateKeysOnMissingKey))
-{ }
-
-TServiceCombiner::~TServiceCombiner()
-{ }
-
-void TServiceCombiner::SetUpdatePeriod(TDuration period)
 {
-    Impl_->SetUpdatePeriod(period);
-}
-
-IYPathService::TResolveResult TServiceCombiner::Resolve(
-    const TYPath& path,
-    const IYPathServiceContextPtr& /*context*/)
-{
-    return TResolveResultHere{path};
-}
-
-void TServiceCombiner::Invoke(const IYPathServiceContextPtr& context)
-{
-    Impl_->GetInitialized().Subscribe(BIND([impl = Impl_, context = context] (const TError& error) {
-        if (error.IsOK()) {
-            ExecuteVerb(impl, context);
-        } else {
-            context->Reply(error);
-        }
-    }));
+    return New<TServiceCombiner>(
+        std::move(services),
+        keysUpdatePeriod,
+        updateKeysOnMissingKey);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

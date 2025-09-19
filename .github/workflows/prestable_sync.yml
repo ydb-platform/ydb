@@ -15,9 +15,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - base_branch: prestable-25-2
-            head_branch: stable-25-1
-            label: sync-prestable
           - base_branch: prestable-25-3
             head_branch: main
             label: sync-prestable
@@ -35,4 +32,5 @@ jobs:
           head_branch: ${{ matrix.head_branch }}
           label: ${{ matrix.label }}
           repository: ${{ github.repository }}
+          merge_ours: ".github/CODEOWNERS"
           gh_personal_access_token: ${{ env.GH_TOKEN }}

@@ -10,21 +10,15 @@
 
 import math
 import sys
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from numbers import Real
 from types import SimpleNamespace
 from typing import (
     TYPE_CHECKING,
     Any,
-    Iterable,
-    Iterator,
-    List,
     Literal,
-    Mapping,
     NamedTuple,
     Optional,
-    Sequence,
-    Tuple,
-    Type,
     TypeVar,
     Union,
     get_args,
@@ -69,10 +63,10 @@ __all__ = [
 ]
 
 
-RELEASED_VERSIONS = ("2021.12", "2022.12", "2023.12")
+RELEASED_VERSIONS = ("2021.12", "2022.12", "2023.12", "2024.12")
 NOMINAL_VERSIONS = (*RELEASED_VERSIONS, "draft")
 assert sorted(NOMINAL_VERSIONS) == list(NOMINAL_VERSIONS)  # sanity check
-NominalVersion = Literal["2021.12", "2022.12", "2023.12", "draft"]
+NominalVersion = Literal["2021.12", "2022.12", "2023.12", "2024.12", "draft"]
 assert get_args(NominalVersion) == NOMINAL_VERSIONS  # sanity check
 
 
@@ -89,7 +83,7 @@ DataType = TypeVar("DataType")
 
 
 @check_function
-def check_xp_attributes(xp: Any, attributes: List[str]) -> None:
+def check_xp_attributes(xp: Any, attributes: list[str]) -> None:
     missing_attrs = [attr for attr in attributes if not hasattr(xp, attr)]
     if len(missing_attrs) > 0:
         f_attrs = ", ".join(missing_attrs)
@@ -100,7 +94,7 @@ def check_xp_attributes(xp: Any, attributes: List[str]) -> None:
 
 def partition_attributes_and_stubs(
     xp: Any, attributes: Iterable[str]
-) -> Tuple[List[Any], List[str]]:
+) -> tuple[list[Any], list[str]]:
     non_stubs = []
     stubs = []
     for attr in attributes:
@@ -112,7 +106,7 @@ def partition_attributes_and_stubs(
     return non_stubs, stubs
 
 
-def warn_on_missing_dtypes(xp: Any, stubs: List[str]) -> None:
+def warn_on_missing_dtypes(xp: Any, stubs: list[str]) -> None:
     f_stubs = ", ".join(stubs)
     warn(
         f"Array module {xp.__name__} does not have the following "
@@ -124,7 +118,7 @@ def warn_on_missing_dtypes(xp: Any, stubs: List[str]) -> None:
 
 def find_castable_builtin_for_dtype(
     xp: Any, api_version: NominalVersion, dtype: DataType
-) -> Type[Union[bool, int, float, complex]]:
+) -> type[Union[bool, int, float, complex]]:
     """Returns builtin type which can have values that are castable to the given
     dtype, according to :xp-ref:`type promotion rules <type_promotion.html>`.
 
@@ -505,9 +499,6 @@ def _arrays(
       >>> xps.arrays(xp, xp.int8, 3, elements={"min_value": 10}).example()
       Array([125, 13, 79], dtype=int8)
 
-    Refer to :doc:`What you can generate and how <data>` for passing
-    your own elements strategy.
-
     .. code-block:: pycon
 
       >>> xps.arrays(xp, xp.float32, 3, elements=floats(0, 1, width=32)).example()
@@ -591,7 +582,7 @@ def _arrays(
 
 
 @check_function
-def check_dtypes(xp: Any, dtypes: List[DataType], stubs: List[str]) -> None:
+def check_dtypes(xp: Any, dtypes: list[DataType], stubs: list[str]) -> None:
     if len(dtypes) == 0:
         assert len(stubs) > 0, "No dtypes passed but stubs is empty"
         f_stubs = ", ".join(stubs)

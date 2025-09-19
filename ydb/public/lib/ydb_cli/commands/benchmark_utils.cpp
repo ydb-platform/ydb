@@ -32,62 +32,54 @@ namespace NYdb::NConsoleClient::BenchmarkUtils {
 
 using namespace NYdb;
 
-TTestInfo::TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDuration>&& serverTimings)
-    : ClientTimings(std::move(clientTimings))
-    , ServerTimings(std::move(serverTimings))
+TTestInfo::TTestInfo(std::vector<TTiming>&& timings)
+    : Timings(std::move(timings))
 {
 
-    if (ClientTimings.empty()) {
+    if (Timings.empty()) {
         return;
     }
 
-    Y_ABORT_UNLESS(ClientTimings.size() == ServerTimings.size());
+    ColdTime = Timings.front().Server;
+    std::vector<TDuration> serverTimingsCopy;
+    serverTimingsCopy.reserve(Timings.size());
+    double totalServer = 0;
+    double totalRtt = 0;
+    double totalCompilation = 0;
+    Min = RttMin = CompilationMin = TDuration::Max();
+    for (const auto& timing : Timings) {
+        Max = std::max(Max, timing.Server);
+        Min = std::min(Min, timing.Server);
+        totalServer += timing.Server.MillisecondsFloat();
 
-    ColdTime = ServerTimings[0];
+        TDuration rtt = timing.Total - timing.Server; 
+        RttMax = std::max(RttMax, rtt);
+        RttMin = std::min(RttMin, rtt);
+        totalRtt += rtt.MillisecondsFloat();
 
-    {
-        ui32 sum = 0;
-        for (const auto& timing : ServerTimings) {
-            if (Max < timing) {
-                Max = timing;
-            }
-            if (!Min || Min > timing) {
-                Min = timing;
-            }
-            sum += timing.MilliSeconds();
-        }
+        CompilationMax = std::max(CompilationMax, timing.Compilation);
+        CompilationMin = std::min(CompilationMin, timing.Compilation);
+        totalCompilation += timing.Compilation.MillisecondsFloat();
 
-        Mean = static_cast<double>(sum) / static_cast<double>(ServerTimings.size());
-        double variance = 0;
-        for (const auto& timing : ServerTimings) {
-            double diff = (Mean - timing.MilliSeconds());
-            variance += diff * diff;
-        }
-        variance = variance / static_cast<double>(ServerTimings.size());
-        Std = sqrt(variance);
+        serverTimingsCopy.emplace_back(timing.Server);
     }
+    Mean = totalServer / Timings.size();
+    RttMean = totalRtt / Timings.size();
+    CompilationMean = totalCompilation / Timings.size();
 
-    double totalDiff = 0;
-    for(size_t idx = 0; idx < ServerTimings.size(); ++idx) {
-        TDuration diff = ClientTimings[idx] - ServerTimings[idx];
-        totalDiff += diff.MilliSeconds();
-        if (idx == 0 || diff < RttMin) {
-            RttMin = diff;
-        }
-
-        if (idx == 0 || diff > RttMax) {
-            RttMax = diff;
-        }
+    double variance = 0;
+    for (const auto& timing : Timings) {
+        double diff = (Mean - timing.Server.MilliSeconds());
+        variance += diff * diff;
     }
+    variance = variance / Timings.size();
+    Std = sqrt(variance);
 
-    RttMean = totalDiff / static_cast<double>(ServerTimings.size());
-
-    auto serverTimingsCopy = ServerTimings;
     Sort(serverTimingsCopy);
-    auto centerElement = serverTimingsCopy.begin() + ServerTimings.size() / 2;
+    auto centerElement = serverTimingsCopy.begin() + Timings.size() / 2;
     std::nth_element(serverTimingsCopy.begin(), centerElement, serverTimingsCopy.end());
 
-    if (ServerTimings.size() % 2 == 0) {
+    if (Timings.size() % 2 == 0) {
         auto maxLessThanCenterElement = std::max_element(serverTimingsCopy.begin(), centerElement);
         Median = (centerElement->MilliSeconds() + maxLessThanCenterElement->MilliSeconds()) / 2.0;
     } else {
@@ -111,6 +103,9 @@ void TTestInfo::operator /=(const ui32 count) {
     Mean /= count;
     Median /= count;
     UnixBench /= count;
+    CompilationMin /= count;
+    CompilationMax /= count;
+    CompilationMean /= count;
 }
 
 void TTestInfo::operator +=(const TTestInfo& other) {
@@ -123,6 +118,9 @@ void TTestInfo::operator +=(const TTestInfo& other) {
     Mean += other.Mean;
     Median += other.Median;
     UnixBench += other.UnixBench;
+    CompilationMin += other.CompilationMin;
+    CompilationMax += other.CompilationMax;
+    CompilationMean += other.CompilationMean;
 }
 
 TString FullTablePath(const TString& database, const TString& table) {
@@ -146,10 +144,11 @@ bool HasCharsInString(const TString& str) {
 class TQueryResultScanner {
 private:
     YDB_READONLY_DEF(TString, ErrorInfo);
-    YDB_READONLY_DEF(TDuration, ServerTiming);
+    YDB_READONLY_DEF(TTiming, Timing);
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
     YDB_ACCESSOR_DEF(TString, DeadlineName);
+    YDB_ACCESSOR_DEF(TString, ExecStats);
     TQueryBenchmarkResult::TRawResults RawResults;
 public:
     TQueryBenchmarkResult::TRawResults&& ExtractRawResults() {
@@ -237,9 +236,12 @@ public:
             }
         }
         if (execStats) {
-            ServerTiming += execStats->GetTotalDuration();
+            Timing.Server += execStats->GetTotalDuration();
             QueryPlan = execStats->GetPlan().value_or("");
             PlanAst = execStats->GetAst().value_or("");
+            ExecStats = execStats->ToString();
+            const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
+            Timing.Compilation += TDuration::MicroSeconds(protoStats.Getcompilation().Getduration_us());
         }
         return TStatus(EStatus::SUCCESS, NIssue::TIssues());
     }
@@ -250,14 +252,15 @@ TQueryBenchmarkResult  ConstructResultByStatus(const TStatus& status, const THol
         Y_ENSURE(scaner);
         return TQueryBenchmarkResult::Result(
             scaner->ExtractRawResults(),
-            scaner->GetServerTiming(),
+            scaner->GetTiming(),
             scaner->GetQueryPlan(),
             scaner->GetPlanAst(),
+            scaner->GetExecStats(),
             expected
         );
     }
     TStringBuilder errorInfo;
-    TString plan, ast;
+    TString plan, ast, execStats;
     switch (status.GetStatus()) {
         case NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
             errorInfo << becnhmarkSettings.Deadline.Name << " deadline expiried: " << status.GetIssues();
@@ -267,19 +270,20 @@ TQueryBenchmarkResult  ConstructResultByStatus(const TStatus& status, const THol
                 errorInfo << scaner->GetErrorInfo();
                 plan = scaner->GetQueryPlan();
                 ast = scaner->GetPlanAst();
+                execStats = scaner->GetExecStats();
             } else {
                 errorInfo << "Operation failed with status " << status.GetStatus() << ": " << status.GetIssues().ToString();
             }
             break;
     }
-    return TQueryBenchmarkResult::Error(errorInfo, plan, ast);
+    return TQueryBenchmarkResult::Error(errorInfo, plan, ast, execStats);
 }
 
 TMaybe<TQueryBenchmarkResult> SetTimeoutSettings(NQuery::TExecuteQuerySettings& settings, const TQueryBenchmarkDeadline& deadline) {
     if (deadline.Deadline != TInstant::Max()) {
         auto now = Now();
         if (now >= deadline.Deadline) {
-            return TQueryBenchmarkResult::Error(deadline.Name + " deadline expiried", "", "");
+            return TQueryBenchmarkResult::Error(deadline.Name + " deadline expiried", "", "", "");
         }
         settings.ClientTimeout(deadline.Deadline - now);
     }
@@ -397,15 +401,19 @@ bool CompareValueImplDecimal(const NYdb::TDecimalValue& valResult, TStringBuf vE
     TStringBuf precesionStr;
     vExpected.Split("+-", vExpected, precesionStr);
     auto expectedInt = NYql::NDecimal::FromString(vExpected, valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
-
-    if (precesionStr) {
+    auto relativePrecision = 0.0001;
+    if (precesionStr.ChopSuffix("%")) {
+        relativePrecision = FromString<double>(precesionStr) / 100;
+    } else if (precesionStr) {
         auto precInt = NYql::NDecimal::FromString(precesionStr, valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
         return resInt >= expectedInt - precInt && resInt <= expectedInt + precInt;
     }
-    const auto from = NYql::NDecimal::FromString("0.9999", valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
-    const auto to = NYql::NDecimal::FromString("1.0001", valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
-    const auto devider = NYql::NDecimal::GetDivider(valResult.DecimalType_.Scale);
-    return resInt > NYql::NDecimal::MulAndDivNormalDivider(from, expectedInt, devider) && resInt < NYql::NDecimal::MulAndDivNormalDivider(to, expectedInt, devider);
+    NYql::NDecimal::TInt128 precInt = i64(double(expectedInt) * relativePrecision);
+    if (precInt < 0) {
+        precInt = -precInt;
+    }
+    precInt = std::max<NYql::NDecimal::TInt128>(precInt, 1);
+    return resInt >= expectedInt - precInt && resInt <= expectedInt + precInt;
 }
 
 bool CompareValueImplDatetime(IOutputStream& errStream, const TInstant& valResult, TStringBuf vExpected, TDuration unit) {
@@ -510,13 +518,13 @@ bool CompareValuePrimitive(IOutputStream& errStream, const TValueParser& vp, TSt
     case EPrimitiveType::Interval:
         return CompareValueImpl(errStream, vp.GetInterval(), vExpected);
     case EPrimitiveType::Date32:
-        return CompareValueImplDatetime64(errStream, vp.GetDate32(), vExpected, TDuration::Days(1));
+        return CompareValueImplDatetime64(errStream, vp.GetDate32().time_since_epoch().count(), vExpected, TDuration::Days(1));
     case EPrimitiveType::Datetime64:
-        return CompareValueImplDatetime64(errStream, vp.GetDatetime64(), vExpected, TDuration::Seconds(1));
+        return CompareValueImplDatetime64(errStream, vp.GetDatetime64().time_since_epoch().count(), vExpected, TDuration::Seconds(1));
     case EPrimitiveType::Timestamp64:
-        return CompareValueImplDatetime64(errStream, vp.GetTimestamp64(), vExpected, TDuration::MicroSeconds(1));
+        return CompareValueImplDatetime64(errStream, vp.GetTimestamp64().time_since_epoch().count(), vExpected, TDuration::MicroSeconds(1));
     case EPrimitiveType::Interval64:
-        return CompareValueImpl(errStream, vp.GetInterval64(), vExpected);
+        return CompareValueImpl(errStream, vp.GetInterval64().count(), vExpected);
     case EPrimitiveType::String:
         return CompareValueImpl(errStream, vp.GetString(), vExpected);
     case EPrimitiveType::Utf8:

@@ -38,7 +38,7 @@ public:
             return true;
         }
 
-        if (target->GetDstState() != TReplication::EDstState::Creating) {
+        if (target->GetDstState() != TReplication::EDstState::Creating && target->GetDstState() != TReplication::EDstState::Alter) {
             CLOG_W(ctx, "Dst state mismatch"
                 << ": rid# " << rid
                 << ", tid# " << tid

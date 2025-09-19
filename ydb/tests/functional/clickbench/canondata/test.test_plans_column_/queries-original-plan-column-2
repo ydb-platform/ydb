@@ -82,8 +82,17 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TableFullScan",
+                                                "Node Type": "Aggregate-TableFullScan",
                                                 "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
+                                                    },
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
@@ -101,72 +110,13 @@
                                                         "SsaProgram": {
                                                             "Command": [
                                                                 {
-                                                                    "GroupBy": {
-                                                                        "Aggregates": [
-                                                                            {
-                                                                                "Column": {
-                                                                                    "Id": 106
-                                                                                },
-                                                                                "Function": {
-                                                                                    "Arguments": [
-                                                                                        {
-                                                                                            "Id": 21
-                                                                                        }
-                                                                                    ],
-                                                                                    "Id": 5
-                                                                                }
-                                                                            },
-                                                                            {
-                                                                                "Column": {
-                                                                                    "Id": 107
-                                                                                },
-                                                                                "Function": {
-                                                                                    "Arguments": [
-                                                                                        {
-                                                                                            "Id": 21
-                                                                                        }
-                                                                                    ],
-                                                                                    "Id": 2
-                                                                                }
-                                                                            },
-                                                                            {
-                                                                                "Column": {
-                                                                                    "Id": 108
-                                                                                },
-                                                                                "Function": {
-                                                                                    "Id": 2
-                                                                                }
-                                                                            },
-                                                                            {
-                                                                                "Column": {
-                                                                                    "Id": 109
-                                                                                },
-                                                                                "Function": {
-                                                                                    "Arguments": [
-                                                                                        {
-                                                                                            "Id": 41
-                                                                                        }
-                                                                                    ],
-                                                                                    "Id": 5
-                                                                                }
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                },
-                                                                {
                                                                     "Projection": {
                                                                         "Columns": [
                                                                             {
-                                                                                "Id": 107
+                                                                                "Id": 41
                                                                             },
                                                                             {
-                                                                                "Id": 106
-                                                                            },
-                                                                            {
-                                                                                "Id": 108
-                                                                            },
-                                                                            {
-                                                                                "Id": 109
+                                                                                "Id": 21
                                                                             }
                                                                         ]
                                                                     }

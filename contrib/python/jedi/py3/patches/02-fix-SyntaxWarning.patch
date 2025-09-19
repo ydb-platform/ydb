@@ -1,0 +1,5 @@
+--- contrib/python/jedi/py3/jedi/evaluate/arguments.py	(index)
++++ contrib/python/jedi/py3/jedi/evaluate/arguments.py	(working tree)
+@@ -95 +95 @@ def _parse_argument_clinic(string):
+-        match = re.match('(?:(?:(\[),? ?|, ?|)(\w+)|, ?/)\]*', string)
++        match = re.match(r'(?:(?:(\[),? ?|, ?|)(\w+)|, ?/)\]*', string)

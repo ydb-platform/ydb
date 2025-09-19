@@ -178,16 +178,12 @@ Y_UNIT_TEST_SUITE (TMemoryStatsAggregator) {
             "AnonRss: 36 CGroupLimit: 66 MemTotal: 65 MemAvailable: 85 AllocatedMemory: 156 AllocatorCachesMemory: 186 HardLimit: 145 SoftLimit: 165 TargetUtilization: 185 ExternalConsumption: 194 SharedCacheConsumption: 336 SharedCacheLimit: 366 MemTableConsumption: 396 MemTableLimit: 426 QueryExecutionConsumption: 456 QueryExecutionLimit: 486");
     }
 
-    Y_UNIT_TEST(ColumnShard_Single) {
+    Y_UNIT_TEST(Compaction_Single) {
         TMemoryStatsAggregator aggregator;
 
         TMemoryStats stats;
-        stats.SetColumnTablesReadExecutionConsumption(1);
-        stats.SetColumnTablesReadExecutionLimit(2);
-        stats.SetColumnTablesCompactionConsumption(3);
-        stats.SetColumnTablesCompactionLimit(4);
-        stats.SetColumnTablesCacheConsumption(5);
-        stats.SetColumnTablesCacheLimit(6);
+        stats.SetCompactionConsumption(3);
+        stats.SetCompactionLimit(4);
 
         aggregator.Add(stats, "host");
 

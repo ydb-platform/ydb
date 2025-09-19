@@ -23,7 +23,6 @@ NO_RUNTIME()
 
 CFLAGS(
     -DHAVE_CONFIG_H
-    -DEVENT__HAVE_STRLCPY=1
 )
 
 SRCDIR(contrib/libs/libevent)

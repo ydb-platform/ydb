@@ -205,7 +205,7 @@ public:
         const NApi::TPutFileToCacheOptions& options) override;
 
     // Security.
-    TFuture<TGetCurrentUserResultPtr> GetCurrentUser(
+    TFuture<TGetCurrentUserResult> GetCurrentUser(
         const TGetCurrentUserOptions& options) override;
 
     TFuture<void> AddMember(

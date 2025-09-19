@@ -578,6 +578,8 @@ namespace NActors {
         void RegisterDisconnect();
         ui32 GetDisconnectCountInLastHour();
         void ShiftDisconnectWindow(TMonotonic now);
+
+        std::optional<TString> PeerBridgePileName;
     };
 
 }

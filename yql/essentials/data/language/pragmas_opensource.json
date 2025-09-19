@@ -801,6 +801,9 @@
     "name": "dq.UseWideChannels"
   },
   {
+    "name": "dq.ValuePackerVersion"
+  },
+  {
     "name": "dq.WatermarksEnableIdlePartitions"
   },
   {

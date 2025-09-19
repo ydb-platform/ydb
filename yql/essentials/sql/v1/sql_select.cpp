@@ -38,7 +38,11 @@ bool CollectJoinLinkSettings(TPosition pos, TJoinLinkSettings& linkSettings, TCo
             linkSettings.Compact = true;
             continue;
         } else {
-            ctx.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT) << "Unsupported join hint: " << hint.Name;
+            if (!ctx.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT, [&](auto& out) {
+                out << "Unsupported join hint: " << hint.Name;
+            })) {
+                return false;
+            }
         }
 
         if (TJoinLinkSettings::EStrategy::Default == linkSettings.Strategy) {
@@ -159,7 +163,11 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
     }
     joinOp = NormalizeJoinOp(joinOp);
     if (linkSettings.Strategy != TJoinLinkSettings::EStrategy::Default && joinOp == "Cross") {
-        Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_UNUSED_HINT) << "Non-default join strategy will not be used for CROSS JOIN";
+        if (!Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_UNUSED_HINT, [](auto& out) {
+            out << "Non-default join strategy will not be used for CROSS JOIN";
+        })) {
+            return false;
+        }
         linkSettings.Strategy = TJoinLinkSettings::EStrategy::Default;
     }
 
@@ -999,7 +1007,11 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
             uniqueSets.insert_unique(NSorted::TSimpleSet<TString>(hint.Values.cbegin(), hint.Values.cend()));
             distinctSets.insert_unique(NSorted::TSimpleSet<TString>(hint.Values.cbegin(), hint.Values.cend()));
         } else {
-            Ctx_.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT) << "Hint " << hint.Name << " will not be used";
+            if (!Ctx_.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT, [&](auto& out) {
+                out << "Hint " << hint.Name << " will not be used";
+            })) {
+                return nullptr;
+            }
         }
     }
 
@@ -1392,6 +1404,19 @@ TSourcePtr TSqlSelect::BuildStmt(const TRule& node, TPosition& pos) {
         .Label = extra.Last.Settings.Label,
     };
 
+    if (assumeOrderBy) {
+        YQL_ENSURE(!orderBy.empty());
+
+        if (!Ctx_.Warning(orderBy[0]->OrderExpr->GetPos(), TIssuesIds::WARNING, [](auto& out) {
+            out << "ASSUME ORDER BY is used, "
+                << "but UNION, INTERSECT and EXCEPT "
+                << "operators have no ordering guarantees, "
+                << "therefore consider using ORDER BY";
+        })) {
+            return nullptr;
+        }
+    }
+
     if (orderBy) {
         TVector<TNodePtr> groupByExpr;
         TVector<TNodePtr> groupBy;
@@ -1450,7 +1475,28 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
     for (int i = 0; i < tail.size(); ++i) {
         const auto& nextBlock = tail[i];
 
-        TString nextOp = ToLowerUTF8(Token(nextBlock.GetRule_union_op1().GetToken1()));
+        const NSQLv1Generated::TToken& token = nextBlock.GetRule_union_op1().GetToken1();
+        TString nextOp = ToLowerUTF8(Token(token));
+        if (nextOp != "union" &&
+            !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3)) &&
+            !Ctx_.ExceptIntersectBefore202503) {
+            Ctx_.Error(Ctx_.TokenPosition(token))
+                << "EXCEPT/INTERSECT is not available before version 2025.03";
+            return nullptr;
+        }
+
+        if (nextBlock.GetRule_union_op1().HasBlock2()) {
+            const NSQLv1Generated::TToken& token = nextBlock.GetRule_union_op1().GetBlock2().GetToken1();
+            const TString qualifier = ToLowerUTF8(Token(token));
+            if (qualifier == "distinct" &&
+                !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3)) &&
+                !Ctx_.ExceptIntersectBefore202503) {
+                Ctx_.Error(Ctx_.TokenPosition(token))
+                    << "UNION DISTINCT is not available before version 2025.03";
+                return nullptr;
+            }
+        }
+
         bool isNextAllQualified = IsAllQualifiedOp(nextBlock.GetRule_union_op1());
 
         TSelectKindPlacement nextPlacement = {
@@ -1526,7 +1572,15 @@ TSourcePtr TSqlSelect::BuildIntersection(
     for (int i = 0; i < tail.size(); ++i) {
         const auto& nextBlock = tail[i];
 
-        TString nextOp = ToLowerUTF8(Token(nextBlock.GetRule_intersect_op1().GetToken1()));
+        const NSQLv1Generated::TToken& token = nextBlock.GetRule_intersect_op1().GetToken1();
+        if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3)) &&
+            !Ctx_.ExceptIntersectBefore202503) {
+            Ctx_.Error(Ctx_.TokenPosition(token))
+                << "EXCEPT/INTERSECT is not available before version 2025.03";
+            return nullptr;
+        }
+
+        TString nextOp = ToLowerUTF8(Token(token));
         bool isNextAllQualified = IsAllQualifiedOp(nextBlock.GetRule_intersect_op1());
 
         TSelectKindPlacement nextPlacement = {

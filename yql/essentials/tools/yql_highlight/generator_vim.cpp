@@ -41,6 +41,10 @@ namespace NSQLHighlight {
                 vim << R"(\c)";
             }
 
+            if (!pattern.Before.empty()) {
+                vim << "(" << ToVim(pattern.Before) << ")@<=";
+            }
+
             vim << "(" << ToVim(pattern.Body) << ")";
 
             if (!pattern.After.empty()) {
@@ -90,6 +94,11 @@ namespace NSQLHighlight {
             }
         }
 
+        TString VimRangeEscaped(TString range) {
+            SubstGlobal(range, "*", "\\*");
+            return range;
+        }
+
         void PrintRules(IOutputStream& out, const TUnit& unit) {
             TString name = ToVimName(unit.Kind);
             for (const auto& pattern : std::ranges::reverse_view(unit.Patterns)) {
@@ -98,8 +107,8 @@ namespace NSQLHighlight {
             }
             if (auto range = unit.RangePattern) {
                 out << "syntax region " << name << "Multiline" << " "
-                    << "start=\"" << range->Begin << "\" "
-                    << "end=\"" << range->End << "\""
+                    << "start=\"" << VimRangeEscaped(range->Begin) << "\" "
+                    << "end=\"" << VimRangeEscaped(range->End) << "\""
                     << '\n';
             }
         }
@@ -135,7 +144,7 @@ namespace NSQLHighlight {
 
     } // namespace
 
-    void GenerateVim(IOutputStream& out, const THighlighting& highlighting) {
+    void GenerateVim(IOutputStream& out, const THighlighting& highlighting, bool /* ansi */) {
         out << "if exists(\"b:current_syntax\")" << '\n';
         out << "  finish" << '\n';
         out << "endif" << '\n';
@@ -161,7 +170,7 @@ namespace NSQLHighlight {
 
         out << '\n';
 
-        out << "let b:current_syntax = \"yql\"" << '\n';
+        out << "let b:current_syntax = \"" << highlighting.Extension << "\"" << '\n';
         out.Flush();
     }
 

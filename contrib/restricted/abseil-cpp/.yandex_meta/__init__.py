@@ -41,13 +41,14 @@ abseil_cpp = CMakeNinjaNixProject(
         "absl/time/internal/*.inc",
         "absl/**/*.h",
     ],
+    copy_sources_except=[
+        "absl/status/status_matchers.h",
+        "absl/time/internal/cctz/src/test_time_zone_names.h",
+    ],
     ignore_targets=[
         # these depend on gtest, ignore it.
         "absl_scoped_mock_log",
         "absl_status_matchers",
-    ],
-    copy_sources_except=[
-        "absl/status/status_matchers.h",
     ],
     put={
         "absl_base": ".",
@@ -87,10 +88,12 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_flags_usage_internal",
             "absl_graphcycles_internal",
             "absl_hash",
+            "absl_hashtable_profiler",
             "absl_hashtablez_sampler",
             "absl_int128",
             "absl_kernel_timeout_internal",
             "absl_leak_check",
+            "absl_log_entry",
             "absl_log_flags",
             "absl_log_globals",
             "absl_log_initialize",
@@ -106,10 +109,10 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_log_internal_structured_proto",
             "absl_log_severity",
             "absl_log_sink",
-            "absl_low_level_hash",
             "absl_malloc_internal",
             "absl_periodic_sampler",
             "absl_poison",
+            "absl_profile_builder",
             "absl_random_distributions",
             "absl_random_internal_distribution_test_util",
             "absl_random_internal_entropy_pool",

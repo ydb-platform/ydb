@@ -37,8 +37,8 @@ public:
 
     TStateStoragePtr GetStateStorage(const char* tablePrefix) {
 
-        NConfig::TCheckpointCoordinatorConfig config;
-        auto& stateStorageConfig = *config.MutableStorage();
+        NKikimrConfig::TCheckpointsConfig config;
+        auto& stateStorageConfig = *config.MutableExternalStorage();
         stateStorageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
         stateStorageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
         stateStorageConfig.SetToken("");
@@ -47,7 +47,7 @@ public:
         stateStorageLimits.SetMaxRowSizeBytes(YdbRowSizeLimit);
 
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        auto ydbConnectionPtr = NewYdbConnection(config.GetStorage(), NKikimr::CreateYdbCredentialsProviderFactory, driver);
+        auto ydbConnectionPtr = NewYdbConnection(config.GetExternalStorage(), NKikimr::CreateYdbCredentialsProviderFactory, driver);
         auto storage = NewYdbStateStorage(config, ydbConnectionPtr);
         storage->Init().GetValueSync();
         return storage;

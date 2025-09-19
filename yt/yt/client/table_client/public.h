@@ -398,6 +398,8 @@ DECLARE_REFCOUNTED_STRUCT(TChunkWriterOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TVersionedRowDigestConfig)
 
+DECLARE_REFCOUNTED_STRUCT(TMinHashDigestConfig)
+
 DECLARE_REFCOUNTED_STRUCT(TSchemalessBufferedDynamicTableWriterConfig)
 
 DECLARE_REFCOUNTED_CLASS(TSchemafulPipe)

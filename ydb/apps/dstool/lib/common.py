@@ -613,7 +613,7 @@ def promote_pile(pile_id):
     request = ydb_bridge.UpdateClusterStateRequest()
     request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
         pile_id=pile_id,
-        state=ydb_bridge.PileState.PROMOTE
+        state=ydb_bridge.PileState.PROMOTED
     ))
     invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
 

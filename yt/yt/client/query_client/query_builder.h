@@ -53,8 +53,8 @@ public:
     void AddOrderByAscendingExpression(std::string expression);
     void AddOrderByDescendingExpression(std::string expression);
 
-    void AddJoinExpression(std::string table, std::string alias, std::string onExpression, ETableJoinType type);
-    void AddArrayJoinExpression(const std::vector<std::string>& expressions,  const std::vector<std::string>& aliases, ETableJoinType type);
+    void AddJoinExpression(std::string table, std::string alias, std::string onExpression, ETableJoinType type, std::string predicate = "");
+    void AddArrayJoinExpression(const std::vector<std::string>& expressions,  const std::vector<std::string>& aliases, ETableJoinType type, std::string predicate = "");
 
     void SetOffset(i64 offset);
     void SetLimit(i64 limit);
@@ -62,7 +62,6 @@ public:
     std::string Build();
 
 private:
-    std::string WrapTableName(const std::string& source);
     struct TEntryWithAlias
     {
         std::string Expression;
@@ -82,6 +81,7 @@ private:
         std::string OnExpression;
         ETableJoinType Type;
         std::vector<TEntryWithAlias> ArrayJoinFields;
+        std::string Predicate;
     };
 
 private:
@@ -98,6 +98,8 @@ private:
     std::vector<TJoinEntry> JoinEntries_;
     std::optional<i64> Offset_;
     std::optional<i64> Limit_;
+
+    std::string WrapTableName(const std::string& source);
 
     static void FormatEntryWithAlias(TStringBuilderBase* builder, const TEntryWithAlias& entry);
     static void FormatOrderByEntry(TStringBuilderBase* builder, const TOrderByEntry& entry);

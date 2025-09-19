@@ -39,6 +39,12 @@ void ParseJson(
     TJsonFormatConfigPtr config = nullptr,
     NYson::EYsonType type = NYson::EYsonType::Node);
 
+void ParseWebJson(
+    IInputStream* input,
+    NYson::IYsonConsumer* consumer,
+    TWebJsonFormatConfigPtr config = nullptr,
+    NYson::EYsonType type = NYson::EYsonType::Node);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NJson

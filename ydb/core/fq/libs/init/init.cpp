@@ -2,7 +2,6 @@
 
 #include <ydb/core/fq/libs/audit/yq_audit_service.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
-#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/cloud_audit/yq_cloud_audit_service.h>
 #include <ydb/core/fq/libs/compute/ydb/control_plane/compute_database_control_plane_service.h>
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
@@ -18,9 +17,12 @@
 #include <ydb/core/fq/libs/rate_limiter/events/control_plane_events.h>
 #include <ydb/core/fq/libs/rate_limiter/events/data_plane.h>
 #include <ydb/core/fq/libs/rate_limiter/quoter_service/quoter_service.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/test_connection/test_connection.h>
+
+#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <yql/essentials/providers/common/metrics/service_counters.h>
@@ -49,7 +51,6 @@
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
-
 
 #include <util/stream/file.h>
 #include <util/system/hostname.h>
@@ -175,11 +176,36 @@ void Init(
     }
 
     if (protoConfig.GetCheckpointCoordinator().GetEnabled()) {
+        NKikimrConfig::TCheckpointsConfig config;
+        const auto& oldConfig = protoConfig.GetCheckpointCoordinator();
+        config.SetEnabled(oldConfig.GetEnabled());
+        auto* storageConfig = config.MutableExternalStorage();
+        storageConfig->SetEndpoint(oldConfig.GetStorage().GetEndpoint());
+        storageConfig->SetDatabase(oldConfig.GetStorage().GetDatabase());
+        storageConfig->SetOAuthFile(oldConfig.GetStorage().GetOAuthFile());
+        storageConfig->SetToken(oldConfig.GetStorage().GetToken());
+        storageConfig->SetTablePrefix(oldConfig.GetStorage().GetTablePrefix());
+        storageConfig->SetCertificateFile(oldConfig.GetStorage().GetCertificateFile());
+        storageConfig->SetIamEndpoint(oldConfig.GetStorage().GetIamEndpoint());
+        storageConfig->SetSaKeyFile(oldConfig.GetStorage().GetSaKeyFile());
+        storageConfig->SetUseLocalMetadataService(oldConfig.GetStorage().GetUseLocalMetadataService());
+        storageConfig->SetClientTimeoutSec(oldConfig.GetStorage().GetClientTimeoutSec());
+        storageConfig->SetOperationTimeoutSec(oldConfig.GetStorage().GetOperationTimeoutSec());
+        storageConfig->SetCancelAfterSec(oldConfig.GetStorage().GetCancelAfterSec());
+        storageConfig->SetUseSsl(oldConfig.GetStorage().GetUseSsl());
+        storageConfig->SetTableClientMaxActiveSessions(oldConfig.GetStorage().GetTableClientMaxActiveSessions());
+        auto* gcConfig = config.MutableCheckpointGarbageConfig();
+        gcConfig->SetEnabled(oldConfig.GetCheckpointGarbageConfig().GetEnabled());
+        auto* limitsConfig = config.MutableStateStorageLimits();
+        limitsConfig->SetMaxGraphCheckpointsSizeBytes(oldConfig.GetStateStorageLimits().GetMaxGraphCheckpointsSizeBytes());
+        limitsConfig->SetMaxTaskStateSizeBytes(oldConfig.GetStateStorageLimits().GetMaxTaskStateSizeBytes());
+        limitsConfig->SetMaxRowSizeBytes(oldConfig.GetStateStorageLimits().GetMaxRowSizeBytes());
+
         auto checkpointStorage = NFq::NewCheckpointStorageService(
-            protoConfig.GetCheckpointCoordinator(),
-            protoConfig.GetCommon(),
+            config,
+            protoConfig.GetCommon().GetIdsPrefix(),
             NKikimr::CreateYdbCredentialsProviderFactory,
-            yqSharedResources,
+            yqSharedResources->UserSpaceYdbDriver,
             yqCounters->GetSubgroup("subsystem", "checkpoint_storage"));
         actorRegistrator(NYql::NDq::MakeCheckpointStorageID(), checkpointStorage.release());
     }
@@ -233,14 +259,45 @@ void Init(
             nullptr,
             commonTopicClientSettings
         );
+        auto fqConfig = protoConfig.GetRowDispatcher();
+        NKikimrConfig::TSharedReadingConfig config;
+        config.SetEnabled(fqConfig.GetEnabled());
+        config.SetTimeoutBeforeStartSessionSec(fqConfig.GetTimeoutBeforeStartSessionSec());
+        config.SetSendStatusPeriodSec(fqConfig.GetSendStatusPeriodSec());
+        config.SetMaxSessionUsedMemory(fqConfig.GetMaxSessionUsedMemory());
+        config.SetWithoutConsumer(fqConfig.GetWithoutConsumer());
+        config.MutableJsonParser()->SetBatchSizeBytes(fqConfig.GetJsonParser().GetBatchSizeBytes());
+        config.MutableJsonParser()->SetBatchCreationTimeoutMs(fqConfig.GetJsonParser().GetBatchCreationTimeoutMs());
+        config.MutableJsonParser()->SetBufferCellCount(fqConfig.GetJsonParser().GetBufferCellCount());
+        config.MutableCompileService()->SetParallelCompilationLimit(fqConfig.GetCompileService().GetParallelCompilationLimit());
+        auto* database = config.MutableCoordinator()->MutableDatabase();
+        auto fqDatabase = fqConfig.GetCoordinator().GetDatabase();
+        database->SetEndpoint(fqDatabase.GetEndpoint());
+        database->SetDatabase(fqDatabase.GetDatabase());
+        database->SetOAuthFile(fqDatabase.GetOAuthFile());
+        database->SetToken(fqDatabase.GetToken());
+        database->SetTablePrefix(fqDatabase.GetTablePrefix());
+        database->SetCertificateFile(fqDatabase.GetCertificateFile());
+        database->SetIamEndpoint(fqDatabase.GetIamEndpoint());
+        database->SetSaKeyFile(fqDatabase.GetSaKeyFile());
+        database->SetUseLocalMetadataService(fqDatabase.GetUseLocalMetadataService());
+        database->SetClientTimeoutSec(fqDatabase.GetClientTimeoutSec());
+        database->SetOperationTimeoutSec(fqDatabase.GetOperationTimeoutSec());
+        database->SetCancelAfterSec(fqDatabase.GetCancelAfterSec());
+        database->SetUseSsl(fqDatabase.GetUseSsl());
+        database->SetTableClientMaxActiveSessions(fqDatabase.GetTableClientMaxActiveSessions());
+        config.MutableCoordinator()->SetCoordinationNodePath(fqConfig.GetCoordinator().GetCoordinationNodePath());
+        config.MutableCoordinator()->SetLocalMode(fqConfig.GetCoordinator().GetLocalMode());
+
         auto rowDispatcher = NFq::NewRowDispatcherService(
-            protoConfig.GetRowDispatcher(),
+            config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            yqSharedResources,
             credentialsFactory,
+            appData->FunctionRegistry,
             tenant,
             yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
             pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
+            yqSharedResources->UserSpaceYdbDriver,
             appData->Mon,
             appData->Counters);
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());

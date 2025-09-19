@@ -2,7 +2,7 @@
 #include "ydb_tools_infer.h"
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
@@ -154,6 +154,9 @@ void TCommandRestore::Config(TConfig& config) {
     config.Opts->AddLongOption("restore-acl", "Whether to restore ACL and owner or not.")
         .DefaultValue(defaults.RestoreACL_).StoreResult(&RestoreACL);
 
+    config.Opts->AddLongOption("replace-sys-acl", "Whether to replace ACL for system objects or not.")
+        .DefaultValue(defaults.ReplaceSysACL_).StoreResult(&ReplaceSysACL);
+
     config.Opts->AddLongOption("skip-document-tables", "Skip Document API tables.")
         .DefaultValue(defaults.SkipDocumentTables_).StoreResult(&SkipDocumentTables)
         .Hidden(); // Deprecated
@@ -222,6 +225,9 @@ void TCommandRestore::Config(TConfig& config) {
         " instead of silently skipping its removal.")
         .StoreTrue(&VerifyExistence);
 
+    config.Opts->AddLongOption("retries", "Max retry count for every request.")
+        .DefaultValue(10).StoreResult(&Retries);
+
     config.Opts->MutuallyExclusive("bandwidth", "rps");
     config.Opts->MutuallyExclusive("import-data", "bulk-upsert");
     config.Opts->MutuallyExclusive("import-data", "upload-batch-rows");
@@ -239,11 +245,13 @@ int TCommandRestore::Run(TConfig& config) {
         .RestoreData(RestoreData)
         .RestoreIndexes(RestoreIndexes)
         .RestoreACL(RestoreACL)
+        .ReplaceSysACL(ReplaceSysACL)
         .SkipDocumentTables(SkipDocumentTables)
         .SavePartialResult(SavePartialResult)
         .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest))
         .Replace(Replace)
-        .VerifyExistence(VerifyExistence);
+        .VerifyExistence(VerifyExistence)
+        .MaxRetries(Retries);
 
     if (InFlight) {
         settings.MaxInFlight(InFlight);
@@ -311,11 +319,7 @@ void TCommandCopy::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
-    TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
-        << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp)
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosiltyLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 }
 
@@ -340,7 +344,18 @@ void TCommandCopy::ExtractParams(TConfig& config) {
 int TCommandCopy::Run(TConfig& config) {
     TVector<NYdb::NTable::TCopyItem> copyItems;
     copyItems.reserve(Items.size());
+    auto driver = CreateDriver(config);
+    auto schemeClient = NScheme::TSchemeClient(driver);
     for (auto& item : Items) {
+        auto describeResult = schemeClient.DescribePath(item.Source).GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
+        switch (describeResult.GetEntry().Type) {
+            case NScheme::ESchemeEntryType::Table:
+                break;
+            default:
+                Cerr << "Source path " << item.Source << " is of type `" << describeResult.GetEntry().Type << "`. Only row tables are supported for copying." << Endl;
+                return EXIT_FAILURE;
+        }
         copyItems.emplace_back(item.Source, item.Destination);
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
@@ -373,11 +388,7 @@ void TCommandRename::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
-    TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
-        << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp)
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosiltyLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
     AddCommandExamples(

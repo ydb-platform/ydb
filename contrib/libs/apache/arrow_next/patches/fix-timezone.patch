@@ -1,0 +1,22 @@
+--- contrib/libs/apache/arrow/cpp/src/arrow/ipc/metadata_internal.cc    (index)
++++ contrib/libs/apache/arrow/cpp/src/arrow/ipc/metadata_internal.cc    (working tree)
+@@ -315,1 +315,1 @@ Status ConcreteTypeFromFlatbuffer(flatbuf::Type type, const void* type_data,
+-      *out = timestamp(unit, StringFromFlatbuffers(ts_type->timezone()));
++      *out = timestamp(unit, StringFromFlatbuffers(ts_type->time_zone()));
+--- contrib/libs/apache/arrow/cpp/src/generated/Schema.fbs      (index)
++++ contrib/libs/apache/arrow/cpp/src/generated/Schema.fbs      (working tree)
+@@ -269,1 +269,1 @@ table Timestamp {
+-  timezone: string;
++  time_zone: string;
+--- contrib/libs/apache/arrow/cpp/src/arrow/ipc/feather.cc      (index)
++++ contrib/libs/apache/arrow/cpp/src/arrow/ipc/feather.cc      (working tree)
+@@ -210,2 +210,2 @@ class ReaderV1 : public Reader {
+-        if (meta->timezone() != 0) {
+-          tz = meta->timezone()->str();
++        if (meta->time_zone() != 0) {
++          tz = meta->time_zone()->str();
+--- contrib/libs/apache/arrow/cpp/src/generated/feather.fbs     (index)
++++ contrib/libs/apache/arrow/cpp/src/generated/feather.fbs     (working tree)
+@@ -113,1 +113,1 @@ table TimestampMetadata {
+-  timezone: string;
++  time_zone: string;

@@ -12,13 +12,13 @@
 (let expandLambda (lambda '(item) (Member item '"x")))
 (let wideStream (FromFlow (ExpandMap (ToFlow list) expandLambda)))
 (let wideBlockStream (WideToBlocks wideStream))
-(let wideFlowScalar (WideMap (ToFlow wideBlockStream) (lambda '($x, $blockSize) (AsScalar (Uint64 '"123")) $blockSize)))
+(let wideBlockScalar (WideMap  wideBlockStream (lambda '($x, $blockSize) (AsScalar (Uint64 '"123")) $blockSize)))
 
 (let sortParams '('('0 (Bool 'true))))
 
 (let replicateParams '('"0"))
 
-(let nopFromBlocksToBlocks (WideFromBlocks (WideSortBlocks (ReplicateScalars (FromFlow wideFlowScalar) replicateParams) sortParams)))
+(let nopFromBlocksToBlocks (WideFromBlocks (WideSortBlocks (ReplicateScalars wideBlockScalar replicateParams) sortParams)))
 
 (let narrowLambda (lambda '(x) (AsStruct '('"x" x))))
 (let scalarList (ForwardList (NarrowMap (ToFlow nopFromBlocksToBlocks) narrowLambda)))

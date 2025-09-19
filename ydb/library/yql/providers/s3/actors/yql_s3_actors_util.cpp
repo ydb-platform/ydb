@@ -2,9 +2,7 @@
 
 #include <util/string/builder.h>
 
-#ifdef THROW
 #undef THROW
-#endif
 #include <library/cpp/xml/document/xml-document.h>
 
 namespace NYql::NDq {
@@ -20,12 +18,12 @@ bool ParseS3ErrorResponse(const TString& response, TString& errorCode, TString& 
 }
 
 TIssues BuildIssues(long httpCode, const TString& s3ErrorCode, const TString& message) {
-
     TIssues issues;
 
     if (httpCode) {
         issues.AddIssue(TStringBuilder() << "HTTP Code: " << httpCode);
     }
+
     if (s3ErrorCode) {
         issues.AddIssue(TStringBuilder() << "Object Storage Code: " << s3ErrorCode << ", " << message);
     } else {
@@ -76,4 +74,24 @@ TS3Result::TS3Result(const TString& body)
     }
 }
 
+TSourceErrorHandler::TSourceErrorHandler(ui64 inputIndex)
+    : InputIndex(inputIndex)
+{}
+
+void TSourceErrorHandler::CanonizeFatalError(TIssues& issues, NYql::NDqProto::StatusIds::StatusCode& fatalCode, const std::source_location& location) {
+    if (fatalCode == NDqProto::StatusIds::UNSPECIFIED) {
+        fatalCode = NDqProto::StatusIds::INTERNAL_ERROR;
+        issues.AddIssue(TStringBuilder() << "Got fatal error with unspecified error code from " << location.file_name() << ":" << location.line() << ":" << location.column() << ", please contact internal support.");
+    }
 }
+
+void TSourceErrorHandler::OnRetriableError(const TIssues& issues) {
+    SendError(std::make_unique<IDqComputeActorAsyncInput::TEvAsyncInputError>(InputIndex, issues, NDqProto::StatusIds::UNSPECIFIED));
+}
+
+void TSourceErrorHandler::OnFatalError(TIssues issues, NYql::NDqProto::StatusIds::StatusCode fatalCode, std::source_location location) {
+    CanonizeFatalError(issues, fatalCode, location);
+    SendError(std::make_unique<IDqComputeActorAsyncInput::TEvAsyncInputError>(InputIndex, issues, fatalCode));
+}
+
+} // namespace NYql::NDq

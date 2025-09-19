@@ -257,6 +257,9 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
 
         for (const auto& ringGroup : info->RingGroups) {
             for (const auto& ring : ringGroup.Rings) {
+                if (ring.IsDisabled) {
+                    continue;
+                }
                 for (ui32 index = 0; index < ring.Replicas.size(); ++index) {
                     if (const TActorId& replicaId = ring.Replicas[index]; replicaId.NodeId() == LocalNodeId) {
                         if (!localActorIds.contains(replicaId) && !newActorIds.contains(replicaId)) {

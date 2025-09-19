@@ -8,6 +8,7 @@
 #include <util/generic/is_in.h>
 #include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
+#include <util/string/hex.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -46,7 +47,11 @@ namespace {
 
         TVector<std::pair<TString, TString>> result;
         for (const auto& table : ret.Entries) {
-            result.emplace_back(table.Name, TStringBuilder() << dstPath << TStringBuf(table.Name).RNextTok(srcPath));
+            TStringBuilder dstPathBuilder;
+            if (dstPath) { // It is not recommended to use this path for encrypted exports, because it shows real database structure in S3
+                dstPathBuilder << dstPath << TStringBuf(table.Name).RNextTok(srcPath);
+            }
+            result.emplace_back(table.Name, dstPathBuilder);
         }
 
         return result;
@@ -120,11 +125,7 @@ void TCommandExportToYt::Config(TConfig& config) {
     config.Opts->AddLongOption("token", tokenHelp)
         .RequiredArgument("TOKEN");
 
-    TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
-        << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp)
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosiltyLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
     config.Opts->AddLongOption("exclude", "Pattern (PCRE) for paths excluded from export operation")
@@ -210,7 +211,7 @@ int TCommandExportToYt::Run(TConfig& config) {
 
 /// S3
 TCommandExportToS3::TCommandExportToS3()
-    : TYdbOperationCommand("s3", {}, "Create export to S3")
+    : TYdbOperationCommand("s3", {}, "Create export to S3.\nFor more info go to: ydb.tech/docs/en/reference/ydb-cli/export-import/export-s3")
 {
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
@@ -232,55 +233,68 @@ void TCommandExportToS3::Config(TConfig& config) {
             << colors.BoldColor() << "https" << colors.OldColor())
         .RequiredArgument("SCHEME").StoreResult(&AwsScheme).DefaultValue(AwsScheme);
 
-    TStringBuilder storageClassHelp;
-    storageClassHelp << "S3 storage class" << Endl
-        << "  Available options:" << Endl;
-    for (auto value : GetEnumAllValues<EStorageClass>()) {
-        storageClassHelp << "    - " << value << Endl;
+    {
+        TStringBuilder storageClassHelp;
+        storageClassHelp << "S3 storage class. Available options: ";
+        bool first = true;
+        for (auto value : GetEnumAllValues<EStorageClass>()) {
+            if (value == EStorageClass::UNKNOWN) {
+                continue;
+            }
+            if (config.HelpCommandVerbosiltyLevel >= 2) {
+                storageClassHelp << Endl << "    - " << value;
+            } else {
+                if (first) {
+                    first = false;
+                } else {
+                    storageClassHelp << ", ";
+                }
+                storageClassHelp << colors.BoldColor() << value << colors.OldColor();
+            }
+        }
+        storageClassHelp << Endl;
+        config.Opts->AddLongOption("storage-class", storageClassHelp)
+            .RequiredArgument("STORAGE_CLASS").StoreResult(&AwsStorageClass).DefaultValue(AwsStorageClass);
     }
-    config.Opts->AddLongOption("storage-class", storageClassHelp)
-        .RequiredArgument("STORAGE_CLASS").StoreResult(&AwsStorageClass).DefaultValue(AwsStorageClass);
 
     config.Opts->AddLongOption("bucket", "S3 bucket")
         .Required().RequiredArgument("BUCKET").StoreResult(&AwsBucket);
 
-    TStringBuilder accessKeyHelp;
-    accessKeyHelp << "Access key id" << Endl
-        << "  Search order:" << Endl
-        << "    1. This option" << Endl
-        << "    2. \"AWS_ACCESS_KEY_ID\" environment variable" << Endl
-        << "    3. \"aws_access_key_id\" key in \"" << AwsCredentialsFile << "\" file";
-    config.Opts->AddLongOption("access-key", accessKeyHelp)
+    config.Opts->AddLongOption("access-key", "AWS access key id")
+        .Env("AWS_ACCESS_KEY_ID", false)
+        .ManualDefaultValueDescription(TStringBuilder() << colors.Cyan() << "aws_access_key_id" << colors.OldColor() << " key in AWS credentials file \"" << AwsCredentialsFile << "\"")
         .RequiredArgument("STRING");
 
-    TStringBuilder secretKeyHelp;
-    secretKeyHelp << "Secret key" << Endl
-        << "  Search order:" << Endl
-        << "    1. This option" << Endl
-        << "    2. \"AWS_SECRET_ACCESS_KEY\" environment variable" << Endl
-        << "    3. \"aws_secret_access_key\" key in \"" << AwsCredentialsFile << "\" file";
-    config.Opts->AddLongOption("secret-key", secretKeyHelp)
+    config.Opts->AddLongOption("secret-key", "AWS secret key")
+        .Env("AWS_SECRET_ACCESS_KEY", false)
+        .ManualDefaultValueDescription(TStringBuilder() << colors.Cyan() << "aws_secret_access_key" << colors.OldColor() << " key in AWS credentials file \"" << AwsCredentialsFile << "\"")
         .RequiredArgument("STRING");
 
-    TStringBuilder profileHelp;
-    profileHelp << "Named profile in \"" << AwsCredentialsFile << "\" file" << Endl
-        << "  Search order:" << Endl
-        << "    1. This option" << Endl
-        << "    2. \"AWS_PROFILE\" environment variable";
-    config.Opts->AddLongOption("aws-profile", profileHelp)
-        .RequiredArgument("STRING").DefaultValue(AwsDefaultProfileName);
+    config.Opts->AddLongOption("aws-profile", TStringBuilder() << "Named profile in AWS credentials file \"" << AwsCredentialsFile << "\"")
+        .RequiredArgument("STRING")
+        .Env("AWS_PROFILE", false)
+        .DefaultValue(AwsDefaultProfileName);
 
-    TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
-        << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp)
-        .RequiredArgument("PROPERTY=VALUE,...");
+    config.Opts->AddLongOption("destination-prefix", "Destination prefix for export in bucket")
+        .RequiredArgument("PREFIX").StoreResult(&CommonDestinationPrefix);
+
+    config.Opts->AddLongOption("root-path", "Root directory in database for the objects being exported, database root if not provided")
+        .RequiredArgument("PATH").StoreResult(&CommonSourcePath);
+
+    config.Opts->AddLongOption("include", "Schema objects to be included in the export. Directories are traversed recursively. The option can be used multiple times")
+        .RequiredArgument("PATH").Handler([this](const TString& arg) {
+            TItem item;
+            item.Source = arg;
+            Items.emplace_back(std::move(item));
+        });
 
     config.Opts->AddLongOption("exclude", "Pattern (PCRE) for paths excluded from export operation")
         .RequiredArgument("STRING").Handler([this](const TString& arg) {
             ExclusionPatterns.emplace_back(TRegExMatch(arg));
         });
+
+    config.Opts->AddLongOption("item", TItem::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
+        .RequiredArgument("PROPERTY=VALUE,...");
 
     config.Opts->AddLongOption("description", "Textual description of export operation")
         .RequiredArgument("STRING").StoreResult(&Description);
@@ -288,20 +302,51 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("retries", "Number of retries")
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
-    config.Opts->AddLongOption("compression", TStringBuilder()
-            << "Codec used to compress data" << Endl
-            << "  Available options:" << Endl
-            << "    - zstd" << Endl
-            << "    - zstd-N (N is compression level in range [1, 22], e.g. zstd-3)" << Endl)
-        .RequiredArgument("STRING").StoreResult(&Compression);
+    {
+        TStringBuilder codecHelp;
+        codecHelp << "Codec used to compress data. Available options: ";
+        if (config.HelpCommandVerbosiltyLevel >= 2) {
+            codecHelp << Endl
+                << "    - " << colors.BoldColor() << "zstd" << colors.OldColor() << Endl
+                << "    - " << colors.BoldColor() << "zstd-N" << colors.OldColor() << " (N is compression level in range [1, 22], e.g. zstd-3)" << Endl;
+        } else {
+            codecHelp << colors.BoldColor() << "zstd" << colors.OldColor() << ", "
+                << colors.BoldColor() << "zstd-N" << colors.OldColor();
+        }
+        config.Opts->AddLongOption("compression", codecHelp)
+            .RequiredArgument("STRING").StoreResult(&Compression);
+    }
 
     config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
             << "Sets bucket URL style. Value "
             << colors.BoldColor() << "true" << colors.OldColor()
             << " means use Virtual-Hosted-Style URL, "
             << colors.BoldColor() << "false" << colors.OldColor()
-            << " - Path-Style URL.")
+            << " - Path-Style URL")
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
+
+    {
+        TStringBuilder encryptionAlgorithmHelp;
+        encryptionAlgorithmHelp << "Encryption algorithm. Supported values: ";
+        bool first = true;
+        for (const auto& alg : {"AES-128-GCM", "AES-256-GCM", "ChaCha20-Poly1305"}) {
+            if (first) {
+                first = false;
+            } else {
+                encryptionAlgorithmHelp << ", ";
+            }
+            encryptionAlgorithmHelp << colors.BoldColor() << alg << colors.OldColor();
+        }
+        config.Opts->AddLongOption("encryption-algorithm", encryptionAlgorithmHelp)
+            .RequiredArgument("NAME").StoreResult(&EncryptionAlgorithm);
+    }
+
+    config.Opts->AddLongOption("encryption-key-file", "File path that contains encryption key or env that contains hex encoded key value")
+        .Env("YDB_ENCRYPTION_KEY_FILE", true, "encryption key file")
+        .Env("YDB_ENCRYPTION_KEY", false)
+        .FileName("encryption key file").RequiredArgument("PATH")
+        .StoreFilePath(&EncryptionKeyFile)
+        .StoreResult(&EncryptionKey);
 
     AddDeprecatedJsonOption(config);
     AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
@@ -316,9 +361,10 @@ void TCommandExportToS3::Parse(TConfig& config) {
     ParseAwsAccessKey(config, "access-key");
     ParseAwsSecretKey(config, "secret-key");
 
-    Items = TItem::Parse(config, "item");
-    if (Items.empty()) {
-        throw TMisuseException() << "At least one item should be provided";
+    auto items = TItem::Parse(config, "item");
+    Items.insert(Items.end(), items.begin(), items.end());
+    if (Items.empty() && !CommonDestinationPrefix) {
+        throw TMisuseException() << "No destination prefix was provided";
     }
 }
 
@@ -326,11 +372,40 @@ void TCommandExportToS3::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
 
     for (auto& item : Items) {
+        if (CommonSourcePath && item.Source && item.Source[0] != '/') {
+            item.Source = CommonSourcePath + "/" + item.Source;
+        }
         NConsoleClient::AdjustPath(item.Source, config);
     }
 }
 
 int TCommandExportToS3::Run(TConfig& config) {
+    if (EncryptionKey && !EncryptionKeyFile) { // We read key from env YDB_ENCRYPTION_KEY, treat as hex encoded
+        try {
+            EncryptionKey = HexDecode(EncryptionKey);
+        } catch (const std::exception&) {
+            // Don't print error, it may contain secret.
+            Cerr << "Failed to decode encryption key from hex" << Endl;
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (EncryptionAlgorithm && !EncryptionKey) {
+        Cerr << "No encryption key provided" << Endl;
+        return EXIT_FAILURE;
+    }
+
+    if (EncryptionKey && !EncryptionAlgorithm) {
+        Cerr << "No encryption algorithm provided" << Endl;
+        return EXIT_FAILURE;
+    }
+
+    const bool encryption = EncryptionAlgorithm && EncryptionKey;
+    if (encryption && !CommonDestinationPrefix) {
+        Cerr << "--destination-prefix parameter is required for exports with encryption" << Endl;
+        return EXIT_FAILURE;
+    }
+
     using namespace NExport;
     using namespace NScheme;
 
@@ -358,15 +433,36 @@ int TCommandExportToS3::Run(TConfig& config) {
         settings.Compression(Compression);
     }
 
+    if (CommonSourcePath) {
+        settings.SourcePath(CommonSourcePath);
+    }
+
+    if (CommonDestinationPrefix) {
+        settings.DestinationPrefix(CommonDestinationPrefix);
+    }
+
+    if (encryption) {
+        settings.SymmetricEncryption(EncryptionAlgorithm, EncryptionKey);
+    }
+
+    // YDB supported recursive directories handling along with --destination-prefix option.
+    // So if we use it, then we can suppose that YDB already supports expanding of items.
+    const bool expandItems = (!CommonDestinationPrefix || !ExclusionPatterns.empty());
+    if (expandItems && settings.Item_.empty()) {
+        settings.AppendItem(TExportToS3Settings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database, .Dst = !encryption ? CommonDestinationPrefix : TString{}});
+    }
+
     const TDriver driver = CreateDriver(config);
 
     TSchemeClient schemeClient(driver);
     TExportClient client(driver);
 
     auto originalItems = settings.Item_;
-    ExpandItems(schemeClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
+    if (expandItems) {
+        ExpandItems(schemeClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
+    }
     TExportToS3Response response = client.ExportToS3(settings).ExtractValueSync();
-    if (response.Status().GetStatus() == EStatus::BAD_REQUEST) {
+    if (expandItems && response.Status().GetStatus() == EStatus::BAD_REQUEST) {
         // Retry the export operation limiting the scope to tables only.
         // This approach ensures compatibility with servers running an older version of YDB.
         settings.Item_ = std::move(originalItems);

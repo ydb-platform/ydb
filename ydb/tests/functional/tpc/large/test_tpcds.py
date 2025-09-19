@@ -10,9 +10,15 @@ class TestTpcdsS1(tpcds.TestTpcds1, FunctionalTestBase):
     }
 
     @classmethod
+    def addition_init_params(cls) -> list[str]:
+        if cls.float_mode:
+            return ['--float-mode', cls.float_mode]
+        return []
+
+    @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster(memory_controller_config=cls.memory_controller_config)
-        cls.run_cli(['workload', 'tpcds', '-p', f'olap_yatests/{cls._get_path()}', 'init', '--store=column', '--datetime-types=dt64'])
+        cls.run_cli(['workload', 'tpcds', '-p', f'olap_yatests/{cls._get_path()}', 'init', '--store=column', '--datetime-types=dt64'] + cls.addition_init_params())
         cls.run_cli(['workload', 'tpcds', '-p', f'olap_yatests/{cls._get_path()}', 'import', 'generator', f'--scale={cls.scale}'])
         super().setup_class()
 
@@ -45,3 +51,7 @@ class TestTpcdsS0_1(TestTpcdsS1):
         'web_sales': 71632,
         'web_site': 3,
     }
+
+
+class TestTpcdsS0_1DecimalNative(TestTpcdsS0_1):
+    float_mode = 'decimal'

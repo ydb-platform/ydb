@@ -35,6 +35,11 @@ TFsPath TFileStorageDecorator::GetRoot() const {
 TFsPath TFileStorageDecorator::GetTemp() const {
     return Inner_->GetTemp();
 }
+
+TFsPath TFileStorageDecorator::GetLockFilePath(const TString& lockName) const {
+    return Inner_->GetLockFilePath(lockName);
+}
+
 const TFileStorageConfig& TFileStorageDecorator::GetConfig() const {
     return Inner_->GetConfig();
 }

@@ -77,10 +77,8 @@ struct TEvPrivate {
         EvAskColumnData,
 
         EvRequestFilter,
-        EvDuplicateFilterDataFetched,
-        EvDuplicateSourceCacheResult,
+        EvFilterRequestResourcesAllocated,
         EvFilterConstructionResult,
-        EvDuplicateFilterIntervalResult,
 
         EvEnd
     };

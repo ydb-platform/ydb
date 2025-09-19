@@ -110,7 +110,9 @@ ui64 TRUCalculator::Calculate(const TMeteringStats& stats, TString& explain) {
         << ", BulkUpsert: " << bulkUpsert
         << ", CPU: " << cpu;
 
-    return Max(readTable + bulkUpsert, cpu);
+    // CPU usage is intentionally excluded to simplify the documentation
+    // as I/O operations are typically much more resource-intensive than CPU processing
+    return readTable + bulkUpsert;
 }
 
 }

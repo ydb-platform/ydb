@@ -237,7 +237,7 @@ void ValidateSimpleLogicalType(TStringBuf value)
                     ValidateSimpleLogicalType<underlyingDateType>(static_cast<ui64>(timestamp));
                 }
             } catch (const std::exception& ex) {
-                THROW_ERROR_EXCEPTION("Cannot validate underlying timestamp of %Qv type", type)
+                THROW_ERROR_EXCEPTION("Cannot validate underlying timestamp of %Qlv type", type)
                     << ex;
             }
 
@@ -245,7 +245,7 @@ void ValidateSimpleLogicalType(TStringBuf value)
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::SchemaViolation,
-                "Not a valid timezone time")
+                "Not a valid timezone type")
                 << TErrorAttribute("value", value)
                 << ex;
         }

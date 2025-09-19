@@ -3,11 +3,13 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
@@ -25,6 +27,21 @@
 #include <util/stream/file.h>
 
 namespace NKikimr::NKqp {
+
+namespace {
+
+    bool ValidateExternalSink(const NKqpProto::TKqpExternalSink& sink) {
+        if (sink.GetType() != "S3Sink") {
+            return false;
+        }
+
+        NYql::NS3::TSink sinkSettings;
+        sink.GetSettings().UnpackTo(&sinkSettings);
+
+        return sinkSettings.GetAtomicUploadCommit();
+    }
+
+}  // anonymous namespace
 
     bool CheckNestingDepth(const google::protobuf::Message& message, ui32 maxDepth) {
         if (!maxDepth) {
@@ -180,6 +197,10 @@ namespace NKikimr::NKqp {
     }
 
     std::optional<TKqpFederatedQuerySetup> TKqpFederatedQuerySetupFactoryDefault::Make(NActors::TActorSystem* actorSystem) {
+        if (!ActorSystemPtr->load(std::memory_order_relaxed)) {
+            ActorSystemPtr->store(actorSystem, std::memory_order_relaxed);
+        }
+
         auto result = TKqpFederatedQuerySetup{
             HttpGateway,
             ConnectorClient,
@@ -301,7 +322,7 @@ namespace NKikimr::NKqp {
         const TString& path) {
 
         if (!federatedQuerySetup || !federatedQuerySetup->Driver) {
-            return NThreading::MakeFuture<TGetSchemeEntryResult>(Nothing()); 
+            return NThreading::MakeFuture<TGetSchemeEntryResult>(); 
         }
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false);
         auto driver = federatedQuerySetup->Driver;
@@ -318,13 +339,31 @@ namespace NKikimr::NKqp {
         return schemeClient->DescribePath(path)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), p = path, sc = schemeClient, database, endpoint](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
                 auto describePathResult = result.GetValue();
+                TGetSchemeEntryResult res;
                 if (!describePathResult.IsSuccess()) {
-                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed: " << describePathResult.GetIssues().ToString());
-                    return NThreading::MakeFuture<TGetSchemeEntryResult>(Nothing());
+                    TString message = TStringBuilder() <<  "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
+                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, message + describePathResult.GetIssues().ToString());
+                    auto issue = YqlIssue({}, NYql::TIssuesIds::INFO, message);
+                    issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(YqlIssue({}, NYql::TIssuesIds::INFO, describePathResult.GetIssues().ToString())));
+                    res.Issues.AddIssue(issue);  
+                } else {
+                    NYdb::NScheme::TSchemeEntry entry = describePathResult.GetEntry();
+                    res.EntryType = entry.Type;
                 }
-                NYdb::NScheme::TSchemeEntry entry = describePathResult.GetEntry();
-                return NThreading::MakeFuture<TGetSchemeEntryResult>(entry.Type);
+                return NThreading::MakeFuture<TGetSchemeEntryResult>(res);
             });
     };
-    
+
+    std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks) {
+        std::vector<NKqpProto::TKqpExternalSink> filteredSinks;
+        filteredSinks.reserve(sinks.size());
+        for (const auto& sink : sinks) {
+            if (ValidateExternalSink(sink)) {
+                filteredSinks.push_back(sink);
+            }
+        }
+
+        return filteredSinks;
+    }
+
 }  // namespace NKikimr::NKqp

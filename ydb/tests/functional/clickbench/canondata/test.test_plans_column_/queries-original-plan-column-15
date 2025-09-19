@@ -69,8 +69,19 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "TableFullScan",
+                                                                "Node Type": "Aggregate-TableFullScan",
                                                                 "Operators": [
+                                                                    {
+                                                                        "Aggregation": "{SUM(1)}",
+                                                                        "GroupBy": "item.UserID",
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate"
+                                                                    },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
@@ -86,32 +97,10 @@
                                                                         "SsaProgram": {
                                                                             "Command": [
                                                                                 {
-                                                                                    "GroupBy": {
-                                                                                        "Aggregates": [
-                                                                                            {
-                                                                                                "Column": {
-                                                                                                    "Id": 106
-                                                                                                },
-                                                                                                "Function": {
-                                                                                                    "Id": 2
-                                                                                                }
-                                                                                            }
-                                                                                        ],
-                                                                                        "KeyColumns": [
-                                                                                            {
-                                                                                                "Id": 10
-                                                                                            }
-                                                                                        ]
-                                                                                    }
-                                                                                },
-                                                                                {
                                                                                     "Projection": {
                                                                                         "Columns": [
                                                                                             {
                                                                                                 "Id": 10
-                                                                                            },
-                                                                                            {
-                                                                                                "Id": 106
                                                                                             }
                                                                                         ]
                                                                                     }

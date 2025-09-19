@@ -221,6 +221,7 @@ namespace NYdb::NConsoleClient {
         void AddAllowedTransformFormats(TConfig& config);
         void ParseTransformFormat();
         NTopic::TReadSessionSettings PrepareReadSessionSettings();
+        TTopicReaderSettings PrepareReaderSettings() const;
     };
 
     class TCommandWithCodec {
@@ -257,6 +258,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui64> BatchSize_;
         TMaybe<ui64> BatchMessagesCount_;
         TMaybe<TString> MessageGroupId_;
+        TMaybe<TDuration> MessagesWaitTimeout_;
 
         ui64 MessageSizeLimit_ = 0;
         void ParseMessageSizeLimit();

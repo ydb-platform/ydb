@@ -58,6 +58,7 @@ YT_DEFINE_ERROR_ENUM(
     ((FormatDisabled)                                    (1925))
     ((ClusterLivenessCheckFailed)                        (1926))
     ((UnsupportedArchiveVersion)                         (1927))
+    ((SignatureGenerationIsUnsupported)                  (1928))
 );
 
 DEFINE_ENUM(ERowModificationType,

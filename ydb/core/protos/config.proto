@@ -11,6 +11,7 @@ import "ydb/core/protos/blobstorage_vdisk_config.proto";
 import "ydb/core/protos/bootstrap.proto";
 import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/compaction.proto";
+import "ydb/core/protos/config_metrics.proto";
 import "ydb/core/protos/config_units.proto";
 import "ydb/core/protos/counters_schemeshard.proto";
 import "ydb/core/protos/data_integrity_trails.proto";
@@ -690,6 +691,7 @@ message TCompositeConveyorConfig {
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
         optional string Name = 4;
+        optional uint64 MaxBatchSize = 5;
     }
 
     optional bool Enabled = 1 [default = true];
@@ -1144,6 +1146,82 @@ message TFinalizeScriptServiceConfig {
     optional uint32 MaxInFlightFinalizationsCount = 2 [default = 10];
 };
 
+message TExternalStorage {
+    optional string Endpoint = 1;
+    optional string Database = 2;
+    optional string OAuthFile = 3;
+    optional string Token = 4;
+    optional string TablePrefix = 5;
+    optional string CertificateFile = 6;
+    optional string IamEndpoint = 7;
+    optional string SaKeyFile = 8;
+    optional bool UseLocalMetadataService = 9;
+    optional uint32 ClientTimeoutSec = 10;
+    optional uint32 OperationTimeoutSec = 11;
+    optional uint32 CancelAfterSec = 12;
+    optional bool UseSsl = 13;
+    optional uint32 TableClientMaxActiveSessions = 14;
+}
+
+message TSharedReadingConfig {
+    message TJsonParserConfig {
+        optional uint64 BatchSizeBytes = 1;  // default 1 MiB
+        optional uint64 BatchCreationTimeoutMs = 2;
+        optional uint64 BufferCellCount = 3;  // (number rows) * (number columns) limit, default 10^6
+    }
+
+    message TCompileServiceConfig {
+        optional uint64 ParallelCompilationLimit = 1;  // 1 by default
+    }
+
+    message TCoordinatorConfig {
+        optional TExternalStorage Database = 1;
+        optional string CoordinationNodePath = 2;
+        optional bool LocalMode = 3;
+    }
+
+    optional bool Enabled = 1;
+    optional uint64 TimeoutBeforeStartSessionSec = 2;
+    optional uint64 SendStatusPeriodSec = 3;
+    optional uint64 MaxSessionUsedMemory = 4; 
+    optional bool WithoutConsumer = 5;
+    optional TJsonParserConfig JsonParser = 7;
+    optional TCompileServiceConfig CompileService = 8;
+    optional TCoordinatorConfig Coordinator = 6;
+}
+
+message TCheckpointsConfig {
+    message TStateStorageLimitsConfig {
+        optional uint64 MaxGraphCheckpointsSizeBytes = 1;
+        optional uint64 MaxTaskStateSizeBytes = 2;
+        optional uint64 MaxRowSizeBytes = 3;
+    }
+
+    message TCheckpointGcConfig {
+        optional bool Enabled = 1;
+    }
+
+    message TLocalStorage {
+        optional string TablePrefix = 1;
+    }
+
+    optional bool Enabled = 1;
+    oneof Storage {
+        TExternalStorage ExternalStorage = 2;
+        TLocalStorage LocalStorage = 3;
+    }
+    optional TCheckpointGcConfig CheckpointGarbageConfig = 4;
+    optional TStateStorageLimitsConfig StateStorageLimits = 5;
+    optional uint64 CheckpointingPeriodMillis = 6 [default = 30000];
+    optional uint64 MaxInflight = 7;
+    optional uint64 CheckpointingSnapshotRotationPeriod = 8; // 0 - All checkpoints are snapshots, 1 - 1 increment/ 1 snapshot, 20 - 20 increment / 1 snapshot.
+}
+
+message TStreamingQueriesConfig {
+    optional uint64 MaxQueryExecutions = 1 [default = 30];
+    optional bool PrivateSystemTables = 2 [default = true];
+}
+
 message TQueryServiceConfig {
     optional uint64 ScriptOperationTimeoutDefaultSeconds = 1 [default = 604800]; // default = 1 week
     optional uint64 ScriptForgetAfterDefaultSeconds = 2 [default = 31536000]; // default = 1 year; 0 = infinity
@@ -1165,10 +1243,13 @@ message TQueryServiceConfig {
     optional NYql.TGenericGatewayConfig Generic = 11;
     optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
-    optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
+    optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 7200];
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
+    optional TCheckpointsConfig CheckpointsConfig = 24;
+    optional TStreamingQueriesConfig StreamingQueries = 25;
+    optional TSharedReadingConfig SharedReading = 26;
 }
 
 // Config describes immediate controls and allows
@@ -1733,6 +1814,15 @@ message TImmediateControlsConfig {
         map<string, TRequestConfig> RequestConfigs = 1;
     }
 
+    message TKeyValueVolumeControls {
+        optional uint64 ReadRequestsInFlightLimit = 1 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous read requests",
+            MinValue: 1,
+            MaxValue: 4096,
+            DefaultValue: 3
+        }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1747,6 +1837,7 @@ message TImmediateControlsConfig {
     optional TTableServiceControls TableServiceControls = 12;
     optional TTestShardControls TestShardControls = 13;
     optional TGRpcControls GRpcControls = 14;
+    optional TKeyValueVolumeControls KeyValueVolumeControls = 15;
 };
 
 message TMeteringConfig {
@@ -1794,6 +1885,7 @@ message TAuditConfig {
             Operations = 7; // Operations API. See ydb/public/api/grpc/ydb_operation_v1.proto
             ExportImport = 8;
             Acl = 9;
+            AuditHeartbeat = 10;
             Default = 1000; // For default settings for all other nonconfigured log classes
         }
 
@@ -1804,15 +1896,31 @@ message TAuditConfig {
             ServiceImpersonatedFromUser = 4;
         }
 
+        enum ELogPhase {
+            Received = 1;  // A request is received and the initial checks and authentication are made // "status" field of audit log record is equal to "IN-PROCESS"
+            Completed = 2; // A request is completely finished and has final status // "status"/"detailed_status" fields of audit log record are equal to request's final status
+        }
+
         optional ELogClass LogClass = 1; // Log class selector. Default is used for all log classes that were not included in config
         optional bool EnableLogging = 2; // Enables audit logging for specified log class
         repeated EAccountType ExcludeAccountType = 3; // If audit logging for log class is enabled, excludes logging for these account types
+        repeated ELogPhase LogPhase = 4; // The phases of requests execution where audit log records are written
+    }
+
+    // Settings for heartbeat audit messages
+    // Heartbeat messages are messages that are written in
+    // a time interval that is set up in this config.
+    // Audit messages are written from AuditHeartbeat log class
+    // and Anonymous account type and also can be set up using its setting
+    message THeartbeatSettings {
+        optional uint32 IntervalSeconds = 5; // Make heartbeat records to audit log every HeartbeatInterval seconds. 0 means that heartbeat is disabled
     }
 
     optional TStderrBackend StderrBackend = 1;
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
     repeated TLogClassConfig LogClassConfig = 4;
+    optional THeartbeatSettings Heartbeat = 5;
 };
 
 message THiveTabletLimit {
@@ -1964,6 +2072,8 @@ message THiveConfig {
     optional bool UseTabletUsageEstimate = 86 [default = true];
     repeated TBootPriority TabletTypeToBootPriority = 87;
     optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
+    optional bool LockedTabletsSendMetrics = 89 [default = false]; // if true then hive will process metrics from locked tablets
+    optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
 }
 
 message THealthCheckConfig {
@@ -2001,7 +2111,7 @@ message TColumnShardConfig {
     optional bool CompactionEnabled = 5 [default = true];
     optional bool TTLEnabled = 6 [default = true];
     optional bool WritingEnabled = 7 [default = true];
-    optional uint32 WritingBufferDurationMs = 8 [default = 0];
+    optional uint32 WritingBufferDurationMs = 8 [default = 1000];
     optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
     optional uint64 TieringsMemoryLimit = 11 [default = 536870912];
     message TIndexMetadataMemoryLimit {
@@ -2027,24 +2137,24 @@ message TColumnShardConfig {
     }
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
-    optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
+    optional uint32 MaxReadStaleness_ms = 18 [default = 1800000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
     optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
     optional uint32 ActualizationTasksLagMs = 21 [default = 1000];
     optional uint32 LagForCompactionBeforeTieringsMs = 22 [default = 3600000];
     optional uint32 OptimizerFreshnessCheckDurationMs = 23 [default = 300000];
     optional uint32 SmallPortionDetectSizeLimit = 24 [default = 1048576];  // 1 << 20
-    optional bool ColumnChunksV0Usage = 25 [default = true];
-    optional bool ColumnChunksV1Usage = 26 [default = true];
+    optional bool ColumnChunksV0Usage = 25 [default = false];
+    optional bool ColumnChunksV1Usage = 26 [default = false];
     optional uint64 MemoryLimitScanPortion = 27 [default = 100000000];
     optional string ReaderClassName = 28;
     optional bool AllowNullableColumnsInPK = 29 [default = false];
     optional uint32 RestoreDataOnWriteTimeoutSeconds = 30;
     optional bool UseSlicesFilter = 31 [default = true];
     optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
-    optional uint64 WritingBufferVolumeMb = 33 [default = 32];
-    optional uint64 WritingInFlightRequestsCountLimit = 34 [default = 1000];
-    optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 128000000];
+    optional uint64 WritingBufferVolumeMb = 33 [default = 32, deprecated = true];
+    optional uint64 WritingInFlightRequestsCountLimit = 34;
+    optional uint64 WritingInFlightRequestBytesLimit = 35;
     optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36;
     optional int32 DefaultCompressionLevel = 37;
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
@@ -2052,10 +2162,16 @@ message TColumnShardConfig {
     optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
     optional bool PortionMetaV0Usage = 41 [default = true];
     optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
-    optional bool GenerateInternalPathId = 43 [default = false]; //Be aware! IRREVERSIBLE(if set, can not be unset for a dababase)
+    optional bool GenerateInternalPathId = 43 [default = true];
     optional bool ProxyWritingEnabled = 44 [default = true];
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
-    optional bool DeduplicationEnabled = 46 [default = false];
+    optional bool DeduplicationEnabled = 46 [default = true];
+    optional bool BulkUpsertRequireAllColumns = 47 [default = true];
+    optional uint64 ProxyMemoryInFlightLimit = 48;
+    optional uint64 WritingBufferVolumeBytes = 49 [default = 524288];
+    optional bool OnlyBulkUpsertWritingBuffer = 50 [default = true];
+    optional uint64 BadPortionSizeLimit = 51 [default = 524288];
+    optional uint64 BadPortionsLimit = 52;
 }
 
 message TSchemeShardConfig {
@@ -2377,6 +2493,9 @@ message TKafkaProxyConfig {
     optional bool MeteringV2Enabled = 10 [default = true];
     optional bool AuthViaApiKey = 11 [default = true];
     optional uint32 TransactionTimeoutMs = 12 [default = 300000]; // 5 minutes (same as in kafka)
+    optional bool AutoCreateTopicsEnable = 13 [default = false];
+    optional uint32 TopicCreationDefaultPartitions = 14 [default = 1];
+    optional bool AutoCreateConsumersEnable = 15 [default = true];
 }
 
 message TAwsCompatibilityConfig {
@@ -2408,6 +2527,29 @@ message TGeneralCacheConfig {
     optional uint64 MemoryLimit = 1;
     optional uint64 DirectInflightSourceLimit = 2;
     optional uint64 DirectInflightGlobalLimit = 3;
+}
+
+message TStatisticsConfig {
+    // Interval for base statistics send requests from SchemeShard to StatisticsAggregator.
+    // Serverless interval should be higher because many SchemeShards send data to one aggregator.
+    optional uint32 BaseStatsSendIntervalSecondsDedicated = 1 [default = 5];
+    optional uint32 BaseStatsSendIntervalSecondsServerless = 2 [default = 240];
+
+    // Interval for base statistics propagate requests from StatisticsAggregator to StatisticsService.
+    // Serverless interval should be higher because in each iteration we need to propagate more data
+    // from many SchemeShards.
+    optional uint32 BaseStatsPropagateIntervalSecondsDedicated = 3 [default = 5];
+    optional uint32 BaseStatsPropagateIntervalSecondsServerless = 4 [default = 180];
+};
+
+message TSystemTabletBackupConfig {
+    message TFilesystemBackend {
+        optional string Path = 1;
+    }
+
+    oneof Backend {
+        TFilesystemBackend Filesystem = 1;
+    }
 }
 
 message TAppConfig {
@@ -2513,6 +2655,10 @@ message TAppConfig {
     optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
     optional TGeneralCacheConfig PortionsMetadataCache = 110;
     optional TGeneralCacheConfig ColumnDataCache = 111;
+    optional TGroupedMemoryLimiterConfig DeduplicationGroupedMemoryLimiterConfig = 112;
+    optional TStatisticsConfig StatisticsConfig = 113;
+    optional TMetricsConfig MetricsConfig = 114;
+    optional TSystemTabletBackupConfig SystemTabletBackupConfig = 115;
 }
 
 message TYdbVersion {

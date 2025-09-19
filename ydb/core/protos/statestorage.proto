@@ -166,5 +166,7 @@ message TEndpointBoardEntry {
     repeated string AddressesV6 = 9;
     optional string TargetNameOverride = 10;
     optional string EndpointId = 11;
+
+    optional string BridgePileName = 12;
 };
 

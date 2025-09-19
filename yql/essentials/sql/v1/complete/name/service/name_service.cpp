@@ -1,9 +1,5 @@
 #include "name_service.h"
 
-#include <yql/essentials/core/sql_types/normalize_name.h>
-
-#include <util/charset/utf8.h>
-
 namespace NSQLComplete {
 
     namespace {
@@ -67,19 +63,6 @@ namespace NSQLComplete {
             name = Unqualified(std::move(name));
         }
         return qualified;
-    }
-
-    TString LowerizeName(TStringBuf name) {
-        return ToLowerUTF8(name);
-    }
-
-    TString NormalizeName(TStringBuf name) {
-        TString normalized(name);
-        TMaybe<NYql::TIssue> error = NYql::NormalizeName(NYql::TPosition(), normalized);
-        if (!error.Empty()) {
-            return LowerizeName(name);
-        }
-        return normalized;
     }
 
 } // namespace NSQLComplete

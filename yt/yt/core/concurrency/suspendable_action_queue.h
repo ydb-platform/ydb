@@ -35,7 +35,7 @@ struct TSuspendableActionQueueOptions
 };
 
 ISuspendableActionQueuePtr CreateSuspendableActionQueue(
-    TString threadName,
+    std::string threadName,
     TSuspendableActionQueueOptions options = {});
 
 ////////////////////////////////////////////////////////////////////////////////

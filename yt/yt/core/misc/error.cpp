@@ -182,13 +182,13 @@ TOriginAttributes ExtractFromDictionaryOverride(TErrorAttributes* attributes)
     TExtensionData ext;
 
     if (attributes) {
-        static const TString FidKey("fid");
+        static const std::string FidKey("fid");
         ext.Fid = attributes->GetAndRemove<NConcurrency::TFiberId>(FidKey, NConcurrency::InvalidFiberId);
 
-        static const TString TraceIdKey("trace_id");
+        static const std::string TraceIdKey("trace_id");
         ext.TraceId = attributes->GetAndRemove<NTracing::TTraceId>(TraceIdKey, NTracing::InvalidTraceId);
 
-        static const TString SpanIdKey("span_id");
+        static const std::string SpanIdKey("span_id");
         ext.SpanId = attributes->GetAndRemove<NTracing::TSpanId>(SpanIdKey, NTracing::InvalidSpanId);
     }
 
@@ -404,7 +404,7 @@ void Deserialize(TError& error, const NYTree::INodePtr& node)
 
     auto mapNode = node->AsMap();
 
-    static const TString CodeKey("code");
+    static const std::string CodeKey("code");
     auto code = TErrorCode(mapNode->GetChildValueOrThrow<i64>(CodeKey));
     if (code == NYT::EErrorCode::OK) {
         return;
@@ -412,10 +412,10 @@ void Deserialize(TError& error, const NYTree::INodePtr& node)
 
     error.SetCode(code);
 
-    static const TString MessageKey("message");
+    static const std::string MessageKey("message");
     error.SetMessage(mapNode->GetChildValueOrThrow<TString>(MessageKey));
 
-    static const TString AttributesKey("attributes");
+    static const std::string AttributesKey("attributes");
     auto children = mapNode->GetChildOrThrow(AttributesKey)->AsMap()->GetChildren();
 
     for (const auto& [key, value] : children) {
@@ -427,7 +427,7 @@ void Deserialize(TError& error, const NYTree::INodePtr& node)
 
     error.UpdateOriginAttributes();
 
-    static const TString InnerErrorsKey("inner_errors");
+    static const std::string InnerErrorsKey("inner_errors");
     if (auto innerErrorsNode = mapNode->FindChild(InnerErrorsKey)) {
         for (const auto& innerErrorNode : innerErrorsNode->AsList()->GetChildren()) {
             error.MutableInnerErrors()->push_back(ConvertTo<TError>(innerErrorNode));
@@ -470,41 +470,41 @@ void ToProto(NYT::NProto::TError* protoError, const TError& error)
         }
     }
 
-    auto addAttribute = [&] (const TString& key, const auto& value) {
+    auto addAttribute = [&] (const std::string& key, const auto& value) {
         auto* protoItem = protoError->mutable_attributes()->add_attributes();
         protoItem->set_key(key);
         protoItem->set_value(ToProto(ConvertToYsonString(value)));
     };
 
     if (error.HasOriginAttributes()) {
-        static const TString PidKey("pid");
+        static const std::string PidKey("pid");
         addAttribute(PidKey, error.GetPid());
 
-        static const TString TidKey("tid");
+        static const std::string TidKey("tid");
         addAttribute(TidKey, error.GetTid());
 
-        static const TString ThreadName("thread");
+        static const std::string ThreadName("thread");
         addAttribute(ThreadName, error.GetThreadName());
 
-        static const TString FidKey("fid");
+        static const std::string FidKey("fid");
         addAttribute(FidKey, GetFid(error));
     }
 
     if (HasHost(error)) {
-        static const TString HostKey("host");
+        static const std::string HostKey("host");
         addAttribute(HostKey, GetHost(error));
     }
 
     if (error.HasDatetime()) {
-        static const TString DatetimeKey("datetime");
+        static const std::string DatetimeKey("datetime");
         addAttribute(DatetimeKey, error.GetDatetime());
     }
 
     if (HasTracingAttributes(error)) {
-        static const TString TraceIdKey("trace_id");
+        static const std::string TraceIdKey("trace_id");
         addAttribute(TraceIdKey, GetTraceId(error));
 
-        static const TString SpanIdKey("span_id");
+        static const std::string SpanIdKey("span_id");
         addAttribute(SpanIdKey, GetSpanId(error));
     }
 
@@ -591,40 +591,40 @@ void TErrorSerializer::Save(TStreamSaveContext& context, const TError& error)
 
         TSizeSerializer::Save(context, attributeCount);
 
-        auto saveAttribute = [&] (const TString& key, const auto& value) {
+        auto saveAttribute = [&] (const std::string& key, const auto& value) {
             Save(context, key);
             Save(context, ConvertToYsonString(value));
         };
 
         if (HasHost(error)) {
-            static const TString HostKey("host");
+            static const std::string HostKey("host");
             saveAttribute(HostKey, GetHost(error));
         }
 
         if (error.HasOriginAttributes()) {
-            static const TString PidKey("pid");
+            static const std::string PidKey("pid");
             saveAttribute(PidKey, error.GetPid());
 
-            static const TString TidKey("tid");
+            static const std::string TidKey("tid");
             saveAttribute(TidKey, error.GetTid());
 
-            static const TString ThreadNameKey("thread");
+            static const std::string ThreadNameKey("thread");
             saveAttribute(ThreadNameKey, error.GetThreadName());
 
-            static const TString FidKey("fid");
+            static const std::string FidKey("fid");
             saveAttribute(FidKey, GetFid(error));
         }
 
         if (error.HasDatetime()) {
-            static const TString DatetimeKey("datetime");
+            static const std::string DatetimeKey("datetime");
             saveAttribute(DatetimeKey, error.GetDatetime());
         }
 
         if (HasTracingAttributes(error)) {
-            static const TString TraceIdKey("trace_id");
+            static const std::string TraceIdKey("trace_id");
             saveAttribute(TraceIdKey, GetTraceId(error));
 
-            static const TString SpanIdKey("span_id");
+            static const std::string SpanIdKey("span_id");
             saveAttribute(SpanIdKey, GetSpanId(error));
         }
 

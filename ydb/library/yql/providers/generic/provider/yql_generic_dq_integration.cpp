@@ -47,7 +47,7 @@ namespace NYql {
                 case NYql::EGenericDataSourceKind::MONGO_DB:
                     return "MongoDBGeneric";
                 case NYql::EGenericDataSourceKind::OPENSEARCH:
-                    return "OpenSearchGeneric";  
+                    return "OpenSearchGeneric";
                 default:
                     throw yexception() << "Data source kind is unknown or not specified";
             }
@@ -301,7 +301,7 @@ namespace NYql {
                             break;
                         case NYql::EGenericDataSourceKind::OPENSEARCH:
                             properties["SourceType"] = "OpenSearch";
-                            break;    
+                            break;
                         case NYql::EGenericDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;
                         default:

@@ -88,19 +88,6 @@ class TestSchemeDescribe:
             output = execute_ydb_cli_command(ydb_cluster.nodes[1], database_path, ["scheme", "describe", view])
             return canonical_result(output, self.tmp_path)
 
-    def test_describe_view_json(self, ydb_cluster, ydb_database, ydb_client_session):
-        database_path = ydb_database
-        session_pool = ydb_client_session(database_path)
-        with session_pool.checkout() as session:
-            view = "view"
-            query = "select 1"
-            create_view(session, view, query)
-            output = execute_ydb_cli_command(
-                ydb_cluster.nodes[1], database_path, ["scheme", "describe", "--format", "proto-json-base64", view]
-            )
-            description = output.splitlines()[1]
-            assert json.loads(description)["query_text"] == query
-
     def test_describe_external_table_references_json(self, ydb_cluster, ydb_database, ydb_client_session):
         database_path = ydb_database
         external_data_source = "external_data_source"
@@ -132,3 +119,64 @@ class TestSchemeDescribe:
             assert isinstance(references, list)
             assert len(references) == 1
             assert references[0] == expected_reference
+
+
+class TestViewSchemeDescribe:
+    @pytest.fixture(
+        scope="module",
+        params=[
+            (True, True),
+            (True, False),
+            (False, True),
+            (False, False),
+        ],
+        ids=lambda param: f"show_create_{"enabled" if param[0] else "disabled"}_view_service_{"enabled" if param[1] else "disabled"}",
+    )
+    def ydb_cluster_configuration(self, request):
+        show_create_enabled, view_service_enabled = request.param
+
+        extra_feature_flags = []
+        disabled_feature_flags = []
+        if show_create_enabled:
+            extra_feature_flags = ["enable_show_create"]
+        else:
+            disabled_feature_flags = ["enable_show_create"]
+
+        extra_grpc_services = []
+        disabled_grpc_services = []
+        if view_service_enabled:
+            extra_grpc_services = ["view"]
+        else:
+            disabled_grpc_services = ["view"]
+
+        return dict(
+            extra_feature_flags=extra_feature_flags,
+            disabled_feature_flags=disabled_feature_flags,
+            extra_grpc_services=extra_grpc_services,
+            disabled_grpc_services=disabled_grpc_services,
+        )
+
+    @pytest.fixture(autouse=True, scope="function")
+    def init_test(self, tmp_path):
+        self.tmp_path = tmp_path
+        set_canondata_root("ydb/tests/functional/ydb_cli/canondata")
+
+    def test_describe_view(self, ydb_cluster_configuration, ydb_cluster, ydb_database, ydb_client_session):
+        session_pool = ydb_client_session(ydb_database)
+        with session_pool.checkout() as session:
+            view_name = "view"
+            create_view(session, view_name)
+
+            should_fail = (
+                "enable_show_create" in ydb_cluster_configuration["disabled_feature_flags"]
+                and "view" in ydb_cluster_configuration["disabled_grpc_services"]
+            )
+
+            if should_fail:
+                with pytest.raises(yatest.common.process.ExecutionError):
+                    execute_ydb_cli_command(ydb_cluster.nodes[1], ydb_database, ["scheme", "describe", view_name])
+                output = ""
+            else:
+                output = execute_ydb_cli_command(ydb_cluster.nodes[1], ydb_database, ["scheme", "describe", view_name])
+
+            return canonical_result(output, self.tmp_path)

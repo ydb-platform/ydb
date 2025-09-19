@@ -23,7 +23,11 @@
 
 namespace NKikimrConfig {
     class TQueryServiceConfig;
-}
+}  // namespace NKikimrConfig
+
+namespace NKqpProto {
+    class TKqpExternalSink;
+}  // namespace NKqpProto
 
 namespace NKikimr::NKqp {
 
@@ -190,7 +194,10 @@ namespace NKikimr::NKqp {
 
     NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth = 90);
 
-    using TGetSchemeEntryResult = TMaybe<NYdb::NScheme::ESchemeEntryType>;
+    struct TGetSchemeEntryResult {
+        TMaybe<NYdb::NScheme::ESchemeEntryType> EntryType;
+        NYql::TIssues Issues;
+    };
 
     NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
@@ -199,5 +206,7 @@ namespace NKikimr::NKqp {
         bool useTls,
         const TString& structuredTokenJson,
         const TString& path);
+
+    std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks);
 
 }  // namespace NKikimr::NKqp

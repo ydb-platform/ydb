@@ -154,6 +154,7 @@ message TConfigItem {
 
         CompositeConveyorConfigItem = 109;
         PortionsMetadataCacheItem = 110;
+        DeduGroupedMemoryLimiterConfig = 112;
 
         // synthetic kinds for audit purposes only
         DatabaseYamlConfigChangeItem = 32767;

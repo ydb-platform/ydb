@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
                 Sleep(TDuration::Seconds(1));
                 TDownloadTaskParams downloadTaskParams = std::get<TDownloadTaskParams>(task->TaskParams);
                 TString partId = downloadTaskParams.Output.PartId;
-                TFmrTableOutputRef fmrTableOutputRef{.TableId = tableId, .PartId = partId};
+                TFmrTableOutputRef fmrTableOutputRef(tableId, partId);
                 TTableChunkStats tableChunkStats{
                     .PartId = partId,
                     .PartIdChunkStats = std::vector<TChunkStats>(totalChunkCount, TChunkStats{.Rows = chunkRowCount, .DataWeight = chunkDataWeight})

@@ -81,8 +81,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/regex/v5/basic_regex.hpp [3:4]
-        src/regex.cpp [3:4]
-        src/regex_debug.cpp [3:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4047300d625348707598991c59d561ac
 BELONGS ya.make
@@ -110,7 +108,6 @@ BELONGS ya.make
         include/boost/regex/concepts.hpp [3:4]
         include/boost/regex/mfc.hpp [3:4]
         include/boost/regex/pending/object_cache.hpp [3:4]
-        include/boost/regex/pending/static_mutex.hpp [3:4]
         include/boost/regex/v5/basic_regex_creator.hpp [3:4]
         include/boost/regex/v5/basic_regex_parser.hpp [3:4]
         include/boost/regex/v5/c_regex_traits.hpp [3:4]
@@ -120,19 +117,6 @@ BELONGS ya.make
         include/boost/regex/v5/regex_traits_defaults.hpp [3:4]
         include/boost/regex/v5/unicode_iterator.hpp [3:4]
         include/boost/regex/v5/w32_regex_traits.hpp [3:4]
-        src/static_mutex.cpp [3:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 6f522c25b81fd9005f9f0cdd69d03b25
-BELONGS ya.make
-    License text:
-         * Copyright (c) 2011
-         * John Maddock
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        src/internals.hpp [3:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 81fe68c1eb5b189c68e4dea969fce3be
 BELONGS ya.make
@@ -164,8 +148,6 @@ BELONGS ya.make
         include/boost/cregex.hpp [3:4]
         include/boost/regex.hpp [3:4]
         include/boost/regex/config.hpp [3:4]
-        include/boost/regex/config/borland.hpp [3:4]
-        include/boost/regex/config/cwchar.hpp [3:4]
         include/boost/regex/pattern_except.hpp [3:4]
         include/boost/regex/regex_traits.hpp [3:4]
         include/boost/regex/user.hpp [3:4]

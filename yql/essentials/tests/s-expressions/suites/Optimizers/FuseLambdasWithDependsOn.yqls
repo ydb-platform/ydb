@@ -1,0 +1,81 @@
+(
+(let world (Configure! world (DataSource '"config") '"OptimizerFlags" '"ForbidConstantDependsOnFuse"))
+(let res_sink (DataSink 'result))
+
+(let $row1 (AsStruct '('"key" (Uint64 '"1")) '('"value" (Uint64 '"101"))))
+(let $row2 (AsStruct '('"key" (Uint64 '"2")) '('"value" (Uint64 '"102"))))
+(let $row3 (AsStruct '('"key" (Uint64 '"3")) '('"value" (Uint64 '"103"))))
+(let $row4 (AsStruct '('"key" (Uint64 '"4")) '('"value" (Uint64 '"104"))))
+(let $row5 (AsStruct '('"key" (Uint64 '"5")) '('"value" (Uint64 '"105"))))
+(let $input (AsList $row1 $row2 $row3 $row4 $row5))
+
+# ----------------------
+
+(let $wideFlow1 (ExpandMap (ToFlow $input (DependsOn (Uint64 '"1"))) (lambda '($row) (Member $row '"key") (Member $row '"value"))))
+
+# can be fused
+(let $processed1 (ExpandMap (NarrowMap $wideFlow1 (lambda '($key $value) $key)) (lambda '($key) (RandomNumber (DependsOn $key)))))
+
+(let $result1 (NarrowMap $processed1 (lambda '($rand) (AsStruct '('"rand" $rand)))))
+(let world (Write! world res_sink (Key) (Collect $result1) '('('type) '('label '"Result 1"))))
+(let world (Commit! world res_sink))
+
+# ----------------------
+
+(let $wideFlow2 (ExpandMap (ToFlow $input (DependsOn (Uint64 '"2"))) (lambda '($row) (Member $row '"key") (Member $row '"value"))))
+
+# cannot be fused
+(let $processed2 (ExpandMap (NarrowMap $wideFlow2 (lambda '($key $value) (Uint64 '"42"))) (lambda '($key) (RandomNumber (DependsOn $key)))))
+
+(let $result2 (NarrowMap $processed2 (lambda '($rand) (AsStruct '('"rand" $rand)))))
+(let world (Write! world res_sink (Key) (Collect $result2) '('('type) '('label '"Result 2"))))
+(let world (Commit! world res_sink))
+
+# ----------------------
+
+(let $wideFlow3 (ExpandMap (ToFlow $input (DependsOn (Uint64 '"3"))) (lambda '($row) (Member $row '"key") (Member $row '"value"))))
+
+# can be fused
+(let $processed3 (WideMap (WideMap $wideFlow3 (lambda '($key $value) $key $value)) (lambda '($key $value) (RandomNumber (DependsOn $key)) (RandomNumber (DependsOn $value)))))
+
+(let $result3 (NarrowMap $processed3 (lambda '($rand1 $rand2) (AsStruct '('"rand1" $rand1) '('"rand2" $rand2)))))
+(let world (Write! world res_sink (Key) (Collect $result3) '('('type) '('label '"Result 3"))))
+(let world (Commit! world res_sink))
+
+# ----------------------
+
+(let $wideFlow4 (ExpandMap (ToFlow $input (DependsOn (Uint64 '"4"))) (lambda '($row) (Member $row '"key") (Member $row '"value"))))
+
+# cannot be fused
+(let $processed4 (WideMap (WideMap $wideFlow4 (lambda '($key $value) $key (Uint64 '"42"))) (lambda '($key $value) (RandomNumber (DependsOn $key)) (RandomNumber (DependsOn $value)))))
+
+(let $result4 (NarrowMap $processed4 (lambda '($rand1 $rand2) (AsStruct '('"rand1" $rand1) '('"rand2" $rand2)))))
+(let world (Write! world res_sink (Key) (Collect $result4) '('('type) '('label '"Result 4"))))
+(let world (Commit! world res_sink))
+
+# ----------------------
+
+(let $wideFlow5 (ExpandMap (ToFlow $input (DependsOn (Uint64 '"5"))) (lambda '($row) (Member $row '"key") (Member $row '"value"))))
+
+# can be fused
+(let $processed5 (MultiMap (NarrowMultiMap $wideFlow5 (lambda '($key $value) $key $value)) (lambda '($key) (RandomNumber (DependsOn $key)) $key)))
+
+(let $result5 (Map $processed5 (lambda '($rand) (AsStruct '('"rand" $rand)))))
+(let world (Write! world res_sink (Key) (Collect $result5) '('('type) '('label '"Result 5"))))
+(let world (Commit! world res_sink))
+
+# ----------------------
+
+(let $wideFlow6 (ExpandMap (ToFlow $input (DependsOn (Uint64 '"5"))) (lambda '($row) (Member $row '"key") (Member $row '"value"))))
+
+# cannot be fused
+(let $processed6 (MultiMap (NarrowMultiMap $wideFlow6 (lambda '($key $value) (Uint64 '"42") (Uint64 '"43"))) (lambda '($key) (RandomNumber (DependsOn $key) (DependsOn (Uint64 '"1"))) (RandomNumber (DependsOn $key) (DependsOn (Uint64 '"2"))))))
+
+(let $result6 (Map $processed6 (lambda '($rand) (AsStruct '('"rand" $rand)))))
+(let world (Write! world res_sink (Key) (Collect $result6) '('('type) '('label '"Result 6"))))
+(let world (Commit! world res_sink))
+
+# ----------------------
+
+(return world)
+)

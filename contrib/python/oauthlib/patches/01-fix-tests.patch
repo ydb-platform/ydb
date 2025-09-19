@@ -1,14 +1,8 @@
 --- contrib/python/oauthlib/tests/openid/connect/core/endpoints/test_claims_handling.py	(index)
 +++ contrib/python/oauthlib/tests/openid/connect/core/endpoints/test_claims_handling.py	(working tree)
-@@ -11,7 +11,7 @@ from unittest import mock
- from oauthlib.openid import RequestValidator
- from oauthlib.openid.connect.core.endpoints.pre_configured import Server
- 
+@@ -11,1 +11,1 @@ from unittest import mock
 -from tests.oauth2.rfc6749.endpoints.test_utils import get_query_credentials
 +from __tests__.oauth2.rfc6749.endpoints.test_utils import get_query_credentials
- from tests.unittest import TestCase
- 
- 
 --- contrib/python/oauthlib/tests/openid/connect/core/grant_types/test_authorization_code.py	(index)
 +++ contrib/python/oauthlib/tests/openid/connect/core/grant_types/test_authorization_code.py	(working tree)
 @@ -14,1 +14,1 @@ from oauthlib.openid.connect.core.grant_types.authorization_code import (

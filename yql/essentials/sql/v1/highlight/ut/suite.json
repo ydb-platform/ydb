@@ -61,7 +61,8 @@
     ["select", "KKKKKK"],
     ["ALTER", "KKKKK"],
     ["GROUP BY", "KKKKK#_#KK"],
-    ["INSERT", "KKKKKK"]
+    ["INSERT", "KKKKKK"],
+    ["NULL", "KKKK"]
   ],
   "String": [
     ["\"\"", "SS"],

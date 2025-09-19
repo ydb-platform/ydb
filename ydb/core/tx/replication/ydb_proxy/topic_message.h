@@ -13,14 +13,17 @@ class TTopicMessage: protected NYdb::NTopic::TReadSessionEvent::TDataReceivedEve
 public:
     explicit TTopicMessage(const TDataEvent::TMessage& msg);
     explicit TTopicMessage(const TDataEvent::TCompressedMessage& msg);
-    explicit TTopicMessage(ui64 offset, const TString& data); // from scratch
+    TTopicMessage(TDataEvent::TMessageInformation&& msg, TString&& data);
+    TTopicMessage(ui64 offset, const TString& data); // from scratch
 
+    NYdb::NTopic::TMessageMeta::TPtr GetMessageMeta() const;
     ECodec GetCodec() const;
     const TString& GetData() const;
     TString& GetData();
     ui64 GetOffset() const;
     ui64 GetSeqNo() const;
     TInstant GetCreateTime() const;
+    TInstant GetWriteTime() const;
     TString GetMessageGroupId() const;
     TString GetProducerId() const;
     void Out(IOutputStream& out) const;

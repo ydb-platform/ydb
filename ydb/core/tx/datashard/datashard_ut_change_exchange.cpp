@@ -4,9 +4,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
@@ -666,7 +665,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         CreateShardedTable(server, sender, "/Root", "Table", TableWithIndex(SimpleAsyncIndex()));
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (1, 10);");
-        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (2, 20);", true, Ydb::StatusIds::OVERLOADED);
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (2, 20);", true, Ydb::StatusIds::TIMEOUT);
 
         sendEnqueued();
         WaitForContent(server, "/Root/Table/by_ikey/indexImplTable",
@@ -4005,6 +4004,67 @@ Y_UNIT_TEST_SUITE(Cdc) {
         ShouldBreakLocksOnConcurrentSchemeTx(&AddStream, [](TServer::TPtr server, const TActorId& edgeActor) {
             WaitTxNotification(server, edgeActor, AsyncAlterDropStream(server, "/Root", "Table", "Stream2"));
         });
+    }
+
+    template <typename TPrepareFunc>
+    void ShouldBreakLocksOnFinalizingIndex(TPrepareFunc prepare) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+                {"value2", "Uint32", false, false}});
+        CreateShardedTable(server, edgeActor, "/Root", "Table", opts);
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> blockProgress(runtime);
+        ui64 buildIndexId = prepare(server);
+        runtime.WaitFor("Progress", [&]{ return blockProgress.size(); });
+
+        TString sessionId;
+        TString txId;
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+        KqpSimpleBegin(runtime, sessionId, txId, "UPDATE `/Root/Table` ON (key, value2) VALUES (1, 11);");
+        KqpSimpleContinue(runtime, sessionId, txId, "SELECT key, value FROM `/Root/Table`;");
+
+        blockProgress.Unblock().Stop();
+        WaitTxNotification(server, edgeActor, buildIndexId);
+
+        auto commitResult = KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1;");
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            commitResult,
+            Sprintf("ERROR: %s", Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::ABORTED).c_str()));
+    }
+
+    Y_UNIT_TEST(ShouldBreakLocksOnConcurrentFinalizeBuildSyncIndex) {
+        auto addSyncIndexWithBlock = [](TServer::TPtr server) {
+            return AsyncAlterAddIndex(server, "/Root", "/Root/Table", TShardedTableOptions::TIndex{"Index", {"value"}});
+        };
+        ShouldBreakLocksOnFinalizingIndex(addSyncIndexWithBlock);
+    }
+
+    Y_UNIT_TEST(ShouldBreakLocksOnConcurrentFinalizeBuildAsyncIndex) {
+        auto addAsyncIndexWithBlock = [](TServer::TPtr server) {
+            return AsyncAlterAddIndex(server, "/Root", "/Root/Table", TShardedTableOptions::TIndex{"Index", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync});
+        };
+        ShouldBreakLocksOnFinalizingIndex(addAsyncIndexWithBlock);
     }
 
     Y_UNIT_TEST(ResolvedTimestampsContinueAfterMerge) {

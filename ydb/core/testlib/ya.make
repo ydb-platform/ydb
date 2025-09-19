@@ -66,6 +66,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/security
     ydb/core/security/ldap_auth_provider
+    ydb/core/security/token_manager
     ydb/core/statistics/aggregator
     ydb/core/sys_view/processor
     ydb/core/sys_view/service

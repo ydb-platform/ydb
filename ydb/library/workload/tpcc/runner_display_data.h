@@ -16,6 +16,9 @@ namespace NYdb::NTPCC {
 // Here we collect all the stats in a single place to easily display progress:
 //  * terminal stats: TPC-C related statistics like per transaction type latencies, tpmC.
 //  * thread stats: load, Queue
+
+constexpr double ThreadSaturatedLoadThreshold = 0.8;
+
 struct TAllStatistics {
 
     struct TThreadStatistics {
@@ -44,6 +47,8 @@ struct TAllStatistics {
 
             ExternalQueueTimeMs = TaskThreadStats->ExternalQueueTimeMs;
             ExternalQueueTimeMs.Sub(prev.TaskThreadStats->ExternalQueueTimeMs);
+
+            Load = TotalTime != 0 ? (ExecutingTime / TotalTime) : 0.0;
         }
 
         std::unique_ptr<ITaskQueue::TThreadStats> TaskThreadStats;
@@ -54,6 +59,7 @@ struct TAllStatistics {
 
         double ExecutingTime = 0;
         double TotalTime = 0;
+        double Load = 0.0;
         THistogram InternalInflightWaitTimeMs{ITaskQueue::TThreadStats::BUCKET_COUNT, ITaskQueue::TThreadStats::MAX_HIST_VALUE};
         THistogram ExternalQueueTimeMs{ITaskQueue::TThreadStats::BUCKET_COUNT, ITaskQueue::TThreadStats::MAX_HIST_VALUE};
     };
@@ -75,8 +81,12 @@ struct TAllStatistics {
         }
 
         // Aggregate total statistics
+        SaturatedThreads = 0;
         for (const auto& stats: StatVec) {
             stats.TerminalStats->Collect(TotalTerminalStats);
+            if (stats.Load >= ThreadSaturatedLoadThreshold) {
+                ++SaturatedThreads;
+            }
         }
     }
 
@@ -84,6 +94,7 @@ struct TAllStatistics {
     const Clock::time_point Ts;
 
     TTerminalStats TotalTerminalStats;
+    size_t SaturatedThreads = 0;
 };
 
 struct TRunStatusData {

@@ -1,7 +1,6 @@
 #include "tx_scan.h"
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
@@ -36,15 +35,19 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (snapshot.IsZero()) {
         snapshot = Self->GetLastTxSnapshot();
     }
+    const bool deduplicationEnabled = AppDataVerified().ColumnShardConfig.GetDeduplicationEnabled();
     const TReadMetadataBase::ESorting sorting = [&]() {
         if (request.HasReverse()) {
             return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
+        } else if (deduplicationEnabled) {
+            return TReadMetadataBase::ESorting::ASC;
         } else {
             return TReadMetadataBase::ESorting::NONE;
         }
     }();
-
-    TScannerConstructorContext context(snapshot, request.HasItemsLimit() ? request.GetItemsLimit() : 0, sorting);
+    /* FIXME: #22992 */
+    const auto useLimit = request.HasItemsLimit() && (sorting == ERequestSorting::NONE || !deduplicationEnabled);
+    TScannerConstructorContext context(snapshot, useLimit ? request.GetItemsLimit() : 0, sorting);
     const auto scanId = request.GetScanId();
     const ui64 txId = request.GetTxId();
     const ui32 scanGen = request.GetGeneration();
@@ -65,8 +68,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
         TReadDescription read(Self->TabletID(), snapshot, sorting);
-        read.DeduplicationPolicy = AppDataVerified().ColumnShardConfig.GetDeduplicationEnabled() ? EDeduplicationPolicy::PREVENT_DUPLICATES
-                                                                                                 : EDeduplicationPolicy::ALLOW_DUPLICATES;
+        read.DeduplicationPolicy = deduplicationEnabled ? EDeduplicationPolicy::PREVENT_DUPLICATES : EDeduplicationPolicy::ALLOW_DUPLICATES;
         read.TxId = txId;
         if (request.HasLockTxId()) {
             read.LockId = request.GetLockTxId();
@@ -88,7 +90,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
         const TString defaultReader = [&]() {
             const TString defGlobal =
-                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "PLAIN";
+                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "SIMPLE";
             if (Self->HasIndex()) {
                 return Self->GetIndexAs<TColumnEngineForLogs>()
                     .GetVersionedIndex()

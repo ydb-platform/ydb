@@ -151,6 +151,7 @@ STATEFN(TNodeWarden::StateOnline) {
         // proxy requests for the NodeWhiteboard to prevent races
         hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
 
+        hFunc(TEvBlobStorage::TEvControllerConfigRequest, Handle);
         hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
 
         cFunc(TEvPrivate::EvReadCache, HandleReadCache);
@@ -181,7 +182,7 @@ STATEFN(TNodeWarden::StateOnline) {
 
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
-        hFunc(TEvNodeWardenManageSyncers, HandleManageSyncers);
+        hFunc(TEvNodeWardenNotifySyncerFinished, Handle);
 
         default:
             EnqueuePendingMessage(ev);
@@ -769,7 +770,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
             }
         }
 
-        return [this, saveCtx, success]() { 
+        return [this, saveCtx, success]() {
             if (success) {
                 if (!YamlConfig) {
                     YamlConfig.emplace();
@@ -787,7 +788,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
                 }
                 ConfigSaveTimer.Reset();
             } else {
-                TActivationContext::Schedule(TDuration::MilliSeconds(ConfigSaveTimer.NextBackoffMs()), new IEventHandle(
+                TActivationContext::Schedule(ConfigSaveTimer.Next(), new IEventHandle(
                     SelfId(), {}, new TEvPrivate::TEvRetrySaveConfig(std::move(saveCtx->MainYaml), saveCtx->MainYamlVersion,
                     std::move(saveCtx->StorageYaml), saveCtx->StorageYamlVersion), 0, ExpectedSaveConfigCookie));
             }
@@ -801,6 +802,8 @@ void TNodeWarden::Handle(TEvRegisterPDiskLoadActor::TPtr ev) {
 
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr ev) {
     auto& record = ev->Get()->Record;
+
+    STLOG(PRI_DEBUG, BS_NODE, NW52, "TEvControllerNodeServiceSetUpdate", (Record, record));
 
     if (record.HasAvailDomain() && record.GetAvailDomain() != AvailDomainId) {
         // AvailDomain may arrive unset
@@ -901,6 +904,10 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
             yaml.HasStorageConfigVersion() ? std::make_optional(yaml.GetStorageConfigVersion()) : std::nullopt);
 
         ExpectedSaveConfigCookie++;
+    }
+
+    if (record.GetUpdateSyncers()) {
+        ApplyWorkingSyncers(record);
     }
 }
 
@@ -1029,9 +1036,30 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvNotifyWardenPDiskRestarted::TPtr ev)
     OnPDiskRestartFinished(ev->Get()->PDiskId, ev->Get()->Status);
 }
 
+void TNodeWarden::Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr ev) {
+    const ui64 cookie = NextConfigCookie++;
+    UnfinishedRequests[cookie].CopyFrom(ev->Get()->Record);
+    ConfigInFlight.emplace(cookie, [this, cookie = cookie, origSender = ev->Sender, origCookie = ev->Cookie](
+            TEvBlobStorage::TEvControllerConfigResponse *ev) {
+        if (ev) {
+            Send(origSender, ev, 0, origCookie);
+            UnfinishedRequests.erase(cookie);
+        }
+    });
+    SendToController(std::unique_ptr<IEventBase>(ev->ReleaseBase().Release()), cookie);
+}
+
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
     if (auto nh = ConfigInFlight.extract(ev->Cookie)) {
         nh.mapped()(ev->Get());
+    }
+}
+
+void TNodeWarden::SendUnfinishedRequests() {
+    for (const auto& [cookie, record] : UnfinishedRequests) {
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        ev->Record.CopyFrom(record);
+        SendToController(std::move(ev), cookie);
     }
 }
 
@@ -1107,6 +1135,7 @@ void TNodeWarden::Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&) {
     STLOG(PRI_TRACE, BS_NODE, NW39, "Handle(TEvPrivate::TEvSendDiskMetrics)");
     SendDiskMetrics(true);
     ReportLatencies();
+    NotifySyncersProgress();
     Schedule(TDuration::Seconds(10), new TEvPrivate::TEvSendDiskMetrics());
 }
 
@@ -1353,7 +1382,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     } else {
         config->ClearSelfManagementConfig();
     }
-    
+
     const auto& bsFrom = appConfig.GetBlobStorageConfig();
     auto *bsTo = config->MutableBlobStorageConfig();
 
@@ -1575,12 +1604,8 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 
             auto updateConfig = [&](bool needMerge, auto *to, const auto& from, const char *entity) {
                 if (needMerge) {
-                    auto toInfo = BuildStateStorageInfo(*to);
-                    auto fromInfo = BuildStateStorageInfo(from);
-                    if (toInfo->RingGroups != fromInfo->RingGroups) {
-                        *errorReason = TStringBuilder() << entity << " NToSelect/rings differs"
-                            << " from# " << SingleLineProto(from)
-                            << " to# " << SingleLineProto(*to);
+                    *errorReason = VerifyConfigCompatibility(entity, from, *to);
+                    if (!errorReason->empty()) {
                         return false;
                     }
                 }
@@ -1603,19 +1628,121 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                     break;
                 }
             }
+        }
 
 #define UPDATE_EXPLICIT_CONFIG(NAME) \
-            if (domains.HasExplicit##NAME##Config()) { \
-                config->Mutable##NAME##Config()->CopyFrom(domains.GetExplicit##NAME##Config()); \
-            }
-
-            UPDATE_EXPLICIT_CONFIG(StateStorage)
-            UPDATE_EXPLICIT_CONFIG(StateStorageBoard)
-            UPDATE_EXPLICIT_CONFIG(SchemeBoard)
+        if (domains.HasExplicit##NAME##Config()) { \
+            if (config->Has##NAME##Config()) { \
+                *errorReason = VerifyConfigCompatibility(#NAME, config->Get##NAME##Config(), domains.GetExplicit##NAME##Config()); \
+                if (!errorReason->empty()) { \
+                    return false; \
+                } \
+            } \
+            config->Mutable##NAME##Config()->CopyFrom(domains.GetExplicit##NAME##Config()); \
         }
+
+        UPDATE_EXPLICIT_CONFIG(StateStorage)
+        UPDATE_EXPLICIT_CONFIG(StateStorageBoard)
+        UPDATE_EXPLICIT_CONFIG(SchemeBoard)
     }
 
     return true;
+}
+
+TString NKikimr::VerifyConfigCompatibility(const char* name, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSSConfig, const NKikimrConfig::TDomainsConfig::TStateStorage& newSSConfig) {
+    STLOG(PRI_DEBUG, BS_NODE, NW102, "VerifyConfigCompatibility", (oldSSConfig, oldSSConfig), (newSSConfig, newSSConfig));
+
+    if ((oldSSConfig.HasRing() || oldSSConfig.RingGroupsSize() == 1) && (newSSConfig.HasRing() || newSSConfig.RingGroupsSize() == 1)) {
+        auto toInfo = BuildStateStorageInfo(newSSConfig);
+        auto fromInfo = BuildStateStorageInfo(oldSSConfig);
+        if (toInfo->RingGroups != fromInfo->RingGroups) {
+            return TStringBuilder() << name << " NToSelect/rings differs"
+                << " from# " << SingleLineProto(oldSSConfig)
+                << " to# " << SingleLineProto(newSSConfig);
+        }
+        return "";
+    }
+    if (newSSConfig.RingGroupsSize() < 1) {
+        return TStringBuilder() << "New " << name << " configuration RingGroups is not filled in";
+    }
+    if (newSSConfig.GetRingGroups(0).GetWriteOnly()) {
+        return TStringBuilder() << "New " << name << " configuration first RingGroup is writeOnly";
+    }
+    for (auto& rg : newSSConfig.GetRingGroups()) {
+        if (rg.RingSize() && rg.NodeSize()) {
+            return TStringBuilder() << name << " Ring and Node are defined, use the one of them";
+        }
+        const size_t numItems = Max(rg.RingSize(), rg.NodeSize());
+        if (!rg.HasNToSelect() || numItems < 1 || rg.GetNToSelect() < 1 || rg.GetNToSelect() > numItems) {
+            return TStringBuilder() << name << " invalid ring group selection";
+        }
+        for (auto &ring : rg.GetRing()) {
+            if (ring.RingSize() > 0) {
+                return TStringBuilder() << name << " too deep nested ring declaration";
+            }
+            if (ring.HasRingGroupActorIdOffset()) {
+                return TStringBuilder() << name << " RingGroupActorIdOffset should be used in ring group level, not ring";
+            }
+            if (ring.NodeSize() < 1) {
+                return TStringBuilder() << name << " empty ring";
+            }
+        }
+    }
+    try {
+        TIntrusivePtr<TStateStorageInfo> newSSInfo;
+        TIntrusivePtr<TStateStorageInfo> oldSSInfo;
+        newSSInfo = BuildStateStorageInfo(newSSConfig);
+        oldSSInfo = BuildStateStorageInfo(oldSSConfig);
+        THashSet<TActorId> replicas;
+        for (auto& ringGroup : newSSInfo->RingGroups) {
+            for (auto& ring : ringGroup.Rings) {
+                for (auto& node : ring.Replicas) {
+                    if (!replicas.insert(node).second) {
+                        return TStringBuilder() << name << " replicas ActorId intersection, specify"
+                            " RingGroupActorIdOffset if you run multiple replicas on one node";
+                    }
+                }
+            }
+        }
+
+        Y_ABORT_UNLESS(newSSInfo->RingGroups.size() > 0 && oldSSInfo->RingGroups.size() > 0);
+
+        for (auto& newGroup : newSSInfo->RingGroups) {
+            if (newGroup.WriteOnly) {
+                continue;
+            }
+            bool found = false;
+            for (auto& rg : oldSSInfo->RingGroups) {
+                if (newGroup.SameConfiguration(rg)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return TStringBuilder() << "New introduced ring group should be WriteOnly old: " << oldSSInfo->ToString()
+                    << " new: " << newSSInfo->ToString();
+            }
+        }
+        for (auto& oldGroup : oldSSInfo->RingGroups) {
+            if (oldGroup.WriteOnly) {
+                continue;
+            }
+            bool found = false;
+            for (auto& rg : newSSInfo->RingGroups) {
+                if (oldGroup.SameConfiguration(rg)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return TStringBuilder() << "Can not delete not WriteOnly ring group. Make it WriteOnly before deletion old: "
+                    << oldSSInfo->ToString() << " new: " << newSSInfo->ToString();
+            }
+        }
+    } catch (const std::exception& e) {
+        return TStringBuilder() << "Can not build " << name << " info from config. " << e.what();
+    }
+    return "";
 }
 
 bool NKikimr::ObtainStaticKey(TEncryptionKey *key) {

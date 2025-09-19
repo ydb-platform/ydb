@@ -179,6 +179,14 @@ void TTypedLocalHelper::FillPKOnly(const double pkKff /*= 0*/, const ui32 numRow
     builders.emplace_back(
         NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable(
             "pk_int", numRows * pkKff));
+    if (TypeName) {
+        builders.emplace_back(
+            NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TStringPoolFiller>::BuildNotNullable(
+                "field", NArrow::NConstruction::TStringPoolFiller(1, 1, "abcde", 1)));
+    }
+    builders.emplace_back(
+        NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::TimestampType>>::BuildNotNullable(
+            "ts", numRows * pkKff));
     NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
     std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
     TBase::SendDataViaActorSystem(TablePath, batch);

@@ -1461,6 +1461,47 @@ private:
     const NMiniKQL::TType* ItemType_ = nullptr;
 };
 
+//////////////////////////////////////////////////////////////////////////////
+// TLinearTypeBuilder
+//////////////////////////////////////////////////////////////////////////////
+class TLinearTypeBuilder: public NUdf::ILinearTypeBuilder
+{
+public:
+    TLinearTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent, bool isDynamic)
+        : NUdf::ILinearTypeBuilder(isDynamic)
+        , Parent_(parent)
+    {
+    }
+
+    NUdf::ILinearTypeBuilder& Item(NUdf::TDataTypeId typeId) override {
+        ItemType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
+        return *this;
+    }
+
+    NUdf::ILinearTypeBuilder& Item(const NUdf::TType* type) override {
+        ItemType_ = static_cast<const NMiniKQL::TType*>(type);
+        return *this;
+    }
+
+    NUdf::ILinearTypeBuilder& Item(
+            const NUdf::ITypeBuilder& typeBuilder) override
+    {
+        ItemType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
+        return *this;
+    }
+
+    NUdf::TType* Build() const override {
+        return NMiniKQL::TLinearType::Create(
+                    const_cast<NMiniKQL::TType*>(ItemType_),
+                    IsDynamic_,
+                    Parent_.Env());
+    }
+
+private:
+    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
+    const NMiniKQL::TType* ItemType_ = nullptr;
+};
+
 } // namespace
 
 namespace NMiniKQL {
@@ -1841,6 +1882,10 @@ ui32 TFunctionTypeInfoBuilder::GetCurrentLangVer() const {
     return LangVer_;
 }
 
+NUdf::ILinearTypeBuilder::TPtr TFunctionTypeInfoBuilder::Linear(bool isDynamic) const {
+    return new TLinearTypeBuilder(*this, isDynamic);
+}
+
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl(
         NUdf::TDataTypeId typeId)
 {
@@ -2101,6 +2146,7 @@ NUdf::ETypeKind TTypeInfoHelper::GetTypeKind(const NUdf::TType* type) const {
     case NMiniKQL::TType::EKind::Tagged: return NUdf::ETypeKind::Tagged;
     case NMiniKQL::TType::EKind::Pg: return NUdf::ETypeKind::Pg;
     case NMiniKQL::TType::EKind::Block: return NUdf::ETypeKind::Block;
+    case NMiniKQL::TType::EKind::Linear: return NUdf::ETypeKind::Linear;
     default:
         Y_DEBUG_ABORT_UNLESS(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
         return NUdf::ETypeKind::Unknown;
@@ -2137,6 +2183,7 @@ case NMiniKQL::TType::EKind::TypeKind: { \
         MKQL_HANDLE_UDF_TYPE(Tagged)
         MKQL_HANDLE_UDF_TYPE(Pg)
         MKQL_HANDLE_UDF_TYPE(Block)
+        MKQL_HANDLE_UDF_TYPE(Linear)
     default:
         Y_DEBUG_ABORT_UNLESS(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
     }
@@ -2287,6 +2334,12 @@ void TTypeInfoHelper::DoPg(const NMiniKQL::TPgType* tt, NUdf::ITypeVisitor* v) {
 void TTypeInfoHelper::DoBlock(const NMiniKQL::TBlockType* tt, NUdf::ITypeVisitor* v) {
     if (v->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(2, 26))) {
         v->OnBlock(tt->GetItemType(), tt->GetShape() == TBlockType::EShape::Scalar);
+    }
+}
+
+void TTypeInfoHelper::DoLinear(const NMiniKQL::TLinearType* tt, NUdf::ITypeVisitor* v) {
+    if (v->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(2, 44))) {
+        v->OnLinear(tt->GetItemType(), tt->IsDynamic());
     }
 }
 
@@ -2863,6 +2916,10 @@ TType* TTypeBuilder::BuildBlockStructType(const TStructType* structType) const {
         NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar)
     );
     return NewStructType(blockStructItems);
+}
+
+TType* TTypeBuilder::NewLinearType(TType* itemType, bool isDynamic) const {
+    return TLinearType::Create(itemType, isDynamic, Env);
 }
 
 void RebuildTypeIndex() {

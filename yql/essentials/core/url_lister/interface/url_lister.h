@@ -8,6 +8,7 @@
 namespace NYql {
 
 enum class EUrlListEntryType {
+    // DO NOT CHANGE ORDER AND/OR EXISTING VALUES
     FILE = 1,
     DIRECTORY = 2,
 };

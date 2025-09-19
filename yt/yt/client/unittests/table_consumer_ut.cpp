@@ -127,5 +127,5 @@ TEST(TYsonParserTest, ContextInExceptions_TableConsumer)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT::NVersionedTableClient
+} // namespace NYT::NTableClient
 

@@ -1,0 +1,61 @@
+--- contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/datetime/tz.cpp	(index)
++++ contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/datetime/tz.cpp	(working tree)
+@@ -1489,7 +1489,7 @@ void
+ detail::Rule::split(std::vector<Rule>& rules, std::size_t i, std::size_t k, std::size_t& e)
+ {
+     using namespace arrow20_vendored::date;
+-    using difference_type = std::vector<Rule>::iterator::difference_type;
++    using difference_type = std::iterator_traits<std::vector<Rule>::iterator>::difference_type;
+     // rules[i].starting_year_ <= rules[k].starting_year_ &&
+     //     rules[i].ending_year_ >= rules[k].starting_year_ &&
+     //     (rules[i].starting_year_ != rules[k].starting_year_ ||
+@@ -1557,7 +1557,7 @@ detail::Rule::split(std::vector<Rule>& rules, std::size_t i, std::size_t k, std:
+ void
+ detail::Rule::split_overlaps(std::vector<Rule>& rules, std::size_t i, std::size_t& e)
+ {
+-    using difference_type = std::vector<Rule>::iterator::difference_type;
++    using difference_type = std::iterator_traits<std::vector<Rule>::iterator>::difference_type;
+     auto j = i;
+     for (; i + 1 < e; ++i)
+     {
+@@ -1581,7 +1581,7 @@ detail::Rule::split_overlaps(std::vector<Rule>& rules, std::size_t i, std::size_
+ void
+ detail::Rule::split_overlaps(std::vector<Rule>& rules)
+ {
+-    using difference_type = std::vector<Rule>::iterator::difference_type;
++    using difference_type = std::iterator_traits<std::vector<Rule>::iterator>::difference_type;
+     for (std::size_t i = 0; i < rules.size();)
+     {
+         auto e = static_cast<std::size_t>(std::upper_bound(
+--- contrib/libs/apache/arrow_next/patches/iterator.patch	(index)
++++ contrib/libs/apache/arrow_next/patches/iterator.patch	(working tree)
+@@ -1,15 +1,15 @@
+---- a/cpp/src/arrow/vendored/datetime/tz.cpp
+-+++ b/cpp/src/arrow/vendored/datetime/tz.cpp
+-@@ -1309,7 +1309,7 @@ void
++--- contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/datetime/tz.cpp	(index)
+++++ contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/datetime/tz.cpp	(working tree)
++@@ -1489,7 +1489,7 @@ void
+  detail::Rule::split(std::vector<Rule>& rules, std::size_t i, std::size_t k, std::size_t& e)
+  {
+-     using namespace date;
++     using namespace arrow20_vendored::date;
+ -    using difference_type = std::vector<Rule>::iterator::difference_type;
+ +    using difference_type = std::iterator_traits<std::vector<Rule>::iterator>::difference_type;
+      // rules[i].starting_year_ <= rules[k].starting_year_ &&
+      //     rules[i].ending_year_ >= rules[k].starting_year_ &&
+      //     (rules[i].starting_year_ != rules[k].starting_year_ ||
+-@@ -1377,7 +1377,7 @@ detail::Rule::split(std::vector<Rule>& rules, std::size_t i, std::size_t k, std:
++@@ -1557,7 +1557,7 @@ detail::Rule::split(std::vector<Rule>& rules, std::size_t i, std::size_t k, std:
+  void
+  detail::Rule::split_overlaps(std::vector<Rule>& rules, std::size_t i, std::size_t& e)
+  {
+@@ -18,7 +18,7 @@
+      auto j = i;
+      for (; i + 1 < e; ++i)
+      {
+-@@ -1401,7 +1401,7 @@ detail::Rule::split_overlaps(std::vector<Rule>& rules, std::size_t i, std::size_
++@@ -1581,7 +1581,7 @@ detail::Rule::split_overlaps(std::vector<Rule>& rules, std::size_t i, std::size_
+  void
+  detail::Rule::split_overlaps(std::vector<Rule>& rules)
+  {

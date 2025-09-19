@@ -90,31 +90,49 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     auto cluster = Ctx_.Scoped->CurrCluster;
     std::pair<bool, TDeferredAtom> nameOrAt;
     bool isBinding = false;
+
+    const bool isClusterSpecified = (
+        (tableRefCore.HasAlt_simple_table_ref_core1() &&
+         tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) ||
+        (tableRefCore.HasAlt_simple_table_ref_core2() &&
+         tableRefCore.GetAlt_simple_table_ref_core2().HasBlock1())
+    );
+
+    const bool hasAt = (
+        (tableRefCore.HasAlt_simple_table_ref_core1() &&
+         tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2().HasBlock1()) ||
+        (tableRefCore.HasAlt_simple_table_ref_core2() &&
+         tableRefCore.GetAlt_simple_table_ref_core2().HasBlock2())
+    );
+
+    if (isClusterSpecified) {
+        const auto& clusterExpr = tableRefCore.HasAlt_simple_table_ref_core1()
+            ? tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1()
+            : tableRefCore.GetAlt_simple_table_ref_core2().GetBlock1().GetRule_cluster_expr1();
+
+        const bool result = !hasAt
+            ? ClusterExprOrBinding(clusterExpr, service, cluster, isBinding)
+            : ClusterExpr(clusterExpr, false, service, cluster);
+
+        if (!result) {
+            return nullptr;
+        }
+    }
+
+    if (!isBinding && cluster.Empty()) {
+        Ctx_.Error() << "No cluster name given and no default cluster is selected";
+        return nullptr;
+    }
+
     switch (tableRefCore.Alt_case()) {
         case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore1: {
-            if (tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) {
-                const auto& clusterExpr = tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1();
-                bool hasAt = tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2().HasBlock1();
-                bool result = !hasAt ?
-                    ClusterExprOrBinding(clusterExpr, service, cluster, isBinding) : ClusterExpr(clusterExpr, false, service, cluster);
-                if (!result) {
-                    return nullptr;
-                }
-            }
-
-            if (!isBinding && cluster.Empty()) {
-                Ctx_.Error() << "No cluster name given and no default cluster is selected";
-                return nullptr;
-            }
-
             auto id = Id(tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2(), *this);
             nameOrAt = std::make_pair(id.first, TDeferredAtom(Ctx_.Pos(), id.second));
             break;
         }
         case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore2: {
-            auto at = tableRefCore.GetAlt_simple_table_ref_core2().HasBlock1();
             TString name;
-            if (!NamedNodeImpl(tableRefCore.GetAlt_simple_table_ref_core2().GetRule_bind_parameter2(), name, *this)) {
+            if (!NamedNodeImpl(tableRefCore.GetAlt_simple_table_ref_core2().GetRule_bind_parameter3(), name, *this)) {
                 return nullptr;
             }
             auto named = GetNamedNode(name);
@@ -123,14 +141,10 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             }
 
             named->SetRefPos(Ctx_.Pos());
-            if (cluster.Empty()) {
-                Ctx_.Error() << "No cluster name given and no default cluster is selected";
-                return nullptr;
-            }
 
             TDeferredAtom table;
             MakeTableFromExpression(Ctx_.Pos(), Ctx_, named, table);
-            nameOrAt = std::make_pair(at, table);
+            nameOrAt = std::make_pair(hasAt, table);
             break;
         }
         case TRule_simple_table_ref_core::AltCase::ALT_NOT_SET:

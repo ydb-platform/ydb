@@ -124,7 +124,7 @@ struct TSimd8 {
     }
 
     Y_FORCE_INLINE void StoreMasked(void* dst, const TSimd8<T>& mask) const {
-        _mm_maskmoveu_si128(this->Value, mask.Value, dst);
+        _mm_maskmoveu_si128(this->Value, mask.Value, (char*)dst);
     }
 
     template<bool CanBeNegative = true>

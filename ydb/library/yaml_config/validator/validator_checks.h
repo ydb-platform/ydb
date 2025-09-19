@@ -70,14 +70,6 @@ TNodeWrapperCommonOps<TThis>::TNodeWrapperCommonOps(const TNodeWrapperCommonOps<
     , PathFromCheckNode_(other.PathFromCheckNode_) {}
 
 template <typename TThis>
-TNodeWrapperCommonOps<TThis>& TNodeWrapperCommonOps<TThis>::operator=(const TNodeWrapperCommonOps<TThis>& other) {
-    Context_ = other.Context_;
-    Node_ = other.Node_;
-    PathFromCheckNode_ = other.PathFromCheckNode_;
-    return *this;
-}
-
-template <typename TThis>
 void TNodeWrapperCommonOps<TThis>::ThrowIfNullNode() const {
     if (!Node_) {
         throw TCheckException() <<
@@ -427,5 +419,17 @@ public:
 private:
     TEnumValidator* Validator_;
 };
+
+namespace NDetail {
+
+template <typename TThis>
+TNodeWrapperCommonOps<TThis>& TNodeWrapperCommonOps<TThis>::operator=(const TNodeWrapperCommonOps<TThis>& other) {
+    Context_ = other.Context_;
+    Node_ = other.Node_;
+    PathFromCheckNode_ = other.PathFromCheckNode_;
+    return *this;
+}
+
+} // namespace NDetail
 
 } // namespace NKikimr::NYamlConfig::NValidator

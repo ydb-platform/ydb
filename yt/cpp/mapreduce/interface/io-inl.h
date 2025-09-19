@@ -625,9 +625,10 @@ inline TTableReaderPtr<T> IIOClient::CreateTableReader(
         return new TTableReader<T>(CreateProtoReader(path, options, prototype.Get()));
     } else if constexpr (TIsSkiffRow<T>::value) {
         const auto& hints = options.FormatHints_ ? options.FormatHints_->SkiffRowHints_ : Nothing();
-        auto schema = GetSkiffSchema<T>(hints);
+        auto requestedSchema = GetSkiffSchema<T>(hints);
+        auto parserSchema = GetParserSkiffSchema<T>(hints);
         auto skipper = CreateSkiffSkipper<T>(hints);
-        return new TTableReader<T>(CreateSkiffRowReader(path, options, skipper, schema), hints);
+        return new TTableReader<T>(CreateSkiffRowReader(path, options, skipper, requestedSchema, parserSchema), hints);
     } else {
         static_assert(TDependentFalse<T>, "Unsupported type for table reader");
     }
@@ -649,9 +650,10 @@ inline TTableReaderPtr<T> IIOClient::CreateTablePartitionReader(
         return new TTableReader<T>(CreateProtoReader(path, options, &prototype));
     } else if constexpr (TIsSkiffRow<T>::value) {
         const auto& hints = options.FormatHints_ ? options.FormatHints_->SkiffRowHints_ : Nothing();
-        auto schema = GetSkiffSchema<T>(hints);
+        auto requestedSchema = GetSkiffSchema<T>(hints);
+        auto parserSchema = GetParserSkiffSchema<T>(hints);
         auto skipper = CreateSkiffSkipper<T>(hints);
-        return new TTableReader<T>(CreateSkiffRowReader(path, options, skipper, schema), hints);
+        return new TTableReader<T>(CreateSkiffRowReader(path, options, skipper, requestedSchema, parserSchema), hints);
     } else {
         static_assert(TDependentFalse<T>, "Unsupported type for table reader");
     }

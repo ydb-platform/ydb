@@ -68,6 +68,7 @@ public:
         const TMaybe<size_t> BufferPageAllocSize;
         const bool VerboseMemoryLimitException;
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
+        const TActorId& CheckpointCoordinator;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -103,6 +104,8 @@ private:
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 
     void LogMemoryStatistics(const TLogFunc& logFunc);
+    void PrepareCheckpoints();
+    void SendReadyStateToCheckpointCoordinator();
 
 private:
     const ui64 TxId;
@@ -145,7 +148,8 @@ private:
     const TMaybe<size_t> BufferPageAllocSize;
     const bool VerboseMemoryLimitException;
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
-
+    TActorId CheckpointCoordinatorId;
+    bool CheckpointsReadyStateSent = false;
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error
 };

@@ -3,6 +3,7 @@
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/util/backoff.h>
 
 namespace NKikimr::NReplication::NTransfer {
 
@@ -59,7 +60,7 @@ public:
             tableData[tablePath] = d;
         }
 
-        TActivationContext::AsActorContext().RegisterWithSameMailbox(
+        UploaderActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
             new TTableUploader(SelfId, GetScheme(), std::move(tableData))
         );
 
@@ -76,9 +77,14 @@ std::unique_ptr<ITableKindState> CreateRowTableState(const TActorId& selfId, TAu
     return std::make_unique<TRowTableState>(selfId, result);
 }
 
+namespace {
+
+const TBackoff DefaultBackoff = TBackoff(TDuration::Seconds(1), TDuration::Seconds(15));
+
+}
 template<>
 IActor* TTableUploader<TData>::CreateUploaderInternal(const TString& tablePath, const std::shared_ptr<TData>& data, ui64 cookie) {
-    return NTxProxy::CreateUploadRowsInternal(SelfId(), tablePath, Scheme->Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie);
+    return NTxProxy::CreateUploadRowsInternal(SelfId(), tablePath, Scheme->Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie, DefaultBackoff);
 }
 
 }

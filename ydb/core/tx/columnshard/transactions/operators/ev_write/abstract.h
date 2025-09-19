@@ -1,8 +1,11 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/tracing/probes.h>
 
 namespace NKikimr::NColumnShard {
+
+LWTRACE_USING(YDB_CS);
 
 class TBaseEvWriteTransactionOperator: public TTxController::ITransactionOperator {
 private:
@@ -52,9 +55,11 @@ private:
         TLogContextGuard gLogging(
             NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("send_reply_tx_id", GetTxId())("send_reply_lock_id", LockId));
         if (IsFail()) {
+            LWPROBE(EvWriteResult, owner.TabletID(), TxInfo.Source.ToString(), txInfo.GetTxId(), txInfo.Cookie, "transaction operator", false, GetProposeStartInfoVerified().GetStatusMessage());
             evResult = NEvents::TDataEvents::TEvWriteResult::BuildError(owner.TabletID(), txInfo.GetTxId(),
                 NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, GetProposeStartInfoVerified().GetStatusMessage());
         } else {
+            LWPROBE(EvWriteResult, owner.TabletID(), TxInfo.Source.ToString(), txInfo.GetTxId(), txInfo.Cookie, "transaction operator (prepared)", true, "");
             evResult = NEvents::TDataEvents::TEvWriteResult::BuildPrepared(
                 owner.TabletID(), txInfo.GetTxId(), owner.GetProgressTxController().BuildCoordinatorInfo(txInfo));
         }
@@ -94,10 +99,12 @@ public:
         AFL_VERIFY(Version);
         if (IsTxBroken()) {
             owner.GetOperationsManager().AbortTransactionOnComplete(owner, GetTxId());
+            LWPROBE(EvWriteResult, owner.TabletID(), TxInfo.Source.ToString(), GetTxId(), TxInfo.Cookie, "on_complete", false, "lock invalidated");
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
                 owner.TabletID(), GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "lock invalidated");
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
         } else {
+            LWPROBE(EvWriteResult, owner.TabletID(), TxInfo.Source.ToString(), GetTxId(), TxInfo.Cookie, "on_complete", true, "");
             owner.GetOperationsManager().CommitTransactionOnComplete(owner, GetTxId(), *Version);
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(owner.TabletID(), GetTxId());
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);

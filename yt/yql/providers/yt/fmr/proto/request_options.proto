@@ -66,6 +66,8 @@ message TFmrTableId {
 
 message TFmrTableRef {
     TFmrTableId FmrTableId = 1;
+    repeated string Columns = 2;
+    optional string ColumnGroups = 3;
 }
 
 message TTableRange {
@@ -77,11 +79,14 @@ message TTableRange {
 message TFmrTableInputRef {
     string TableId = 1;
     repeated TTableRange TableRanges = 2;
+    repeated string Columns = 3;
+    optional string ColumnGroups = 4;
 }
 
 message TFmrTableOutputRef {
     string TableId = 1;
     string PartId = 2;
+    optional string ColumnGroups = 3;
 }
 
 message TTableStats {

@@ -189,7 +189,7 @@ void TFutureState<void>::WaitUntilSet() const
         auto guard = Guard(SpinLock_);
         InstallAbandonedError();
         if (Set_) {
-            return ;
+            return;
         }
         if (!ReadyEvent_) {
             ReadyEvent_ = std::make_unique<NThreading::TEvent>();
@@ -260,6 +260,20 @@ void TFutureState<void>::OnLastPromiseRefLost()
 }
 
 } // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::atomic<bool> ContextSwitchInFutureHandlerForbidden;
+
+void ForbidContextSwitchInFutureHandler()
+{
+    ContextSwitchInFutureHandlerForbidden.store(true, std::memory_order::release);
+}
+
+bool IsContextSwitchInFutureHandlerForbidden()
+{
+    return ContextSwitchInFutureHandlerForbidden.load(std::memory_order::acquire);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

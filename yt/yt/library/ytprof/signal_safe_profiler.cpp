@@ -272,7 +272,7 @@ void TSignalSafeProfiler::DequeueSamples()
                 break;
             }
 
-            sample.ThreadName = TString{reinterpret_cast<char*>(threadName)};
+            sample.ThreadName = std::string{reinterpret_cast<char*>(threadName)};
             sample.Tid = *tid;
             for (auto& tag : ReadFiberTags(*fiberStorage)) {
                 sample.Tags.push_back(std::move(tag));

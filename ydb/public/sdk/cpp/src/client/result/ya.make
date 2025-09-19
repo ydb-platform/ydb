@@ -6,6 +6,8 @@ SRCS(
     result.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h)
+
 PEERDIR(
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/client/types/fatal_error_handlers

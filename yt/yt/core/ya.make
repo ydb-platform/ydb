@@ -113,6 +113,7 @@ SRCS(
     logging/zstd_compression.cpp
 
     misc/arithmetic_formula.cpp
+    misc/backtrace.cpp
     misc/backoff_strategy.cpp
     misc/bitmap.cpp
     misc/bit_packed_unsigned_vector.cpp
@@ -362,6 +363,7 @@ PEERDIR(
 
     yt/yt_proto/yt/core
 
+    library/cpp/containers/concurrent_hash
     library/cpp/yt/assert
     library/cpp/yt/backtrace
     library/cpp/yt/coding

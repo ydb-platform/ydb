@@ -2974,6 +2974,28 @@ typedef int (*ngtcp2_update_key)(
 /**
  * @functypedef
  *
+ * :type:`ngtcp2_begin_path_validation` is a callback function which
+ * is called when the path validation has started.  |flags| is zero or
+ * more of :macro:`NGTCP2_PATH_VALIDATION_FLAG_*
+ * <NGTCP2_PATH_VALIDATION_FLAG_NONE>`.  |path| is the path that is
+ * being validated.  |fallback_path|, if not NULL, is the path that is
+ * used when this validation fails.
+ *
+ * Currently, the flags may only contain
+ * :macro:`NGTCP2_PATH_VALIDATION_FLAG_PREFERRED_ADDR`.
+ *
+ * The callback function must return 0 if it succeeds.  Returning
+ * :macro:`NGTCP2_ERR_CALLBACK_FAILURE` makes the library call return
+ * immediately.
+ */
+typedef int (*ngtcp2_begin_path_validation)(ngtcp2_conn *conn, uint32_t flags,
+                                            const ngtcp2_path *path,
+                                            const ngtcp2_path *fallback_path,
+                                            void *user_data);
+
+/**
+ * @functypedef
+ *
  * :type:`ngtcp2_path_validation` is a callback function which tells
  * an application the outcome of path validation.  |flags| is zero or
  * more of :macro:`NGTCP2_PATH_VALIDATION_FLAG_*
@@ -3262,7 +3284,8 @@ typedef int (*ngtcp2_tls_early_data_rejected)(ngtcp2_conn *conn,
                                               void *user_data);
 
 #define NGTCP2_CALLBACKS_V1 1
-#define NGTCP2_CALLBACKS_VERSION NGTCP2_CALLBACKS_V1
+#define NGTCP2_CALLBACKS_V2 2
+#define NGTCP2_CALLBACKS_VERSION NGTCP2_CALLBACKS_V2
 
 /**
  * @struct
@@ -3527,6 +3550,13 @@ typedef struct ngtcp2_callbacks {
    * is only used by client.
    */
   ngtcp2_tls_early_data_rejected tls_early_data_rejected;
+  /* The following fields have been added since NGTCP2_CALLBACKS_V2. */
+  /**
+   * :member:`begin_path_validation` is a callback function which is
+   * invoked when a path validation has started.  This field is
+   * available since v1.14.0.
+   */
+  ngtcp2_begin_path_validation begin_path_validation;
 } ngtcp2_callbacks;
 
 /**

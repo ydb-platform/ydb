@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
                 TestDescribeResult(DescribePath(runtime, indexPath, true, true, true),
                                    {NLs::PathExist,
                                     NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
-                using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+                using namespace NTableIndex::NKMeans;
                 if (Prefixed) {
                     TestDescribeResult(DescribePath(runtime, indexPath + "/" + PrefixTable, true, true, true), {NLs::PathExist});
                 }

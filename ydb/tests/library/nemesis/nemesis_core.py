@@ -51,7 +51,11 @@ class NemesisProcess(threading.Thread):
     @property
     def __nemesis_list(self):
         if self.__private_nemesis_list is None:
-            self.__private_nemesis_list = wrap_in_list(self.__nemesis_factory())
+            try:
+                self.__private_nemesis_list = wrap_in_list(self.__nemesis_factory())
+            except Exception as e:
+                self.__logger.error("Failed to create nemesis list: %s", e)
+                self.__private_nemesis_list = []
         return self.__private_nemesis_list
 
     def stop(self):
@@ -77,63 +81,127 @@ class NemesisProcess(threading.Thread):
     def run(self):
         try:
             self.__run()
-        except Exception:
-            self.__logger.exception("Some exception in NemesisProcess")
+        except Exception as e:
+            self.__logger.exception("Some exception in NemesisProcess: %s", e)
             raise
         finally:
-            self.__stop_nemesis()
+            try:
+                self.__stop_nemesis()
+            except Exception as e:
+                self.__logger.error("Error while stopping nemesis in finally: %s", e)
 
     def __run(self):
+        self.__logger.info("Starting nemesis execution loop")
         random.seed()
         self.__pq.clear()
         self.__is_running.set()
         self.__finished_running.clear()
 
+        self.__logger.info("Initial sleep for %d seconds", self.__initial_sleep)
         time.sleep(self.__initial_sleep)
         self.__init_pq()
 
+        execution_count = 0
         while self.__is_running.is_set() and self.__pq:
-            while self.__is_running.is_set() and time.time() < self.__pq.peek_priority():
-                time.sleep(1)
-            if not self.__is_running.is_set():
+            current_time = time.time()
+            try:
+                next_priority = self.__pq.peek_priority()
+                self.__logger.debug("Current time: %f, Next priority: %f, Queue size: %d",
+                                    current_time, next_priority, len(self.__pq))
+
+                while self.__is_running.is_set() and time.time() < self.__pq.peek_priority():
+                    time.sleep(1)
+                if not self.__is_running.is_set():
+                    self.__logger.info("Nemesis process stopped, breaking main loop")
+                    break
+            except IndexError:
+                self.__logger.debug("Queue became empty, breaking main loop")
                 break
 
             nemesis = self.__pq.pop()
+            execution_count += 1
+            self.__logger.info("=== EXECUTING NEMESIS #%d: %s ===", execution_count, str(nemesis))
+            self.__logger.info("Current time: %f, Executing nemesis: %s", time.time(), str(nemesis))
+
             try:
                 nemesis.inject_fault()
-            except Exception:
+                self.__logger.info("=== NEMESIS COMPLETED: %s ===", str(nemesis))
+            except Exception as e:
                 self.__logger.exception(
-                    'Inject fault for nemesis = {nemesis} failed.'.format(
-                        nemesis=nemesis,
+                    'Inject fault for nemesis = {nemesis} failed with error: {error}'.format(
+                        nemesis=nemesis, error=str(e)
                     )
                 )
+                self.__logger.info("=== NEMESIS FAILED: %s ===", str(nemesis))
 
-            priority = time.time() + nemesis.next_schedule()
-            self.__pq.add_task(task=nemesis, priority=priority)
+            try:
+                next_schedule = nemesis.next_schedule()
+                self.__logger.debug("Next schedule for %s: %s", str(nemesis), next_schedule)
+
+                if next_schedule is not None:
+                    priority = time.time() + next_schedule
+                    self.__pq.add_task(task=nemesis, priority=priority)
+                    self.__logger.debug("Re-added nemesis to queue: %s with priority: %f (in %f seconds)",
+                                        str(nemesis), priority, next_schedule)
+                else:
+                    self.__logger.debug("Nemesis disabled, not adding back to queue: %s", nemesis)
+            except Exception as e:
+                self.__logger.error("Failed to reschedule nemesis %s: %s", nemesis, e)
+
+        self.__logger.info("Nemesis execution loop finished after %d executions", execution_count)
 
     def __init_pq(self):
         self.__logger.info("NemesisProcess started")
-        self.__logger.info("self.nemesis_list = " + str(self.__nemesis_list))
+        self.__logger.info("Total nemesis count: %d", len(self.__nemesis_list))
+        self.__logger.info("Nemesis types: %s", [type(nemesis).__name__ for nemesis in self.__nemesis_list])
 
-        # noinspection PyTypeChecker
-        for nemesis in self.__nemesis_list:
+        self.__logger.info("Starting nemesis preparation phase")
+        prepared_count = 0
+        failed_count = 0
+
+        for i, nemesis in enumerate(self.__nemesis_list):
+            self.__logger.info("Preparing nemesis %d/%d: %s", i+1, len(self.__nemesis_list), nemesis)
             prepared = False
-            while not prepared:
+            retry_count = 0
+            while not prepared and retry_count < 3:
                 try:
-                    self.__logger.info("Preparing nemesis = " + str(nemesis))
                     nemesis.prepare_state()
                     prepared = True
-                    self.__logger.info("Preparation succeeded nemesis = " + str(nemesis))
-                except Exception:
-                    self.__logger.exception("Preparation failed for nemesis = " + str(nemesis))
+                    prepared_count += 1
+                    self.__logger.info("Preparation succeeded nemesis = %s", nemesis)
+                except Exception as e:
+                    retry_count += 1
+                    self.__logger.exception("Preparation failed for nemesis = %s (attempt %d/3): %s", nemesis, retry_count, e)
+                    if retry_count >= 3:
+                        failed_count += 1
                     time.sleep(1)
 
-        # noinspection PyTypeChecker
-        for nemesis in self.__nemesis_list:
-            priority = time.time() + nemesis.next_schedule()
-            self.__pq.add_task(nemesis, priority=priority)
+        self.__logger.info("Preparation phase completed: %d succeeded, %d failed", prepared_count, failed_count)
 
-        self.__logger.debug("Initial PriorityQueue = " + str(self.__pq))
+        self.__logger.info("Starting nemesis scheduling phase")
+        scheduled_count = 0
+        skipped_count = 0
+        error_count = 0
+
+        for i, nemesis in enumerate(self.__nemesis_list):
+            self.__logger.info("Scheduling nemesis %d/%d: %s", i+1, len(self.__nemesis_list), nemesis)
+            try:
+                next_schedule = nemesis.next_schedule()
+                if next_schedule is not None:
+                    priority = time.time() + next_schedule
+                    self.__pq.add_task(nemesis, priority=priority)
+                    scheduled_count += 1
+                    self.__logger.debug("Added nemesis to queue: %s with priority: %s", nemesis, priority)
+                else:
+                    skipped_count += 1
+                    self.__logger.debug("Skipped nemesis (disabled): %s", nemesis)
+            except Exception as e:
+                error_count += 1
+                self.__logger.error("Failed to schedule nemesis %s: %s", nemesis, e)
+
+        self.__logger.info("Scheduling phase completed: %d scheduled, %d skipped, %d errors",
+                           scheduled_count, skipped_count, error_count)
+        self.__logger.debug("Initial PriorityQueue size: %d", len(self.__pq))
 
     def __stop_nemesis(self):
         # Stopping Nemesis
@@ -143,8 +211,9 @@ class NemesisProcess(threading.Thread):
             self.__logger.info("Extracting fault for Nemesis = " + str(nemesis))
             try:
                 nemesis.extract_fault()
-            except Exception:
-                logger.exception('Nemesis = {nemesis} extract_fault() failed with exception = '.format(nemesis=nemesis))
+            except Exception as e:
+                self.__logger.exception('Nemesis = {nemesis} extract_fault() failed with exception = {error}'.format(
+                    nemesis=nemesis, error=str(e)))
 
         self.__finished_running.set()
         self.__logger.info("Stopped Nemesis successfully in run()")
@@ -334,10 +403,14 @@ class PriorityQueue(object):
         return task
 
     def peek(self):
+        if not self.__heap:
+            raise IndexError("peek from empty queue")
         _, _, task = self.__heap[0]
         return task
 
     def peek_priority(self):
+        if not self.__heap:
+            raise IndexError("peek_priority from empty queue")
         priority, _, _ = self.__heap[0]
         return priority
 

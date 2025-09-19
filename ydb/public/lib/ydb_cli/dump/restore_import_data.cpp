@@ -158,11 +158,11 @@ class TValueConverter {
         case EPrimitiveType::Timestamp:
             return TValue(Parser.GetTimestamp().GetValue());
         case EPrimitiveType::Date32:
-            return TValue(Parser.GetDate32());
+            return TValue(Parser.GetDate32().time_since_epoch().count());
         case EPrimitiveType::Datetime64:
-            return TValue(Parser.GetDatetime64());
+            return TValue(Parser.GetDatetime64().time_since_epoch().count());
         case EPrimitiveType::Timestamp64:
-            return TValue(Parser.GetTimestamp64());
+            return TValue(Parser.GetTimestamp64().time_since_epoch().count());
         case EPrimitiveType::String:
             return TValue(Parser.GetString());
         case EPrimitiveType::Utf8:
@@ -290,16 +290,16 @@ public:
         return TInstant::ParseIso8601(Value);
     }
 
-    i32 GetDate32() const {
-        return FromString<i32>(Value);
+    std::chrono::sys_time<TWideDays> GetDate32() const {
+        return std::chrono::sys_time<TWideDays>(TWideDays(FromString<int32_t>(Value)));
     }
 
-    i64 GetDatetime64() const {
-        return FromString<i64>(Value);
+    std::chrono::sys_time<TWideSeconds> GetDatetime64() const {
+        return std::chrono::sys_time<TWideSeconds>(TWideSeconds(FromString<int64_t>(Value)));
     }
 
-    i64 GetTimestamp64() const {
-        return FromString<i64>(Value);
+    std::chrono::sys_time<TWideMicroseconds> GetTimestamp64() const {
+        return std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(FromString<int64_t>(Value)));
     }
 
     TString GetString() const {
@@ -829,10 +829,9 @@ class TDataWriter: public NPrivate::IDataWriter {
     }
 
     bool Write(const NPrivate::TBatch& data) {
-        const ui32 maxRetries = 10;
         TDuration retrySleep = TDuration::MilliSeconds(500);
 
-        for (ui32 retryNumber = 0; retryNumber <= maxRetries; ++retryNumber) {
+        for (ui32 retryNumber = 0; retryNumber <= MaxRetries; ++retryNumber) {
             while (!RequestLimiter.IsAvail()) {
                 Sleep(Min(TDuration::MicroSeconds(RequestLimiter.GetWaitTime()), RateLimiterSettings.ReactionTime_));
                 if (IsStopped()) {
@@ -852,8 +851,9 @@ class TDataWriter: public NPrivate::IDataWriter {
                 return true;
             }
 
-            if (retryNumber == maxRetries) {
-                LOG_E("There is no retries left, last result: " << importResult);
+            if (retryNumber == MaxRetries) {
+                LOG_E("There is no retries left while importing data to " << Path.Quote()
+                      << ", last result: " << importResult);
                 SetError(std::move(importResult));
                 return false;
             }
@@ -941,6 +941,7 @@ public:
         , Log(log)
         , RateLimiterSettings(settings.RateLimiterSettings_)
         , RequestLimiter(RateLimiterSettings.GetRps(), RateLimiterSettings.GetRps())
+        , MaxRetries(settings.MaxRetries_)
         , Stopped(0)
     {
         Y_ENSURE(!accumulators.empty());
@@ -997,6 +998,8 @@ private:
 
     using TRpsLimiter = TBucketQuoter<ui64>;
     TRpsLimiter RequestLimiter;
+
+    const ui32 MaxRetries;
 
     THolder<IThreadPool> TasksQueue;
     TAtomic Stopped;

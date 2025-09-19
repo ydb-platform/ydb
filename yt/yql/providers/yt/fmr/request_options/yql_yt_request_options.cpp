@@ -93,7 +93,9 @@ void TFmrTableInputRef::Save(IOutputStream* buffer) const {
     ::SaveMany(
         buffer,
         TableId,
-        TableRanges
+        TableRanges,
+        Columns,
+        SerializedColumnGroups
     );
 }
 
@@ -101,7 +103,9 @@ void TFmrTableInputRef::Load(IInputStream* buffer) {
     ::LoadMany(
         buffer,
         TableId,
-        TableRanges
+        TableRanges,
+        Columns,
+        SerializedColumnGroups
     );
 }
 
@@ -113,11 +117,25 @@ void TTaskTableInputRef::Load(IInputStream* buffer) {
     ::Load(buffer, Inputs);
 }
 
+TFmrTableOutputRef::TFmrTableOutputRef(const TString& tableId, const TMaybe<TString>& partId): TableId(tableId) {
+    if (partId) {
+        PartId = *partId;
+    }
+}
+
+// Helper constructor which initializes all fields except PartId.
+TFmrTableOutputRef::TFmrTableOutputRef(const TFmrTableRef& fmrTableRef)
+    : TableId(fmrTableRef.FmrTableId.Id)
+    , SerializedColumnGroups(fmrTableRef.SerializedColumnGroups)
+{
+}
+
 void TFmrTableOutputRef::Save(IOutputStream* buffer) const {
     ::SaveMany(
         buffer,
         TableId,
-        PartId
+        PartId,
+        SerializedColumnGroups
     );
 }
 
@@ -125,7 +143,8 @@ void TFmrTableOutputRef::Load(IInputStream* buffer) {
     ::LoadMany(
         buffer,
         TableId,
-        PartId
+        PartId,
+        SerializedColumnGroups
     );
 }
 

@@ -4,6 +4,16 @@
             "uri": "file://test.test_Basic_/results.txt"
         }
     ],
+    "test.test[Ipv4Uint32]": [
+        {
+            "uri": "file://test.test_Ipv4Uint32_/results.txt"
+        }
+    ],
+    "test.test[Ipv4Uint32_2025_02]": [
+        {
+            "uri": "file://test.test_Ipv4Uint32_2025_02_/extracted"
+        }
+    ],
     "test.test[Subnets]": [
         {
             "uri": "file://test.test_Subnets_/results.txt"

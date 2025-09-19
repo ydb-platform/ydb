@@ -80,9 +80,8 @@ inline bool TWriterStarvingRWSpinLock::TryAndTryAcquireReader() noexcept
 inline bool TWriterStarvingRWSpinLock::TryAcquireWriter() noexcept
 {
     auto expected = UnlockedValue;
-
     bool acquired =  Value_.compare_exchange_weak(expected, WriterMask, std::memory_order::acquire);
-    NDetail::RecordSpinLockAcquired(acquired);
+    NDetail::MaybeRecordSpinLockAcquired(acquired);
     return acquired;
 }
 

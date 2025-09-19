@@ -73,7 +73,7 @@ void TFmrUserJob::InitializeFmrUserJob() {
     TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery);
 
     for (auto& fmrTable: OutputTables_) {
-        TableDataServiceWriters_.emplace_back(MakeIntrusive<TFmrTableDataServiceWriter>(fmrTable.TableId, fmrTable.PartId, TableDataService_)); // TODO - settings
+        TableDataServiceWriters_.emplace_back(MakeIntrusive<TFmrTableDataServiceWriter>(fmrTable.TableId, fmrTable.PartId, TableDataService_, fmrTable.SerializedColumnGroups)); // TODO - settings
     }
 }
 

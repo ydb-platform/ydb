@@ -1,13 +1,14 @@
 #pragma once
 
-#include "shared_cache_tiers.h"
 #include "shared_handle.h"
+#include "shared_cache_s3fifo.h"
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NSharedCache {
 
 using TPageId = NTable::NPage::TPageId;
 using EPage = NTable::NPage::EPage;
+using ECacheMode = NTable::NPage::ECacheMode;
 
 struct TCollection;
 
@@ -25,10 +26,9 @@ struct TPage
     , public TIntrusiveListItem<TPage>
 {
     ui32 State : 4 = PageStateNo;
-    ui32 CacheId : 4 = 0;
-    ui32 CacheFlags1 : 4 = 0;
-    ui32 CacheFlags2 : 4 = 0;
-    ECacheTier CacheTier : 2 = ECacheTier::Regular;
+    ECacheMode CacheMode : 2 = ECacheMode::Regular;
+
+    ES3FIFOPageLocation Location : 4 = ES3FIFOPageLocation::None;
 
     const TPageId PageId;
     const size_t Size;
@@ -54,19 +54,17 @@ struct TPage
         }
     }
 
-    void Initialize(TSharedData data) {
+    void ProvideBody(TSharedData body) {
         Y_DEBUG_ABORT_UNLESS(HasMissingBody());
-        TSharedPageHandle::Initialize(std::move(data));
+        TSharedPageHandle::Initialize(std::move(body));
         State = PageStateLoaded;
     }
 
     void EnsureNoCacheFlags() {
-        Y_ENSURE(CacheId == 0, "Unexpected page " << CacheId << " cache id");
-        Y_ENSURE(CacheFlags1 == 0, "Unexpected page " << CacheFlags1 << " cache flags 1");
-        Y_ENSURE(CacheFlags2 == 0, "Unexpected page " << CacheFlags2 << " cache flags 2");
+        Y_ENSURE(Location == ES3FIFOPageLocation::None, "Unexpected page " << Location << " Location");
     }
 };
 
-static_assert(sizeof(TPage) == 104);
+static_assert(sizeof(TPage) == 112);
 
 }

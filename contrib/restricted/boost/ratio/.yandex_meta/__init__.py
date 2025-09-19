@@ -9,7 +9,7 @@ def post_install(self):
 boost_ratio = NixSourceProject(
     nixattr="boost_ratio",
     arcdir=boost.make_arcdir("ratio"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

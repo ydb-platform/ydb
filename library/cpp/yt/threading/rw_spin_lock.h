@@ -38,6 +38,8 @@ class TReaderWriterSpinLock
     : public TSpinLockBase
 {
 public:
+    static constexpr bool Traced = true;
+
     using TSpinLockBase::TSpinLockBase;
 
     //! Acquires the reader lock.
@@ -132,16 +134,12 @@ private:
     void AcquireWriterSlow() noexcept;
 };
 
-REGISTER_TRACKED_SPIN_LOCK_CLASS(TReaderWriterSpinLock)
-
 ////////////////////////////////////////////////////////////////////////////////
 
 //! A variant of TReaderWriterSpinLock occupying the whole cache line.
 class alignas(CacheLineSize) TPaddedReaderWriterSpinLock
     : public TReaderWriterSpinLock
 { };
-
-REGISTER_TRACKED_SPIN_LOCK_CLASS(TPaddedReaderWriterSpinLock)
 
 ////////////////////////////////////////////////////////////////////////////////
 

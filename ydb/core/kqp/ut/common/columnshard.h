@@ -115,8 +115,8 @@ public:
     TString CreateTieringRule(const TString& tierName, const TString& columnName);
     void SetTiering(const TString& tableName, const TString& tierName, const TString& columnName);
     void ResetTiering(const TString& tableName);
-    void BulkUpsert(
-        const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
+    void BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates,
+        const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS, const TString& expectedIssuePrefix = {});
     void BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch,
         const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
     void ReadData(const TString& query, const TString& expected, const NYdb::EStatus opStatus = NYdb::EStatus::SUCCESS) const;

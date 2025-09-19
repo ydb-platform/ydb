@@ -33,6 +33,7 @@ struct TYqEventSubspace {
         YdbCompute,
         TableOverFq,
         RowDispatcher,
+        NodesManager,
         SubspacesEnd,
     };
 

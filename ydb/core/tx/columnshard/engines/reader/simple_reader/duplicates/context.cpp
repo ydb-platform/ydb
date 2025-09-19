@@ -1,24 +1,18 @@
 #include "context.h"
 
-#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
-
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-    namespace {
-
-        static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> DeduplicationStageFeatures =
-            NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
-
-    }
-
-TInternalFilterConstructor::TInternalFilterConstructor(const TEvRequestFilter::TPtr& request, TColumnDataSplitter&& splitter)
+TFilterAccumulator::TFilterAccumulator(const TEvRequestFilter::TPtr& request)
     : OriginalRequest(request)
-    , Intervals(std::move(splitter))
-    , ProcessGuard(NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildProcessGuard({ DeduplicationStageFeatures }))
+{
+    AFL_VERIFY(!!OriginalRequest);
+}
+
+TFilterBuildingGuard::TFilterBuildingGuard()
+    : ProcessGuard(NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildProcessGuard(GetStageFeatures()))
     , ScopeGuard(ProcessGuard->BuildScopeGuard(1))
     , GroupGuard(ScopeGuard->BuildGroupGuard())
 {
-    AFL_VERIFY(!!OriginalRequest);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

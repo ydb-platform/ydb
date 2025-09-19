@@ -33,6 +33,14 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistSequenceAlter(db, pId);
     }
 
+    for (const auto& pathId : Secrets) {
+        ss->PersistSecret(db, pathId);
+    }
+
+    for (const auto& pathId : AlterSecrets) {
+        ss->PersistSecretAlter(db, pathId);
+    }
+
     for (const auto& pId : ApplyIndexes) {
         ss->PersistTableIndex(db, pId);
     }
@@ -111,6 +119,14 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
 
     for (const auto& op : LongIncrementalRestoreOps) {
         ss->PersistLongIncrementalRestoreOp(db, op);
+    }
+
+    for (const auto& id : IncrementalBackups) {
+        ss->PersistIncrementalBackup(db, id);
+    }
+
+    for (const auto& pId : StreamingQueries) {
+        ss->PersistStreamingQuery(db, pId);
     }
 }
 

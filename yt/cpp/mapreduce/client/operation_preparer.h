@@ -80,6 +80,7 @@ public:
     bool ShouldMountSandbox() const;
     ui64 GetTotalFileSize() const;
     bool ShouldRedirectStdoutToStderr() const;
+    bool ShouldEnableDebugCommandLineArguments() const;
 
 private:
     const IRawClientPtr RawClient_;

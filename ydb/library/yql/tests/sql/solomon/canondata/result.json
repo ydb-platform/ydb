@@ -79,6 +79,17 @@
             "uri": "file://test.test_solomon-InvalidProject-_/extracted"
         }
     ],
+    "test.test[solomon-LabelColumnAliases-default.txt]": [
+        {
+            "uri": "file://test.test_solomon-LabelColumnAliases-default.txt_/results.txt"
+        },
+        {
+            "uri": "file://test.test_solomon-LabelColumnAliases-default.txt_/opt.yql"
+        },
+        {
+            "uri": "file://test.test_solomon-LabelColumnAliases-default.txt_/plan.txt"
+        }
+    ],
     "test.test[solomon-LabelColumns-default.txt]": [
         {
             "uri": "file://test.test_solomon-LabelColumns-default.txt_/results.txt"

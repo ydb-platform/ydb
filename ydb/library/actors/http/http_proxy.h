@@ -328,6 +328,13 @@ struct TPrivateEndpointInfo : THttpEndpointInfo {
     {}
 };
 
+struct TUrlHandler {
+    THashMap<TString, TActorId> Handlers;
+
+    void RegisterHandler(const TString& url, const TActorId& handler);
+    TActorId GetHandler(const TString& url) const;
+};
+
 NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry = NMonitoring::TMetricRegistry::SharedInstance());
 NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner);
 NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event);

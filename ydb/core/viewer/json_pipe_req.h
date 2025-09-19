@@ -324,7 +324,7 @@ protected:
     [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(TPathId pathId, ui64 cookie = 0);
     [[nodiscard]] TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> MakeRequestSchemeShardDescribe(TTabletId schemeShardId, const TString& path, const NKikimrSchemeOp::TDescribeOptions& options = {}, ui64 cookie = 0);
     [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigateWithToken(
-        const TString& path, bool showPrivate, ui32 access, ui64 cookie = 0);
+        const TString& path, ui32 access, ui64 cookie = 0);
 
     TRequestResponse<TEvViewer::TEvViewerResponse> MakeRequestViewer(TNodeId nodeId, TEvViewer::TEvViewerRequest* request, ui32 flags = 0);
     void RequestTxProxyDescribe(const TString& path, const NKikimrSchemeOp::TDescribeOptions& options = {});
@@ -333,6 +333,8 @@ protected:
     TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie = 0);
     std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
+    std::vector<TNodeId> GetDatabaseNodes();
+    bool IsDatabaseRequest();
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
     void BuildParamsFromJson(TStringBuf data);
@@ -390,7 +392,7 @@ protected:
     STATEFN(StateResolveDatabase);
     STATEFN(StateResolveResource);
     void RedirectToDatabase(const TString& database);
-    bool NeedToRedirect();
+    bool NeedToRedirect(bool checkDatabaseAuth = true);
     void HandleTimeout();
     void PassAway() override;
 };

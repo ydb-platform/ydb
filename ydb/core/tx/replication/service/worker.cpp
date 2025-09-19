@@ -88,6 +88,13 @@ TEvWorker::TEvDataEnd::TEvDataEnd(ui64 partitionId, TVector<ui64>&& adjacentPart
 {
 }
 
+TEvWorker::TEvDataEnd::TEvDataEnd(ui64 partitionId, const TVector<ui64>& adjacentPartitionsIds, const TVector<ui64>& childPartitionsIds)
+    : PartitionId(partitionId)
+    , AdjacentPartitionsIds(adjacentPartitionsIds)
+    , ChildPartitionsIds(childPartitionsIds)
+{
+}
+
 TString TEvWorker::TEvDataEnd::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
         << " PartitionId: " << PartitionId
@@ -154,7 +161,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 << ": sender# " << ev->Sender);
 
             Reader.Registered();
-            if (!InFlightData) {
+            if (!InFlightData && !DataEnd) {
                 Send(Reader, new TEvWorker::TEvPoll());
             }
         } else if (ev->Sender == Writer) {
@@ -164,6 +171,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
             Writer.Registered();
             if (InFlightData) {
                 Send(Writer, new TEvWorker::TEvData(InFlightData->PartitionId, InFlightData->Source, InFlightData->Records));
+            } else if (DataEnd) {
+                Send(Writer, new TEvWorker::TEvDataEnd(DataEnd->PartitionId, DataEnd->AdjacentPartitionsIds, DataEnd->ChildPartitionsIds));
             }
         } else {
             LOG_W("Handshake from unknown actor"
@@ -193,6 +202,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
 
         InFlightData.Reset();
+        DataEnd.Reset();
         if (Reader) {
             Send(ev->Forward(Reader));
         }
@@ -238,6 +248,9 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
+        Y_ABORT_UNLESS(!DataEnd);
+        DataEnd = MakeHolder<TEvWorker::TEvDataEnd>(ev->Get()->PartitionId, ev->Get()->AdjacentPartitionsIds, ev->Get()->ChildPartitionsIds);
+
         if (Writer) {
             Send(ev->Forward(Writer));
         }
@@ -246,11 +259,13 @@ class TWorker: public TActorBootstrapped<TWorker> {
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
         if (ev->Sender == Reader) {
             LOG_I("Reader has gone"
-                << ": sender# " << ev->Sender);
+                << ": sender# " << ev->Sender
+                << ": " << ev->Get()->ToString());
             MaybeRecreateActor(ev, Reader);
         } else if (ev->Sender == Writer) {
             LOG_I("Writer has gone"
-                << ": sender# " << ev->Sender);
+                << ": sender# " << ev->Sender
+                << ": " << ev->Get()->ToString());
             MaybeRecreateActor(ev, Writer);
         } else {
             LOG_W("Unknown actor has gone"
@@ -368,6 +383,7 @@ private:
     TActorInfo Reader;
     TActorInfo Writer;
     THolder<TEvWorker::TEvData> InFlightData;
+    THolder<TEvWorker::TEvDataEnd> DataEnd;
     TDuration Lag;
 };
 

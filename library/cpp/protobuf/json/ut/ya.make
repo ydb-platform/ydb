@@ -3,6 +3,7 @@ UNITTEST_FOR(library/cpp/protobuf/json)
 SRCS(
     filter_ut.cpp
     json2proto_ut.cpp
+    json2proto_ordered_ut.cpp
     proto2json_ut.cpp
     inline_ut.proto
     inline_ut.cpp
@@ -19,6 +20,7 @@ PEERDIR(
     library/cpp/protobuf/interop
     library/cpp/protobuf/json
     library/cpp/protobuf/json/proto
+    library/cpp/protobuf/json/ordered_maps
 )
 
 END()

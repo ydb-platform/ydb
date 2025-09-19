@@ -465,6 +465,41 @@ public:
     }
 };
 
+template <bool HasMode>
+class TSideEffects : public TCallNode {
+public:
+    TSideEffects(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "WithSideEffectsMode", 2, 2, args)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        const size_t expectedArgs = HasMode ? 2 : 1;
+        if (Args_.size() != expectedArgs) {
+            ctx.Error(Pos_) << OpName_ << " requires exactly " << expectedArgs << " arguments";
+            return false;
+        }
+
+        for (const auto& arg : Args_) {
+            if (!arg->Init(ctx, src)) {
+                return false;
+            }
+        }
+
+        if (HasMode) {
+            Args_[1] = MakeAtomFromExpression(Pos_, ctx, Args_[1]).Build();
+        } else {
+            Args_.push_back(Q("General"));
+        }
+
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TSideEffects<HasMode>(Pos_, CloneContainer(Args_));
+    }
+};
+
 class TTableName : public TCallNode {
 public:
     TTableName(TPosition pos, const TVector<TNodePtr>& args, const TString& service)
@@ -487,14 +522,20 @@ public:
 
             // TODO: TablePath() and TableRecordIndex() have more strict limitations
             if (src->GetJoin()) {
-                ctx.Warning(Pos_,
-                    TIssuesIds::YQL_EMPTY_TABLENAME_RESULT) << "TableName() may produce empty result when used in ambiguous context (with JOIN)";
+                if (!ctx.Warning(Pos_, TIssuesIds::YQL_EMPTY_TABLENAME_RESULT, [](auto& out) {
+                    out << "TableName() may produce empty result when used in ambiguous context (with JOIN)";
+                })) {
+                    return false;
+                }
             }
 
             if (src->HasAggregations()) {
-                ctx.Warning(Pos_,
-                    TIssuesIds::YQL_EMPTY_TABLENAME_RESULT) << "TableName() will produce empty result when used with aggregation.\n"
-                                                               "Please consult documentation for possible workaround";
+                if (!ctx.Warning(Pos_, TIssuesIds::YQL_EMPTY_TABLENAME_RESULT, [](auto& out) {
+                    out << "TableName() will produce empty result when used with aggregation.\n"
+                           "Please consult documentation for possible workaround";
+                })) {
+                    return false;
+                }
             }
 
             Args_.push_back(Y("TablePath", Y("DependsOn", "row")));
@@ -1615,10 +1656,13 @@ private:
             // TODO: 'IN ((select ...))' is parsed exactly like 'IN (select ...)' instead of a single element tuple
             if (singleElement->GetSource() || singleElement->IsSelect()) {
                 TStringBuf parenKind = singleElement->GetSource() ? "" : "external ";
-                ctx.Warning(pos,
-                            TIssuesIds::YQL_CONST_SUBREQUEST_IN_LIST) << "Using subrequest in scalar context after IN, "
-                                                                      << "perhaps you should remove "
-                                                                      << parenKind << "parenthesis here";
+                if (!ctx.Warning(pos, TIssuesIds::YQL_CONST_SUBREQUEST_IN_LIST, [&](auto& out) {
+                    out << "Using subrequest in scalar context after IN, "
+                        << "perhaps you should remove "
+                        << parenKind << "parenthesis here";
+                })) {
+                    return false;
+                }
             }
         }
 
@@ -2152,17 +2196,12 @@ private:
     TNodePtr Node_;
 };
 
-THoppingWindow::THoppingWindow(TPosition pos, const TVector<TNodePtr>& args)
+THoppingWindow::THoppingWindow(TPosition pos, TVector<TNodePtr> args)
     : INode(pos)
-    , Args_(args)
+    , Args_(std::move(args))
     , FakeSource_(BuildFakeSource(pos))
     , Valid_(false)
 {}
-
-void THoppingWindow::MarkValid() {
-    YQL_ENSURE(!HasState(ENodeState::Initialized));
-    Valid_ = true;
-}
 
 TNodePtr THoppingWindow::BuildTraits(const TString& label) const {
     YQL_ENSURE(HasState(ENodeState::Initialized));
@@ -2170,12 +2209,22 @@ TNodePtr THoppingWindow::BuildTraits(const TString& label) const {
     return Y(
         "HoppingTraits",
         Y("ListItemType", Y("TypeOf", label)),
-        BuildLambda(Pos_, Y("row"), Y("Just", Y("SystemMetadata", Y("String", Q("write_time")), Y("DependsOn", "row")))),
-        Hop,
-        Interval,
-        Interval,
-        Q("true"),
-        Q("v2"));
+        BuildLambda(Pos_, Y("row"), TimeExtractor_),
+        Hop_,
+        Interval_,
+        Delay_,
+        Q(DataWatermarks_),
+        Q("v2")
+    );
+}
+
+TNodePtr THoppingWindow::GetInterval() const {
+    return Interval_;
+}
+
+void THoppingWindow::MarkValid() {
+    YQL_ENSURE(!HasState(ENodeState::Initialized));
+    Valid_ = true;
 }
 
 bool THoppingWindow::DoInit(TContext& ctx, ISource* src) {
@@ -2184,8 +2233,8 @@ bool THoppingWindow::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    if (!(Args_.size() == 2)) {
-        ctx.Error(Pos_) << "HoppingWindow requires two arguments";
+    if (Args_.size() != 3) {
+        ctx.Error(Pos_) << "HoppingWindow requires three arguments";
         return false;
     }
 
@@ -2194,14 +2243,19 @@ bool THoppingWindow::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    auto hopExpr = Args_[0];
-    auto intervalExpr = Args_[1];
-    if (!(hopExpr->Init(ctx, FakeSource_.Get()) && intervalExpr->Init(ctx, FakeSource_.Get()))) {
+    auto timeExtractor = Args_[0];
+    auto hopExpr = Args_[1];
+    auto intervalExpr = Args_[2];
+
+    if (!timeExtractor->Init(ctx, src) ||
+        !hopExpr->Init(ctx, FakeSource_.Get()) ||
+        !intervalExpr->Init(ctx, FakeSource_.Get())) {
         return false;
     }
 
-    Hop = ProcessIntervalParam(hopExpr);
-    Interval = ProcessIntervalParam(intervalExpr);
+    TimeExtractor_ = timeExtractor;
+    Hop_ = ProcessIntervalParam(hopExpr);
+    Interval_ = ProcessIntervalParam(intervalExpr);
 
     return true;
 }
@@ -2232,7 +2286,7 @@ TNodePtr THoppingWindow::ProcessIntervalParam(const TNodePtr& node) const {
     return new TYqlData(node->GetPos(), "Interval", {node});
 }
 
-TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr customUserType) {
+TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr externalTypes) {
     TVector<TNodePtr> argsTypeItems;
     for (auto& arg : args) {
         argsTypeItems.push_back(new TCallNodeImpl(pos, "TypeOf", TVector<TNodePtr>(1, arg)));
@@ -2241,8 +2295,8 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNode
     TVector<TNodePtr> userTypeItems;
     userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", argsTypeItems));
     userTypeItems.push_back(new TCallNodeImpl(pos, "StructType", {}));
-    if (customUserType) {
-        userTypeItems.push_back(customUserType);
+    if (externalTypes) {
+        userTypeItems.push_back(externalTypes);
     } else {
         userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
@@ -2250,13 +2304,13 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNode
     return new TCallNodeImpl(pos, "TupleType", userTypeItems);
 }
 
-TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType) {
+TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr externalTypes) {
     TVector<TNodePtr> userTypeItems;
     userTypeItems.reserve(3);
     userTypeItems.push_back(positionalArgs->Y("TypeOf", positionalArgs));
     userTypeItems.push_back(positionalArgs->Y("TypeOf", namedArgs));
-    if (customUserType) {
-        userTypeItems.push_back(customUserType);
+    if (externalTypes) {
+        userTypeItems.push_back(externalTypes);
     } else {
         userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
@@ -2265,7 +2319,7 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr na
 }
 
 TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector<TNodePtr>& args,
-        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, TNodePtr typeConfig) {
+        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr externalTypes, TNodePtr typeConfig) {
     if (!ctx.Settings.EnableGenericUdfs) {
         return {};
     }
@@ -2273,9 +2327,9 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
     udfArgs.push_back(new TAstListNodeImpl(pos));
     udfArgs[0]->Add(new TAstAtomNodeImpl(pos, "Void", 0));
     if (namedArgs) {
-        udfArgs.push_back(BuildUdfUserTypeArg(pos, positionalArgs, namedArgs, customUserType));
+        udfArgs.push_back(BuildUdfUserTypeArg(pos, positionalArgs, namedArgs, externalTypes));
     } else {
-        udfArgs.push_back(BuildUdfUserTypeArg(pos, args, customUserType));
+        udfArgs.push_back(BuildUdfUserTypeArg(pos, args, externalTypes));
     }
 
     if (typeConfig) {
@@ -2286,8 +2340,8 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
 }
 
 TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
-    TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig,
-    TNodePtr options)
+    TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr externalTypes, const TDeferredAtom& typeConfig, TNodePtr runConfig,
+    TNodePtr options, const TVector<TNodePtr>& depends)
 {
     const TString fullName = module + "." + name;
     TNodePtr callable;
@@ -2317,26 +2371,32 @@ TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const
     }
 
     // optional arguments
-    if (customUserType) {
-        sqlCallArgs.push_back(customUserType);
-    } else if (!typeConfig.Empty() || runConfig || options) {
+    if (externalTypes) {
+        sqlCallArgs.push_back(externalTypes);
+    } else if (!typeConfig.Empty() || runConfig || options || !depends.empty()) {
         sqlCallArgs.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
 
     if (!typeConfig.Empty()) {
         sqlCallArgs.push_back(typeConfig.Build());
-    } else if (runConfig || options) {
+    } else if (runConfig || options || !depends.empty()) {
         sqlCallArgs.push_back(BuildQuotedAtom(pos, ""));
     }
 
     if (runConfig) {
         sqlCallArgs.push_back(runConfig);
-    } else if (options) {
+    } else if (options || !depends.empty()) {
         sqlCallArgs.push_back(new TCallNodeImpl(pos, "Void", {}));
     }
 
     if (options) {
         sqlCallArgs.push_back(options);
+    } else if (!depends.empty()) {
+        sqlCallArgs.push_back(BuildQuote(pos, BuildList(pos)));
+    }
+
+    for (const auto& d : depends) {
+        sqlCallArgs.push_back(new TCallNodeImpl(pos, "DependsOn", { d }));
     }
 
     return new TCallNodeImpl(pos, "SqlCall", sqlCallArgs);
@@ -2385,12 +2445,12 @@ public:
                 src->AllColumns();
             }
         } else {
-            TNodePtr customUserType = nullptr;
+            TNodePtr externalTypes = nullptr;
             if (Module_ == "Tensorflow" && Name_ == "RunBatch") {
                 if (Args_.size() > 2) {
                     auto passThroughAtom = Q("PassThrough");
                     auto passThroughType = Y("StructMemberType", Y("ListItemType", Y("TypeOf", Args_[1])), passThroughAtom);
-                    customUserType = Y("AddMemberType", Args_[2], passThroughAtom, passThroughType);
+                    externalTypes = Y("AddMemberType", Args_[2], passThroughAtom, passThroughType);
                     Args_.erase(Args_.begin() + 2);
                 }
             }
@@ -2402,13 +2462,13 @@ public:
             if (ForReduce_) {
                 TVector<TNodePtr> udfArgs;
                 udfArgs.push_back(BuildQuotedAtom(Pos_, TString(Module_) + "." + Name_));
-                udfArgs.push_back(customUserType ? customUserType : new TCallNodeImpl(Pos_, "TupleType", {}));
+                udfArgs.push_back(externalTypes ? externalTypes : new TCallNodeImpl(Pos_, "TupleType", {}));
                 if (typeConfig) {
                     udfArgs.push_back(typeConfig);
                 }
                 Node_ = new TCallNodeImpl(Pos_, "SqlReduceUdf", udfArgs);
             } else {
-                auto udfArgs = BuildUdfArgs(ctx, Pos_, Args_, nullptr, nullptr, customUserType, typeConfig);
+                auto udfArgs = BuildUdfArgs(ctx, Pos_, Args_, nullptr, nullptr, externalTypes, typeConfig);
                 Node_ = BuildUdf(ctx, Pos_, Module_, Name_, udfArgs);
             }
         }
@@ -2607,54 +2667,71 @@ private:
     TString Mode_;
 };
 
-template <bool IsStart>
-class THoppingTime final: public TAstListNode {
+template<bool IsStart>
+class THoppingTime final : public TAstListNode {
 public:
-    THoppingTime(TPosition pos, const TVector<TNodePtr>& args = {})
+    THoppingTime(TPosition pos, TVector<TNodePtr> args)
         : TAstListNode(pos)
-    {
-        Y_UNUSED(args);
-    }
+        , Args_(std::move(args))
+    {}
 
 private:
-    TNodePtr DoClone() const override {
-        return new THoppingTime(GetPos());
-    }
-
     bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(ctx);
+        if (!src || src->IsFake()) {
+            ctx.Error(Pos_) << GetOpName() << " requires data source";
+            return false;
+        }
+
+        if (Args_.size() > 0) {
+            ctx.Error(Pos_) << GetOpName() << " requires exactly 0 arguments";
+            return false;
+        }
 
         auto legacySpec = src->GetLegacyHoppingWindowSpec();
         auto spec = src->GetHoppingWindowSpec();
         if (!legacySpec && !spec) {
-            ctx.Error(Pos_) << "No hopping window parameters in aggregation";
+            if (src->HasAggregations()) {
+                ctx.Error(Pos_) << GetOpName() << " can not be used here: HoppingWindow specification is missing in GROUP BY";
+            } else {
+                ctx.Error(Pos_) << GetOpName() << " can not be used without aggregation by HoppingWindow";
+            }
             return false;
         }
-
-        Nodes_.clear();
 
         const auto fieldName = legacySpec
             ? "_yql_time"
             : spec->GetLabel();
 
-        const auto interval = legacySpec
+        if constexpr (IsStart) {
+            const auto interval = legacySpec
             ? legacySpec->Interval
-            : dynamic_cast<THoppingWindow*>(spec.Get())->Interval;
+            : dynamic_cast<THoppingWindow*>(spec.Get())->GetInterval();
 
-        if (!IsStart) {
+            Add("Sub",
+                Y("Member", "row", Q(fieldName)),
+                interval
+            );
+        } else {
             Add("Member", "row", Q(fieldName));
-            return true;
         }
 
-        Add("Sub",
-            Y("Member", "row", Q(fieldName)),
-            interval);
         return true;
     }
 
     void DoUpdateState() const override {
         State_.Set(ENodeState::Aggregated, true);
     }
+
+    TNodePtr DoClone() const override {
+        return new THoppingTime<IsStart>(Pos_, CloneContainer(Args_));
+    }
+
+    TString GetOpName() const override {
+        return IsStart ? "HopStart" : "HopEnd";
+    }
+
+private:
+    TVector<TNodePtr> Args_;
 };
 
 class TInvalidBuiltin final: public INode {
@@ -3018,7 +3095,9 @@ struct TBuiltinFuncData {
             {"parsetype", {"ParseType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlParseType>()}},
             {"ensuretype", {"EnsureType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlTypeAssert<true>>()}},
             {"ensureconvertibleto", {"EnsureConvertibleTo", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlTypeAssert<false>>()}},
-            {"ensure", {"Ensure", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Ensure", 2, 3)}},
+            {"ensure", {"Ensure", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EnsureWarn", 2, 3)}},
+            {"withsideeffects", {"WithSideEffects", "Normal", BuildSimpleBuiltinFactoryCallback<TSideEffects<false>>()}},
+            {"withsideeffectsmode", {"WithSideEffectsMode", "Normal", BuildSimpleBuiltinFactoryCallback<TSideEffects<true>>()}},
             {"evaluateexpr", {"EvaluateExpr", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateExpr", 1, 1)}},
             {"evaluateatom", {"EvaluateAtom", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateAtom", 1, 1)}},
             {"evaluatetype", {"EvaluateType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateType", 1, 1)}},
@@ -3055,6 +3134,9 @@ struct TBuiltinFuncData {
             {"taggedtype", {"TaggedType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlTaggedType>()}},
             {"varianttype", {"VariantType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantType", 1, 1)}},
             {"callabletype", {"CallableType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlCallableType>()}},
+            {"lineartype", {"LinearType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("LinearType", 1, 1)}},
+            {"dynamiclineartype", {"LinearType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DynamicLinearType", 1, 1)}},
+            {"linearitemtype", {"LinearItemType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("LinearItemType", 1, 1)}},
             {"optionalitemtype", {"OptionalItemType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("OptionalItemType", 1, 1)}},
             {"listitemtype", {"ListItemType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListItemType", 1, 1)}},
             {"streamitemtype", {"ListItemType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StreamItemType", 1, 1)}},
@@ -3089,6 +3171,8 @@ struct TBuiltinFuncData {
             {"datatypecomponents", {"DataTypeComponents", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DataTypeComponents", 1, 1)}},
             {"datatypehandle", {"DataTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DataTypeHandle", 1, 1)}},
             {"optionaltypehandle", {"OptionalTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("OptionalTypeHandle", 1, 1)}},
+            {"lineartypehandle", {"LinearTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("LinearTypeHandle", 1, 1)}},
+            {"dynamiclineartypehandle", {"DynamicLinearTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DynamicLinearTypeHandle", 1, 1)}},
             {"listtypehandle", {"ListTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTypeHandle", 1, 1)}},
             {"streamtypehandle", {"StreamTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StreamTypeHandle", 1, 1)}},
             {"tupletypecomponents", {"TupleTypeComponents", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TupleTypeComponents", 1, 1)}},
@@ -3415,7 +3499,12 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     }
 
     if (ns == "datetime2") {
-        ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_DATETIME2) << "DateTime2:: is a temporary alias for DateTime:: which will be removed in the future, use DateTime:: instead";
+        if (!ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_DATETIME2, [](auto& out) {
+            out << "DateTime2:: is a temporary alias for DateTime:: which will be "
+                << "removed in the future, use DateTime:: instead";
+        })) {
+            return nullptr;
+        }
     }
 
     if (ns == "datetime") {
@@ -3442,9 +3531,12 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     if (ns == "yql" || ns == "@yql") {
         if (warnOnYqlNameSpace && GetEnv("YQL_DETERMINISTIC_MODE").empty()) {
-            ctx.Warning(pos, TIssuesIds::YQL_S_EXPRESSIONS_CALL)
-                << "It is not recommended to directly access s-expressions functions via YQL::" << Endl
-                << "This mechanism is mostly intended for temporary workarounds or internal testing purposes";
+            if (!ctx.Warning(pos, TIssuesIds::YQL_S_EXPRESSIONS_CALL, [](auto& out) {
+                out << "It is not recommended to directly access s-expressions functions via YQL::" << Endl
+                    << "This mechanism is mostly intended for temporary workarounds or internal testing purposes";
+            })) {
+                return nullptr;
+            }
         }
 
         if (ns == "yql") {
@@ -3470,7 +3562,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             };
             auto fullName = moduleName + "." + name;
             return new TYqlTypeConfigUdf(pos, fullName, multiArgs, multiArgs.size() + 1);
-        } else if (!(ns.StartsWith("re2") && lowerName == "options")) {
+        } else if (!(ns.StartsWith("re2") && (lowerName == "options" || lowerName == "isvalidregexp"))) {
             auto newArgs = args;
             if (ns.StartsWith("re2")) {
                 // convert run config is tuple of string and optional options
@@ -3855,9 +3947,13 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     TVector<TNodePtr> usedArgs = args;
 
-    TNodePtr customUserType = nullptr;
+    TNodePtr externalTypes = nullptr;
     if (ns == "json") {
-        ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_JSON_UDF) << "Json UDF is deprecated. Please use JSON API instead";
+        if (!ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_JSON_UDF, [](auto& out) {
+            out << "Json UDF is deprecated. Please use JSON API instead";
+        })) {
+            return nullptr;
+        }
 
         ns = "yson";
         nameSpace = "Yson";
@@ -3878,7 +3974,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     if (ns.StartsWith("yson")) {
         if (lowerName == "convertto" && usedArgs.size() > 1) {
-            customUserType = usedArgs[1];
+            externalTypes = usedArgs[1];
             usedArgs.erase(usedArgs.begin() + 1);
         }
 
@@ -3930,8 +4026,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     }
 
     TNodePtr typeConfig = MakeTypeConfig(pos, ns, usedArgs);
-    return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, customUserType,
-        TDeferredAtom(typeConfig, ctx), nullptr, nullptr);
+    return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, externalTypes,
+        TDeferredAtom(typeConfig, ctx), nullptr, nullptr, {});
 }
 
 void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind)>& callback) {

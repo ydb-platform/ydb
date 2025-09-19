@@ -228,7 +228,7 @@ public:
 
     bool RemoveChild(const std::string& key) override
     {
-        auto it = KeyToChild_.find(TString(key));
+        auto it = KeyToChild_.find(key);
         if (it == KeyToChild_.end()) {
             return false;
         }
@@ -287,8 +287,8 @@ public:
     }
 
 private:
-    THashMap<TString, INodePtr> KeyToChild_;
-    THashMap<INodePtr, TString> ChildToKey_;
+    THashMap<std::string, INodePtr> KeyToChild_;
+    THashMap<INodePtr, std::string> ChildToKey_;
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override
     {
@@ -518,4 +518,3 @@ INodeFactory* GetEphemeralNodeFactory(bool shouldHideAttributes)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYTree
-

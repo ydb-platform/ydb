@@ -9,7 +9,7 @@ namespace NYql {
 
 namespace {
 
-constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2025, 2);
+constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2025, 3);
 
 const std::pair<ui32,ui32> Versions[] = {
 #include "yql_langver_list.inc"
@@ -92,6 +92,12 @@ bool IsBackwardCompatibleFeatureAvailable(TLangVersion currentVer, TLangVersion 
         return IsAvailableLangVersion(featureVer, GetMaxReleasedLangVersion());
     case EBackportCompatibleFeaturesMode::None:
         return IsAvailableLangVersion(featureVer, currentVer);
+    }
+}
+
+void EnumerateLangVersions(const std::function<void(TLangVersion)>& callback) {
+    for (size_t i = 0; i < Y_ARRAY_SIZE(Versions); ++i) {
+        callback(MakeLangVersion(Versions[i].first, Versions[i].second));
     }
 }
 

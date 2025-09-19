@@ -35,6 +35,8 @@ namespace NYql {
 
 namespace {
 
+constexpr const char CleanupLockFilename[] = ".cleanup_lock";
+
 struct TFileObject {
     TString Name;
     time_t MTime;
@@ -52,6 +54,9 @@ TFsPath ToFilePath(const TString& path)
     return path;
 }
 
+constexpr char FileLocksDir[] = "locks";
+
+constexpr size_t MaxLockPathInStorage = 4096;
 } // namespace
 
 TFileLink::TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy)
@@ -152,6 +157,7 @@ public:
     TImpl(size_t maxFiles, ui64 maxSize, const TString& storagePath)
         : StorageDir_(ToFilePath(storagePath))
         , ProcessTempDir_(StorageDir_ / ToString(GetPID())) // must be subfolder for fast hardlinking
+        , FileLocksDir_(StorageDir_ / ToString(FileLocksDir))
         , IsTemp_(storagePath.empty())
         , MaxFiles_(maxFiles)
         , MaxSize_(maxSize)
@@ -162,9 +168,14 @@ public:
         // TFsPath is not thread safe. It can initialize internal Split at any time. Force do it right now
         StorageDir_.PathSplit();
         ProcessTempDir_.PathSplit();
+        FileLocksDir_.PathSplit();
 
         StorageDir_.MkDirs(MODE0711);
         ProcessTempDir_.MkDirs(MODE0711);
+        FileLocksDir_.MkDirs(MODE0711);
+
+        CleanupLock_ = THolder<TFileLock>(new TFileLock(FileLocksDir_ / CleanupLockFilename));
+
 #ifdef _linux_
         ProcessTempDirLock_.Reset(new TFileLock(ProcessTempDir_ / ".lockfile"));
         ProcessTempDirLock_->Acquire();
@@ -177,6 +188,7 @@ public:
         TAtforkReinit::Get().Register(this);
         YQL_LOG(INFO) << "FileStorage initialized in " << StorageDir_.GetPath().Quote()
             << ", temporary dir: " << ProcessTempDir_.GetPath().Quote()
+            << ", locks dir:" << FileLocksDir_.GetPath().Quote()
             << ", files: " << CurrentFiles_.load()
             << ", total size: " << CurrentSize_.load();
     }
@@ -186,6 +198,7 @@ public:
         try {
             ProcessTempDir_.ForceDelete();
             if (IsTemp_) {
+                FileLocksDir_.ForceDelete();
                 StorageDir_.ForceDelete();
             }
         } catch (...) {
@@ -199,6 +212,10 @@ public:
 
     const TFsPath& GetTemp() const {
         return ProcessTempDir_;
+    }
+
+    TFsPath GetLockFilePath(const TString& componentName, const TString& lockName) const {
+        return FileLocksDir_ / (componentName + "_" + ToString(THash<TString>{}(lockName) % MaxLockPathInStorage) + ".lockfile");
     }
 
     TFileLinkPtr Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const NYql::NFS::TDataProvider& puller) {
@@ -380,58 +397,64 @@ private:
         if (!NeedToCleanup()) {
             return;
         }
+
+        TTryGuard guard(*CleanupLock_);
+
+        if (!guard.WasAcquired()) {
+            Dirty_.store(true);
+            return;
+        }
+
         Dirty_.store(false);
 
-        with_lock (CleanupLock_) {
-            TVector<TString> names;
-            StorageDir_.ListNames(names);
+        TVector<TString> names;
+        StorageDir_.ListNames(names);
 
-            TVector<TFileObject> files;
-            files.reserve(names.size());
+        TVector<TFileObject> files;
+        files.reserve(names.size());
 
-            ui64 actualFiles = 0;
-            ui64 actualSize = 0;
+        ui64 actualFiles = 0;
+        ui64 actualSize = 0;
 
-            for (const TString& name: names) {
-                TFsPath childPath(StorageDir_ / name);
-                TFileStat stat(childPath, true);
-                if (stat.IsFile()) {
-                    files.push_back(TFileObject{name, stat.MTime, stat.Size});
-                    ++actualFiles;
-                    actualSize += stat.Size;
-                }
+        for (const TString& name: names) {
+            TFsPath childPath(StorageDir_ / name);
+            TFileStat stat(childPath, true);
+            if (stat.IsFile()) {
+                files.push_back(TFileObject{name, stat.MTime, stat.Size});
+                ++actualFiles;
+                actualSize += stat.Size;
             }
-
-            // sort files to get older files first
-            Sort(files, [](const TFileObject& f1, const TFileObject& f2) {
-                if (f1.MTime == f2.MTime) {
-                    return f1.Name.compare(f2.Name) < 0;
-                }
-                return f1.MTime < f2.MTime;
-            });
-
-            ui64 filesThreshold = MaxFiles_ / 2;
-            ui64 sizeThreshold = MaxSize_ / 2;
-
-            for (const TFileObject& f: files) {
-                if (actualFiles <= filesThreshold && actualSize <= sizeThreshold) {
-                    break;
-                }
-
-                YQL_LOG(INFO) << "Removing file from cache (name: " << f.Name
-                     << ", size: " << f.Size
-                     << ", mtime: " << f.MTime << ")";
-                if (!NFs::Remove(StorageDir_ / f.Name)) {
-                    YQL_LOG(WARN) << "Failed to remove file " << f.Name.Quote() << ": " << LastSystemErrorText();
-                } else {
-                    --actualFiles;
-                    actualSize -= f.Size;
-                }
-            }
-
-            CurrentFiles_.store(actualFiles);
-            CurrentSize_.store(actualSize);
         }
+
+        // sort files to get older files first
+        Sort(files, [](const TFileObject& f1, const TFileObject& f2) {
+            if (f1.MTime == f2.MTime) {
+                return f1.Name.compare(f2.Name) < 0;
+            }
+            return f1.MTime < f2.MTime;
+        });
+
+        ui64 filesThreshold = MaxFiles_ / 2;
+        ui64 sizeThreshold = MaxSize_ / 2;
+
+        for (const TFileObject& f: files) {
+            if (actualFiles <= filesThreshold && actualSize <= sizeThreshold) {
+                break;
+            }
+
+            YQL_LOG(INFO) << "Removing file from cache (name: " << f.Name
+                    << ", size: " << f.Size
+                    << ", mtime: " << f.MTime << ")";
+            if (!NFs::Remove(StorageDir_ / f.Name)) {
+                YQL_LOG(WARN) << "Failed to remove file " << f.Name.Quote() << ": " << LastSystemErrorText();
+            } else {
+                --actualFiles;
+                actualSize -= f.Size;
+            }
+        }
+
+        CurrentFiles_.store(actualFiles);
+        CurrentSize_.store(actualSize);
     }
 
     void ResetAtFork() {
@@ -444,9 +467,11 @@ private:
     }
 
 private:
-    TMutex CleanupLock_;
     const TFsPath StorageDir_;
     const TFsPath ProcessTempDir_;
+    const TFsPath FileLocksDir_;
+    THolder<TFileLock> CleanupLock_;
+
     THolder<TFileLock> ProcessTempDirLock_;
     const bool IsTemp_;
     const ui64 MaxFiles_;
@@ -475,6 +500,10 @@ TFsPath TStorage::GetRoot() const
 TFsPath TStorage::GetTemp() const
 {
     return Impl_->GetTemp();
+}
+
+TFsPath TStorage::GetLockFilePath(const TString& componentName, const TString& lockName) const {
+    return Impl_->GetLockFilePath(componentName, lockName);
 }
 
 TFileLinkPtr TStorage::Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const NFS::TDataProvider& puller)

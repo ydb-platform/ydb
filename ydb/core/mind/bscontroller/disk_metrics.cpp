@@ -33,20 +33,19 @@ public:
                 value.ClearVDiskId();
                 db.Table<Schema::VDiskMetrics>().Key(key).Update<Schema::VDiskMetrics::Metrics>(value);
                 Self->SysViewChangedVSlots.insert(vslotId);
-                Self->SysViewChangedGroups.insert(v->GroupId);
+                Self->SysViewChangedGroups.insert(v->GroupId); // TODO(alexvru): really necessary?
             }
         }
 
         for (auto& [vslotId, v] : Self->StaticVSlots) {
             if (std::exchange(v.MetricsDirty, false)) {
-                Self->SysViewChangedVSlots.insert(vslotId);
                 auto vdiskId = v.VDiskId;
                 auto groupId = vdiskId.GroupID.GetRawId();
                 auto&& key = std::tie(groupId, vdiskId.GroupGeneration, vdiskId.FailRealm, vdiskId.FailDomain, vdiskId.VDisk);
                 auto value = v.VDiskMetrics;
                 value->ClearVDiskId();
                 db.Table<Schema::VDiskMetrics>().Key(key).Update<Schema::VDiskMetrics::Metrics>(*value);
-                Self->SysViewChangedGroups.insert(vdiskId.GroupID);
+                Self->SysViewChangedVSlots.insert(vslotId);
             }
         }
         return true;

@@ -423,6 +423,9 @@ message TReqStartTransaction
 
     optional TReplicateToMasterCellTags replicate_to_master_cell_tags = 15;
 
+    // Address of the last client that pinged transaction.
+    optional string pinger_address = 16;
+
     optional TMutatingOptions mutating_options = 103;
 }
 
@@ -618,6 +621,7 @@ message TRspMultiLookup
 
 message TQueryStatistics
 {
+    // COMPAT(sabdenovch)
     optional int64 rows_read = 1;
     optional int64 data_weight_read = 2;
     optional int64 rows_written = 3;
@@ -628,10 +632,32 @@ message TQueryStatistics
     optional uint64 write_time = 8; // TDuration
     optional uint64 codegen_time = 9; // TDuration
     optional uint64 wait_on_ready_event_time = 10; // TDuration
+    optional int64 grouped_row_count = 16;
+    optional uint64 memory_usage = 15;
+
     optional bool incomplete_input = 11;
     optional bool incomplete_output = 12;
-    optional uint64 memory_usage = 15;
-    optional int64 total_grouped_row_count = 16;
+    optional int64 query_count = 17 [default = 1];
+
+    message TAggregate
+    {
+        optional int64 total = 1;
+        optional int64 max = 2;
+        optional string argmax_node = 3;
+    };
+
+    optional TAggregate rows_read_aggr = 21;
+    optional TAggregate data_weight_read_aggr = 22;
+    optional TAggregate rows_written_aggr = 23;
+    optional TAggregate sync_time_aggr = 24;
+    optional TAggregate async_time_aggr = 25;
+    optional TAggregate execute_time_aggr = 26;
+    optional TAggregate read_time_aggr = 27;
+    optional TAggregate write_time_aggr = 28;
+    optional TAggregate codegen_time_aggr = 29;
+    optional TAggregate wait_on_ready_event_time_aggr = 30;
+    optional TAggregate memory_usage_aggr = 31;
+    optional TAggregate grouped_row_count_aggr = 32;
 
     repeated TQueryStatistics inner_statistics = 14;
 }
@@ -643,6 +669,7 @@ message TReqSelectRows
     //optional NYT.NProto.TGuid transaction_id = 2;
     optional uint64 timestamp = 3 [default = 0x3fffffffffffff01];
     optional uint64 retention_timestamp = 16 [default = 0];
+    optional int32 read_from = 34; // NHydra::EPeerKind
 
     optional uint64 input_row_limit = 4;
     optional uint64 output_row_limit = 5;
@@ -671,6 +698,7 @@ message TReqSelectRows
     optional int64 write_rowset_size = 30;
     optional int64 max_join_batch_size = 31;
     optional bool use_order_by_in_join_subqueries = 32;
+    optional int32 statistics_aggregation = 33; // EStatisticsAggregation
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 
@@ -1764,6 +1792,7 @@ message TReqLinkNode
     optional bool force = 4 [default = false];
     optional bool ignore_existing = 5 [default = false];
     optional bool lock_existing = 6 [default = false];
+    optional NYT.NYTree.NProto.TAttributeDictionary attributes = 7;
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -1837,6 +1866,8 @@ message TReqAttachTransaction
     optional uint64 ping_period = 4; // TDuration
     optional bool ping = 5 [default = true];
     optional bool ping_ancestors = 6 [default = false];
+    // Address of the last client that pinged transaction.
+    optional string pinger_address = 7;
 }
 
 message TRspAttachTransaction
@@ -2960,6 +2991,7 @@ message TReqCheckPermissionByAcl
     required string acl = 3;
 
     optional bool ignore_missing_subjects = 4 [default = false];
+    optional bool ignore_pending_removal_subjects = 5 [default = false];
 
     optional TPrerequisiteOptions prerequisite_options = 101;
     optional TMasterReadOptions master_read_options = 102;
@@ -3397,6 +3429,7 @@ message TCheckPermissionByAclResult
     required NYT.NProto.TGuid subject_id = 2;
     optional string subject_name = 3;
     repeated string missing_subjects = 4;
+    repeated string pending_removal_subjects = 5;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3517,6 +3550,7 @@ message TQuery
     optional bytes annotations = 14; // YSON
     optional NYT.NYTree.NProto.TAttributeDictionary other_attributes = 15;
     optional bytes access_control_objects = 16; // YSON
+    optional bytes secrets = 17; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3549,6 +3583,8 @@ message TReqListQueries
     optional string substr_filter = 9;
     optional uint64 limit = 10 [default = 100];
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 11;
+    optional bool search_by_token_prefix = 12 [default = false];
+    optional bool use_full_text_search = 13 [default = true];
 }
 
 message TRspListQueries
@@ -3595,6 +3631,7 @@ message TRspGetQueryTrackerInfo
     optional string query_tracker_stage = 4;
     repeated string clusters = 5;
     optional bytes engines_info = 6; // YSON
+    optional int32 expected_tables_version = 7;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3616,11 +3653,21 @@ message TRspStartDistributedWriteSession
     repeated bytes signed_cookies = 2; // vector of YSON-serialized TSignedDistributedWriteCookiePtr
 }
 
+message TReqPingDistributedWriteSession
+{
+    required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteSessionPtr
+}
+
+message TRspPingDistributedWriteSession
+{
+}
+
 message TReqFinishDistributedWriteSession
 {
     required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteSessionPtr
     repeated bytes signed_write_results = 2; // vector of YSON-serialized TSignedWriteFragmentResultPtr
 
+    // TODO(achains): Remove after YT-26131
     required int32 max_children_per_attach_request = 3;
 }
 

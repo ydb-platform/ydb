@@ -1,5 +1,7 @@
 #include "tablet_counters.h"
 
+#include <google/protobuf/util/json_util.h>
+
 ////////////////////////////////////////////
 namespace NKikimr {
 
@@ -85,13 +87,12 @@ void TTabletPercentileCounter::OutputHtml(IOutputStream &os, const char* name) c
     }
 }
 
-void TTabletCountersBase::OutputHtml(IOutputStream &os) const {
+void TTabletCountersBase::OutputHtml(IOutputStream &os, const char* counterClass) const {
     HTML(os) {
         DIV_CLASS("row") {
-            DIV_CLASS("col-md-12") {OutputHtml(os, "Simple", SimpleCountersMetaInfo, "col-md-3", SimpleCounters);}
-            DIV_CLASS("col-md-12") {OutputHtml(os, "Cumulative", CumulativeCountersMetaInfo, "col-md-3", CumulativeCounters);}
+            DIV_CLASS("col-md-12") {OutputHtml(os, "Simple", SimpleCountersMetaInfo, counterClass, SimpleCounters);}
+            DIV_CLASS("col-md-12") {OutputHtml(os, "Cumulative", CumulativeCountersMetaInfo, counterClass, CumulativeCounters);}
             DIV_CLASS("col-md-12") {OutputHtml(os, "Percentile", PercentileCountersMetaInfo, "col-md-12", PercentileCounters);}
-
         }
     }
 }
@@ -141,6 +142,16 @@ void TTabletCountersBase::OutputProto(NKikimrTabletBase::TTabletCountersBase& op
             }
         }
     }
+}
+
+TString TTabletCountersBase::OutputJson() const {
+    NKikimrTabletBase::TTabletCountersBase proto;
+    OutputProto(proto);
+
+    TString jsonString;
+    google::protobuf::util::MessageToJsonString(proto, &jsonString, {});
+
+    return jsonString;
 }
 
 ////////////////////////////////////////////

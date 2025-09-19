@@ -77,6 +77,14 @@ public:
         return promise.GetFuture();
     }
 
+    void ReportAlloc(ui64 bytes) override {
+        Y_UNUSED(bytes);
+    }
+
+    void ReportFree(ui64 bytes) override {
+        Y_UNUSED(bytes);
+    }
+
     const std::vector<size_t>& GetPutSizes() const {
         return PutSizes_;
     }
@@ -110,6 +118,11 @@ public:
 
     const std::vector<ISpiller::TPtr>& GetCreatedSpillers() const {
         return Spillers_;
+    }
+
+    void SetMemoryReportingCallbacks(ISpiller::TMemoryReportCallback reportAlloc, ISpiller::TMemoryReportCallback reportFree) override {
+        Y_UNUSED(reportAlloc);
+        Y_UNUSED(reportFree);
     }
 
 private:

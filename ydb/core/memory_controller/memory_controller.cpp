@@ -431,7 +431,7 @@ private:
         LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer QueryExecution state:" << " Consumption: " << HumanReadableBytes(queryExecutionConsumption) << " Limit: " << HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]));
         Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
         Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
-        memoryStats.SetQueryExecutionConsumption(queryExecutionConsumption);
+        memoryStats.SetQueryExecutionConsumption(memoryStats.GetQueryExecutionConsumption() + queryExecutionConsumption);
         memoryStats.SetQueryExecutionLimit(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
 
         // Note: for now ResourceBroker and its queues aren't MemoryController consumers and don't share limits with other caches
@@ -487,32 +487,28 @@ private:
                 break;
             }
             case EMemoryConsumerKind::SharedCache: {
-                Y_ASSERT(!stats.HasSharedCacheConsumption());
                 Y_ASSERT(!stats.HasSharedCacheLimit());
-                stats.SetSharedCacheConsumption(consumer.Consumption);
+                stats.SetSharedCacheConsumption(stats.GetSharedCacheConsumption() + consumer.Consumption);
                 stats.SetSharedCacheLimit(limitBytes);
                 break;
             }
-            case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
-            case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory: {
-                stats.SetColumnTablesReadExecutionConsumption(stats.GetColumnTablesReadExecutionConsumption() + consumer.Consumption);
-                stats.SetColumnTablesReadExecutionLimit(stats.GetColumnTablesReadExecutionLimit() + limitBytes);
-                break;
-            }
             case EMemoryConsumerKind::ColumnTablesCompGroupedMemory: {
-                // TODO: what about resource broker queues?
-                Y_ASSERT(!stats.HasColumnTablesCompactionConsumption());
-                Y_ASSERT(!stats.HasColumnTablesCompactionLimit());
-                stats.SetColumnTablesCompactionConsumption(consumer.Consumption);
-                stats.SetColumnTablesCompactionLimit(limitBytes);
+                Y_ASSERT(!stats.HasCompactionConsumption());
+                Y_ASSERT(!stats.HasCompactionLimit());
+                stats.SetCompactionConsumption(consumer.Consumption);
+                stats.SetCompactionLimit(limitBytes);
                 break;
             }
             case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache:
             case EMemoryConsumerKind::ColumnTablesDataAccessorCache:
             case EMemoryConsumerKind::ColumnTablesColumnDataCache:
             case EMemoryConsumerKind::ColumnTablesBlobCache: {
-                stats.SetColumnTablesCacheConsumption(stats.GetColumnTablesCacheConsumption() + consumer.Consumption);
-                stats.SetColumnTablesCacheLimit(stats.GetColumnTablesCacheLimit() + limitBytes);
+                stats.SetSharedCacheConsumption(stats.GetSharedCacheConsumption() + consumer.Consumption);
+                break;
+            }
+            case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
+            case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory: {
+                stats.SetQueryExecutionConsumption(stats.GetQueryExecutionConsumption() + consumer.Consumption);
                 break;
             }
         }

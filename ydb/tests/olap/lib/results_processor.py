@@ -5,7 +5,7 @@ import ydb
 import os
 import logging
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param
+from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param, get_ci_version, get_self_version
 from time import time_ns
 
 
@@ -149,6 +149,9 @@ class ResultsProcessor:
         ci_launch_id = os.getenv('CI_LAUNCH_ID', None)
         if ci_launch_id:
             info['ci_launch_id'] = ci_launch_id
+        if get_ci_version():
+            info['ci_version'] = get_ci_version()
+        info['test_tools_version'] = get_self_version()
 
         data = {
             'Db': cls.get_cluster_id(),

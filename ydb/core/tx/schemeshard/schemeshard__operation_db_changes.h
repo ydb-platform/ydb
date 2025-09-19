@@ -40,10 +40,17 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
     TDeque<TPathId> Sequences;
     TDeque<TPathId> AlterSequences;
 
+    TDeque<TPathId> Secrets;
+    TDeque<TPathId> AlterSecrets;
+
     TDeque<TPathId> SysViews;
 
     // Can we have multiple long incremental restore operations?
     TDeque<NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
+
+    TDeque<ui64> IncrementalBackups;
+
+    TDeque<TPathId> StreamingQueries;
 
     //PQ part
     TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
@@ -133,12 +140,28 @@ public:
         Sequences.push_back(pathId);
     }
 
+    void PersistAlterSecret(const TPathId& pathId) {
+        AlterSecrets.emplace_back(pathId);
+    }
+
+    void PersistSecret(const TPathId& pathId) {
+        Secrets.emplace_back(pathId);
+    }
+
     void PersistSysView(const TPathId& pathId) {
         SysViews.emplace_back(pathId);
     }
 
     void PersistLongIncrementalRestoreOp(const NKikimrSchemeOp::TLongIncrementalRestoreOp& op) {
         LongIncrementalRestoreOps.emplace_back(op);
+    }
+
+    void PersistLongIncrementalBackupOp(ui64 id) {
+        IncrementalBackups.emplace_back(id);
+    }
+
+    void PersistStreamingQuery(const TPathId& pathId) {
+        StreamingQueries.emplace_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

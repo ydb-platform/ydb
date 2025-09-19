@@ -232,6 +232,7 @@ void ToProto(
     YT_OPTIONAL_TO_PROTO(proto, subject_name, result.SubjectName);
 
     ToProto(proto->mutable_missing_subjects(), result.MissingSubjects);
+    ToProto(proto->mutable_pending_removal_subjects(), result.PendingRemovalSubjects);
 }
 
 void FromProto(
@@ -244,6 +245,7 @@ void FromProto(
     result->SubjectName = YT_OPTIONAL_FROM_PROTO(proto, subject_name);
 
     FromProto(&result->MissingSubjects, proto.missing_subjects());
+    FromProto(&result->PendingRemovalSubjects, proto.pending_removal_subjects());
 }
 
 void ToProto(
@@ -583,49 +585,124 @@ void FromProto(NTabletClient::TTabletInfo* tabletInfo, const NProto::TTabletInfo
     tabletInfo->CellId = FromProto<TTabletCellId>(protoTabletInfo.cell_id());
 }
 
+template <class T>
+void ToProto(
+    NProto::TQueryStatistics::TAggregate* protoCounter,
+    const NQueryClient::TAggregate<T>& counter)
+{
+    protoCounter->set_argmax_node(counter.ArgmaxNode());
+    if constexpr (std::is_same_v<T, TDuration>) {
+        protoCounter->set_total(counter.GetTotal().GetValue());
+        protoCounter->set_max(counter.GetMax().GetValue());
+    } else {
+        protoCounter->set_total(counter.GetTotal());
+        protoCounter->set_max(counter.GetMax());
+    }
+}
+
+template <class T>
+void FromProto(
+    NQueryClient::TAggregate<T>* counter,
+    const NProto::TQueryStatistics::TAggregate& protoCounter)
+{
+    if (protoCounter.has_argmax_node()) {
+        FromProto(&counter->ArgmaxNode(), protoCounter.argmax_node());
+    }
+    if (protoCounter.has_total()) {
+        if constexpr (std::is_same_v<T, TDuration>) {
+            counter->SetTotal(TDuration::FromValue(protoCounter.total()));
+        } else {
+            counter->SetTotal(protoCounter.total());
+        }
+    }
+    if (protoCounter.has_max()) {
+        if constexpr (std::is_same_v<T, TDuration>) {
+            counter->SetMax(TDuration::FromValue(protoCounter.max()));
+        } else {
+            counter->SetMax(protoCounter.max());
+        }
+    }
+}
+
 void ToProto(
     NProto::TQueryStatistics* protoStatistics,
     const NQueryClient::TQueryStatistics& statistics)
 {
-    protoStatistics->set_rows_read(statistics.RowsRead);
-    protoStatistics->set_data_weight_read(statistics.DataWeightRead);
-    protoStatistics->set_rows_written(statistics.RowsWritten);
-    protoStatistics->set_sync_time(statistics.SyncTime.GetValue());
-    protoStatistics->set_async_time(statistics.AsyncTime.GetValue());
-    protoStatistics->set_execute_time(statistics.ExecuteTime.GetValue());
-    protoStatistics->set_read_time(statistics.ReadTime.GetValue());
-    protoStatistics->set_write_time(statistics.WriteTime.GetValue());
-    protoStatistics->set_codegen_time(statistics.CodegenTime.GetValue());
-    protoStatistics->set_wait_on_ready_event_time(statistics.WaitOnReadyEventTime.GetValue());
+    // COMPAT(sabdenovch)
+    protoStatistics->set_rows_read(statistics.RowsRead.GetTotal());
+    protoStatistics->set_data_weight_read(statistics.DataWeightRead.GetTotal());
+    protoStatistics->set_rows_written(statistics.RowsWritten.GetTotal());
+    protoStatistics->set_sync_time(statistics.SyncTime.GetTotal().GetValue());
+    protoStatistics->set_async_time(statistics.AsyncTime.GetTotal().GetValue());
+    protoStatistics->set_execute_time(statistics.ExecuteTime.GetTotal().GetValue());
+    protoStatistics->set_read_time(statistics.ReadTime.GetTotal().GetValue());
+    protoStatistics->set_write_time(statistics.WriteTime.GetTotal().GetValue());
+    protoStatistics->set_codegen_time(statistics.CodegenTime.GetTotal().GetValue());
+    protoStatistics->set_wait_on_ready_event_time(statistics.WaitOnReadyEventTime.GetTotal().GetValue());
+    protoStatistics->set_memory_usage(statistics.MemoryUsage.GetTotal());
+    protoStatistics->set_grouped_row_count(statistics.GroupedRowCount.GetTotal());
+
+    ToProto(protoStatistics->mutable_rows_read_aggr(), statistics.RowsRead);
+    ToProto(protoStatistics->mutable_data_weight_read_aggr(), statistics.DataWeightRead);
+    ToProto(protoStatistics->mutable_rows_written_aggr(), statistics.RowsWritten);
+    ToProto(protoStatistics->mutable_sync_time_aggr(), statistics.SyncTime);
+    ToProto(protoStatistics->mutable_async_time_aggr(), statistics.AsyncTime);
+    ToProto(protoStatistics->mutable_execute_time_aggr(), statistics.ExecuteTime);
+    ToProto(protoStatistics->mutable_read_time_aggr(), statistics.ReadTime);
+    ToProto(protoStatistics->mutable_write_time_aggr(), statistics.WriteTime);
+    ToProto(protoStatistics->mutable_codegen_time_aggr(), statistics.CodegenTime);
+    ToProto(protoStatistics->mutable_wait_on_ready_event_time_aggr(), statistics.WaitOnReadyEventTime);
+    ToProto(protoStatistics->mutable_memory_usage_aggr(), statistics.MemoryUsage);
+    ToProto(protoStatistics->mutable_grouped_row_count_aggr(), statistics.GroupedRowCount);
+
     protoStatistics->set_incomplete_input(statistics.IncompleteInput);
     protoStatistics->set_incomplete_output(statistics.IncompleteOutput);
-    protoStatistics->set_memory_usage(statistics.MemoryUsage);
-    protoStatistics->set_total_grouped_row_count(statistics.TotalGroupedRowCount);
+    protoStatistics->set_query_count(statistics.QueryCount);
 
     ToProto(protoStatistics->mutable_inner_statistics(), statistics.InnerStatistics);
 }
+
+#define DESERIALIZE_I64_AND_MAYBE_FALLBACK(snakeCaseName, camelCaseName) \
+    if (protoStatistics.has_##snakeCaseName##_aggr()) { \
+        FromProto(&statistics->camelCaseName, protoStatistics.snakeCaseName##_aggr()); \
+    } else if (protoStatistics.has_##snakeCaseName()) { \
+        statistics->camelCaseName.SetTotal(protoStatistics.snakeCaseName()); \
+    }
+
+#define DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(snakeCaseName, camelCaseName) \
+    if (protoStatistics.has_##snakeCaseName##_aggr()) { \
+        FromProto(&statistics->camelCaseName, protoStatistics.snakeCaseName##_aggr()); \
+    } else if (protoStatistics.has_##snakeCaseName()) { \
+        statistics->camelCaseName.SetTotal(TDuration::FromValue(protoStatistics.snakeCaseName())); \
+    }
 
 void FromProto(
     NQueryClient::TQueryStatistics* statistics,
     const NProto::TQueryStatistics& protoStatistics)
 {
-    statistics->RowsRead = protoStatistics.rows_read();
-    statistics->DataWeightRead = protoStatistics.data_weight_read();
-    statistics->RowsWritten = protoStatistics.rows_written();
-    statistics->SyncTime = TDuration::FromValue(protoStatistics.sync_time());
-    statistics->AsyncTime = TDuration::FromValue(protoStatistics.async_time());
-    statistics->ExecuteTime = TDuration::FromValue(protoStatistics.execute_time());
-    statistics->ReadTime = TDuration::FromValue(protoStatistics.read_time());
-    statistics->WriteTime = TDuration::FromValue(protoStatistics.write_time());
-    statistics->CodegenTime = TDuration::FromValue(protoStatistics.codegen_time());
-    statistics->WaitOnReadyEventTime = TDuration::FromValue(protoStatistics.wait_on_ready_event_time());
+    // COMPAT(sabdenovch)
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(rows_read, RowsRead);
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(data_weight_read, DataWeightRead);
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(rows_written, RowsWritten);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(sync_time, SyncTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(async_time, AsyncTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(execute_time, ExecuteTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(read_time, ReadTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(write_time, WriteTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(codegen_time, CodegenTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(wait_on_ready_event_time, WaitOnReadyEventTime);
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(memory_usage, MemoryUsage);
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(grouped_row_count, GroupedRowCount);
+
     statistics->IncompleteInput = protoStatistics.incomplete_input();
     statistics->IncompleteOutput = protoStatistics.incomplete_output();
-    statistics->MemoryUsage = protoStatistics.memory_usage();
-    statistics->TotalGroupedRowCount = protoStatistics.total_grouped_row_count();
+    statistics->QueryCount = protoStatistics.query_count();
 
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
+
+#undef DESERIALIZE_I64_AND_MAYBE_FALLBACK
+#undef DESERIALIZE_DURATION_AND_MAYBE_FALLBACK
 
 void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operation)
 {
@@ -1324,6 +1401,9 @@ void ToProto(
     if (query.OtherAttributes) {
         ToProto(protoQuery->mutable_other_attributes(), *query.OtherAttributes);
     }
+    if (query.Secrets) {
+        protoQuery->set_secrets(ToProto(*query.Secrets));
+    }
 }
 
 void FromProto(
@@ -1362,6 +1442,11 @@ void FromProto(
         query->OtherAttributes = NYTree::FromProto(protoQuery.other_attributes());
     } else if (query->OtherAttributes) {
         query->OtherAttributes->Clear();
+    }
+    if (protoQuery.has_secrets()) {
+        query->Secrets = TYsonString(protoQuery.secrets());
+    } else if (query->Secrets) {
+        query->Secrets = TYsonString{};
     }
 }
 
@@ -1879,9 +1964,29 @@ void ParseRequest(
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
+    TReqPingDistributedWriteSession* req,
+    const TSignedDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionPingOptions& options)
+{
+    Y_UNUSED(options);
+    req->set_signed_session(ToProto(ConvertToYsonString(session)));
+}
+
+void ParseRequest(
+    TSignedDistributedWriteSessionPtr* mutableSession,
+    TDistributedWriteSessionPingOptions* mutableOptions,
+    const TReqPingDistributedWriteSession& req)
+{
+    Y_UNUSED(mutableOptions);
+    *mutableSession = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
     TReqFinishDistributedWriteSession* req,
     const TDistributedWriteSessionWithResults& sessionWithResults,
-    const TDistributedWriteSessionFinishOptions& options)
+    const TDistributedWriteSessionFinishOptions& /*options*/)
 {
     YT_VERIFY(sessionWithResults.Session);
 
@@ -1890,12 +1995,14 @@ void FillRequest(
         YT_VERIFY(writeResult);
         req->add_signed_write_results(ConvertToYsonString(writeResult).ToString());
     }
-    req->set_max_children_per_attach_request(options.MaxChildrenPerAttachRequest);
+    // TODO(achains): Remove after updated server binaries
+    // Setting default value for MaxChildrenPerAttachRequest from TDistributedWriteDynamicConfig
+    req->set_max_children_per_attach_request(10'000);
 }
 
 void ParseRequest(
     TDistributedWriteSessionWithResults* mutableSessionWithResults,
-    TDistributedWriteSessionFinishOptions* mutableOptions,
+    TDistributedWriteSessionFinishOptions* /*mutableOptions*/,
     const TReqFinishDistributedWriteSession& req)
 {
     mutableSessionWithResults->Results.reserve(req.signed_write_results().size());
@@ -1904,8 +2011,6 @@ void ParseRequest(
     }
 
     mutableSessionWithResults->Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
-
-    mutableOptions->MaxChildrenPerAttachRequest = req.max_children_per_attach_request();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1941,6 +2046,21 @@ void ParseRequest(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool IsChaosRetriableError(const TError& error)
+{
+    return static_cast<bool>(error.FindMatching([] (const TError& error) {
+        auto code = error.GetCode();
+        return
+            code == NTransactionClient::EErrorCode::ChaosCoordinatorsAreNotAvailable ||
+            code == NTabletClient::EErrorCode::SyncReplicaNotInSync ||
+            code == NTableClient::EErrorCode::UnableToSynchronizeReplicationCard ||
+            code == NTabletClient::EErrorCode::TabletReplicationEraMismatch ||
+            code == NChaosClient::EErrorCode::ShortcutNotFound ||
+            code == NChaosClient::EErrorCode::ShortcutHasDifferentEra ||
+            code == NChaosClient::EErrorCode::ShortcutRevoked;
+    }));
+}
+
 bool IsDynamicTableRetriableError(const TError& error)
 {
     return
@@ -1951,8 +2071,7 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoInSyncReplicas) ||
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
-        error.FindMatching(NTabletClient::EErrorCode::TabletReplicationEraMismatch) ||
-        error.FindMatching(NTableClient::EErrorCode::UnableToSynchronizeReplicationCard);
+        IsChaosRetriableError(error);
 }
 
 bool IsRetriableError(const TError& error, bool retryProxyBanned)

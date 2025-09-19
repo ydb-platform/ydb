@@ -47,6 +47,7 @@ namespace NSQLTranslationV1 {
         virtual bool AddFilter(TContext& ctx, TNodePtr filter);
         virtual bool AddGroupKey(TContext& ctx, const TString& column);
         virtual void SetCompactGroupBy(bool compactGroupBy);
+        virtual TStringBuf GetGroupBySuffix() const;
         virtual void SetGroupBySuffix(const TString& suffix);
         virtual TString MakeLocalName(const TString& name);
         virtual bool AddAggregation(TContext& ctx, TAggregationPtr aggr);
@@ -210,12 +211,11 @@ namespace NSQLTranslationV1 {
 
     class THoppingWindow final : public INode {
     public:
-        THoppingWindow(TPosition pos, const TVector<TNodePtr>& args);
-        void MarkValid();
+        THoppingWindow(TPosition pos, TVector<TNodePtr> args);
         TNodePtr BuildTraits(const TString& label) const;
-    public:
-        TNodePtr Hop;
-        TNodePtr Interval;
+        TNodePtr GetInterval() const;
+        void MarkValid();
+
     private:
         bool DoInit(TContext& ctx, ISource* src) override;
         TAstNode* Translate(TContext&) const override;
@@ -224,9 +224,14 @@ namespace NSQLTranslationV1 {
         TString GetOpName() const override;
         TNodePtr ProcessIntervalParam(const TNodePtr& val) const;
 
+    private:
         TVector<TNodePtr> Args_;
         TSourcePtr FakeSource_;
-        TNodePtr Node_;
+        TNodePtr TimeExtractor_;
+        TNodePtr Hop_;
+        TNodePtr Interval_;
+        const TNodePtr Delay_ = Y("Interval", Q("0"));
+        const TString DataWatermarks_ = "true";
         bool Valid_;
     };
 
@@ -276,6 +281,7 @@ namespace NSQLTranslationV1 {
         TColumnsSets&& distinctSets
     );
     TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake);
+    TSourcePtr BuildAnyColumnSource(TPosition pos);
 
 
     enum class ReduceMode {
@@ -286,13 +292,13 @@ namespace NSQLTranslationV1 {
         TVector<TNodePtr>&& keys, TVector<TNodePtr>&& args, TNodePtr udf, TNodePtr having, const TWriteSettings& settings,
         const TVector<TSortSpecificationPtr>& assumeOrderBy, bool listCall);
     TSourcePtr BuildProcess(TPosition pos, TSourcePtr source, TNodePtr with, bool withExtFunction, TVector<TNodePtr>&& terms, bool listCall,
-        bool prcessStream, const TWriteSettings& settings, const TVector<TSortSpecificationPtr>& assumeOrderBy);
+        bool processStream, const TWriteSettings& settings, const TVector<TSortSpecificationPtr>& assumeOrderBy);
 
     TNodePtr BuildSelectResult(TPosition pos, TSourcePtr source, bool writeResult, bool inSubquery, TScopedStatePtr scoped);
 
     // Implemented in insert.cpp
-    TSourcePtr BuildWriteValues(TPosition pos, const TString& opertationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values);
-    TSourcePtr BuildWriteValues(TPosition pos, const TString& opertationHumanName, const TVector<TString>& columnsHint, TSourcePtr source);
+    TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values);
+    TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, TSourcePtr source);
     TSourcePtr BuildUpdateValues(TPosition pos, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values);
 
     EWriteColumnMode ToWriteColumnsMode(ESQLWriteColumnMode sqlWriteColumnMode);

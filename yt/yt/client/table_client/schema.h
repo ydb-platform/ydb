@@ -427,7 +427,6 @@ private:
         std::vector<TDeletedColumn> DeletedColumns;
     };
 
-
     std::shared_ptr<const TColumnInfo> ColumnInfo_;
     int KeyColumnCount_ = 0;
     bool HasMaterializedComputedColumns_ = false;

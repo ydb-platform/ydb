@@ -2,6 +2,7 @@
 # mypy: disable-error-code="misc"
 
 from collections.abc import MutableSequence
+from copy import deepcopy
 
 import pytest
 
@@ -247,6 +248,129 @@ class FrozenListMixin:
     def test_count(self) -> None:
         _list = self.FrozenList([1, 2])
         assert _list.count(1) == 1
+
+    def test_deepcopy_unfrozen(self) -> None:
+        orig = self.FrozenList([1, 2, 3])
+        copied = deepcopy(orig)
+        assert copied == orig
+        assert copied is not orig
+        assert list(copied) == list(orig)
+        assert not copied.frozen
+        # Verify the copy is mutable
+        copied.append(4)
+        assert len(copied) == 4
+        assert len(orig) == 3
+
+    def test_deepcopy_frozen(self) -> None:
+        orig = self.FrozenList([1, 2, 3])
+        orig.freeze()
+        copied = deepcopy(orig)
+        assert copied == orig
+        assert copied is not orig
+        assert list(copied) == list(orig)
+        assert copied.frozen
+        # Verify the copy is also frozen
+        with pytest.raises(RuntimeError):
+            copied.append(4)
+
+    def test_deepcopy_nested(self) -> None:
+        inner = self.FrozenList([1, 2])
+        orig = self.FrozenList([inner, 3])
+        copied = deepcopy(orig)
+        assert copied == orig
+        assert copied[0] is not orig[0]
+        assert isinstance(copied[0], self.FrozenList)
+        # Modify the inner list in the copy
+        copied[0].append(3)
+        assert len(copied[0]) == 3
+        assert len(orig[0]) == 2
+
+    def test_deepcopy_circular(self) -> None:
+        orig = self.FrozenList([1, 2])
+        orig.append(orig)  # Create circular reference
+
+        copied = deepcopy(orig)
+
+        # Check structure is preserved
+        assert len(copied) == 3
+        assert copied[0] == 1
+        assert copied[1] == 2
+        assert copied[2] is copied  # Circular reference preserved
+
+        # Verify they are different objects
+        assert copied is not orig
+        assert copied[2] is not orig
+
+        # Modify the copy
+        copied.append(3)
+        assert len(copied) == 4
+        assert len(orig) == 3
+
+    def test_deepcopy_circular_frozen(self) -> None:
+        orig = self.FrozenList([1, 2])
+        orig.append(orig)  # Create circular reference
+        orig.freeze()
+
+        copied = deepcopy(orig)
+
+        # Check structure is preserved
+        assert len(copied) == 3
+        assert copied[0] == 1
+        assert copied[1] == 2
+        assert copied[2] is copied  # Circular reference preserved
+        assert copied.frozen
+
+        # Verify frozen state
+        with pytest.raises(RuntimeError):
+            copied.append(3)
+
+    def test_deepcopy_nested_circular(self) -> None:
+        # Create a complex nested structure with circular references
+        inner1 = self.FrozenList([1, 2])
+        inner2 = self.FrozenList([3, 4])
+        orig = self.FrozenList([inner1, inner2])
+
+        # Add circular references
+        inner1.append(inner2)  # inner1 -> inner2
+        inner2.append(orig)  # inner2 -> orig (outer list)
+        orig.append(orig)  # orig -> orig (self reference)
+
+        copied = deepcopy(orig)
+
+        # Verify structure
+        assert len(copied) == 3
+        assert isinstance(copied[0], self.FrozenList)
+        assert isinstance(copied[1], self.FrozenList)
+        assert copied[2] is copied  # Self reference preserved
+
+        # Verify nested circular references
+        assert len(copied[0]) == 3
+        assert copied[0][2] is copied[1]  # inner1 -> inner2 preserved
+        assert len(copied[1]) == 3
+        assert copied[1][2] is copied  # inner2 -> orig preserved
+
+        # All objects should be new instances
+        assert copied is not orig
+        assert copied[0] is not orig[0]
+        assert copied[1] is not orig[1]
+
+    def test_deepcopy_multiple_references(self) -> None:
+        # Test that multiple references to the same object are preserved
+        shared = self.FrozenList([1, 2])
+        orig = self.FrozenList([shared, shared, 3])
+
+        copied = deepcopy(orig)
+
+        # Both references should point to the same copied object
+        assert copied[0] is copied[1]
+        assert copied[0] is not shared
+        assert isinstance(copied[0], self.FrozenList)
+
+        # Modify through one reference
+        copied[0].append(3)
+        assert len(copied[0]) == 3
+        assert len(copied[1]) == 3  # Should see the change
+        assert len(shared) == 2  # Original unchanged
 
 
 class TestFrozenList(FrozenListMixin):

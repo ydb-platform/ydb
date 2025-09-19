@@ -79,6 +79,8 @@ namespace NKikimrConfig {
     class TWorkloadManagerConfig;
     class TQueryServiceConfig;
     class TBridgeConfig;
+    class TStatisticsConfig;
+    class TSystemTabletBackupConfig;
 }
 
 namespace NKikimrReplication {
@@ -107,6 +109,7 @@ namespace NKikimr {
     class TResourceProfiles;
     class TControlBoard;
     class TFeatureFlags;
+    class TMetricsConfig;
 }
 
 namespace NKikimr {
@@ -262,6 +265,9 @@ struct TAppData {
     NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
     NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;
     NKikimrConfig::TBridgeConfig& BridgeConfig;
+    NKikimrConfig::TStatisticsConfig& StatisticsConfig;
+    TMetricsConfig& MetricsConfig;
+    NKikimrConfig::TSystemTabletBackupConfig& SystemTabletBackupConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
@@ -271,6 +277,7 @@ struct TAppData {
     bool UsePartitionStatsCollectorForTests = false;
     bool DisableCdcAutoSwitchingToReadyStateForTests = false;
     bool BridgeModeEnabled = false;
+    bool SuppressBridgeModeBootstrapperLogic = false; // for tests
 
     TVector<TString> AdministrationAllowedSIDs; // use IsAdministrator method to check whether a user or a group is allowed to perform administrative tasks
     TVector<TString> RegisterDynamicNodeAllowedSIDs;

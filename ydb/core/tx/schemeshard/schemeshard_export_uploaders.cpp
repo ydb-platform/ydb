@@ -15,6 +15,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/wrappers/abstract.h>
+#include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/ydb_convert/topic_description.h>
@@ -25,17 +26,6 @@
 #include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NSchemeShard {
-
-namespace {
-
-bool ShouldRetry(const Aws::S3::S3Error& error) {
-    if (error.ShouldRetry()) {
-        return true;
-    }
-    return error.GetExceptionName() == "TooManyRequests";
-}
-
-} // anonymous
 
 template <class TDerived>
 class TExportFilesUploader: public TActorBootstrapped<TDerived> {
@@ -143,7 +133,7 @@ protected:
     }
 
     void RetryOrFinish(const Aws::S3::S3Error& error, TFileUpload& upload) {
-        if (upload.Attempt < Settings.number_of_retries() && ShouldRetry(error)) {
+        if (upload.Attempt < Settings.number_of_retries() && NWrappers::ShouldRetry(error)) {
             Retry(upload);
         } else {
             Fail(TStringBuilder() << upload.Path << ". S3 error: " << error.GetMessage());

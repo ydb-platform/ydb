@@ -9,6 +9,9 @@
 
 #include <util/stream/input.h>
 #include <util/stream/output.h>
+#include <util/stream/str.h>
+
+#include <optional>
 
 namespace NSkiff {
 
@@ -210,6 +213,9 @@ public:
     void WriteVariant8Tag(ui8 tag);
     void WriteVariant16Tag(ui16 tag);
 
+    void StartBlob();
+    void FinishBlob();
+
     void Flush();
     void Finish();
 
@@ -220,7 +226,13 @@ private:
 
 private:
     THolder<TBufferedOutput> BufferedOutput_;
-    TZeroCopyOutputStreamWriter Underlying_;
+    TZeroCopyOutputStreamWriter UnderlyingOutputWriter_;
+
+    TString Blob_;
+    std::optional<TStringOutput> BlobOutput_;
+    std::optional<TZeroCopyOutputStreamWriter> BlobOutputWriter_;
+
+    TZeroCopyOutputStreamWriter* CurrentOutputWriter_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -258,6 +270,9 @@ public:
 
     void WriteVariant8Tag(ui8 tag);
     void WriteVariant16Tag(ui16 tag);
+
+    void StartBlob();
+    void FinishBlob();
 
     void Flush();
     void Finish();

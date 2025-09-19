@@ -15,6 +15,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface
     yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/impl
     yt/yql/providers/yt/fmr/gc_service/impl
+    yt/yql/providers/yt/fmr/utils
     yql/essentials/utils
     yql/essentials/utils/log
 )

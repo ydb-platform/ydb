@@ -8,6 +8,12 @@
 
 namespace NYdb::NConsoleClient::BenchmarkUtils {
 
+struct TTiming {
+    TDuration Total = TDuration::Zero(); // timings captured by the client application. these timings include time RTT between server and the client application
+    TDuration Server = TDuration::Zero(); // total query timings measured by the server
+    TDuration Compilation = TDuration::Zero(); // compitation timing
+};
+
 struct TTestInfo {
     TDuration ColdTime;
     TDuration Min;
@@ -17,14 +23,17 @@ struct TTestInfo {
     TDuration RttMax;
     double RttMean = 0;
 
+    TDuration CompilationMin;
+    TDuration CompilationMax;
+    double CompilationMean = 1;
+
     double Mean = 0;
     double Median = 0;
     double Std = 0;
     TDuration UnixBench;
-    std::vector<TDuration> ClientTimings; // timings captured by the client application. these timings include time RTT between server and the client application.
-    std::vector<TDuration> ServerTimings; // query timings measured by the server.
+    std::vector<TTiming> Timings;
 
-    explicit TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDuration>&& serverTimings);
+    explicit TTestInfo(std::vector<TTiming>&& timings);
     void operator +=(const TTestInfo& other);
     void operator /=(const ui32 count);
 };
@@ -36,30 +45,33 @@ public:
 private:
     YDB_READONLY_DEF(TString, ErrorInfo);
     YDB_READONLY_DEF(TRawResults, RawResults);
-    YDB_READONLY_DEF(TDuration, ServerTiming);
+    YDB_ACCESSOR_DEF(TTiming, Timing);
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
+    YDB_READONLY_DEF(TString, ExecStats);
     YDB_READONLY_DEF(TString, DiffErrors);
     YDB_READONLY_DEF(TString, DiffWarrnings);
     TQueryBenchmarkResult() = default;
 public:
     static TQueryBenchmarkResult Result(TRawResults&& rawResults,
-        const TDuration& serverTiming, const TString& queryPlan, const TString& planAst, TStringBuf expected)
+        const TTiming& timing, const TString& queryPlan, const TString& planAst, const TString& execStats, TStringBuf expected)
     {
         TQueryBenchmarkResult result;
         result.RawResults = std::move(rawResults);
-        result.ServerTiming = serverTiming;
+        result.Timing = timing;
         result.QueryPlan = queryPlan;
         result.PlanAst = planAst;
+        result.ExecStats = execStats;
         result.CompareWithExpected(expected);
         return result;
     }
 
-    static TQueryBenchmarkResult Error(const TString& error, const TString& queryPlan, const TString& planAst) {
+    static TQueryBenchmarkResult Error(const TString& error, const TString& queryPlan, const TString& planAst, const TString& execStats) {
         TQueryBenchmarkResult result;
         result.ErrorInfo = error;
         result.QueryPlan = queryPlan;
         result.PlanAst = planAst;
+        result.ExecStats = execStats;
         return result;
     }
 

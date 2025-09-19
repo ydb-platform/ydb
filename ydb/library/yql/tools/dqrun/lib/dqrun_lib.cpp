@@ -13,7 +13,6 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 
-#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
@@ -306,7 +305,7 @@ TDqRunTool::TDqRunTool()
         } else {
             std::function<NActors::IActor*(void)> metricsPusherFactory = {};
             dqGateway = CreateLocalDqGateway(GetFuncRegistry().Get(), compFactory, CreateDqTaskTransformFactory(), CreateDqTaskPreprocessorFactories(),
-                 EnableSpilling_, CreateAsyncIoFactory(), DqThreads_, GetMetricsRegistry(), metricsPusherFactory, GetFqServices());
+                 EnableSpilling_, CreateAsyncIoFactory(), DqThreads_, GetMetricsRegistry(), metricsPusherFactory);
         }
 
         return GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, compFactory, {}, GetFileStorage());
@@ -462,32 +461,6 @@ IPqGateway::TPtr TDqRunTool::GetPqGateway() {
         }
     }
     return PqGateway_;
-}
-
-TVector<std::pair<TActorId, TActorSetupCmd>> TDqRunTool::GetFqServices() {
-    TVector<std::pair<TActorId, TActorSetupCmd>> services;
-    if (FqConfig_->HasRowDispatcher() && FqConfig_->GetRowDispatcher().GetEnabled()) {
-        NFq::IYqSharedResources::TPtr iSharedResources = NFq::CreateYqSharedResources(
-            *FqConfig_,
-            NKikimr::CreateYdbCredentialsProviderFactory,
-            MakeIntrusive<NMonitoring::TDynamicCounters>());
-        NFq::TYqSharedResources::TPtr yqSharedResources = NFq::TYqSharedResources::Cast(iSharedResources);
-        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
-
-        auto rowDispatcher = NFq::NewRowDispatcherService(
-            FqConfig_->GetRowDispatcher(),
-            NKikimr::CreateYdbCredentialsProviderFactory,
-            yqSharedResources,
-            credentialsFactory,
-            "/tenant",
-            MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            GetPqGateway());
-
-        services.emplace_back(
-            NFq::RowDispatcherServiceActorId(),
-            TActorSetupCmd(rowDispatcher.release(), TMailboxType::Simple, 0));
-    }
-    return services;
 }
 
 NKikimr::NMiniKQL::TComputationNodeFactory TDqRunTool::CreateCompNodeFactory() {

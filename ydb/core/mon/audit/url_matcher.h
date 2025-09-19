@@ -19,8 +19,8 @@ struct TUrlPattern {
 class TUrlMatcher {
 public:
     void AddPattern(const TUrlPattern& rule);
-    bool Match(const TString& url, const TCgiParameters& params) const;
-    bool Match(const TString& url, const TString& params = {}) const;
+    bool Match(const TStringBuf path, const TCgiParameters& params) const;
+    bool Match(const TStringBuf url) const;
 
 private:
     struct TParamCondition {

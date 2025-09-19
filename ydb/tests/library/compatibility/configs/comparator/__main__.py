@@ -22,11 +22,24 @@ class FieldInfo:
         self.value = field.get('default-value')
 
 
+class FieldIdent:
+    def __init__(self, name: str, file: str):
+        self.name: str = name
+        self.file: str = file
+
+
+class FieldResolution:
+    def __init__(self, ident: FieldIdent, first_value):
+        self.ident = ident
+        self.result_class: str = ''
+        self.branch_resolutions: list[tuple[Resolution, str]] = [(Resolution.NO if first_value is None else Resolution.OK, '')]
+
+
 class Differ:
 
     def __init__(self):
-        self.fields: list[tuple[str, list[FieldInfo]]] = []
-        self.resolutions: list[tuple[str, list[tuple[Resolution, str]], str]] = []
+        self.fields: list[tuple[FieldIdent, list[FieldInfo]]] = []
+        self.resolutions: list[FieldResolution] = []
         self.branches: list[dict[str, str]] = []
 
     def load_files(self, names: list[str]):
@@ -59,6 +72,7 @@ class Differ:
         maxlist = 0
         dicts = []
         infos = []
+        file = ''
         for f in fields:
             if f is None:
                 infos.append(None)
@@ -69,7 +83,8 @@ class Differ:
             dicts.append(info.value if isinstance(info.value, dict) else None)
             if isinstance(info.value, list):
                 maxlist = max(maxlist, len(info.value))
-        self.fields.append(('.'.join(path), infos))
+            file = f.get('file', file)
+        self.fields.append((FieldIdent('.'.join(path), file), infos))
         self._add_fields_dict(dicts, path)
         for i in range(maxlist):
             index_fields = [info.value[i] if info and isinstance(info.value, list) and len(info.value) > i else None for info in infos]
@@ -104,18 +119,18 @@ class Differ:
         return Resolution.OK, ''
 
     def compare(self):
-        for name, values in self.fields:
+        for ident, values in self.fields:
             if len(values) == 0:
                 continue
-            result = [(Resolution.NO if values[0] is None else Resolution.OK, '')]
+            res = FieldResolution(ident, values[0])
             max_resolution = 0
             for i in range(1, len(values)):
-                result.append(self.compare_two_fields(values[i-1], values[i], name))
-                max_resolution = max(max_resolution, result[-1][0].value)
+                res.branch_resolutions.append(self.compare_two_fields(values[i-1], values[i], ident.name))
+                max_resolution = max(max_resolution, res.branch_resolutions[-1][0].value)
             if max_resolution <= Resolution.OK.value:
                 continue
-            cl = 'greenLine' if max_resolution == Resolution.INFO.value else ''
-            self.resolutions.append((name, result, cl))
+            res.result_class = 'greenLine' if max_resolution == Resolution.INFO.value else ''
+            self.resolutions.append(res)
 
     def print_result(self) -> None:
         print('''<style>
@@ -230,9 +245,13 @@ removing fields, changing their type or id (in protobuf), disabling the Feature 
             print(f'<th style="padding-left: 10; padding-right: 10">{br_text}</th>')
         print('</tr></thead>')
         print('<tbody>')
-        for field, result, cl in self.resolutions:
-            print(f'<tr class="{cl}"><td style="padding-left: 10; padding-right: 10">{field}</td>')
-            for resulution, msg in result:
+        for res in self.resolutions:
+            if res.ident.file:
+                field = f'<a href="https://github.com/ydb-platform/ydb/blame/main/{res.ident.file}">{res.ident.name}</a>'
+            else:
+                field = res.ident.name
+            print(f'<tr class="{res.result_class}"><td style="padding-left: 10; padding-right: 10">{field}</td>')
+            for resulution, msg in res.branch_resolutions:
                 color = {
                     Resolution.NO: '',
                     Resolution.OK: '#aaffaa',

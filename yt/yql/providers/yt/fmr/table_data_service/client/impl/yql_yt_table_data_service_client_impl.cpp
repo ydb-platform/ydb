@@ -20,10 +20,10 @@ class TFmrTableDataServiceClient: public ITableDataService {
 public:
     TFmrTableDataServiceClient(ITableDataServiceDiscovery::TPtr discovery): TableDataServiceDiscovery_(discovery) {}
 
-    NThreading::TFuture<void> Put(const TString& key, const TString& value) override {
-        TString putRequestUrl = "/put_data?key=" + key;
+    NThreading::TFuture<void> Put(const TString& group, const TString& chunkId, const TString& value) override {
+        TString putRequestUrl = "/put_data?group=" + group + "&chunkId=" + chunkId;
         ui64 workersNum = TableDataServiceDiscovery_->GetHostCount();
-        auto tableDataServiceWorkerNum = std::hash<TString>()(key) % workersNum;
+        auto tableDataServiceWorkerNum = std::hash<TString>()(group + chunkId) % workersNum;
         auto workerConnection = TableDataServiceDiscovery_->GetHosts()[tableDataServiceWorkerNum];
         auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
         YQL_CLOG(TRACE, FastMapReduce) << "Sending put request with url: " << putRequestUrl <<
@@ -40,10 +40,10 @@ public:
         return *DoWithRetry<NThreading::TFuture<void>, yexception>(putTableDataServiceFunc, RetryPolicy_, true, OnFail_);
     }
 
-    NThreading::TFuture<TMaybe<TString>> Get(const TString& key) const override {
-        TString getRequestUrl = "/get_data?key=" + key;
+    NThreading::TFuture<TMaybe<TString>> Get(const TString& group, const TString& chunkId) const override {
+        TString getRequestUrl = "/get_data?group=" + group + "&chunkId=" + chunkId;
         ui64 workersNum = TableDataServiceDiscovery_->GetHostCount();
-        auto tableDataServiceWorkerNum = std::hash<TString>()(key) % workersNum;
+        auto tableDataServiceWorkerNum = std::hash<TString>()(group + chunkId) % workersNum;
         auto workerConnection = TableDataServiceDiscovery_->GetHosts()[tableDataServiceWorkerNum];
         auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
         TStringStream outputStream;
@@ -67,10 +67,10 @@ public:
     }
 
 
-    NThreading::TFuture<void> Delete(const TString& key) override {
-        TString deleteRequestUrl = "/delete_data?key=" + key;
+    NThreading::TFuture<void> Delete(const TString& group, const TString& chunkId) override {
+        TString deleteRequestUrl = "/delete_data?group=" + group + "&chunkId=" + chunkId;
         ui64 workersNum = TableDataServiceDiscovery_->GetHostCount();
-        auto tableDataServiceWorkerNum = std::hash<TString>()(key) % workersNum;
+        auto tableDataServiceWorkerNum = std::hash<TString>()(group + chunkId) % workersNum;
         auto workerConnection = TableDataServiceDiscovery_->GetHosts()[tableDataServiceWorkerNum];
         auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
         YQL_CLOG(TRACE, FastMapReduce) << "Sending delete request with url: " << deleteRequestUrl <<
@@ -111,6 +111,24 @@ public:
             allNodesDeletions.emplace_back(*DoWithRetry<NThreading::TFuture<void>, yexception>(deletionRequestFunc, RetryPolicy_, true, OnFail_));
         }
         return WaitExceptionOrAll(allNodesDeletions);
+    }
+
+    NThreading::TFuture<void> Clear() override {
+        TString clearRequestUrl = "/clear";
+        ui64 totalWorkersNum = TableDataServiceDiscovery_->GetHostCount();
+        for (ui64 workerNum = 0; workerNum < totalWorkersNum; ++workerNum) {
+            auto workerConnection = TableDataServiceDiscovery_->GetHosts()[workerNum];
+            auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
+            YQL_CLOG(TRACE, FastMapReduce) << "Sending clear request with url: " << clearRequestUrl <<
+                " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
+            try {
+                httpClient.DoPost(clearRequestUrl, TString(), nullptr, GetHeadersWithLogContext(Headers_));
+            } catch (...) {
+                YQL_CLOG(ERROR, FastMapReduce) << "Failed to clear table data service host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port)
+                    << "with error message: " << CurrentExceptionMessage();
+            }
+        }
+        return NThreading::MakeFuture(); // For now just log errors and ignore request failiures.
     }
 
 private:

@@ -132,8 +132,13 @@ namespace NDataShard {
             WaitingForRestart = 1ULL << 46,
             // Operation has write keys registered in the cache
             DistributedWritesRegistered = 1ULL << 47,
+            // Operation was blocked and is waiting for explicit unblock
+            BlockFailPointWaiting = 1ULL << 48,
+            BlockFailPointUnblocked = 1ULL << 49,
+            // Operation sent a TEvProposeTransactionRestart notification
+            RestartNotificationSent = 1ULL << 50,
 
-            LastFlag = DistributedWritesRegistered,
+            LastFlag = RestartNotificationSent,
 
             PrivateFlagsMask = 0xFFFFFFFFFFFF0000ULL,
             PreservedPrivateFlagsMask = ReadOnly | ProposeBlocker | NeedDiagnostics | GlobalReader

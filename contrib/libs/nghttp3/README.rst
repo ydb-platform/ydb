@@ -38,6 +38,8 @@ The following extensions have been implemented:
   <https://datatracker.ietf.org/doc/html/rfc9218>`_
 - `Bootstrapping WebSockets with HTTP/3
   <https://datatracker.ietf.org/doc/html/rfc9220>`_
+- `The ORIGIN Extension in HTTP/3
+  <https://datatracker.ietf.org/doc/html/rfc9412>`_
 
 It can also send and receive `SETTINGS_H3_DATAGRAM` from `HTTP
 Datagrams and the Capsule Protocol

@@ -384,7 +384,7 @@ bool ExtractUsedFields(const TExprNode::TPtr& start, const TExprNode& arg, TSet<
 
         if (parent->IsCallable("Member")) {
             usedFields.emplace(parent->Tail().Content());
-        } else if (allowDependsOn && parent->IsCallable("DependsOn")) {
+        } else if (allowDependsOn && IsDependsOnUsage(*parent, parentsMap)) {
             continue;
         } else {
             // unknown node
@@ -422,10 +422,11 @@ TExprBase TKqpMatchReadResult::BuildProcessNodes(TExprBase input, TExprContext& 
             .Done();
     }
 
+
     if (FlatMap) {
         expr = Build<TCoFlatMap>(ctx, FlatMap.Cast().Pos())
             .Input(expr)
-            .Lambda(FlatMap.Cast().Lambda())
+            .Lambda(ctx.DeepCopyLambda(FlatMap.Cast().Lambda().Ref()))
             .Done();
     }
 

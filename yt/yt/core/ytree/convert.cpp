@@ -25,7 +25,7 @@ TYsonString ConvertToYsonStringNestingLimited(const TYsonString& value, int nest
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NYSon
+} // namespace NYT::NYson
 
 namespace NYT::NYTree {
 

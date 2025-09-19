@@ -131,19 +131,13 @@ public:
         };
 
         auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
-        if (ev->Cookie) {
-            auto response = MakeHolder<TEvQueryResponse>();
-            response->Query = query;
-            Send(ev->Sender, response.Release(), 0, queryId);
-        }
+        auto response = MakeHolder<TEvQueryResponse>();
+        response->Query = query;
+        Send(ev->Sender, response.Release(), 0, queryId);
     }
 
     void Handle(TEvRemoveQuery::TPtr& ev) {
-        const auto& databaseId = ev->Get()->DatabaseId;
-        const auto& poolId = ev->Get()->PoolId;
-        const auto& queryId = ev->Get()->QueryId;
-
-        Scheduler->RemoveQuery(databaseId, poolId, queryId);
+        Scheduler->RemoveQuery(ev->Get()->Query);
     }
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
@@ -243,7 +237,7 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const T
 
     TQueryPtr query;
 
-    if (query = pool->GetQuery(queryId)) {
+    if (query = std::static_pointer_cast<TQuery>(pool->GetQuery(queryId))) {
         query->Update(attrs);
     } else {
         query = std::make_shared<TQuery>(queryId, &DelayParams, attrs);
@@ -254,13 +248,14 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const T
     return query;
 }
 
-void TComputeScheduler::RemoveQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId) {
-    TWriteGuard lock(Mutex);
+void TComputeScheduler::RemoveQuery(const TQueryPtr& query) {
+    Y_ENSURE(query);
 
-    auto database = Root->GetDatabase(databaseId);
-    auto pool = database->GetPool(poolId);
-    pool->RemoveQuery(queryId);
-    Queries.erase(queryId);
+    TWriteGuard lock(Mutex);
+    const auto& queryId = std::get<NHdrf::TQueryId>(query->GetId());
+
+    Y_ENSURE(Queries.erase(queryId));
+    query->GetParent()->RemoveQuery(queryId);
 }
 
 void TComputeScheduler::UpdateFairShare() {
@@ -278,7 +273,7 @@ void TComputeScheduler::UpdateFairShare() {
     {
         TWriteGuard lock(Mutex);
         if (auto oldSnapshot = Root->SetSnapshot(snapshot)) {
-            snapshot->AccountFairShare(oldSnapshot);
+            snapshot->AccountPreviousSnapshot(oldSnapshot);
         }
     }
 

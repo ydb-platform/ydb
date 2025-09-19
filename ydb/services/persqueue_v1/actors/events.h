@@ -5,8 +5,8 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/persqueue/key.h>
-#include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/persqueue/public/key.h>
+#include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/tx/scheme_board/events.h>
 
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
@@ -487,8 +487,11 @@ struct TEvPQProxy {
     };
 
     struct TEvPartitionStatus : public NActors::TEventLocal<TEvPartitionStatus, EvPartitionStatus> {
-        TEvPartitionStatus(const TPartitionId& partition, const ui64 offset, const ui64 endOffset, const ui64 writeTimestampEstimateMs, ui64 nodeId, ui64 generation, bool clientHasAnyCommits,
-                           bool init = true)
+        TEvPartitionStatus(const TPartitionId& partition,
+                           const ui64 offset, const ui64 endOffset, const ui64 writeTimestampEstimateMs, ui64 nodeId, ui64 generation,
+                           const TExplicitType<bool> clientHasAnyCommits,
+                           const TExplicitType<ui64> readOffset,
+                           const TExplicitType<bool> init = true)
             : Partition(partition)
             , Offset(offset)
             , EndOffset(endOffset)
@@ -496,6 +499,7 @@ struct TEvPQProxy {
             , WriteTimestampEstimateMs(writeTimestampEstimateMs)
             , NodeId(nodeId)
             , Generation(generation)
+            , ReadOffset(readOffset)
             , Init(init)
         { }
 
@@ -506,6 +510,7 @@ struct TEvPQProxy {
         ui64 WriteTimestampEstimateMs;
         ui64 NodeId;
         ui64 Generation;
+        ui64 ReadOffset;
         bool Init;
     };
 

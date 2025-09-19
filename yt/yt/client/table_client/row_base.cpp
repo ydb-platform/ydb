@@ -24,7 +24,7 @@ TColumnFilter::TColumnFilter()
     : Universal_(true)
 { }
 
-TColumnFilter::TColumnFilter(const std::initializer_list<int>& indexes)
+TColumnFilter::TColumnFilter(std::initializer_list<int> indexes)
     : Universal_(false)
     , Indexes_(indexes.begin(), indexes.end())
 { }

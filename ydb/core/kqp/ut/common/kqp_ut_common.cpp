@@ -20,6 +20,36 @@
 namespace NKikimr {
 namespace NKqp {
 
+namespace {
+
+void TerminateHandler() {
+    Cerr << "======= terminate() call stack ========" << Endl;
+    FormatBackTrace(&Cerr);
+    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
+        Cerr << "======== exception call stack =========" << Endl;
+        backtrace.PrintTo(Cerr);
+    }
+    Cerr << "=======================================" << Endl;
+
+    if (std::current_exception()) {
+        Cerr << "Uncaught exception: " << CurrentExceptionMessage() << Endl;
+    } else {
+        Cerr << "Terminate for unknown reason (no current exception)" << Endl;
+    }
+
+    abort();
+}
+
+void BackTraceSignalHandler(int signal) {
+    Cerr << "======= Signal " << signal << " call stack ========" << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << "===============================================" << Endl;
+
+    abort();
+}
+
+} // anonymous namespace
+
 using namespace NYdb::NTable;
 
 const TString EXPECTED_EIGHTSHARD_VALUE1 = R"(
@@ -102,6 +132,11 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     EnableYDBBacktraceFormat();
 
+    std::set_terminate(&TerminateHandler);
+    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
+        signal(sig, &BackTraceSignalHandler);
+    }
+
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
@@ -129,6 +164,13 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
+    if (settings.EnableStorageProxy) {
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetEnabled(true);
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetCheckpointingPeriodMillis(200);
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetMaxInflight(1);
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->MutableExternalStorage()->SetEndpoint(GetEnv("YDB_ENDPOINT"));
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->MutableExternalStorage()->SetDatabase(GetEnv("YDB_DATABASE"));
+    }
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
     ServerSettings->SetNodeCount(settings.NodeCount);
@@ -145,6 +187,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
     ServerSettings->SetEnableScriptExecutionBackgroundChecks(settings.EnableScriptExecutionBackgroundChecks);
+    ServerSettings->SetEnableStorageProxy(settings.EnableStorageProxy);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);
@@ -155,10 +198,13 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetEnableMockOnSingleNode(false);
     }
 
-    if (settings.LogStream)
+    if (settings.LogStream) {
         ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
+    }
 
-    if (settings.FederatedQuerySetupFactory) {
+    if (settings.InitFederatedQuerySetupFactory) {
+        ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
+    } else if (settings.FederatedQuerySetupFactory) {
         ServerSettings->SetFederatedQuerySetupFactory(settings.FederatedQuerySetupFactory);
     }
 
@@ -645,22 +691,33 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
     SetupLogLevelFromTestParam(NKikimrServices::SSA_GRAPH_EXECUTION);
-
+    SetupLogLevelFromTestParam(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR);
+    SetupLogLevelFromTestParam(NKikimrServices::STREAMS_STORAGE_SERVICE);
+    SetupLogLevelFromTestParam(NKikimrServices::YDB_SDK);
+    SetupLogLevelFromTestParam(NKikimrServices::DISCOVERY);
+    SetupLogLevelFromTestParam(NKikimrServices::DISCOVERY_CACHE);
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);
         return true;
     });
 
-    if (settings.AuthToken) {
-        this->Client->GrantConnect(settings.AuthToken);
-    }
-
+    // Create sample tables in anonymous mode
     if (settings.WithSampleTables) {
         RunCall([this] {
             this->CreateSampleTables();
             return true;
         });
+    }
+
+    // Initial user becomes cluster admin.
+    if (settings.AuthToken) {
+        // Cluster admin does not require the explicit EAccessRights::ConnectDatabase right,
+        // but does require explicit EAccessRights::GenericFull rights.
+        // The order is important here, because grants from anonymous user are possible
+        // only while AdministrationAllowedSIDs is empty (which means that anyone is an admin).
+        this->Client->TestGrant("/", settings.DomainRoot, settings.AuthToken, NACLib::EAccessRights::GenericFull);
+        Server->GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back(settings.AuthToken);
     }
 }
 

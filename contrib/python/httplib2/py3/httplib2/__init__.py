@@ -16,7 +16,7 @@ __contributors__ = [
     "Lai Han",
 ]
 __license__ = "MIT"
-__version__ = "0.22.0"
+__version__ = "0.30.0"
 
 import base64
 import calendar
@@ -47,9 +47,7 @@ import zlib
 try:
     import socks
 except ImportError:
-    # TODO: remove this fallback and copypasted socksipy module upon py2/3 merge,
-    # idea is to have soft-dependency on any compatible module called socks
-    from . import socks
+    socks = None
 from . import auth
 from .error import *
 from .iri2uri import iri2uri

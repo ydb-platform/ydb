@@ -9,7 +9,7 @@ def post_install(self):
 boost_range = NixSourceProject(
     nixattr="boost_range",
     arcdir=boost.make_arcdir("range"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

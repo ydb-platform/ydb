@@ -194,7 +194,7 @@ bool TTiersManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContex
         if (versionInfo.GetTtlSettings().HasEnabled()) {
             NOlap::TTiering tiering;
             tiering.DeserializeFromProto(versionInfo.GetTtlSettings().GetEnabled()).Validate();
-            Self->Tiers->ActivateTiers(tiering.GetUsedTiers());
+            Self->Tiers->ActivateTiers(tiering.GetUsedTiers(), false);
         }
 
         if (!rowset.Next()) {

@@ -2,6 +2,7 @@
 #include <library/cpp/resource/resource.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_partitioner.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include "yql_yt_coordinator_impl.h"
@@ -36,6 +37,7 @@ public:
     {
         StartClearingIdempotencyKeys();
         CheckWorkersAliveStatus();
+        GcService_->ClearAll();
     }
 
     ~TFmrCoordinator() {
@@ -452,14 +454,14 @@ private:
             TString tableId = downloadTaskParams->Output.TableId;
             if (!downloadTaskParams->Output.PartId.empty()) {
                 auto prevPartId = downloadTaskParams->Output.PartId;
-                groupsToClear.emplace_back(TString::Join(tableId, "_", prevPartId));
+                groupsToClear.emplace_back(GetTableDataServiceGroup(tableId, prevPartId));
                 PartIdsForTables_.erase(prevPartId);
             }
         } else if (mergeTaskParams) {
             TString tableId = mergeTaskParams->Output.TableId;
             if (!mergeTaskParams->Output.PartId.empty()) {
                 auto prevPartId = mergeTaskParams->Output.PartId;
-                groupsToClear.emplace_back(TString::Join(tableId, "_", prevPartId));
+                groupsToClear.emplace_back(GetTableDataServiceGroup(tableId, prevPartId));
                 PartIdsForTables_.erase(prevPartId);
             }
         } else if (mapTaskParams) {
@@ -467,7 +469,7 @@ private:
                 TString tableId = fmrTableOutputRef.TableId;
                 if (!fmrTableOutputRef.PartId.empty()) {
                     auto prevPartId = fmrTableOutputRef.PartId;
-                    groupsToClear.emplace_back(TString::Join(tableId, "_", prevPartId));
+                    groupsToClear.emplace_back(GetTableDataServiceGroup(tableId, prevPartId));
                     PartIdsForTables_.erase(prevPartId);
                 }
             }
@@ -596,7 +598,7 @@ private:
                 YQL_ENSURE(task.Inputs.size() == 1, "Download task should have exactly one yt table partition input");
                 auto& ytTablePart = task.Inputs[0];
                 downloadTaskParams.Input = std::get<TYtTableTaskRef>(ytTablePart);
-                downloadTaskParams.Output = TFmrTableOutputRef{.TableId = downloadOperationParams.Output.FmrTableId.Id};
+                downloadTaskParams.Output = TFmrTableOutputRef(downloadOperationParams.Output);
                 // PartId for tasks which write to table data service will be set later
                 TaskParams.emplace_back(downloadTaskParams);
             }
@@ -605,7 +607,7 @@ private:
             for (auto& task: PartitionResult.TaskInputs) {
                 TMergeTaskParams mergeTaskParams;
                 mergeTaskParams.Input = task;
-                mergeTaskParams.Output = TFmrTableOutputRef{.TableId = mergeOperationParams.Output.FmrTableId.Id};
+                mergeTaskParams.Output = TFmrTableOutputRef(mergeOperationParams.Output);
                 TaskParams.emplace_back(mergeTaskParams);
             }
         }
@@ -615,7 +617,7 @@ private:
                 mapTaskParams.Input = task;
                 std::vector<TFmrTableOutputRef> fmrTableOutputRefs;
                 std::transform(mapOperationParams.Output.begin(), mapOperationParams.Output.end(), std::back_inserter(fmrTableOutputRefs), [] (const TFmrTableRef& fmrTableRef) {
-                    return TFmrTableOutputRef{.TableId = fmrTableRef.FmrTableId.Id};
+                    return TFmrTableOutputRef(fmrTableRef);
                 });
 
                 mapTaskParams.Output = fmrTableOutputRefs;

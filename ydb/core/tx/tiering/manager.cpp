@@ -254,14 +254,15 @@ const NTiers::TManager* TTiersManager::GetManagerOptional(const NTiers::TExterna
     }
 }
 
-void TTiersManager::ActivateTiers(const THashSet<NTiers::TExternalStorageId>& usedTiers) {
+void TTiersManager::ActivateTiers(const THashSet<NTiers::TExternalStorageId>& usedTiers, const bool resubscribeToConfig) {
     AFL_VERIFY(Actor)("error", "tiers_manager_is_not_started");
     for (const NTiers::TExternalStorageId& tierId : usedTiers) {
         auto findTier = Tiers.find(tierId);
+        const bool newTier = (findTier == Tiers.end());
         if (findTier == Tiers.end()) {
             findTier = Tiers.emplace(tierId, TTierGuard(tierId, this)).first;
         }
-        if (findTier->second.GetState() != TTiersManager::ETierState::AVAILABLE) {
+        if (newTier || (findTier->second.GetState() != TTiersManager::ETierState::AVAILABLE && resubscribeToConfig)) {
             const auto& actorContext = NActors::TActivationContext::AsActorContext();
             AFL_VERIFY(&actorContext)("error", "no_actor_context");
             actorContext.Send(Actor->SelfId(), new NTiers::TEvWatchSchemeObject({ tierId.GetConfigPath() }));

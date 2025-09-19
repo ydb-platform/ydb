@@ -76,4 +76,6 @@ namespace NKikimr {
 
     IActor *CreateDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId);
 
+    TString VerifyConfigCompatibility(const char* name, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSSConfig, const NKikimrConfig::TDomainsConfig::TStateStorage& newSSConfig);
+
 } // NKikimr

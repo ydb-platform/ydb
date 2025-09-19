@@ -38,6 +38,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/audit/audit_config
+    ydb/core/audit/heartbeat_actor
     ydb/core/backup/controller
     ydb/core/base
     ydb/core/blob_depot
@@ -95,6 +96,7 @@ PEERDIR(
     ydb/core/scheme_types
     ydb/core/security
     ydb/core/security/ldap_auth_provider
+    ydb/core/security/token_manager
     ydb/core/statistics/aggregator
     ydb/core/statistics/service
     ydb/core/sys_view/processor

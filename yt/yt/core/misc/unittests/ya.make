@@ -22,6 +22,7 @@ SRCS(
     concurrent_cache_ut.cpp
     configurable_singleton_ut.cpp
     consistent_hashing_ut.cpp
+    crash_handler_ut.cpp
     default_map_ut.cpp
     digest_ut.cpp
     ema_counter_ut.cpp

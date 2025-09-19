@@ -1535,7 +1535,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto list1 = pb.NewList(type, {data0, data1, data2});
         const auto list2 = pb.NewList(type, {data3, data4});
 
-        const auto pgmReturn = pb.FromFlow(pb.Extend({pb.ToFlow(list2), pb.ToFlow(list1), pb.ToFlow(list2)}));
+        const auto pgmReturn = pb.FromFlow(pb.Extend({pb.ToFlow(list1), pb.ToFlow(list2), pb.ToFlow(list2)}));
 
         const auto graph = setup.BuildGraph(pgmReturn);
 
@@ -1557,6 +1557,194 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), -7898.8);
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+    }
+
+    class TGraphInput : public TComputationValue<TGraphInput> {
+        using TBase = TComputationValue<TGraphInput>;
+    public:
+        TGraphInput(TMemoryUsageInfo* memInfo, ui32 value)
+            : TBase(memInfo), Value(value)
+        {}
+
+        NUdf::EFetchStatus GetReturnStatus() const {
+            return Status;
+        }
+
+        void SetReturnStatus(NUdf::EFetchStatus status) {
+            Status = status;
+        }
+
+    private:
+        NUdf::EFetchStatus Fetch(NKikimr::NUdf::TUnboxedValue& item) final {
+            if (Status == NUdf::EFetchStatus::Ok) {
+                item = NKikimr::NUdf::TUnboxedValuePod(Value);
+            }
+            return Status;
+        }
+
+        NUdf::EFetchStatus WideFetch(NKikimr::NUdf::TUnboxedValue* , ui32 ) final {
+            UNIT_ASSERT(false);
+            return Status;
+        }
+
+        const ui32 Value;
+        NUdf::EFetchStatus Status = NUdf::EFetchStatus::Yield;
+    };
+
+    Y_UNIT_TEST_QUAD(TestExtendYields, LLVM, WIDE) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto type = TStreamType::Create(pb.NewDataType(NUdf::TDataType<ui32>::Id), pb.GetTypeEnvironment());
+        const auto arg0 = pb.Arg(type);
+        const auto arg1 = pb.Arg(type);
+
+        const auto pgmReturn = WIDE ?
+            pb.FromFlow(
+                pb.NarrowMap(
+                    pb.Extend({
+                        pb.ExpandMap(pb.ToFlow(arg0), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
+                        pb.ExpandMap(pb.ToFlow(arg1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; })
+                    }),
+                    [&](TRuntimeNode::TList items) { return items[0]; }
+                )
+            )
+            : pb.FromFlow(pb.Extend({pb.ToFlow(arg0), pb.ToFlow(arg1)}));
+
+        const auto graph = setup.BuildGraph(pgmReturn, {arg0.GetNode(), arg1.GetNode()});
+
+        NUdf::TUnboxedValuePod inputPod0 = graph->GetHolderFactory().template Create<TGraphInput>(0);
+        NUdf::TUnboxedValuePod inputPod1 = graph->GetHolderFactory().template Create<TGraphInput>(1);
+
+        auto* input0 = dynamic_cast<TGraphInput*>(inputPod0.AsRawBoxed());
+        auto* input1 = dynamic_cast<TGraphInput*>(inputPod1.AsRawBoxed());
+
+        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(inputPod0));
+        graph->GetEntryPoint(1, true)->SetValue(graph->GetContext(), std::move(inputPod1));
+
+        const auto iterator = graph->GetValue();
+        NUdf::TUnboxedValue item;
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Yield, iterator.Fetch(item));
+        input0->SetReturnStatus(NUdf::EFetchStatus::Ok);
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0);
+        input0->SetReturnStatus(NUdf::EFetchStatus::Yield);
+        input1->SetReturnStatus(NUdf::EFetchStatus::Ok);
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1);
+        input1->SetReturnStatus(NUdf::EFetchStatus::Yield);
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Yield, iterator.Fetch(item));
+        input0->SetReturnStatus(NUdf::EFetchStatus::Finish);
+        input1->SetReturnStatus(NUdf::EFetchStatus::Ok);
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1);
+        input1->SetReturnStatus(NUdf::EFetchStatus::Finish);
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+    }
+
+    Y_UNIT_TEST_QUAD(TestExtendRandomYields, LLVM, WIDE) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto type = TStreamType::Create(pb.NewDataType(NUdf::TDataType<ui32>::Id), pb.GetTypeEnvironment());
+        const auto arg0 = pb.Arg(type);
+        const auto arg1 = pb.Arg(type);
+        const auto arg2 = pb.Arg(type);
+        const auto arg3 = pb.Arg(type);
+
+        const auto expandLambda = [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; };
+
+        const auto pgmReturn = WIDE ?
+            pb.FromFlow(
+                pb.NarrowMap(
+                    pb.Extend({
+                        pb.ExpandMap(pb.ToFlow(arg0), expandLambda),
+                        pb.ExpandMap(pb.ToFlow(arg1), expandLambda),
+                        pb.ExpandMap(pb.ToFlow(arg2), expandLambda),
+                        pb.ExpandMap(pb.ToFlow(arg3), expandLambda),
+                    }),
+                    [&](TRuntimeNode::TList items) { return items[0]; }
+                )
+            )
+            : pb.FromFlow(pb.Extend({pb.ToFlow(arg0), pb.ToFlow(arg1), pb.ToFlow(arg2), pb.ToFlow(arg3)}));
+
+        const auto graph = setup.BuildGraph(pgmReturn, {arg0.GetNode(), arg1.GetNode(), arg2.GetNode(), arg3.GetNode()});
+
+        TGraphInput* inputs[4];
+
+        for (ui32 i = 0; i < 4; i++) {
+            NUdf::TUnboxedValuePod inputPod = graph->GetHolderFactory().template Create<TGraphInput>(i);
+            inputs[i] = dynamic_cast<TGraphInput*>(inputPod.AsRawBoxed());
+            graph->GetEntryPoint(i, true)->SetValue(graph->GetContext(), std::move(inputPod));
+        }
+
+        const auto iterator = graph->GetValue();
+        NUdf::TUnboxedValue item;
+
+        const auto yieldCountLambda = [&]() -> ui32 {
+            ui32 result = 0;
+            for (ui32 i = 0; i < 4; i++) {
+                if (inputs[i]->GetReturnStatus() == NUdf::EFetchStatus::Yield) {
+                    result++;
+                }
+            }
+            return result;
+        };
+
+        ui32 finishCount = 0;
+        ui32 iterationCount = 0;
+        ui32 okCount = 0;
+
+        TIntrusivePtr<IRandomProvider> random = CreateDeterministicRandomProvider(1);
+
+        while (true) {
+
+            ui64 mask = random->GenRand() & 0x1F;
+            if (mask & 0x10) {
+                mask = 0;
+            }
+
+            switch (++iterationCount) {
+                case 600:
+                case 800:
+                case 900:
+                case 1000:
+                    inputs[finishCount]->SetReturnStatus(NUdf::EFetchStatus::Finish);
+                    finishCount++;
+                    break;
+                default:
+                    for (ui32 i = 0; i < 4; i++) {
+                        auto status = inputs[i]->GetReturnStatus();
+                        if (status != NUdf::EFetchStatus::Finish) {
+                            auto newStatus = mask & (1 << i) ? NUdf::EFetchStatus::Ok : NUdf::EFetchStatus::Yield;
+                            if (status != newStatus) {
+                                inputs[i]->SetReturnStatus(newStatus);
+                            }
+                        }
+                    }
+            }
+
+            auto itemStatus = iterator.Fetch(item);
+
+            switch (itemStatus) {
+                case NUdf::EFetchStatus::Ok:
+                    UNIT_ASSERT(inputs[item.template Get<ui32>()]->GetReturnStatus() ==  NUdf::EFetchStatus::Ok);
+                    okCount++;
+                    break;
+                case NUdf::EFetchStatus::Yield:
+                    UNIT_ASSERT(yieldCountLambda() == 4 - finishCount && (finishCount < 4));
+                    break;
+                case NUdf::EFetchStatus::Finish:
+                    UNIT_ASSERT(finishCount == 4);
+                    break;
+            }
+
+            if (finishCount == 4) {
+                break;
+            }
+        }
+        UNIT_ASSERT_C(okCount * 4 >= iterationCount, "Less than 25% OKs, add more bits to masks");
+        UNIT_ASSERT_C(okCount * 4 <= iterationCount * 3, "More than 75% OKs, remove bits from masks");
     }
 
     Y_UNIT_TEST_LLVM(TestOrderedExtendOverFlows) {

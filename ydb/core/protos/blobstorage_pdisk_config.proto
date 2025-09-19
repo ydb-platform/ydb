@@ -96,4 +96,5 @@ message TPDiskConfig {
     optional bool UseNoopScheduler = 2004;
     optional bool PlainDataChunks = 2005;
     optional uint32 SlotSizeInUnits = 2006;
+    optional bool SeparateHugePriorities = 2007;
 };

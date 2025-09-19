@@ -97,6 +97,47 @@ TYPED_TEST(TRpcTest, RetryingSend)
     });
 }
 
+TYPED_TEST(TRpcTest, TestingDelayLite)
+{
+    auto startTime = TInstant::Now();
+
+    for (int i = 0; i < 5; ++i) {
+        TTestProxy proxy(this->CreateChannel());
+        auto req = proxy.DelayedCall();
+        auto rspOrError = req->Invoke().Get();
+        EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
+
+        // Do not run the test for a long time if sufficient delay has already been observed.
+        if (TInstant::Now() - startTime > TDuration::Seconds(1)) {
+            break;
+        }
+    }
+
+    auto elapsed = TInstant::Now() - startTime;
+    EXPECT_GT(elapsed, TDuration::MilliSeconds(500));
+}
+
+TYPED_TEST(TRpcTest, TestingDelayHeavy)
+{
+    auto startTime = TInstant::Now();
+
+    for (int i = 0; i < 5; ++i) {
+        TTestProxy proxy(this->CreateChannel());
+        auto req = proxy.DelayedCall();
+        req->SetRequestHeavy(true);
+        auto rspOrError = req->Invoke().Get();
+        EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
+
+        // Do not run the test for a long time if sufficient delay has already been observed.
+        if (TInstant::Now() - startTime > TDuration::Seconds(1)) {
+            break;
+        }
+    }
+
+    auto elapsed = TInstant::Now() - startTime;
+    EXPECT_GT(elapsed, TDuration::MilliSeconds(500));
+}
+
 TYPED_TEST(TRpcTest, UserTag)
 {
     TTestProxy proxy(this->CreateChannel());
@@ -1155,6 +1196,7 @@ protected:
     TAttachmentsInputStreamPtr CreateStream(std::optional<TDuration> timeout = {})
     {
         return New<TAttachmentsInputStream>(
+            TRequestId(),
             BIND([=] {}),
             nullptr,
             timeout);
@@ -1292,6 +1334,7 @@ protected:
     {
         PullCallbackCounter_ = 0;
         return New<TAttachmentsOutputStream>(
+            TRequestId(),
             NCompression::ECodec::None,
             nullptr,
             BIND([this] {

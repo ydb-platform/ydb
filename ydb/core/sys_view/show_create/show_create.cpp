@@ -5,7 +5,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
@@ -113,7 +113,7 @@ private:
     void StartScan() {
         if (!AppData()->FeatureFlags.GetEnableShowCreate()) {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
-                TStringBuilder() << "Sys view is not supported: " << ShowCreateName);
+                TStringBuilder() << "Sys view 'show_create' is not supported");
             return;
         }
 

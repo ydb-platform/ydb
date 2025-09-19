@@ -15,6 +15,7 @@ namespace NYql {
         TProtoSchemaOptions::TProtoSchemaOptions()
             : EnumPolicy(EEnumPolicy::Int32)
             , ListIsOptional(false)
+            , EnableRecursiveRenaming(false)
         {
         }
 
@@ -25,6 +26,11 @@ namespace NYql {
 
         TProtoSchemaOptions& TProtoSchemaOptions::SetListIsOptional(bool value) {
             ListIsOptional = value;
+            return *this;
+        }
+
+        TProtoSchemaOptions& TProtoSchemaOptions::SetEnableRecursiveRenaming(bool value) {
+            EnableRecursiveRenaming = value;
             return *this;
         }
 
@@ -122,7 +128,7 @@ namespace NYql {
                 auto name = fieldDescriptor.name();
                 if (
                     auto renamePtr = options.FieldRenames.FindPtr(name);
-                    nested.size() == 1 && renamePtr
+                    (options.EnableRecursiveRenaming || nested.size() == 1) && renamePtr
                 ) {
                     name = *renamePtr;
                 }

@@ -55,7 +55,11 @@ message TEvModifySchemeTransaction {
     optional string Owner = 5;
     optional bool FailOnExist = 6; // deprecated, TModifyScheme.FailOnExist is recomended
     optional string UserToken = 7 [(Ydb.sensitive) = true]; // serialized NACLib::TUserToken
+    // Fields for audit logging
     optional string PeerName = 8;
+	// UserSID and SanitizedToken are used as alternatives to UserToken for operations initiated by schemeshard itself, such as schema operations during import/export and similar tasks.
+    optional string UserSID = 9;
+    optional string SanitizedToken = 10;
 }
 
 message TFetcherCheckUserTieringPermissionsResult {

@@ -5,7 +5,7 @@
 * [строковые](../concepts/datamodel/table.md#row-oriented-tables) таблицы;
 * [вторичные индексы](../concepts/secondary_indexes.md) для строковых таблиц;
 * [потоки изменений](../concepts/cdc.md) строковых таблиц;
-* [топики](../concepts/topic.md).
+* [топики](../concepts/datamodel/topic.md).
 
 {% note warning %}
 
@@ -535,7 +535,7 @@ resource "ydb_table_index" "ydb_table_index" {
 
 ## Управление конфигурацией топиков {{ ydb-short-name }} через Terraform
 
-Для работы с [топиками](../concepts/topic.md) используется ресурс `ydb_topic`
+Для работы с [топиками](../concepts/datamodel/topic.md) используется ресурс `ydb_topic`
 
 {% note info %}
 

@@ -4,6 +4,7 @@
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "viewer_tabletinfo.h"
+#include <ydb/public/api/protos/ydb_bridge_common.pb.h>
 
 namespace NKikimr::NViewer {
 
@@ -13,13 +14,16 @@ using namespace NNodeWhiteboard;
 class TJsonCluster : public TViewerPipeClient {
     using TThis = TJsonCluster;
     using TBase = TViewerPipeClient;
+    using TPDiskId = std::pair<TNodeId, ui32>;
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
     std::optional<TRequestResponse<TEvNodeWardenStorageConfig>> NodeWardenStorageConfigResponse;
     bool NodeWardenStorageConfigResponseProcessed = false;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
     std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ListTenantsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse>> PDisksResponse;
+    std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse>> VSlotsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResponse>> StorageStatsResponse;
+    std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GroupsResponse;
     std::optional<TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStatsResponse;
 
     int WhiteboardStateRequestsInFlight = 0;
@@ -34,7 +38,7 @@ class TJsonCluster : public TViewerPipeClient {
         TNodeId NodeId;
         TString DataCenter;
         TSubDomainKey SubDomainKey;
-        std::optional<ui32> PileId;
+        std::optional<ui32> PileNum;
         bool Static = false;
         bool Connected = false;
         bool Disconnected = false;
@@ -114,6 +118,8 @@ public:
         }
         NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, new TEvWhiteboard::TEvNodeStateRequest());
         PDisksResponse = MakeCachedRequestBSControllerPDisks();
+        VSlotsResponse = MakeCachedRequestBSControllerVSlots();
+        GroupsResponse = MakeCachedRequestBSControllerGroups();
         StorageStatsResponse = MakeCachedRequestBSControllerStorageStats();
         ListTenantsResponse = MakeRequestConsoleListTenants();
         if (AppData()->DomainsInfo && AppData()->DomainsInfo->Domain) {
@@ -216,31 +222,59 @@ private:
     }
 
     bool TimeToAskWhiteboard() {
-        if (NodesInfoResponse) {
+        if (NodesInfoResponse && !NodesInfoResponse->IsDone()) {
             return false;
         }
 
-        if (NodeStateResponse) {
+        if (NodeStateResponse && !NodeStateResponse->IsDone()) {
             return false;
         }
 
-        if (ListTenantsResponse) {
+        if (ListTenantsResponse && !ListTenantsResponse->IsDone()) {
             return false;
         }
 
-        if (PDisksResponse) {
+        if (PDisksResponse && !PDisksResponse->IsDone()) {
             return false;
         }
 
-        if (StorageStatsResponse) {
+        if (VSlotsResponse && !VSlotsResponse->IsDone()) {
             return false;
         }
 
-        if (HiveNodeStatsResponse) {
+        if (GroupsResponse && !GroupsResponse->IsDone()) {
+            return false;
+        }
+
+        if (StorageStatsResponse && !StorageStatsResponse->IsDone()) {
+            return false;
+        }
+
+        if (HiveNodeStatsResponse && !HiveNodeStatsResponse->IsDone()) {
             return false;
         }
 
         return true;
+    }
+
+    static Ydb::Bridge::PileState::State GetPileStateFromPile(const TBridgeInfo::TPile& pile) {
+        if (pile.IsPrimary) {
+            return Ydb::Bridge::PileState::PRIMARY;
+        } else if (pile.IsBeingPromoted) {
+            return Ydb::Bridge::PileState::PROMOTED;
+        } else {
+            switch (pile.State) {
+                case NKikimrBridge::TClusterState::DISCONNECTED:
+                    return Ydb::Bridge::PileState::DISCONNECTED;
+                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
+                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
+                    return Ydb::Bridge::PileState::NOT_SYNCHRONIZED;
+                case NKikimrBridge::TClusterState::SYNCHRONIZED:
+                    return Ydb::Bridge::PileState::SYNCHRONIZED;
+                default:
+                    return Ydb::Bridge::PileState::UNSPECIFIED;
+            }
+        }
     }
 
     void ProcessResponses() {
@@ -259,13 +293,13 @@ private:
                     NodeCache.emplace(node.NodeInfo.NodeId, &node);
                 }
                 if (NodesInfoResponse->Get()->PileMap) {
-                    for (ui32 pileId = 0; pileId < NodesInfoResponse->Get()->PileMap->size(); ++pileId) {
-                        for (ui32 nodeId : (*NodesInfoResponse->Get()->PileMap)[pileId]) {
+                    for (ui32 pileNum = 0; pileNum < NodesInfoResponse->Get()->PileMap->size(); ++pileNum) {
+                        for (ui32 nodeId : (*NodesInfoResponse->Get()->PileMap)[pileNum]) {
                             auto itNode = NodeCache.find(nodeId);
                             if (itNode == NodeCache.end()) {
                                 continue;
                             }
-                            itNode->second->PileId = pileId;
+                            itNode->second->PileNum = pileNum;
                         }
                     }
                 }
@@ -326,31 +360,6 @@ private:
             ListTenantsResponse.reset();
         }
 
-        if (PDisksResponse && PDisksResponse->IsDone()) {
-            if (PDisksResponse->IsOk()) {
-                for (const NKikimrSysView::TPDiskEntry& entry : PDisksResponse->Get()->Record.GetEntries()) {
-                    const NKikimrSysView::TPDiskInfo& info = entry.GetInfo();
-                    (*ClusterInfo.MutableMapStorageTotal())[info.GetType()] += info.GetTotalSize();
-                    (*ClusterInfo.MutableMapStorageUsed())[info.GetType()] += info.GetTotalSize() - info.GetAvailableSize();
-                }
-            } else {
-                AddProblem("no-pdisk-info");
-            }
-            PDisksResponse.reset();
-        }
-
-        if (StorageStatsResponse && StorageStatsResponse->IsDone()) {
-            if (StorageStatsResponse->IsOk()) {
-                for (NKikimrSysView::TStorageStatsEntry& entry : *StorageStatsResponse->Get()->Record.MutableEntries()) {
-                    NKikimrSysView::TStorageStatsEntry& newEntry = (*ClusterInfo.AddStorageStats()) = std::move(entry);
-                    newEntry.ClearPDiskFilterData(); // remove binary data
-                }
-            } else {
-                AddProblem("no-storage-stats");
-            }
-            StorageStatsResponse.reset();
-        }
-
         if (NodeWardenStorageConfigResponse && NodeWardenStorageConfigResponse->IsDone() && !NodeWardenStorageConfigResponseProcessed) {
             if (NodeWardenStorageConfigResponse->IsOk()) {
                 if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
@@ -361,20 +370,20 @@ private:
                         auto& pbBridgePileInfo = *pbBridgeInfo.AddPiles();
                         pile.BridgePileId.CopyToProto(&pbBridgePileInfo, &std::decay_t<decltype(pbBridgePileInfo)>::SetPileId);
                         pbBridgePileInfo.SetName(pile.Name);
-                        pbBridgePileInfo.SetState(pile.State);
-                        pbBridgePileInfo.SetIsPrimary(pile.IsPrimary);
-                        pbBridgePileInfo.SetIsBeingPromoted(pile.IsBeingPromoted);
+                        pbBridgePileInfo.SetState(GetPileStateFromPile(pile));
                     }
                     for (const auto& node : NodeData) {
-                        if (node.PileId) {
-                            pileNodes[*node.PileId]++;
+                        if (node.PileNum) {
+                            pileNodes[*node.PileNum]++;
                         }
                     }
+                    ui32 pileNum = 0;
                     for (auto& pile : *pbBridgeInfo.MutablePiles()) {
-                        auto it = pileNodes.find(pile.GetPileId());
+                        auto it = pileNodes.find(pileNum);
                         if (it != pileNodes.end()) {
                             pile.SetNodes(it->second);
                         }
+                        ++pileNum;
                     }
                 } else {
                     AddProblem("empty-node-warden-bridge-info");
@@ -665,6 +674,20 @@ private:
         }
     }
 
+    void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
+        if (VSlotsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
+    }
+
+    void Handle(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
+        if (GroupsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
+    }
+
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
         if (HiveNodeStatsResponse->Set(std::move(ev))) {
             ProcessResponses();
@@ -826,6 +849,14 @@ private:
             ProcessResponses();
             result = true;
         }
+        if (VSlotsResponse && VSlotsResponse->Error(error)) {
+            ProcessResponses();
+            result = true;
+        }
+        if (GroupsResponse && GroupsResponse->Error(error)) {
+            ProcessResponses();
+            result = true;
+        }
         return result;
     }
 
@@ -869,6 +900,8 @@ private:
             hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetStorageStatsResponse, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
             hFunc(TEvHive::TEvResponseHiveNodeStats, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
@@ -877,7 +910,95 @@ private:
         }
     }
 
+    static TString GetKey(const NKikimrSysView::TStorageStatsEntry& entry) {
+        return entry.GetPDiskFilter() + ",ErasureSpecies:" + entry.GetErasureSpecies();
+    }
+
+    static ui64 GetSlotSize(const NKikimrSysView::TPDiskInfo& pdiskInfo) {
+        if (pdiskInfo.GetExpectedSlotCount()) {
+            return pdiskInfo.GetTotalSize() / pdiskInfo.GetExpectedSlotCount();
+        } else {
+            return pdiskInfo.GetTotalSize() / 16;
+        }
+    }
+
     void ReplyAndPassAway() override {
+        if (StorageStatsResponse && StorageStatsResponse->IsOk()) {
+            for (NKikimrSysView::TStorageStatsEntry& entry : *StorageStatsResponse->Get()->Record.MutableEntries()) {
+                if (entry.GetPDiskFilter().empty() || !TStringBuf(entry.GetPDiskFilter()).StartsWith("Type:")) {
+                    continue;
+                }
+                NKikimrSysView::TStorageStatsEntry& newEntry = (*ClusterInfo.AddStorageStats()) = std::move(entry);
+                newEntry.ClearPDiskFilterData(); // remove binary data
+                //newEntry.ClearAvailableSizeToCreate();
+            }
+        } else {
+            AddProblem("no-storage-stats");
+        }
+
+        std::unordered_map<TPDiskId, const NKikimrSysView::TPDiskInfo&> pDisksIndex;
+
+        if (PDisksResponse && PDisksResponse->IsOk()) {
+            for (const NKikimrSysView::TPDiskEntry& entry : PDisksResponse->Get()->Record.GetEntries()) {
+                const NKikimrSysView::TPDiskKey& key = entry.GetKey();
+                const NKikimrSysView::TPDiskInfo& info = entry.GetInfo();
+                (*ClusterInfo.MutableMapStorageTotal())[info.GetType()] += info.GetTotalSize();
+                (*ClusterInfo.MutableMapStorageUsed())[info.GetType()] += info.GetTotalSize() - info.GetAvailableSize();
+                pDisksIndex.emplace(std::make_pair(key.GetNodeId(), key.GetPDiskId()), info);
+            }
+        } else {
+            AddProblem("no-pdisk-info");
+        }
+
+        std::unordered_map<ui32, TString> groupToErasure;
+
+        if (GroupsResponse && GroupsResponse->IsOk()) {
+            for (const NKikimrSysView::TGroupEntry& entry : GroupsResponse->Get()->Record.GetEntries()) {
+                const NKikimrSysView::TGroupKey& key = entry.GetKey();
+                const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
+                if (key.GetGroupId() < 0x80000000) { // ignore static groups
+                    continue;
+                }
+                groupToErasure.emplace(key.GetGroupId(), info.GetErasureSpeciesV2());
+            }
+        } else {
+            AddProblem("no-group-info");
+        }
+
+        if (VSlotsResponse && VSlotsResponse->IsOk()) {
+            std::unordered_map<TString, NKikimrSysView::TStorageStatsEntry&> storageStatsByType;
+            for (auto& entry : *ClusterInfo.MutableStorageStats()) {
+                auto it = storageStatsByType.emplace(GetKey(entry), entry).first;
+                it->second.ClearCurrentAllocatedSize();
+                it->second.ClearCurrentAvailableSize();
+            }
+            for (const NKikimrSysView::TVSlotEntry& entry : VSlotsResponse->Get()->Record.GetEntries()) {
+                const NKikimrSysView::TVSlotKey& key = entry.GetKey();
+                const NKikimrSysView::TVSlotInfo& info = entry.GetInfo();
+                auto itPDisk = pDisksIndex.find(std::make_pair(key.GetNodeId(), key.GetPDiskId()));
+                if (itPDisk != pDisksIndex.end()) {
+                    ui64 allocated = info.GetAllocatedSize();
+                    ui64 slotSize = GetSlotSize(itPDisk->second);
+                    ui64 slotAvailable = slotSize > allocated ? slotSize - allocated : 0;
+                    ui64 available = info.GetAvailableSize();
+                    if (slotSize < available || available == 0) {
+                        available = slotAvailable;
+                    }
+                    auto itGroup = groupToErasure.find(info.GetGroupId());
+                    if (itGroup != groupToErasure.end()) {
+                        TString type = TString("Type:") + itPDisk->second.GetType() + ",ErasureSpecies:" + itGroup->second;
+                        auto itStats = storageStatsByType.find(type);
+                        if (itStats != storageStatsByType.end()) {
+                            itStats->second.SetCurrentAllocatedSize(itStats->second.GetCurrentAllocatedSize() + allocated);
+                            itStats->second.SetCurrentAvailableSize(itStats->second.GetCurrentAvailableSize() + available);
+                        }
+                    }
+                }
+            }
+        } else {
+            AddProblem("no-vslot-info");
+        }
+
         ClusterInfo.SetVersion(Viewer->GetCapabilityVersion("/viewer/cluster"));
         for (const auto& problem : Problems) {
             ClusterInfo.AddProblems(problem);

@@ -101,6 +101,7 @@ DEFINE_ENUM(ESchemaInferenceMode,
 
 // NB(eshcherbin): This enum must be synchronized at schedulers ans CAs.
 // If you change it, you must bump the controller agent tracker service protocol version!
+// COMPAT(eshcherbin): Remove NodeFairShareTreeChanged in favor of NodePoolTreeChanged.
 DEFINE_ENUM(EAbortReason,
     ((None)                            (  0))
     ((Scheduler)                       (  1))
@@ -161,7 +162,8 @@ DEFINE_ENUM(EAbortReason,
     ((AddressResolveFailed)            ( 57))
     ((UnexpectedNodeJobPhase)          ( 58))
     ((JobCountChangedByUserRequest)    ( 59))
-    ((NbdErrors)                       ( 60))
+    ((NbdError)                        ( 60))
+    ((NodePoolTreeChanged)             ( 61))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))

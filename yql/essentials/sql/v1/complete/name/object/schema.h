@@ -13,6 +13,8 @@ namespace NSQLComplete {
         static constexpr const char* Folder = "Folder";
         static constexpr const char* Table = "Table";
 
+        static THashSet<TString> KnownTypes;
+
         TString Type;
         TString Name;
 
@@ -21,6 +23,7 @@ namespace NSQLComplete {
 
     struct TListFilter {
         TMaybe<THashSet<TString>> Types;
+        bool IsUnknownAllowed = false;
     };
 
     struct TListRequest {

@@ -46,7 +46,7 @@ using TError = NYT::NProto::TError;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
+} // namespace NYT::NYson::NProto
 
 namespace NYT::NYson {
 namespace {

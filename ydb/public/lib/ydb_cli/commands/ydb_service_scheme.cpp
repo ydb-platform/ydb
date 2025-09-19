@@ -3,6 +3,7 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
+#include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -613,6 +614,7 @@ int TCommandDescribe::PrintTransferResponsePretty(const NYdb::NReplication::TDes
     Cout << Endl << "State: ";
     switch (desc.GetState()) {
     case NReplication::TTransferDescription::EState::Running:
+    case NReplication::TTransferDescription::EState::Paused:
         Cout << desc.GetState();
         break;
     case NReplication::TTransferDescription::EState::Error:
@@ -654,17 +656,23 @@ int TCommandDescribe::DescribeTransfer(const TDriver& driver) {
     return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintTransferResponsePretty);
 }
 
-int TCommandDescribe::PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const {
-    Cout << "\nQuery text:\n" << result.GetViewDescription().GetQueryText() << Endl;
-    return EXIT_SUCCESS;
+namespace {
+
+    void PrintViewQuery(const std::string& query) {
+        Cout << "\nQuery text:\n" << query << Endl;
+    }
+
 }
 
 int TCommandDescribe::DescribeView(const TDriver& driver) {
-    NView::TViewClient client(driver);
-    auto result = client.DescribeView(Path, {}).ExtractValueSync();
-    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-
-    return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintViewResponsePretty);
+    TString query;
+    auto status = NDump::DescribeViewQuery(driver, Path, query);
+    if (status.IsSuccess()) {
+        PrintViewQuery(query);
+        return EXIT_SUCCESS;
+    }
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
+    return EXIT_FAILURE;
 }
 
 int TCommandDescribe::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& description) const {
@@ -793,7 +801,8 @@ namespace {
         const auto commitLog1 = settings.GetTabletCommitLog1();
         const auto external = settings.GetExternal();
         const auto storeExternalBlobs = settings.GetStoreExternalBlobs();
-        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.has_value()) {
+        const auto externalDataChannelsCount = settings.GetExternalDataChannelsCount();
+        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.has_value() && !externalDataChannelsCount.has_value()) {
             return;
         }
         Cout << Endl << "Storage settings: " << Endl;
@@ -809,6 +818,9 @@ namespace {
         if (storeExternalBlobs) {
             Cout << "Store large values in \"external blobs\": "
                 << (storeExternalBlobs.value() ? "true" : "false") << Endl;
+        }
+        if (externalDataChannelsCount) {
+            Cout << "External data channels: " << externalDataChannelsCount.value() << Endl;
         }
     }
 
@@ -1235,6 +1247,7 @@ void TCommandPermissionGrant::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to grant permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to grant")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/grant")
         .RequiredArgument("NAME").AppendTo(&PermissionsToGrant);
 }
 
@@ -1280,6 +1293,7 @@ void TCommandPermissionRevoke::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to revoke permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to revoke")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/revoke")
         .RequiredArgument("NAME").AppendTo(&PermissionsToRevoke);
 }
 
@@ -1325,6 +1339,7 @@ void TCommandPermissionSet::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to set permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to set")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/grant")
         .RequiredArgument("NAME").AppendTo(&PermissionsToSet);
 }
 

@@ -293,7 +293,7 @@ NNodes::TExprBase DqReplicateFieldSubset(NNodes::TExprBase node, TExprContext& c
                     usedFields.insert(member.Value());
                 }
             }
-            else if (!TCoDependsOn::Match(parent)) {
+            else if (!IsDependsOnUsage(*parent, parentsMap)) {
                 return node;
             }
 

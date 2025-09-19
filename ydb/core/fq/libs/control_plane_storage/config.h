@@ -4,7 +4,7 @@
 
 #include <ydb/core/fq/libs/config/protos/common.pb.h>
 #include <ydb/core/fq/libs/config/protos/control_plane_storage.pb.h>
-#include <ydb/core/kqp/proxy_service/kqp_script_execution_retries.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 

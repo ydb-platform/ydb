@@ -23,6 +23,6 @@ jobs:
         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
       test_targets: ydb/
-      branches: ''
+      branches: ${{ startsWith(inputs.use_default_branches, 'false') && github.ref_name || '' }}
       branches_config_path: '.github/config/stable_tests_branches.json'
       build_preset: ${{ matrix.build_preset }}

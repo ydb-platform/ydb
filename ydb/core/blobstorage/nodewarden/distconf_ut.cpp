@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         return ss;
     }
 
-    NKikimrConfig::TDomainsConfig::TStateStorage GenerateDCStateStorage(ui32 dcCnt, ui32 racksCnt,  ui32 nodesInRack, std::unordered_map<ui32, ui32> nodesState = {}, std::unordered_set<ui32> usedNodes = {}) {
+    NKikimrConfig::TDomainsConfig::TStateStorage GenerateDCStateStorage(ui32 dcCnt, ui32 racksCnt,  ui32 nodesInRack, std::unordered_map<ui32, ui32> nodesState = {}, std::unordered_set<ui32> usedNodes = {}, std::vector<ui32> oldConfig = {}, ui32 oldNToSelect = 9) {
         NKikimrBlobStorage::TStorageConfig config;
         ui32 nodeId = 1;
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
@@ -50,11 +50,20 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
                 }
             }
         }
+        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        if (!oldConfig.empty()) {
+            auto* rg = oldSS.AddRingGroups();
+            rg->SetNToSelect(oldNToSelect);
+            for (ui32 node : oldConfig) {
+                auto* ssRing = rg->AddRing();
+                ssRing->AddNode(node);
+            }
+        }
         NKikimrConfig::TDomainsConfig::TStateStorage ss;
-        for(auto [nodeId, state] : nodesState) {
+        for (auto [nodeId, state] : nodesState) {
             keeper.SelfHealNodesState[nodeId] = state;
         }
-        keeper.GenerateStateStorageConfig(&ss, config, usedNodes);
+        keeper.GenerateStateStorageConfig(&ss, config, usedNodes, oldSS);
         return ss;
     }
 
@@ -153,7 +162,16 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         CheckStateStorage(GenerateDCStateStorage(1, 1, 20, { {3, 2} }, { 1, 2, 3, 4, 9 }), 5, {5, 6, 7, 8, 10, 11, 12, 13});
         CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {13, 2} }, { 4, 16 }), 9, {1, 5, 7, 10, 14, 17, 19, 22, 25});
         CheckStateStorage(GenerateDCStateStorage(4, 3, 1, { {3, 2} }, { 1 }), 9, {2, 4, 5, 6, 7, 8, 9, 10, 11});
+    }
 
+
+    Y_UNIT_TEST(UseOldNodesInDisconnectedDC) {
+        // DC is connected, not enough bad nodes in DC - normak config generation
+        CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {10, 2}, {11, 4}, {13, 3}, {14, 4} }, {}, {1, 5, 8, 10, 14, 17, 19, 22, 25}), 9, {1, 4, 7, 12, 15, 16, 19, 22, 25});
+        // Disconnected DC, but current config is invalid, build new config without usage of node statuses in disconnected DC
+        CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {10, 2}, {11, 4}, {13, 3}, {14, 4}, {15, 2} }, {}, {1, 5, 8, 10, 14, 17, 19, 22, 25}, 5), 9, {1, 4, 7, 10, 13, 16, 19, 22, 25});
+        // DC disconnected - use previous config for this DC
+        CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {10, 2}, {11, 4}, {13, 3}, {14, 4}, {15, 2} }, {}, {1, 5, 8, 10, 14, 17, 19, 22, 25}, 9), 9, {1, 4, 7, 10, 14, 17, 19, 22, 25});
     }
 }
 }

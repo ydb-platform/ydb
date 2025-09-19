@@ -134,7 +134,8 @@ void TJournalChunkWriterConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TDynamicJournalWriterConfig::Register(TRegistrar registrar) {
+void TDynamicJournalWriterConfig::Register(TRegistrar registrar)
+{
     registrar.Parameter("validate_erasure_coding", &TThis::ValidateErasureCoding)
         .Optional();
 }
@@ -213,4 +214,3 @@ void TJournalChunkWriterOptions::Register(TRegistrar registrar)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

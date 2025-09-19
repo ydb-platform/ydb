@@ -323,11 +323,9 @@ private:
             }
         } else {
             for (auto path: section.Paths()) {
-                auto pathInfo = MakeIntrusive<TYtPathInfo>(path);
-                if (pathInfo->HasColumns()) {
-                    NYT::TRichYPath ytPath;
-                    pathInfo->FillRichYPath(ytPath);
-                    stat->Ncols = std::max<int>(stat->Ncols, std::ssize(ytPath.Columns_->Parts_));
+                const TYtPathInfo pathInfo(path);
+                if (pathInfo.HasColumns()) {
+                    stat->Ncols = std::max<int>(stat->Ncols, std::ssize(*pathInfo.Columns->GetColumns()));
                 }
                 auto tableStat = TYtTableBaseInfo::GetStat(path.Table());
                 stat->ByteSize += tableStat->DataSize;

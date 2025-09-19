@@ -20,7 +20,7 @@ static void PrintTo(ESchemaCompatibility typeCompatibility, std::ostream* stream
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NComplexTypes
+} // namespace NYT::NTableClient
 
 TEST(TCheckTypeCompatibilityTest, SimpleTypes)
 {

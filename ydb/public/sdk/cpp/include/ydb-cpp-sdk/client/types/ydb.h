@@ -3,6 +3,10 @@
 #include "fwd.h"
 #include "status_codes.h"
 
+#include <memory>
+#include <string>
+
+
 namespace NYdb::inline Dev {
 
 enum class EDiscoveryMode {
@@ -22,12 +26,54 @@ enum class EDiscoveryMode {
     Off
 };
 
+//! @deprecated Use TBalancingPolicy instead
 enum class EBalancingPolicy {
     //! Use all available cluster nodes regardless datacenter locality
     UseAllNodes,
     //! Use preferable location,
     //! params is a name of location (VLA, MAN), if params is empty local datacenter is used
-    UsePreferableLocation
+    UsePreferableLocation,
+};
+
+enum EPileState {
+    UNSPECIFIED = 0 /* "unspecified" */,
+    PRIMARY = 1 /* "primary" */,
+    PROMOTED = 2 /* "promoted" */,
+    SYNCHRONIZED = 3 /* "synchronized" */,
+    NOT_SYNCHRONIZED = 4 /* "not_synchronized" */,
+    SUSPENDED = 5 /* "suspended" */,
+    DISCONNECTED = 6 /* "disconnected" */
+};
+
+class TBalancingPolicy {
+    friend class TDriverConfig;
+    friend class TDriver;
+public:
+    //! Use preferable location,
+    //! location is a name of datacenter (VLA, MAN), if location is empty local datacenter is used
+    static TBalancingPolicy UsePreferableLocation(const std::string& location = {});
+
+    //! Use all available cluster nodes regardless datacenter locality
+    static TBalancingPolicy UseAllNodes();
+
+    //! EXPERIMENTAL
+    //! Use pile with preferable state
+    static TBalancingPolicy UsePreferablePileState(EPileState pileState = EPileState::PRIMARY);
+
+    TBalancingPolicy(const TBalancingPolicy&) = delete;
+    TBalancingPolicy(TBalancingPolicy&&) = default;
+    TBalancingPolicy& operator=(const TBalancingPolicy&) = delete;
+    TBalancingPolicy& operator=(TBalancingPolicy&&) = default;
+
+    ~TBalancingPolicy();
+
+    class TImpl;
+private:
+    TBalancingPolicy(std::unique_ptr<TImpl>&& impl);
+
+    TBalancingPolicy(EBalancingPolicy policy, const std::string& params);
+
+    std::unique_ptr<TImpl> Impl_;
 };
 
 } // namespace NYdb

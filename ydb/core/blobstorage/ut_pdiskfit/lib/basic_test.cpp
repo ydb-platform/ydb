@@ -381,7 +381,7 @@ public:
     void VerifyOwnedChunks(const TActorContext& /*ctx*/) {
         for (const auto& [idx, info] : Recovered.Chunks) {
             if (info.GetCommitState() == ECommitState::COMMITTED) {
-                Y_VERIFY_S(OwnedChunks.count(idx), SelfInfo() << " has commited chunk# " << idx << " from Recovered.Chunks,"
+                Y_VERIFY_S(OwnedChunks.contains(idx), SelfInfo() << " has commited chunk# " << idx << " from Recovered.Chunks,"
                         << " but can't find it in OwnedChunks list from PDisk");
                 OwnedChunks.erase(idx);
             }

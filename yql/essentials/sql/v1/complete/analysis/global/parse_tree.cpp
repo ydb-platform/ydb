@@ -1,11 +1,13 @@
 #include "parse_tree.h"
 
+#include <yql/essentials/sql/v1/complete/syntax/format.h>
+
 #include <util/system/yassert.h>
 #include <util/generic/maybe.h>
 
 namespace NSQLComplete {
 
-    TMaybe<std::string> GetId(SQLv1::Bind_parameterContext* ctx) {
+    TMaybe<std::string> GetName(SQLv1::Bind_parameterContext* ctx) {
         if (ctx == nullptr) {
             return Nothing();
         }

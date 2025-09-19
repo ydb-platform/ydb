@@ -24,7 +24,7 @@ enum class EDebugOutput {
 const ui32 PRETTY_FLAGS = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote |
                           NYql::TAstPrintFlags::AdaptArbitraryContent;
 
-inline TString Err2Str(NYql::TAstParseResult& res, EDebugOutput debug = EDebugOutput::None) {
+inline TString Err2Str(const NYql::TAstParseResult& res, EDebugOutput debug = EDebugOutput::None) {
     TStringStream s;
     res.Issues.PrintTo(s);
 
@@ -132,9 +132,9 @@ public:
 typedef std::function<void (const TString& word, const TString& line)> TVerifyLineFunc;
 
 inline TString VerifyProgram(const NYql::TAstParseResult& res, TWordCountHive& wordCounter, TVerifyLineFunc verifyLine = TVerifyLineFunc()) {
-    const auto programm = GetPrettyPrint(res);
+    const auto program = GetPrettyPrint(res);
     TVector<TString> yqlProgram;
-    Split(programm, "\n", yqlProgram);
+    Split(program, "\n", yqlProgram);
     for (const auto& line: yqlProgram) {
         for (auto& counterIter: wordCounter) {
             const auto& word = counterIter.first;
@@ -148,7 +148,7 @@ inline TString VerifyProgram(const NYql::TAstParseResult& res, TWordCountHive& w
             }
         }
     }
-    return programm;
+    return program;
 }
 
 inline void VerifySqlInHints(const TString& query, const THashSet<TString>& expectedHints, TMaybe<bool> ansi) {

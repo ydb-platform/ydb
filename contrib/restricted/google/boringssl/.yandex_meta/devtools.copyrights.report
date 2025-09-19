@@ -1,0 +1,1405 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0493cc2c1135739391f51a5413caa56e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998-2003 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/bio/pair.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 052e9c6f5e4319c121dd64275f63a624
+BELONGS ya.make
+    License text:
+         * Copyright 2006-2021 The OpenSSL Project Authors. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/evp/p_dh_asn1.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b26996bfb42c528af128697232328ba
+BELONGS ya.make
+    License text:
+        /* Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/service_indicator/internal.h [1:1]
+        crypto/fipsmodule/service_indicator/service_indicator.c [1:1]
+        include/openssl/service_indicator.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0db2c93f4364f7de905630ee965b8e9b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2001-2011 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/aes/key_wrap.c [2:2]
+        crypto/fipsmodule/cipher/e_aes.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0e5187301f2c2d72656cf29a67af7148
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998-2011 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [30:30]
+        include/openssl/arm_arch.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1d42d552901b54037d78f435b26f76f8
+BELONGS ya.make
+    License text:
+        Copyright (c) 2009 The Go Authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [192:192]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 207046491db29fe8480d44185c2f24fc
+BELONGS ssl/ya.make ya.make
+    License text:
+        /* Copyright (c) 2018, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/bytestring/unicode.c [1:1]
+        crypto/chacha/internal.h [1:1]
+        crypto/cpu_aarch64_fuchsia.c [1:1]
+        crypto/cpu_aarch64_win.c [1:2]
+        crypto/cpu_arm_linux.h [1:1]
+        crypto/fipsmodule/bn/div_extra.c [1:1]
+        crypto/fipsmodule/bn/gcd_extra.c [1:1]
+        crypto/fipsmodule/ec/felem.c [1:1]
+        crypto/fipsmodule/ec/scalar.c [1:1]
+        crypto/fipsmodule/ec/simple_mul.c [1:1]
+        crypto/fipsmodule/md5/internal.h [1:1]
+        crypto/fipsmodule/sha/internal.h [1:1]
+        crypto/fipsmodule/tls/internal.h [1:1]
+        crypto/hrss/hrss.c [1:1]
+        crypto/hrss/internal.h [1:1]
+        include/boringssl_prefix_symbols.h [1:1]
+        include/boringssl_prefix_symbols_asm.h [1:1]
+        include/boringssl_prefix_symbols_nasm.inc [1:1]
+        include/openssl/e_os2.h [1:1]
+        include/openssl/hrss.h [1:1]
+        ssl/handoff.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 21d7f9f3cef41e2a53883100a368ca8a
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2023, Google LLC
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/spx/address.c [1:1]
+        crypto/spx/address.h [1:1]
+        crypto/spx/fors.c [1:1]
+        crypto/spx/fors.h [1:1]
+        crypto/spx/merkle.c [1:1]
+        crypto/spx/merkle.h [1:1]
+        crypto/spx/params.h [1:1]
+        crypto/spx/spx.c [1:1]
+        crypto/spx/spx_util.c [1:1]
+        crypto/spx/spx_util.h [1:1]
+        crypto/spx/thash.c [1:1]
+        crypto/spx/thash.h [1:1]
+        crypto/spx/wots.c [1:1]
+        crypto/spx/wots.h [1:1]
+        include/openssl/experimental/spx.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 23f7ab9eea921058792d3d6741f4fdc6
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2008 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/cipher/e_aesccm.c [2:2]
+        crypto/fipsmodule/modes/cbc.c [2:2]
+        crypto/fipsmodule/modes/cfb.c [2:2]
+        crypto/fipsmodule/modes/ctr.c [2:2]
+        crypto/fipsmodule/modes/gcm.c [2:2]
+        crypto/fipsmodule/modes/internal.h [2:2]
+        crypto/fipsmodule/modes/ofb.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2563784ac9dd4a256735790893f4f580
+BELONGS ya.make
+    License text:
+         * Copyright 2006-2019 The OpenSSL Project Authors. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/evp/p_dh.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 27416c38867285a7d001d8ce4d1e0391
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2017, the HRSS authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/hrss/asm/poly_rq_mul.S [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 279ac2620aa842ba5830d9ddc0a8936e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2006,2007 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/digestsign/digestsign.c [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2b5c031227cbf70e9537679803c4378b
+BELONGS ssl/ya.make
+    License text:
+          Copyright (C) 2006, Network Resonance, Inc.
+          Copyright (C) 2011, RTFM, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ssl/d1_srtp.cc [113:114]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2cacee9295d3817bb38e193818e5b8dc
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2010 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/cmac/cmac.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 30222adbd0b829894165c0b67a2f8f49
+BELONGS ssl/ya.make ya.make
+    License text:
+        /* Copyright (c) 2015, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [146:146]
+        crypto/bn_extra/bn_asn1.c [1:1]
+        crypto/conf/internal.h [1:1]
+        crypto/curve25519/asm/x25519-asm-arm.S [1:1]
+        crypto/fipsmodule/ec/p224-64.c [1:1]
+        crypto/fipsmodule/ec/util.c [1:1]
+        crypto/fipsmodule/rand/internal.h [1:1]
+        crypto/refcount.c [1:1]
+        crypto/thread_none.c [1:1]
+        crypto/thread_pthread.c [1:1]
+        crypto/thread_win.c [1:1]
+        gen/crypto/err_data.c [1:1]
+        include/openssl/buffer.h [1:1]
+        include/openssl/cmac.h [1:1]
+        include/openssl/curve25519.h [1:1]
+        include/openssl/dtls1.h [1:1]
+        include/openssl/srtp.h [1:1]
+        ssl/ssl_aead_ctx.cc [1:1]
+        ssl/ssl_buffer.cc [1:1]
+        ssl/ssl_key_share.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3126f845830abd1003eba725cc070eaf
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1999-2004 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/x509/ext_dat.h [6:6]
+        crypto/x509/v3_cpols.c [6:6]
+        crypto/x509/v3_int.c [6:6]
+        crypto/x509/v3_purp.c [6:6]
+        include/openssl/x509v3_errors.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 37fb94ef51a858620ccdf9e98560bfac
+BELONGS ya.make
+    License text:
+        Copyright (c) 2015-2016 the fiat-crypto authors (see
+        https://github.com/mit-plv/fiat-crypto/blob/master/AUTHORS).
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [163:164]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 396d90540511de3f398317a01d52d5a2
+BELONGS ya.make
+    License text:
+         * Copyright 2000-2016 The OpenSSL Project Authors. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/x509/v3_ocsp.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 40697db461712258cbde41aae2fd553d
+BELONGS ya.make
+    License text:
+        Copyright 2015 The Chromium Authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [226:226]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 41670b3e11b538c659ae8a154d324705
+BELONGS ya.make
+    License text:
+        /* Copyright 2016 Brian Smith.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/bn/montgomery_inv.c [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 444e0e2e73580e86609e7ba04bc7657b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2000 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/x509/x_algor.c [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 47365b61406073c03d943ce9ced07b7a
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1999-2003 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/x509/v3_alt.c [6:6]
+        crypto/x509/v3_utl.c [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49338858d8a2ee6aa1039b4b62773f2c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2013 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/x509/internal.h [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49d31c40121bd8e7d2bcf7d19f9da4a5
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998-2001 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/ex_data.c [58:58]
+        crypto/fipsmodule/bn/gcd.c [58:58]
+        crypto/fipsmodule/bn/prime.c [58:58]
+        crypto/fipsmodule/bn/random.c [58:58]
+        crypto/internal.h [58:58]
+        include/openssl/base.h [2:2]
+        include/openssl/ex_data.h [58:58]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4a441768852013786137b51425431606
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2012, Intel Corporation. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/bn/rsaz_exp.c [3:3]
+        crypto/fipsmodule/bn/rsaz_exp.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4ba5b0a502a2274e6654343b632a8d52
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2000-2003 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/ec_extra/ec_asn1.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4dbbe100744ee311f4e751bf082b0df5
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2018, Google Inc.
+         * Copyright (c) 2020, Arm Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/cpu_aarch64_win.c [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4ef4767f6c3ab09f227ffb4b6b0a753c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1999-2002 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/x509/v3_conf.c [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4fffdd2ce27cb0e4ccd2d771916effe6
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2022, Robert Nagy <robert.nagy@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/cpu_aarch64_openbsd.c [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 53d4911a6306278c1bf522340f0cfaa5
+BELONGS decrepit/ya.make ssl/ya.make ya.make
+    License text:
+         * Copyright (c) 1998-2007 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/tls/kdf.c [2:2]
+        decrepit/ssl/ssl_decrepit.c [58:58]
+        include/openssl/ssl.h [58:58]
+        ssl/extensions.cc [58:58]
+        ssl/handshake_client.cc [58:58]
+        ssl/handshake_server.cc [58:58]
+        ssl/internal.h [58:58]
+        ssl/s3_lib.cc [58:58]
+        ssl/ssl_cert.cc [58:58]
+        ssl/ssl_cipher.cc [58:58]
+        ssl/ssl_file.cc [58:58]
+        ssl/ssl_lib.cc [58:58]
+        ssl/ssl_transcript.cc [58:58]
+        ssl/ssl_x509.cc [58:58]
+        ssl/t1_enc.cc [58:58]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 55e8c23bb10f3f0ef20d0adc62748695
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2002-2006 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/aes/aes.c [2:2]
+        crypto/fipsmodule/aes/mode_wrappers.c [2:2]
+        include/openssl/aes.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 58a67965ad6d8b8322a4eebf99d6937c
+BELONGS ya.make
+    License text:
+         * Copyright 2014-2016 The OpenSSL Project Authors. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/ec/p256-nistz-table.h [2:2]
+        crypto/fipsmodule/ec/p256-nistz.c [2:2]
+        crypto/fipsmodule/ec/p256-nistz.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5a558bdf236ee44dc6d707b380f758d7
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/x509/v3_ncons.c [6:6]
+        crypto/x509/v3_pcons.c [6:6]
+        crypto/x509/v3_pmaps.c [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 608e28b1106453a3a97921a9320476ac
+BELONGS ya.make
+    License text:
+        @ Copyright 2007-2016 The OpenSSL Project Authors. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gen/bcm/sha256-armv4-linux.S [7:7]
+        gen/bcm/sha512-armv4-linux.S [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 654157b1c5ccb94449d06ad674ff9669
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2006 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/asn1/internal.h [6:6]
+        crypto/evp/p_dsa_asn1.c [5:5]
+        crypto/evp/p_ec.c [5:5]
+        crypto/evp/p_ec_asn1.c [5:5]
+        crypto/evp/p_rsa.c [5:5]
+        crypto/evp/p_rsa_asn1.c [5:5]
+        crypto/evp/print.c [2:2]
+        crypto/x509/rsa_pss.c [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7113221d1ff8098de35461707ad1699b
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2014, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/bio/socket_helper.c [1:1]
+        crypto/bytestring/ber.c [1:1]
+        crypto/bytestring/cbb.c [1:1]
+        crypto/bytestring/cbs.c [1:1]
+        crypto/bytestring/internal.h [1:1]
+        crypto/chacha/chacha.c [1:1]
+        crypto/cipher_extra/e_chacha20poly1305.c [1:1]
+        crypto/cipher_extra/e_tls.c [1:1]
+        crypto/crypto.c [1:1]
+        crypto/engine/engine.c [1:1]
+        crypto/fipsmodule/cipher/aead.c [1:1]
+        crypto/fipsmodule/hkdf/hkdf.c [1:1]
+        crypto/fipsmodule/rand/rand.c [1:1]
+        crypto/fipsmodule/rand/urandom.c [1:1]
+        crypto/pkcs7/pkcs7.c [1:1]
+        crypto/poly1305/poly1305.c [1:1]
+        crypto/poly1305/poly1305_arm.c [1:1]
+        crypto/poly1305/poly1305_vec.c [1:1]
+        crypto/rand_extra/windows.c [1:1]
+        include/openssl/aead.h [1:1]
+        include/openssl/bytestring.h [1:1]
+        include/openssl/chacha.h [1:1]
+        include/openssl/cpu.h [1:1]
+        include/openssl/crypto.h [1:1]
+        include/openssl/engine.h [1:1]
+        include/openssl/hkdf.h [1:1]
+        include/openssl/objects.h [1:1]
+        include/openssl/opensslconf.h [1:1]
+        include/openssl/opensslv.h [1:1]
+        include/openssl/ossl_typ.h [1:1]
+        include/openssl/pkcs12.h [1:1]
+        include/openssl/pkcs7.h [1:1]
+        include/openssl/poly1305.h [1:1]
+        include/openssl/rand.h [1:1]
+        include/openssl/safestack.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 75e20495a3849ab3dc03c4e49183c592
+BELONGS ssl/ya.make ya.make
+    License text:
+         * Copyright (c) 1998-2005 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/ecdsa_extra/ecdsa_asn1.c [2:2]
+        crypto/fipsmodule/bn/exponentiation.c [58:58]
+        crypto/fipsmodule/ec/ec.c [3:3]
+        crypto/fipsmodule/ec/ec_key.c [3:3]
+        crypto/fipsmodule/ec/ec_montgomery.c [3:3]
+        crypto/fipsmodule/ec/internal.h [3:3]
+        crypto/fipsmodule/ec/oct.c [3:3]
+        crypto/fipsmodule/ec/simple.c [3:3]
+        crypto/fipsmodule/ec/wnaf.c [3:3]
+        crypto/fipsmodule/ecdsa/ecdsa.c [2:2]
+        include/openssl/ec.h [3:3]
+        include/openssl/ec_key.h [3:3]
+        include/openssl/ecdsa.h [2:2]
+        ssl/d1_both.cc [6:6]
+        ssl/d1_pkt.cc [4:4]
+        ssl/dtls_record.cc [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 76395c89957476f85264bdbe23f33f34
+BELONGS decrepit/ya.make ssl/ya.make ya.make
+    License text:
+        /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [86:87]
+        crypto/asn1/a_bitstr.c [1:2]
+        crypto/asn1/a_bool.c [1:2]
+        crypto/asn1/a_d2i_fp.c [1:2]
+        crypto/asn1/a_dup.c [1:2]
+        crypto/asn1/a_gentm.c [1:2]
+        crypto/asn1/a_i2d_fp.c [1:2]
+        crypto/asn1/a_int.c [1:2]
+        crypto/asn1/a_mbstr.c [1:2]
+        crypto/asn1/a_object.c [1:2]
+        crypto/asn1/a_octet.c [1:2]
+        crypto/asn1/a_strex.c [1:2]
+        crypto/asn1/a_strnid.c [1:2]
+        crypto/asn1/a_time.c [1:2]
+        crypto/asn1/a_type.c [1:2]
+        crypto/asn1/a_utctm.c [1:2]
+        crypto/asn1/asn1_lib.c [1:2]
+        crypto/asn1/asn1_par.c [1:2]
+        crypto/asn1/asn_pack.c [1:2]
+        crypto/asn1/f_int.c [1:2]
+        crypto/asn1/f_string.c [1:2]
+        crypto/asn1/tasn_dec.c [1:2]
+        crypto/asn1/tasn_enc.c [1:2]
+        crypto/asn1/tasn_fre.c [1:2]
+        crypto/asn1/tasn_new.c [1:2]
+        crypto/asn1/tasn_typ.c [1:2]
+        crypto/asn1/tasn_utl.c [1:2]
+        crypto/base64/base64.c [1:2]
+        crypto/bio/bio.c [1:2]
+        crypto/bio/bio_mem.c [1:2]
+        crypto/bio/connect.c [1:2]
+        crypto/bio/errno.c [1:2]
+        crypto/bio/fd.c [1:2]
+        crypto/bio/file.c [1:2]
+        crypto/bio/hexdump.c [1:2]
+        crypto/bio/internal.h [1:2]
+        crypto/bio/printf.c [1:2]
+        crypto/bio/socket.c [1:2]
+        crypto/bn_extra/convert.c [1:2]
+        crypto/buf/buf.c [1:2]
+        crypto/cipher_extra/cipher_extra.c [1:2]
+        crypto/cipher_extra/derive_key.c [1:2]
+        crypto/cipher_extra/e_des.c [1:2]
+        crypto/cipher_extra/e_null.c [1:2]
+        crypto/cipher_extra/e_rc2.c [1:2]
+        crypto/cipher_extra/e_rc4.c [1:2]
+        crypto/cipher_extra/internal.h [1:2]
+        crypto/conf/conf.c [1:2]
+        crypto/conf/conf_def.h [1:2]
+        crypto/cpu_intel.c [1:2]
+        crypto/des/des.c [1:2]
+        crypto/des/internal.h [1:2]
+        crypto/digest_extra/digest_extra.c [1:2]
+        crypto/dsa/dsa.c [1:2]
+        crypto/err/err.c [1:2]
+        crypto/evp/evp.c [1:2]
+        crypto/evp/evp_asn1.c [1:2]
+        crypto/evp/evp_ctx.c [1:2]
+        crypto/evp/internal.h [1:2]
+        crypto/evp/sign.c [1:2]
+        crypto/ex_data.c [1:2]
+        crypto/fipsmodule/bn/add.c [1:2]
+        crypto/fipsmodule/bn/bn.c [1:2]
+        crypto/fipsmodule/bn/bytes.c [1:2]
+        crypto/fipsmodule/bn/cmp.c [1:2]
+        crypto/fipsmodule/bn/div.c [1:2]
+        crypto/fipsmodule/bn/exponentiation.c [1:2]
+        crypto/fipsmodule/bn/gcd.c [1:2]
+        crypto/fipsmodule/bn/generic.c [1:2]
+        crypto/fipsmodule/bn/montgomery.c [1:2]
+        crypto/fipsmodule/bn/mul.c [1:2]
+        crypto/fipsmodule/bn/prime.c [1:2]
+        crypto/fipsmodule/bn/random.c [1:2]
+        crypto/fipsmodule/bn/shift.c [1:2]
+        crypto/fipsmodule/cipher/cipher.c [1:2]
+        crypto/fipsmodule/cipher/internal.h [1:2]
+        crypto/fipsmodule/dh/check.c [1:2]
+        crypto/fipsmodule/dh/dh.c [1:2]
+        crypto/fipsmodule/digest/digest.c [1:2]
+        crypto/fipsmodule/digest/digests.c [1:2]
+        crypto/fipsmodule/digest/internal.h [1:2]
+        crypto/fipsmodule/hmac/hmac.c [1:2]
+        crypto/fipsmodule/md4/md4.c [1:2]
+        crypto/fipsmodule/md5/md5.c [1:2]
+        crypto/fipsmodule/rsa/blinding.c [53:54]
+        crypto/fipsmodule/rsa/internal.h [1:2]
+        crypto/fipsmodule/rsa/rsa.c [1:2]
+        crypto/fipsmodule/rsa/rsa_impl.c [1:2]
+        crypto/fipsmodule/sha/sha1.c [1:2]
+        crypto/fipsmodule/sha/sha256.c [1:2]
+        crypto/fipsmodule/sha/sha512.c [1:2]
+        crypto/internal.h [1:2]
+        crypto/lhash/internal.h [1:2]
+        crypto/lhash/lhash.c [1:2]
+        crypto/mem.c [1:2]
+        crypto/obj/obj.c [1:2]
+        crypto/obj/obj_xref.c [1:2]
+        crypto/pem/pem_all.c [1:2]
+        crypto/pem/pem_info.c [1:2]
+        crypto/pem/pem_lib.c [1:2]
+        crypto/pem/pem_oth.c [1:2]
+        crypto/pem/pem_pk8.c [1:2]
+        crypto/pem/pem_pkey.c [1:2]
+        crypto/rc4/rc4.c [1:2]
+        crypto/rsa_extra/internal.h [1:2]
+        crypto/rsa_extra/rsa_crypt.c [1:2]
+        crypto/stack/stack.c [1:2]
+        crypto/thread.c [1:2]
+        crypto/x509/a_digest.c [1:2]
+        crypto/x509/a_sign.c [1:2]
+        crypto/x509/a_verify.c [1:2]
+        crypto/x509/algorithm.c [1:2]
+        crypto/x509/asn1_gen.c [1:2]
+        crypto/x509/by_dir.c [1:2]
+        crypto/x509/by_file.c [1:2]
+        crypto/x509/i2d_pr.c [1:2]
+        crypto/x509/name_print.c [1:2]
+        crypto/x509/t_crl.c [1:2]
+        crypto/x509/t_req.c [1:2]
+        crypto/x509/t_x509.c [1:2]
+        crypto/x509/t_x509a.c [1:2]
+        crypto/x509/x509.c [1:2]
+        crypto/x509/x509_att.c [1:2]
+        crypto/x509/x509_cmp.c [1:2]
+        crypto/x509/x509_d2.c [1:2]
+        crypto/x509/x509_def.c [1:2]
+        crypto/x509/x509_ext.c [1:2]
+        crypto/x509/x509_lu.c [1:2]
+        crypto/x509/x509_obj.c [1:2]
+        crypto/x509/x509_req.c [1:2]
+        crypto/x509/x509_set.c [1:2]
+        crypto/x509/x509_txt.c [1:2]
+        crypto/x509/x509_v3.c [1:2]
+        crypto/x509/x509_vfy.c [1:2]
+        crypto/x509/x509name.c [1:2]
+        crypto/x509/x509rset.c [1:2]
+        crypto/x509/x_all.c [1:2]
+        crypto/x509/x_attrib.c [1:2]
+        crypto/x509/x_crl.c [1:2]
+        crypto/x509/x_exten.c [1:2]
+        crypto/x509/x_name.c [1:2]
+        crypto/x509/x_pubkey.c [1:2]
+        crypto/x509/x_req.c [1:2]
+        crypto/x509/x_sig.c [1:2]
+        crypto/x509/x_spki.c [1:2]
+        crypto/x509/x_val.c [1:2]
+        crypto/x509/x_x509.c [1:2]
+        decrepit/bio/base64_bio.c [1:2]
+        decrepit/blowfish/blowfish.c [1:2]
+        decrepit/cast/cast.c [1:2]
+        decrepit/cast/cast_tables.c [1:2]
+        decrepit/cast/internal.h [1:2]
+        decrepit/des/cfb64ede.c [1:2]
+        decrepit/macros.h [1:2]
+        decrepit/rc4/rc4_decrepit.c [1:2]
+        decrepit/ripemd/ripemd.c [1:2]
+        decrepit/rsa/rsa_decrepit.c [1:2]
+        decrepit/ssl/ssl_decrepit.c [1:2]
+        include/openssl/asn1.h [1:2]
+        include/openssl/base64.h [1:2]
+        include/openssl/bio.h [1:2]
+        include/openssl/blowfish.h [1:2]
+        include/openssl/buf.h [1:2]
+        include/openssl/cast.h [1:2]
+        include/openssl/cipher.h [1:2]
+        include/openssl/conf.h [1:2]
+        include/openssl/des.h [1:2]
+        include/openssl/dh.h [1:2]
+        include/openssl/digest.h [1:2]
+        include/openssl/dsa.h [1:2]
+        include/openssl/err.h [1:2]
+        include/openssl/evp.h [1:2]
+        include/openssl/evp_errors.h [1:2]
+        include/openssl/ex_data.h [1:2]
+        include/openssl/hmac.h [1:2]
+        include/openssl/lhash.h [1:2]
+        include/openssl/md4.h [1:2]
+        include/openssl/md5.h [1:2]
+        include/openssl/mem.h [1:2]
+        include/openssl/obj.h [1:2]
+        include/openssl/rc4.h [1:2]
+        include/openssl/ripemd.h [1:2]
+        include/openssl/rsa.h [1:2]
+        include/openssl/sha.h [1:2]
+        include/openssl/ssl.h [1:2]
+        include/openssl/ssl3.h [1:2]
+        include/openssl/stack.h [1:2]
+        include/openssl/thread.h [1:2]
+        include/openssl/tls1.h [1:2]
+        include/openssl/type_check.h [1:2]
+        include/openssl/x509.h [1:2]
+        ssl/d1_both.cc [58:59]
+        ssl/d1_pkt.cc [56:57]
+        ssl/d1_srtp.cc [1:2]
+        ssl/dtls_record.cc [56:57]
+        ssl/extensions.cc [1:2]
+        ssl/handshake.cc [1:2]
+        ssl/handshake_client.cc [1:2]
+        ssl/handshake_server.cc [1:2]
+        ssl/internal.h [1:2]
+        ssl/s3_both.cc [1:2]
+        ssl/s3_lib.cc [1:2]
+        ssl/s3_pkt.cc [1:2]
+        ssl/ssl_asn1.cc [1:2]
+        ssl/ssl_cert.cc [1:2]
+        ssl/ssl_cipher.cc [1:2]
+        ssl/ssl_file.cc [1:2]
+        ssl/ssl_lib.cc [1:2]
+        ssl/ssl_privkey.cc [1:2]
+        ssl/ssl_session.cc [1:2]
+        ssl/ssl_stat.cc [1:2]
+        ssl/ssl_transcript.cc [1:2]
+        ssl/ssl_x509.cc [1:2]
+        ssl/t1_enc.cc [1:2]
+        ssl/tls_method.cc [1:2]
+        ssl/tls_record.cc [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 777e212e12bf0477f2d92d9aec83126b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998-2004 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/bn/ctx.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 782060c1c81f94fd0178893f1106e97e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/x509/x509_vpm.c [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8dbc074356409bbfc4c1b6816c32108f
+BELONGS ya.make
+    License text:
+        // Copyright 2014-2020 The OpenSSL Project Authors. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gen/bcm/sha256-armv8-apple.S [7:7]
+        gen/bcm/sha256-armv8-linux.S [7:7]
+        gen/bcm/sha256-armv8-win.S [7:7]
+        gen/bcm/sha512-armv8-apple.S [7:7]
+        gen/bcm/sha512-armv8-linux.S [7:7]
+        gen/bcm/sha512-armv8-win.S [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8f4f3c8b244f34d2100cb19542272a2e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1999 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/evp/pbkdf.c [5:5]
+        crypto/pkcs8/internal.h [5:5]
+        crypto/pkcs8/p5_pbev2.c [5:5]
+        crypto/pkcs8/pkcs8.c [5:5]
+        crypto/pkcs8/pkcs8_x509.c [5:5]
+        crypto/x509/v3_akey.c [6:6]
+        crypto/x509/v3_akeya.c [6:6]
+        crypto/x509/v3_bcons.c [6:6]
+        crypto/x509/v3_bitst.c [6:6]
+        crypto/x509/v3_enum.c [6:6]
+        crypto/x509/v3_extku.c [6:6]
+        crypto/x509/v3_ia5.c [6:6]
+        crypto/x509/v3_info.c [6:6]
+        crypto/x509/v3_lib.c [6:6]
+        crypto/x509/v3_prn.c [6:6]
+        crypto/x509/v3_skey.c [6:6]
+        crypto/x509/x509_trs.c [6:6]
+        crypto/x509/x509spki.c [6:6]
+        crypto/x509/x_x509a.c [6:6]
+        include/openssl/pkcs8.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8fb712a16ba8722665c7a51be7aa2553
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2023, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/cpu_aarch64_sysreg.c [1:1]
+        crypto/curve25519/curve25519_64_adx.c [1:1]
+        crypto/fipsmodule/ec/builtin_curves.h [1:1]
+        crypto/keccak/internal.h [1:1]
+        crypto/keccak/keccak.c [1:1]
+        crypto/kyber/internal.h [1:1]
+        crypto/kyber/kyber.c [1:1]
+        crypto/rand_extra/getentropy.c [1:1]
+        crypto/rand_extra/ios.c [1:1]
+        include/openssl/asm_base.h [1:1]
+        include/openssl/experimental/kyber.h [1:1]
+        include/openssl/target.h [1:1]
+        include/openssl/x509v3.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9142ab2af90f5831171712f8d87bc7e3
+BELONGS ssl/ya.make ya.make
+    License text:
+        /* Copyright (c) 2021, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/blake2/blake2.c [1:1]
+        crypto/cpu_aarch64_apple.c [1:1]
+        crypto/fipsmodule/ecdsa/internal.h [1:1]
+        include/openssl/blake2.h [1:1]
+        include/openssl/x509_vfy.h [1:1]
+        ssl/encrypted_client_hello.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 941d04760846cf2a708e461235f79d4d
+BELONGS decrepit/ya.make ssl/ya.make ya.make
+    License text:
+         * Copyright (c) 1998-2002 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/pem/pem_all.c [58:58]
+        decrepit/dh/dh_decrepit.c [2:2]
+        decrepit/dsa/dsa_decrepit.c [2:2]
+        include/openssl/ssl3.h [58:58]
+        ssl/handshake.cc [58:58]
+        ssl/s3_both.cc [58:58]
+        ssl/s3_pkt.cc [58:58]
+        ssl/tls_record.cc [58:58]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9856d60a05152199eda66597745ec67b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998-2000 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/bn/jacobi.c [2:2]
+        crypto/fipsmodule/bn/sqrt.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9cfd06210c2fe0a47e11d08d6e9b573b
+BELONGS ssl/ya.make ya.make
+    License text:
+        /* Copyright (c) 2024, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/openssl/time.h [1:1]
+        ssl/ssl_credential.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9d9d3fa25c4c83ec81ed1a192ad8855e
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2019, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/ec_extra/ec_derive.c [1:1]
+        crypto/evp/p_x25519.c [1:1]
+        crypto/evp/p_x25519_asn1.c [1:1]
+        crypto/fipsmodule/aes/aes_nohw.c [1:1]
+        crypto/fipsmodule/fips_shared_support.c [1:1]
+        crypto/fipsmodule/modes/gcm_nohw.c [1:1]
+        crypto/siphash/siphash.c [1:1]
+        crypto/trust_token/internal.h [1:1]
+        crypto/trust_token/trust_token.c [1:1]
+        include/openssl/siphash.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a053b65bd857819df2e29ffee77015cc
+BELONGS decrepit/ya.make ya.make
+    License text:
+         * Copyright (c) 2011 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/dh_extra/params.c [2:2]
+        decrepit/xts/xts.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a74524cba47e5ae22059015969d08fbf
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2014, Intel Corporation. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/ec/p256-nistz.c [3:3]
+        crypto/fipsmodule/ec/p256-nistz.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ac8520b168f9a90cebd18bc9b8e9b30a
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 1995-1997 Eric Young (eay@cryptsoft.com)
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/bn/internal.h [1:2]
+        crypto/obj/obj_dat.h [1:2]
+        include/openssl/bn.h [1:2]
+        include/openssl/nid.h [1:2]
+        include/openssl/pem.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ad84f8998bd8e65d4c8e63d94f771ba1
+BELONGS ya.make
+    License text:
+         * Copyright 2013-2016 The OpenSSL Project Authors. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/bn/rsaz_exp.c [2:2]
+        crypto/fipsmodule/bn/rsaz_exp.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aec1abed1ea23fbdebaeea6500621c57
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1999-2008 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/x509/v3_crld.c [6:6]
+        crypto/x509/v3_genn.c [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL af9a03839447c1181ef496229898608a
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2020, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/curve25519/curve25519.c [1:1]
+        crypto/curve25519/curve25519_tables.h [1:1]
+        crypto/curve25519/internal.h [1:1]
+        crypto/dsa/internal.h [1:1]
+        crypto/ec_extra/hash_to_curve.c [1:1]
+        crypto/ec_extra/internal.h [1:1]
+        crypto/fipsmodule/ec/p256.c [1:1]
+        crypto/fipsmodule/ec/p256_table.h [1:1]
+        crypto/fipsmodule/rand/fork_detect.c [1:1]
+        crypto/fipsmodule/rand/fork_detect.h [1:1]
+        crypto/fipsmodule/rand/getrandom_fillin.h [1:1]
+        crypto/hpke/hpke.c [1:1]
+        crypto/rand_extra/passive.c [1:1]
+        crypto/trust_token/pmbtoken.c [1:1]
+        crypto/trust_token/voprf.c [1:1]
+        include/openssl/hpke.h [1:1]
+        include/openssl/trust_token.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL afd8b384c958e8cc54b944678ce80d9f
+BELONGS decrepit/ya.make ssl/ya.make ya.make
+    License text:
+        /* Copyright (c) 2016, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/bytestring/asn1_compat.c [1:1]
+        crypto/cpu_aarch64_linux.c [1:1]
+        crypto/cpu_arm_linux.c [1:1]
+        crypto/curve25519/spake25519.c [1:1]
+        crypto/fipsmodule/modes/polyval.c [1:1]
+        crypto/poly1305/internal.h [1:1]
+        crypto/pool/internal.h [1:1]
+        crypto/pool/pool.c [1:1]
+        crypto/rand_extra/deterministic.c [1:1]
+        decrepit/evp/dss1.c [1:1]
+        decrepit/evp/evp_do_all.c [1:1]
+        decrepit/obj/obj_decrepit.c [1:1]
+        decrepit/x509/x509_decrepit.c [1:1]
+        include/openssl/asn1_mac.h [1:1]
+        include/openssl/obj_mac.h [1:1]
+        include/openssl/pool.h [1:1]
+        ssl/tls13_both.cc [1:1]
+        ssl/tls13_client.cc [1:1]
+        ssl/tls13_enc.cc [1:1]
+        ssl/tls13_server.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b1a484e42033112b90f2446ae6f57b66
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1999-2007 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/digest/md32_common.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b1c39028a3edcc1be77aa05a462cd25d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/rsa/padding.c [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b3b5abb839fd0c2a61609c34431ba89f
+BELONGS ya.make
+    License text:
+         * Copyright 2015-2016 The OpenSSL Project Authors. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/evp/scrypt.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bd8b64b1af148b2dbd21629189d91761
+BELONGS ssl/ya.make ya.make
+    License text:
+         * Copyright (c) 1998-2006 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/err/err.c [58:58]
+        crypto/fipsmodule/bn/internal.h [58:58]
+        crypto/fipsmodule/bn/montgomery.c [58:58]
+        crypto/fipsmodule/rsa/blinding.c [2:2]
+        include/openssl/bn.h [58:58]
+        include/openssl/err.h [58:58]
+        include/openssl/tls1.h [58:58]
+        ssl/d1_srtp.cc [58:58]
+        ssl/ssl_session.cc [58:58]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c09425aa30f3eba17c4ad64618fa04b7
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2012 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/cipher_extra/tls_cbc.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c34f77242e71e81b8019bb268eaa75d4
+BELONGS ssl/ya.make ya.make
+    License text:
+         * Copyright 2002 Sun Microsystems, Inc. ALL RIGHTS RESERVED.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/ecdh_extra/ecdh_extra.c [2:2]
+        crypto/fipsmodule/bn/internal.h [111:111]
+        crypto/fipsmodule/ec/ec.c [56:56]
+        crypto/fipsmodule/ec/ec_key.c [56:56]
+        crypto/fipsmodule/ec/ec_montgomery.c [56:56]
+        crypto/fipsmodule/ec/internal.h [56:56]
+        crypto/fipsmodule/ec/oct.c [56:56]
+        crypto/fipsmodule/ec/simple.c [56:56]
+        crypto/fipsmodule/ec/wnaf.c [56:56]
+        crypto/fipsmodule/ecdh/ecdh.c [2:2]
+        include/openssl/bn.h [111:111]
+        include/openssl/ec.h [56:56]
+        include/openssl/ec_key.h [56:56]
+        include/openssl/ecdh.h [2:2]
+        include/openssl/ssl.h [111:111]
+        include/openssl/ssl3.h [111:111]
+        include/openssl/tls1.h [111:111]
+        include/openssl/x509.h [58:58]
+        ssl/handshake.cc [109:109]
+        ssl/handshake_client.cc [111:111]
+        ssl/handshake_server.cc [111:111]
+        ssl/internal.h [111:111]
+        ssl/s3_both.cc [109:109]
+        ssl/s3_lib.cc [111:111]
+        ssl/ssl_cert.cc [111:111]
+        ssl/ssl_cipher.cc [111:111]
+        ssl/ssl_lib.cc [111:111]
+        ssl/ssl_x509.cc [111:111]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ccaf8dfa0dcea9cef3eec62d2af4363f
+BELONGS decrepit/ya.make ssl/ya.make ya.make
+    License text:
+        /* Copyright (c) 2017, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/cipher_extra/e_aesctrhmac.c [1:1]
+        crypto/cipher_extra/e_aesgcmsiv.c [1:1]
+        crypto/err/internal.h [1:1]
+        crypto/evp/p_ed25519.c [1:1]
+        crypto/evp/p_ed25519_asn1.c [1:1]
+        crypto/fipsmodule/aes/internal.h [1:1]
+        crypto/fipsmodule/bcm.c [1:1]
+        crypto/fipsmodule/delocate.h [1:1]
+        crypto/fipsmodule/rand/ctrdrbg.c [1:1]
+        crypto/fipsmodule/self_check/fips.c [1:1]
+        crypto/fipsmodule/self_check/self_check.c [1:1]
+        crypto/pkcs7/internal.h [1:1]
+        crypto/pkcs7/pkcs7_x509.c [1:1]
+        crypto/rand_extra/forkunsafe.c [1:1]
+        crypto/rand_extra/rand_extra.c [1:1]
+        decrepit/cfb/cfb.c [1:1]
+        include/openssl/is_boringssl.h [1:1]
+        include/openssl/span.h [1:1]
+        ssl/ssl_versions.cc [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cf09c285133d644c8cd89957e89ab0a6
+BELONGS ya.make
+    License text:
+        @ Copyright 2012-2016 The OpenSSL Project Authors. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gen/bcm/bsaes-armv7-linux.S [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d133e52e765c4b1715eaf6dd730072de
+BELONGS ya.make
+    License text:
+        Copyright (c) 2015-2020 the fiat-crypto authors (see
+        https://github.com/mit-plv/fiat-crypto/blob/master/AUTHORS).
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        third_party/fiat/LICENSE [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d81142d73e9bd2ef13377405e287c488
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2000-2002 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/ecdh_extra/ecdh_extra.c [16:16]
+        crypto/fipsmodule/ecdh/ecdh.c [16:16]
+        include/openssl/ecdh.h [16:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL db3ce8c830e63a7e58517e343fc8970f
+BELONGS ssl/ya.make
+    License text:
+         * Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ssl/bio_ssl.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e16acf03b8f2d9d3aa97881ef78703b9
+BELONGS ya.make
+    License text:
+         * Copyright 2006-2017 The OpenSSL Project Authors. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/rsa_extra/rsa_print.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e56bc2ee97b0d5e48feeb882d7a08615
+BELONGS ssl/ya.make
+    License text:
+          Copyright (C) 2006, Network Resonance, Inc.
+          Copyright (C) 2011, RTFM, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ssl/d1_srtp.cc [113:114]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e6c73fc0692db928703ad1803354e412
+BELONGS ssl/ya.make
+    License text:
+         * Copyright (c) 1999-2005 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ssl/d1_lib.cc [6:6]
+        ssl/dtls_method.cc [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL edb1ede9decbb673859a5ff148d78452
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2001 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/pem/pem_x509.c [6:6]
+        crypto/pem/pem_xaux.c [6:6]
+        crypto/x509/x509cset.c [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f26e6084ffe7007b0ea94f0046e5fe00
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2000-2005 The OpenSSL Project.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/dh_extra/dh_asn1.c [5:5]
+        crypto/dsa/dsa_asn1.c [4:4]
+        crypto/rsa_extra/rsa_asn1.c [5:5]
+        include/openssl/asn1t.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f8df436c64ca33c568665671245c2160
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2022, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/asn1/posix_time.c [1:1]
+        crypto/cpu_arm_freebsd.c [1:1]
+        crypto/evp/p_hkdf.c [1:1]
+        crypto/fipsmodule/dh/internal.h [1:1]
+        crypto/x509/policy.c [1:1]
+        include/openssl/ctrdrbg.h [1:1]
+        include/openssl/kdf.h [1:1]
+        include/openssl/posix_time.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fb8aca2c26ab96ca9aa4d398c690e34f
+BELONGS ssl/ya.make ya.make
+    License text:
+         * Copyright 2005 Nokia. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/openssl/ssl.h [116:116]
+        include/openssl/tls1.h [124:124]
+        ssl/handshake_client.cc [124:124]
+        ssl/handshake_server.cc [124:124]
+        ssl/internal.h [116:116]
+        ssl/s3_lib.cc [124:124]
+        ssl/ssl_asn1.cc [58:58]
+        ssl/ssl_cipher.cc [116:116]
+        ssl/ssl_lib.cc [116:116]
+        ssl/ssl_session.cc [111:111]
+        ssl/ssl_stat.cc [58:58]
+        ssl/ssl_transcript.cc [111:111]
+        ssl/ssl_x509.cc [116:116]
+        ssl/t1_enc.cc [111:111]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ffdb5d0db88bfaeb36fd2315d2bd3edd
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015, Intel Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/fipsmodule/ec/p256-nistz-table.h [3:3]

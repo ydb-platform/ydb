@@ -269,10 +269,11 @@ struct nghttp3_qpack_encoder {
 /*
  * nghttp3_qpack_encoder_init initializes |encoder|.
  * |hard_max_dtable_capacity| is the upper bound of the dynamic table
- * capacity.  |mem| is a memory allocator.
+ * capacity.  |seed| is used to initialize nghttp3_map.  |mem| is a
+ * memory allocator.
  */
 void nghttp3_qpack_encoder_init(nghttp3_qpack_encoder *encoder,
-                                size_t hard_max_dtable_capacity,
+                                size_t hard_max_dtable_capacity, uint64_t seed,
                                 const nghttp3_mem *mem);
 
 /*

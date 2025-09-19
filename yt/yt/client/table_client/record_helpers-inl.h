@@ -22,7 +22,7 @@ void ValidateRowNotNull(TUnversionedRow row);
 template <class TRecord>
 TRecord ToRecord(
     TUnversionedRow row,
-    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping)
+    const typename TRecord::TRecordDescriptor::TPartialIdMapping& idMapping)
 {
     NTableClient::NDetail::ValidateRowNotNull(row);
     return TRecord::FromUnversionedRow(row, idMapping);
@@ -31,7 +31,7 @@ TRecord ToRecord(
 template <class TRecord>
 std::vector<TRecord> ToRecords(
     TRange<TUnversionedRow> rows,
-    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping)
+    const typename TRecord::TRecordDescriptor::TPartialIdMapping& idMapping)
 {
     std::vector<TRecord> records;
     records.reserve(rows.size());
@@ -44,14 +44,14 @@ std::vector<TRecord> ToRecords(
 template <class TRecord>
 std::vector<TRecord> ToRecords(const NApi::IUnversionedRowsetPtr& rowset)
 {
-    typename TRecord::TRecordDescriptor::TIdMapping idMapping(rowset->GetNameTable());
+    typename TRecord::TRecordDescriptor::TPartialIdMapping idMapping(rowset->GetNameTable());
     return ToRecords<TRecord>(rowset->GetRows(), idMapping);
 }
 
 template <class TRecord>
 std::optional<TRecord> ToOptionalRecord(
     TUnversionedRow row,
-    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping)
+    const typename TRecord::TRecordDescriptor::TPartialIdMapping& idMapping)
 {
     if (!row) {
         return std::nullopt;
@@ -62,7 +62,7 @@ std::optional<TRecord> ToOptionalRecord(
 template <class TRecord>
 std::vector<std::optional<TRecord>> ToOptionalRecords(
     TRange<TUnversionedRow> rows,
-    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping)
+    const typename TRecord::TRecordDescriptor::TPartialIdMapping& idMapping)
 {
     std::vector<std::optional<TRecord>> records;
     records.reserve(rows.size());
@@ -75,7 +75,7 @@ std::vector<std::optional<TRecord>> ToOptionalRecords(
 template <class TRecord>
 std::vector<std::optional<TRecord>> ToOptionalRecords(const NApi::IUnversionedRowsetPtr& rowset)
 {
-    typename TRecord::TRecordDescriptor::TIdMapping idMapping(rowset->GetNameTable());
+    typename TRecord::TRecordDescriptor::TPartialIdMapping idMapping(rowset->GetNameTable());
     return ToOptionalRecords<TRecord>(rowset->GetRows(), idMapping);
 }
 
@@ -85,7 +85,7 @@ template <class TRecord>
 TUnversionedRow FromRecord(
     const TRecord& record,
     const TRowBufferPtr& rowBuffer,
-    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping,
+    const typename TRecord::TRecordDescriptor::TPartialIdMapping& idMapping,
     NTableClient::EValueFlags flags)
 {
     return record.ToUnversionedRow(rowBuffer, idMapping, flags);
@@ -94,7 +94,7 @@ TUnversionedRow FromRecord(
 template <class TRecord>
 TUnversionedOwningRow FromRecord(
     const TRecord& record,
-    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping,
+    const typename TRecord::TRecordDescriptor::TPartialIdMapping& idMapping,
     NTableClient::EValueFlags flags)
 {
     // TODO(babenko): optimize
@@ -106,7 +106,7 @@ template <class TRecord>
 TSharedRange<TUnversionedRow> FromRecords(
     TRange<TRecord> records,
     const TRowBufferPtr& rowBuffer,
-    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping,
+    const typename TRecord::TRecordDescriptor::TPartialIdMapping& idMapping,
     NTableClient::EValueFlags flags)
 {
     std::vector<TUnversionedRow> rows;
@@ -120,7 +120,7 @@ TSharedRange<TUnversionedRow> FromRecords(
 template <class TRecord>
 TSharedRange<TUnversionedRow> FromRecords(
     TRange<TRecord> records,
-    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping,
+    const typename TRecord::TRecordDescriptor::TPartialIdMapping& idMapping,
     NTableClient::EValueFlags flags)
 {
     return FromRecords(records, New<TRowBuffer>(), idMapping, flags);

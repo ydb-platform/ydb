@@ -43,7 +43,6 @@ TNodePtr TSqlCallExpr::BuildCall() {
             TNodePtr named_args = BuildStructure(Pos_, NamedArgs_);
             TNodePtr named = named_args->Y("TypeOf", named_args);
 
-            TNodePtr custom_user_type = new TCallNodeImpl(Pos_, "TupleType", {positional, named, udf_node->GetExternalTypes()});
             TNodePtr options = udf_node->BuildOptions();
 
             if (udf_node->IsScript()) {
@@ -62,8 +61,9 @@ TNodePtr TSqlCallExpr::BuildCall() {
             }
 
             return BuildSqlCall(Ctx_, Pos_, udf_node->GetModule(), udf_node->GetFunction(),
-                                args, positional_args, named_args, custom_user_type,
-                                udf_node->GetTypeConfig(), udf_node->GetRunConfig(), options);
+                                args, positional_args, named_args, udf_node->GetExternalTypes(),
+                                udf_node->GetTypeConfig(), udf_node->GetRunConfig(), options,
+                                udf_node->GetDepends());
         }
 
         if (Node_ && (!Node_->FuncName() || Node_->IsScript())) {

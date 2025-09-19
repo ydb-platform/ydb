@@ -428,7 +428,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AddPruneKeys(TExprBase 
             MakePruneKeysExtractorLambda(node.Ref(), columns, ctx),
             isOrdered,
             cluster,
-            ctx.NewWorld(section.Pos()),
+            equiJoin.World().Ptr(),
             Build<TYtSectionList>(ctx, section.Pos())
                 .Add(inputSection)
                 .Done(),

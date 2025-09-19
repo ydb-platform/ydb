@@ -102,8 +102,13 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
 
         auto rootPath = storage->GetRoot();
         storage.Destroy();
+// On Windows, the lock file is not removed when deleting a folder recursively (for some reason).
+// Mute the test path because, in production, TStorage is usually not created in temporary mode:
+// the rootPath (and locks folder) will still exist even after the TStorage instance is destroyed.
+#if !defined(_win_)
         UNIT_ASSERT(!fileInStorage->GetPath().Exists());
         UNIT_ASSERT(!rootPath.Exists());
+#endif // !defined(_win_)
     }
 
     Y_UNIT_TEST(DisplaceByCount) {
@@ -132,7 +137,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
 
         TVector<TString> filesInStorage;
         storage->GetRoot().ListNames(filesInStorage);
-        UNIT_ASSERT_EQUAL(filesInStorage.size(), 2); // 1 file + 1 hardlink directory
+        UNIT_ASSERT_EQUAL(filesInStorage.size(), 3); // 1 file + 1 hardlink directory + 1 locks directory
 
         auto beg = filesInStorage.begin(),
              end = filesInStorage.end();
@@ -169,7 +174,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
 
         TVector<TString> filesInStorage;
         storage->GetRoot().ListNames(filesInStorage);
-        UNIT_ASSERT_EQUAL(filesInStorage.size(), 2); // 1 file + 1 hardlink directory
+        UNIT_ASSERT_EQUAL(filesInStorage.size(), 3); // 1 file + 1 hardlink directory + 1 locks folder
 
         auto beg = filesInStorage.begin(),
              end = filesInStorage.end();
@@ -192,10 +197,21 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
         storage.Destroy();
         UNIT_ASSERT(!fileInStorage->GetPath().Exists()); // hardlink was deleted
         UNIT_ASSERT(rootPath.Exists());
+        UNIT_ASSERT((rootPath / "locks").Exists());
         UNIT_ASSERT((rootPath / fileInStorage->GetStorageFileName()).Exists());
 
         storage.Reset(new TStorage(100, 100, dir.GetFsPath()));
         UNIT_ASSERT_EQUAL(storage->GetCount(), 1);
         UNIT_ASSERT_EQUAL(storage->GetOccupiedSize(), DATA.size());
+    }
+
+    Y_UNIT_TEST(TestLocksDontGrowEndless) {
+        TTestDir dir("PersistStorage");
+        THolder<TStorage> storage = MakeHolder<TStorage>(100, 100, dir.GetFsPath());
+        THashSet<TString> uniquePaths;
+        for (size_t i = 0; i < 10000; i++) {
+            uniquePaths.emplace(storage->GetLockFilePath("test_component", ToString(i)));
+        }
+        UNIT_ASSERT_LE(uniquePaths.size(), 4096);
     }
 }

@@ -27,6 +27,8 @@ class TSpinLock
     : public TSpinLockBase
 {
 public:
+    static constexpr bool Traced = true;
+
     using TSpinLockBase::TSpinLockBase;
 
     //! Acquires the lock.
@@ -63,16 +65,12 @@ private:
     void AcquireSlow() noexcept;
 };
 
-REGISTER_TRACKED_SPIN_LOCK_CLASS(TSpinLock)
-
 ////////////////////////////////////////////////////////////////////////////////
 
 //! A variant of TSpinLock occupying the whole cache line.
 class alignas(CacheLineSize) TPaddedSpinLock
     : public TSpinLock
 { };
-
-REGISTER_TRACKED_SPIN_LOCK_CLASS(TPaddedSpinLock)
 
 ////////////////////////////////////////////////////////////////////////////////
 

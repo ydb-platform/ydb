@@ -189,6 +189,10 @@ public:
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options) override;
 
+    TFuture<void> PingDistributedWriteSession(
+        const TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options) override;
+
     TFuture<void> FinishDistributedWriteSession(
         const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options) override;

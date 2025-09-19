@@ -45,11 +45,19 @@ namespace NSQLComplete {
                 }
 
                 THashMap<TTableId, NThreading::TFuture<TDescribeTableResponse>> futuresByTable;
-                for (const auto& [table, _] : aliasesByTable) {
+                for (const auto& [table, aliases] : aliasesByTable) {
+                    TString columnPrefix = prefix;
+                    for (const auto& alias : aliases) {
+                        if (alias.StartsWith(prefix)) {
+                            columnPrefix = "";
+                            break;
+                        }
+                    }
+
                     TDescribeTableRequest request = {
                         .TableCluster = table.Cluster,
                         .TablePath = table.Path,
-                        .ColumnPrefix = prefix,
+                        .ColumnPrefix = columnPrefix,
                         .ColumnsLimit = limit,
                     };
 
@@ -102,9 +110,16 @@ namespace NSQLComplete {
             }
 
             static TListFilter ToListFilter(const TNameConstraints& constraints) {
+                const auto& kinds = constraints.Object->Kinds;
+
                 TListFilter filter;
                 filter.Types = THashSet<TString>();
-                for (auto kind : constraints.Object->Kinds) {
+                filter.IsUnknownAllowed = kinds.contains(EObjectKind::Unknown);
+                for (EObjectKind kind : kinds) {
+                    if (kind == EObjectKind::Unknown) {
+                        continue;
+                    }
+
                     filter.Types->emplace(ToFolderEntry(kind));
                 }
                 return filter;
@@ -116,6 +131,10 @@ namespace NSQLComplete {
                         return TFolderEntry::Folder;
                     case EObjectKind::Table:
                         return TFolderEntry::Table;
+                    case EObjectKind::Unknown:
+                        ythrow yexception()
+                            << "Unknown is a type class and "
+                            << "can not be a folder entry";
                 }
             }
 

@@ -33,7 +33,7 @@ constinit const auto Logger = ThreadingLogger;
 ////////////////////////////////////////////////////////////////////////////////
 
 TThread::TThread(
-    TString threadName,
+    std::string threadName,
     TThreadOptions options)
     : ThreadName_(std::move(threadName))
     , Options_(std::move(options))
@@ -289,7 +289,7 @@ void TThread::SetThreadPriority()
 
 #if defined(_unix_)
 TThread::TSignalHandlerStack::TSignalHandlerStack(size_t size)
-    : Size_(size)
+    : Size_(RoundUpToPage(size))
 {
     const size_t guardSize = GuardPageCount * GetPageSize();
 

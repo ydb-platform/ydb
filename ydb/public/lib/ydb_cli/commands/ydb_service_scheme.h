@@ -106,7 +106,6 @@ private:
     int PrintTransferResponsePretty(const NYdb::NReplication::TDescribeTransferResult& result) const;
 
     int DescribeView(const TDriver& driver);
-    int PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const;
 
     int DescribeExternalDataSource(const TDriver& driver);
     int PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& result) const;

@@ -117,6 +117,9 @@ void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sou
 }
 
 void TSpecialReadContext::UnregisterActors() {
+    if (NActors::TActorSystem::IsStopped()) {
+        return;
+    }
     if (DuplicatesManager) {
         NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison);
         DuplicatesManager = TActorId();

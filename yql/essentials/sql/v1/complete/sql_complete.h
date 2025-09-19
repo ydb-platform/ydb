@@ -4,6 +4,7 @@
 
 #include <yql/essentials/sql/v1/complete/core/input.h>
 #include <yql/essentials/sql/v1/complete/core/environment.h>
+#include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
 #include <yql/essentials/sql/v1/complete/name/service/name_service.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 
@@ -70,6 +71,7 @@ namespace NSQLComplete {
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
         TLexerSupplier lexer,
         INameService::TPtr names,
-        TConfiguration configuration = {});
+        TConfiguration configuration = {},
+        IRanking::TPtr ranking = nullptr);
 
 } // namespace NSQLComplete

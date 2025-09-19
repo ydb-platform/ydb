@@ -204,7 +204,7 @@ void TAsyncLooper::DoStep()
     try {
         SyncFinish_();
     } catch (const TFiberCanceledException&) {
-        // We got canceled -- this is normal.
+        Stop();
         throw;
     } catch (const std::exception& ex) {
         if (TError(ex).GetCode() == NYT::EErrorCode::Canceled) {

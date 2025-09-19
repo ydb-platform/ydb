@@ -44,6 +44,7 @@ SET(ORIG_SOURCES
     mkql_filters_ut.cpp
     mkql_flatmap_ut.cpp
     mkql_fromstring_ut.cpp
+    mkql_linear_ut.cpp
     mkql_multihopping_saveload_ut.cpp
     mkql_multihopping_ut.cpp
     mkql_multimap_ut.cpp
@@ -63,6 +64,7 @@ SET(ORIG_SOURCES
     mkql_match_recognize_list_ut.cpp
     mkql_match_recognize_nfa_ut.cpp
     mkql_match_recognize_ut.cpp
+    mkql_mutdict_ut.cpp
     mkql_safe_circular_buffer_ut.cpp
     mkql_sort_ut.cpp
     mkql_switch_ut.cpp

@@ -252,18 +252,34 @@ class WebApplicationClientTest(TestCase):
         self.assertEqual(r4b_params['client_id'], self.client_id)
 
         # scenario Warnings
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")  # catch all
-
-            # warning1 - raise a DeprecationWarning if a `client_id` is submitted
-            rWarnings1 = client.prepare_request_body(client_id=self.client_id)
-            self.assertEqual(len(w), 1)
-            self.assertIsInstance(w[0].message, DeprecationWarning)
-
+        # warning1 - raise a DeprecationWarning if a `client_id` is submitted
+        with self.assertWarns(DeprecationWarning):
+            client.prepare_request_body(client_id=self.client_id)
             # testing the exact warning message in Python2&Python3 is a pain
 
         # scenario Exceptions
         # exception1 - raise a ValueError if the a different `client_id` is submitted
-        with self.assertRaises(ValueError) as cm:
+        with self.assertWarns(DeprecationWarning), self.assertRaises(ValueError):
             client.prepare_request_body(client_id='different_client_id')
             # testing the exact exception message in Python2&Python3 is a pain
+
+    def test_expires_in_as_str(self):
+        """
+        see regression issue #906
+        """
+
+        client = WebApplicationClient(
+            client_id="dummy",
+            token={"access_token": "xyz", "expires_in": "3600"}
+        )
+        self.assertIsNotNone(client)
+        client = WebApplicationClient(
+            client_id="dummy",
+            token={"access_token": "xyz", "expires_in": 3600}
+        )
+        self.assertIsNotNone(client)
+        client = WebApplicationClient(
+            client_id="dummy",
+            token={"access_token": "xyz", "expires_in": 3600.12}
+        )
+        self.assertIsNotNone(client)

@@ -1,0 +1,2531 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+IGNORE_FILES CHANGELOG.md
+
+KEEP     MIT                  001ca03e64d54ef98bae8ee0d59fbe7b
+BELONGS ya.make
+    License text:
+        The MIT License (MIT)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [822:822]
+
+KEEP     MIT                  0170df03b3e0791551ef234be60baddd
+BELONGS ya.make
+    License text:
+        µnit, an MIT-licensed project which is used for testing), the code is
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [2028:2028]
+        cpp/src/arrow/vendored/portable-snippets/README.md [5:5]
+
+KEEP     MIT                  019e08975b1c0274f778b9c7f69b7e2a
+BELONGS ya.make
+    License text:
+        note that RapidJSON source code is licensed under the MIT License, except for
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [1350:1350]
+
+KEEP     Apache-2.0           0251302c9951026343559c59aa54b107
+BELONGS ya.make
+    License text:
+        [![License](http://img.shields.io/:license-Apache%202-blue.svg)](https://github.com/apache/arrow/blob/main/LICENSE.txt)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [23:23]
+
+SKIP     CC-BY-4.0            0600ef0cab3cf3289fe8096147bed5de
+BELONGS ya.make
+    # License for benchmark testdata. We have no tests and benchmarks in this library
+    License text:
+           which is licensed under the CC-BY license. See
+    Scancode info:
+        Original SPDX id: CC-BY-4.0
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/licenses/by/4.0/, http://creativecommons.org/licenses/by/4.0/legalcode, https://spdx.org/licenses/CC-BY-4.0
+    Files with this license:
+        LICENSE.txt [1463:1463]
+
+KEEP     BSD-2-Clause         0a03e096bf2017683990cafb77ac175c
+BELONGS ya.make
+    License text:
+        License: BSD 2-Clause
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [848:848]
+
+KEEP     MIT                  0a46c3e57ed2859adbf327028e84e392
+BELONGS ya.make
+    License text:
+        // The MIT License (MIT)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        cpp/src/arrow/vendored/datetime/date.h [5:5]
+        cpp/src/arrow/vendored/datetime/ios.h [6:6]
+        cpp/src/arrow/vendored/datetime/ios.mm [2:2]
+        cpp/src/arrow/vendored/datetime/tz.cpp [1:1]
+        cpp/src/arrow/vendored/datetime/tz.h [5:5]
+        cpp/src/arrow/vendored/datetime/tz_private.h [5:5]
+
+KEEP     Apache-2.0           0b97342a89c940802b77b92a3644cbcc
+BELONGS ya.make
+    License text:
+        distributions, like the python wheels. Apache Thrift has the following license:
+        Apache Thrift
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 90.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [1198:1200]
+
+KEEP     BSD-2-Clause         0d76f941501b1e5dc8ef5050a3b19eca
+BELONGS ya.make
+    License text:
+        dev/tasks/homebrew-formulae/apache-arrow.rb has the following license:
+        BSD 2-Clause License
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [1892:1894]
+
+KEEP     Apache-2.0           0eb84046138f0047b703e6672b640c80
+BELONGS ya.make
+    License text:
+        This product includes software from Google Guava (Apache 2.0)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        NOTICE.txt [48:48]
+
+KEEP     BSD-3-Clause         0eeb53b5ade46c0dbfd74de7f691d839
+BELONGS ya.make
+    License text:
+            Open Source Software Licensed Under the BSD License:
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [1361:1361]
+
+KEEP     Public-Domain        123ac72d639e6944dff1ddcfbbd49bf4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE.txt [1467:1470]
+
+KEEP     BSD-3-Clause         132868e8af7e99148e4cf802925f8898
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [1480:1504]
+        LICENSE.txt [1514:1538]
+
+KEEP     BSD-3-Clause         14dc42c26bb4b47bf63a13095a15f9c6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [1550:1575]
+
+KEEP     Apache-2.0           1552496078c75a9f68cdfb273eaaa476
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        cpp/src/arrow/util/print.h [2:17]
+        cpp/src/arrow/util/string_builder.h [2:17]
+
+KEEP     BSD-3-Clause         15a5f0d7ca842dd6ffb0397b18c0d2c9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [1368:1390]
+
+KEEP     MIT                  15c663e84622860fcda30a03eb61b22a
+BELONGS ya.make
+    License text:
+         * Licensed under the MIT License;
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        NOTICE.txt [25:25]
+
+KEEP     Apache-2.0           17298432aaad236495d0c0686c74cacc
+BELONGS ya.make
+    License text:
+        copyright (c) Google inc and (c) The Chromium Authors and licensed under the
+        Apache 2.0 License or the under the 3-clause BSD license:
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [209:210]
+
+KEEP     CC0-1.0              1741444be843499b32387edee6181e44
+BELONGS ya.make
+    License text:
+        public domain, released using the CC0 1.0 Universal dedication.
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 20.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        cpp/src/arrow/vendored/portable-snippets/README.md [6:6]
+
+SKIP     LicenseRef-scancode-proprietary-license 1833c1254f6036f98bc232f4dd1be1b1
+BELONGS ya.make
+    # not license
+    License text:
+        // under the License.
+        // Private header, not to be exported
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 100.00
+        Match type      : TAG
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        cpp/src/arrow/util/hashing.h [17:19]
+        cpp/src/arrow/visit_scalar_inline.h [17:19]
+
+KEEP     BSD-2-Clause         198aca070f8fd7a1f90a2b9e5e23cb2d
+BELONGS ya.make
+    License text:
+        The BSD 2-Clause License
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [1851:1851]
+
+KEEP     LicenseRef-scancode-bsd-no-disclaimer-unmodified 1b04cc1d1ab234d2b00a90f68686fcc5
+BELONGS ya.make
+    License text:
+         * 3. The name "Carnegie Mellon University" must not be used to
+         *    endorse or promote products derived from this software without
+         *    prior written permission. For permission or any legal
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-bsd-no-disclaimer-unmodified
+        Score           : 25.40
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsd-no-disclaimer-unmodified.LICENSE
+    Files with this license:
+        cpp/src/arrow/util/crc32.cc [58:60]
+
+KEEP     Python-2.0           1cf0aef114d97d6b9f86cf985c6f356d
+BELONGS ya.make
+    License text:
+        which is made available under the Python Software Foundation License Version 2.
+    Scancode info:
+        Original SPDX id: Python-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
+    Files with this license:
+        LICENSE.txt [2112:2112]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 1d5722ad27b90f6d1d0be68827d20f5b
+BELONGS ya.make
+    # just an indication that the licenses are below 
+    License text:
+        Other dependencies and licenses:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE.txt [1359:1359]
+
+KEEP     MIT                  1e6267b65e0d8c205a22a3b9e4f9034f
+BELONGS ya.make
+    # changed manual
+    License text:
+        It is licensed under MIT license.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE.txt [530:530]
+
+KEEP     Apache-2.0           1f8abe716106cf5b190791efd76147fc
+BELONGS ya.make
+    License text:
+          This product includes software developed by The Apache Software
+          Foundation (http://www.apache.org/).
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        NOTICE.txt [80:81]
+
+KEEP     Apache-2.0           241309f4a31780cc149efce9b1cfbe74
+BELONGS ya.make
+    License text:
+        These files are derived from code from Netty, which is made available under the
+        Apache License 2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [2260:2261]
+
+KEEP     Apache-2.0           268037272aafc65d690d542c962cf9be
+BELONGS ya.make
+    License text:
+        This product includes software developed at
+        The Apache Software Foundation (http://www.apache.org/).
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [1203:1204]
+        NOTICE.txt [4:5]
+
+KEEP     MIT                  27470c2a7be0aee56a83d70b562df721
+BELONGS ya.make
+    License text:
+        or under the MIT license (provided in LICENSE-MIT.txt and at
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [2073:2073]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [2073:2073]
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [2:202]
+
+KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE.txt [313:335]
+
+KEEP     Apache-2.0           2db5267c3888dfc13b29fee96cb9b0ba
+BELONGS ya.make
+    License text:
+        Licensed under the Apache License, Version 2.0 (provided in
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [2071:2071]
+
+KEEP     BSD-2-Clause         32758628ee8c27de0d77e81c5f17b4e5
+BELONGS ya.make
+    License text:
+        The files in cpp/src/arrow/vendored/xxhash/ have the following license
+        (BSD 2-Clause License)
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [585:586]
+
+KEEP     BSD-3-Clause         34da0bbaf1e8782be668a9fbba945ef8
+BELONGS ya.make
+    License text:
+        The files in cpp/src/arrow/vendored/double-conversion/ have the following license
+        (BSD 3-Clause License)
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [619:620]
+
+KEEP     BSD-2-Clause         35eb6dde46e4e7c75a337b562689bed2
+BELONGS ya.make
+    License text:
+        which is made available under the BSD 2-clause license.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [2047:2047]
+
+KEEP     BSD-3-Clause         370eca8c4491a4340b0de094d4bb3b73
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [1584:1608]
+
+SKIP     OpenSSL              373d2beb824e0a87b7fb600d7d84f173
+BELONGS ya.make
+    # for third-party dependency
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        LICENSE.txt [1667:1788]
+
+KEEP     Apache-2.0           38d501467657ab7aadf31588c7709971
+BELONGS ya.make
+    License text:
+        distributions. opentelemetry-cpp is made available under the Apache License 2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [2117:2117]
+
+KEEP     Apache-2.0           3b0ea1fb66390711cb1f160e05b0e2a4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        cpp/src/arrow/vendored/ProducerConsumerQueue.h [7:17]
+
+KEEP     BSD-3-Clause         3c2a4c63734b5dad4f3385f0b4dfcaa6
+BELONGS ya.make
+    License text:
+        Apache 2.0 License or the under the 3-clause BSD license:
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [210:210]
+
+KEEP     BSD-3-Clause         3e04a2df6704445406067fc4ae34e857
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [214:238]
+
+KEEP     CC0-1.0              3e277187161fc8ae16591f4b36dd0dbd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 80.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        cpp/src/arrow/vendored/portable-snippets/debug-trap.h [6:9]
+        cpp/src/arrow/vendored/portable-snippets/safe-math.h [6:9]
+
+KEEP     MIT                  3eaaa7a31fe6d2745d7ba81f3f7c3668
+BELONGS ya.make
+    License text:
+        // Licensed under the MIT License;
+        // You may obtain a copy of the License at
+        //
+        // https://opensource.org/licenses/MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 53.12
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        cpp/src/arrow/io/mman.h [4:7]
+
+KEEP     LicenseRef-scancode-bsd-no-disclaimer 3eaadafd9dca7e55b6ff39825ff93c47
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-bsd-no-disclaimer
+        Score           : 84.38
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsd-no-disclaimer.LICENSE
+    Files with this license:
+        cpp/src/arrow/util/crc32.cc [46:56]
+
+KEEP     MIT                  3f3afe988b12ebc2ed2b87083bfeef1b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [2091:2107]
+
+KEEP     Apache-2.0           4248d6c827c367ff9f1b5e59ca41408e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        cpp/src/arrow/result.h [5:15]
+
+KEEP     Apache-2.0           45853d8a2d46e4ebad4c0e685c7dd34a
+BELONGS ya.make
+    License text:
+        which is made available under both the Apache license v2.0 and the
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 22.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [2055:2055]
+
+KEEP     Apache-2.0 AND BSD-3-Clause 46a69588a4944ea85961dfa87ddc85a2
+BELONGS ya.make
+    License text:
+        src/arrow/util (some portions): Apache 2.0, and 3-clause BSD
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [206:206]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [206:206]
+
+KEEP     Public-Domain        477fe38846ba1fd9a256bf092850d2e6
+BELONGS ya.make
+    License text:
+        µnit, an MIT-licensed project which is used for testing), the code is
+        public domain, released using the CC0 1.0 Universal dedication (*).
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 16.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE.txt [2028:2029]
+
+KEEP     MIT                  498f327de2223bab9e75e50d8c8f2ce9
+BELONGS ya.make
+    License text:
+        A copy of the MIT License is included in this file.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [1357:1357]
+
+KEEP     Apache-2.0           4a1e9b3643a9eb4804ecad2c9dcb962a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [1206:1216]
+        LICENSE.txt [1232:1242]
+
+KEEP     MIT                  4ad44c4565cde3358998fc83c166da48
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [825:841]
+
+KEEP     MIT                  4c37016b4a43484c8b458a1e370a9ed4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [1395:1411]
+
+SKIP     CC-BY-3.0            4fd78bd76e9544afb994175aedd7385b
+BELONGS ya.make
+    # License for benchmark testdata. We have no tests and benchmarks in this library
+    License text:
+           is licensed under the Creative Commons Attribution 3.0 license
+           (CC-BY-3.0). See https://creativecommons.org/licenses/by/3.0/
+           for more information.
+    Scancode info:
+        Original SPDX id: CC-BY-3.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/licenses/by/3.0/, http://creativecommons.org/licenses/by/3.0/legalcode, https://spdx.org/licenses/CC-BY-3.0
+    Files with this license:
+        LICENSE.txt [1451:1453]
+
+KEEP     MIT                  545579f4dd756987368331cd36f234d3
+BELONGS ya.make
+    License text:
+        It is licensed under MIT license.
+        The MIT License (MIT)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [530:532]
+
+KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [539:555]
+        LICENSE.txt [565:581]
+        LICENSE.txt [1999:2015]
+        LICENSE.txt [2128:2144]
+        LICENSE.txt [2208:2224]
+        LICENSE.txt [2238:2254]
+
+KEEP     MIT                  5754c7975b209d87bd75d5b41528f193
+BELONGS ya.make
+    License text:
+        http://opensource.org/licenses/MIT), at your option. This file may not
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [2074:2074]
+
+KEEP     Apache-2.0           5af23c5b03ddad2884b9d0347035d56e
+BELONGS ya.make
+    License text:
+        LICENSE-APACHE.txt and at http://www.apache.org/licenses/LICENSE-2.0)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [2072:2072]
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [2072:2072]
+
+KEEP     Apache-2.0           5b2104e40256607faf9657262ec3029d
+BELONGS ya.make
+    License text:
+        This product includes software from the Feather project (Apache 2.0)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        NOTICE.txt [11:11]
+
+KEEP     Apache-2.0           5b418c53658874b000953d47ee5ae1fb
+BELONGS ya.make
+    License text:
+        This product includes software developed by The Apache Software
+        Foundation (http://www.apache.org/).
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [1226:1227]
+
+KEEP     MIT AND Apache-2.0   5be86800ca189110fb14aa6dbdf0cc34
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 95.83
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        cpp/src/arrow/vendored/pcg/pcg_extras.hpp [10:14]
+        cpp/src/arrow/vendored/pcg/pcg_random.hpp [10:14]
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.83
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        cpp/src/arrow/vendored/pcg/pcg_extras.hpp [10:14]
+        cpp/src/arrow/vendored/pcg/pcg_random.hpp [10:14]
+
+KEEP     BSD-2-Clause         5c880a4b5e993709231a41c5ca5988a8
+BELONGS ya.make
+    License text:
+        This product includes software from https://github.com/matthew-brett/multibuild (BSD 2-clause)
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        NOTICE.txt [37:37]
+
+KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [2276:2292]
+
+KEEP     BSD-2-Clause         60b320831c9fdd14aea8b9efaa76f22f
+BELONGS ya.make
+    License text:
+        This product includes software from the DyND project (BSD 2-clause)
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        NOTICE.txt [14:14]
+
+KEEP     JSON                 60e6ed36a81492c270be786241181e68
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: JSON
+        Score           : 48.07
+        Match type      : TEXT
+        Links           : http://www.json.org/license.html, https://spdx.org/licenses/JSON
+    Files with this license:
+        cpp/src/arrow/vendored/datetime/README.md [2:12]
+
+KEEP     Zlib                 61d3bb10901c051c6de542a346e1b79e
+BELONGS ya.make
+    License text:
+        this will likely change to static linkage. zlib has the following license:
+        zlib.h -- interface of the 'zlib' general purpose compression library
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.txt [1635:1637]
+
+KEEP     MIT                  62574968655dfadc849b1ab4123aba22
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [1317:1333]
+
+KEEP     BSD-3-Clause         63c6e7aee9dba773961e4b91d5328b45
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [699:722]
+
+KEEP     BSD-3-Clause         655dfdda1a032335b8acb3ccd2ee4517
+BELONGS ya.make
+    License text:
+        available under the 3-clause BSD license, which follows:
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [1806:1806]
+
+KEEP     Zlib                 65cdcfa09914055b79725d09bc2f36f2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 92.42
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        cpp/src/arrow/vendored/base64.cpp [10:26]
+
+KEEP     BSD-2-Clause         68092a45bf6b6ec767dc44b4ccef998d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [592:611]
+        LICENSE.txt [1289:1308]
+
+KEEP     BSD-3-Clause         68c2ca914e17fc753ca10ba0a11b9f32
+BELONGS ya.make
+    License text:
+        This product include software from CMake (BSD 3-Clause)
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        NOTICE.txt [52:52]
+
+KEEP     MIT                  696d1b59f1691a3e0cd170583202077c
+BELONGS ya.make
+    License text:
+        that the RapidJSON binary is licensed under the MIT License.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [1348:1348]
+
+KEEP     MIT                  6b45d159c11839114dfda208e6140eda
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        cpp/src/arrow/vendored/datetime/date.h [14:30]
+        cpp/src/arrow/vendored/datetime/ios.h [10:26]
+        cpp/src/arrow/vendored/datetime/ios.mm [6:22]
+        cpp/src/arrow/vendored/datetime/tz.cpp [11:27]
+        cpp/src/arrow/vendored/datetime/tz.h [12:28]
+        cpp/src/arrow/vendored/datetime/tz_private.h [9:25]
+
+KEEP     MIT                  6c33adfd5cd931cfa14db28021ae23ef
+BELONGS ya.make
+    License text:
+        which is made available under the MIT license
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [1995:1995]
+        LICENSE.txt [2087:2087]
+        LICENSE.txt [2204:2204]
+        LICENSE.txt [2233:2233]
+        LICENSE.txt [2270:2270]
+
+KEEP     BSD-3-Clause         6eadae96e365c51aa54ab38dbdc87a7a
+BELONGS ya.make
+    License text:
+        This project includes code from the Go project, BSD 3-clause license + PATENTS
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [404:404]
+
+KEEP     BSD-3-Clause         71bd4cf523dc0d96d92eb06ea452cf58
+BELONGS ya.make
+    License text:
+        // Use of this source code is governed by a BSD-style license that can be
+        // found in the LICENSE file. See the AUTHORS file for names of contributors.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        cpp/src/arrow/status.cc [2:3]
+        cpp/src/arrow/status.h [3:4]
+
+KEEP     BSD-3-Clause         77137747a117e3a74307068d3b1c7dfa
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [1255:1278]
+
+KEEP     Protobuf-License     77b55cb8215e726b6ae7c1cf484bc45f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-protobuf
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://protobuf.googlecode.com/svn/trunk/COPYING.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/protobuf.LICENSE
+    Files with this license:
+        LICENSE.txt [904:933]
+
+KEEP     MIT AND BSD-3-Clause 782881b2ac2c75f1cd8cfb705f70004e
+BELONGS ya.make
+    License text:
+         * Use of this source code is governed by a BSD-style license that can be
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 83.33
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        NOTICE.txt [29:29]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        NOTICE.txt [29:29]
+
+KEEP     LicenseRef-scancode-warranty-disclaimer 78ea515605185491694f4370b9efef5a
+BELONGS ya.make
+    License text:
+        be copied, modified, or distributed except according to those terms.
+        Distributed on an "AS IS" BASIS, WITHOUT WARRANTY OF ANY KIND, either
+        express or implied.  See your chosen license for details.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 83.33
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        cpp/src/arrow/vendored/pcg/README.md [13:16]
+
+KEEP     ZPL-2.1              7a64e87b751ed15f62c60ffa26122b0c
+BELONGS ya.make
+    License text:
+        License: Zope Public License (ZPL) Version 2.1.
+    Scancode info:
+        Original SPDX id: ZPL-2.1
+        Score           : 99.00
+        Match type      : TAG
+        Links           : http://www.zope.org/Resources/License/, https://spdx.org/licenses/ZPL-2.1
+    Files with this license:
+        LICENSE.txt [881:881]
+
+KEEP     Apache-2.0 AND MIT   7d240285367ad7a836f67bbcf683d8ce
+BELONGS ya.make
+    License text:
+        SPDX-License-Identifier: (Apache-2.0 OR MIT)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [2069:2069]
+        cpp/src/arrow/vendored/pcg/README.md [7:7]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [2069:2069]
+        cpp/src/arrow/vendored/pcg/README.md [7:7]
+
+KEEP     MIT                  7e6e033600e4b4c8a14dae91119e002c
+BELONGS ya.make
+    License text:
+        with the following license (MIT)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [561:561]
+
+KEEP     BSD-2-Clause         7ee309ca13176881da77437148124526
+BELONGS ya.make
+    License text:
+        which is made available under both the Apache license v2.0 and the
+        BSD 2-clause license.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [2055:2056]
+
+KEEP     BSD-2-Clause         7f842266f0998b808eec76199a8c4aac
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [1856:1878]
+
+KEEP     BSD-2-Clause         7fcfdc48eda59f02fa02539558ec8359
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [384:401]
+
+KEEP     BSD-3-Clause         802b0ad118aaa1808c2fabe1a83093ba
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-bsd-x11
+        Score           : 95.33
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsd-x11.LICENSE
+    Files with this license:
+        LICENSE.txt [1817:1843]
+
+KEEP     BSD-3-Clause         81f1634e09063200aeea05033ac4ac7c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [410:434]
+
+SKIP     Apache-2.0 WITH LLVM-exception 8494a9caed330d9a4f40e19cce7dc770
+BELONGS ya.make
+    # for third-party libraries
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        LICENSE.txt [1148:1162]
+
+KEEP     BSD-3-Clause         84d035d46e776ad9714f602f27f2ddb3
+BELONGS ya.make
+    License text:
+        The files under dev/tasks/conda-recipes have the following license
+        BSD 3-clause license
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [693:695]
+
+KEEP     Zlib                 857046cd498c8e240c5c490a45d6a9b5
+BELONGS ya.make
+    License text:
+        cpp/src/arrow/vendored/base64.cpp has the following license
+        ZLIB License
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.txt [1922:1924]
+
+KEEP     Zlib                 863ebcdc91660eb6c7f9b92fbdabc5e0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 88.64
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        cpp/src/arrow/util/crc32.cc [24:37]
+
+KEEP     Apache-2.0           86a0725dcd00b87b9929258039db566c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [258:268]
+        LICENSE.txt [343:353]
+        LICENSE.txt [361:371]
+        LICENSE.txt [512:522]
+        LICENSE.txt [1183:1193]
+
+KEEP     Apache-2.0           87a3b063a58bf07da8349329b4e22ee9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        cpp/src/arrow/adapters/orc/adapter.cc [1:16]
+        cpp/src/arrow/adapters/orc/adapter.h [2:17]
+        cpp/src/arrow/adapters/orc/options.cc [1:16]
+        cpp/src/arrow/adapters/orc/options.h [2:17]
+        cpp/src/arrow/adapters/orc/util.cc [1:16]
+        cpp/src/arrow/adapters/orc/util.h [2:17]
+        cpp/src/arrow/api.h [2:17]
+        cpp/src/arrow/array.h [2:17]
+        cpp/src/arrow/array/array_base.cc [1:16]
+        cpp/src/arrow/array/array_base.h [2:17]
+        cpp/src/arrow/array/array_binary.cc [1:16]
+        cpp/src/arrow/array/array_binary.h [2:17]
+        cpp/src/arrow/array/array_decimal.cc [1:16]
+        cpp/src/arrow/array/array_decimal.h [2:17]
+        cpp/src/arrow/array/array_dict.cc [1:16]
+        cpp/src/arrow/array/array_dict.h [2:17]
+        cpp/src/arrow/array/array_nested.cc [1:16]
+        cpp/src/arrow/array/array_nested.h [2:17]
+        cpp/src/arrow/array/array_primitive.cc [1:16]
+        cpp/src/arrow/array/array_primitive.h [2:17]
+        cpp/src/arrow/array/array_run_end.cc [1:16]
+        cpp/src/arrow/array/array_run_end.h [2:17]
+        cpp/src/arrow/array/builder_adaptive.cc [1:16]
+        cpp/src/arrow/array/builder_adaptive.h [2:17]
+        cpp/src/arrow/array/builder_base.cc [1:16]
+        cpp/src/arrow/array/builder_base.h [2:17]
+        cpp/src/arrow/array/builder_binary.cc [1:16]
+        cpp/src/arrow/array/builder_binary.h [2:17]
+        cpp/src/arrow/array/builder_decimal.cc [1:16]
+        cpp/src/arrow/array/builder_decimal.h [2:17]
+        cpp/src/arrow/array/builder_dict.cc [1:16]
+        cpp/src/arrow/array/builder_dict.h [2:17]
+        cpp/src/arrow/array/builder_nested.cc [1:16]
+        cpp/src/arrow/array/builder_nested.h [2:17]
+        cpp/src/arrow/array/builder_primitive.cc [1:16]
+        cpp/src/arrow/array/builder_primitive.h [2:17]
+        cpp/src/arrow/array/builder_run_end.cc [1:16]
+        cpp/src/arrow/array/builder_run_end.h [2:17]
+        cpp/src/arrow/array/builder_time.h [2:17]
+        cpp/src/arrow/array/builder_union.cc [1:16]
+        cpp/src/arrow/array/builder_union.h [2:17]
+        cpp/src/arrow/array/concatenate.cc [1:16]
+        cpp/src/arrow/array/concatenate.h [2:17]
+        cpp/src/arrow/array/data.cc [1:16]
+        cpp/src/arrow/array/data.h [2:17]
+        cpp/src/arrow/array/dict_internal.h [2:17]
+        cpp/src/arrow/array/diff.cc [1:16]
+        cpp/src/arrow/array/diff.h [2:17]
+        cpp/src/arrow/array/statistics.cc [1:16]
+        cpp/src/arrow/array/statistics.h [2:17]
+        cpp/src/arrow/array/util.cc [1:16]
+        cpp/src/arrow/array/util.h [2:17]
+        cpp/src/arrow/array/validate.cc [1:16]
+        cpp/src/arrow/array/validate.h [2:17]
+        cpp/src/arrow/buffer.cc [1:16]
+        cpp/src/arrow/buffer.h [2:17]
+        cpp/src/arrow/buffer_builder.h [2:17]
+        cpp/src/arrow/builder.cc [1:16]
+        cpp/src/arrow/builder.h [2:17]
+        cpp/src/arrow/c/abi.h [2:17]
+        cpp/src/arrow/c/bridge.cc [1:16]
+        cpp/src/arrow/c/bridge.h [2:17]
+        cpp/src/arrow/c/dlpack.cc [1:16]
+        cpp/src/arrow/c/dlpack.h [2:17]
+        cpp/src/arrow/c/helpers.h [2:17]
+        cpp/src/arrow/c/util_internal.h [2:17]
+        cpp/src/arrow/chunk_resolver.cc [1:16]
+        cpp/src/arrow/chunk_resolver.h [2:17]
+        cpp/src/arrow/chunked_array.cc [1:16]
+        cpp/src/arrow/chunked_array.h [2:17]
+        cpp/src/arrow/compare.cc [1:16]
+        cpp/src/arrow/compare.h [2:17]
+        cpp/src/arrow/compute/api.h [2:17]
+        cpp/src/arrow/compute/api_aggregate.cc [1:16]
+        cpp/src/arrow/compute/api_aggregate.h [2:17]
+        cpp/src/arrow/compute/api_scalar.cc [1:16]
+        cpp/src/arrow/compute/api_scalar.h [2:17]
+        cpp/src/arrow/compute/api_vector.cc [1:16]
+        cpp/src/arrow/compute/api_vector.h [2:17]
+        cpp/src/arrow/compute/cast.cc [1:16]
+        cpp/src/arrow/compute/cast.h [2:17]
+        cpp/src/arrow/compute/cast_internal.h [2:17]
+        cpp/src/arrow/compute/exec.cc [1:16]
+        cpp/src/arrow/compute/exec.h [2:17]
+        cpp/src/arrow/compute/exec_internal.h [2:17]
+        cpp/src/arrow/compute/expression.cc [1:16]
+        cpp/src/arrow/compute/expression.h [2:17]
+        cpp/src/arrow/compute/expression_internal.h [2:17]
+        cpp/src/arrow/compute/function.cc [1:16]
+        cpp/src/arrow/compute/function.h [2:17]
+        cpp/src/arrow/compute/function_internal.cc [1:16]
+        cpp/src/arrow/compute/function_internal.h [2:17]
+        cpp/src/arrow/compute/function_options.h [2:17]
+        cpp/src/arrow/compute/kernel.cc [1:16]
+        cpp/src/arrow/compute/kernel.h [2:17]
+        cpp/src/arrow/compute/kernels/aggregate_basic.cc [1:16]
+        cpp/src/arrow/compute/kernels/aggregate_basic.inc.cc [1:16]
+        cpp/src/arrow/compute/kernels/aggregate_basic_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/aggregate_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/aggregate_mode.cc [1:16]
+        cpp/src/arrow/compute/kernels/aggregate_pivot.cc [1:16]
+        cpp/src/arrow/compute/kernels/aggregate_quantile.cc [1:16]
+        cpp/src/arrow/compute/kernels/aggregate_tdigest.cc [1:16]
+        cpp/src/arrow/compute/kernels/aggregate_var_std.cc [1:16]
+        cpp/src/arrow/compute/kernels/aggregate_var_std_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/base_arithmetic_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/chunked_internal.cc [1:16]
+        cpp/src/arrow/compute/kernels/chunked_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/codegen_internal.cc [1:16]
+        cpp/src/arrow/compute/kernels/codegen_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/common_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/copy_data_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/gather_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/hash_aggregate.cc [1:16]
+        cpp/src/arrow/compute/kernels/hash_aggregate_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/hash_aggregate_numeric.cc [1:16]
+        cpp/src/arrow/compute/kernels/hash_aggregate_pivot.cc [1:16]
+        cpp/src/arrow/compute/kernels/pivot_internal.cc [1:16]
+        cpp/src/arrow/compute/kernels/pivot_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/ree_util_internal.cc [1:16]
+        cpp/src/arrow/compute/kernels/ree_util_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/scalar_arithmetic.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_boolean.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_cast_boolean.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_cast_dictionary.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_cast_extension.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_cast_internal.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_cast_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/scalar_cast_nested.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_cast_numeric.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_cast_string.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_cast_temporal.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_compare.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_if_else.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_nested.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_random.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_round.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_set_lookup.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_string_ascii.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_string_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/scalar_string_utf8.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_temporal_binary.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_temporal_unary.cc [1:16]
+        cpp/src/arrow/compute/kernels/scalar_validity.cc [1:16]
+        cpp/src/arrow/compute/kernels/temporal_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/util_internal.cc [1:16]
+        cpp/src/arrow/compute/kernels/util_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/vector_array_sort.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_cumulative_ops.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_hash.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_nested.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_pairwise.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_rank.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_replace.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_run_end_encode.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_select_k.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_selection.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_selection_filter_internal.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_selection_filter_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/vector_selection_internal.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_selection_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/vector_selection_take_internal.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_selection_take_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/vector_sort.cc [1:16]
+        cpp/src/arrow/compute/kernels/vector_sort_internal.h [2:17]
+        cpp/src/arrow/compute/kernels/vector_statistics.cc [1:16]
+        cpp/src/arrow/compute/key_hash_internal.cc [1:16]
+        cpp/src/arrow/compute/key_hash_internal.h [2:17]
+        cpp/src/arrow/compute/key_map_internal.cc [1:16]
+        cpp/src/arrow/compute/key_map_internal.h [2:17]
+        cpp/src/arrow/compute/light_array_internal.cc [1:16]
+        cpp/src/arrow/compute/light_array_internal.h [2:17]
+        cpp/src/arrow/compute/ordering.cc [1:16]
+        cpp/src/arrow/compute/ordering.h [2:17]
+        cpp/src/arrow/compute/registry.cc [1:16]
+        cpp/src/arrow/compute/registry.h [2:17]
+        cpp/src/arrow/compute/registry_internal.h [2:17]
+        cpp/src/arrow/compute/row/compare_internal.cc [1:16]
+        cpp/src/arrow/compute/row/compare_internal.h [2:17]
+        cpp/src/arrow/compute/row/encode_internal.cc [1:16]
+        cpp/src/arrow/compute/row/encode_internal.h [2:17]
+        cpp/src/arrow/compute/row/grouper.cc [1:16]
+        cpp/src/arrow/compute/row/grouper.h [2:17]
+        cpp/src/arrow/compute/row/grouper_internal.h [2:17]
+        cpp/src/arrow/compute/row/row_encoder_internal.cc [1:16]
+        cpp/src/arrow/compute/row/row_encoder_internal.h [2:17]
+        cpp/src/arrow/compute/row/row_internal.cc [1:16]
+        cpp/src/arrow/compute/row/row_internal.h [2:17]
+        cpp/src/arrow/compute/type_fwd.h [2:17]
+        cpp/src/arrow/compute/util.cc [1:16]
+        cpp/src/arrow/compute/util.h [2:17]
+        cpp/src/arrow/compute/util_internal.cc [1:16]
+        cpp/src/arrow/compute/util_internal.h [2:17]
+        cpp/src/arrow/config.cc [1:16]
+        cpp/src/arrow/config.h [2:17]
+        cpp/src/arrow/csv/api.h [2:17]
+        cpp/src/arrow/csv/chunker.cc [1:16]
+        cpp/src/arrow/csv/chunker.h [2:17]
+        cpp/src/arrow/csv/column_builder.cc [1:16]
+        cpp/src/arrow/csv/column_builder.h [2:17]
+        cpp/src/arrow/csv/column_decoder.cc [1:16]
+        cpp/src/arrow/csv/column_decoder.h [2:17]
+        cpp/src/arrow/csv/converter.cc [1:16]
+        cpp/src/arrow/csv/converter.h [2:17]
+        cpp/src/arrow/csv/inference_internal.h [2:17]
+        cpp/src/arrow/csv/invalid_row.h [2:17]
+        cpp/src/arrow/csv/lexing_internal.h [2:17]
+        cpp/src/arrow/csv/options.cc [1:16]
+        cpp/src/arrow/csv/options.h [2:17]
+        cpp/src/arrow/csv/parser.cc [1:16]
+        cpp/src/arrow/csv/parser.h [2:17]
+        cpp/src/arrow/csv/reader.cc [1:16]
+        cpp/src/arrow/csv/reader.h [2:17]
+        cpp/src/arrow/csv/type_fwd.h [2:17]
+        cpp/src/arrow/csv/writer.cc [1:16]
+        cpp/src/arrow/csv/writer.h [2:17]
+        cpp/src/arrow/datum.cc [1:16]
+        cpp/src/arrow/datum.h [2:17]
+        cpp/src/arrow/device.cc [1:16]
+        cpp/src/arrow/device.h [2:17]
+        cpp/src/arrow/device_allocation_type_set.cc [1:16]
+        cpp/src/arrow/device_allocation_type_set.h [2:17]
+        cpp/src/arrow/extension/bool8.cc [1:16]
+        cpp/src/arrow/extension/bool8.h [2:17]
+        cpp/src/arrow/extension/fixed_shape_tensor.cc [1:16]
+        cpp/src/arrow/extension/fixed_shape_tensor.h [2:17]
+        cpp/src/arrow/extension/json.cc [1:16]
+        cpp/src/arrow/extension/json.h [2:17]
+        cpp/src/arrow/extension/opaque.cc [1:16]
+        cpp/src/arrow/extension/opaque.h [2:17]
+        cpp/src/arrow/extension/tensor_internal.h [2:17]
+        cpp/src/arrow/extension/uuid.cc [1:16]
+        cpp/src/arrow/extension/uuid.h [2:17]
+        cpp/src/arrow/extension_type.cc [1:16]
+        cpp/src/arrow/extension_type.h [2:17]
+        cpp/src/arrow/filesystem/api.h [2:17]
+        cpp/src/arrow/filesystem/filesystem.cc [1:16]
+        cpp/src/arrow/filesystem/filesystem.h [2:17]
+        cpp/src/arrow/filesystem/localfs.cc [1:16]
+        cpp/src/arrow/filesystem/localfs.h [2:17]
+        cpp/src/arrow/filesystem/mockfs.cc [1:16]
+        cpp/src/arrow/filesystem/mockfs.h [2:17]
+        cpp/src/arrow/filesystem/path_util.cc [1:16]
+        cpp/src/arrow/filesystem/path_util.h [2:17]
+        cpp/src/arrow/filesystem/type_fwd.h [2:17]
+        cpp/src/arrow/filesystem/util_internal.cc [1:16]
+        cpp/src/arrow/filesystem/util_internal.h [2:17]
+        cpp/src/arrow/io/api.h [2:17]
+        cpp/src/arrow/io/buffered.cc [1:16]
+        cpp/src/arrow/io/buffered.h [2:17]
+        cpp/src/arrow/io/caching.cc [1:16]
+        cpp/src/arrow/io/caching.h [2:17]
+        cpp/src/arrow/io/compressed.cc [1:16]
+        cpp/src/arrow/io/compressed.h [2:17]
+        cpp/src/arrow/io/concurrency.h [2:17]
+        cpp/src/arrow/io/file.cc [1:16]
+        cpp/src/arrow/io/file.h [2:17]
+        cpp/src/arrow/io/interfaces.cc [1:16]
+        cpp/src/arrow/io/interfaces.h [2:17]
+        cpp/src/arrow/io/memory.cc [1:16]
+        cpp/src/arrow/io/memory.h [2:17]
+        cpp/src/arrow/io/slow.cc [1:16]
+        cpp/src/arrow/io/slow.h [2:17]
+        cpp/src/arrow/io/stdio.cc [1:16]
+        cpp/src/arrow/io/stdio.h [2:17]
+        cpp/src/arrow/io/transform.cc [1:16]
+        cpp/src/arrow/io/transform.h [2:17]
+        cpp/src/arrow/io/type_fwd.h [2:17]
+        cpp/src/arrow/io/util_internal.h [2:17]
+        cpp/src/arrow/ipc/api.h [2:17]
+        cpp/src/arrow/ipc/dictionary.cc [1:16]
+        cpp/src/arrow/ipc/dictionary.h [2:17]
+        cpp/src/arrow/ipc/feather.cc [1:16]
+        cpp/src/arrow/ipc/feather.h [2:17]
+        cpp/src/arrow/ipc/json_simple.cc [1:16]
+        cpp/src/arrow/ipc/json_simple.h [2:17]
+        cpp/src/arrow/ipc/message.cc [1:16]
+        cpp/src/arrow/ipc/message.h [2:17]
+        cpp/src/arrow/ipc/metadata_internal.cc [1:16]
+        cpp/src/arrow/ipc/metadata_internal.h [2:17]
+        cpp/src/arrow/ipc/options.cc [1:16]
+        cpp/src/arrow/ipc/options.h [2:17]
+        cpp/src/arrow/ipc/reader.cc [1:16]
+        cpp/src/arrow/ipc/reader.h [2:17]
+        cpp/src/arrow/ipc/reader_internal.h [2:17]
+        cpp/src/arrow/ipc/type_fwd.h [2:17]
+        cpp/src/arrow/ipc/util.h [2:17]
+        cpp/src/arrow/ipc/writer.cc [1:16]
+        cpp/src/arrow/ipc/writer.h [2:17]
+        cpp/src/arrow/json/chunked_builder.cc [1:16]
+        cpp/src/arrow/json/chunked_builder.h [2:17]
+        cpp/src/arrow/json/chunker.cc [1:16]
+        cpp/src/arrow/json/chunker.h [2:17]
+        cpp/src/arrow/json/converter.cc [1:16]
+        cpp/src/arrow/json/converter.h [2:17]
+        cpp/src/arrow/json/object_parser.cc [1:16]
+        cpp/src/arrow/json/object_parser.h [2:17]
+        cpp/src/arrow/json/object_writer.cc [1:16]
+        cpp/src/arrow/json/object_writer.h [2:17]
+        cpp/src/arrow/json/options.cc [1:16]
+        cpp/src/arrow/json/options.h [2:17]
+        cpp/src/arrow/json/parser.cc [1:16]
+        cpp/src/arrow/json/parser.h [2:17]
+        cpp/src/arrow/json/rapidjson_defs.h [2:17]
+        cpp/src/arrow/json/reader.cc [1:16]
+        cpp/src/arrow/json/reader.h [2:17]
+        cpp/src/arrow/json/type_fwd.h [2:17]
+        cpp/src/arrow/memory_pool.cc [1:16]
+        cpp/src/arrow/memory_pool.h [2:17]
+        cpp/src/arrow/memory_pool_internal.h [2:17]
+        cpp/src/arrow/pretty_print.cc [1:16]
+        cpp/src/arrow/pretty_print.h [2:17]
+        cpp/src/arrow/record_batch.cc [1:16]
+        cpp/src/arrow/record_batch.h [2:17]
+        cpp/src/arrow/result.cc [1:16]
+        cpp/src/arrow/scalar.cc [1:16]
+        cpp/src/arrow/scalar.h [2:17]
+        cpp/src/arrow/sparse_tensor.cc [1:16]
+        cpp/src/arrow/sparse_tensor.h [2:17]
+        cpp/src/arrow/status_internal.h [2:17]
+        cpp/src/arrow/stl_allocator.h [2:17]
+        cpp/src/arrow/stl_iterator.h [2:17]
+        cpp/src/arrow/table.cc [1:16]
+        cpp/src/arrow/table.h [2:17]
+        cpp/src/arrow/table_builder.cc [1:16]
+        cpp/src/arrow/table_builder.h [2:17]
+        cpp/src/arrow/tensor.cc [1:16]
+        cpp/src/arrow/tensor.h [2:17]
+        cpp/src/arrow/tensor/converter.h [2:17]
+        cpp/src/arrow/tensor/converter_internal.h [2:17]
+        cpp/src/arrow/tensor/coo_converter.cc [1:16]
+        cpp/src/arrow/tensor/csf_converter.cc [1:16]
+        cpp/src/arrow/tensor/csx_converter.cc [1:16]
+        cpp/src/arrow/type.cc [1:16]
+        cpp/src/arrow/type.h [2:17]
+        cpp/src/arrow/type_fwd.h [2:17]
+        cpp/src/arrow/type_traits.cc [1:16]
+        cpp/src/arrow/type_traits.h [2:17]
+        cpp/src/arrow/util/algorithm.h [2:17]
+        cpp/src/arrow/util/align_util.cc [1:16]
+        cpp/src/arrow/util/align_util.h [2:17]
+        cpp/src/arrow/util/aligned_storage.h [2:17]
+        cpp/src/arrow/util/async_generator.h [2:17]
+        cpp/src/arrow/util/async_generator_fwd.h [2:17]
+        cpp/src/arrow/util/async_util.cc [1:16]
+        cpp/src/arrow/util/async_util.h [2:17]
+        cpp/src/arrow/util/atfork_internal.cc [1:16]
+        cpp/src/arrow/util/atfork_internal.h [2:17]
+        cpp/src/arrow/util/base64.h [2:17]
+        cpp/src/arrow/util/basic_decimal.cc [1:16]
+        cpp/src/arrow/util/basic_decimal.h [2:17]
+        cpp/src/arrow/util/binary_view_util.h [2:17]
+        cpp/src/arrow/util/bit_block_counter.cc [1:16]
+        cpp/src/arrow/util/bit_block_counter.h [2:17]
+        cpp/src/arrow/util/bit_run_reader.cc [1:16]
+        cpp/src/arrow/util/bit_run_reader.h [2:17]
+        cpp/src/arrow/util/bit_stream_utils_internal.h [2:17]
+        cpp/src/arrow/util/bit_util.cc [1:16]
+        cpp/src/arrow/util/bit_util.h [2:17]
+        cpp/src/arrow/util/bitmap.cc [1:16]
+        cpp/src/arrow/util/bitmap.h [2:17]
+        cpp/src/arrow/util/bitmap_builders.cc [1:16]
+        cpp/src/arrow/util/bitmap_builders.h [2:17]
+        cpp/src/arrow/util/bitmap_generate.h [2:17]
+        cpp/src/arrow/util/bitmap_ops.cc [1:16]
+        cpp/src/arrow/util/bitmap_ops.h [2:17]
+        cpp/src/arrow/util/bitmap_reader.h [2:17]
+        cpp/src/arrow/util/bitmap_visit.h [2:17]
+        cpp/src/arrow/util/bitmap_writer.h [2:17]
+        cpp/src/arrow/util/bitset_stack.h [2:17]
+        cpp/src/arrow/util/bpacking.cc [1:16]
+        cpp/src/arrow/util/bpacking.h [2:17]
+        cpp/src/arrow/util/bpacking64_default.h [2:17]
+        cpp/src/arrow/util/bpacking_default.h [2:17]
+        cpp/src/arrow/util/byte_size.cc [1:16]
+        cpp/src/arrow/util/byte_size.h [2:17]
+        cpp/src/arrow/util/byte_stream_split_internal.h [2:17]
+        cpp/src/arrow/util/cancel.cc [1:16]
+        cpp/src/arrow/util/cancel.h [2:17]
+        cpp/src/arrow/util/checked_cast.h [2:17]
+        cpp/src/arrow/util/compare.h [2:17]
+        cpp/src/arrow/util/compression.cc [1:16]
+        cpp/src/arrow/util/compression.h [2:17]
+        cpp/src/arrow/util/compression_brotli.cc [1:16]
+        cpp/src/arrow/util/compression_internal.h [2:17]
+        cpp/src/arrow/util/compression_lz4.cc [1:16]
+        cpp/src/arrow/util/compression_snappy.cc [1:16]
+        cpp/src/arrow/util/compression_zlib.cc [1:16]
+        cpp/src/arrow/util/compression_zstd.cc [1:16]
+        cpp/src/arrow/util/counting_semaphore.cc [1:16]
+        cpp/src/arrow/util/counting_semaphore.h [2:17]
+        cpp/src/arrow/util/cpu_info.cc [1:16]
+        cpp/src/arrow/util/cpu_info.h [2:17]
+        cpp/src/arrow/util/crc32.cc [1:16]
+        cpp/src/arrow/util/crc32.h [2:17]
+        cpp/src/arrow/util/debug.cc [1:16]
+        cpp/src/arrow/util/debug.h [2:17]
+        cpp/src/arrow/util/decimal.cc [1:16]
+        cpp/src/arrow/util/decimal.h [2:17]
+        cpp/src/arrow/util/decimal_internal.h [2:17]
+        cpp/src/arrow/util/delimiting.cc [1:16]
+        cpp/src/arrow/util/delimiting.h [2:17]
+        cpp/src/arrow/util/dict_util.cc [1:16]
+        cpp/src/arrow/util/dict_util.h [2:17]
+        cpp/src/arrow/util/dispatch.h [2:17]
+        cpp/src/arrow/util/double_conversion.h [2:17]
+        cpp/src/arrow/util/endian.h [2:17]
+        cpp/src/arrow/util/fixed_width_internal.cc [1:16]
+        cpp/src/arrow/util/fixed_width_internal.h [2:17]
+        cpp/src/arrow/util/float16.cc [1:16]
+        cpp/src/arrow/util/float16.h [2:17]
+        cpp/src/arrow/util/formatting.cc [1:16]
+        cpp/src/arrow/util/formatting.h [2:17]
+        cpp/src/arrow/util/functional.h [2:17]
+        cpp/src/arrow/util/future.cc [1:16]
+        cpp/src/arrow/util/future.h [2:17]
+        cpp/src/arrow/util/hash_util.h [2:17]
+        cpp/src/arrow/util/hashing.cc [1:16]
+        cpp/src/arrow/util/hashing.h [2:17]
+        cpp/src/arrow/util/int128_internal.h [2:17]
+        cpp/src/arrow/util/int_util.cc [1:16]
+        cpp/src/arrow/util/int_util.h [2:17]
+        cpp/src/arrow/util/int_util_overflow.h [2:17]
+        cpp/src/arrow/util/io_util.cc [1:16]
+        cpp/src/arrow/util/io_util.h [2:17]
+        cpp/src/arrow/util/iterator.h [2:17]
+        cpp/src/arrow/util/key_value_metadata.cc [1:16]
+        cpp/src/arrow/util/key_value_metadata.h [2:17]
+        cpp/src/arrow/util/launder.h [2:17]
+        cpp/src/arrow/util/list_util.cc [1:16]
+        cpp/src/arrow/util/list_util.h [2:17]
+        cpp/src/arrow/util/logger.cc [1:16]
+        cpp/src/arrow/util/logger.h [2:17]
+        cpp/src/arrow/util/logging.cc [1:16]
+        cpp/src/arrow/util/logging.h [2:17]
+        cpp/src/arrow/util/macros.h [2:17]
+        cpp/src/arrow/util/math_constants.h [2:17]
+        cpp/src/arrow/util/math_internal.cc [1:16]
+        cpp/src/arrow/util/math_internal.h [2:17]
+        cpp/src/arrow/util/memory.cc [1:16]
+        cpp/src/arrow/util/memory.h [2:17]
+        cpp/src/arrow/util/mutex.cc [1:16]
+        cpp/src/arrow/util/mutex.h [2:17]
+        cpp/src/arrow/util/parallel.h [2:17]
+        cpp/src/arrow/util/pcg_random.h [2:17]
+        cpp/src/arrow/util/queue.h [2:17]
+        cpp/src/arrow/util/range.h [2:17]
+        cpp/src/arrow/util/ree_util.cc [1:16]
+        cpp/src/arrow/util/ree_util.h [2:17]
+        cpp/src/arrow/util/reflection_internal.h [2:17]
+        cpp/src/arrow/util/rle_encoding_internal.h [2:17]
+        cpp/src/arrow/util/simd.h [2:17]
+        cpp/src/arrow/util/slice_util_internal.h [2:17]
+        cpp/src/arrow/util/small_vector.h [2:17]
+        cpp/src/arrow/util/sort.h [2:17]
+        cpp/src/arrow/util/spaced.h [2:17]
+        cpp/src/arrow/util/span.h [2:17]
+        cpp/src/arrow/util/string.cc [1:16]
+        cpp/src/arrow/util/string.h [2:17]
+        cpp/src/arrow/util/string_builder.cc [1:16]
+        cpp/src/arrow/util/task_group.cc [1:16]
+        cpp/src/arrow/util/task_group.h [2:17]
+        cpp/src/arrow/util/tdigest.cc [1:16]
+        cpp/src/arrow/util/tdigest.h [2:17]
+        cpp/src/arrow/util/thread_pool.cc [1:16]
+        cpp/src/arrow/util/thread_pool.h [2:17]
+        cpp/src/arrow/util/time.cc [1:16]
+        cpp/src/arrow/util/time.h [2:17]
+        cpp/src/arrow/util/tracing.cc [1:16]
+        cpp/src/arrow/util/tracing.h [2:17]
+        cpp/src/arrow/util/tracing_internal.h [2:17]
+        cpp/src/arrow/util/trie.cc [1:16]
+        cpp/src/arrow/util/trie.h [2:17]
+        cpp/src/arrow/util/type_fwd.h [2:17]
+        cpp/src/arrow/util/type_traits.h [2:17]
+        cpp/src/arrow/util/ubsan.h [2:17]
+        cpp/src/arrow/util/union_util.cc [1:16]
+        cpp/src/arrow/util/union_util.h [2:17]
+        cpp/src/arrow/util/unreachable.cc [1:16]
+        cpp/src/arrow/util/unreachable.h [2:17]
+        cpp/src/arrow/util/uri.cc [1:16]
+        cpp/src/arrow/util/uri.h [2:17]
+        cpp/src/arrow/util/utf8.cc [1:16]
+        cpp/src/arrow/util/utf8.h [2:17]
+        cpp/src/arrow/util/utf8_internal.h [2:17]
+        cpp/src/arrow/util/value_parsing.cc [1:16]
+        cpp/src/arrow/util/value_parsing.h [2:17]
+        cpp/src/arrow/util/vector.h [2:17]
+        cpp/src/arrow/util/visibility.h [2:17]
+        cpp/src/arrow/util/windows_compatibility.h [2:17]
+        cpp/src/arrow/util/windows_fixup.h [2:17]
+        cpp/src/arrow/vendored/datetime.cpp [1:16]
+        cpp/src/arrow/vendored/datetime.h [2:17]
+        cpp/src/arrow/vendored/datetime/visibility.h [2:17]
+        cpp/src/arrow/vendored/strptime.h [2:17]
+        cpp/src/arrow/visit_array_inline.h [2:17]
+        cpp/src/arrow/visit_data_inline.h [2:17]
+        cpp/src/arrow/visit_scalar_inline.h [2:17]
+        cpp/src/arrow/visit_type_inline.h [2:17]
+        cpp/src/arrow/visitor.cc [1:16]
+        cpp/src/arrow/visitor.h [2:17]
+        cpp/src/arrow/visitor_generate.h [2:17]
+        cpp/src/generated/File.fbs [1:16]
+        cpp/src/generated/Message.fbs [1:16]
+        cpp/src/generated/Schema.fbs [1:16]
+        cpp/src/generated/SparseTensor.fbs [1:16]
+        cpp/src/generated/Tensor.fbs [1:16]
+        cpp/src/generated/feather.fbs [1:16]
+        cpp/src/parquet/api/io.h [2:17]
+        cpp/src/parquet/api/reader.h [2:17]
+        cpp/src/parquet/api/schema.h [2:17]
+        cpp/src/parquet/api/writer.h [2:17]
+        cpp/src/parquet/arrow/path_internal.cc [1:16]
+        cpp/src/parquet/arrow/path_internal.h [2:17]
+        cpp/src/parquet/arrow/reader.cc [1:16]
+        cpp/src/parquet/arrow/reader.h [2:17]
+        cpp/src/parquet/arrow/reader_internal.cc [1:16]
+        cpp/src/parquet/arrow/reader_internal.h [2:17]
+        cpp/src/parquet/arrow/schema.cc [1:16]
+        cpp/src/parquet/arrow/schema.h [2:17]
+        cpp/src/parquet/arrow/schema_internal.cc [1:16]
+        cpp/src/parquet/arrow/schema_internal.h [2:17]
+        cpp/src/parquet/arrow/writer.cc [1:16]
+        cpp/src/parquet/arrow/writer.h [2:17]
+        cpp/src/parquet/bloom_filter.cc [1:16]
+        cpp/src/parquet/bloom_filter.h [2:17]
+        cpp/src/parquet/bloom_filter_reader.cc [1:16]
+        cpp/src/parquet/bloom_filter_reader.h [2:17]
+        cpp/src/parquet/column_page.h [2:17]
+        cpp/src/parquet/column_reader.cc [1:16]
+        cpp/src/parquet/column_reader.h [2:17]
+        cpp/src/parquet/column_scanner.cc [1:16]
+        cpp/src/parquet/column_scanner.h [2:17]
+        cpp/src/parquet/column_writer.cc [1:16]
+        cpp/src/parquet/column_writer.h [2:17]
+        cpp/src/parquet/decoder.cc [1:16]
+        cpp/src/parquet/encoder.cc [1:16]
+        cpp/src/parquet/encoding.h [2:17]
+        cpp/src/parquet/encryption/encryption.cc [1:16]
+        cpp/src/parquet/encryption/encryption.h [2:17]
+        cpp/src/parquet/encryption/encryption_internal.h [2:17]
+        cpp/src/parquet/encryption/encryption_internal_nossl.cc [1:16]
+        cpp/src/parquet/encryption/internal_file_decryptor.cc [1:16]
+        cpp/src/parquet/encryption/internal_file_decryptor.h [2:17]
+        cpp/src/parquet/encryption/internal_file_encryptor.cc [1:16]
+        cpp/src/parquet/encryption/internal_file_encryptor.h [2:17]
+        cpp/src/parquet/encryption/type_fwd.h [2:17]
+        cpp/src/parquet/exception.cc [1:16]
+        cpp/src/parquet/exception.h [2:17]
+        cpp/src/parquet/file_reader.cc [1:16]
+        cpp/src/parquet/file_reader.h [2:17]
+        cpp/src/parquet/file_writer.cc [1:16]
+        cpp/src/parquet/file_writer.h [2:17]
+        cpp/src/parquet/hasher.h [2:17]
+        cpp/src/parquet/level_comparison.cc [1:16]
+        cpp/src/parquet/level_comparison.h [2:17]
+        cpp/src/parquet/level_comparison_inc.h [2:17]
+        cpp/src/parquet/level_conversion.cc [1:16]
+        cpp/src/parquet/level_conversion.h [2:17]
+        cpp/src/parquet/level_conversion_inc.h [2:17]
+        cpp/src/parquet/metadata.cc [1:16]
+        cpp/src/parquet/metadata.h [2:17]
+        cpp/src/parquet/page_index.cc [1:16]
+        cpp/src/parquet/page_index.h [2:17]
+        cpp/src/parquet/platform.cc [1:16]
+        cpp/src/parquet/platform.h [2:17]
+        cpp/src/parquet/printer.cc [1:16]
+        cpp/src/parquet/printer.h [2:17]
+        cpp/src/parquet/properties.cc [1:16]
+        cpp/src/parquet/properties.h [2:17]
+        cpp/src/parquet/schema.cc [1:16]
+        cpp/src/parquet/schema.h [2:17]
+        cpp/src/parquet/schema_internal.h [2:17]
+        cpp/src/parquet/size_statistics.h [2:17]
+        cpp/src/parquet/statistics.cc [1:16]
+        cpp/src/parquet/statistics.h [2:17]
+        cpp/src/parquet/stream_reader.cc [1:16]
+        cpp/src/parquet/stream_reader.h [2:17]
+        cpp/src/parquet/stream_writer.cc [1:16]
+        cpp/src/parquet/stream_writer.h [2:17]
+        cpp/src/parquet/thrift_internal.h [2:17]
+        cpp/src/parquet/type_fwd.h [2:17]
+        cpp/src/parquet/types.cc [1:16]
+        cpp/src/parquet/types.h [2:17]
+        cpp/src/parquet/windows_compatibility.h [2:17]
+        cpp/src/parquet/windows_fixup.h [2:17]
+        cpp/src/parquet/xxhasher.cc [1:16]
+        cpp/src/parquet/xxhasher.h [2:17]
+        src/arrow/util/config.h [2:17]
+        src/arrow/util/config_internal.h [2:17]
+        src/parquet/parquet_version.h [2:17]
+
+KEEP     Apache-2.0           8bcb53ef10c66a13f3367500f22e3a7d
+BELONGS ya.make
+    License text:
+        License: Apache 2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [891:891]
+
+KEEP     MIT                  8d18be6409468bae48b33b87db85824a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [1970:1987]
+        cpp/src/arrow/vendored/musl/README.md [4:21]
+
+KEEP     BSD-3-Clause         8e488c1278a51250013cad72be503e47
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [660:689]
+
+KEEP     Apache-2.0           8f3e8dd049f8a9752a3cb0d61dc89234
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 99.16
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        cpp/src/parquet/size_statistics.cc [1:16]
+
+KEEP     BSD-2-Clause         92f1000d66d2bf3f0fb4475f7ea7e47d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [1899:1918]
+
+KEEP     MIT                  95ab90f27aff3638498c3133a31fb2c6
+BELONGS ya.make
+    License text:
+           is licensed under the MIT License. See
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [1456:1456]
+
+KEEP     MIT                  988ddfd056445c59ec3e71333357d449
+BELONGS ya.make
+    License text:
+        compliance with the MIT License, as well as the other licenses applicable to
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [1353:1353]
+
+KEEP     MIT                  9967c3b8cb5ae607d4ac9b71731eafd5
+BELONGS ya.make
+    License text:
+            Terms of the MIT License:
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [1392:1392]
+
+KEEP     Apache-2.0           9ac77f65a898755c7eed97099caded94
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [945:1145]
+
+KEEP     Apache-2.0           9accc58e2a998482852fffbc69b6b485
+BELONGS ya.make
+    License text:
+        which is made available under the Apache License 2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [2039:2039]
+        LICENSE.txt [2195:2195]
+
+KEEP     BSL-1.0              9ae61873512d9ba8d0d9a969c6fd3c1b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE.txt [730:750]
+        cpp/src/arrow/vendored/utfcpp/checked.h [5:25]
+        cpp/src/arrow/vendored/utfcpp/core.h [5:25]
+        cpp/src/arrow/vendored/utfcpp/cpp11.h [5:25]
+
+KEEP     Apache-2.0           9dd9e817662fd0380ddd3711059a09de
+BELONGS ya.make
+    License text:
+        SPDX-License-Identifier: Apache-2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [2120:2120]
+
+KEEP     BSD-3-Clause         9e159875328c3e5ca24c1379a410a177
+BELONGS ya.make
+    License text:
+        distributions, like the python wheels. ZSTD has the following license:
+        BSD License
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [1247:1249]
+
+KEEP     Apache-2.0           9f1f6cacd42c16a1a991fe6d52db694b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [444:454]
+
+KEEP     Apache-2.0           a064f9c492da2b6d466383b3380ecc36
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        cpp/src/arrow/compute/kernels/vector_swizzle.cc [1:16]
+
+KEEP     Apache-2.0           a0df54e7b5c400ffde38760de5661ffc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        CODE_OF_CONDUCT.md [2:17]
+        CONTRIBUTING.md [2:17]
+        README.md [2:17]
+        cpp/README.md [2:17]
+        cpp/src/arrow/array/README.md [2:17]
+        cpp/src/arrow/compute/README.md [2:17]
+
+KEEP     BSD-2-Clause         a3557d3eaf184200803bddedb1e9aa2a
+BELONGS ya.make
+    License text:
+        adapted from libdynd and dynd-python under the terms of the BSD 2-clause
+        license
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [1848:1849]
+
+KEEP     MIT                  a3bc23f8d804bc52bc7c66e4736b2da2
+BELONGS ya.make
+    License text:
+        License: The MIT License (MIT)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [814:814]
+
+KEEP     Apache-2.0           a94d578c0e6d030f4302d8c0d30719f1
+BELONGS ya.make
+    License text:
+        This product includes software from Dremio (Apache 2.0)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        NOTICE.txt [44:44]
+
+KEEP     Apache-2.0           a9948f6e35c882554bcdfcba0e6cefc1
+BELONGS ya.make
+    License text:
+          This product includes software developed at
+          The Apache Software Foundation (http://www.apache.org/).
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        NOTICE.txt [66:67]
+
+KEEP     Zlib                 aa58f308323ed48be51ebc4b5d89fdbf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE.txt [1642:1659]
+
+KEEP     MIT                  aacc52b1f6c4d8df7870f58dd63132d6
+BELONGS ya.make
+    License text:
+        The script r/configure has the following license (MIT)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [482:482]
+
+KEEP     BSD-3-Clause         aca2e0b7d11c9ec12ed09245bb6dfac5
+BELONGS ya.make
+    # Changed from LicenseRef-scancode-bsd-plus-mod-notice
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-bsd-plus-mod-notice
+        Score           : 90.48
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsd-plus-mod-notice.LICENSE
+    Files with this license:
+        LICENSE.txt [281:307]
+
+SKIP     LicenseRef-scancode-unknown-license-reference ad98979307eef8394d05065ad469bfdf
+BELONGS ya.make
+    # part of zlib text
+    License text:
+        Permission is granted to anyone to use this software for any purpose, including
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 22.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE.txt [1932:1932]
+
+KEEP     Apache-2.0 AND MIT   ae884eb73588dc3ee43cfe371f7d9587
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: (Apache-2.0 OR MIT)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        cpp/src/arrow/vendored/pcg/pcg_extras.hpp [8:8]
+        cpp/src/arrow/vendored/pcg/pcg_random.hpp [8:8]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        cpp/src/arrow/vendored/pcg/pcg_extras.hpp [8:8]
+        cpp/src/arrow/vendored/pcg/pcg_random.hpp [8:8]
+
+KEEP     LicenseRef-scancode-paul-mackerras-simplified b957150b38dabb1a63d8e1604688be1d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-paul-mackerras-simplified
+        Score           : 39.57
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/paul-mackerras-simplified.LICENSE
+    Files with this license:
+        cpp/src/arrow/util/crc32.cc [75:81]
+
+KEEP     BSD-3-Clause         b9d405f527cf9e69808df67a0d5250f7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [623:647]
+
+KEEP     Apache-2.0           bc06ca91163165516ac282c2fc50a64e
+BELONGS ya.make
+    License text:
+        for PyArrow. Ibis is released under the Apache License, Version 2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [1888:1888]
+
+KEEP     MIT AND Apache-2.0   bdee0af72e813543a42f960d3ae1cf88
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 95.83
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        cpp/src/arrow/vendored/pcg/README.md [9:13]
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.83
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        cpp/src/arrow/vendored/pcg/README.md [9:13]
+
+KEEP     NCSA                 bf0f365f53bc5f232ac01c01c8c4bb11
+BELONGS ya.make
+    License text:
+         * distributed under the University of Illinois Open Source
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        NOTICE.txt [18:18]
+
+KEEP     Apache-2.0           c1fec4d54fe071e7e5b1ff98b9e5c744
+BELONGS ya.make
+    License text:
+        Ray Project (https://github.com/ray-project/ray) (Apache 2.0).
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [508:508]
+
+KEEP     CC0-1.0              c249c5841d9da7e4328415be289e4f32
+BELONGS ya.make
+    License text:
+        (*) https://creativecommons.org/publicdomain/zero/1.0/legalcode
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        LICENSE.txt [2031:2031]
+
+KEEP     CC0-1.0              c4486032eb12090687b5192094676ae8
+BELONGS ya.make
+    License text:
+         *   details, see the Creative Commons Zero 1.0 Universal license at
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        cpp/src/arrow/vendored/portable-snippets/debug-trap.h [8:8]
+        cpp/src/arrow/vendored/portable-snippets/safe-math.h [8:8]
+
+KEEP     Apache-2.0           c62a4827a5eefe8579890c7832fe60fe
+BELONGS ya.make
+    License text:
+        // This code is released under the
+        // Apache License Version 2.0 http://www.apache.org/licenses/.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        cpp/src/arrow/util/bpacking64_default.h [24:25]
+        cpp/src/arrow/util/bpacking_default.h [24:25]
+
+KEEP     MIT                  c866ccb5b8d293e47501ce5e7bf9afe5
+BELONGS ya.make
+    License text:
+        which is made available under the MIT license
+        The MIT License (MIT)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [2270:2272]
+
+KEEP     BSD-3-Clause         cd5d1fe40dd51b3c727916abd96fc9b9
+BELONGS ya.make
+    License text:
+        The files in cpp/src/arrow/vendored/uriparser/ have the following license
+        (BSD 3-Clause License)
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [651:652]
+
+KEEP     BSD-3-Clause         d5c647713f5ff6afd2c7d0573f568b6d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [2164:2187]
+
+KEEP     BSD-2-Clause         daec4bcb93d10658cc457c310c353617
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [852:871]
+
+KEEP     BSD-3-Clause         dbd59e0cab1105105c8a8be43b055c82
+BELONGS ya.make
+    License text:
+        adapted from libdynd and dynd-python under the terms of the BSD 2-clause
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [1848:1848]
+
+KEEP     BSD-3-Clause         dc8027fa260745426527bd0b45dc764d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [1421:1444]
+
+SKIP     Apache-2.0 WITH LLVM-exception df18889e552d44a4679aff552267f802
+BELONGS ya.make
+    # for third-party libraries
+    License text:
+        The LLVM Project is under the Apache License v2.0 with LLVM Exceptions:
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [942:942]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        LICENSE.txt [942:942]
+
+KEEP     BSL-1.0              e2cdcbf5c8472620a6c9cd3adff43371
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        cpp/src/arrow/vendored/utfcpp/README.md [2:24]
+
+KEEP     Apache-2.0           e530b77b7ad17da9a512ae812d2290f3
+BELONGS ya.make
+    License text:
+        License: Apache License Version 2.0 http://www.apache.org/licenses/LICENSE-2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [250:250]
+
+KEEP     Apache-2.0           e7c716f5b18800449ac4436fd2c6d094
+BELONGS ya.make
+    License text:
+        This product includes software from the Ibis project (Apache 2.0)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        NOTICE.txt [40:40]
+
+KEEP     BSD-3-Clause         e9bd7e1231bff3c386a13a5588e59c70
+BELONGS ya.make
+    License text:
+        This product includes software from the SFrame project (BSD, 3-clause).
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        NOTICE.txt [7:7]
+
+KEEP     Public-Domain        eb083470c08035dbfc1cf495ae87e83e
+BELONGS ya.make
+    License text:
+        µnit, an MIT-licensed project which is used for testing), the code is
+        public domain, released using the CC0 1.0 Universal dedication.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 16.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        cpp/src/arrow/vendored/portable-snippets/README.md [5:6]
+
+KEEP     BSD-3-Clause         eb65663a7aed63f09b34bfae41545a3d
+BELONGS ya.make
+    License text:
+        License: 3-clause BSD
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [792:792]
+        LICENSE.txt [803:803]
+        LICENSE.txt [1801:1801]
+
+KEEP     MIT                  eda4392ff1ecb2e3afd880e12d2d1e8c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.txt [462:478]
+        LICENSE.txt [486:502]
+
+KEEP     Apache-2.0           edd658e1c859022a17fde815756c5bf4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        CPPLINT.cfg [1:16]
+        cpp/src/arrow/symbols.map [1:16]
+        cpp/src/parquet/symbols.map [1:16]
+
+SKIP     NTP                  f38773a6c7891fe26d04523312f44f88
+BELONGS ya.make
+    # License for third-party dependency c-ares
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NTP
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_.28no_advertising_without_permission.29, https://spdx.org/licenses/NTP
+    Files with this license:
+        LICENSE.txt [1622:1629]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer f3bee6c31d0c37b0ad4efbaa7b8fc31a
+BELONGS ya.make
+    # not a license
+    License text:
+          /// Use at your own risk; Message::Open has more metadata validation
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        cpp/src/arrow/ipc/message.h [52:52]
+
+KEEP     LicenseRef-scancode-warranty-disclaimer f44a923239baabfd87c5c6140a2b5d78
+BELONGS ya.make
+    License text:
+         * CARNEGIE MELLON UNIVERSITY DISCLAIMS ALL WARRANTIES WITH REGARD TO
+         * THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        cpp/src/arrow/util/crc32.cc [75:76]
+
+KEEP     CC0-1.0              f7aeb23ff2cf210670fa11a29f27ae48
+BELONGS ya.make
+    License text:
+        public domain, released using the CC0 1.0 Universal dedication (*).
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        LICENSE.txt [2029:2029]
+
+KEEP     Apache-2.0           f926ad4edbcb978de38206dc62e2bcb7
+BELONGS ya.make
+    License text:
+        License: http://www.apache.org/licenses/LICENSE-2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [760:760]
+        LICENSE.txt [771:771]
+        LICENSE.txt [782:782]
+        LICENSE.txt [1962:1962]
+
+KEEP     Apache-2.0           fddd48cac1f6fe35121efeb546d29750
+BELONGS ya.make
+    License text:
+        distributions, like the python wheels. Apache ORC has the following license:
+        Apache ORC
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 90.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.txt [1221:1223]

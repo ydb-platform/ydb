@@ -566,7 +566,8 @@ namespace {
 
         return true;
     }
-}
+
+} // namespace
 
 TMaybe<TIssue> TJoinLabel::Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct) {
     Tables.clear();
@@ -1060,8 +1061,21 @@ THashMap<TStringBuf, bool> CollectAdditiveInputLabels(const TCoEquiJoinTuple& jo
     return result;
 }
 
-TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input,
-    const TJoinLabel& label, const TSet<TString>& optionalKeyColumns, TExprContext& ctx) {
+bool IsSkipNullsUnessential(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char flag[] = "EmitSkipNullOnPushdownUsingUnessential";
+    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+}
+
+TExprNode::TPtr FilterOutNullJoinColumns(
+    TPositionHandle pos,
+    const TExprNode::TPtr& input,
+    const TJoinLabel& label,
+    const TSet<TString>& optionalKeyColumns,
+    bool ordered,
+    const TTypeAnnotationContext* types,
+    TExprContext& ctx
+) {
     if (optionalKeyColumns.empty()) {
         return input;
     }
@@ -1073,6 +1087,36 @@ TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::T
         SplitTableName(fullColumnName, table, column);
         auto memberName = label.MemberName(table, column);
         optColumns.push_back(ctx.NewAtom(pos, memberName));
+    }
+
+    if (IsSkipNullsUnessential(types)) {
+        return ctx.Builder(pos)
+            .Callable(ordered ? "OrderedFilter" : "Filter")
+                .Add(0, input)
+                .Lambda(1)
+                    .Param("row")
+                    .Callable("Unessential")
+                        .Callable(0, "And")
+                            .Do([&optColumns] (TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                size_t i = 0;
+                                for (const auto& column : optColumns) {
+                                    parent.Callable(i++, "Not")
+                                        .Callable(0, "HasNull")
+                                            .Callable(0, "Member")
+                                                .Arg(0, "row")
+                                                .Add(1, column)
+                                            .Seal()
+                                        .Seal()
+                                    .Seal();
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                        .Add(1, MakeBool<true>(pos, ctx))
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
     }
 
     return ctx.Builder(pos)
@@ -2234,6 +2278,15 @@ TExprNode::TPtr DropAnyOverJoinInputs(TExprNode::TPtr joinTree, const TJoinLabel
     }
 
     return joinTree;
+}
+
+bool IsNoPullColumn(TStringBuf columnName) {
+    if (columnName.Contains('.')) {
+        TStringBuf table, column;
+        SplitTableName(columnName, table, column);
+        columnName = column;
+    }
+    return columnName.StartsWith(YqlCanaryColumnName) || columnName.StartsWith(YqlJoinKeyColumnName);
 }
 
 } // namespace NYql

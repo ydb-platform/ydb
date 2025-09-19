@@ -46,6 +46,39 @@ typedef sljit_u32 sljit_ins;
 #define SLJIT_PASS_ENTRY_ADDR_TO_CALL 1
 #endif
 
+#ifdef __linux__
+#include <sys/auxv.h>
+
+/* Return the instruction cache line size, in bytes. */
+static SLJIT_INLINE sljit_u32 get_icache_line_size()
+{
+	static sljit_u32 icache_line_size = 0;
+	if (SLJIT_UNLIKELY(!icache_line_size)) {
+		icache_line_size = (sljit_u32) getauxval(AT_ICACHEBSIZE);
+		SLJIT_ASSERT(icache_line_size != 0);
+	}
+	return icache_line_size;
+}
+
+/* Cache and return the first hardware capabilities word. */
+static SLJIT_INLINE unsigned long get_hwcap()
+{
+	static unsigned long hwcap = 0;
+	if (SLJIT_UNLIKELY(!hwcap)) {
+		hwcap = getauxval(AT_HWCAP);
+		SLJIT_ASSERT(hwcap != 0);
+	}
+	return hwcap;
+}
+
+/* Return non-zero if this CPU has the icache snoop feature. */
+static SLJIT_INLINE unsigned long has_feature_icache_snoop()
+{
+	return (get_hwcap() & PPC_FEATURE_ICACHE_SNOOP);
+}
+
+#endif  /* __linux__ */
+
 #if (defined SLJIT_CACHE_FLUSH_OWN_IMPL && SLJIT_CACHE_FLUSH_OWN_IMPL)
 
 static void ppc_cache_flush(sljit_ins *from, sljit_ins *to)
@@ -68,14 +101,40 @@ static void ppc_cache_flush(sljit_ins *from, sljit_ins *to)
 #	error "Cache flush is not implemented for PowerPC/POWER common mode."
 #	else
 	/* Cache flush for PowerPC architecture. */
-	while (from < to) {
+	/* For POWER5 and up with icache snooping, only one icbi in the range
+ 	 * is required. The sync flushes the store queue, and the icbi/isync
+	 * kills the local prefetch.
+	 */
+	if (has_feature_icache_snoop()) {
 		__asm__ volatile (
-			"dcbf 0, %0\n"
 			"sync\n"
 			"icbi 0, %0\n"
-			: : "r"(from)
+			"isync\n"
+			: : "r"(from) : "memory"
 		);
-		from++;
+		return;
+	}
+
+	sljit_u32 cache_line_bytes = get_icache_line_size();
+	sljit_u32 cache_line_words = cache_line_bytes / sizeof(sljit_ins);
+	uintptr_t cache_line_mask = ~(uintptr_t)(cache_line_bytes - 1);
+
+	/* Round down to start of cache line to simplify the end condition. */
+	sljit_ins* start = (sljit_ins*)((uintptr_t)(from) & cache_line_mask);
+
+	for (from = start; from < to; from += cache_line_words) {
+		__asm__ volatile (
+			"dcbf 0, %0"
+			: : "r"(from) : "memory"
+		);
+	}
+	__asm__ volatile ( "sync" );
+
+	for (from = start; from < to; from += cache_line_words) {
+		__asm__ volatile (
+			"icbi 0, %0"
+			: : "r"(from) : "memory"
+		);
 	}
 	__asm__ volatile ( "isync" );
 #	endif

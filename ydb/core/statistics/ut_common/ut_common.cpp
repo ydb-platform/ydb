@@ -23,7 +23,8 @@ using namespace NYdb::NScheme;
 namespace NKikimr {
 namespace NStat {
 
-TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads)
+TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
+    std::function<void(Tests::TServerSettings&)> modifySettings)
     : CSController(NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>())
 {
     auto mbusPort = PortManager.GetPort();
@@ -37,11 +38,15 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads)
     Settings->AddStoragePoolType("hdd1");
     Settings->AddStoragePoolType("hdd2");
     Settings->SetColumnShardAlterObjectEnabled(true);
+    Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsSendIntervalSecondsServerless(6);
+    Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsPropagateIntervalSecondsServerless(6);
 
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableStatistics(true);
     featureFlags.SetEnableColumnStatistics(true);
     Settings->SetFeatureFlags(featureFlags);
+
+    modifySettings(*Settings);
 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);
@@ -518,6 +523,60 @@ void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId) {
     });
 
     waiter.Wait();
+}
+
+ui64 GetRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId) {
+    auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(nodeIndex));
+    NStat::TRequest req;
+    req.PathId = pathId;
+
+    auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
+    evGet->StatType = NStat::EStatType::SIMPLE;
+    evGet->StatRequests.push_back(req);
+
+    auto sender = runtime.AllocateEdgeActor(nodeIndex);
+    runtime.Send(statServiceId, sender, evGet.release(), nodeIndex, true);
+    auto evResult = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
+
+    UNIT_ASSERT(evResult);
+    UNIT_ASSERT(evResult->Get());
+    UNIT_ASSERT(evResult->Get()->StatResponses.size() == 1);
+
+    auto rsp = evResult->Get()->StatResponses[0];
+    auto stat = rsp.Simple;
+
+    return stat.RowCount;
+}
+
+void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId, size_t expectedRowCount) {
+    ui64 rowCount = 0;
+    while (rowCount == 0) {
+        rowCount = GetRowCount(runtime, nodeIndex, pathId);
+
+        if (rowCount != 0) {
+            UNIT_ASSERT_VALUES_EQUAL(rowCount, expectedRowCount);
+            break;
+        }
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
+}
+
+void WaitForRowCount(
+        TTestActorRuntime& runtime, ui32 nodeIndex,
+        TPathId pathId, size_t expectedRowCount, size_t timeoutSec) {
+    ui64 lastRowCount = 0;
+    for (size_t i = 0; i <= timeoutSec; ++i) {
+        lastRowCount = GetRowCount(runtime, nodeIndex, pathId);
+        if (i % 5 == 0) {
+            Cerr << "row count: " << lastRowCount << " (expected: " << expectedRowCount << ")\n";
+        }
+        if (lastRowCount == expectedRowCount) {
+            return;
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
+    UNIT_ASSERT_C(false, "timed out, last row count: " << lastRowCount);
 }
 
 } // NStat

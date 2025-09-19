@@ -84,10 +84,18 @@ struct TUrlParameters {
     THashMap<TStringBuf, TStringBuf> Parameters;
 
     TUrlParameters(TStringBuf url);
-    TString operator [](TStringBuf name) const;
+    const TString operator [](TStringBuf name) const;
     bool Has(TStringBuf name) const;
     TStringBuf Get(TStringBuf name) const; // raw
     TString Render() const;
+};
+
+struct TUrlParametersBuilder : TUrlParameters {
+    TDeque<std::pair<TString, TString>> Data;
+
+    using TUrlParameters::TUrlParameters;
+    TUrlParametersBuilder();
+    void Set(TStringBuf name, TStringBuf data);
 };
 
 struct TCookies {
@@ -95,7 +103,7 @@ struct TCookies {
 
     TCookies(TStringBuf cookie);
     TCookies(const TCookies&) = delete;
-    TStringBuf operator [](TStringBuf name) const;
+    const TStringBuf operator [](TStringBuf name) const;
     bool Has(TStringBuf name) const;
     TStringBuf Get(TStringBuf name) const; // raw
     TString Render() const;
@@ -1039,6 +1047,7 @@ public:
     static THttpOutgoingRequestPtr CreateRequest(TStringBuf method, TStringBuf url, TStringBuf contentType = TStringBuf(), TStringBuf body = TStringBuf());
     static THttpOutgoingRequestPtr CreateHttpRequest(TStringBuf method, TStringBuf host, TStringBuf uri, TStringBuf contentType = TStringBuf(), TStringBuf body = TStringBuf());
     THttpOutgoingRequestPtr Duplicate();
+    THttpIncomingRequestPtr Reverse();
 
     bool IsConnectionClose() const {
         return TEqNoCase()(Connection, "close");
@@ -1132,6 +1141,7 @@ public:
     }
 
     THttpOutgoingResponsePtr Duplicate(THttpIncomingRequestPtr request);
+    THttpIncomingResponsePtr Reverse(THttpOutgoingRequestPtr request);
     THttpOutgoingDataChunkPtr CreateDataChunk(TStringBuf data = {}); // empty chunk means end of data
     THttpOutgoingDataChunkPtr CreateIncompleteDataChunk(); // to construct it later
 

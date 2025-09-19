@@ -154,6 +154,9 @@ void TStageFeatures::AttachOwner(const std::shared_ptr<TStageFeatures>& owner) {
 }
 
 void TStageFeatures::AttachCounters(const std::shared_ptr<TStageCounters>& counters) {
+    if (Counters) {
+        return;
+    }
     Counters = counters;
     if (Counters) {
         Counters->ValueSoftLimit->Set(Limit);

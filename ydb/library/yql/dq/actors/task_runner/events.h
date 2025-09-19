@@ -119,17 +119,19 @@ struct TEvOutputChannelDataRequest
 struct TEvInputChannelData
     : NActors::TEventLocal<TEvInputChannelData, TTaskRunnerEvents::EvInputChannelData>
 {
-    TEvInputChannelData(ui32 channelId, std::optional<TDqSerializedBatch>&& data, bool finish, bool pauseAfterPush)
+    TEvInputChannelData(ui32 channelId, std::optional<TDqSerializedBatch>&& data, bool finish, bool pauseAfterPush, const TMaybe<TInstant>& watermarkAfterPush = {})
         : ChannelId(channelId)
         , Data(std::move(data))
         , Finish(finish)
         , PauseAfterPush(pauseAfterPush)
+        , WatermarkAfterPush(watermarkAfterPush)
     { }
 
     const ui32 ChannelId;
     std::optional<TDqSerializedBatch> Data; //not const, because we want to efficiently move data out of this event on a reciever side
     const bool Finish;
     const bool PauseAfterPush;
+    const TMaybe<TInstant> WatermarkAfterPush;
 };
 
 //Sent by TaskRunnerActor to ComputeActor to ackonowledge input data received in TEvInputChannelData
@@ -223,7 +225,9 @@ struct TEvTaskRunFinished
         const TDqMemoryQuota::TProfileStats& profileStats = {},
         ui64 mkqlMemoryLimit = 0,
         THolder<TMiniKqlProgramState>&& programState = nullptr,
-        bool watermarkInjectedToOutputs = false,
+        TMaybe<TInstant> watermarkInjectedToOutputs = Nothing(),
+        TVector<ui32>&& finishedInputsWithWatermarks = {},
+        TVector<ui32>&& finishedSourcesWithWatermarks = {},
         bool checkpointRequestedFromTaskRunner = false,
         TDuration computeTime = TDuration::Zero())
         : RunStatus(runStatus)
@@ -234,6 +238,8 @@ struct TEvTaskRunFinished
         , MkqlMemoryLimit(mkqlMemoryLimit)
         , ProgramState(std::move(programState))
         , WatermarkInjectedToOutputs(watermarkInjectedToOutputs)
+        , FinishedInputsWithWatermarks(finishedInputsWithWatermarks)
+        , FinishedSourcesWithWatermarks(finishedSourcesWithWatermarks)
         , CheckpointRequestedFromTaskRunner(checkpointRequestedFromTaskRunner)
         , ComputeTime(computeTime)
     { }
@@ -246,7 +252,9 @@ struct TEvTaskRunFinished
     TDqMemoryQuota::TProfileStats ProfileStats;
     ui64 MkqlMemoryLimit = 0;
     THolder<TMiniKqlProgramState> ProgramState;
-    bool WatermarkInjectedToOutputs = false;
+    TMaybe<TInstant> WatermarkInjectedToOutputs = Nothing();
+    TVector<ui32> FinishedInputsWithWatermarks;
+    TVector<ui32> FinishedSourcesWithWatermarks;
     bool CheckpointRequestedFromTaskRunner = false;
     TDuration ComputeTime;
 };
@@ -296,28 +304,12 @@ struct TEvOutputChannelData
     bool Changed;
 };
 
-struct TWatermarkRequest {
-    TWatermarkRequest() = default;
-
-    TWatermarkRequest(TVector<ui32>&& channelIds, TInstant watermark)
-        : ChannelIds(std::move(channelIds))
-        , Watermark(watermark) {
-    }
-
-    TVector<ui32> ChannelIds;
-    TInstant Watermark;
-};
-
 // Holds info required to inject barriers to outputs
 struct TCheckpointRequest {
-    TCheckpointRequest(TVector<ui32>&& channelIds, TVector<ui32>&& sinkIds, const NDqProto::TCheckpoint& checkpoint)
-        : ChannelIds(std::move(channelIds))
-        , SinkIds(std::move(sinkIds))
-        , Checkpoint(checkpoint) {
+    explicit TCheckpointRequest(const NDqProto::TCheckpoint& checkpoint)
+        : Checkpoint(checkpoint) {
     }
 
-    TVector<ui32> ChannelIds;
-    TVector<ui32> SinkIds;
     NDqProto::TCheckpoint Checkpoint;
 };
 
@@ -327,7 +319,7 @@ struct TEvContinueRun
     TEvContinueRun() = default;
 
     explicit TEvContinueRun(
-        TMaybe<TWatermarkRequest>&& watermarkRequest,
+        TMaybe<TInstant>&& watermarkRequest,
         TMaybe<TCheckpointRequest>&& checkpointRequest,
         bool checkpointOnly
     )
@@ -337,20 +329,18 @@ struct TEvContinueRun
         , CheckpointOnly(checkpointOnly)
     { }
 
-    TEvContinueRun(THashSet<ui32>&& inputChannels, ui64 memLimit)
+    TEvContinueRun(TVector<ui32>&& inputChannels, ui64 memLimit)
         : AskFreeSpace(false)
         , InputChannels(std::move(inputChannels))
         , MemLimit(memLimit)
     { }
 
     bool AskFreeSpace = true;
-    const THashSet<ui32> InputChannels;
+    const TVector<ui32> InputChannels;
     ui64 MemLimit;
-    TMaybe<TWatermarkRequest> WatermarkRequest = Nothing();
+    TMaybe<TInstant> WatermarkRequest = Nothing();
     TMaybe<TCheckpointRequest> CheckpointRequest = Nothing();
     bool CheckpointOnly = false;
-    TVector<ui32> SinkIds;
-    TVector<ui32> InputTransformIds;
 };
 
 //Sent by TaskRunnerActor to ComputeActor as an acknowledgement in AsyncInputPush method call
@@ -427,14 +417,10 @@ struct TEvLoadTaskRunnerFromStateDone : NActors::TEventLocal<TEvLoadTaskRunnerFr
 
 struct TEvStatistics : NActors::TEventLocal<TEvStatistics, TTaskRunnerEvents::EvStatistics>
 {
-    explicit TEvStatistics(TVector<ui32>&& sinkIds, TVector<ui32>&& inputTransformIds)
-        : SinkIds(std::move(sinkIds))
-        , InputTransformIds(std::move(inputTransformIds))
-        , Stats() {
+    explicit TEvStatistics()
+        : Stats() {
     }
 
-    TVector<ui32> SinkIds;
-    TVector<ui32> InputTransformIds;
     NDq::TDqTaskRunnerStatsView Stats;
 };
 

@@ -20,8 +20,15 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
         ...
         columnN typeN,
 {% if feature_secondary_index == true %}
-        INDEX index1_name GLOBAL ON ( column ),
-        INDEX index2_name GLOBAL ON ( column1, column2, ... ),
+        INDEX `<index_name>`
+          [GLOBAL|LOCAL]
+          [UNIQUE]
+          [SYNC|ASYNC]
+          [USING <index_type>]
+          ON ( <index_columns> )
+          [COVER ( <cover_columns> )]
+          [WITH ( <parameter_name> = <parameter_value>[, ...])]
+        ...
 {% endif %}
 {% if feature_map_tables %}
         PRIMARY KEY ( column, ... ),
@@ -60,7 +67,11 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
 
 {% endif %}
 
-{% include [table naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md) %}
+{% note info %}
+
+When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+
+{% endnote %}
 
 ## Examples of table creation {#examples-tables-creation}
 

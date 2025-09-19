@@ -1,0 +1,83 @@
+SELECT 1; -- A single-line comment SELECT 1
+select 1; /*
+   Some SELECT 1
+   multi-line comment
+*/ SELECT 1;
+/* /* */ */
+
+SELECT my_column FROM my_table;
+SELECT `column with space` from my_table;
+SELECT * FROM `my_dir/my_table`;
+SELECT `select` FROM my_table;
+SELECT `escaped \` quoted`;
+
+SELECT 'string with\n newline, \x0a newline and \' backtick ';
+SELECT "string with\n newline, \x0a newline and \" backtick ";
+SELECT @@some
+multiline with double at: @@@@
+text@@;
+SELECT "foo"u, '[1;2]'y, @@{"a":null}@@j;
+
+SELECT
+    CAST(123l AS Int64) AS `Int64`,
+    CAST(0b01u AS Uint32) AS `Uint32`,
+    CAST(0xfful AS Uint64) AS `Uint64`,
+    CAST(0o7ut AS Uint8) AS `Uint8`,
+    CAST(456s AS Int16) AS `Int16`,
+    CAST(1.2345f AS Float) AS `Float`;
+
+SELECT
+    1234p,
+    0x123pb,
+    "тест"pt,
+    123e-1000pn,
+    True,
+    False;
+
+SELECT
+    CAST("12345" AS Double),
+    CAST(1.2345 AS Uint8),
+    CAST(12345 AS String),
+    CAST("1.2345" AS Decimal(5, 2)),
+    CAST("xyz" AS Uint64) IS NULL,
+    CAST(-1 AS Uint16) IS NULL,
+    CAST([-1, 0, 1] AS List<Uint8?>),
+    CAST(["3.14", "bad", "42"] AS List<Float>),
+    CAST(255 AS Uint8),
+    CAST(256 AS Uint8) IS NULL;
+
+DEFINE SUBQUERY $dict() AS
+    SELECT name, age FROM people;
+END DEFINE;
+
+$input = SELECT "rnd" AS name, 16 AS age;
+$process = PROCESS $input;
+$h = ($x, $y?) -> ($x + ($y ?? 0));
+
+SELECT
+  t.struct.member,
+  t.tuple.7,
+  t.dict["key"],
+  t.list[7]
+FROM my_table AS t;
+
+PRAGMA AutoCommit;
+PRAGMA TablePathPrefix = "home/yql";
+PRAGMA Warning("disable", "1101");
+
+SELECT ListCreate(OptionalType(DataType("String")));
+$match = Re2::Match("[ax]+\\d");
+
+$py = Python3::foo(@@#py
+from yql.typing import *
+
+def foo(
+    x:Optional[Int32],
+    y:Struct['a':Int32, 'b':Int32],
+    z:slice("name", Int32, {AutoMap})) -> Optional[Int32]:
+    """
+       foo function description
+       @@@@
+    """
+    return x + y.a + z
+@@);

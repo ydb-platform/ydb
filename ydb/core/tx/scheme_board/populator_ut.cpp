@@ -256,10 +256,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         for (int i = 0; i + 1 < ssize(requiredAcks); ++i) {
             runtime.Send(requiredAcks[i].Release());
         }
-        UNIT_CHECK_GENERATED_EXCEPTION(
-            runtime.GrabEdgeEvent<TUpdateAck>(edge, TDuration::Seconds(10)),
-            TEmptyEventQueueException
-        );
+        UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);
         runtime.Send(requiredAcks.back().Release());
 
         auto mainAck = runtime.GrabEdgeEvent<TUpdateAck>(edge, TDuration::Seconds(10));

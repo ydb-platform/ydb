@@ -316,6 +316,8 @@ class TDataShard
     class TSendVolatileWriteResult;
     class TSendArbiterReadSets;
 
+    friend class TBlockFailPointUnit;
+
     struct TEvPrivate {
         enum EEv {
             EvProgressTransaction = EventSpaceBegin(TKikimrEvents::ES_PRIVATE), // WARNING: tests use ES_PRIVATE + 0
@@ -352,6 +354,7 @@ class TDataShard
             EvStatisticsScanFinished,
             EvTableStatsError,
             EvRemoveSchemaSnapshots,
+            EvBlockFailPointUnblock,
             EvEnd
         };
 
@@ -575,6 +578,14 @@ class TDataShard
         struct TEvStatisticsScanFinished : public TEventLocal<TEvStatisticsScanFinished, EvStatisticsScanFinished> {};
 
         struct TEvRemoveSchemaSnapshots : public TEventLocal<TEvRemoveSchemaSnapshots, EvRemoveSchemaSnapshots> {};
+
+        struct TEvBlockFailPointUnblock : public TEventLocal<TEvBlockFailPointUnblock, EvBlockFailPointUnblock> {
+            explicit TEvBlockFailPointUnblock(ui64 txId)
+                : TxId(txId)
+            {}
+
+            const ui64 TxId;
+        };
     };
 
     struct Schema : NIceDb::Schema {
@@ -1336,6 +1347,7 @@ class TDataShard
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRestartOperation::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvBlockFailPointUnblock::TPtr& ev, const TActorContext& ctx);
     void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStatisticsScanFinished::TPtr& ev, const TActorContext& ctx);
@@ -1467,7 +1479,7 @@ class TDataShard
     bool CheckMediatorAuthorisation(ui64 mediatorId);
 
     NTabletFlatExecutor::ITransaction* CreateTxInit();
-    NTabletFlatExecutor::ITransaction* CreateTxInitRestored();
+    NTabletFlatExecutor::ITransaction* CreateTxInitRestored(THashMap<ui64, TOperation::TPtr> migratedTxs);
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchemaDefaults();
     NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
@@ -1514,6 +1526,8 @@ public:
     void GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies);
     void SendConfirmedReplies(TMonotonic ts, std::vector<std::unique_ptr<IEventHandle>>&& replies);
     void SendCommittedReplies(std::vector<std::unique_ptr<IEventHandle>>&& replies);
+
+    void SendRestartNotification(TOperation* op);
 
     void WaitVolatileDependenciesThenSend(
             const absl::flat_hash_set<ui64>& dependencies,
@@ -2744,7 +2758,7 @@ private:
     ui64 InMemoryStatePrevGeneration = 0;
 
     void StartInMemoryRestoreActor();
-    void OnInMemoryStateRestored();
+    void OnInMemoryStateRestored(THashMap<ui64, TOperation::TPtr> migratedTxs);
     bool StartInMemoryStateActor();
 
     struct TPreservedInMemoryState {
@@ -3216,6 +3230,7 @@ protected:
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
             HFunc(TEvPrivate::TEvAsyncJobComplete, Handle);
             HFunc(TEvPrivate::TEvRestartOperation, Handle);
+            HFunc(TEvPrivate::TEvBlockFailPointUnblock, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
             HFunc(TEvents::TEvUndelivered, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);

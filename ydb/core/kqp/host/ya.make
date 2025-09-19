@@ -7,7 +7,6 @@ SRCS(
     kqp_runner.cpp
     kqp_transform.cpp
     kqp_translate.cpp
-    kqp_type_ann.cpp
     kqp_statement_rewrite.cpp
 )
 
@@ -44,7 +43,7 @@ PEERDIR(
     yql/essentials/providers/pg/provider
     yql/essentials/providers/result/provider
     ydb/library/yql/providers/s3/expr_nodes
-    ydb/public/sdk/cpp/src/client/impl/ydb_internal/common
+    ydb/public/sdk/cpp/src/client/impl/internal/common
 )
 
 YQL_LAST_ABI_VERSION()

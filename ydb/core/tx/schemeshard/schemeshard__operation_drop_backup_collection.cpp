@@ -127,19 +127,16 @@ TTxTransaction CreateTableDropTransaction(const TPath& tablePath) {
 }
 
 // TODO: replace UGLY scan
-// Clean up incremental restore state for a backup collection
 void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOperationContext& context, NIceDb::TNiceDb& db) {
     LOG_I("CleanupIncrementalRestoreState for backup collection pathId: " << backupCollectionPathId);
     
-    // Find all incremental restore states for this backup collection
     TVector<ui64> statesToCleanup;
     
     for (auto it = context.SS->IncrementalRestoreStates.begin(); it != context.SS->IncrementalRestoreStates.end();) {
         if (it->second.BackupCollectionPathId == backupCollectionPathId) {
-            const auto& stateId = it->first;  // it->first is ui64 (state ID)
+            const auto& stateId = it->first;
             statesToCleanup.push_back(stateId);
             
-            // Remove from memory
             auto toErase = it;
             ++it;
             context.SS->IncrementalRestoreStates.erase(toErase);
@@ -148,12 +145,9 @@ void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOper
         }
     }
     
-    // Clean up database entries
     for (const auto& stateId : statesToCleanup) {
-        // Delete from IncrementalRestoreState table
         db.Table<Schema::IncrementalRestoreState>().Key(stateId).Delete();
         
-        // Delete all shard progress records for this state
         auto shardProgressRowset = db.Table<Schema::IncrementalRestoreShardProgress>().Range().Select();
         if (!shardProgressRowset.IsReady()) {
             return;
@@ -173,7 +167,6 @@ void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOper
         }
     }
     
-    // Clean up operation-to-state mappings
     for (auto opIt = context.SS->IncrementalRestoreOperationToState.begin(); 
          opIt != context.SS->IncrementalRestoreOperationToState.end();) {
         if (std::find(statesToCleanup.begin(), statesToCleanup.end(), opIt->second) != statesToCleanup.end()) {
@@ -301,7 +294,6 @@ class TDropBackupCollection : public TSubOperation {
         context.DbChanges.PersistPath(dstPath->ParentPathId);
     }
 
-    // TODO: replace UGLY scan
     bool HasActiveBackupOperations(const TPath& bcPath, TOperationContext& context) const {
         // Check if there are any active backup or restore operations for this collection
         const TPathId& bcPathId = bcPath.Base()->PathId;
@@ -465,7 +457,6 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
         
-        // Clean up incremental restore state for this backup collection
         TVector<ui64> operationsToCleanup;
         
         for (const auto& [opId, restoreState] : context.SS->IncrementalRestoreStates) {
@@ -477,15 +468,12 @@ public:
         for (ui64 opId : operationsToCleanup) {
             LOG_I(DebugHint() << "Cleaning up incremental restore state for operation: " << opId);
             
-            // Remove from database
             db.Table<Schema::IncrementalRestoreOperations>()
                 .Key(opId)
                 .Delete();
             
-            // Remove from in-memory state
             context.SS->IncrementalRestoreStates.erase(opId);
             
-            // Clean up related mappings
             auto txIt = context.SS->TxIdToIncrementalRestore.begin();
             while (txIt != context.SS->TxIdToIncrementalRestore.end()) {
                 if (txIt->second == opId) {
@@ -564,8 +552,6 @@ TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId next
             .IsCommonSensePath();
 
         if (!checks) {
-            // TODO: is there more clean way to write it?
-            // Handle the special case where the path is being deleted
             if (dstPath.IsResolved() && dstPath.Base()->IsBackupCollection() && 
                 (dstPath.Base()->PlannedToDrop() || dstPath.Base()->Dropped())) {
                 

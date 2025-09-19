@@ -1603,7 +1603,8 @@ namespace NKikimr {
                 NKikimrProto::EReplyStatus status, const TString& /*errorReason*/, TInstant /*now*/,
                 const std::optional<NBackpressure::TMessageId>& expectedMsgId = std::nullopt) {
             const ui32 flags = IEventHandle::MakeFlags(ev->GetChannel(), 0);
-            auto res = std::make_unique<TEvBlobStorage::TEvVCheckReadinessResult>(status);
+            auto res = std::make_unique<TEvBlobStorage::TEvVCheckReadinessResult>(status,
+                Config->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER);
             auto& record = res->Record;
             SetRacingGroupInfo(ev->Get()->Record, record, GInfo);
             if (expectedMsgId) {
@@ -1639,8 +1640,9 @@ namespace NKikimr {
         void Reply(TEvBlobStorage::TEvVStatus::TPtr &ev, const TActorContext &ctx,
                 NKikimrProto::EReplyStatus status, const TString& /*errorReason*/, TInstant /*now*/) {
             const ui32 flags = IEventHandle::MakeFlags(ev->GetChannel(), 0);
-            ctx.Send(ev->Sender, new TEvBlobStorage::TEvVStatusResult(status, ev->Get()->Record.GetVDiskID()),
-                flags, ev->Cookie);
+            auto response = std::make_unique<TEvBlobStorage::TEvVStatusResult>(status, SelfVDiskId);
+            SetRacingGroupInfo(ev->Get()->Record, response->Record, GInfo);
+            ctx.Send(ev->Sender, response.release(), flags, ev->Cookie);
         }
         // FIXME: don't forget about counters
 

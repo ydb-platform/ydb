@@ -2,6 +2,7 @@ syntax = "proto2";
 
 import "ydb/core/config/protos/marker.proto";
 import "ydb/core/protos/blobstorage.proto";
+import "ydb/core/protos/blobstorage_base.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
@@ -75,11 +76,17 @@ message TExtendedHostConfigDrive {
     optional uint64 ExpectedSlotCount = 7;
     optional uint32 SlotSizeInUnits = 8;
     optional uint64 InferPDiskSlotCountFromUnitSize = 9 [(NMarkers.CopyTo) = "THostConfigDrive"];
+    optional uint32 InferPDiskSlotCountMax = 10 [(NMarkers.CopyTo) = "THostConfigDrive"];
 }
 
 message TInferPDiskSlotCountFromUnitSize {
     optional uint64 Rot = 1;
     optional uint64 Ssd = 2; // Implies both ssd and nvme
+}
+
+message TInferPDiskSlotCountMax {
+    optional uint32 Rot = 1;
+    optional uint32 Ssd = 2; // Implies both ssd and nvme
 }
 
 message THosts {
@@ -148,6 +155,7 @@ message TExtendedDefineHostConfig {
     repeated string Nvme = 7 [(NMarkers.CopyTo) = "TDefineHostConfig"];
 
     optional TInferPDiskSlotCountFromUnitSize InferPDiskSlotCountFromUnitSize = 8;
+    optional TInferPDiskSlotCountMax InferPDiskSlotCountMax = 9;
 
     optional uint64 ItemConfigGeneration = 100 [(NMarkers.CopyTo) = "TDefineHostConfig"];
 }

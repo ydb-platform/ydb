@@ -44,7 +44,7 @@ namespace NKikimr {
         HullCompMaxInFlightReads = 20;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;
-        AddHeader = true;
+        BlobHeaderMode = EBlobHeaderMode::OLD_HEADER;
 
         RecoveryLogCutterFirstDuration = TDuration::Seconds(10);
         RecoveryLogCutterRegularDuration = TDuration::Seconds(30);
@@ -131,6 +131,10 @@ namespace NKikimr {
 #endif
 
     }
+
+    const ui32 TVDiskConfig::TinyDiskHugeBlobOverhead = 2u;
+    const ui32 TVDiskConfig::TinyDiskHullCompLevel0MaxSstsAtOnce = 2u;
+    const ui32 TVDiskConfig::TinyDiskHullCompSortedPartsNum = 2u;
 
     void TVDiskConfig::SetupHugeBytes() {
         switch (BaseInfo.DeviceType) {

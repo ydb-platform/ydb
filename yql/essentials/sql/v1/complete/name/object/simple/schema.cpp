@@ -20,11 +20,17 @@ namespace NSQLComplete {
                 };
             }
 
-            static auto FilterEntriesByTypes(TMaybe<THashSet<TString>> types) {
-                return [types = std::move(types)](auto f) mutable {
+            static auto FilterEntriesByTypes(const TListFilter& filter) {
+                return [filter](auto f) mutable {
                     TVector<TFolderEntry> entries = f.ExtractValue();
-                    EraseIf(entries, [types = std::move(types)](const TFolderEntry& entry) {
-                        return types && !types->contains(entry.Type);
+                    EraseIf(entries, [filter = std::move(filter)](const TFolderEntry& entry) {
+                        const bool isKnownType = TFolderEntry::KnownTypes.contains(entry.Type);
+                        return (
+                            (isKnownType &&
+                             filter.Types &&
+                             !filter.Types->contains(entry.Type)) ||
+                            (!isKnownType &&
+                             !filter.IsUnknownAllowed));
                     });
                     return entries;
                 };
@@ -90,7 +96,7 @@ namespace NSQLComplete {
                 auto [path, name] = Simple_->Split(request.Path);
                 return Simple_->List(request.Cluster, TString(path))
                     .Apply(FilterEntriesByName(TString(name)))
-                    .Apply(FilterEntriesByTypes(request.Filter.Types))
+                    .Apply(FilterEntriesByTypes(request.Filter))
                     .Apply(CropEntries(request.Limit))
                     .Apply(ToListResponse(name));
             }

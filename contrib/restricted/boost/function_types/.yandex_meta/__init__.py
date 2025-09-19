@@ -9,7 +9,7 @@ def post_install(self):
 boost_function_types = NixSourceProject(
     nixattr="boost_function_types",
     arcdir=boost.make_arcdir("function_types"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

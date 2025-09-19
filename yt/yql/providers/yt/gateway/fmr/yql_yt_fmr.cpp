@@ -29,6 +29,7 @@ using namespace NYql::NNodes;
 namespace NYql::NFmr {
 
 enum class ETablePresenceStatus {
+    Undefined,
     OnlyInYt,
     OnlyInFmr,
     Both
@@ -62,10 +63,10 @@ public:
         auto getOperationStatusesFunc = [this] {
             while (!StopFmrGateway_) {
                 with_lock(Mutex_) {
-                    auto checkOperationStatuses = [this] (std::unordered_map<TFmrTableId, TPromise<TFmrOperationResult>>& operationStatuses, const TString& sessionId) {
+                    auto checkOperationStatuses = [this] (std::unordered_map<TString, TPromise<TFmrOperationResult>>& operationStatuses, const TString& sessionId) {
                         for (auto [operationId, promise]: operationStatuses) {
                             YQL_CLOG(TRACE, FastMapReduce) << "Sending get operation request to coordinator with operationId: " << operationId;
-                            auto getOperationFuture = Coordinator_->GetOperation({operationId.Id});
+                            auto getOperationFuture = Coordinator_->GetOperation({operationId});
                             getOperationFuture.Subscribe([this, operationId, sessionId, &operationStatuses] (const auto& getFuture) {
                                 auto getOperationResult = getFuture.GetValueSync();
                                 auto getOperationStatus = getOperationResult.Status;
@@ -86,7 +87,7 @@ public:
                                         auto promise = operationStatuses[operationId];
                                         promise.SetValue(fmrOperationResult);
                                         YQL_CLOG(INFO, FastMapReduce) << "Sending delete operation request to coordinator with operationId: " << operationId;
-                                        auto deleteOperationFuture = Coordinator_->DeleteOperation({operationId.Id});
+                                        auto deleteOperationFuture = Coordinator_->DeleteOperation({operationId});
                                         deleteOperationFuture.Subscribe([] (const auto& deleteFuture) {
                                             auto deleteOperationResult = deleteFuture.GetValueSync();
                                             auto deleteOperationStatus = deleteOperationResult.Status;
@@ -276,36 +277,48 @@ private:
     void SetTablePresenceStatus(const TFmrTableId& fmrTableId, const TString& sessionId, ETablePresenceStatus newStatus) {
         with_lock(Mutex_) {
             YQL_CLOG(DEBUG, FastMapReduce) << "Setting table presence status " << newStatus << " for table with id " << fmrTableId;
-            auto& tablePresenceStatuses = Sessions_[sessionId]->TablePresenceStatuses;
-            tablePresenceStatuses[fmrTableId] = newStatus;
+            auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
+            fmrTableInfo[fmrTableId].TablePresenceStatus = newStatus;
+        }
+    }
+
+    ETablePresenceStatus GetTablePresenceStatus(const TFmrTableId& fmrTableId, const TString& sessionId) {
+        with_lock(Mutex_) {
+            auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
+            return fmrTableInfo[fmrTableId].TablePresenceStatus;
         }
     }
 
     void SetFmrIdAlias(const TFmrTableId& fmrTableId, const TFmrTableId& alias, const TString& sessionId) {
         with_lock(Mutex_) {
             YQL_CLOG(DEBUG, FastMapReduce) << "Setting table fmr id alias " << alias << " for table with id " << fmrTableId;
-            auto& fmrIdAliases = Sessions_[sessionId]->FmrIdAliases;
-            fmrIdAliases[fmrTableId] = alias;
+            auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
+            fmrTableInfo[fmrTableId].FmrIdAlias = alias;
         }
     }
 
     TFmrTableId GetFmrIdOrAlias(const TFmrTableId& fmrTableId, const TString& sessionId) {
         with_lock(Mutex_) {
-            auto& fmrIdAliases = Sessions_[sessionId]->FmrIdAliases;
-            if (!fmrIdAliases.contains(fmrTableId)) {
-                return fmrTableId;
-            }
-            return fmrIdAliases[fmrTableId];
+            auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
+            auto alias = fmrTableInfo[fmrTableId].FmrIdAlias;
+            return alias ? fmrTableId : *alias;
         }
     }
 
-    TMaybe<ETablePresenceStatus> GetTablePresenceStatus(const TFmrTableId& fmrTableId, const TString& sessionId) {
+    void SetColumnGroupSpec(const TFmrTableId& fmrTableId, const TString& columnGroupSpec, const TString& sessionId) {
         with_lock(Mutex_) {
-            auto& tablePresenceStatuses = Sessions_[sessionId]->TablePresenceStatuses;
-            if (!tablePresenceStatuses.contains(fmrTableId)) {
-                return Nothing();
+            if (!columnGroupSpec.empty()) {
+                YQL_CLOG(DEBUG, FastMapReduce) << "Setting column group spec " << columnGroupSpec << " for table " << fmrTableId;
             }
-            return tablePresenceStatuses[fmrTableId];
+            auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
+            fmrTableInfo[fmrTableId].ColumnGroupSpec = columnGroupSpec;
+        }
+    }
+
+    TString GetColumnGroupSpec(const TFmrTableId& fmrTableId, const TString& sessionId) {
+        with_lock(Mutex_) {
+            auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
+            return fmrTableInfo[fmrTableId].ColumnGroupSpec;
         }
     }
 
@@ -338,9 +351,9 @@ private:
         auto future = promise.GetFuture();
         YQL_CLOG(INFO, FastMapReduce) << "Starting " << startOperationRequest.TaskType << " operation";
         auto startOperationResponseFuture = Coordinator_->StartOperation(startOperationRequest);
-        startOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId] (const auto& mergeFuture) {
-            TStartOperationResponse mergeOperationResponse = mergeFuture.GetValueSync();
-            TString operationId = mergeOperationResponse.OperationId;
+        startOperationResponseFuture.Subscribe([this, promise = std::move(promise), sessionId] (const auto& startOperationFuture) {
+            TStartOperationResponse startOperationResponse = startOperationFuture.GetValueSync();
+            TString operationId = startOperationResponse.OperationId;
             with_lock(Mutex_) {
                 auto& operationStates = Sessions_[sessionId]->OperationStates;
                 auto& operationStatuses = operationStates.OperationStatuses;
@@ -368,13 +381,19 @@ private:
             auto richPath = GetFilledRichPathFromInputTable(ytTable);
             TFmrTableId fmrTableId(richPath);
             auto tablePresenceStatus = GetTablePresenceStatus(fmrTableId, sessionId);
-            if (!tablePresenceStatus) {
+            if (tablePresenceStatus == ETablePresenceStatus::Undefined) {
                 SetTablePresenceStatus(fmrTableId, sessionId, ETablePresenceStatus::OnlyInYt);
             }
 
-            if (tablePresenceStatus && *tablePresenceStatus != ETablePresenceStatus::OnlyInYt) {
+            if (tablePresenceStatus == ETablePresenceStatus::OnlyInFmr || tablePresenceStatus == ETablePresenceStatus::Both) {
                 // table is in fmr, do not download
-                operationInputTables.emplace_back(TFmrTableRef(GetFmrIdOrAlias(fmrTableId, sessionId)));
+                TFmrTableRef fmrTableRef{.FmrTableId = GetFmrIdOrAlias(fmrTableId, sessionId)};
+                if (!richPath.Columns_.Empty()) {
+                    std::vector<TString> neededColumns(richPath.Columns_->Parts_.begin(), richPath.Columns_->Parts_.end());
+                    fmrTableRef.Columns = neededColumns;
+                    // TODO - check correctness for fmr inputs
+                }
+                operationInputTables.emplace_back(fmrTableRef);
             } else {
                 TYtTableRef ytTableRef{.RichPath = richPath};
                 ytTableRef.FilePath = GetTableFilePath(TGetTableFilePathOptions(sessionId).Cluster(inputCluster).Path(ytTable.Name).IsTemp(ytTable.Temp));
@@ -385,15 +404,30 @@ private:
         return {operationInputTables, clusterConnections};
     }
 
+    std::vector<TString> GetOutputTablesColumnGroups(const TExecContextSimple<TRunOptions>::TPtr& execCtx) {
+    std::vector<TString> columnGroups;
+        for (auto& out: execCtx->OutTables_) {
+            auto curTableColumnGroups = out.ColumnGroups;
+            if (curTableColumnGroups.IsUndefined()) {
+                columnGroups.emplace_back(TString());
+                continue;
+            }
+            columnGroups.emplace_back(NYT::NodeToYsonString(curTableColumnGroups));
+        }
+        return columnGroups;
+    }
+
     TFuture<TFmrOperationResult> DoPublish(const TString& outputCluster, const TString& outputPath, const TString& sessionId, TYtSettings::TConstPtr& config, TExprNode::TPtr outputOpBase, TExprContext& ctx) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
         TFmrTableRef fmrTableRef{TFmrTableId(outputCluster, outputPath)};
         auto tablePresenceStatus = GetTablePresenceStatus(fmrTableRef.FmrTableId, sessionId);
 
-        if (!tablePresenceStatus || *tablePresenceStatus != ETablePresenceStatus::OnlyInFmr) {
+        if (tablePresenceStatus != ETablePresenceStatus::OnlyInFmr) {
             YQL_CLOG(INFO, FastMapReduce) << " We assume table " << fmrTableRef.FmrTableId << " should be present in yt, not uploading from fmr";
             return GetSuccessfulFmrOperationResult();
         }
+
+        fmrTableRef.SerializedColumnGroups = GetColumnGroupSpec(fmrTableRef.FmrTableId, sessionId);
 
         auto richPath = Slave_->GetWriteTable(sessionId, outputCluster, outputPath, GetTablesTmpFolder(*config, outputCluster));
         TYtTableRef outputTable{.RichPath = richPath};
@@ -448,8 +482,15 @@ private:
         auto outputTable = outputTables[0];
         TString outputCluster = execCtx->Cluster_;
 
+        auto outputTableColumnGroups = GetOutputTablesColumnGroups(execCtx);
+        TFmrTableId outputTableFmrId(outputCluster, outputTable.GetPath());
+        auto columnGroupSpec = outputTableColumnGroups[0];
+        SetColumnGroupSpec(outputTableFmrId, columnGroupSpec, sessionId);
 
-        TFmrTableRef fmrOutputTable{TFmrTableId(outputCluster, outputTable.GetPath())};
+        TFmrTableRef fmrOutputTable{
+            .FmrTableId = outputTableFmrId,
+            .SerializedColumnGroups = columnGroupSpec
+        };
 
         auto [mergeInputTables, clusterConnections] = GetInputTablesAndConnections(execCtx);
 
@@ -484,9 +525,20 @@ private:
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
 
         std::vector<TFmrTableRef> fmrOutputTables;
+        auto outputTableColumnGroups = GetOutputTablesColumnGroups(execCtx);
+        YQL_ENSURE(outputTables.size() == outputTableColumnGroups.size());
 
-        for (auto& outputTable : outputTables) {
-            fmrOutputTables.emplace_back(TFmrTableRef(TFmrTableId(execCtx->Cluster_, outputTable.GetPath())));
+        for (ui64 i = 0; i < outputTables.size(); ++i) {
+            auto& outputTable = outputTables[i];
+            TFmrTableId outputTableFmrId(execCtx->Cluster_, outputTable.GetPath());
+            auto columnGroupSpec = outputTableColumnGroups[0];
+            SetColumnGroupSpec(outputTableFmrId, columnGroupSpec, sessionId);
+
+            TFmrTableRef fmrOutputTable{
+                .FmrTableId = outputTableFmrId,
+                .SerializedColumnGroups = columnGroupSpec
+            };
+            fmrOutputTables.emplace_back(fmrOutputTable);
         }
 
         auto [mapInputTables, clusterConnections] = GetInputTablesAndConnections(execCtx);
@@ -555,17 +607,21 @@ private:
 
 private:
     struct TFmrGatewayOperationsState {
-        std::unordered_map<TFmrTableId, TPromise<TFmrOperationResult>> OperationStatuses = {}; // operationId -> promise which we set when operation completes
+        std::unordered_map<TString, TPromise<TFmrOperationResult>> OperationStatuses = {}; // operationId -> promise which we set when operation completes
+    };
+
+    struct TFmrTableInfo {
+        ETablePresenceStatus TablePresenceStatus = ETablePresenceStatus::Undefined; // Is table present in yt, fmr or both
+        TMaybe<TFmrTableId> FmrIdAlias = Nothing(); // Alias, needed for anonymous table
+        TString ColumnGroupSpec = TString(); // Column group spec for fmr table.
     };
 
     struct TFmrSession: public TSessionBase {
         using TPtr = TIntrusivePtr<TFmrSession>;
         using TSessionBase::TSessionBase;
 
-        TFmrGatewayOperationsState OperationStates;
-        std::unordered_map<TFmrTableId, ETablePresenceStatus> TablePresenceStatuses; // yt cluster and path -> is it In Yt, Fmr TableDataService
-        std::unordered_map<TFmrTableId, TFmrTableId> FmrIdAliases;
-
+        TFmrGatewayOperationsState OperationStates; // Info about operations
+        std::unordered_map<TFmrTableId, TFmrTableInfo> FmrTables; // Info about tables
     };
 
     IFmrCoordinator::TPtr Coordinator_;
@@ -591,6 +647,10 @@ IYtGateway::TPtr CreateYtFmrGateway(IYtGateway::TPtr slave, IFmrCoordinator::TPt
 template<>
 void Out<NYql::NFmr::ETablePresenceStatus>(IOutputStream& out, NYql::NFmr::ETablePresenceStatus status) {
     switch (status) {
+        case NYql::NFmr::ETablePresenceStatus::Undefined: {
+            out << "UNDEFINED";
+            return;
+        }
         case NYql::NFmr::ETablePresenceStatus::Both: {
             out << "BOTH";
             return;

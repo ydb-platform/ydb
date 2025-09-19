@@ -1,0 +1,137 @@
+--- a/CMakeLists.txt	2024-07-01 14:29:47.982926677 +0300
++++ b/CMakeLists.txt	2024-07-01 16:42:26.741070025 +0300
+@@ -58,36 +58,11 @@
+          "${${VAR}_RELEASE}")
+ endforeach()
+ 
+-if(BORINGSSL_PREFIX AND BORINGSSL_PREFIX_SYMBOLS)
+-  require_go()
+-  add_definitions(-DBORINGSSL_PREFIX=${BORINGSSL_PREFIX})
+-  # CMake automatically connects include_directories to the NASM command-line,
+-  # but not add_definitions.
+-  set(CMAKE_ASM_NASM_FLAGS "${CMAKE_ASM_NASM_FLAGS} -DBORINGSSL_PREFIX=${BORINGSSL_PREFIX}")
+-
+-  # Use "symbol_prefix_include" to store generated header files
+-  include_directories(${CMAKE_CURRENT_BINARY_DIR}/symbol_prefix_include)
+-  add_custom_command(
+-    OUTPUT symbol_prefix_include/boringssl_prefix_symbols.h
+-           symbol_prefix_include/boringssl_prefix_symbols_asm.h
+-           symbol_prefix_include/boringssl_prefix_symbols_nasm.inc
+-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/symbol_prefix_include
+-    COMMAND ${GO_EXECUTABLE} run ${CMAKE_CURRENT_SOURCE_DIR}/util/make_prefix_headers.go -out ${CMAKE_CURRENT_BINARY_DIR}/symbol_prefix_include ${BORINGSSL_PREFIX_SYMBOLS}
+-    DEPENDS util/make_prefix_headers.go
+-            ${BORINGSSL_PREFIX_SYMBOLS})
+-
+-  # add_dependencies needs a target, not a file, so we add an intermediate
+-  # target.
+-  add_custom_target(
+-    boringssl_prefix_symbols
+-    DEPENDS symbol_prefix_include/boringssl_prefix_symbols.h
+-            symbol_prefix_include/boringssl_prefix_symbols_asm.h
+-            symbol_prefix_include/boringssl_prefix_symbols_nasm.inc)
+-elseif(BORINGSSL_PREFIX OR BORINGSSL_PREFIX_SYMBOLS)
+-  message(FATAL_ERROR "Must specify both or neither of BORINGSSL_PREFIX and BORINGSSL_PREFIX_SYMBOLS")
+-else()
+-  add_custom_target(boringssl_prefix_symbols)
+-endif()
++add_custom_target(
++  boringssl_prefix_symbols
++  DEPENDS include/boringssl_prefix_symbols.h
++          include/boringssl_prefix_symbols_asm.h
++          include/boringssl_prefix_symbols_nasm.inc)
+ 
+ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+   set(CLANG 1)
+@@ -452,26 +427,6 @@
+   target_link_libraries(libcxx libcxxabi)
+ endif()
+ 
+-# Add minimal googletest targets. The provided one has many side-effects, and
+-# googletest has a very straightforward build.
+-add_library(
+-  boringssl_gtest
+-  third_party/googletest/googlemock/src/gmock-all.cc
+-  third_party/googletest/googletest/src/gtest-all.cc
+-)
+-if(USE_CUSTOM_LIBCXX)
+-  target_link_libraries(boringssl_gtest libcxx)
+-endif()
+-target_include_directories(
+-    boringssl_gtest
+-    PUBLIC
+-    third_party/googletest/googlemock/include
+-    third_party/googletest/googletest/include
+-    PRIVATE
+-    third_party/googletest/googlemock
+-    third_party/googletest/googletest
+-)
+-
+ # Declare a dummy target to build all unit tests. Test targets should inject
+ # themselves as dependencies next to the target definition.
+ add_custom_target(all_tests)
+@@ -614,65 +569,12 @@
+ add_library(decrepit ${DECREPIT_SOURCES})
+ target_link_libraries(decrepit crypto ssl)
+ 
+-add_library(test_support_lib STATIC
+-            ${TEST_SUPPORT_SOURCES} ${TEST_SUPPORT_SOURCES_ASM_USED})
+-if(LIBUNWIND_FOUND)
+-  target_compile_options(test_support_lib PRIVATE ${LIBUNWIND_CFLAGS_OTHER})
+-  target_include_directories(test_support_lib PRIVATE ${LIBUNWIND_INCLUDE_DIRS})
+-  target_link_libraries(test_support_lib ${LIBUNWIND_LDFLAGS})
+-endif()
+-if(WIN32)
+-  target_link_libraries(test_support_lib dbghelp)
+-endif()
+-target_link_libraries(test_support_lib boringssl_gtest crypto)
+-
+-# urandom_test is a separate binary because it needs to be able to observe the
+-# PRNG initialisation, which means that it can't have other tests running before
+-# it does.
+-add_executable(urandom_test ${URANDOM_TEST_SOURCES})
+-target_link_libraries(urandom_test test_support_lib boringssl_gtest crypto)
+-add_dependencies(all_tests urandom_test)
+-
+-add_executable(crypto_test ${CRYPTO_TEST_SOURCES})
+-target_link_libraries(crypto_test test_support_lib boringssl_gtest crypto)
+-add_dependencies(all_tests crypto_test)
+-
+-add_executable(ssl_test ${SSL_TEST_SOURCES})
+-target_link_libraries(ssl_test test_support_lib boringssl_gtest ssl crypto)
+-add_dependencies(all_tests ssl_test)
+-add_executable(decrepit_test ${DECREPIT_TEST_SOURCES})
+-target_link_libraries(decrepit_test test_support_lib boringssl_gtest
+-                      decrepit crypto)
+-add_dependencies(all_tests decrepit_test)
+-
+-if(APPLE)
+-  set(PKI_CXX_FLAGS "-fno-aligned-new")
+-endif()
+-
+-add_library(pki ${PKI_SOURCES})
+-target_link_libraries(pki crypto)
+-
+-add_executable(pki_test ${PKI_TEST_SOURCES})
+-target_link_libraries(pki_test test_support_lib boringssl_gtest pki crypto)
+-add_dependencies(all_tests pki_test)
+-
+-# The PKI library requires C++17.
+-set_target_properties(
+-  pki pki_test
+-  PROPERTIES
+-  CXX_STANDARD 17
+-  CXX_STANDARD_REQUIRED YES
+-  COMPILE_FLAGS "${PKI_CXX_FLAGS}")
+-
+ add_executable(bssl ${BSSL_SOURCES})
+ target_link_libraries(bssl ssl crypto)
+ 
+ # Historically, targets were built in subdirectories. For compatibility with
+ # existing tools, we, for now, copy the targets into the subdirectories. This
+ # will be removed sometime in 2024.
+-copy_post_build(crypto crypto crypto_test urandom_test)
+-copy_post_build(ssl ssl ssl_test)
+-copy_post_build(decrepit decrepit decrepit_test)
+ copy_post_build(tool bssl)
+ 
+ if(FUZZ)

@@ -14,6 +14,29 @@ struct TThrowedLogContext {
 
 } // namspace
 
+TStringBuf ToStringBuf(EContextKey key) {
+    switch (key) {
+    case EContextKey::DateTime:
+        return "datetime";
+    case EContextKey::Level:
+        return "level";
+    case EContextKey::ProcessName:
+        return "procname";
+    case EContextKey::ProcessID:
+        return "pid";
+    case EContextKey::ThreadID:
+        return "tid";
+    case EContextKey::Component:
+        return "component";
+    case EContextKey::FileName:
+        return "filename";
+    case EContextKey::Line:
+        return "line";
+    case EContextKey::Path:
+        return "path";
+    }
+}
+
 void OutputLogCtx(IOutputStream* out, bool withBraces, bool skipSessionId) {
     const NImpl::TLogContextListItem* ctxList = NImpl::GetLogContextList();
 
@@ -70,10 +93,15 @@ TString ThrowedLogContextPath() {
 }
 
 
-TAutoPtr<TLogElement> TContextPreprocessor::Preprocess(
-        TAutoPtr<TLogElement> element)
+TAutoPtr<TLogElement> TContextPreprocessor::Preprocess(TAutoPtr<TLogElement> element)
 {
-    OutputLogCtx(element.Get(), true);
+    TStringStream out;
+    OutputLogCtx(&out, false);
+
+    if (!out.Empty()) {
+        element->With(ToStringBuf(EContextKey::Path), std::move(out.Str()));
+    }
+
     return element;
 }
 

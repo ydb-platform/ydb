@@ -83,7 +83,7 @@ namespace NKikimr::NStorage {
         // TODO: implement
     }
 
-    bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
+    bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config, bool fromBinding) {
         if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
                 (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
             // extract the main config from newly applied section
@@ -150,6 +150,24 @@ namespace NKikimr::NStorage {
 
             QuorumValid = false;
 
+            if (BridgeInfo && !BridgeInfo->SelfNodePile->IsPrimary) {
+                UnbindNodesFromOtherPiles("not primary pile anymore");
+            }
+
+            // update configuration to the root
+            if (IsSelfStatic && !fromBinding) {
+                auto ev = std::make_unique<TEvNodeConfigPush>();
+                UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, ev.get());
+                if (Binding && Binding->SessionId) {
+                    SendEvent(*Binding, std::move(ev));
+                }
+            }
+
+            // update configuration to bound nodes
+            if (IsSelfStatic) {
+                FanOutReversePush();
+            }
+
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
                 StorageConfig->GetFingerprint() != config.GetFingerprint()) {
@@ -198,7 +216,7 @@ namespace NKikimr::NStorage {
                     std::ranges::binary_search(NodeIdsForOutgoingBinding, nodeId)) {
                 continue; // okay
             } else if (BridgeInfo && BridgeInfo->SelfNodePile->IsPrimary && !NodesFromSamePile.contains(nodeId) &&
-                    AllNodeIds.contains(nodeId) && !Binding) {
+                    AllNodeIds.contains(nodeId) && (!Binding || !Binding->RootNodeId)) {
                 continue; // okay too -- other pile connecting to primary
             }
             Y_ABORT_S("unexpected incoming bound node NodeId# " << nodeId
@@ -299,17 +317,11 @@ namespace NKikimr::NStorage {
             Y_VERIFY_S(RootState != ERootState::INITIAL && RootState != ERootState::ERROR_TIMEOUT, "RootState# " << RootState);
             Y_ABORT_UNLESS(!Binding);
         } else {
-            Y_VERIFY_S(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ||
-                RootState == ERootState::LOCAL_QUORUM_OP, "RootState# " << RootState);
+            Y_VERIFY_S(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT, "RootState# " << RootState);
 
             // we can't have connection to the Console without being the root node
             Y_ABORT_UNLESS(!ConsolePipeId);
             Y_ABORT_UNLESS(!ConsoleConnected);
-        }
-
-        if (RootState == ERootState::LOCAL_QUORUM_OP) {
-            Y_ABORT_UNLESS(!InvokeQ.empty());
-            Y_ABORT_UNLESS(LocalQuorumObtained);
         }
     }
 #endif
@@ -358,6 +370,7 @@ namespace NKikimr::NStorage {
         if (change && NodeListObtained && StorageConfigLoaded) {
             if (IsSelfStatic) {
                 UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
+                UpdateQuorums();
                 IssueNextBindRequest();
             }
             processPendingEvents();
@@ -397,7 +410,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeConfigUnbind, Handle);
             hFunc(TEvNodeConfigScatter, Handle);
             hFunc(TEvNodeConfigGather, Handle);
-            hFunc(TEvNodeConfigInvokeOnRoot, Handle);
+            hFunc(TEvNodeConfigInvokeOnRoot, HandleInvokeOnRoot);
             IgnoreFunc(TEvNodeConfigInvokeOnRootResult);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
@@ -421,13 +434,14 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeWardenUpdateCache, Handle);
             hFunc(TEvNodeWardenQueryCache, Handle);
             hFunc(TEvNodeWardenUnsubscribeFromCache, Handle);
-            hFunc(TEvNodeWardenManageSyncersResult, Handle);
             hFunc(TEvNodeWardenUpdateConfigFromPeer, [this](auto ev) { ApplyStorageConfig(ev->Get()->Config); });
+            fFunc(TEvPrivate::EvRetryCollectConfigsAndPropose, HandleRetryCollectConfigsAndPropose);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
         }
         if (IsSelfStatic && StorageConfig && NodeListObtained) {
+            UpdateQuorums();
             IssueNextBindRequest();
             CheckRootNodeStatus();
         }
@@ -473,110 +487,6 @@ namespace NKikimr::NStorage {
         } catch (const std::exception& ex) {
             return ex.what();
         }
-        return std::nullopt;
-    }
-
-    std::optional<TString> UpdateClusterState(NKikimrBlobStorage::TStorageConfig *config) {
-        // copy bridge info into state storage configs for easier access in replica processors/proxies
-        if (config->HasClusterState()) {
-            auto fillInBridge = [&](auto *pb) -> std::optional<TString> {
-                auto& clusterState = config->GetClusterState();
-
-                // copy cluster state generation
-                pb->SetClusterStateGeneration(clusterState.GetGeneration());
-                pb->SetClusterStateGuid(clusterState.GetGuid());
-
-                if (!pb->RingGroupsSize() || pb->HasRing()) {
-                    return "configuration has Ring field set or no RingGroups";
-                }
-
-                auto *groups = pb->MutableRingGroups();
-                for (int i = 0, count = groups->size(); i < count; ++i) {
-                    auto *group = groups->Mutable(i);
-                    if (!group->HasBridgePileId()) {
-                        return "bridge pile id is not set for a ring group";
-                    } else if (const auto pileId = TBridgePileId::FromProto(group, &std::decay_t<decltype(*group)>::GetBridgePileId);
-                            pileId.GetPileIndex() < clusterState.PerPileStateSize()) {
-                        using T = NKikimrConfig::TDomainsConfig::TStateStorage;
-                        std::optional<T::EPileState> state;
-                        if (pileId == TBridgePileId::FromProto(&clusterState, &NKikimrBridge::TClusterState::GetPrimaryPile)) {
-                            state = pileId == TBridgePileId::FromProto(&clusterState, &NKikimrBridge::TClusterState::GetPromotedPile)
-                                ? T::PRIMARY
-                                : T::DEMOTED;
-                        } else if (pileId == TBridgePileId::FromProto(&clusterState, &NKikimrBridge::TClusterState::GetPromotedPile)) {
-                            state = T::PROMOTED;
-                        } else {
-                            switch (clusterState.GetPerPileState(pileId.GetPileIndex())) {
-                                case NKikimrBridge::TClusterState::DISCONNECTED:
-                                    state = T::DISCONNECTED;
-                                    break;
-
-                                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
-                                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
-                                    state = T::NOT_SYNCHRONIZED;
-                                    break;
-
-                                case NKikimrBridge::TClusterState::SYNCHRONIZED:
-                                    state = T::SYNCHRONIZED;
-                                    break;
-
-                                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
-                                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
-                                    Y_DEBUG_ABORT("unexpected value");
-                            }
-                        }
-                        if (!state) {
-                            return "can't determine correct pile state for ring group";
-                        }
-                        group->SetPileState(*state);
-                    } else {
-                        return "bridge pile id is out of bounds";
-                    }
-                }
-                return std::nullopt;
-            };
-
-            std::optional<TString> error;
-            if (!error && config->HasStateStorageConfig()) {
-                error = fillInBridge(config->MutableStateStorageConfig());
-            }
-            if (!error && config->HasStateStorageBoardConfig()) {
-                error = fillInBridge(config->MutableStateStorageBoardConfig());
-            }
-            if (!error && config->HasSchemeBoardConfig()) {
-                error = fillInBridge(config->MutableSchemeBoardConfig());
-            }
-            return error;
-        }
-
-        if (config->HasClusterStateDetails()) {
-            auto *details = config->MutableClusterStateDetails();
-            auto *history = details->MutableUnsyncedHistory();
-
-            Y_DEBUG_ABORT_UNLESS(config->HasClusterState());
-            const auto& clusterState = config->GetClusterState();
-
-            // filter out unsynced piles from config (they become synced when they are the part of the quorum)
-            for (int i = 0; i < history->size(); ++i) {
-                auto *unsyncedPiles = history->Mutable(i)->MutableUnsyncedPiles();
-                for (int j = 0; j < unsyncedPiles->size(); ++j) {
-                    const auto unsyncedBridgePileId = TBridgePileId::FromProto(unsyncedPiles,
-                        &std::decay_t<decltype(*unsyncedPiles)>::at, j);
-                    if (clusterState.PerPileStateSize() <= unsyncedBridgePileId.GetPileIndex()) {
-                        Y_DEBUG_ABORT(); // incorrect per pile state
-                    } else if (NBridge::PileStateTraits(clusterState.GetPerPileState(
-                            unsyncedBridgePileId.GetPileIndex())).RequiresConfigQuorum) {
-                        // this pile is a part of quorum we expect to obtain, so it will be config-synced
-                        unsyncedPiles->SwapElements(j--, unsyncedPiles->size() - 1);
-                        unsyncedPiles->RemoveLast();
-                    }
-                }
-                if (unsyncedPiles->empty()) {
-                    history->DeleteSubrange(i--, 1);
-                }
-            }
-        }
-
         return std::nullopt;
     }
 
@@ -651,11 +561,10 @@ template<>
 void Out<NKikimr::NStorage::TDistributedConfigKeeper::ERootState>(IOutputStream& s, NKikimr::NStorage::TDistributedConfigKeeper::ERootState state) {
     using E = decltype(state);
     switch (state) {
-        case E::INITIAL:         s << "INITIAL";         return;
-        case E::ERROR_TIMEOUT:   s << "ERROR_TIMEOUT";   return;
-        case E::IN_PROGRESS:     s << "IN_PROGRESS";     return;
-        case E::RELAX:           s << "RELAX";           return;
-        case E::LOCAL_QUORUM_OP: s << "LOCAL_QUORUM_OP"; return;
+        case E::INITIAL:       s << "INITIAL";         return;
+        case E::ERROR_TIMEOUT: s << "ERROR_TIMEOUT";   return;
+        case E::IN_PROGRESS:   s << "IN_PROGRESS";     return;
+        case E::RELAX:         s << "RELAX";           return;
     }
     Y_ABORT();
 }

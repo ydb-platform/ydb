@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl"), {
             NLs::PathExist,
-            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeNewImage),
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
             NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
             NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
             NLs::StreamVirtualTimestamps(false),
@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl"), {
             NLs::PathExist,
-            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeNewImage),
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
             NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
             NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateDisabled),
         });
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl"), {
             NLs::PathExist,
-            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeNewImage),
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
             NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
             NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
             NLs::StreamVirtualTimestamps(false),
@@ -121,13 +121,14 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
                             OwnerId: %)" PRIu64 R"(
                             LocalId: %)" PRIu64 R"(
                         }
+                        TxId: %)" PRIu64 R"(
                     }
-                )", ownerId, localId)),
+                )", ownerId, localId, txId)),
         });
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/1_continuousBackupImpl"), {
             NLs::PathExist,
-            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeNewImage),
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
             NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
             NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
             NLs::StreamVirtualTimestamps(false),
@@ -145,7 +146,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl"), {
             NLs::PathExist,
             NLs::IsTable,
-            NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__ydb_incrBackupImpl_deleted"}, {}, {"key"}),
+            NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__ydb_incrBackupImpl_changeMetadata"}, {}, {"key"}),
         });
     }
 } // TCdcStreamWithInitialScanTests

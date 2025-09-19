@@ -383,11 +383,15 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
             Response = MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId), "Failed to parse user token");
             return true;
         }
+        const auto& record = Request->Get()->Record;
         if (userToken) {
             UserSID = userToken->GetUserSID();
             SanitizedToken = userToken->GetSanitizedToken();
+        } else {
+            UserSID = record.GetUserSID();
+            SanitizedToken = record.GetSanitizedToken();
         }
-        PeerName = Request->Get()->Record.GetPeerName();
+        PeerName = record.GetPeerName();
 
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
@@ -1274,8 +1278,31 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxChangePathState:
         return CreateChangePathState(NextPartId(), txState);
 
+    // Incremental Restore Finalization
+    case TTxState::ETxType::TxIncrementalRestoreFinalize:
+        return CreateIncrementalRestoreFinalize(NextPartId(), txState);
+
     case TTxState::ETxType::TxCreateLongIncrementalRestoreOp:
         return CreateLongIncrementalRestoreOpControlPlane(NextPartId(), txState);
+
+    case TTxState::ETxType::TxCreateLongIncrementalBackupOp:
+        return CreateLongIncrementalBackupOp(NextPartId(), txState);
+
+    // Secret
+    case TTxState::ETxType::TxCreateSecret:
+        return CreateNewSecret(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterSecret:
+        return CreateAlterSecret(NextPartId(), txState);
+    case TTxState::ETxType::TxDropSecret:
+        return CreateDropSecret(NextPartId(), txState);
+
+    // StreamingQuery
+    case TTxState::ETxType::TxCreateStreamingQuery:
+        return CreateNewStreamingQuery(NextPartId(), txState);
+    case TTxState::ETxType::TxDropStreamingQuery:
+        return CreateDropStreamingQuery(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterStreamingQuery:
+        return CreateAlterStreamingQuery(NextPartId(), txState);
 
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
@@ -1396,6 +1423,10 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return {CreateUpgradeSubDomainDecision(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
         return CreateBuildColumn(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
+        return {DropBuildColumn(op.NextPartId(), tx, context)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
+        return CreateSetConstraintInitiate(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
         return CreateBuildIndex(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
@@ -1578,6 +1609,8 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return CreateBackupBackupCollection(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
         return CreateBackupIncrementalBackupCollection(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return CreateRestoreBackupCollection(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
@@ -1592,6 +1625,26 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     // ChangePathState
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         return CreateChangePathState(op.NextPartId(), tx, context);
+
+    // Incremental Restore Finalization
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        return {CreateIncrementalRestoreFinalize(op.NextPartId(), tx)};
+
+    // Secret
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
+        return {CreateNewSecret(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSecret:
+        return {CreateAlterSecret(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:
+        return {CreateDropSecret(op.NextPartId(), tx)};
+
+    // StreamingQuery
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery:
+        return {CreateNewStreamingQuery(op.NextPartId(), tx, context)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery:
+        return {CreateDropStreamingQuery(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
+        return {CreateAlterStreamingQuery(op.NextPartId(), tx)};
     }
 
     Y_UNREACHABLE();

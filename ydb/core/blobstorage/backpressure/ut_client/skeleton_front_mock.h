@@ -55,14 +55,14 @@ public:
         if (!Ready && record.GetNotifyIfNotReady()) {
             Notify.insert(ev->Sender);
         }
-        Reply(*ev, new TEvBlobStorage::TEvVCheckReadinessResult(Ready ? NKikimrProto::OK : NKikimrProto::NOTREADY));
+        Reply(*ev, new TEvBlobStorage::TEvVCheckReadinessResult(Ready ? NKikimrProto::OK : NKikimrProto::NOTREADY, false));
     }
 
     void Handle(TEvBlobStorage::TEvVStatus::TPtr ev) {
         auto& record = ev->Get()->Record;
 
         if (!Ready) {
-            Reply(*ev, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::NOTREADY, record.GetVDiskID()));
+            Reply(*ev, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::NOTREADY, VDiskIDFromVDiskID(record.GetVDiskID())));
             if (record.GetNotifyIfNotReady()) {
                 Notify.insert(ev->Sender);
             }

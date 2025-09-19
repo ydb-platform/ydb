@@ -96,14 +96,14 @@ class GRPC_MUST_USE_RESULT_WHEN_USE_STRICT_WARNING Status {
   /// instead of a value (which results in a copy instead of a move) to allow
   /// for easy transition to y_absl::Status in the future which accepts an
   /// y_absl::string_view as a parameter.
-  Status(StatusCode code, const TString& error_message)
+  Status(StatusCode code, const std::string& error_message)
       : code_(code), error_message_(error_message) {}
 
   /// Construct an instance with \a code,  \a error_message and
   /// \a error_details. It is an error to construct an OK status with non-empty
   /// \a error_message and/or \a error_details.
-  Status(StatusCode code, const TString& error_message,
-         const TString& error_details)
+  Status(StatusCode code, const std::string& error_message,
+         const std::string& error_details)
       : code_(code),
         error_message_(error_message),
         binary_error_details_(error_details) {}
@@ -117,10 +117,10 @@ class GRPC_MUST_USE_RESULT_WHEN_USE_STRICT_WARNING Status {
   /// Return the instance's error code.
   StatusCode error_code() const { return code_; }
   /// Return the instance's error message.
-  TString error_message() const { return error_message_; }
+  std::string error_message() const { return error_message_; }
   /// Return the (binary) error details.
   // Usually it contains a serialized google.rpc.Status proto.
-  TString error_details() const { return binary_error_details_; }
+  std::string error_details() const { return binary_error_details_; }
 
   /// Is the status OK?
   bool ok() const { return code_ == StatusCode::OK; }
@@ -132,8 +132,8 @@ class GRPC_MUST_USE_RESULT_WHEN_USE_STRICT_WARNING Status {
 
  private:
   StatusCode code_;
-  TString error_message_;
-  TString binary_error_details_;
+  std::string error_message_;
+  std::string binary_error_details_;
 };
 
 }  // namespace grpc

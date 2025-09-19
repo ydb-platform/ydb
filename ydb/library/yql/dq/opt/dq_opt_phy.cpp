@@ -3394,7 +3394,7 @@ TMaybeNode<TExprBase> DqUnorderedOverStageInput(TExprBase node, TExprContext& ct
             for (auto n: it->second) {
                 if (TCoUnordered::Match(n)) {
                     unordereds.push_back(n);
-                } else if (!TCoDependsOn::Match(n)) {
+                } else if (!IsDependsOnUsage(*n, parentsMap)) {
                     unordereds.clear();
                     break;
                 }

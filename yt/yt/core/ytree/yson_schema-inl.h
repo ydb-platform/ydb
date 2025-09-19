@@ -90,9 +90,10 @@ void WriteSchema(const T&, NYson::IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)
         .BeginMap()
-            .Item("type_name").Value("enum")
-            .Item("enum_name").Value(TEnumTraits<T>::GetTypeName())
-            .Item("values").DoListFor(
+            .Item("type_name").Value("tagged")
+            .Item("tag").Value(Format("enum/%v", TEnumTraits<T>::GetTypeName()))
+            .Item("item").Value("string")
+            .Item("enum").DoListFor(
                 TEnumTraits<T>::GetDomainNames(), [] (auto fluent, TStringBuf name) {
                     fluent.Item().Value(EncodeEnumValue(name));
                 })

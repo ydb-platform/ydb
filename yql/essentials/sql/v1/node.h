@@ -1,6 +1,7 @@
 #pragma once
 
 #include <google/protobuf/message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/resetable_setting.h>
 #include <yql/essentials/parser/proto_ast/common.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -820,7 +821,7 @@ namespace NSQLTranslationV1 {
 
     TWinSpecs CloneContainer(const TWinSpecs& specs);
 
-    void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
+    bool WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
         const TVector<TNodePtr>& groupByExprTerms);
     bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& nodes);
 
@@ -954,6 +955,7 @@ namespace NSQLTranslationV1 {
         const TUdfNode* GetUdfNode() const override;
         bool IsScript() const override;
         const TVector<TNodePtr>& GetScriptArgs() const;
+        const TVector<TNodePtr>& GetDepends() const;
         TNodePtr BuildOptions() const;
     private:
         TVector<TNodePtr> Args_;
@@ -966,6 +968,7 @@ namespace NSQLTranslationV1 {
         TDeferredAtom ExtraMem_;
         bool ScriptUdf_ = false;
         TVector<TNodePtr> ScriptArgs_;
+        TVector<TNodePtr> Depends_;
     };
 
     class IAggregation: public INode {
@@ -1159,6 +1162,7 @@ namespace NSQLTranslationV1 {
         TMaybe<TIdentifier> StoreType;
         TNodePtr PartitionByHashFunction;
         TMaybe<TIdentifier> StoreExternalBlobs;
+        TNodePtr ExternalDataChannelsCount;
 
         TNodePtr DataSourcePath;
         NYql::TResetableSetting<TNodePtr, void> Location;
@@ -1168,7 +1172,7 @@ namespace NSQLTranslationV1 {
             return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad
                 || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter
                 || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction
-                || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters;
+                || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters || ExternalDataChannelsCount;
         }
     };
 
@@ -1181,35 +1185,7 @@ namespace NSQLTranslationV1 {
         TNodePtr Data;
         TNodePtr Compression;
         TNodePtr CompressionLevel;
-    };
-
-    struct TVectorIndexSettings {
-        enum class EDistance {
-              Cosine        /* "cosine" */
-            , Manhattan     /* "manhattan" */
-            , Euclidean     /* "euclidean" */
-        };
-
-        enum class ESimilarity {
-              Cosine        /* "cosine" */
-            , InnerProduct  /* "inner_product" */
-        };
-
-        enum class EVectorType {
-              Float         /* "float" */
-            , Uint8         /* "uint8" */
-            , Int8          /* "int8" */
-            , Bit           /* "bit" */
-        };
-
-        std::optional<EDistance> Distance;
-        std::optional<ESimilarity> Similarity;
-        std::optional<EVectorType> VectorType;
-        ui32 VectorDimension = 0;
-        ui32 Clusters = 0;
-        ui32 Levels = 0;
-
-        bool Validate(TContext& ctx) const;
+        TNodePtr CacheMode;
     };
 
     struct TIndexDescription {
@@ -1218,6 +1194,13 @@ namespace NSQLTranslationV1 {
             GlobalAsync,
             GlobalSyncUnique,
             GlobalVectorKmeansTree,
+        };
+
+        struct TIndexSetting {
+            TString Name;
+            TPosition NamePosition;
+            TString Value;
+            TPosition ValuePosition;
         };
 
         TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)
@@ -1231,7 +1214,7 @@ namespace NSQLTranslationV1 {
         TVector<TIdentifier> DataColumns;
         TTableSettings TableSettings;
 
-        using TIndexSettings = std::variant<std::monostate, TVectorIndexSettings>;
+        using TIndexSettings = TMap<TString, TIndexSetting>;
         TIndexSettings IndexSettings;
     };
 
@@ -1342,6 +1325,20 @@ namespace NSQLTranslationV1 {
         TMaybe<TDeferredAtom> Increment;
     };
 
+    class TSecretParameters {
+    public:
+        enum class TOperationMode {
+            Create,
+            Alter,
+        };
+
+        TMaybe<TDeferredAtom> Value;
+        TMaybe<TDeferredAtom> InheritPermissions;
+
+    public:
+        bool ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::TOperationMode mode);
+    };
+
     struct TTopicConsumerSettings {
         struct TLocalSinkSettings {
             // no special settings
@@ -1448,6 +1445,14 @@ namespace NSQLTranslationV1 {
         TString At;
     };
 
+    struct TStreamingQuerySettings {
+        inline static constexpr char RESERVED_FEATURE_PREFIX[] = "__";
+        inline static constexpr char QUERY_TEXT_FEATURE[] = "__query_text";
+        inline static constexpr char QUERY_AST_FEATURE[] = "__query_ast";
+
+        std::map<TString, TDeferredAtom> Features;
+    };
+
     TString IdContent(TContext& ctx, const TString& str);
     TString IdContentFromString(TContext& ctx, const TString& str);
     TTableHints GetContextHints(TContext& ctx);
@@ -1529,8 +1534,8 @@ namespace NSQLTranslationV1 {
 
     // Implemented in builtin.cpp
     TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
-        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig,
-        TNodePtr options);
+        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr externalTypes, const TDeferredAtom& typeConfig, TNodePtr runConfig,
+        TNodePtr options, const TVector<TNodePtr>& depends);
     TNodePtr BuildScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args,
         TNodePtr options);
 
@@ -1563,7 +1568,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
         bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
     TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-        std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context);
+        bool missingOk, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context);
     TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
         bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context);
     TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
@@ -1630,6 +1635,23 @@ namespace NSQLTranslationV1 {
         const TRestoreParameters& params,
         const TObjectOperatorContext& context);
 
+    TNodePtr BuildCreateSecret(
+        TPosition pos,
+        const TString& objectId,
+        const TSecretParameters& secretParams,
+        const TObjectOperatorContext& context,
+        TScopedStatePtr scoped);
+    TNodePtr BuildAlterSecret(
+        TPosition pos,
+        const TString& objectId,
+        const TSecretParameters& secretParams,
+        const TObjectOperatorContext& context,
+        TScopedStatePtr scoped);
+    TNodePtr BuildDropSecret(
+        TPosition pos,
+        const TString& objectId,
+        const TObjectOperatorContext& context,
+        TScopedStatePtr scoped);
 
     template<class TContainer>
     TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) {

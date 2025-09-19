@@ -32,7 +32,7 @@ message TPartitionMeta {
     optional bool SubDomainOutOfSpace = 3 [default = false];
     optional TPartitionCounterData CounterData = 4;
     optional uint64 EndWriteTimestamp = 5;
-    optional uint64 FirstUncompactedOffset = 6;
+    optional uint64 FirstUncompactedOffset = 6; //deprecated
 }
 
 message TPartitionTxMeta {
@@ -260,7 +260,7 @@ message TPartitionConfig {
     optional uint64 StorageLimitBytes = 16;
 
     // List of ClientIds, for which we don't delete data until they are read by these clients
-    repeated string ImportantClientId = 4; //can be empty . Deprecated. Use Consumer.Important
+    repeated string ImportantClientId_Deprecated = 4; //can be empty . Deprecated. Use Consumer.Important
     optional uint32 LowWatermark = 5 [default = 6291456]; //6Mb, compact blobs if they at least this big.
     optional uint32 SourceIdLifetimeSeconds = 6 [ default = 1382400]; //16 days
     optional uint32 SourceIdMaxCounts = 31 [default = 6000000]; // Maximum number of stored sourceId records in partition
@@ -321,6 +321,7 @@ message TOffloadConfig {
     message TIncrementalBackup {
         optional string DstPath = 1;
         optional NKikimrProto.TPathID DstPathId = 2;
+        optional uint64 TxId = 3;
     }
 
     message TIncrementalRestore {
@@ -348,21 +349,21 @@ message TPQTabletConfig {
     optional string DC = 12;
 
     // ReadRules, ReadTopicTimestampMs, ReadRuleVersions, ConsumerFormatVersions, ConsumersCodecs and ConsumerScalingSupport form a consumer data array stored by columns
-    repeated string ReadRules = 13; // Deprecated. Use Consumers.Name
-    repeated uint64 ReadFromTimestampsMs = 14; // Deprecated. Use Consumers.ReadFromTimestampsMs
-    repeated uint64 ConsumerFormatVersions = 15; // Deprecated. Use Consumers.FormatVersion
+    repeated string ReadRules_Deprecated = 13; // Deprecated. Use Consumers.Name
+    repeated uint64 ReadFromTimestampsMs_Deprecated = 14; // Deprecated. Use Consumers.ReadFromTimestampsMs
+    repeated uint64 ConsumerFormatVersions_Deprecated = 15; // Deprecated. Use Consumers.FormatVersion
     message TCodecs {
         repeated int64 Ids = 1;
         repeated string Codecs = 2;
     }
-    repeated TCodecs ConsumerCodecs = 16; // Deprecated. Use Consumers.Codec
-    repeated string ReadRuleServiceTypes = 17; // Deprecated. Use Consumers.ServiceType
+    repeated TCodecs ConsumerCodecs_Deprecated = 16; // Deprecated. Use Consumers.Codec
+    repeated string ReadRuleServiceTypes_Deprecated = 17; // Deprecated. Use Consumers.ServiceType
 
     optional uint64 FormatVersion = 20;
     optional TCodecs Codecs = 21;
 
-    repeated uint64 ReadRuleVersions = 22; // Deprecated. Use Consumers.Version
-    repeated uint64 ReadRuleGenerations = 32; // Deprecated. Use Consumers.Generation
+    repeated uint64 ReadRuleVersions_Deprecated = 22; // Deprecated. Use Consumers.Version
+    repeated uint64 ReadRuleGenerations_Deprecated = 32; // Deprecated. Use Consumers.Generation
 
     message TConsumer {
         optional string Name = 1;
@@ -814,6 +815,7 @@ message TStatusResponse {
         optional uint64 Cookie = 34;
 
         optional EScaleStatus ScaleStatus = 35;
+        optional TPartitionScaleParticipants ScaleParticipatingPartitions = 36;
     }
 
     message TConsumerResult {
@@ -838,6 +840,15 @@ message TStatusResponse {
     optional uint64 TabletId = 1;
     repeated TPartResult PartResult = 2;
 }
+
+
+message TBroadcastPartitionError {
+    message TMessageGroup {
+        repeated TStatusResponse.TErrorMessage Errors = 1;
+    }
+    repeated TMessageGroup MessageGroups = 1;
+};
+
 
 message THasDataInfo {
     optional int32 Partition = 1;
@@ -1077,9 +1088,15 @@ message TEvReadingPartitionStartedRequest {
     optional uint32 PartitionId = 2;
 };
 
+message TPartitionScaleParticipants {
+    repeated uint32 ChildPartitionIds = 1;
+    repeated uint32 AdjacentPartitionIds = 2;
+};
+
 message TEvPartitionScaleStatusChanged {
     required uint32 PartitionId = 1;
     required EScaleStatus ScaleStatus = 2;
+    optional TPartitionScaleParticipants ParticipatingPartitions = 3;
 };
 
 message TPartitions {
@@ -1116,6 +1133,9 @@ message TTransaction {
         EXECUTED = 9;     // persist
         WAIT_RS_ACKS = 11;
         DELETING = 10;
+
+        EXPIRED = 12;
+        CANCELED = 13;
     };
 
     message TPredicateReceived {
@@ -1152,6 +1172,10 @@ message TTransaction {
     optional NActorsProto.TActorId SourceActor = 14;
 
     optional TWriteId WriteId = 15;
+
+    optional NActorsProto.TTraceId ExecuteTraceId = 17;
+    optional NActorsProto.TTraceId WaitRSTraceId = 18;
+    optional NActorsProto.TTraceId WaitRSAcksTraceId = 19;
 };
 
 message TTabletTxInfo {
@@ -1177,7 +1201,8 @@ message TEvOffloadStatus {
         DONE = 1;
     }
 
-    optional EStatus Status = 1;
-    optional uint64 TabletId = 2;
-    optional uint32 PartitionId = 3;
+    optional uint64 TxId = 1;
+    optional EStatus Status = 2;
+    optional uint64 TabletId = 3;
+    optional uint32 PartitionId = 4;
 }

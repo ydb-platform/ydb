@@ -247,8 +247,9 @@ TExprBase KqpPushDownOlapGroupByKeysImpl(TExprBase node, TExprContext& ctx, bool
     }
 }
 
-TExprBase KqpPushDownOlapGroupByKeys(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!kqpCtx.Config->HasOptEnableOlapPushdown() || !kqpCtx.Config->HasOptEnableOlapProvideComputeSharding()) {
+TExprBase KqpPushDownOlapGroupByKeys(TExprBase node, TExprContext &ctx, const TKqpOptimizeContext &kqpCtx) {
+    if (!kqpCtx.Config->HasOptEnableOlapPushdown() || !kqpCtx.Config->HasOptEnableOlapProvideComputeSharding() ||
+        !kqpCtx.Config->GetEnableOlapPushdownAggregate()) {
         return node;
     }
 
@@ -269,7 +270,7 @@ TExprBase KqpPushDownOlapGroupByKeys(TExprBase node, TExprContext& ctx, const TK
 
 TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
-    if (!kqpCtx.Config->HasOptEnableOlapPushdown() || !kqpCtx.Config->HasOptEnableOlapPushdownAggregate()) {
+    if (!kqpCtx.Config->HasOptEnableOlapPushdown() || !kqpCtx.Config->GetEnableOlapPushdownAggregate()) {
         return node;
     }
 

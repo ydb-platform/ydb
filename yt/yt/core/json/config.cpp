@@ -52,4 +52,12 @@ void TJsonFormatConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TWebJsonFormatConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("format", &TThis::Format)
+        .Default(EJsonFormat::Text);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NJson

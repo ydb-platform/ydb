@@ -466,3 +466,12 @@
   includes:
     - thread.h: contrib/restricted/ffmpeg/libavcodec/thread.h
     - jni.h: contrib/restricted/ffmpeg/libavcodec/jni.h
+
+- source_filter: "^contrib/libs/ngtcp2/crypto/(boringssl/boringssl[.]c|includes/ngtcp2/ngtcp2_crypto_boringssl[.]h)$"
+  includes:
+    - openssl/ssl.h: contrib/restricted/google/boringssl/include/openssl/ssl.h
+    - openssl/evp.h: contrib/restricted/google/boringssl/include/openssl/evp.h
+    - openssl/hkdf.h: contrib/restricted/google/boringssl/include/openssl/hkdf.h
+    - openssl/aes.h: contrib/restricted/google/boringssl/include/openssl/aes.h
+    - openssl/chacha.h: contrib/restricted/google/boringssl/include/openssl/chacha.h
+    - openssl/rand.h: contrib/restricted/google/boringssl/include/openssl/rand.h

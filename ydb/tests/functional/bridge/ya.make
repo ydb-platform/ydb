@@ -1,7 +1,9 @@
 PY3TEST()
 
 TEST_SRCS(
+    common.py
     test_bridge.py
+    test_discovery.py
 )
 
 SPLIT_FACTOR(10)
@@ -13,7 +15,7 @@ TAG(ya:fat)
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1800)
 ELSE()
-    TIMEOUT(60)
+    TIMEOUT(100)
 ENDIF()
 
 

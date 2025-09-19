@@ -8,9 +8,6 @@
 
 #include <util/system/env.h>
 
-#include <condition_variable>
-#include <thread>
-
 namespace NYql::NDq {
 
 namespace {
@@ -22,8 +19,6 @@ void SegmentationFaultHandler(int) {
 }
 
 }
-
-using namespace NActors;
 
 NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     TString topic,
@@ -49,6 +44,10 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     settings.MutableWatermarks()->SetIdlePartitionsEnabled(idlePartitionsEnabled);
     settings.MutableWatermarks()->SetLateArrivalDelayUs(lateArrivalDelay.MicroSeconds());
 
+    auto* disposition = settings.mutable_disposition()->mutable_from_time()->mutable_timestamp();
+    disposition->set_seconds(0);
+    disposition->set_nanos(0);
+
     return settings;
 }
 
@@ -71,53 +70,6 @@ TPqIoTestFixture::TPqIoTestFixture() {
 TPqIoTestFixture::~TPqIoTestFixture() {
     CaSetup = nullptr;
     Driver.Stop(true);
-}
-
-void TPqIoTestFixture::InitSource(
-    NYql::NPq::NProto::TDqPqTopicSource&& settings,
-    i64 freeSpace)
-{
-    CaSetup->Execute([&](TFakeActor& actor) {
-        NPq::NProto::TDqReadTaskParams params;
-        auto* partitioninigParams = params.MutablePartitioningParams();
-        partitioninigParams->SetTopicPartitionsCount(1);
-        partitioninigParams->SetEachTopicPartitionGroupId(0);
-        partitioninigParams->SetDqPartitionsCount(1);
-
-        TString serializedParams;
-        Y_PROTOBUF_SUPPRESS_NODISCARD params.SerializeToString(&serializedParams);
-
-        const THashMap<TString, TString> secureParams;
-        const THashMap<TString, TString> taskParams { {"pq", serializedParams} };
-
-        TPqGatewayServices pqServices(
-            Driver,
-            nullptr,
-            nullptr,
-            std::make_shared<TPqGatewayConfig>(),
-            nullptr
-        );
-
-        auto [dqSource, dqSourceAsActor] = CreateDqPqReadActor(
-            std::move(settings),
-            0,
-            NYql::NDq::TCollectStatsLevel::None,
-            "query_1",
-            0,
-            secureParams,
-            taskParams,
-            {},
-            Driver,
-            nullptr,
-            actor.SelfId(),
-            actor.GetHolderFactory(),
-            MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            CreatePqNativeGateway(std::move(pqServices)),
-            freeSpace);
-
-        actor.InitAsyncInput(dqSource, dqSourceAsActor);
-    });
 }
 
 void TPqIoTestFixture::InitAsyncOutput(
@@ -168,28 +120,28 @@ TString GetDefaultPqDatabase() {
 extern const TString DefaultPqConsumer = "test_client";
 
 void PQWrite(
-    const std::vector<TString>& sequence,
+    const std::vector<TString>& messages,
     const TString& topic,
     const TString& endpoint)
 {
-    NYdb::TDriverConfig cfg;
-    cfg.SetEndpoint(endpoint);
-    cfg.SetDatabase(GetDefaultPqDatabase());
-    cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
-    NYdb::TDriver driver(cfg);
+    auto config = NYdb::TDriverConfig()
+        .SetEndpoint(endpoint)
+        .SetDatabase(GetDefaultPqDatabase())
+        .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
+    NYdb::TDriver driver(config);
     NYdb::NTopic::TTopicClient client(driver);
-    NYdb::NTopic::TWriteSessionSettings sessionSettings;
-    sessionSettings
+
+    auto settings = NYdb::NTopic::TWriteSessionSettings()
         .Path(topic)
         .MessageGroupId("src_id")
         .Codec(NYdb::NTopic::ECodec::RAW);
-    auto session = client.CreateSimpleBlockingWriteSession(sessionSettings);
-    for (const TString& data : sequence) {
-        UNIT_ASSERT_C(session->Write(data), "Failed to write message with body \"" << data << "\" to topic " << topic);
-        Cerr << "Message '" << data << "' was written into topic '" << topic << "'" << Endl;
+    auto session = client.CreateSimpleBlockingWriteSession(settings);
+    for (const auto& message : messages) {
+        UNIT_ASSERT_C(session->Write(message), "Failed to write message with body \"" << message << "\" to topic " << topic);
+        Cerr << "Message '" << message << "' was written into topic '" << topic << "'" << Endl;
     }
+
     session->Close(); // Wait until all data would be written into PQ.
-    session = nullptr;
     driver.Stop(true);
 }
 
@@ -241,7 +193,7 @@ void PQCreateStream(const TString& streamName)
     NYdb::NDataStreams::V1::TDataStreamsClient client = NYdb::NDataStreams::V1::TDataStreamsClient(
         driver,
         NYdb::TCommonClientSettings().Database(GetDefaultPqDatabase()));
-    
+
     auto result = client.CreateStream(streamName,
         NYdb::NDataStreams::V1::TCreateStreamSettings().ShardCount(1).RetentionPeriodHours(1)).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -268,7 +220,7 @@ void AddReadRule(NYdb::TDriver& driver, const TString& streamName) {
     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
 }
 
-std::vector<std::pair<ui64, TString>> UVPairParser(const NUdf::TUnboxedValue& item) {
+std::vector<TMessage> UVPairParser(const NUdf::TUnboxedValue& item) {
     UNIT_ASSERT_VALUES_EQUAL(item.GetListLength(), 2);
     auto stringElement = item.GetElement(1);
     return { {item.GetElement(0).Get<ui64>(), TString(stringElement.AsStringRef())} };

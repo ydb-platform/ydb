@@ -14,6 +14,7 @@ namespace NTable {
         using TFamily = TScheme::TFamily;
         using ECodec = NPage::ECodec;
         using ECache = NPage::ECache;
+        using ECacheMode = NPage::ECacheMode;
 
         explicit TSchemeModifier(TScheme &scheme, TSchemeRollbackState *rollbackState = nullptr);
 

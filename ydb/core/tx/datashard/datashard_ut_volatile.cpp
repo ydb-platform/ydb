@@ -204,23 +204,38 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         }
         capturedPlans.clear();
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(future))),
-            "ERROR: UNDETERMINED");
+        auto upsertResult = FormatResult(AwaitResponse(runtime, std::move(future)));
         Cerr << "!!! distributed write end" << Endl;
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
-        // Verify transaction was not committed
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleExec(runtime, R"(
-                SELECT key, value FROM `/Root/table-1`
-                UNION ALL
-                SELECT key, value FROM `/Root/table-2`
-                ORDER BY key
-                )"),
-            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+        if (upsertResult == "ERROR: UNDETERMINED") {
+            // Verify transaction was not committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table-1`
+                    UNION ALL
+                    SELECT key, value FROM `/Root/table-2`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+        } else if (upsertResult == "<empty>") {
+            // Verify transaction was fully committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table-1`
+                    UNION ALL
+                    SELECT key, value FROM `/Root/table-2`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+                "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
+                "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
+        } else {
+            UNIT_ASSERT_C(false, "Unexpected upsert result: " << upsertResult);
+        }
     }
 
     Y_UNIT_TEST_TWIN(DistributedWriteShardRestartAfterExpectation, UseSink) {
@@ -295,23 +310,38 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         // Restart the first table shard
         RebootTablet(runtime, shard1, sender);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(future))),
-            "ERROR: UNDETERMINED");
+        auto upsertResult = FormatResult(AwaitResponse(runtime, std::move(future)));
         Cerr << "!!! distributed write end" << Endl;
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
-        // Verify transaction was not committed
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleExec(runtime, R"(
-                SELECT key, value FROM `/Root/table-1`
-                UNION ALL
-                SELECT key, value FROM `/Root/table-2`
-                ORDER BY key
-                )"),
-            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+        if (upsertResult == "ERROR: UNDETERMINED") {
+            // Verify transaction was not committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table-1`
+                    UNION ALL
+                    SELECT key, value FROM `/Root/table-2`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+        } else if (upsertResult == "<empty>") {
+            // Verify transaction was fully committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table-1`
+                    UNION ALL
+                    SELECT key, value FROM `/Root/table-2`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+                "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
+                "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
+        } else {
+            UNIT_ASSERT_C(false, "Unexpected upsert result: " << upsertResult);
+        }
     }
 
     Y_UNIT_TEST(DistributedWriteEarlierSnapshotNotBlocked) {
@@ -480,9 +510,10 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
     }
 
-    Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenAbort) {
+    Y_UNIT_TEST_TWIN(DistributedWriteLaterSnapshotBlockedThenAbort, UseSink) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -543,11 +574,11 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Start reading from table-2
-        TString sessionIdSnapshot = CreateSessionRPC(runtime, "/Root");
-        auto snapshotReadFuture = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        TString snapshotSessionId, snapshotTxId;
+        auto snapshotReadFuture = KqpSimpleBeginSend(runtime, snapshotSessionId, R"(
             SELECT key, value FROM `/Root/table-2`
             ORDER BY key
-        )", sessionIdSnapshot, "", false /* commitTx */), "/Root");
+        )", "/Root");
 
         // Let some virtual time pass
         SimulateSleep(runtime, TDuration::Seconds(1));
@@ -556,19 +587,34 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         UNIT_ASSERT(!snapshotReadFuture.HasValue());
         UNIT_ASSERT(!future.HasValue());
 
-        // Reboot table-1 tablet and sleep a little, this will abort the write
+        // Reboot table-1 tablet and sleep a little, this may abort the write
         RebootTablet(runtime, shard1, sender);
         SimulateSleep(runtime, TDuration::Seconds(1));
 
-        // We expect aborted commit and read without that data
+        // We expect aborted commit and read without that data, or successful commit and read with the data
         UNIT_ASSERT(snapshotReadFuture.HasValue());
         UNIT_ASSERT(future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(future.ExtractValue()),
-            "ERROR: UNDETERMINED");
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(snapshotReadFuture.ExtractValue()),
-            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+        auto upsertResult = FormatResult(future.ExtractValue());
+        auto readResult = KqpSimpleBeginWait(runtime, snapshotTxId, std::move(snapshotReadFuture));
+        if (upsertResult == "ERROR: UNDETERMINED") {
+            UNIT_ASSERT_VALUES_EQUAL(
+                readResult,
+                "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+        } else if (upsertResult == "<empty>") {
+            UNIT_ASSERT_VALUES_EQUAL(
+                readResult,
+                "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
+                "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleContinue(runtime, snapshotSessionId, snapshotTxId, R"(
+                    SELECT key, value FROM `/Root/table-1`
+                    ORDER BY key
+                )", "/Root"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
+        } else {
+            UNIT_ASSERT_C(false, "Unexpected upsert result: " << upsertResult);
+        }
     }
 
     Y_UNIT_TEST(DistributedWriteAsymmetricExecute) {
@@ -3062,7 +3108,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         // arbiter will send 3 expectations
         // two shards will send 1 commit decision + 1 expectation
-        size_t expectedReadSets = 3 + 2 * 2;
+        // one shard will send 1 abort decision
+        size_t expectedReadSets = 3 + 2 * 2 + 1;
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(blockedReadSets.size(), expectedReadSets);
 
@@ -3078,9 +3125,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TCountReadSets countReadSets(runtime);
         runtime.SimulateSleep(TDuration::Seconds(1));
 
-        // arbiter will send 3 additional commit decisions
-        // the last shard sends a nodata readset to answer expectation
-        UNIT_ASSERT_VALUES_EQUAL(countReadSets.Count, expectedReadSets + 4);
+        // arbiter will send 3 additional commit (abort) decisions
+        UNIT_ASSERT_VALUES_EQUAL(countReadSets.Count, expectedReadSets + 3);
 
         Cerr << "========= Checking table =========" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(
@@ -3318,17 +3364,43 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         Cerr << "========= Restarting shard 1 =========" << Endl;
         GracefulRestartTablet(runtime, shards.at(0), sender);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(runtime.WaitFuture(std::move(upsertFuture1))),
-            "ERROR: ABORTED");
+        auto upsertResult = FormatResult(runtime.WaitFuture(std::move(upsertFuture1)));
+
+        Cerr << "========= Checking table =========" << Endl;
+        if (upsertResult == "ERROR: ABORTED") {
+            // Verify transaction was not committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 11 } items { uint32_value: 11 } }");
+        } else if (upsertResult == "<empty>") {
+            // Verify transaction was fully committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+                "{ items { uint32_value: 11 } items { uint32_value: 11 } }, "
+                "{ items { uint32_value: 12 } items { uint32_value: 12 } }");
+        } else {
+            UNIT_ASSERT_C(false, "Unexpected upsert result: " << upsertResult);
+        }
     }
 
-    Y_UNIT_TEST(DistributedUpsertRestartAfterPlan) {
+    Y_UNIT_TEST_TWIN(DistributedUpsertRestartAfterPlan, UseSink) {
         TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+            .SetEnableDataShardVolatileTransactions(true)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3389,18 +3461,33 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         Cerr << "========= Restarting shard 1 =========" << Endl;
         GracefulRestartTablet(runtime, shards.at(0), sender);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(runtime.WaitFuture(std::move(upsertFuture1))),
-            "ERROR: ABORTED");
+        auto upsertResult = FormatResult(runtime.WaitFuture(std::move(upsertFuture1)));
 
         Cerr << "========= Checking table =========" << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleExec(runtime, R"(
-                SELECT key, value FROM `/Root/table`
-                ORDER BY key;
-            )"),
-            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 11 } items { uint32_value: 11 } }");
+        if (upsertResult == "ERROR: ABORTED") {
+            // Verify transaction was not committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 11 } items { uint32_value: 11 } }");
+        } else if (upsertResult == "<empty>") {
+            // Verify transaction was fully committed
+            Cerr << "========= Checking table =========" << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+                "{ items { uint32_value: 11 } items { uint32_value: 11 } }, "
+                "{ items { uint32_value: 12 } items { uint32_value: 12 } }");
+        } else {
+            UNIT_ASSERT_C(false, "Unexpected upsert result: " << upsertResult);
+        }
     }
 
     // Regression test for KIKIMR-22506

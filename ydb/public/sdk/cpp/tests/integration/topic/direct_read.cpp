@@ -1292,6 +1292,13 @@ TEST_F(DirectReadWithControlSession, StopPartitionSession) {
         }
     }
 
+    {
+        // Send a StartDirectReadPartitionSessionResponse with a random partition session id,
+        // the session should ignore it.
+        auto r = TMockDirectReadSessionProcessor::TServerReadInfo();
+        setup.AddDirectReadResponse(r.StartDirectReadPartitionSessionResponse(333));
+    }
+
     setup.GetControlSession()->Start();
     {
         auto r = TMockReadSessionProcessor::TServerReadInfo();

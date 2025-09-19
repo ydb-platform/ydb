@@ -86,6 +86,7 @@ struct TEvWorker {
         TVector<ui64> ChildPartitionsIds;
 
         TEvDataEnd(ui64 partitionId, TVector<ui64>&& adjacentPartitionsIds, TVector<ui64>&& childPartitionsIds);
+        TEvDataEnd(ui64 partitionId, const TVector<ui64>& adjacentPartitionsIds, const TVector<ui64>& childPartitionsIds);
         TString ToString() const override;
     };
 };

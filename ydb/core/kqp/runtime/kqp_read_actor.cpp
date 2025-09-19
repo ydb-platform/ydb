@@ -333,25 +333,34 @@ public:
 public:
     TKqpReadActor(
         const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings,
-        const NYql::NDq::TDqAsyncIoFactory::TSourceArguments& args,
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena, // Arena for settings
+        const NActors::TActorId& computeActorId,
+        ui64 inputIndex,
+        NYql::NDq::TCollectStatsLevel statsLevel,
+        NYql::NDq::TTxId txId,
+        ui64 taskId,
+        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        const NWilson::TTraceId& traceId,
         TIntrusivePtr<TKqpCounters> counters)
         : Settings(settings)
-        , Arena(args.Arena)
-        , LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ", CA Id " << args.ComputeActorId << ". ")
-        , ComputeActorId(args.ComputeActorId)
-        , InputIndex(args.InputIndex)
-        , TypeEnv(args.TypeEnv)
-        , HolderFactory(args.HolderFactory)
-        , Alloc(args.Alloc)
+        , Arena(arena)
+        , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId << ". ")
+        , ComputeActorId(computeActorId)
+        , InputIndex(inputIndex)
+        , TypeEnv(typeEnv)
+        , HolderFactory(holderFactory)
+        , Alloc(alloc)
         , Counters(counters)
         , UseFollowers(false)
         , PipeCacheId(MainPipeCacheId)
-        , ReadActorSpan(TWilsonKqp::ReadActor,  NWilson::TTraceId(args.TraceId), "ReadActor")
+        , ReadActorSpan(TWilsonKqp::ReadActor, NWilson::TTraceId(traceId), "ReadActor")
     {
         Y_ABORT_UNLESS(Arena);
         Y_ABORT_UNLESS(settings->GetArena() == Arena->Get());
 
-        IngressStats.Level = args.StatsLevel;
+        IngressStats.Level = statsLevel;
 
         TableId = TTableId(
             Settings->GetTable().GetTableId().GetOwnerId(),
@@ -1659,13 +1668,28 @@ private:
     TSerializedCellVec BatchOperationMaxRow;
 };
 
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpReadActor(const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings,
+    TIntrusivePtr<NActors::TProtoArenaHolder> arena, // Arena for settings
+    const NActors::TActorId& computeActorId,
+    ui64 inputIndex,
+    NYql::NDq::TCollectStatsLevel statsLevel,
+    NYql::NDq::TTxId txId,
+    ui64 taskId,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+    const NWilson::TTraceId& traceId,
+    TIntrusivePtr<TKqpCounters> counters) {
+    auto* actor = new TKqpReadActor(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters);
+    return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
+}
 
 void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {
     factory.RegisterSource<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(
         TString(NYql::KqpReadRangesSourceName),
         [counters] (const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments&& args) {
-            auto* actor = new TKqpReadActor(settings, args, counters);
-            return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
+            return CreateKqpReadActor(settings, args.Arena, args.ComputeActorId, args.InputIndex, args.StatsLevel,
+        args.TxId, args.TaskId, args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters);
         });
 }
 

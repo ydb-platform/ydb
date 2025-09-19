@@ -88,7 +88,7 @@ void EnrichTracingForLookupRequest(NTracing::TTraceContext::TTagList& tagList, T
         tagList.emplace_back("yt.table_path", path);
         std::string columnsTag = columns.empty()
             ? "universal"
-            : SanitizeTracingTag(ConvertToYsonString(columns).ToString());
+            : SanitizeTracingTag(ConvertToYsonString(columns, EYsonFormat::Text).ToString());
         tagList.emplace_back("yt.column_filter", std::move(columnsTag));
     }
 }
@@ -182,6 +182,7 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
     req->set_sticky(sticky);
     req->set_ping(options.Ping);
     req->set_ping_ancestors(options.PingAncestors);
+    YT_OPTIONAL_SET_PROTO(req, pinger_address, options.PingerAddress);
     req->set_atomicity(static_cast<NProto::EAtomicity>(options.Atomicity));
     req->set_durability(static_cast<NProto::EDurability>(options.Durability));
     if (options.Attributes) {
@@ -223,6 +224,7 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
                 options.Durability,
                 timeout,
                 options.PingAncestors,
+                options.PingerAddress,
                 pingPeriod,
                 std::move(stickyParameters),
                 rsp->sequence_number_source_id(),
@@ -565,6 +567,10 @@ TFuture<NCypressClient::TNodeId> TClientBase::LinkNode(
     req->set_ignore_existing(options.IgnoreExisting);
     req->set_lock_existing(options.LockExisting);
 
+    if (options.Attributes) {
+        ToProto(req->mutable_attributes(), *options.Attributes);
+    }
+
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
@@ -827,6 +833,18 @@ TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteS
         }));
 }
 
+TFuture<void> TClientBase::PingDistributedWriteSession(
+    TSignedDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionPingOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PingDistributedWriteSession();
+
+    FillRequest(req.Get(), session, options);
+    return req->Invoke().AsVoid();
+}
+
 TFuture<void> TClientBase::FinishDistributedWriteSession(
     const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options)
@@ -980,12 +998,17 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
             if (columnFiltersTagLength <= MaxTracingTagLength) {
                 std::string columnsTag = subrequest.Options.ColumnFilter.IsUniversal()
                     ? "universal"
-                    : SanitizeTracingTag(NYson::ConvertToYsonString(protoSubrequest.columns()).ToString());
+                    : SanitizeTracingTag(
+                        NYson::ConvertToYsonString(protoSubrequest.columns(), EYsonFormat::Text).ToString());
                 columnFiltersTagLength += columnFilterTags.emplace_back(std::move(columnsTag)).size();
             }
         }
-        req->TracingTags().emplace_back("yt.table_paths", SanitizeTracingTag(NYson::ConvertToYsonString(paths).ToString()));
-        req->TracingTags().emplace_back("yt.column_filters", SanitizeTracingTag(NYson::ConvertToYsonString(columnFilterTags).ToString()));
+        req->TracingTags().emplace_back(
+            "yt.table_paths",
+            SanitizeTracingTag(NYson::ConvertToYsonString(paths, EYsonFormat::Text).ToString()));
+        req->TracingTags().emplace_back(
+            "yt.column_filters",
+            SanitizeTracingTag(NYson::ConvertToYsonString(columnFilterTags, EYsonFormat::Text).ToString()));
     }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
@@ -1092,6 +1115,8 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
     req->set_expression_builder_version(options.ExpressionBuilderVersion);
     req->set_use_order_by_in_join_subqueries(options.UseOrderByInJoinSubqueries);
+    YT_OPTIONAL_SET_PROTO(req, statistics_aggregation, options.StatisticsAggregation);
+    req->set_read_from(ToProto(options.ReadFrom));
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;

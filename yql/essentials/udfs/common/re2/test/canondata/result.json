@@ -44,6 +44,11 @@
             "uri": "file://test.test_InvalidRegexSuccess_2025.02_/results.txt"
         }
     ],
+    "test.test[IsValidRegexp]": [
+        {
+            "uri": "file://test.test_IsValidRegexp_/results.txt"
+        }
+    ],
     "test.test[LikeEscape]": [
         {
             "uri": "file://test.test_LikeEscape_/results.txt"

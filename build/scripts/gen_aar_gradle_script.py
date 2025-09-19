@@ -109,8 +109,8 @@ android {{
     buildToolsVersion buildVersion
 
     compileOptions {{
-        sourceCompatibility 1.8
-        targetCompatibility 1.8
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }}
 
     defaultConfig {{

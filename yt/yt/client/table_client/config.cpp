@@ -175,6 +175,11 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("enable_large_columnar_statistics", &TThis::EnableLargeColumnarStatistics)
         .Default(false);
+
+    registrar.Parameter("enable_segment_meta_in_blocks", &TThis::EnableSegmentMetaInBlocks)
+        .Optional();
+    registrar.Parameter("enable_column_meta_in_chunk_meta", &TThis::EnableColumnMetaInChunkMeta)
+        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -554,6 +559,16 @@ void TVersionedRowDigestConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("t_digest", &TThis::TDigest)
         .DefaultNew();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TMinHashDigestConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("write_count", &TThis::WriteCount)
+        .Default(100);
+    registrar.Parameter("delete_tombstone_count", &TThis::DeleteTombstoneCount)
+        .Default(100);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

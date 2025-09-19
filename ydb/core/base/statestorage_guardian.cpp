@@ -108,13 +108,13 @@ protected:
     {}
 
     void Gone() {
-        TDerived::Send(Guard, new TEvents::TEvGone());
+        this->Send(Guard, new TEvents::TEvGone());
         PassAway();
     }
 
     void PassAway() override {
-        if (Replica.NodeId() != TDerived::SelfId().NodeId())
-            TDerived::Send(TActivationContext::InterconnectProxy(Replica.NodeId()), new TEvents::TEvUnsubscribe);
+        if (Replica.NodeId() != this->SelfId().NodeId())
+            this->Send(TActivationContext::InterconnectProxy(Replica.NodeId()), new TEvents::TEvUnsubscribe);
 
         TActorBootstrapped<TDerived>::PassAway();
     }
@@ -133,7 +133,7 @@ protected:
             LastReplicaMissing = TMonotonic::Max();
         }
         if (value != ReplicaMissingReported) {
-            TDerived::Send(Guard, new TEvPrivate::TEvReplicaMissing(value));
+            this->Send(Guard, new TEvPrivate::TEvReplicaMissing(value));
             ReplicaMissingReported = value;
         }
     }
@@ -167,7 +167,7 @@ protected:
             return Gone();
         }
 
-        TDerived::Become(&TDerived::StateSleep, TDuration::MilliSeconds(250), new TEvents::TEvWakeup());
+        this->Become(&TDerived::StateSleep, TDuration::MilliSeconds(250), new TEvents::TEvWakeup());
     }
 
     void HandleConfigVersion(TEvStateStorage::TEvConfigVersionInfo::TPtr &ev) {
@@ -181,7 +181,7 @@ protected:
         ui64 msgGuid = msg->Record.GetClusterStateGuid();
         if (ClusterStateGeneration < msgGeneration || (ClusterStateGeneration == msgGeneration && ClusterStateGuid != msgGuid)) {
             BLOG_D("Guardian TEvNodeWardenNotifyConfigMismatch: ClusterStateGeneration=" << ClusterStateGeneration << " msgGeneration=" << msgGeneration <<" ClusterStateGuid=" << ClusterStateGuid << " msgGuid=" << msgGuid);
-            TDerived::Send(MakeBlobStorageNodeWardenID(selfId.NodeId()), 
+            this->Send(MakeBlobStorageNodeWardenID(selfId.NodeId()), 
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
         }
     }

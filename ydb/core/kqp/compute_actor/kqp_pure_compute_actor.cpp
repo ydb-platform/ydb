@@ -87,7 +87,10 @@ void TKqpComputeActor::DoBootstrap() {
     auto taskRunner = MakeDqTaskRunner(TBase::GetAllocatorPtr(), execCtx, settings, logger);
     SetTaskRunner(taskRunner);
 
-    auto wakeupCallback = [this]{ ContinueExecute(); };
+    auto selfId = this->SelfId();
+    auto wakeupCallback = [actorSystem, selfId]() {
+        actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+    };
     auto errorCallback = [this](const TString& error){ SendError(error); };
     try {
         PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
@@ -242,14 +245,14 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
             case NKikimrDataEvents::FORMAT_UNSPECIFIED:
             case NKikimrDataEvents::FORMAT_CELLVEC: {
                 if (!msg.Rows.empty()) {
-                    bytes = ScanData->AddData(msg.Rows, {}, TaskRunner->GetHolderFactory(), 0, msg.Finished);
+                    bytes = ScanData->AddData(msg.Rows, {}, TaskRunner->GetHolderFactory(), 0, 0, 0, msg.Finished);
                     rowsCount = msg.Rows.size();
                 }
                 break;
             }
             case NKikimrDataEvents::FORMAT_ARROW: {
                 if(msg.ArrowBatch != nullptr) {
-                    bytes = ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.ArrowBatch, BlockTrackingMode), {}, TaskRunner->GetHolderFactory(), 0, msg.Finished);
+                    bytes = ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.ArrowBatch, BlockTrackingMode), {}, TaskRunner->GetHolderFactory(), 0, 0, 0, msg.Finished);
                     rowsCount = msg.ArrowBatch->num_rows();
                 }
                 break;

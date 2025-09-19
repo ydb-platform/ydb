@@ -3,7 +3,7 @@
 #include "persqueue_utils.h"
 
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
@@ -108,6 +108,9 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         }
         if (config.HasFederationAccount()) {
             (*settings->mutable_attributes())["_federation_account"] = config.GetFederationAccount();
+        }
+        if (config.GetEnableCompactification()) {
+            (*settings->mutable_attributes())["_cleanup_policy"] = "compact";
         }
         bool local = config.GetLocalDC();
         settings->set_client_write_disabled(!local);

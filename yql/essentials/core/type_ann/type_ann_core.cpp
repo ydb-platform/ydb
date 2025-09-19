@@ -211,6 +211,8 @@ namespace NTypeAnnImpl {
         case ETypeAnnotationKind::Pg:
         case ETypeAnnotationKind::Block:
         case ETypeAnnotationKind::Scalar:
+        case ETypeAnnotationKind::Linear:
+        case ETypeAnnotationKind::DynamicLinear:
             return { input, type };
 
         case ETypeAnnotationKind::Optional: {
@@ -1521,7 +1523,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus FlattenByColumns(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus FlattenByColumns(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -1626,32 +1628,23 @@ namespace NTypeAnnImpl {
             const bool fieldOptional = fieldType->GetKind() == ETypeAnnotationKind::Optional;
             if (fieldOptional) {
                 fieldType = fieldType->Cast<TOptionalExprType>()->GetItemType();
-            } else {
-                allFieldOptional = false;
             }
 
-            if (mode == "optional" && !fieldOptional) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
-                    "Expected optional type in field of struct: '" << fieldName <<
-                    "', but got: " << *field->GetItemType()));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (mode == "list" && RemoveOptionalType(field->GetItemType())->GetKind() != ETypeAnnotationKind::List) {
+            if (mode == "list" && fieldType->GetKind() != ETypeAnnotationKind::List) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
                     "Expected (optional) list type in field of struct: '" << fieldName <<
                     "', but got: " << *field->GetItemType()));
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (mode == "dict" && RemoveOptionalType(field->GetItemType())->GetKind() != ETypeAnnotationKind::Dict) {
+            if (mode == "dict" && fieldType->GetKind() != ETypeAnnotationKind::Dict) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
                     "Expected (optional) dict type in field of struct: '" << fieldName <<
                     "', but got: " << *field->GetItemType()));
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (mode == "auto" && fieldOptional && RemoveOptionalType(field->GetItemType())->GetKind() == ETypeAnnotationKind::List) {
+            if (mode == "auto" && fieldOptional && fieldType->GetKind() == ETypeAnnotationKind::List) {
                 auto issue = TIssue(ctx.Expr.GetPosition(structObj->Pos()), "Ambiguous FLATTEN BY statement, please choose FLATTEN LIST BY or FLATTEN OPTIONAL BY");
                 SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_FLATTEN_BY_OPT, issue);
                 if (!ctx.Expr.AddWarning(issue)) {
@@ -1659,7 +1652,7 @@ namespace NTypeAnnImpl {
                 }
             }
 
-            if (mode == "auto" && fieldOptional && RemoveOptionalType(field->GetItemType())->GetKind() == ETypeAnnotationKind::Dict) {
+            if (mode == "auto" && fieldOptional && fieldType->GetKind() == ETypeAnnotationKind::Dict) {
                 auto issue = TIssue(ctx.Expr.GetPosition(structObj->Pos()), "Ambiguous FLATTEN BY statement, please choose FLATTEN DICT BY or FLATTEN OPTIONAL BY");
                 SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_FLATTEN_BY_OPT, issue);
                 if (!ctx.Expr.AddWarning(issue)) {
@@ -1668,27 +1661,25 @@ namespace NTypeAnnImpl {
             }
 
             const TTypeAnnotationNode* flattenItemType = nullptr;
-            if (fieldOptional) {
-                flattenItemType = fieldType;
-                if (mode == "list") {
-                    auto listType = fieldType->Cast<TListExprType>();
-                    flattenItemType = listType->GetItemType();
-                    allFieldOptional = false;
-                } else if (mode == "dict") {
-                    auto dictType = fieldType->Cast<TDictExprType>();
-                    const auto keyType = dictType->GetKeyType();
-                    const auto payloadType = dictType->GetPayloadType();
-                    flattenItemType = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType({ keyType, payloadType }));
-                    allFieldOptional = false;
-                }
-            } else if (fieldType->GetKind() == ETypeAnnotationKind::List) {
+            if (mode == "list" || (mode == "auto" && !fieldOptional && fieldType->GetKind() == ETypeAnnotationKind::List)) {
                 auto listType = fieldType->Cast<TListExprType>();
                 flattenItemType = listType->GetItemType();
-            } else if (fieldType->GetKind() == ETypeAnnotationKind::Dict) {
+                allFieldOptional = false;
+            } else if (mode == "dict" || (mode == "auto" && !fieldOptional && fieldType->GetKind() == ETypeAnnotationKind::Dict)) {
                 auto dictType = fieldType->Cast<TDictExprType>();
                 const auto keyType = dictType->GetKeyType();
                 const auto payloadType = dictType->GetPayloadType();
                 flattenItemType = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType({keyType, payloadType}));
+                allFieldOptional = false;
+            } else if (mode == "optional" || (mode == "auto" && fieldOptional)) {
+                if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 03), ctx.Types.BackportMode) && !fieldOptional) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
+                        "Expected optional type in field of struct: '" << fieldName <<
+                        "', but got: " << *field->GetItemType()));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                flattenItemType = fieldType;
             } else {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
                     "Expected list, dict or optional types in field of struct: '" << fieldName <<
@@ -2184,7 +2175,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (const auto status = ConvertChildrenToType(input, commonItemType, ctx.Expr, ctx.Types.UseTypeDiffForConvertToError);
+        if (const auto status = ConvertChildrenToType(input, commonItemType, ctx.Expr, ctx.Types);
             status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -3075,7 +3066,7 @@ namespace NTypeAnnImpl {
         }
 
         const auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint8);
-        const auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        const auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr, ctx.Types);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), "Shift count must be Uint8"));
             return IGraphTransformer::TStatus::Error;
@@ -3116,6 +3107,69 @@ namespace NTypeAnnImpl {
         }
 
         input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus WorldWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        output = ctx.Expr.NewWorld(input->Pos());
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    IGraphTransformer::TStatus SeqExclamWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureWorldType(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;
+        for (size_t i = 1; i < input->ChildrenSize(); ++i) {
+            status = status.Combine(ConvertToLambda(input->ChildRef(i), ctx.Expr, 1));
+        }
+
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        auto headType = input->Head().GetTypeAnn();
+        bool rebuildRemaining = false;
+        TExprNode::EState prevChildState = TExprNode::EState::ExecutionComplete;
+        for (size_t i = 1; i < input->ChildrenSize(); ++i) {
+            auto& child = input->ChildRef(i);
+            if (child->GetState() > prevChildState) {
+                rebuildRemaining = true;
+            }
+            prevChildState = child->GetState();
+            if (rebuildRemaining) {
+                if (child->Head().Head().GetState() >= TExprNode::EState::TypeComplete) {
+                    auto newLambda = ctx.Expr.DeepCopyLambda(*child);
+                    child = std::move(newLambda);
+                    status = status.Combine(IGraphTransformer::TStatus::Repeat);
+                }
+            } else if (child->GetState() < TExprNode::EState::TypeComplete) {
+                if (!UpdateLambdaAllArgumentsTypes(input->ChildRef(i), {headType}, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+                status = status.Combine(IGraphTransformer::TStatus::Repeat);
+                rebuildRemaining = true;
+            } else {
+                if (!EnsureWorldType(*child, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        input->SetTypeAnn(headType);
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -3250,7 +3304,7 @@ namespace NTypeAnnImpl {
         if (kindOne == ETypeAnnotationKind::Optional || kindOne == ETypeAnnotationKind::Null) {
             expectedTypeOne = ctx.Expr.MakeType<TOptionalExprType>(expectedTypeOne);
         }
-        const auto convertStatus1 = TryConvertTo(input->ChildRef(1), *expectedTypeOne, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        const auto convertStatus1 = TryConvertTo(input->ChildRef(1), *expectedTypeOne, ctx.Expr, ctx.Types);
         if (convertStatus1.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Mismatch argument types"));
             return IGraphTransformer::TStatus::Error;
@@ -3261,7 +3315,7 @@ namespace NTypeAnnImpl {
         if (kindTwo == ETypeAnnotationKind::Optional || kindTwo == ETypeAnnotationKind::Null) {
             expectedTypeTwo = ctx.Expr.MakeType<TOptionalExprType>(expectedTypeTwo);
         }
-        const auto convertStatus2 = TryConvertTo(input->ChildRef(2), *expectedTypeTwo, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        const auto convertStatus2 = TryConvertTo(input->ChildRef(2), *expectedTypeTwo, ctx.Expr, ctx.Types);
         if (convertStatus2.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), "Mismatch argument types"));
             return IGraphTransformer::TStatus::Error;
@@ -3302,7 +3356,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (const auto convertStatus = TryConvertTo(input->ChildRef(1), *type, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        if (const auto convertStatus = TryConvertTo(input->ChildRef(1), *type, ctx.Expr, ctx.Types);
             convertStatus.Level != IGraphTransformer::TStatus::Ok) {
             return convertStatus;
         }
@@ -3312,7 +3366,7 @@ namespace NTypeAnnImpl {
             expectedType = ctx.Expr.MakeType<TOptionalExprType>(expectedType);
         }
 
-        if (const auto convertStatus = TryConvertTo(input->ChildRef(2), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        if (const auto convertStatus = TryConvertTo(input->ChildRef(2), *expectedType, ctx.Expr, ctx.Types);
             convertStatus.Level != IGraphTransformer::TStatus::Ok) {
             return convertStatus;
         }
@@ -3401,7 +3455,7 @@ namespace NTypeAnnImpl {
         }
 
         auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint32);
-        auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, ctx.Types);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Mismatch argument types"));
             return IGraphTransformer::TStatus::Error;
@@ -3458,7 +3512,7 @@ namespace NTypeAnnImpl {
             output = ctx.Expr.RenameNode(*input, "AsList");
             return IGraphTransformer::TStatus::Repeat;
         } else if (const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr, warn)) {
-            if (const auto status = ConvertChildrenToType(input, commonItemType, ctx.Expr, ctx.Types.UseTypeDiffForConvertToError);
+            if (const auto status = ConvertChildrenToType(input, commonItemType, ctx.Expr, ctx.Types);
                 status != IGraphTransformer::TStatus::Ok)
                 return status;
         } else {
@@ -4732,7 +4786,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus CoalesceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus CoalesceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -4793,8 +4847,8 @@ namespace NTypeAnnImpl {
         auto convertedArg1 = arg1;
         auto convertedArg2 = arg2;
         const TTypeAnnotationNode* commonItemType = nullptr;
-        if (SilentInferCommonType(convertedArg2, *rightItemType, convertedArg1, *leftItemType, ctx.Expr, commonItemType,
-            TConvertFlags().Set(NConvertFlags::AllowUnsafeConvert)) == IGraphTransformer::TStatus::Error) {
+        if (SilentInferCommonType(convertedArg2, *rightItemType, convertedArg1, *leftItemType, ctx.Expr, ctx.Types,
+            commonItemType, TConvertFlags().Set(NConvertFlags::AllowUnsafeConvert)) == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "uncompatible coalesce types, first type: " <<
                 *leftType << ", second type: " << *rightType));
             return IGraphTransformer::TStatus::Error;
@@ -4803,7 +4857,7 @@ namespace NTypeAnnImpl {
         auto arg3 = ctx.Expr.NewArgument(input->Pos(), "arg3");
         bool isNarrowing =
             leftType->GetKind() != ETypeAnnotationKind::Optional ||
-            TrySilentConvertTo(arg3, *leftType, *commonItemType, ctx.Expr) == IGraphTransformer::TStatus::Error;
+            TrySilentConvertTo(arg3, *leftType, *commonItemType, ctx.Expr, ctx.Types) == IGraphTransformer::TStatus::Error;
         bool changedArg2 = (convertedArg2 != arg2);
         bool changedArg1 = isNarrowing ? (convertedArg1 != arg1) : (!convertedArg1->IsCallable("Just") || convertedArg1->HeadPtr() != arg1);
 
@@ -5468,7 +5522,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             itemType = tupleType->GetItems()[index];
         }
 
-        auto convertStatus = TryConvertTo(input->ChildRef(0), *itemType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto convertStatus = TryConvertTo(input->ChildRef(0), *itemType, ctx.Expr, ctx.Types);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             return IGraphTransformer::TStatus::Error;
         } else if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
@@ -5977,7 +6031,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             output = ctx.Expr.RenameNode(*input, IsSet ? "AsSet" : "AsDict");
             return IGraphTransformer::TStatus::Repeat;
         } else if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr, warn)) {
-            if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr, ctx.Types.UseTypeDiffForConvertToError);
+            if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr, ctx.Types);
                 status != IGraphTransformer::TStatus::Ok)
                 return status;
 
@@ -6025,7 +6079,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         for (size_t i = 0; i < keysListNode->ChildrenSize(); ++i) {
             newChildren.push_back(keysListNode->ChildPtr(i));
             auto& childRef = newChildren.back();
-            auto status = TryConvertTo(childRef, *keyType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            auto status = TryConvertTo(childRef, *keyType, ctx.Expr, ctx.Types);
             totalStatus = totalStatus.Combine(status);
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return status;
@@ -6078,8 +6132,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Error;
             }
         } else if (const auto commonType = CommonType<false>(input->Pos(), thenType, elseType, ctx.Expr)) {
-            if (const auto status = TryConvertTo(input->ChildRef(1), *commonType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError)
-                .Combine(TryConvertTo(input->TailRef(), *commonType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError));
+            if (const auto status = TryConvertTo(input->ChildRef(1), *commonType, ctx.Expr, ctx.Types)
+                .Combine(TryConvertTo(input->TailRef(), *commonType, ctx.Expr, ctx.Types));
                 status != IGraphTransformer::TStatus::Ok)
                 return status;
 
@@ -6912,7 +6966,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     template <bool Strict>
-    IGraphTransformer::TStatus TypeAssertWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeAssertWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -6965,7 +7019,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         } else {
             auto arg = ctx.Expr.NewArgument(input->Pos(), "arg");
-            auto status = TrySilentConvertTo(arg, *valueType, *targetType, ctx.Expr, TConvertFlags().Set(NConvertFlags::AllowUnsafeConvert));
+            auto status = TrySilentConvertTo(arg, *valueType, *targetType, ctx.Expr, ctx.Types, TConvertFlags().Set(NConvertFlags::AllowUnsafeConvert));
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Cannot convert type "
                     << *valueType << " into " << *targetType << message));
@@ -7053,7 +7107,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus EnsureWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        Y_UNUSED(output);
         if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -7077,10 +7130,24 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         }
 
+        if (input->Content().EndsWith("Warn")) {
+            if (input->Head().GetTypeAnn()->IsSingleton()) {
+                auto issue = TIssue(ctx.Expr.GetPosition(input->Head().Pos()), "Consider using non-singular type as first argument of Ensure");
+                SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_SINGULAR_TYPE_ENSURE, issue);
+                if (!ctx.Expr.AddWarning(issue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+
+            output = ctx.Expr.RenameNode(*input, "Ensure");
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
         input->SetTypeAnn(input->Head().GetTypeAnn());
         if (ctx.Types.DebugPositions) {
             input->SetPosAware();
         }
+
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -7886,7 +7953,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        auto status = TryConvertTo(input->ChildRef(1), *cachedRunConfigType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto status = TryConvertTo(input->ChildRef(1), *cachedRunConfigType, ctx.Expr, ctx.Types);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), TStringBuilder() << "Mismatch type of run config in UDF function "
@@ -8087,7 +8154,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus ApplyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus ApplyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -8126,7 +8193,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Error;
             }
 
-            auto convertStatus = TrySilentConvertTo(input->ChildRef(i), *arg.Type, ctx.Expr);
+            auto convertStatus = TrySilentConvertTo(input->ChildRef(i), *arg.Type, ctx.Expr, ctx.Types);
             if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
                 if (isAutoMap && srcType && (srcType->GetKind() == ETypeAnnotationKind::Optional || srcType->GetKind() == ETypeAnnotationKind::Null)) {
                     if (srcType->GetKind() == ETypeAnnotationKind::Null) {
@@ -8142,7 +8209,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
                     auto tmp = tmpArg;
                     convertStatus = TrySilentConvertTo(tmp, *srcType->Cast<TOptionalExprType>()->GetItemType(),
-                        *arg.Type, ctx.Expr);
+                        *arg.Type, ctx.Expr, ctx.Types);
 
                     if (convertStatus.Level != IGraphTransformer::TStatus::Error) {
                         autoMapArgs.push_back(i);
@@ -8259,19 +8326,19 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         TVector<ui32> tupleAutoMaps;
         auto expectedTupleType = ctx.Expr.MakeType<TTupleExprType>(expectedTupleTypeItems);
-        auto convertStatus = TrySilentConvertTo(input->ChildRef(1), *expectedTupleType, ctx.Expr);
+        auto convertStatus = TrySilentConvertTo(input->ChildRef(1), *expectedTupleType, ctx.Expr, ctx.Types);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             bool hasError = false;
             for (ui32 i = 0; i < tupleType->GetSize(); ++i) {
                 auto srcType = tupleType->GetItems()[i];
                 auto dstType = expectedTupleType->GetItems()[i];
                 auto tmp = tmpArg;
-                auto convertStatus = TrySilentConvertTo(tmp, *srcType, *dstType, ctx.Expr);
+                auto convertStatus = TrySilentConvertTo(tmp, *srcType, *dstType, ctx.Expr, ctx.Types);
                 if (convertStatus == IGraphTransformer::TStatus::Error) {
                     const bool isAutoMap = type->GetArguments()[i].Flags & NKikimr::NUdf::ICallablePayload::TArgumentFlags::AutoMap;
                     if (isAutoMap && srcType->GetKind() == ETypeAnnotationKind::Optional) {
                         tmp = tmpArg;
-                        convertStatus = TrySilentConvertTo(tmp, *srcType->Cast<TOptionalExprType>()->GetItemType(), *dstType, ctx.Expr);
+                        convertStatus = TrySilentConvertTo(tmp, *srcType->Cast<TOptionalExprType>()->GetItemType(), *dstType, ctx.Expr, ctx.Types);
                         if (convertStatus != IGraphTransformer::TStatus::Error) {
                             tupleAutoMaps.push_back(i);
                             continue;
@@ -8338,7 +8405,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        convertStatus = TrySilentConvertTo(input->ChildRef(2), *expectedStructType, ctx.Expr);
+        convertStatus = TrySilentConvertTo(input->ChildRef(2), *expectedStructType, ctx.Expr, ctx.Types);
         TVector<ui32> structAutoMaps;
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             bool hasError = false;
@@ -8346,12 +8413,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 auto srcType = structType->GetItems()[i]->GetItemType();
                 auto dstType = expectedStructType->GetItems()[i]->GetItemType();
                 auto tmp = tmpArg;
-                auto convertStatus = TrySilentConvertTo(tmp, *srcType, *dstType, ctx.Expr);
+                auto convertStatus = TrySilentConvertTo(tmp, *srcType, *dstType, ctx.Expr, ctx.Types);
                 if (convertStatus == IGraphTransformer::TStatus::Error) {
                     const bool isAutoMap = type->GetArguments()[i].Flags & NKikimr::NUdf::ICallablePayload::TArgumentFlags::AutoMap;
                     if (isAutoMap && srcType->GetKind() == ETypeAnnotationKind::Optional) {
                         tmp = tmpArg;
-                        convertStatus = TrySilentConvertTo(tmp, *srcType->Cast<TOptionalExprType>()->GetItemType(), *dstType, ctx.Expr);
+                        convertStatus = TrySilentConvertTo(tmp, *srcType->Cast<TOptionalExprType>()->GetItemType(), *dstType, ctx.Expr, ctx.Types);
                         if (convertStatus != IGraphTransformer::TStatus::Error) {
                             structAutoMaps.push_back(i);
                             continue;
@@ -8473,9 +8540,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus SqlCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 2, 6, ctx.Expr)) {
+    IGraphTransformer::TStatus SqlCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->ChildrenSize() > 6) {
+            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 6);
+            if (status != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
         }
 
         if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
@@ -8508,14 +8582,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         }
 
-        TExprNode::TPtr customUserType;
+        TExprNode::TPtr externalTypes;
         if (input->ChildrenSize() > 2) {
             if (auto status = EnsureTypeRewrite(input->ChildRef(2), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
-            customUserType = input->ChildPtr(2);
+            externalTypes = input->ChildPtr(2);
         } else {
-            customUserType = ctx.Expr.NewCallable(input->Pos(), "TupleType", {});
+            externalTypes = ctx.Expr.NewCallable(input->Pos(), "TupleType", {});
         }
 
         TExprNode::TPtr typeConfig;
@@ -8580,7 +8654,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         }
                         return parent;
                     })
-                    .Add(2, customUserType)
+                    .Add(2, externalTypes)
                 .Seal()
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     if (typeConfig) {
@@ -8601,15 +8675,24 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             .Seal()
             .Build();
 
+        const bool needNamedApply = namedArgs || input->ChildrenSize() > 6;
         TExprNodeList applyArgs = { udf };
-        if (namedArgs) {
+        if (needNamedApply) {
             applyArgs.push_back(ctx.Expr.NewList(input->Pos(), std::move(positionalArgs)));
-            applyArgs.push_back(namedArgs);
+            if (namedArgs) {
+                applyArgs.push_back(namedArgs);
+            } else {
+                applyArgs.push_back(ctx.Expr.NewCallable(input->Pos(), "AsStruct", {}));
+            }
+
+            for (ui32 i = 6; i < input->ChildrenSize(); ++i) {
+                applyArgs.push_back(input->ChildPtr(i));
+            }
         } else {
             applyArgs.insert(applyArgs.end(), positionalArgs.begin(), positionalArgs.end());
         }
 
-        output = ctx.Expr.NewCallable(input->Pos(), namedArgs ? "NamedApply" : "Apply", std::move(applyArgs));
+        output = ctx.Expr.NewCallable(input->Pos(), needNamedApply ? "NamedApply" : "Apply", std::move(applyArgs));
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -8672,7 +8755,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-        auto convertStatus = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto convertStatus = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, ctx.Types);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), "Mismatch argument types"));
             return IGraphTransformer::TStatus::Error;
@@ -8930,7 +9013,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     EDataSlot::Uint32 :
                     EDataSlot::Utf8));
 
-        auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, ctx.Types);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Mismatch argument types"));
             return IGraphTransformer::TStatus::Error;
@@ -8964,7 +9047,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         }
 
-        convertStatus = TryConvertTo(input->ChildRef(0), *firstType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        convertStatus = TryConvertTo(input->ChildRef(0), *firstType, ctx.Expr, ctx.Types);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
                 TStringBuilder() << "Mismatch item type, expected: " << *firstType << ", got: " << *input->Child(0)->GetTypeAnn()));
@@ -10627,7 +10710,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (!EnsureQueueResource(resourceArg, expectedValueType, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
-        auto convertStatus = TryConvertTo(valueArg, *expectedValueType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto convertStatus = TryConvertTo(valueArg, *expectedValueType, ctx.Expr, ctx.Types);
         if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
             return convertStatus;
         }
@@ -10664,7 +10747,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
         auto expectedIndexType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-        auto convertStatus = TryConvertTo(indexArg, *expectedIndexType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto convertStatus = TryConvertTo(indexArg, *expectedIndexType, ctx.Expr, ctx.Types);
         if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
             return convertStatus;
         }
@@ -10689,8 +10772,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         auto expectedIndexType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-        auto convertStatus = TryConvertTo(beginArg, *expectedIndexType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
-        convertStatus = convertStatus.Combine(TryConvertTo(endArg, *expectedIndexType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError));
+        auto convertStatus = TryConvertTo(beginArg, *expectedIndexType, ctx.Expr, ctx.Types);
+        convertStatus = convertStatus.Combine(TryConvertTo(endArg, *expectedIndexType, ctx.Expr, ctx.Types));
         if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
             return convertStatus;
         }
@@ -10815,6 +10898,41 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus WithSideEffectsModeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 04), ctx.Types.BackportMode)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "SideEffects is not available before version 2025.04"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto mode = input->Tail().Content();
+        if (mode == "None") {
+            input->SetSideEffects(ESideEffects::None);
+        } else if (mode == "SemilatticeRT") {
+            input->SetSideEffects(ESideEffects::SemilatticeRT);
+        } else if (mode == "General") {
+            input->SetSideEffects(ESideEffects::General);
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), TStringBuilder() << "Unknown side effects mode: " << mode));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     TMaybe<EDataSlot> ExtractDataType(const TExprNode& node, TExprContext& ctx) {
         if (node.IsAtom()) {
             auto dataType = node.Content();
@@ -10870,7 +10988,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         const bool isDefault = input->ChildrenSize() == 4;
         if (isDefault) {
-            auto convertStatus = TryConvertTo(input->ChildRef(3), *targetTypeExpr, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            auto convertStatus = TryConvertTo(input->ChildRef(3), *targetTypeExpr, ctx.Expr, ctx.Types);
             if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), TStringBuilder() <<
                     "Default value not correspond weak field type: " << targetType));
@@ -11071,7 +11189,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             const EDataSlot payloadStr = isYsonPayload ? EDataSlot::Yson : EDataSlot::String;
             auto expectedType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDictExprType>(
                 ctx.Expr.MakeType<TDataExprType>(EDataSlot::String), ctx.Expr.MakeType<TDataExprType>(payloadStr)));
-            auto convertStatus = TryConvertTo(dictNodeRef, *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            auto convertStatus = TryConvertTo(dictNodeRef, *expectedType, ctx.Expr, ctx.Types);
             if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
                 return convertStatus;
             }
@@ -11517,7 +11635,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             // name
         } else {
             const TTypeAnnotationNode* expectedType = isOptional ? optUi16Type : ui16Type;
-            auto convertStatus = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            auto convertStatus = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, ctx.Types);
             if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), "Mismatch argument types"));
                 return IGraphTransformer::TStatus::Error;
@@ -11552,7 +11670,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             expectedType = ctx.Expr.MakeType<TOptionalExprType>(expectedType);
         }
 
-        auto convertStatus = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto convertStatus = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, ctx.Types);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), "Mismatch argument types"));
             return IGraphTransformer::TStatus::Error;
@@ -11592,7 +11710,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         const TTypeAnnotationNode* ui16Type = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint16);
         const TTypeAnnotationNode* optUi16Type = ctx.Expr.MakeType<TOptionalExprType>(ui16Type);
         const TTypeAnnotationNode* expectedType = isOptional2 ? optUi16Type : ui16Type;
-        auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, ctx.Types);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Mismatch argument types"));
             return IGraphTransformer::TStatus::Error;
@@ -12614,7 +12732,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["RemoveMembers"] = &RemoveMembersWrapper<false>;
         Functions["ForceRemoveMembers"] = &RemoveMembersWrapper<true>;
         Functions["DivePrefixMembers"] = &DivePrefixMembersWrapper;
-        Functions["FlattenByColumns"] = &FlattenByColumns;
+        ExtFunctions["FlattenByColumns"] = &FlattenByColumns;
         Functions["ExtractMembers"] = &ExtractMembersWrapper;
         Functions["FlattenStructs"] = &FlattenStructsWrapper;
         Functions["<"] = &CompareWrapper<false>;
@@ -12684,6 +12802,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["ShiftRight"] = &ShiftWrapper;
         ExtFunctions["RotRight"] = &ShiftWrapper;
         Functions[SyncName] = &SyncWrapper;
+        Functions["World"] = &WorldWrapper;
+        Functions[SeqName] = &SeqExclamWrapper;
         Functions["WithWorld"] = &WithWorldWrapper;
         Functions["Concat"] = &ConcatWrapper;
         Functions["AggrConcat"] = &AggrConcatWrapper;
@@ -12805,7 +12925,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Pickle"] = &PickleWrapper;
         Functions["StablePickle"] = &PickleWrapper;
         Functions["Unpickle"] = &UnpickleWrapper;
-        Functions["Coalesce"] = &CoalesceWrapper;
+        ExtFunctions["Coalesce"] = &CoalesceWrapper;
         Functions["CoalesceMembers"] = &CoalesceMembersWrapper;
         Functions["Nvl"] = &NvlWrapper;
         Functions["Nanvl"] = &NanvlWrapper;
@@ -12835,25 +12955,27 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Zip"] = &ZipWrapper;
         Functions["ZipAll"] = &ZipAllWrapper;
         ExtFunctions["Enumerate"] = &EnumerateWrapper;
-        Functions["GenericType"] = &TypeWrapper<ETypeAnnotationKind::Generic>;
-        Functions["ResourceType"] = &TypeWrapper<ETypeAnnotationKind::Resource>;
-        Functions["ErrorType"] = &TypeWrapper<ETypeAnnotationKind::Error>;
-        Functions["DataType"] = &TypeWrapper<ETypeAnnotationKind::Data>;
-        Functions["ListType"] = &TypeWrapper<ETypeAnnotationKind::List>;
-        Functions["TupleType"] = &TypeWrapper<ETypeAnnotationKind::Tuple>;
-        Functions["MultiType"] = &TypeWrapper<ETypeAnnotationKind::Multi>;
-        Functions["StructType"] = &TypeWrapper<ETypeAnnotationKind::Struct>;
-        Functions["OptionalType"] = &TypeWrapper<ETypeAnnotationKind::Optional>;
-        Functions["TaggedType"] = &TypeWrapper<ETypeAnnotationKind::Tagged>;
-        Functions["VariantType"] = &TypeWrapper<ETypeAnnotationKind::Variant>;
-        Functions["StreamType"] = &TypeWrapper<ETypeAnnotationKind::Stream>;
-        Functions["FlowType"] = &TypeWrapper<ETypeAnnotationKind::Flow>;
-        Functions["BlockType"] = &TypeWrapper<ETypeAnnotationKind::Block>;
-        Functions["ScalarType"] = &TypeWrapper<ETypeAnnotationKind::Scalar>;
+        ExtFunctions["GenericType"] = &TypeWrapper<ETypeAnnotationKind::Generic>;
+        ExtFunctions["ResourceType"] = &TypeWrapper<ETypeAnnotationKind::Resource>;
+        ExtFunctions["ErrorType"] = &TypeWrapper<ETypeAnnotationKind::Error>;
+        ExtFunctions["DataType"] = &TypeWrapper<ETypeAnnotationKind::Data>;
+        ExtFunctions["ListType"] = &TypeWrapper<ETypeAnnotationKind::List>;
+        ExtFunctions["TupleType"] = &TypeWrapper<ETypeAnnotationKind::Tuple>;
+        ExtFunctions["MultiType"] = &TypeWrapper<ETypeAnnotationKind::Multi>;
+        ExtFunctions["StructType"] = &TypeWrapper<ETypeAnnotationKind::Struct>;
+        ExtFunctions["OptionalType"] = &TypeWrapper<ETypeAnnotationKind::Optional>;
+        ExtFunctions["TaggedType"] = &TypeWrapper<ETypeAnnotationKind::Tagged>;
+        ExtFunctions["VariantType"] = &TypeWrapper<ETypeAnnotationKind::Variant>;
+        ExtFunctions["StreamType"] = &TypeWrapper<ETypeAnnotationKind::Stream>;
+        ExtFunctions["FlowType"] = &TypeWrapper<ETypeAnnotationKind::Flow>;
+        ExtFunctions["BlockType"] = &TypeWrapper<ETypeAnnotationKind::Block>;
+        ExtFunctions["ScalarType"] = &TypeWrapper<ETypeAnnotationKind::Scalar>;
+        ExtFunctions["LinearType"] = &TypeWrapper<ETypeAnnotationKind::Linear>;
+        ExtFunctions["DynamicLinearType"] = &TypeWrapper<ETypeAnnotationKind::DynamicLinear>;
         Functions["Nothing"] = &NothingWrapper;
         Functions["AsOptionalType"] = &AsOptionalTypeWrapper;
         Functions["List"] = &ListWrapper;
-        Functions["DictType"] = &TypeWrapper<ETypeAnnotationKind::Dict>;
+        ExtFunctions["DictType"] = &TypeWrapper<ETypeAnnotationKind::Dict>;
         Functions["Dict"] = &DictWrapper;
         ExtFunctions["Variant"] = &VariantWrapper;
         Functions["Enum"] = &EnumWrapper;
@@ -12895,12 +13017,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SourceOf"] = &SourceOfWrapper;
         Functions["MatchType"] = &MatchTypeWrapper;
         Functions["IfType"] = &IfTypeWrapper;
-        Functions["EnsureType"] = &TypeAssertWrapper<true>;
+        ExtFunctions["EnsureType"] = &TypeAssertWrapper<true>;
         Functions["EnsurePersistable"] = &PersistableAssertWrapper;
         Functions["PersistableRepr"] = &PersistableReprWrapper;
-        Functions["EnsureConvertibleTo"] = &TypeAssertWrapper<false>;
+        ExtFunctions["EnsureConvertibleTo"] = &TypeAssertWrapper<false>;
         Functions["EnsureTupleSize"] = &TupleSizeAssertWrapper;
         ExtFunctions["Ensure"] = &EnsureWrapper;
+        ExtFunctions["EnsureWarn"] = &EnsureWrapper;
         Functions["RaiseError"] = &RaiseErrorWrapper;
         Functions["EnsureTypeKind"] = &EnsureTypeKindWrapper;
         Functions["TryMember"] = &TryMemberWrapper;
@@ -12914,11 +13037,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["EmptyList"] = &EmptyListWrapper;
         Functions["EmptyDict"] = &EmptyDictWrapper;
         Functions["Error"] = &ErrorWrapper;
-        Functions["VoidType"] = &TypeWrapper<ETypeAnnotationKind::Void>;
-        Functions["UnitType"] = &TypeWrapper<ETypeAnnotationKind::Unit>;
-        Functions["NullType"] = &TypeWrapper<ETypeAnnotationKind::Null>;
-        Functions["EmptyListType"] = &TypeWrapper<ETypeAnnotationKind::EmptyList>;
-        Functions["EmptyDictType"] = &TypeWrapper<ETypeAnnotationKind::EmptyDict>;
+        ExtFunctions["VoidType"] = &TypeWrapper<ETypeAnnotationKind::Void>;
+        ExtFunctions["UnitType"] = &TypeWrapper<ETypeAnnotationKind::Unit>;
+        ExtFunctions["NullType"] = &TypeWrapper<ETypeAnnotationKind::Null>;
+        ExtFunctions["EmptyListType"] = &TypeWrapper<ETypeAnnotationKind::EmptyList>;
+        ExtFunctions["EmptyDictType"] = &TypeWrapper<ETypeAnnotationKind::EmptyDict>;
         Functions["Join"] = &JoinWrapper;
         Functions["JoinDict"] = &JoinDictWrapper;
         Functions["MapJoinCore"] = &MapJoinCoreWrapper;
@@ -12932,21 +13055,22 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["MultiHoppingCore"] = &MultiHoppingCoreWrapper;
         Functions["EquiJoin"] = &EquiJoinWrapper;
         Functions["OptionalReduce"] = &OptionalReduceWrapper;
-        Functions["OptionalItemType"] = &TypeArgWrapper<ETypeArgument::OptionalItem>;
-        Functions["ListItemType"] = &TypeArgWrapper<ETypeArgument::ListItem>;
-        Functions["StreamItemType"] = &TypeArgWrapper<ETypeArgument::StreamItem>;
-        Functions["TupleElementType"] = &TypeArgWrapper<ETypeArgument::TupleElement>;
-        Functions["StructMemberType"] = &TypeArgWrapper<ETypeArgument::StructMember>;
-        Functions["DictKeyType"] = &TypeArgWrapper<ETypeArgument::DictKey>;
-        Functions["DictPayloadType"] = &TypeArgWrapper<ETypeArgument::DictPayload>;
-        Functions["Apply"] = &ApplyWrapper;
+        ExtFunctions["OptionalItemType"] = &TypeArgWrapper<ETypeArgument::OptionalItem>;
+        ExtFunctions["LinearItemType"] = &TypeArgWrapper<ETypeArgument::LinearItem>;
+        ExtFunctions["ListItemType"] = &TypeArgWrapper<ETypeArgument::ListItem>;
+        ExtFunctions["StreamItemType"] = &TypeArgWrapper<ETypeArgument::StreamItem>;
+        ExtFunctions["TupleElementType"] = &TypeArgWrapper<ETypeArgument::TupleElement>;
+        ExtFunctions["StructMemberType"] = &TypeArgWrapper<ETypeArgument::StructMember>;
+        ExtFunctions["DictKeyType"] = &TypeArgWrapper<ETypeArgument::DictKey>;
+        ExtFunctions["DictPayloadType"] = &TypeArgWrapper<ETypeArgument::DictPayload>;
+        ExtFunctions["Apply"] = &ApplyWrapper;
         ExtFunctions["NamedApply"] = &NamedApplyWrapper;
         Functions["PositionalArgs"] = &PositionalArgsWrapper;
-        Functions["SqlCall"] = &SqlCallWrapper;
+        ExtFunctions["SqlCall"] = &SqlCallWrapper;
         Functions["Callable"] = &CallableWrapper;
-        Functions["CallableType"] = &TypeWrapper<ETypeAnnotationKind::Callable>;
-        Functions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>;
-        Functions["CallableArgumentType"] = &TypeArgWrapper<ETypeArgument::CallableArgument>;
+        ExtFunctions["CallableType"] = &TypeWrapper<ETypeAnnotationKind::Callable>;
+        ExtFunctions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>;
+        ExtFunctions["CallableArgumentType"] = &TypeArgWrapper<ETypeArgument::CallableArgument>;
         Functions["CombineByKey"] = &CombineByKeyWrapper;
         Functions["FinalizeByKey"] = &CombineByKeyWrapper;
         ExtFunctions["NewMTRand"] = &NewMTRandWrapper;
@@ -12954,7 +13078,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["FormatType"] = &FormatTypeWrapper;
         Functions["FormatTypeDiff"] = &FormatTypeDiffWrapper;
         Functions["CastStruct"] = &CastStructWrapper;
-        Functions["AggregationTraits"] = &AggregationTraitsWrapper;
+        ExtFunctions["AggregationTraits"] = &AggregationTraitsWrapper;
         Functions["MultiAggregate"] = &MultiAggregateWrapper;
         Functions["AggOverState"] = &AggOverStateWrapper;
         Functions["SqlAggregateAll"] = &SqlAggregateAllWrapper;
@@ -12967,7 +13091,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WinOnRows"] = &WinOnWrapper;
         Functions["WinOnGroups"] = &WinOnWrapper;
         Functions["WinOnRange"] = &WinOnWrapper;
-        Functions["WindowTraits"] = &WindowTraitsWrapper;
+        ExtFunctions["WindowTraits"] = &WindowTraitsWrapper;
         Functions["ToWindowTraits"] = &ToWindowTraitsWrapper;
         Functions["CalcOverWindow"] = &CalcOverWindowWrapper;
         Functions["CalcOverSessionWindow"] = &CalcOverWindowWrapper;
@@ -12988,11 +13112,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SkipNullMembers"] = &SkipNullMembersWrapper;
         Functions["FilterNullElements"] = &FilterNullElementsWrapper;
         Functions["SkipNullElements"] = &SkipNullElementsWrapper;
-        Functions["AddMemberType"] = &TypeArgWrapper<ETypeArgument::AddMember>;
-        Functions["RemoveMemberType"] = &TypeArgWrapper<ETypeArgument::RemoveMember>;
-        Functions["ForceRemoveMemberType"] = &TypeArgWrapper<ETypeArgument::ForceRemoveMember>;
-        Functions["FlattenMembersType"] = &TypeArgWrapper<ETypeArgument::FlattenMembers>;
-        Functions["VariantUnderlyingType"] = &TypeArgWrapper<ETypeArgument::VariantUnderlying>;
+        ExtFunctions["AddMemberType"] = &TypeArgWrapper<ETypeArgument::AddMember>;
+        ExtFunctions["RemoveMemberType"] = &TypeArgWrapper<ETypeArgument::RemoveMember>;
+        ExtFunctions["ForceRemoveMemberType"] = &TypeArgWrapper<ETypeArgument::ForceRemoveMember>;
+        ExtFunctions["FlattenMembersType"] = &TypeArgWrapper<ETypeArgument::FlattenMembers>;
+        ExtFunctions["VariantUnderlyingType"] = &TypeArgWrapper<ETypeArgument::VariantUnderlying>;
         Functions["Guess"] = &GuessWrapper;
         Functions["SqlVariantItem"] = &SqlVariantItemWrapper;
         Functions["VariantItem"] = &VariantItemWrapper;
@@ -13067,6 +13191,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["InnerDependsOn"] = &InnerDependsOnWrapper;
         Functions["Seq"] = &SeqWrapper;
         Functions["Parameter"] = &ParameterWrapper;
+        ExtFunctions["WithSideEffectsMode"] = WithSideEffectsModeWrapper;
         ExtFunctions["WeakField"] = &WeakFieldWrapper;
         ExtFunctions["TryWeakMemberFromDict"] = &TryWeakMemberFromDictWrapper;
         Functions["ByteString"] = &ByteStringWrapper;
@@ -13085,6 +13210,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["DataTypeComponents"] = &SplitTypeHandleWrapper<ETypeAnnotationKind::Data>;
         ExtFunctions["DataTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::Data>;
         ExtFunctions["OptionalTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::Optional>;
+        ExtFunctions["LinearTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::Linear>;
+        ExtFunctions["DynamicLinearTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::DynamicLinear>;
         ExtFunctions["ListTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::List>;
         ExtFunctions["StreamTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::Stream>;
         Functions["TupleTypeComponents"] = &SplitTypeHandleWrapper<ETypeAnnotationKind::Tuple>;

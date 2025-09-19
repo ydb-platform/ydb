@@ -62,6 +62,7 @@
 #include "mkql_grace_join.h"
 #include "mkql_lazy_list.h"
 #include "mkql_length.h"
+#include "mkql_linear.h"
 #include "mkql_listfromrange.h"
 #include "mkql_logical.h"
 #include "mkql_lookup.h"
@@ -70,6 +71,7 @@
 #include "mkql_map_join.h"
 #include "mkql_match_recognize.h"
 #include "mkql_multimap.h"
+#include "mkql_mutdict.h"
 #include "mkql_narrow_map.h"
 #include "mkql_next_value.h"
 #include "mkql_nop.h"
@@ -365,7 +367,24 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"NextValue", &WrapNextValue},
         {"Nop", &WrapNop},
         {"MatchRecognizeCore", &WrapMatchRecognizeCore},
-        {"TimeOrderRecover", WrapComputationBuilder(TimeOrderRecover)}
+        {"TimeOrderRecover", WrapComputationBuilder(TimeOrderRecover)},
+        {"ToDynamicLinear", &WrapToDynamicLinear},
+        {"FromDynamicLinear", &WrapFromDynamicLinear},
+        {"ToMutDict", &WrapToMutDict},
+        {"MutDictCreate", &WrapMutDictCreate},
+        {"MutDictInsert", &WrapMutDictInsert},
+        {"MutDictUpsert", &WrapMutDictUpsert},
+        {"MutDictUpdate", &WrapMutDictUpdate},
+        {"MutDictRemove", &WrapMutDictRemove},
+        {"MutDictPop", &WrapMutDictPop},
+        {"MutDictContains", &WrapMutDictContains},
+        {"MutDictLookup", &WrapMutDictLookup},
+        {"MutDictLength", &WrapMutDictLength},
+        {"MutDictHasItems", &WrapMutDictHasItems},
+        {"MutDictItems", &WrapMutDictItems},
+        {"MutDictKeys", &WrapMutDictKeys},
+        {"MutDictPayloads", &WrapMutDictPayloads},
+        {"FromMutDict", &WrapFromMutDict}
     };
 };
 

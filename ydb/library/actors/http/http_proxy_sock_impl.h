@@ -198,7 +198,10 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         int err = SSL_get_error(Ssl.Get(), res); // SSL_get_error() must be used after each SSL_* operation
         switch(err) {
         case SSL_ERROR_NONE:
+        case SSL_ERROR_SYSCALL:
             return res;
+        case SSL_ERROR_ZERO_RETURN:
+            return 0; // Connection closed
         case SSL_ERROR_WANT_READ:
             read = true;
             return -EAGAIN;
@@ -206,7 +209,7 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
             write = true;
             return -EAGAIN;
         default:
-            std::cerr << "(SSL_ERROR): " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+            std::cerr << "(SSL_ERROR): " << err << " " << ERR_error_string(ERR_get_error(), NULL) << std::endl;
             return -EIO;
         }
     }

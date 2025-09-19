@@ -1,6 +1,7 @@
 #include "lag_provider.h"
 #include "private_events.h"
 #include "replication.h"
+#include "resource_id_resolver.h"
 #include "secret_resolver.h"
 #include "target_discoverer.h"
 #include "target_table.h"
@@ -41,7 +42,20 @@ class TReplication::TImpl: public TLagProvider {
             return;
         }
 
-        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName));
+        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName, ++SecretResolverCookie));
+    }
+
+    ui64 GetExpectedSecretResolverCookie() const {
+        return SecretResolverCookie;
+    }
+
+    template <typename... Args>
+    void ResolveResourceId(const TActorContext& ctx, Args&&... args) {
+        if (ResourceIdResolver) {
+            return;
+        }
+
+        ResourceIdResolver = ctx.Register(CreateResourceIdResolver(ctx.SelfID, ReplicationId, std::forward<Args>(args)...));
     }
 
     template <typename... Args>
@@ -159,6 +173,16 @@ public:
                     }
                     ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, caCert, params.GetOAuthToken().GetToken()));
                     break;
+                case NKikimrReplication::TConnectionParams::kIamCredentials:
+                    if (const auto& iam = params.GetIamCredentials(); !iam.HasResourceId()) {
+                        if (!iam.GetInitialToken().HasToken()) {
+                            return ResolveSecret(iam.GetInitialToken().GetTokenSecretName(), ctx);
+                        } else {
+                            return ResolveResourceId(ctx, endpoint, database, ssl, caCert, iam.GetInitialToken().GetToken());
+                        }
+                    }
+                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, caCert, params.GetIamCredentials()));
+                    break;
                 default:
                     ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
                     break;
@@ -199,7 +223,7 @@ public:
             target->Shutdown(ctx);
         }
 
-        for (auto* x : TVector<TActorId*>{&SecretResolver, &TargetDiscoverer, &TenantResolver, &YdbProxy}) {
+        for (auto* x : TVector<TActorId*>{&SecretResolver, &ResourceIdResolver, &TargetDiscoverer, &TenantResolver, &YdbProxy}) {
             if (auto actorId = std::exchange(*x, {})) {
                 ctx.Send(actorId, new TEvents::TEvPoison());
             }
@@ -213,6 +237,14 @@ public:
 
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
         Config = config;
+    }
+
+    void ResetCredentials(const TActorContext& ctx) {
+        for (auto* x : TVector<TActorId*>{&SecretResolver, &ResourceIdResolver, &TargetDiscoverer, &YdbProxy}) {
+            if (auto actorId = std::exchange(*x, {})) {
+                ctx.Send(actorId, new TEvents::TEvPoison());
+            }
+        }
     }
 
     void ErrorState(TString issue) {
@@ -243,6 +275,8 @@ private:
     THashSet<ui64> PendingAlterTargets;
     mutable TVector<TString> TargetTablePaths;
     TActorId SecretResolver;
+    ui64 SecretResolverCookie = 0;
+    TActorId ResourceIdResolver;
     TActorId YdbProxy;
     TActorId TenantResolver;
     TActorId TargetDiscoverer;
@@ -323,6 +357,10 @@ void TReplication::SetConfig(NKikimrReplication::TReplicationConfig&& config) {
     Impl->SetConfig(std::move(config));
 }
 
+void TReplication::ResetCredentials(const TActorContext& ctx) {
+    Impl->ResetCredentials(ctx);
+}
+
 const NKikimrReplication::TReplicationConfig& TReplication::GetConfig() const {
     return Impl->Config;
 }
@@ -367,6 +405,24 @@ void TReplication::UpdateSecret(const TString& secretValue) {
         break;
     case NKikimrReplication::TConnectionParams::kOAuthToken:
         params.MutableOAuthToken()->SetToken(secretValue);
+        break;
+    case NKikimrReplication::TConnectionParams::kIamCredentials:
+        params.MutableIamCredentials()->MutableInitialToken()->SetToken(secretValue);
+        break;
+    default:
+        Y_ABORT("unreachable");
+    }
+}
+
+ui64 TReplication::GetExpectedSecretResolverCookie() const {
+    return Impl->GetExpectedSecretResolverCookie();
+}
+
+void TReplication::UpdateResourceId(const TString& value) {
+    auto& params = *Impl->Config.MutableSrcConnectionParams();
+    switch (params.GetCredentialsCase()) {
+    case NKikimrReplication::TConnectionParams::kIamCredentials:
+        params.MutableIamCredentials()->SetResourceId(value);
         break;
     default:
         Y_ABORT("unreachable");

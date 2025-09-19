@@ -1,7 +1,4 @@
-SUBSCRIBER(
-    akozhikhov
-    g:yt
-)
+SUBSCRIBER(g:yt)
 
 EXECTEST()
 

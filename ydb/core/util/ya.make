@@ -6,7 +6,6 @@ SRCS(
     backoff.cpp
     cache.cpp
     cache.h
-    cache_cache.h
     circular_queue.h
     concurrent_rw_hash.cpp
     concurrent_rw_hash.h

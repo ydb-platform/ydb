@@ -36,7 +36,7 @@ TBulkDataGeneratorList TClickbenchWorkloadDataInitializerGenerator::DoGetBulkIni
     for (const auto& c: columns) {
         header.emplace_back(c["name"].GetString());
     }
-    return {std::make_shared<TDataGenerator>(*this, "hits", DataSetSize, "", DataFiles, header)};
+    return {std::make_shared<TDataGenerator>(*this, "hits", DataSetSize, "", DataFiles, header, TDataGenerator::EPortionSizeUnit::Line)};
 }
 
 }

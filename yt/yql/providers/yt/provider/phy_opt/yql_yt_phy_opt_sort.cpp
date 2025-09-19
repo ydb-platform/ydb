@@ -111,12 +111,13 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
     const bool needMerge = maybeReadSettings && NYql::HasSetting(maybeReadSettings.Ref(), EYtSettingType::Sample);
 
     const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+    const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
 
     TKeySelectorBuilder builder(node.Pos(), ctx, useNativeDescSort, outType);
     builder.ProcessKeySelector(keySelectorLambda.Ptr(), sortDirections.Ptr());
 
     TYtOutTableInfo sortOut(outType, nativeTypeFlags);
-    builder.FillRowSpecSort(*sortOut.RowSpec);
+    builder.FillRowSpecSort(*sortOut.RowSpec, useNativeYtDefaultColumnOrder);
     sortOut.SetUnique(sort.Ref().template GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
 
     TExprBase sortInput = sort.Input();
@@ -155,8 +156,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
         TYtOutTableInfo mergeOut(outType, nativeTypeFlags);
         mergeOut.SetUnique(sort.Ref().template GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
         if (firstNativeType) {
-            mergeOut.RowSpec->CopyTypeOrders(*firstNativeType);
-            sortOut.RowSpec->CopyTypeOrders(*firstNativeType);
+            mergeOut.RowSpec->CopyTypeOrders(*firstNativeType, useNativeYtDefaultColumnOrder);
+            sortOut.RowSpec->CopyTypeOrders(*firstNativeType, useNativeYtDefaultColumnOrder);
         }
 
         NPrivate::TConvertInputOpts opts;
@@ -188,7 +189,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
         world = TExprBase(ctx.NewWorld(node.Pos()));
         unordered = false;
     } else if (firstNativeType) {
-        sortOut.RowSpec->CopyTypeOrders(*firstNativeType);
+        sortOut.RowSpec->CopyTypeOrders(*firstNativeType, useNativeYtDefaultColumnOrder);
     }
 
     bool canUseMerge = !needMap && !needMerge;
@@ -511,6 +512,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
     }
 
     const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+    const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
 
     THolder<TKeySelectorBuilder> builder;
     if (sorted) {
@@ -541,13 +543,13 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
         });
         if (canMerge) {
             if (sorted) {
-                outTable.RowSpec->CopySortness(ctx, *inputPaths.front()->Table->RowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
+                outTable.RowSpec->CopySortness(ctx, *inputPaths.front()->Table->RowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                 outTable.RowSpec->ClearSortness(ctx, sorted->GetContent().size());
             }
             outTable.SetUnique(assume.Ref().GetConstraint<TDistinctConstraintNode>(), assume.Pos(), ctx);
 
             if (firstNativeType) {
-                outTable.RowSpec->CopyTypeOrders(*firstNativeType);
+                outTable.RowSpec->CopyTypeOrders(*firstNativeType, useNativeYtDefaultColumnOrder);
             }
 
             YQL_ENSURE(!sorted || sorted->GetContent().size() == outTable.RowSpec->SortMembers.size());
@@ -581,7 +583,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
         }
         else {
             if (builder) {
-                builder->FillRowSpecSort(*outTable.RowSpec);
+                builder->FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
             }
             outTable.SetUnique(assume.Ref().GetConstraint<TDistinctConstraintNode>(), assume.Pos(), ctx);
 
@@ -675,7 +677,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
         TYtOutTableInfo outTable(op.Output().Item(index));
         if (builder) {
             YQL_ENSURE(!builder->NeedMap() || op.Maybe<TYtDqProcessWrite>());
-            builder->FillRowSpecSort(*outTable.RowSpec);
+            builder->FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
         }
         outTable.RowSpec->SetConstraints(assume.Ref().GetConstraintSet());
         outTable.SetUnique(assume.Ref().GetConstraint<TDistinctConstraintNode>(), assume.Pos(), ctx);

@@ -1,4 +1,5 @@
 #include "msgbus_servicereq.h"
+#include <ydb/core/client/server/msgbus_securereq.h>
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/slowpoke_actor.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -6,8 +7,10 @@
 namespace NKikimr {
 namespace NMsgBusProxy {
 
-class TInterconnectDebugActor : public TActorBootstrapped<TInterconnectDebugActor>, public TMessageBusSessionIdentHolder {
+class TInterconnectDebugActor : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TInterconnectDebugActor>> {
     std::function<void(const TActorContext&)> Callback;
+
+    using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TInterconnectDebugActor>>;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -15,8 +18,12 @@ public:
     }
 
     TInterconnectDebugActor(NKikimrClient::TInterconnectDebug& record, NMsgBusProxy::TBusMessageContext& msg)
-        : TMessageBusSessionIdentHolder(msg)
+        : TBase(msg)
     {
+        TBase::SetSecurityToken(record.GetSecurityToken());
+        TBase::SetPeerName(msg.GetPeerName());
+        TBase::SetRequireAdminAccess(true);
+
         if (record.HasNumSlowpokeActors()) {
             const ui32 num = record.GetNumSlowpokeActors();
             const ui32 poolId = record.GetPoolId();

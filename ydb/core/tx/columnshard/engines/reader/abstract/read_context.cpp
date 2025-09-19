@@ -1,5 +1,6 @@
 #include "read_context.h"
 
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/resolver.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
@@ -25,7 +26,7 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     , ResourceSubscribeActorId(resourceSubscribeActorId)
     , ReadCoordinatorActorId(readCoordinatorActorId)
     , ComputeShardingPolicy(computeShardingPolicy)
-    , ConveyorProcessGuard(NConveyorComposite::TScanServiceOperator::StartProcess(ScanId, ::ToString(ScanId), cpuLimits))
+    , ConveyorProcessGuard(NConveyorComposite::TScanServiceOperator::StartProcess(ScanId, cpuLimits.GetCPUGroupNameDef(NResourcePool::DEFAULT_POOL_ID), cpuLimits))
 {
     Y_ABORT_UNLESS(ReadMetadata);
     if (ReadMetadata->HasResultSchema()) {

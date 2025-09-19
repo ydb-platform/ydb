@@ -50,6 +50,9 @@ public:
     TFsPath GetRoot() const;
     // Returns temp storage directory
     TFsPath GetTemp() const;
+    // Returns path of lock filename. Some lock files can be reused for different
+    // |lockName| to prevent the growth of gargabe.
+    TFsPath GetLockFilePath(const TString& componentName, const TString& lockName) const;
     // Puts the passed data to the storage with the specified storage file name.
     // The second argument outFileName specifies a name of temporary link returned from the Put(). If empty, then random guid is used.
     // Provide valid md5 if it is known in advance, otherwise pass "". It will be overridden by puller result

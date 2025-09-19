@@ -92,7 +92,7 @@ public:
 
     void Postprocess(const std::function<NYPath::TYPath()>& pathGetter = {});
 
-    void SetDefaults();
+    void SetDefaults(bool dontSetLiteMembers = false);
 
     void Save(NYson::IYsonConsumer* consumer) const;
 

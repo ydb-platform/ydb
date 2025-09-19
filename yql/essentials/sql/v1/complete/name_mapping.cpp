@@ -121,7 +121,7 @@ namespace NSQLComplete {
 
         if (local.Column->Table.empty() && !name.TableAlias.empty()) {
             name.Identifier.prepend('.');
-            name.Identifier.prepend(name.TableAlias);
+            name.Identifier.prepend(ToIdentifier(std::move(name.TableAlias), local));
         }
 
         return {ECandidateKind::ColumnName, std::move(name.Identifier)};

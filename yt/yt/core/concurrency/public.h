@@ -66,7 +66,10 @@ class TAsyncSemaphore;
 DEFINE_ENUM(EExecutionStackKind,
     (Small) // 256 Kb (default)
     (Large) //   8 Mb
+    (Huge)  //  64 Mb
 );
+
+constexpr auto DefaultExecutionStackKind = EExecutionStackKind::Small;
 
 class TExecutionStack;
 

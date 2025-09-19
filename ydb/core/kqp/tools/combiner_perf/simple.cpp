@@ -31,21 +31,7 @@ THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM>& setup, IDataSampler& samp
     const auto streamType = pb.NewStreamType(streamItemType);
     const auto streamCallable = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", streamType).Build();
 
-    /*
     const auto pgmReturn = pb.FromFlow(pb.WideCombiner(
-        pb.ToFlow(TRuntimeNode(streamCallable, false)),
-        memLimit,
-        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
-        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.back() } ; },
-        [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
-            return {pb.AggrAdd(state.front(), items.back())};
-        },
-        [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList {
-            return {keys.front(), state.front()};
-        }));
-    */
-
-    const auto pgmReturn = pb.FromFlow(pb.DqHashCombine(
         pb.ToFlow(TRuntimeNode(streamCallable, false)),
         memLimit,
         [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },

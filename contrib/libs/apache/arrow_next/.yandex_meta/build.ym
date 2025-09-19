@@ -1,0 +1,3 @@
+{% extends '//builtin/nix.ym' %}
+
+{% block current_version %}20.0.0{% endblock %}

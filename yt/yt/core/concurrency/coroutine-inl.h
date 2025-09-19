@@ -21,7 +21,7 @@ TCoroutineBase::TCoroutineBase(TBody body, EExecutionStackKind stackKind)
         &CoroutineContext,
         TContClosure{
             .TrampoLine = &trampoline,
-            .Stack = TArrayRef(static_cast<char*>(CoroutineStack_->GetStack()), CoroutineStack_->GetSize())
+            .Stack = TArrayRef(static_cast<char*>(CoroutineStack_->GetStack()), CoroutineStack_->GetSize()),
         });
 
     Resume();

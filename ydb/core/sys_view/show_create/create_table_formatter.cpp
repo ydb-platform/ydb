@@ -179,7 +179,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         }
         case NYdb::EPrimitiveType::Date32: {
             Stream << "DATE32(";
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Date32, NUdf::TUnboxedValuePod(parser.GetDate32()));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Date32, NUdf::TUnboxedValuePod(parser.GetDate32().time_since_epoch().count()));
             Y_ENSURE(str.HasValue());
             EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
@@ -187,7 +187,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         }
         case NYdb::EPrimitiveType::Datetime64: {
             Stream << "DATETIME64(";
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetDatetime64())));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetDatetime64().time_since_epoch().count())));
             Y_ENSURE(str.HasValue());
             EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
@@ -195,7 +195,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         }
         case NYdb::EPrimitiveType::Timestamp64: {
             Stream << "TIMESTAMP64(";
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetTimestamp64())));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetTimestamp64().time_since_epoch().count())));
             Y_ENSURE(str.HasValue());
             EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
@@ -203,7 +203,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         }
         case NYdb::EPrimitiveType::Interval64: {
             Stream << "INTERVAL64(";
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetInterval64())));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetInterval64().count())));
             Y_ENSURE(str.HasValue());
             EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";

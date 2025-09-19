@@ -14,6 +14,7 @@
 
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -35,6 +36,10 @@ public:
     using TBase = NTests::TBaseFixture;
 
 public:
+    TFixture()
+        : FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {}))
+    {}
+
     void SetUp(NUnitTest::TTestContext& ctx) override {
         TBase::SetUp(ctx);
 
@@ -53,7 +58,7 @@ public:
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-   
+
         NYql::TPqGatewayServices pqServices(
             yqSharedResources->UserSpaceYdbDriver,
             nullptr,
@@ -75,6 +80,7 @@ public:
             GetDefaultPqEndpoint(),
             GetDefaultPqDatabase(),
             Config,
+            FunctionRegistry.Get(),
             RowDispatcherActorId,
             compileServiceActorId,
             0,
@@ -187,7 +193,7 @@ public:
         return numberMessages;
     }
 
-    void ExpectStatistics(TMap<NActors::TActorId, ui64> clients) {
+    void ExpectStatistics(TMap<NActors::TActorId, TMaybe<ui64>> clients) {
         auto check = [&]() -> bool {
             auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionStatistic>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
             UNIT_ASSERT(eventHolder.Get() != nullptr);
@@ -217,11 +223,11 @@ public:
         return TRow().AddUint64(100 * index).AddString(TStringBuilder() << "value" << index);
     }
 
-    using TMessageInformation = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation; 
-    using TMessage = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage; 
+    using TMessageInformation = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation;
+    using TMessage = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage;
 
-    TMessageInformation MakeNextMessageInformation(size_t offset, size_t uncompressedSize) { 
-        auto now = TInstant::Now(); 
+    TMessageInformation MakeNextMessageInformation(size_t offset, size_t uncompressedSize) {
+        auto now = TInstant::Now();
         TMessageInformation msgInfo(
             offset,
             "ProducerId",
@@ -259,6 +265,7 @@ public:
     }
 
 public:
+    const NKikimr::NMiniKQL::IFunctionRegistry::TPtr FunctionRegistry;
     TString TopicPath;
     NActors::TActorId TopicSession;
     NActors::TActorId RowDispatcherActorId;
@@ -271,7 +278,7 @@ public:
     NActors::TActorId ReadActorId2;
     NActors::TActorId ReadActorId3;
     ui32 PartitionId = 0;
-    NConfig::TRowDispatcherConfig Config;
+    NKikimrConfig::TSharedReadingConfig Config;
     TIntrusivePtr<IMockPqGateway> MockPqGateway;
 
     const TString Json1 = "{\"dt\":100,\"value\":\"value1\"}";
@@ -293,9 +300,9 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         Init(topicName);
         auto source = BuildSource();
         StartSession(ReadActorId1, source);
-        ExpectStatistics({{ReadActorId1, 0}});
+        ExpectStatistics({{ReadActorId1, Nothing()}});
         StartSession(ReadActorId2, source);
-        ExpectStatistics({{ReadActorId1, 0}, {ReadActorId2, 0}});
+        ExpectStatistics({{ReadActorId1, Nothing()}, {ReadActorId2, Nothing()}});
 
         std::vector<TString> data = { Json1 };
         PQWrite(data);

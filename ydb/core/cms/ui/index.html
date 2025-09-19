@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="cms/common.css"></link>
     <link rel="stylesheet" href="cms/cms.css"></link>
     <link rel="stylesheet" href="cms/sentinel.css"></link>
+    <link rel="stylesheet" href="cms/state_storage.css"></link>
     <script language="javascript" type="text/javascript" src="cms/ext/myers-diff/myers_diff.js"></script>
     <script language="javascript" type="text/javascript" src="cms/common.js"></script>
     <script language="javascript" type="text/javascript" src="cms/nanotable.js"></script>
@@ -18,6 +19,7 @@
     <script language="javascript" type="text/javascript" src="cms/cms_log.js"></script>
     <script language="javascript" type="text/javascript" src="cms/console_log.js"></script>
     <script language="javascript" type="text/javascript" src="cms/sentinel_state.js"></script>
+    <script language="javascript" type="text/javascript" src="cms/state_storage_state.js"></script>
     <script language="javascript" type="text/javascript" src="cms/configs.js"></script>
     <script language="javascript" type="text/javascript" src="cms/yaml_config.js"></script>
     <script language="javascript" type="text/javascript" src="cms/config_forms.js"></script>
@@ -63,6 +65,14 @@
             Sentinel state
             <svg width="25px" height="25px" id="sentinel-loader">
               <circle id="sentinel-anim" cy="50%" cx="50%" r="5"></circle>
+            </svg>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#state-storage-state" data-toggle="tab">
+            State Storage
+            <svg width="25px" height="25px" id="state-storage-loader">
+              <circle id="state-storage-anim" cy="50%" cx="50%" r="5"></circle>
             </svg>
           </a>
         </li>
@@ -470,6 +480,12 @@
             <div id="sentinel-filter-controls"></div>
           </div>
           <table id="sentinel-nodes"></table>
+        </div>
+        <div id="state-storage-state" class="tab-pane fade">
+          <div id="state-storage-error" class="error"></div>
+          <table id="state-storage-state-storage-config"></table>
+          <table id="state-storage-board-config"></table>
+          <table id="state-storage-scheme-board-config"></table>
         </div>
       </div>
     </div>

@@ -16,6 +16,7 @@
 #include "grpc_server.h"
 #include "logger.h"
 
+#include <util/string/builder.h>
 #include <util/system/hp_timer.h>
 
 #include <grpc++/server.h>
@@ -122,6 +123,10 @@ public:
 
     bool SslServer() const override {
         return Server_->SslServer();
+    }
+
+    TString GetRpcMethodName() const override {
+        return TStringBuilder() << TService::TCurrentGRpcService::service_full_name() << '/' << Name_;
     }
 
     void Run() {

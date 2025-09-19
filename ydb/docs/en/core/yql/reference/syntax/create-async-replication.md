@@ -31,6 +31,12 @@ WITH (option = value [, ...])
             * `USER` — a database user name.
             * `PASSWORD_SECRET_NAME` — the name of the [secret](../../../concepts/datamodel/secrets.md) that contains the password for the source database user.
 
+        * [Delegated service account](https://yandex.cloud/en/docs/iam/concepts/service-control):
+
+            * `SERVICE_ACCOUNT_ID` — identifier of the service account.
+            * `INITIAL_TOKEN_SECRET_NAME` — the name of the [secret](../../../concepts/datamodel/secrets.md) that contains the token for the service account. Used for initialization.
+
+
 * `CONSISTENCY_LEVEL` — [consistency level of replicated data](../../../concepts/async-replication.md#consistency-levels):
   * `ROW` — [row-level data consistency](../../../concepts/async-replication.md#consistency-level-row). Default mode.
   * `GLOBAL` — [global data consistency](../../../concepts/async-replication.md#consistency-level-global). Additionally can be specified:

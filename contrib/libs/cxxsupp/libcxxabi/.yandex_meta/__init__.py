@@ -80,7 +80,7 @@ def post_install(self):
 
 
 libcxxabi = NixSourceProject(
-    owners=["g:cpp-committee", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/cxxsupp/libcxxabi",
     # nixos-24.05 merged libcxx and libcxxabi.
     # Use the primer and override sourceRoot in override.nix as aworkaround.

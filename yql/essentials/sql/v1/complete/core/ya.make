@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/core/sql_types
     library/cpp/yson/node
 )
 

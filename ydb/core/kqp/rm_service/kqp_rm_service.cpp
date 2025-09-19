@@ -582,19 +582,20 @@ public:
     TKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         TIntrusivePtr<TKqpCounters> counters, const TActorId& resourceBrokerId,
         std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources, ui32 nodeId)
-        : Config(config)
+        : NodeId(nodeId)
+        , Config(config)
         , ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
     {
         ResourceManager = std::make_shared<TKqpResourceManager>(config, counters);
-        with_lock (ResourceManagers.Lock) {
-            ResourceManagers.ByNodeId[nodeId] = ResourceManager;
-            ResourceManagers.Default = ResourceManager;
-        }
     }
 
     void Bootstrap() {
         ResourceManager->Bootstrap(Config, TlsActivationContext->ActorSystem(), SelfId());
+        with_lock (ResourceManagers.Lock) {
+            ResourceManagers.ByNodeId[NodeId] = ResourceManager;
+            ResourceManagers.Default = ResourceManager;
+        }
 
         LOG_D("Start KqpResourceManagerActor at " << SelfId() << " with ResourceBroker at " << ResourceBrokerId);
 
@@ -935,6 +936,7 @@ private:
     }
 
 private:
+    const ui32 NodeId;
     NKikimrConfig::TTableServiceConfig::TResourceManager Config;
 
     const TActorId ResourceBrokerId;
@@ -984,7 +986,10 @@ std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _no
 
 std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> _nodeId) {
     ui32 nodeId = _nodeId ? *_nodeId : TActivationContext::ActorSystem()->NodeId;
-    auto rm = NRm::ResourceManagers.Default.lock();
+    std::shared_ptr<NRm::TKqpResourceManager> rm;
+    with_lock (NRm::ResourceManagers.Lock) {
+        rm = NRm::ResourceManagers.Default.lock();
+    }
     if (Y_LIKELY(rm && rm->GetNodeId() == nodeId)) {
         return rm;
     }

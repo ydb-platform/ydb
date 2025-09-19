@@ -682,7 +682,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetAffectedShardsLimit(23);
 
-        TKikimrRunner kikimr(appConfig);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
 
         kikimr.GetTestClient().CreateTable("/Root", R"(
             Name: "ManyShard23"

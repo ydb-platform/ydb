@@ -22,7 +22,7 @@
                         "subkey",
                         "value"
                     ],
-                    "type": "MultiInsert"
+                    "type": "MultiUpsert"
                 }
             ]
         },
@@ -44,7 +44,7 @@
                         "Group",
                         "Name"
                     ],
-                    "type": "MultiInsert"
+                    "type": "MultiUpsert"
                 }
             ]
         }

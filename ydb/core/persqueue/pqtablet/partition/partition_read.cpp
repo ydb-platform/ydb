@@ -46,11 +46,13 @@ ui64 TPartition::GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) cons
         return offset;
     }
     TMaybe<ui64> estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.DataKeysBody, *readTimestamp);
-    if (!estimatedOffset.Defined() && AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
-        estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, *readTimestamp);
-    }
-    if (!estimatedOffset.Defined()) {
-        estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp);
+    if (!AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+        if (!estimatedOffset.Defined()) {
+            estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, *readTimestamp);
+        }
+        if (!estimatedOffset.Defined()) {
+            estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp);
+        }
     }
     if (!estimatedOffset.Defined()) {
         estimatedOffset = Min(BlobEncoder.Head.Offset, BlobEncoder.EndOffset - 1);

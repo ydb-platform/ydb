@@ -2350,11 +2350,40 @@ class WorkloadTestBase(LoadSuiteBase):
             self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols)
 
             # 5. Загрузка результатов (ВСЕГДА, даже если тест broken)
-            self._upload_results(result, workload_name)
-            self._upload_results_per_workload_run(result, workload_name)
+            with allure.step("Upload results"):
+                self._safe_upload_results(result, workload_name)
 
             # 6. Обработка ошибок/статусов (fail, broken, etc) - может выбросить исключение
             self._handle_final_status(result, workload_name, node_errors)
+
+    def _safe_upload_results(self, result, workload_name):
+        """Безопасная выгрузка результатов с обработкой ошибок и Allure отчетом"""
+        if not ResultsProcessor.send_results:
+            allure.attach("Results upload is disabled (send_results=false)",
+                          "Upload status", allure.attachment_type.TEXT)
+            return
+
+        try:
+            self._upload_results(result, workload_name)
+            self._upload_results_per_workload_run(result, workload_name)
+            allure.attach("Results uploaded successfully",
+                          "Upload status", allure.attachment_type.TEXT)
+        except Exception as e:
+            # Логируем ошибку выгрузки, но не прерываем выполнение
+            error_msg = f"Failed to upload results: {e}"
+            logging.error(error_msg)
+            result.add_warning(error_msg)
+            # После добавления warning нужно пересчитать summary флаги
+            self._update_summary_flags(result, workload_name)
+
+            # Подробная информация об ошибке для Allure
+            error_details = [
+                f"Error type: {type(e).__name__}",
+                f"Error message: {str(e)}",
+                f"Timestamp: {time_module.strftime('%Y-%m-%d %H:%M:%S')}",
+            ]
+            allure.attach("\n".join(error_details),
+                          "Upload error details", allure.attachment_type.TEXT)
 
     def _upload_results(self, result, workload_name):
         """Переопределенный метод для workload тестов"""

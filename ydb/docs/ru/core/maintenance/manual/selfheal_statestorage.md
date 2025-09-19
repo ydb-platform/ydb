@@ -38,9 +38,9 @@ Self Heal State Storage  включен по умолчанию.
     ```
 
     {% cut "Подробнее" %}
-    Для работы механизма требуется активация как [CMS Sentinel](../../concepts/glossary.md#cms), так и [распределённой конфигурации](../../concepts/glossary.md#distributed-configuration). Убедитесь что они включены.
-    Подробнее о [миграции на конфигурацию V2 и включении распределенной конфигурации](../../devops/configuration-management/migration/migration-to-v2.md)
-    Значение опции `state_storage_self_heal_config: true` включает механизм сохранения работоспособности и отказоустойчивости [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board)
+        Для работы механизма требуется активация как [CMS Sentinel](../../concepts/glossary.md#cms), так и [распределённой конфигурации](../../concepts/glossary.md#distributed-configuration). Убедитесь что они включены.
+        Подробнее о [миграции на конфигурацию V2 и включении распределенной конфигурации](../../devops/configuration-management/migration/migration-to-v2.md)
+        Значение опции `state_storage_self_heal_config: true` включает механизм сохранения работоспособности и отказоустойчивости [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board)
     {% endcut %}
 
 3. Обновить конфигурацию кластера с учетом выполненных изменений с помощью [ydb admin cluster config replace](../../reference/ydb-cli/commands/configuration/cluster/replace.md):

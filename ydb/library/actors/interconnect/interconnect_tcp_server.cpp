@@ -103,7 +103,7 @@ namespace NActors {
             const int r = Listener->Accept(address);
             if (r >= 0) {
                 auto socket = MakeIntrusive<NInterconnect::TStreamSocket>(static_cast<SOCKET>(r));
-                LOG_ERROR_IC("ICL04", "Accepted from: %s", address.ToString().data());
+                LOG_DEBUG_IC("ICL04", "Accepted from: %s", address.ToString().data());
                 ctx.Register(CreateIncomingHandshakeActor(ProxyCommonCtx, std::move(socket)));
                 continue;
             } else if (-r != EAGAIN && -r != EWOULDBLOCK) {

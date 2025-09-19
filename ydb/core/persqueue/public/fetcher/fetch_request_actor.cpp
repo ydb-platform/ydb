@@ -8,12 +8,17 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/grpc_services/service_scheme.h>
+#include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
-
+#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
+#include <ydb/core/kafka_proxy/actors/actors.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
 
@@ -71,6 +76,18 @@ struct TEvPrivate {
 
 };
 
+struct TTopicGroupIdAndPath {
+    TString GroupId;
+    TString TopicPath;
+
+    bool operator==(const TTopicGroupIdAndPath& topicGroupIdAndPath) const {
+        return GroupId == topicGroupIdAndPath.GroupId && TopicPath == topicGroupIdAndPath.TopicPath;
+    }
+};
+
+struct TStructHash { size_t operator()(const TTopicGroupIdAndPath& alterTopicRequest) const { return CombineHashes(std::hash<TString>()(alterTopicRequest.GroupId), std::hash<TString>()(alterTopicRequest.TopicPath)); } };
+
+
 private:
     TFetchRequestSettings Settings;
 
@@ -78,13 +95,18 @@ private:
     ui32 FetchRequestReadsDone;
     ui64 FetchRequestCurrentReadTablet;
     ui64 CurrentCookie;
+    ui32 AlterTopicCookie = 0;
     ui32 FetchRequestBytesLeft;
     THolder<TEvPQ::TEvFetchResponse> Response;
     TVector<TActorId> PQClient;
     const TActorId SchemeCache;
+    ui32 InflyTopics = 0;
 
     THashMap<TString, TTopicInfo> TopicInfo;
     THashMap<ui64, TTabletInfo> TabletInfo;
+
+    std::unordered_map<ui32, TString> AlterTopicCookieToName;
+    std::unordered_set<TTopicGroupIdAndPath, TStructHash> ConsumerTopicAlterRequestAttempts;
 
     ui32 TopicsAnswered;
     THashSet<ui64> TabletsDiscovered;
@@ -278,17 +300,112 @@ public:
             auto& topicInfo = TopicInfo[path];
             topicInfo.BalancerTabletId = description.GetBalancerTabletID();
             topicInfo.PQInfo = entry.PQGroupInfo;
+
+            const auto &config = description.GetPQTabletConfig();
+            const auto &consumers = config.GetConsumers();
+            TString groupId = Settings.Partitions[0].ClientId;
+            if (groupId != NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER) {
+                bool consumerIsAdded = false;
+                for (const auto& consumer : consumers) {
+                    TString consumerName = consumer.GetName();
+                    if (consumerName == groupId) {
+                        consumerIsAdded = true;
+                    }
+                }
+                // если нет консьюмера у топика
+                // получить Context через AppData()
+                TAppData* appData = AppData(ctx);
+                if (!consumerIsAdded && (appData->KafkaProxyConfig.GetAutoCreateConsumersEnable() || appData->KafkaProxyConfig.GetAutoCreateTopicsEnable())) {
+                    CreateConsumerGroupIfNecessary(entry.Path.back(), path, entry.Path.back(), groupId);
+                }
+                // (Context->Config.GetAutoCreateConsumersEnable() || Context->Config.GetAutoCreateTopicsEnable()) {
+                // for (auto topicReq: Message->Topics) {
+                //     TString topicPath = NormalizePath(Context->DatabasePath, *topicReq.Name); // как для serverless?
+                //     CreateConsumerGroupIfNecessary(*topicReq.Name, topicPath, *topicReq.Name, *Message->GroupId);
+                // }
+            }
         }
 
-        if (anyCdcTopicInRequest) {
-            SendSchemeCacheRequest(ctx);
+        if (InflyTopics == 0) {
+            if (anyCdcTopicInRequest) {
+                SendSchemeCacheRequest(ctx);
+                return;
+            }
+
+            for (auto& p: TopicInfo) {
+                ProcessMetadata(p.first, p.second, ctx);
+            }
+        }
+
+    }
+
+    void CreateConsumerGroupIfNecessary(const TString& topicName,
+                                    const TString& topicPath,
+                                    const TString& originalTopicName,
+                                    const TString& groupId) {
+        TTopicGroupIdAndPath consumerTopicRequest = TTopicGroupIdAndPath{groupId, topicPath};
+        if (ConsumerTopicAlterRequestAttempts.find(consumerTopicRequest) == ConsumerTopicAlterRequestAttempts.end()) {
+            ConsumerTopicAlterRequestAttempts.insert(consumerTopicRequest);
+        } else {
+            // it is enough to send a consumer addition request only once for a particular topic
             return;
         }
+        InflyTopics++;
 
-        for (auto& p: TopicInfo) {
-            ProcessMetadata(p.first, p.second, ctx);
+        auto topicSettings = NYdb::NTopic::TAlterTopicSettings();
+        topicSettings.BeginAddConsumer(groupId).EndAddConsumer();
+        auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
+        request.get()->set_path(topicPath);
+        for (auto& c : topicSettings.AddConsumers_) {
+            auto* consumer = request.get()->add_add_consumers();
+            consumer->set_name(c.ConsumerName_);
+        }
+        AlterTopicCookie++;
+        AlterTopicCookieToName[AlterTopicCookie] = originalTopicName;
+        auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = topicName, this]
+            (Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
+            NYdb::NIssue::TIssues issues;
+            NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
+            Send(replyTo,
+                new NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse(std::move(status)),
+                0,
+                cookie);
+        };
+        NKikimr::NGRpcService::DoAlterTopicRequest(
+            std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(
+            topicName, Settings.Database, std::move(request), callback),
+            NKikimr::NReplication::TLocalProxyActor(Settings.Database));
+
+    }
+
+    void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext&) {
+        NYdb::TStatus& result = ev->Get()->Result;
+        // KAFKA_LOG_D("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+        if (result.GetStatus() != NYdb::EStatus::SUCCESS) {
+            InflyTopics--;
+        //     if (InflyTopics == 0) {
+        //         auto response = GetOffsetFetchResponse();
+        //         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
+        //         Die(ctx);
+        //     }
+        //     return;
         }
 
+        // const TString& alteredTopicName = AlterTopicCookieToName[ev->Cookie];
+        // NKikimr::NGRpcProxy::V1::TLocalRequestBase locationRequest{
+        //     NormalizePath(Context->DatabasePath, alteredTopicName),
+        //     Context->DatabasePath,
+        //     GetUserSerializedToken(Context),
+        // };
+        // TActorId actorId = SelfId();
+        // ctx.Register(new TTopicOffsetActor(
+        //     TopicToEntities[alteredTopicName].Consumers,
+        //     locationRequest,
+        //     actorId,
+        //     TopicToEntities[alteredTopicName].Partitions,
+        //     alteredTopicName,
+        //     GetUsernameOrAnonymous(Context)
+        // ));
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -576,6 +693,7 @@ public:
             HFunc(TEvPersQueue::TEvResponse, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
+            HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
             HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
             CFunc(TEvPrivate::EvTimeout, HandleTimeout);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);

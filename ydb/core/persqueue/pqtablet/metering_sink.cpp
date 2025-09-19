@@ -102,6 +102,7 @@ TString TMeteringSink::GetMeteringJson(const TMeteringSink::FlushParameters& par
     writer.OpenMap("labels");
     writer.Write("datastreams_stream_name", Parameters_.StreamName);
     writer.Write("ydb_database", Parameters_.YdbDatabaseId);
+    writer.Write("Category", "Topic");
     writer.CloseMap(); // "labels"
 
     writer.Write("version", parameters.Version);

@@ -163,4 +163,10 @@ When you drop an asynchronous replication instance:
 * Optionally, all replicas are deleted.
 * Asynchronous replication instance is deleted.
 
+{% note warning %}
+
+If asynchronous replication is dropped without prior [completion](#done) and replica objects are not deleted, they will remain available only for reading.
+
+{% endnote %}
+
 To drop an asynchronous replication instance, use the [DROP ASYNC REPLICATION](../yql/reference/syntax/drop-async-replication.md) YQL expression.

@@ -4976,6 +4976,20 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_like-like_rewrite_/sql.yql"
         }
     ],
+    "test_sql2yql.test[linear-types]": [
+        {
+            "checksum": "f756d489eb05467c7a6414636f47f37e",
+            "size": 1609,
+            "uri": "https://{canondata_backend}/1781765/e398ef188885373eb0a98e1d374e17ce1b8dfd7c/resource.tar.gz#test_sql2yql.test_linear-types_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-types_reflection]": [
+        {
+            "checksum": "4566c1aaefced662dfd823a332922d0d",
+            "size": 2089,
+            "uri": "https://{canondata_backend}/1942100/f91a9f890b15407bdf858550427100932981d900/resource.tar.gz#test_sql2yql.test_linear-types_reflection_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[match_recognize-after_match_skip_past_last_row]": [
         {
             "checksum": "8c019a9e653e16decf0c5d7eee2fe567",
@@ -7883,37 +7897,37 @@
     ],
     "test_sql2yql.test[seq_mode-shared_named_expr]": [
         {
-            "checksum": "7f16d29d01ed38006249f8a6df896d89",
-            "size": 2162,
-            "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_seq_mode-shared_named_expr_/sql.yql"
+            "checksum": "1bc276a9cb08e31273e24da9ad90582d",
+            "size": 2291,
+            "uri": "https://{canondata_backend}/1925842/cfa71598e75c768c65a88908e736e1530b7d43ce/resource.tar.gz#test_sql2yql.test_seq_mode-shared_named_expr_/sql.yql"
         }
     ],
     "test_sql2yql.test[seq_mode-shared_subquery_expr]": [
         {
-            "checksum": "442af621c99f97281cb191ad5121a040",
-            "size": 2759,
-            "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_seq_mode-shared_subquery_expr_/sql.yql"
+            "checksum": "9422f76b560ea5ecdcb0327e9c9e4ed3",
+            "size": 2888,
+            "uri": "https://{canondata_backend}/1925842/cfa71598e75c768c65a88908e736e1530b7d43ce/resource.tar.gz#test_sql2yql.test_seq_mode-shared_subquery_expr_/sql.yql"
         }
     ],
     "test_sql2yql.test[seq_mode-simple1]": [
         {
-            "checksum": "1f0db2592f2b598f5aed44db4a3e1133",
-            "size": 1269,
-            "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_seq_mode-simple1_/sql.yql"
+            "checksum": "48fb00e55120b60eb11fa6cf1061c504",
+            "size": 1398,
+            "uri": "https://{canondata_backend}/1925842/cfa71598e75c768c65a88908e736e1530b7d43ce/resource.tar.gz#test_sql2yql.test_seq_mode-simple1_/sql.yql"
         }
     ],
     "test_sql2yql.test[seq_mode-simple2]": [
         {
-            "checksum": "20c533355047f0b26cbf19786e4dcb3b",
-            "size": 2124,
-            "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_seq_mode-simple2_/sql.yql"
+            "checksum": "eb5d04c76da927a4a883b6545ccbd960",
+            "size": 2253,
+            "uri": "https://{canondata_backend}/1925842/cfa71598e75c768c65a88908e736e1530b7d43ce/resource.tar.gz#test_sql2yql.test_seq_mode-simple2_/sql.yql"
         }
     ],
     "test_sql2yql.test[seq_mode-subquery_shared_subquery]": [
         {
-            "checksum": "0da75f9a85034564b31a4f5679b6685b",
-            "size": 2377,
-            "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_seq_mode-subquery_shared_subquery_/sql.yql"
+            "checksum": "08becfe4d405df78f6cc4dd857d39326",
+            "size": 2204,
+            "uri": "https://{canondata_backend}/1925842/cfa71598e75c768c65a88908e736e1530b7d43ce/resource.tar.gz#test_sql2yql.test_seq_mode-subquery_shared_subquery_/sql.yql"
         }
     ],
     "test_sql2yql.test[side_effects-convert_empty_dict_to_dict]": [
@@ -11987,6 +12001,16 @@
     "test_sql_format.test[like-like_rewrite]": [
         {
             "uri": "file://test_sql_format.test_like-like_rewrite_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-types]": [
+        {
+            "uri": "file://test_sql_format.test_linear-types_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-types_reflection]": [
+        {
+            "uri": "file://test_sql_format.test_linear-types_reflection_/formatted.sql"
         }
     ],
     "test_sql_format.test[match_recognize-after_match_skip_past_last_row]": [

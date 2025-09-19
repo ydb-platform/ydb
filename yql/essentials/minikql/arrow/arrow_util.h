@@ -19,6 +19,7 @@ using NYql::NUdf::Chop;
 
 /// \brief Remove optional from `data` as new ArrayData object
 std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* itemType);
+std::shared_ptr<arrow::Scalar> UnwrapScalar(std::shared_ptr<arrow::Scalar> scalar, TType* itemType);
 
 using NYql::NUdf::AllocateBitmapWithReserve;
 using NYql::NUdf::MakeDenseBitmap;

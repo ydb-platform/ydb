@@ -2,6 +2,7 @@
 
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr::NMiniKQL {
 

@@ -92,15 +92,15 @@ namespace NInterconnect::NRdma {
         
         int GetErrCode() const noexcept {
             if (IsWcError()) {
-                return std::get<1>(Record).Code;
+                return std::get<TWcErr>(Record).Code;
             } else if (IsWrError()) {
-                return std::get<3>(Record).Code;
+                return std::get<TWrErr>(Record).Code;
             } else {
                 return -1;
             }
         }
 
-        std::string GetErrSource() const noexcept {
+        std::string_view GetErrSource() const noexcept {
             switch (Record.index()) {
                 case 0: return "Ok";
                 case 1: return "TWcErr";

@@ -81,4 +81,24 @@ Below are examples of the code for setting the "prefer the nearest data center" 
    }
    ```
 
+- С++
+
+  The C++ SDK uses the `prefer_local_dc` (prefer the nearest data center) algorithm by default.
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+
+  int main() {
+    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+    auto driverConfig = NYdb::TDriverConfig(connectionString)
+      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation());
+
+    NYdb::TDriver driver(driverConfig);
+    ...
+    driver.Stop(true);
+    return 0;
+  }
+  ```
+
 {% endlist %}

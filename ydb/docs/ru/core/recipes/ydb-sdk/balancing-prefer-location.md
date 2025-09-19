@@ -85,4 +85,24 @@
   }
   ```
 
+- С++
+
+  В C++ SDK можно выбрать только одну зону доступности в качестве предпочитаемой.
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+
+  int main() {
+    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+    auto driverConfig = NYdb::TDriverConfig(connectionString)
+      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation("datacenter1"));
+
+    NYdb::TDriver driver(driverConfig);
+    ...
+    driver.Stop(true);
+    return 0;
+  }
+  ```
+
 {% endlist %}

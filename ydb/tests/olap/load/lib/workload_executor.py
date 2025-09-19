@@ -2306,6 +2306,28 @@ class WorkloadTestBase(LoadSuiteBase):
                     workload_name,
                     "nodes_with_issues",
                     len(node_errors))
+                
+                # Формируем списки ошибок для выгрузки
+                node_error_messages = []
+                workload_error_messages = []
+                
+                # Собираем ошибки нод с подробностями
+                for node_error in node_errors:
+                    if node_error.core_hashes:
+                        for core_id, core_hash in node_error.core_hashes:
+                            node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
+                    if node_error.was_oom:
+                        node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
+                
+                # Собираем workload ошибки (не связанные с нодами)
+                if result.errors:
+                    for err in result.errors:
+                        if "coredump" not in err.lower() and "oom" not in err.lower():
+                            workload_error_messages.append(err)
+                
+                # Добавляем в статистику
+                result.add_stat(workload_name, "node_error_messages", node_error_messages)
+                result.add_stat(workload_name, "workload_error_messages", workload_error_messages)
 
             # 3. Формирование summary/статистики
             self._update_summary_flags(result, workload_name)

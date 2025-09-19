@@ -31,6 +31,10 @@ $aggregate_data = SELECT
     CAST(JSON_VALUE(Stats, '$.nodes_percentage') AS Int32) AS NodesPercentage,
     CAST(JSON_VALUE(Stats, '$.nodes_with_issues') AS Int32) AS NodesWithIssues,
     
+    -- Ошибки и диагностика
+    JSON_VALUE(Stats, '$.node_error_messages') AS NodeErrorMessages, -- JSON массив с подробностями ошибок нод
+    JSON_VALUE(Stats, '$.workload_error_messages') AS WorkloadErrorMessages, -- JSON массив с ошибками workload
+    
     -- Настройки теста
     CAST(JSON_VALUE(Stats, '$.use_iterations') AS Uint8) AS UseIterations,
     CAST(JSON_VALUE(Stats, '$.nemesis') AS Uint8) AS Nemesis,
@@ -97,6 +101,8 @@ SELECT
     TotalThreads,
     NodesPercentage,
     NodesWithIssues,
+    NodeErrorMessages,
+    WorkloadErrorMessages,
     
     -- Настройки
     UseIterations,

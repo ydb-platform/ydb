@@ -20,6 +20,9 @@ $per_run_data = SELECT
     JSON_VALUE(Stats, '$.error_message') AS ErrorMessage,
     JSON_VALUE(Stats, '$.warning_message') AS WarningMessage,
     CAST(JSON_VALUE(Stats, '$.run_id') AS Uint64) AS StatsRunId,
+    -- NOTE: Информация об ошибках нод доступна только в агрегированных данных
+    -- чтобы избежать неточной временной привязки ошибок к конкретным запускам
+    
     -- Извлекаем информацию о кластере из Info JSON
     JSON_VALUE(Info, '$.cluster.version') AS ClusterVersion,
     JSON_VALUE(Info, '$.cluster.endpoint') AS ClusterEndpoint,

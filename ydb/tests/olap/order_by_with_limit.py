@@ -43,7 +43,7 @@ class TestOrderBy(object):
         # [4,  8, 12, 16, 20, ...]
         # [5, 10, 15, 20, 25, ...]
         # ...
-        data = [[ {"id" : j, "value" : j} for j in range(1, self.n) if j % i == 0] for i in range(2, self.n)]
+        data = [[{"id": j, "value": j} for j in range(1, self.n) if j % i == 0] for i in range(2, self.n)]
         random.shuffle(data)
 
         for row in data:
@@ -74,8 +74,8 @@ class TestOrderBy(object):
         self.write_data(table_path)
 
         for i in range(100):
-            limit = random.randint(1, self.n // 2)
-            offset = random.randint(1, self.n // 2)
+            limit = random.randint(1, self.n)
+            offset = random.randint(1, self.n)
             is_desc = random.randint(0, 1)
             is_le = random.randint(0, 1)
             order = ["asc", "desc"]

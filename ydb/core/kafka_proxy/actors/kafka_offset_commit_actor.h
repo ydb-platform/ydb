@@ -2,7 +2,13 @@
 
 #include "ydb/core/base/tablet_pipe.h"
 #include "ydb/core/grpc_services/local_rpc/local_rpc.h"
+#include <ydb/core/grpc_services/service_scheme.h>
+#include <ydb/core/grpc_services/service_topic.h>
+#include "ydb/core/kafka_proxy/actors/actors.h"
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor.h>
@@ -28,6 +34,17 @@ struct TRequestInfo {
         : TopicName(topicName), PartitionId(partitionId) {}
 };
 
+struct TTopicGroupIdAndPath {
+    TString GroupId;
+    TString TopicPath;
+
+    bool operator==(const TTopicGroupIdAndPath& topicGroupIdAndPath) const {
+        return GroupId == topicGroupIdAndPath.GroupId && TopicPath == topicGroupIdAndPath.TopicPath;
+    }
+};
+
+struct TStructHash { size_t operator()(const TTopicGroupIdAndPath& alterTopicRequest) const { return CombineHashes(std::hash<TString>()(alterTopicRequest.GroupId), std::hash<TString>()(alterTopicRequest.TopicPath)); } };
+
 public:
     using TBase = NActors::TActorBootstrapped<TKafkaOffsetCommitActor>;
     TKafkaOffsetCommitActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetCommitRequestData>& message)
@@ -51,6 +68,7 @@ private:
             HFunc(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvCloseSession, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
         }
     }
 
@@ -59,7 +77,13 @@ private:
     void Handle(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx);
 
+    void SendAuthRequest(const NActors::TActorContext& ctx);
+    void CreateConsumerGroupIfNecessary(const TString& topicName,
+                                    const TString& topicPath,
+                                    const TString& originalTopicName,
+                                    const TString& groupId);
     void AddPartitionResponse(EKafkaErrors error, const TString& topicName, ui64 partitionId, const TActorContext& ctx);
     void ProcessPipeProblem(ui64 tabletId, const TActorContext& ctx);
     void SendFailedForAllPartitions(EKafkaErrors error, const TActorContext& ctx);
@@ -72,11 +96,14 @@ private:
 
     ui64 PendingResponses = 0;
     ui64 NextCookie = 0;
+    ui32 AlterTopicCookie = 0;
     std::unordered_map<ui64, TVector<ui64>> TabletIdToCookies;
     std::unordered_map<ui64, TRequestInfo> CookieToRequestInfo;
     std::unordered_map<TString, ui64> ResponseTopicIds;
     NKikimr::NGRpcProxy::TTopicInitInfoMap TopicAndTablets;
     std::unordered_map<ui64, TActorId> TabletIdToPipe;
+    std::unordered_map<ui32, TString> AlterTopicCookieToName;
+    std::unordered_set<TTopicGroupIdAndPath, TStructHash> ConsumerTopicAlterRequestAttempts;
     TActorId AuthInitActor;
     EKafkaErrors Error = NONE_ERROR;
 

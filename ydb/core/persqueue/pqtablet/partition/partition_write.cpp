@@ -1026,11 +1026,23 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     return EProcessResult::Continue;
 }
 
+struct TPartitionsPrivateAddCmdWriteTag {};
+
 void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
                              ui64 creationUnixTime,
                              const TActorContext& ctx,
-                             bool includeToWriteCycle)
+                             bool includeToWriteCycle) {
+    Y_ASSERT(creationUnixTime > 0);
+    AddCmdWriteImpl(newWrite, request, creationUnixTime, ctx, includeToWriteCycle, {});
+}
+
+void TPartition::AddCmdWriteImpl(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                             TEvKeyValue::TEvRequest* request,
+                             ui64 creationUnixTime,
+                             const TActorContext& ctx,
+                             bool includeToWriteCycle,
+                             TPartitionsPrivateAddCmdWriteTag)
 {
     auto write = request->Record.AddCmdWrite();
     write->SetKey(newWrite->Key.Data(), newWrite->Key.Size());
@@ -1049,12 +1061,12 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
         WriteCycleSize += newWrite->Value.size();
 }
 
-void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+void TPartition::AddCmdWriteWithDeferredTimestamp(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
                              const TActorContext& ctx,
                              bool includeToWriteCycle)
 {
-    AddCmdWrite(newWrite, request, 0, ctx, includeToWriteCycle);
+    AddCmdWriteImpl(newWrite, request, 0, ctx, includeToWriteCycle, {});
 }
 
 void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,

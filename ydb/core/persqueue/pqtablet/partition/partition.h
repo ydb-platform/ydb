@@ -1077,10 +1077,16 @@ private:
                      ui64 creationUnixTime,
                      const TActorContext& ctx,
                      bool includeToWriteCycle = true);
-    void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+    void AddCmdWriteWithDeferredTimestamp(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                      TEvKeyValue::TEvRequest* request,
                      const TActorContext& ctx,
                      bool includeToWriteCycle = true);
+    void AddCmdWriteImpl(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                     TEvKeyValue::TEvRequest* request,
+                     ui64 creationUnixTime,
+                     const TActorContext& ctx,
+                     bool includeToWriteCycle,
+                     struct TPartitionsPrivateAddCmdWriteTag);
     void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
                            TProcessParametersBase& parameters,
                            ui32 curWrites,

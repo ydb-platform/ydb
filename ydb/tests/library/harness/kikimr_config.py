@@ -643,10 +643,11 @@ class KikimrConfigGenerator(object):
         if file_backend_cfg is not None:
             file_path = file_backend_cfg.get('file_path')
             if file_path is None:
-                audit_file_path = os.path.join(self.__working_dir, 'audit.txt')
-                with open(audit_file_path, "w") as audit_file:
+                audit_file = tempfile.NamedTemporaryFile('w', prefix="audit_log.", suffix=".txt",
+                                                         dir=self.__working_dir)
+                file_backend_cfg['file_path'] = audit_file.name
+                with audit_file:
                     audit_file.write('')
-                file_backend_cfg['file_path'] = audit_file_path
         self.yaml_config['audit_config'] = cfg
 
     @property

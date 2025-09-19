@@ -5251,8 +5251,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         const auto topicDesc = R"(
             partitioning_settings {
-                min_active_partitions: 1
-                max_active_partitions: 1
+                min_active_partitions: 2
+                max_active_partitions: 2
                 auto_partitioning_settings {
                     strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
                     partition_write_speed {
@@ -5385,18 +5385,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-
-        const auto data = GenerateTestData(R"(
-            columns {
-              name: "key"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            columns {
-              name: "value"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            primary_key: "key"
-        )");
 
         THashMap<TString, TTestDataWithScheme> bucketContent(countChangefeed + 1);
 

@@ -132,6 +132,10 @@
     "kind": "Agg"
   },
   {
+    "name": "Block",
+    "kind": "Normal"
+  },
+  {
     "name": "BlockWardHistogram",
     "kind": "Agg"
   },

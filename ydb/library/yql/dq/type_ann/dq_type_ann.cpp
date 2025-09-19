@@ -90,7 +90,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
     argTypes.reserve(inputsTuple->ChildrenSize());
 
     for (const auto& input: inputsTuple->Children()) {
-        if (!TDqPhyPrecompute::Match(input.Get()) &&
+        if (!TDqPhyPrecompute::Match(input.Get()) && !TCoToOptional::Match(input.Get()) &&
             !(TDqConnection::Match(input.Get()) && !TDqCnValue::Match(input.Get())) &&
             !TDqSource::Match(input.Get()) &&
             !(input->Content() == "KqpTxResultBinding"sv))

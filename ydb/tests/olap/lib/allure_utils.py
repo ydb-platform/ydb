@@ -15,6 +15,8 @@ class NodeErrors:
     def __init__(self, node: YdbCluster.Node, message: str):
         self.node = node
         self.core_hashes: list[tuple[str, str]] = []    # id, aggregated hash
+        self.verifies: str
+        self.sanitizer_errors: str
         self.was_oom: bool = False
         self.message: str = message
 
@@ -60,6 +62,12 @@ def _set_node_errors(test_info: dict[str, str], node_errors: list[NodeErrors]) -
             html += f'<p>Node {node.message}</p>'
         if node.was_oom:
             html += '<p>Node was killed by OOM</p>'
+        if node.verifies:
+            html += '<p>Node had VERIFY failures</p>'
+            allure.attach(node.verifies, f'Node {node.node.slot} VERIFY report', attachment_type=allure.attachment_type.TEXT)
+        if node.sanitizer_errors:
+            html += '<p>Node had sanitizer issues</p>'
+            allure.attach(node.sanitizer_errors, f'Node {node.node.slot} sanitizer report', attachment_type=allure.attachment_type.TEXT)
         for core_id, core_hash in node.core_hashes:
             color = hex(0xFF0000 + hash(str(core_hash)) % 0xFFFF).split('x')[-1]
             html += f'<p>There was coredump <a target="_blank" href="https://coredumps.yandex-team.ru/core_trace?core_id={core_id}" style="background-color: #{color}">{core_hash}</a></p>'

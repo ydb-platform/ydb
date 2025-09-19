@@ -222,6 +222,52 @@ class LoadSuiteBase:
         return core_hashes
 
     @classmethod
+    def __get_sanitizer_events(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, list[tuple[str, str]]]:
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).isoformat()
+        end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
+
+        sanitizer_regex_params = r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)'
+
+        core_processes = {
+            h: cls.execute_ssh(h, f"\
+ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -i -A 150 '{sanitizer_regex_params}'")
+            for h in hosts
+        }
+
+        host_logs = {}
+        for h, exec in core_processes.items():
+            exec.wait(check_exit_code=False)
+            if exec.returncode != 0:
+                logging.error(f'Error while process VERIFY failed and sanitizers on host {h}: {exec.stderr}')
+            else:
+                host_logs[h] = exec.stdout
+        return host_logs
+
+    @classmethod
+    def __get_verify_fails(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, list[tuple[str, str]]]:
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).isoformat()
+        end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
+
+        verify_regex_params = r'(VERIFY failed.*\n)(\D.*\n)*(\d+\..*\n)+'
+
+        core_processes = {
+            h: cls.execute_ssh(h, f"\
+ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -E -i '{verify_regex_params}'")
+            for h in hosts
+        }
+
+        host_logs = {}
+        for h, exec in core_processes.items():
+            exec.wait(check_exit_code=False)
+            if exec.returncode != 0:
+                logging.error(f'Error while process VERIFY failed and sanitizers on host {h}: {exec.stderr}')
+            else:
+                host_logs[h] = exec.stdout
+        return host_logs
+
+    @classmethod
     def __get_hosts_with_omms(cls, hosts: set[str], start_time: float, end_time: float) -> set[str]:
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).strftime("%Y-%m-%d %H:%M:%S")
@@ -502,6 +548,8 @@ class LoadSuiteBase:
         # Собираем диагностическую информацию для всех хостов
         core_hashes = cls.__get_core_hashes_by_pod(all_hosts, start_time, end_time)
         ooms = cls.__get_hosts_with_omms(all_hosts, start_time, end_time)
+        sanitizer_messages = cls.__get_sanitizer_events(all_hosts, start_time, end_time)
+        verifies = cls.__get_verify_fails(all_hosts, start_time, end_time)
 
         # Создаем NodeErrors для каждой ноды с диагностической информацией
         node_errors = []
@@ -510,10 +558,14 @@ class LoadSuiteBase:
             has_cores = bool(core_hashes.get(node.slot, []))
             has_oom = node.host in ooms
 
-            if has_cores or has_oom:
+            if has_cores or has_oom or node.host in verifies:
                 node_error = NodeErrors(node, 'diagnostic info collected')
                 node_error.core_hashes = core_hashes.get(node.slot, [])
                 node_error.was_oom = has_oom
+                if node.host in verifies:
+                    node_error.verifies = verifies[node.host]
+                if node.host in sanitizer_messages:
+                    node_error.sanitizer_errors = sanitizer_messages[node.host]
                 node_errors.append(node_error)
 
                 # Добавляем ошибки в результат (cores и OOM - это errors)

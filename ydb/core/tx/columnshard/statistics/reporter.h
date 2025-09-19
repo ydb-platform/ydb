@@ -41,7 +41,7 @@ private:
             // cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle)
             sFunc(TEvTabletPipe::TEvClientConnected, SendPeriodicStats)
-            sFunc(NColumnShard::TEvPrivate::TEvReportStatistics, SendPeriodicStats);
+            hFunc(NColumnShard::TEvPrivate::TEvReportStatistics, Handle);
             hFunc(TEvDataShard::TEvPeriodicTableStats, Handle);
             hFunc(TEvSetSSId, Handle);
             default:
@@ -69,7 +69,7 @@ public:
     void Bootstrap(const NActors::TActorContext&);
     void Handle(NKikimr::TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
     // void Handle(TEvTabletPipe::TEvClientConnected::TPtr&, const TActorContext&);
-    // void Handle(TEvReportStatistics::TPtr&, const NActors::TActorContext&);
+    void Handle(NColumnShard::TEvPrivate::TEvReportStatistics::TPtr&);
     void Handle(TEvDataShard::TEvPeriodicTableStats::TPtr&);
     void Handle(TEvSetSSId::TPtr&);
 

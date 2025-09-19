@@ -89,6 +89,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());
+    ctx.Send(SelfId(), new TEvPrivate::TEvReportStatistics());
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
     AFL_VERIFY(!!StartInstant);
     Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
@@ -246,8 +247,42 @@ void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvReportStatistics::TPtr& /*ev*/) {
-
     ActorContext().Schedule(TDuration::MilliSeconds(1000), new TEvPrivate::TEvReportStatistics);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "TEvReportStatistics");
+    LOG_S_DEBUG("Send periodic stats.");
+
+    if (!CurrentSchemeShardId || !TablesManager.GetTabletPathIdOptional()) {
+        LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
+        return;
+    }
+    const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
+
+    const TActorContext& ctx = ActorContext();
+    const TInstant now = TAppData::TimeProvider->Now();
+
+    if (LastStatsReport + StatsReportInterval > now) {
+        LOG_S_TRACE("Skip send periodic stats: report interval = " << StatsReportInterval);
+        return;
+    }
+    LastStatsReport = now;
+
+    if (!StatsReportPipe) {
+        LOG_S_DEBUG("Create periodic stats pipe to " << CurrentSchemeShardId << " at tablet " << TabletID());
+        NTabletPipe::TClientConfig clientConfig;
+        StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
+    }
+
+    LOG_S_ERROR("iurii Shard id " << CurrentSchemeShardId << " " << tabletSchemeShardLocalPathId.GetRawValue());
+
+    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
+
+    FillOlapStats(ctx, ev);
+    FillColumnTableStats(ctx, ev);
+    ActorContext().Send(ColumnShardStatisticsReporter, ev.release());
+
+    // AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ev", ev->ToString());
+
+    // NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {

@@ -122,10 +122,6 @@ void TColumnShardStatisticsReporter::SendPeriodicStats() {
 
 
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
-        // TDuration::Seconds(SendStatsIntervalMinSeconds
-    //     + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds))
-    Schedule(TDuration::MilliSeconds(ReportStatisticsPeriodMs), new NColumnShard::TEvPrivate::TEvReportStatistics);
-    // Schedule(TDuration::MilliSeconds(1000), new TEvReportStatistics);
 }
 
 void TColumnShardStatisticsReporter::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
@@ -147,7 +143,17 @@ void TColumnShardStatisticsReporter::ReportExecutorStatistics() {
 }
 
 void TColumnShardStatisticsReporter::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("iurii", "debug")("test", "123");
     latestCSExecutorStats = std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>(ev->Release().Release());
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("iurii", "debug")("test", "456");
+}
+
+void TColumnShardStatisticsReporter::Handle(NColumnShard::TEvPrivate::TEvReportStatistics::TPtr&) {
+            // TDuration::Seconds(SendStatsIntervalMinSeconds
+    //     + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds))
+    Schedule(TDuration::MilliSeconds(ReportStatisticsPeriodMs), new NColumnShard::TEvPrivate::TEvReportStatistics);
+    // Schedule(TDuration::MilliSeconds(1000), new TEvReportStatistics);
+    SendPeriodicStats();
 }
 
 void TColumnShardStatisticsReporter::Handle(TEvSetSSId::TPtr& ev) {

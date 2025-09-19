@@ -2439,6 +2439,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
+    AddCallable("Block", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        return ctx.ProgramBuilder.Block([&](TRuntimeNode parent) {
+            return MkqlBuildLambda(node.Head(), ctx, {parent});
+        });
+    });
+
     AddCallable("Error", [](const TExprNode& node, TMkqlBuildContext& ctx)->NKikimr::NMiniKQL::TRuntimeNode {
         const auto err = node.GetTypeAnn()->Cast<TErrorExprType>()->GetError();
         ythrow TNodeException(ctx.ExprCtx.AppendPosition(err.Position)) << err.GetMessage();

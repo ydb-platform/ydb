@@ -241,6 +241,7 @@ public:
     TRuntimeNode FromBytes(TRuntimeNode data, TType* type);
     TRuntimeNode InversePresortString(TRuntimeNode data);
     TRuntimeNode InverseString(TRuntimeNode data);
+
     TRuntimeNode Random(const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode RandomNumber(const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode RandomUuid(const TArrayRef<const TRuntimeNode>& dependentNodes);
@@ -579,6 +580,7 @@ public:
 
     TRuntimeNode SourceOf(TType* returnType);
     TRuntimeNode Source();
+    TRuntimeNode Block(const TUnaryLambda& lambda);
 
     TRuntimeNode MakeHeap(TRuntimeNode list, const TBinaryLambda& comparator);
     TRuntimeNode PushHeap(TRuntimeNode list, const TBinaryLambda& comparator);

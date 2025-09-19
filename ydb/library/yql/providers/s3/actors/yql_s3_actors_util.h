@@ -1,13 +1,17 @@
 #pragma once
 
-#include <yql/essentials/public/issue/yql_issue.h>
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/xml/document/xml-document-decl.h>
 
 #include <util/generic/string.h>
 
 #include <optional>
+#include <source_location>
 
 namespace NYql::NDq {
 
@@ -24,7 +28,7 @@ struct TS3Result {
     TString S3ErrorCode;
     TString ErrorMessage;
 
-    TS3Result(const TString& body);
+    explicit TS3Result(const TString& body);
 
     operator bool() const {
         return Parsed;
@@ -35,4 +39,20 @@ struct TS3Result {
     }
 };
 
-}
+class TSourceErrorHandler {
+public:
+    explicit TSourceErrorHandler(ui64 inputIndex);
+
+    static void CanonizeFatalError(TIssues& issues, NYql::NDqProto::StatusIds::StatusCode& fatalCode, const std::source_location& location);
+
+protected:
+    void OnRetriableError(const TIssues& issues);
+
+    void OnFatalError(TIssues issues, NYql::NDqProto::StatusIds::StatusCode fatalCode, std::source_location location = std::source_location::current());
+
+    virtual void SendError(std::unique_ptr<IDqComputeActorAsyncInput::TEvAsyncInputError> ev) = 0;
+
+    const ui64 InputIndex = 0;
+};
+
+} // namespace NYql::NDq

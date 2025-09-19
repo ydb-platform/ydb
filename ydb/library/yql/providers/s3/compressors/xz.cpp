@@ -1,14 +1,36 @@
 #include "xz.h"
-
-#include <util/generic/size_literals.h>
-#include <yql/essentials/utils/exceptions.h>
-#include <yql/essentials/utils/yql_panic.h>
-#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include "output_queue_impl.h"
 
-namespace NYql {
+#include <contrib/libs/lzma/liblzma/api/lzma.h>
 
-namespace NXz {
+#include <util/generic/size_literals.h>
+
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+
+#include <yql/essentials/utils/exceptions.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+
+namespace NYql::NXz {
+
+namespace {
+
+class TReadBuffer : public NDB::ReadBuffer {
+public:
+    TReadBuffer(NDB::ReadBuffer& source);
+    ~TReadBuffer();
+private:
+    bool nextImpl() final;
+
+    NDB::ReadBuffer& Source_;
+    std::vector<char> InBuffer, OutBuffer;
+
+    lzma_stream Strm_;
+
+    bool IsInFinished_ = false;
+    bool IsOutFinished_ = false;
+};
 
 TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
     : NDB::ReadBuffer(nullptr, 0ULL), Source_(source), Strm_(LZMA_STREAM_INIT)
@@ -86,8 +108,6 @@ bool TReadBuffer::nextImpl() {
         }
     }
 }
-
-namespace {
 
 class TCompressor : public TOutputQueue<> {
 public:
@@ -193,12 +213,14 @@ private:
     TOutputQueue<0> InputQueue;
 };
 
+} // anonymous namespace
+
+std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source) {
+    return std::make_unique<TReadBuffer>(source);
 }
 
 IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
     return std::make_unique<TCompressor>(cLevel.value_or(LZMA_PRESET_DEFAULT));
 }
 
-}
-
-}
+} // namespace NYql::NXz

@@ -2,7 +2,7 @@ ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestD
 ydb/core/blobstorage/pdisk/ut TPDiskTest.FailedToFormatDiskInfoUpdate
 ydb/core/blobstorage/pdisk/ut TPDiskTest.PDiskSlotSizeInUnits
 ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
-ydb/core/blobstorage/ut_blobstorage GroupLayoutSanitizer.StressMirror3of4
+ydb/core/blobstorage/ut_blobstorage Defragmentation.CorruptedReadHandling
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroup
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
 ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
@@ -29,6 +29,7 @@ ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.ClientError
 ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.ClientErrorWithEmptyFilter
+ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.WatermarkWhereFalse
 ydb/core/kafka_proxy/ut KafkaProtocol.TopicsCompactionGapFromRetention
 ydb/core/kafka_proxy/ut KafkaProtocol.TopicsCompactionSwitchOnAndOff
 ydb/core/kafka_proxy/ut unittest.sole chunk
@@ -48,6 +49,7 @@ ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
 ydb/core/kqp/ut/olap KqpOlapOptimizer.OptimizationAfterDeletion
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewColumns
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
+ydb/core/kqp/ut/opt KqpExtractPredicateLookup.ComplexRange
 ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpLimits.ComputeNodeMemoryLimit
@@ -55,17 +57,23 @@ ydb/core/kqp/ut/query KqpStats.DeferredEffects+UseSink
 ydb/core/kqp/ut/scan KqpScan.StreamExecuteScanQueryClientTimeoutBruteForce
 ydb/core/kqp/ut/scheme KqpAcl.AlterDatabasePrivilegesRequiredToChangeSchemeLimits-AsClusterAdmin
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
+ydb/core/kqp/ut/scheme KqpScheme.InvalidationAfterDropCreateTable2MultiStageTxNoEffects
 ydb/core/kqp/ut/service KqpQueryService.LargeUpsert-UseSink
+ydb/core/kqp/ut/service KqpQueryServiceScripts.ExecuteScriptWithCancelAfterAndTimeout
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
+ydb/core/kqp/ut/service KqpService.PatternCache
 ydb/core/kqp/ut/service KqpService.TwoNodeOneShuttingDown
 ydb/core/kqp/ut/service unittest.[*/*] chunk
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanClientTimeoutBruteForce
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
+ydb/core/kqp/workload_service/ut DefaultPoolSettings.TestResourcePoolsSysViewFilters
+ydb/core/kqp/workload_service/ut KqpWorkloadServiceDistributed.TestDistributedLargeConcurrentQueryLimit
 ydb/core/mind/hive/ut THiveTest.TestCreateSubHiveCreateManyTablets
 ydb/core/mind/hive/ut THiveTest.TestCreateSubHiveCreateManyTabletsWithReboots
 ydb/core/mind/hive/ut THiveTest.TestDeleteTabletWithRestartAndRetry
 ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/persqueue/ut TPQTest.TestCompactifiedWithRetention
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.OrderOfChildrenPartitions_Topic
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_1MB_LegacyTopic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_1MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_LB_exact
@@ -76,8 +84,10 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_LB_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_LegacyTopic_exact
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_LegacyTopic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_Topic_offset+middle
+ydb/core/persqueue/ut/ut_with_sdk unittest.[*/*] chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/sys_view/ut SystemView.AuthGroupMembers_Access
@@ -95,9 +105,12 @@ ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.ShouldS
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index TAsyncIndexTests.MergeBothWithReboots[TabletReboots]
 ydb/core/tx/schemeshard/ut_index unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCase
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCaseWithDataColumns
+ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.UniqueIndexValidationFailsInsideShard
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
+ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_sequence_reboots TSequenceReboots.CreateSequencesWithIndexedTable
 ydb/core/tx/schemeshard/ut_sequence_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots
@@ -117,117 +130,10 @@ ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHidd
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcIsDisabledByDefault
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_datetime[datetime_YQL_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_datetime[datetime_string_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_missing_database[missing_database_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_missing_table[missing_table_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_A_b_C_d_E_HTTP-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_A_b_C_d_E_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_COL1_HTTP-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_COL1_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_asterisk_HTTP-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_asterisk_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_col2_COL1_HTTP-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_col2_COL1_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_col2_HTTP-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_col2_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_col3_HTTP-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[column_selection_col3_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[constant_HTTP-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[constant_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[counts_HTTP-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[counts_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[large_HTTP-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[large_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_non_nullable_HTTP-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_non_nullable_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_nullable_HTTP-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[primitive_types_nullable_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[pushdown_HTTP-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.test_select_positive[pushdown_NATIVE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_datetime[datetimes0-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_datetime[datetimes1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_missing_database[missing_database-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_missing_table[missing_table-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[column_selection_A_b_C_d_E-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[column_selection_COL1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[column_selection_asterisk-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[column_selection_col2-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[column_selection_col2_COL1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[column_selection_col3-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[constant-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[count_rows-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[primitives-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[pushdown0-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[pushdown1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_datetime[datetimes0-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_datetime[datetimes1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_missing_database[missing_database-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_missing_table[missing_table-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[column_selection_A_b_C_d_E-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[column_selection_COL1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[column_selection_asterisk-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[column_selection_col2-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[column_selection_col2_COL1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[column_selection_col3-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[constant-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[count_rows-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[json-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[primitives-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[pushdown0-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[pushdown1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_datetime[DATETIMES0-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_datetime[DATETIMES1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_missing_table[missing_table-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_positive[CONSTANT-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_positive[COUNT_ROWS-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_positive[JSON-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_positive[LONGRAW-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_positive[LONG_TABLE-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_positive[PRIMITIVES-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_positive[PUSHDOWN0-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_positive[PUSHDOWN1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_datetime[datetime_YQL-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_datetime[datetime_string-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_missing_database[missing_database-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_missing_table[missing_table-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[column_selection_A_b_C_d_E-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[column_selection_asterisk-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[column_selection_col1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[column_selection_col2-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[column_selection_col2_col1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[constant-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[count-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[json-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[large-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[primitive_types-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[pushdown0-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[pushdown1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive[upper_case_column-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/postgresql test.py.test_select_positive_with_schema[select_positive_with_schema_asterisk-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_missing_table[missing_table-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_A_b_C_d_E-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_COL1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_asterisk-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2_COL1-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col3-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[constant-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[count-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[json-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[json_document-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[optional_types-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[primitive_types-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[pushdown-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[unsupported_types-kqprun]
-ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[inner_join-kqprun]
-ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_ch-kqprun]
-ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_pg-kqprun]
-ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg_ch-kqprun]
-ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg_pg-kqprun]
 ydb/mvp/oidc_proxy/ut unittest.sole chunk
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.PropagateSessionClosed
 ydb/public/sdk/cpp/src/client/federated_topic/ut unittest.[*/*] chunk
+ydb/public/sdk/cpp/src/client/topic/ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Transactions_Conflict_On_SeqNo_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Table
@@ -248,6 +154,7 @@ ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
 ydb/services/ydb/ut TAuthenticationWithSqlExecution.CreateAlterUserWithHash
 ydb/services/ydb/ut TGRpcAuthentication.NoConnectRights
 ydb/services/ydb/ut TGRpcAuthentication.NoDescribeRights
+ydb/services/ydb/ut TGRpcAuthentication.ValidCredentials
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/compatibility py3test.[test_kafka_topic.py */*] chunk
 ydb/tests/compatibility py3test.[test_statistics.py */*] chunk
@@ -256,52 +163,40 @@ ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[rest
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_main_to_prestable-25-3-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_prestable-25-3_to_prestable-25-3-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_prestable-25-3_to_stable-25-2-1-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_stable-25-2-1_to_prestable-25-3-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_stable-25-2-1_to_stable-25-1-4-row]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_25.1.4.7_to_25.2.1.6]
-ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_prestable-25-3_to_main]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_stable-25-1-4_to_stable-25-2-1]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_stable-25-2-1_to_current]
-ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_25.1.4.7_to_25.2.1.6]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_stable-25-1-4_to_stable-25-2-1]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_stable-25-2-1_to_current]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_stable-25-2-1_to_prestable-25-3]
-ydb/tests/compatibility test_example.py.TestExampleRollingUpdate.test_example[rolling_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_current_to_stable-25-2-1]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_prestable-25-3_to_stable-25-2-1]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_stable-25-2-1_to_current]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_prestable-25-3_to_current-column]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_prestable-25-3_to_current-row]
-ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderMixedCluster.test_simple_reader_mixed_cluster[mixed_prestable-25-3_and_stable-25-2-1]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-25-2-1_to_current]
-ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-25-2-1_to_prestable-25-3]
-ydb/tests/compatibility test_statistics.py.TestStatisticsFollowersRollingUpdate.test_example[rolling_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_25.1.4.7_to_25.2.1.6]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_current_to_current]
+ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_current_to_prestable-25-3]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_current_to_stable-25-2-1]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_prestable-25-3_to_main]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_prestable-25-3_to_prestable-25-3]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_stable-25-2-1_to_current]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_stable-25-2-1_to_stable-25-1-4]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_25.1.4.7_and_24.4.4.12-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_current_and_stable-25-2-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_stable-25-2-1-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_stable-25-2-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_stable-25-2-1-row]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-25-3_and_stable-25-2-1-column-date64]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-25-3_and_stable-25-2-1-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-25-3_and_stable-25-2-1-row]
-ydb/tests/compatibility test_system_views.py.TestSystemViewsRegistry.test_domain_sys_dir[restart_main_to_prestable-25-3]
-ydb/tests/compatibility test_system_views.py.TestSystemViewsRollingUpgrade.test_path_resolving[rolling_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_schema_changes_during_rolling_upgrade[rolling_stable-25-2-1_to_current]
-ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_schema_changes_during_rolling_upgrade[rolling_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_table_operations_during_rolling_upgrade[rolling_stable-25-2-1_to_current]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_table_operations_during_rolling_upgrade[rolling_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read[rolling_stable-25-1-4_to_stable-25-2-1]
 ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read[rolling_stable-25-2-1_to_current]
 ydb/tests/compatibility test_transfer.py.TestTransferRestartToAnotherVersion.test_transfer[restart_current_to_prestable-25-3-row-True]
-ydb/tests/compatibility test_transfer.py.TestTransferRestartToAnotherVersion.test_transfer[restart_main_to_prestable-25-3-row-True]
 ydb/tests/compatibility test_transfer.py.TestTransferRestartToAnotherVersion.test_transfer[restart_prestable-25-3_to_main-row-True]
 ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-25-2-1_to_prestable-25-3-row-False]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_25.1.4.7_to_25.1.4.7]
@@ -327,13 +222,9 @@ ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.t
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_all_scheme_objects[mixed_main]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_all_scheme_objects[mixed_main_and_prestable-25-3]
-ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_all_scheme_objects[mixed_prestable-25-3]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_all_scheme_objects[mixed_prestable-25-3_and_stable-25-2-1]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_tables[mixed_main]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_tables[mixed_main_and_prestable-25-3]
-ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_tables[mixed_prestable-25-3]
-ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_tables[mixed_prestable-25-3_and_stable-25-2-1]
-ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_topics[mixed_prestable-25-3]
 ydb/tests/datashard/vector_index/large test_vector_index.py.TestVectorIndex.test_vector_index
 ydb/tests/datashard/vector_index/large test_vector_index_large_levels_and_clusters.py.TestVectorIndexLargeLevelsAndClusters.test_vecot_index_large_levels_and_clusters
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
@@ -342,6 +233,7 @@ ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/fq/s3 test_bindings_0.py.TestBindings.test_modify_connection_with_a_lot_of_bindings[v2-kikimr_settings0-client0]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1]
+ydb/tests/fq/yds test_bad_syntax.py.TestBadSyntax.test_bad_syntax[v1-mvp_external_ydb_endpoint0-with_created_read_rules-create-streaming]
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_hop_alloc[v1]
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
@@ -351,8 +243,6 @@ ydb/tests/fq/yds test_yq_streaming.py.TestYqStreaming.test_early_finish_case2[v1
 ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_failover
 ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_rejoin
 ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_takedown
-ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_basic
-ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite[select_1]
 ydb/tests/functional/restarts test_restarts.py.TestRestartSingleBlock42.test_restart_single_node_is_ok
@@ -360,7 +250,9 @@ ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quota
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v0-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v0-std]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v1-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v1-tables_format_v0-fifo]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v1-tables_format_v1-std]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_message_counters_in_cloud[tables_format_v1-fifo]
 ydb/tests/functional/sqs/common test_queue_tags.py.TestQueueTags.test_tag_queue[tables_format_v1-std]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_tenants[enable_alter_database_create_hive_first--false]
@@ -467,5 +359,6 @@ ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generate
 ydb/tests/postgres_integrations/go-libpq py3test.[docker_wrapper_test.py] chunk
 ydb/tests/stress/olap_workload/tests py3test.sole chunk
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
 ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

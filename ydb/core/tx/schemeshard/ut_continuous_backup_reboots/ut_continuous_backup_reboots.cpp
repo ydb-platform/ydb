@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupWithRebootsTests) {
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl"), {
                     NLs::PathExist,
                     NLs::IsTable,
-                    NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__ydb_incrBackupImpl_deleted", "__ydb_incrBackupImpl_columnStates"}, {}, {"key"}),
+                    NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__ydb_incrBackupImpl_changeMetadata"}, {}, {"key"}),
                 });
             }
         });
@@ -272,19 +272,19 @@ Y_UNIT_TEST_SUITE(TContinuousBackupWithRebootsTests) {
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl1"), {
                     NLs::PathExist,
                     NLs::IsTable,
-                    NLs::CheckColumns("IncrBackupImpl1", {"key", "value", "__ydb_incrBackupImpl_deleted", "__ydb_incrBackupImpl_columnStates"}, {}, {"key"}),
+                    NLs::CheckColumns("IncrBackupImpl1", {"key", "value", "__ydb_incrBackupImpl_changeMetadata"}, {}, {"key"}),
                 });
 
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl2"), {
                     NLs::PathExist,
                     NLs::IsTable,
-                    NLs::CheckColumns("IncrBackupImpl2", {"key", "value", "__ydb_incrBackupImpl_deleted", "__ydb_incrBackupImpl_columnStates"}, {}, {"key"}),
+                    NLs::CheckColumns("IncrBackupImpl2", {"key", "value", "__ydb_incrBackupImpl_changeMetadata"}, {}, {"key"}),
                 });
 
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl3"), {
                     NLs::PathExist,
                     NLs::IsTable,
-                    NLs::CheckColumns("IncrBackupImpl3", {"key", "value", "__ydb_incrBackupImpl_deleted", "__ydb_incrBackupImpl_columnStates"}, {}, {"key"}),
+                    NLs::CheckColumns("IncrBackupImpl3", {"key", "value", "__ydb_incrBackupImpl_changeMetadata"}, {}, {"key"}),
                 });
             }
         });

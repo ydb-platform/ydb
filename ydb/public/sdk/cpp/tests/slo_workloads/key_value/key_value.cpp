@@ -55,10 +55,47 @@ int DoCreate(TDatabaseOptions& dbOptions, int argc, char** argv) {
 }
 
 int DoRun(TDatabaseOptions& dbOptions, int argc, char** argv) {
-    Y_UNUSED(dbOptions);
-    Y_UNUSED(argc);
-    Y_UNUSED(argv);
-    Cerr << "The run command has not been implemented for this scenario yet" << Endl;
+    TRunOptions runOptions{ {dbOptions} };
+    if (!ParseOptionsRun(argc, argv, runOptions)) {
+        return EXIT_FAILURE;
+    }
+
+    Cout << TInstant::Now().ToRfc822StringLocal() << " Creating and initializing jobs..." << Endl;
+
+    std::uint32_t maxId = GetTableStats(dbOptions, TableName).MaxId;
+
+    std::shared_ptr<TJobContainer>& jobs = *Singleton<std::shared_ptr<TJobContainer>>();
+    TJobGC gc(jobs);
+    jobs = std::make_shared<TJobContainer>();
+
+    if (!runOptions.DontRunA) {
+        runOptions.CommonOptions.Rps = runOptions.Read_rps;
+        runOptions.CommonOptions.ReactionTime = TDuration::MilliSeconds(runOptions.CommonOptions.A_ReactionTime);
+        jobs->Add(new TReadJob(runOptions.CommonOptions, maxId));
+    }
+    if (!runOptions.DontRunB) {
+        runOptions.CommonOptions.Rps = runOptions.Write_rps;
+        runOptions.CommonOptions.ReactionTime = DefaultReactionTime;
+        jobs->Add(new TWriteJob(runOptions.CommonOptions, maxId));
+    }
+
+    TInstant start = TInstant::Now();
+    TInstant deadline = start + TDuration::Seconds(runOptions.CommonOptions.SecondsToRun);
+
+    jobs->Start(deadline);
+
+    SetUpInteraction();
+    Cout << "Jobs launched. Do 'kill -USR1 " << GetPID()
+        << "' for progress details or 'kill -INT " << GetPID() << "' (Ctrl/Cmd + C) to interrupt" << Endl
+        << "           Start time: " << start.ToRfc822StringLocal() << Endl
+        << "Estimated finish time: " << deadline.ToRfc822StringLocal() << Endl;
+
+    jobs->Wait();
+
+    Cout << "All jobs finished: " << TInstant::Now().ToRfc822StringLocal() << Endl;
+
+    jobs->ShowProgress();
+
     return EXIT_SUCCESS;
 }
 

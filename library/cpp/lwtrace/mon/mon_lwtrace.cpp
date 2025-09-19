@@ -4293,7 +4293,7 @@ private:
                                 };
                                 TCgiParameters cgiParams;
                                 for (const auto& kv : request.GetParams()) {
-                                    if (keepParams.count(kv.first)) {
+                                    if (keepParams.contains(kv.first)) {
                                         cgiParams.insert(kv);
                                     }
                                 }
@@ -4486,7 +4486,7 @@ private:
                             };
                             TCgiParameters cgiParams;
                             for (const auto& kv : request.GetParams()) {
-                                if (keepParams.count(kv.first)) {
+                                if (keepParams.contains(kv.first)) {
                                     cgiParams.insert(kv);
                                 }
                             }

@@ -23,6 +23,34 @@ private:
     std::uint64_t Total;
 };
 
+// Write workload job
+class TWriteJob : public TThreadJob {
+public:
+    TWriteJob(const TCommonOptions& opts, std::uint32_t maxId);
+    void ShowProgress(TStringBuilder& report) override;
+    void DoJob() override;
+    void OnFinish() override;
+
+private:
+    TExecutor Executor;
+    TKeyValueGenerator Generator;
+    std::atomic<std::uint64_t> ValuesGenerated = 0;
+};
+
+// Read workload job  
+class TReadJob : public TThreadJob {
+public:
+    TReadJob(const TCommonOptions& opts, std::uint32_t maxId);
+    void ShowProgress(TStringBuilder& report) override;
+    void DoJob() override;
+    void OnFinish() override;
+
+private:
+    std::unique_ptr<TExecutor> Executor;
+    std::uint32_t ObjectIdRange;
+    bool SaveResult;
+};
+
 int CreateTable(TDatabaseOptions& dbOptions);
 int DropTable(TDatabaseOptions& dbOptions);
 

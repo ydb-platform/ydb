@@ -55,7 +55,6 @@ struct TCommonOptions {
     bool StopOnError = false;
     bool UseApplicationTimeout = false;
     bool SendPreventiveRequest = false;
-    bool DoNotPrepare = false;
 
     //Generator options:
     std::uint32_t MinLength = 20;
@@ -125,31 +124,6 @@ ECommandType ParseCommand(const char* cmd);
 
 std::string JoinPath(const std::string& prefix, const std::string& path);
 
-class TYdbErrorException : public yexception {
-public:
-    TYdbErrorException(NYdb::TStatus status)
-        : Status(std::move(status))
-    { }
-
-    friend IOutputStream& operator<<(IOutputStream& out, const TYdbErrorException& e) {
-        out << "Status: " << e.Status.GetStatus();
-        if (e.Status.GetIssues()) {
-            out << Endl;
-            e.Status.GetIssues().PrintTo(out);
-        }
-        return out;
-    }
-
-private:
-    NYdb::TStatus Status;
-};
-
-inline void ThrowOnError(NYdb::TStatus status) {
-    if (!status.IsSuccess()) {
-        throw TYdbErrorException(std::move(status));
-    }
-}
-
 inline void RetryBackoff(
     NYdb::NTable::TTableClient& client,
     std::uint32_t retries,
@@ -165,7 +139,7 @@ inline void RetryBackoff(
         if (!retries) {
             Cerr << "Create request failed after all retries." << Endl;
             Cerr << status << Endl;
-            ThrowOnError(status);
+            NYdb::NStatusHelpers::ThrowOnError(status);
         }
         Cerr << "Create request failed. Sleeping for " << delay << Endl;
         Sleep(delay);

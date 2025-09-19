@@ -2238,7 +2238,7 @@ public:
             }
         }
         auto itMaxClockSkew = std::ranges::max_element(nodeClockSkewState, [](const auto& a, const auto& b) {
-            return a.second.NumberOfReporters > b.second.NumberOfReporters;
+            return a.second.NumberOfReporters < b.second.NumberOfReporters;
         });
         if (itMaxClockSkew != nodeClockSkewState.end()) {
             if (itMaxClockSkew->second.NumberOfReporters * 2 >= static_cast<int>(nodeClockSkewState.size())) { // at least 50% of reporters

@@ -512,7 +512,7 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
-                            Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
+                            Config->MaxLogoBlobDataSize + TDiskBlob::MaxHeaderSize,
                             hugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
                             logFunc);
@@ -533,15 +533,13 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
-                            Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
+                            Config->MaxLogoBlobDataSize + TDiskBlob::MaxHeaderSize,
                             hugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
                             lsn, entryPoint, logFunc);
             }
-            HugeBlobCtx = std::make_shared<THugeBlobCtx>(
-                    LocRecCtx->VCtx->VDiskLogPrefix,
-                    LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),
-                    Config->AddHeader);
+            HugeBlobCtx = std::make_shared<THugeBlobCtx>(LocRecCtx->VCtx->VDiskLogPrefix,
+                LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(), Config->BlobHeaderMode);
             HugeKeeperInitialized = true;
             return true;
         }
@@ -596,7 +594,6 @@ namespace NKikimr {
                         Config->HullCompReadBatchEfficiencyThreshold,
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration,
-                        Config->AddHeader,
                         Config->HullCompLevel0MaxSstsAtOnce,
                         Config->HullCompSortedPartsNum);
 

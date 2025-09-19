@@ -9,7 +9,6 @@
 
 #include <mutex>
 
-
 inline std::string GetMillisecondsStr(const TDuration& d) {
     return TStringBuilder() << d.MilliSeconds() << '.' << Sprintf("%03" PRIu64, d.MicroSeconds() % 1000);
 }
@@ -175,7 +174,7 @@ private:
     void CalculateFailSeconds();
     std::uint64_t GetTotal();
 
-    std::mutex Mutex;
+    std::recursive_mutex Mutex;
     TThreadPool MetricsPushQueue;
     // Current period we collect stats for
     std::shared_ptr<TPeriodData> ActivePeriod;

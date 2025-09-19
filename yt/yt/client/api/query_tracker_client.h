@@ -107,6 +107,9 @@ struct TListQueriesOptions
     ui64 Limit = 100;
 
     NYTree::TAttributeFilter Attributes;
+
+    bool SearchByTokenPrefix = false;
+    bool UseFullTextSearch = true;
 };
 
 struct TQuery

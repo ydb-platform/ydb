@@ -1612,7 +1612,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreTablePartitioningSettings) {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
@@ -1632,7 +1632,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreIndexTablePartitioningSettings) {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
@@ -1654,7 +1654,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreIndexTableReadReplicasSettings) {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
@@ -1678,7 +1678,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreTableSplitBoundaries) {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
@@ -1698,7 +1698,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(ImportDataShouldHandleErrors) {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
@@ -1780,7 +1780,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(BackupUuid) {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
@@ -1856,7 +1856,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST(RestoreViewQueryText) {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TViewClient viewClient(driver);
@@ -1877,7 +1877,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST(RestoreViewReferenceTable) {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
@@ -1929,7 +1929,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST(RestoreViewDependentOnAnotherView) {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
@@ -1949,7 +1949,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreKesusResources) {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NCoordination::TClient nodeClient(driver);
         TRateLimiterClient rateLimiterClient(driver);
         TTempDir tempDir;
@@ -1968,7 +1968,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestTableBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
@@ -1990,7 +1990,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
         TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
 
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
@@ -2012,7 +2012,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestTableWithSerialBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
@@ -2029,7 +2029,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestDirectoryBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TSchemeClient schemeClient(driver);
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
@@ -2046,7 +2046,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestViewBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
@@ -2064,7 +2064,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestTopicBackupRestoreWithoutData() {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         NTopic::TTopicClient topicClient(driver);
@@ -2084,7 +2084,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestKesusBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NCoordination::TClient nodeClient(driver);
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
@@ -2101,7 +2101,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestChangefeedBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
         NTopic::TTopicClient topicClient(driver);
@@ -2124,7 +2124,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TKikimrWithGrpcAndRootSchema server;
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
-        auto driverConfig = TDriverConfig().SetEndpoint(endpoint);
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
         if (useSecret) {
             driverConfig.SetAuthToken("root@builtin");
         }
@@ -2157,7 +2157,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TKikimrWithGrpcAndRootSchema server;
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
-        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
 
         TSchemeClient schemeClient(driver);
         NQuery::TQueryClient queryClient(driver);
@@ -2203,7 +2203,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
         NQuery::TQueryClient queryClient(driver);
@@ -2228,7 +2228,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
 
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
 
@@ -2268,7 +2268,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
         NQuery::TQueryClient queryClient(driver);
@@ -2293,7 +2293,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableRealSystemViewPaths(true);
         TKikimrWithGrpcAndRootSchema server(config);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TSchemeClient schemeClient(driver);
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
@@ -2410,7 +2410,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         server.GetRuntime()->SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::EPriority::PRI_DEBUG);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
-        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
 
         TSchemeClient schemeClient(driver);
         TTableClient tableClient(driver);
@@ -2506,7 +2506,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
-        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
 
         TSchemeClient schemeClient(driver);
         TTableClient tableClient(driver);
@@ -2591,7 +2591,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             return;
         }
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TTempDir tempDir;
@@ -2613,7 +2613,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TKikimrWithGrpcAndRootSchema server;
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
-        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
 
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2662,7 +2662,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(SkipEmptyDirsOnRestore) {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
         pathToBackup.Child("empty").MkDir();
@@ -2724,7 +2724,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
                     return appConfig;
                 }())
-            , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())))
+            , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())).SetDatabase("/Root"))
             , TableClient(Driver)
             , TableSession(TableClient.CreateSession().ExtractValueSync().GetSession())
             , QueryClient(Driver)

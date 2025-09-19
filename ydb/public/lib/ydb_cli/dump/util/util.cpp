@@ -99,7 +99,7 @@ TStatus DescribeViewQuery(const NYdb::TDriver& driver, const TString& path, TStr
         }
         return result;
     });
-    if (status.GetStatus() == EStatus::GENERIC_ERROR) {
+    if (IsIn({ EStatus::GENERIC_ERROR, EStatus::SCHEME_ERROR }, status.GetStatus())) {
         // If the server does not support `SHOW CREATE` statements, retry using the deprecated view description API.
 
         NView::TViewClient client(driver);

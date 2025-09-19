@@ -1,3 +1,5 @@
+IF (ARCH_X86_64 AND OS_LINUX)
+
 EXECTEST()
 
 RUN(
@@ -30,3 +32,5 @@ RECURSE(
     stream_store
     tuples_to_bucket
 )
+
+ENDIF()

@@ -1,3 +1,5 @@
+IF (ARCH_X86_64 AND OS_LINUX)
+
 LIBRARY()
 
 CFLAGS(-mavx2)
@@ -5,3 +7,5 @@ CFLAGS(-mavx2)
 SRCS(avx2_algo.cpp)
 
 END()
+
+ENDIF()

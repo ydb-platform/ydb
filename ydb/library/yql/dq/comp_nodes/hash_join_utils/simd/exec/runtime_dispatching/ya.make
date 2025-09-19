@@ -1,3 +1,5 @@
+IF (ARCH_X86_64 AND OS_LINUX)
+
 LIBRARY()
 
 PEERDIR(
@@ -14,3 +16,5 @@ RECURSE(
     main
     SSE42_algo
 )
+
+ENDIF()

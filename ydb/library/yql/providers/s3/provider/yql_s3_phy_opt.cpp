@@ -1,13 +1,14 @@
 #include "yql_s3_provider_impl.h"
 
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <yql/essentials/providers/common/transform/yql_optimize.h>
-#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/generic/size_literals.h>
 
@@ -192,10 +193,7 @@ public:
             {
                 TExprNode::TListType pair;
                 pair.push_back(ctx.NewAtom(target.Pos(), "file_size_limit"));
-                size_t fileSize = 50_MB;
-                if (const auto& maxObjectSize = State_->Configuration->MaxOutputObjectSize.Get()) {
-                    fileSize = *maxObjectSize;
-                }
+                const auto fileSize = State_->Configuration->MaxOutputObjectSize.GetOrDefault();
                 pair.push_back(ctx.NewAtom(target.Pos(), ToString(fileSize)));
                 sinkOutputSettingsBuilder.Add(ctx.NewList(target.Pos(), std::move(pair)));
             }
@@ -395,7 +393,7 @@ private:
     const TS3State::TPtr State_;
 };
 
-} // namespace
+} // anonymous namespace
 
 THolder<IGraphTransformer> CreateS3PhysicalOptProposalTransformer(TS3State::TPtr state) {
     return MakeHolder<TS3PhysicalOptProposalTransformer>(std::move(state));

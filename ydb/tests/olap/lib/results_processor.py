@@ -31,8 +31,8 @@ class ResultsProcessor:
             except BaseException as e:
                 logging.error(f'[ResultsProcessor] Exception while send results: {e}')
 
-    _endpoints : list[ResultsProcessor.Endpoint] = None
-    _run_id : int = None
+    _endpoints: list[ResultsProcessor.Endpoint] = None
+    _run_id: int = None
 
     send_results = external_param_is_true('send-results')
     _columns_types = (
@@ -102,7 +102,7 @@ class ResultsProcessor:
     ):
         if not cls.send_results:
             return
-        
+
         with allure.step("Upload results to YDB"):
             def _get_duration(dur: float | None):
                 if dur is not None:

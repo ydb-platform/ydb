@@ -208,7 +208,8 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
                            k.Key.GetInternalPartsCount(),
                            k.Size,
                            TString(),
-                           k.Key);
+                           k.Key,
+                           k.Timestamp.Seconds());
         tokens.Append(k.BlobKeyToken);
     }
 #else

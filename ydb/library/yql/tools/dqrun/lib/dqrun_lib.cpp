@@ -479,6 +479,7 @@ TVector<std::pair<TActorId, TActorSetupCmd>> TDqRunTool::GetFqServices() {
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
             credentialsFactory,
+            GetFuncRegistry().Get(),
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             GetPqGateway(),

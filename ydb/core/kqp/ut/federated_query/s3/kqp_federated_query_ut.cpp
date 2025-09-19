@@ -2559,6 +2559,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto db = kikimr->GetQueryClient();
         {
             const TString query = R"(
+                PRAGMA s3.AtomicUploadCommit = "true";
                 INSERT INTO test_bucket.`test-inset-splitting/` WITH (FORMAT = "parquet")
                 SELECT Random(data) AS data FROM AS_TABLE(ListReplicate(
                     <|data: "x"|>,
@@ -2568,12 +2569,16 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
             // Create two large parquet files
             {
-                const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                const auto result = db.ExecuteScript(query).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.Status().GetStatus(), EStatus::SUCCESS, result.Status().GetIssues().ToString());
+                const auto readyOp = WaitScriptExecutionOperation(result.Id(), kikimr->GetDriver());
+                UNIT_ASSERT_EQUAL_C(readyOp.Status().GetStatus(), EStatus::SUCCESS, readyOp.Status().GetIssues().ToString());
             }
             {
-                const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                const auto result = db.ExecuteScript(query).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.Status().GetStatus(), EStatus::SUCCESS, result.Status().GetIssues().ToString());
+                const auto readyOp = WaitScriptExecutionOperation(result.Id(), kikimr->GetDriver());
+                UNIT_ASSERT_EQUAL_C(readyOp.Status().GetStatus(), EStatus::SUCCESS, readyOp.Status().GetIssues().ToString());
             }
         }
 
@@ -2582,6 +2587,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             // write tasks will be scheduled locally
             // so one of the channels is remote
             const TString query = R"(
+                PRAGMA s3.AtomicUploadCommit = "true";
                 PRAGMA s3.UseRuntimeListing = "false";
                 PRAGMA ydb.OverridePlanner = @@ [
                     { "tx": 0, "stage": 0, "tasks": 2 }
@@ -2595,8 +2601,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                     )
                 )
             )";
-            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            const auto result = db.ExecuteScript(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status().GetStatus(), EStatus::SUCCESS, result.Status().GetIssues().ToString());
+            const auto readyOp = WaitScriptExecutionOperation(result.Id(), kikimr->GetDriver());
+            UNIT_ASSERT_EQUAL_C(readyOp.Status().GetStatus(), EStatus::SUCCESS, readyOp.Status().GetIssues().ToString());
         }
 
         const TString query = R"(

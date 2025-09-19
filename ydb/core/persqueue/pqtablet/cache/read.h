@@ -305,7 +305,6 @@ namespace NPQ {
 
                     const TString& value = cmd.GetValue();
                     kvReq.Partition = key.GetPartition();
-                    Y_ASSERT(cmd.GetCreationUnixTime() != 0);
                     kvReq.Blobs.emplace_back(key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount(), value.size(), value, key, cmd.GetCreationUnixTime());
                     const TRequestedBlob& blob = kvReq.Blobs.back();
 

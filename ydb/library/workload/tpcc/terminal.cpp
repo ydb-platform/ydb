@@ -101,6 +101,11 @@ void TTerminal::Start() {
 TTerminalTask TTerminal::Run() {
     auto& Log = Context.Log; // to make LOG_* macros working
 
+    auto guard = std::unique_ptr<void, std::function<void(void*)>>(
+        (void*)1,
+        [&](void*) { Stopped = true; }
+    );
+
     LOG_D("Terminal " << Context.TerminalID << " has started");
 
     while (!StopToken.stop_requested()) {
@@ -214,11 +219,7 @@ bool TTerminal::IsDone() const {
         return true;
     }
 
-    if (!Task.Handle) {
-        return true;
-    }
-
-    return Task.Handle.done();
+    return Stopped;
 }
 
 } // namespace NYdb::NTPCC

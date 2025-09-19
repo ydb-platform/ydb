@@ -38,20 +38,6 @@ void TToolsCommand::Config(TConfig& config) {
     TYdbCommand::Config(config);
 }
 
-ELogPriority TToolsCommand::ToLogLevel(ui32 lvl) const {
-    switch (lvl) {
-        case 0:
-            return ELogPriority::TLOG_ERR;
-        case 1:
-            return ELogPriority::TLOG_NOTICE;
-        case 2:
-            return ELogPriority::TLOG_INFO;
-        case 3:
-        default:
-            return ELogPriority::TLOG_DEBUG;
-    }
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 //  Dump
 ////////////////////////////////////////////////////////////////////////////////
@@ -123,7 +109,7 @@ int TCommandDump::Run(TConfig& config) {
         .PreservePoolKinds(PreservePoolKinds)
         .Ordered(Ordered);
 
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", ToLogLevel(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     NDump::TClient client(CreateDriver(config), std::move(log));
@@ -309,7 +295,7 @@ int TCommandRestore::Run(TConfig& config) {
             << "The --verify-existence option must be used together with the --replace option.";
     }
 
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", ToLogLevel(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     NDump::TClient client(CreateDriver(config), std::move(log));

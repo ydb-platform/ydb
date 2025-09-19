@@ -103,8 +103,6 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 
 - `--verify-existence`: Use with `--replace` option to report an error if an object in the backup is missing from the database instead of silently skipping its removal.
 
-- `--retries`: Number of retries for every upload data request. By default: `10`.
-
 ### Workload restriction parameters {#limiters}
 
 Using the below parameters, you can limit the import workload against the database.

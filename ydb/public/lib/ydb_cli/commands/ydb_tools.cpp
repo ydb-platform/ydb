@@ -226,10 +226,7 @@ void TCommandRestore::Config(TConfig& config) {
         .StoreTrue(&VerifyExistence);
 
     config.Opts->AddLongOption("retries", "Max retry count for every request.")
-        .DefaultValue(10)
-        .Handler([this](const TString& arg) {
-            Retries = FromString<ui32>(arg);
-        });
+        .DefaultValue(10).StoreResult(&Retries);
 
     config.Opts->MutuallyExclusive("bandwidth", "rps");
     config.Opts->MutuallyExclusive("import-data", "bulk-upsert");

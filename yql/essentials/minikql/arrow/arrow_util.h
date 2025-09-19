@@ -24,6 +24,7 @@ using NYql::NUdf::AllocateBitmapWithReserve;
 using NYql::NUdf::MakeDenseBitmap;
 using NYql::NUdf::MakeDenseBitmapCopy;
 using NYql::NUdf::MakeDenseFalseBitmap;
+using NYql::NUdf::MakeDenseBitmapCopyIfOffsetDiffers;
 
 inline arrow::internal::Bitmap GetBitmap(const arrow::ArrayData& arr, int index) {
     return arrow::internal::Bitmap{ arr.buffers[index], arr.offset, arr.length };

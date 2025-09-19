@@ -1799,14 +1799,12 @@ message TEvBuildFulltextIndexRequest {
     optional uint64 SeqNoGeneration = 6;
     optional uint64 SeqNoRound = 7;
 
-    optional Ydb.Table.FulltextIndexSettings Settings = 8;
+    optional string IndexName = 8;
 
-    optional string IndexName = 9;
+    optional Ydb.Table.FulltextIndexSettings Settings = 9; // also has key columns
+    repeated string DataColumns = 10;
 
-    repeated string KeyColumns = 10;
-    repeated string DataColumns = 11;
-
-    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 12;
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 11;
 }
 
 message TEvBuildFulltextIndexResponse {

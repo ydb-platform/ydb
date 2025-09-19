@@ -65,8 +65,6 @@ public:
         Y_ENSURE(Request.settings().columns().size() == 1);
         TextColumn = Request.settings().columns().at(0).column();
         TextAnalyzers = Request.settings().columns().at(0).analyzers();
-        Y_ENSURE(Request.GetKeyColumns().size() == 1);
-        Y_ENSURE(Request.GetKeyColumns().at(0) == TextColumn);
 
         auto tags = GetAllTags(table);
         auto types = GetAllTypes(table);
@@ -373,9 +371,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         }
 
         auto tags = GetAllTags(userTable);
-        for (auto keyColumn : request.GetKeyColumns()) {
-            if (!tags.contains(keyColumn)) {
-                badRequest(TStringBuilder() << "Unknown key column: " << keyColumn);
+        for (auto column : request.GetSettings().columns()) {
+            if (!tags.contains(column.column())) {
+                badRequest(TStringBuilder() << "Unknown key column: " << column.column());
             }
         }
         for (auto dataColumn : request.GetDataColumns()) {
@@ -393,7 +391,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
             badRequest(TStringBuilder() << "Missing fulltext index settings");
         } else {
             TString error;
-            if (!NKikimr::NFulltext::ValidateSettings(request.keycolumns(), request.GetSettings(), error)) {
+            if (!NKikimr::NFulltext::ValidateSettings(request.GetSettings(), error)) {
                 badRequest(error);
             }
         }

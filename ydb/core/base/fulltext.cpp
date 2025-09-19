@@ -137,40 +137,54 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
     return tokens;
 }
 
-bool ValidateSettings(const NProtoBuf::RepeatedPtrField<TString>& keyColumns, const Ydb::Table::FulltextIndexSettings& settings, TString& error) {
+bool ValidateColumnsMatches(const NProtoBuf::RepeatedPtrField<TString>& columns, const Ydb::Table::FulltextIndexSettings& settings, TString& error) {
+    return ValidateColumnsMatches(TVector<TString>{columns.begin(), columns.end()}, settings, error);
+}
+
+bool ValidateColumnsMatches(const TVector<TString>& columns, const Ydb::Table::FulltextIndexSettings& settings, TString& error) {
+    TVector<TString> settingsColumns(::Reserve(settings.columns().size()));
+    for (auto column : settings.columns()) {
+        settingsColumns.push_back(column.column());
+    }
+
+
+    if (columns != settingsColumns) {
+        error = TStringBuilder() << "columns " << settingsColumns << " should be " << columns;
+        return false;
+    }
+
+    error = "";
+    return true;
+}
+
+bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString& error) {
     if (!settings.has_layout() || settings.layout() == Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED) {
         error = "layout should be set";
         return false;
     }
 
+    if (settings.columns().empty()) {
+        error = "columns should be set";
+        return false;
+    }
+    
+    // current implementation limitation:
+    if (settings.columns().size() != 1) {
+        error = "columns should have a single value";
+        return false;
+    }
+
     for (auto column : settings.columns()) {
         if (!column.has_column()) {
-            error = "fulltext index settings should have a column name";
+            error = "column name should be set";
             return false;
         }
-        if (!column.has_analyzers()) {
-            error = "fulltext index settings should have analyzers";
+
+        // current implementation limitation:
+        if (!settings.columns().at(0).has_analyzers()) {
+            error = "column analyzers should be set";
             return false;
         }
-    }
-
-    if (keyColumns.size() != 1) {
-        error = TStringBuilder() << "fulltext index should have a single text key column"
-            << " but have " << keyColumns.size() << " of them";
-        return false;
-    }
-    if (settings.columns().size() != 1) {
-        error = TStringBuilder() << "fulltext index should have a single text key column settings"
-            << " but have " << settings.columns().size() << " of them";
-        return false;
-    }
-    if (keyColumns.at(0) != settings.columns().at(0).column()) {
-        error = TStringBuilder() << "fulltext index should have a single text key column " << keyColumns.at(0) << " settings"
-            << " but have " << settings.columns().at(0).column();
-        return false;
-    }
-
-    for (auto column : settings.columns()) {
         if (!ValidateSettings(column.analyzers(), error)) {
             return false;
         }
@@ -226,15 +240,18 @@ Ydb::Table::FulltextIndexSettings FillSettings(const TString& keyColumn, const T
         columnAnalyzers->mutable_analyzers()->CopyFrom(resultAnalyzers);
     }
 
-    {
-        NProtoBuf::RepeatedPtrField<TString> keyColumns;
-        TString keyColumn_ = keyColumn;
-        keyColumns.Add(std::move(keyColumn_));
-        ValidateSettings(keyColumns, result, error);
-    }
+    ValidateSettings(result, error);
 
     return result;
 }
 
 
+}
+
+template<> inline
+void Out<TVector<TString>>(IOutputStream& o, const TVector<TString> &vec) {
+    o << "[ ";
+    for (const auto &x : vec)
+        o << x << ' ';
+    o << "]";
 }

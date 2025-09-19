@@ -3,6 +3,7 @@
 #include "schemeshard_info_types.h"
 #include "schemeshard_types.h"
 
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/table_index.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -168,7 +169,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             }
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
-            //We have already checked this in IsCompatibleIndex
+            // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
     
             if (indexKeys.KeyColumns.size() > 1 && !IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
@@ -188,25 +189,28 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
-            //We have already checked this in IsCompatibleIndex
+            // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
-    
-            if (indexKeys.KeyColumns.size() > 1) {
+
+            // Here we only check that fulltext index columns matches table description
+            // the rest will be checked in NFulltext::ValidateSettings (called separately outside of CommonCheck)
+            if (!NKikimr::NFulltext::ValidateColumnsMatches(indexKeys.KeyColumns, indexDesc.GetFulltextIndexDescription().GetSettings(), error)) {
                 status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder() << "fulltext index should have a single text key column";
                 return false;
+            }
+
+            for (const auto& column : indexDesc.GetFulltextIndexDescription().GetSettings().columns()) {
+                if (column.has_analyzers()) {
+                    auto typeInfo = baseColumnTypes.at(column.column());
+                    // TODO: support utf-8 in fulltext index
+                    if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
+                        status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                        error = TStringBuilder() << "Fulltext column '" << column.column() << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
+                        return false;
+                    }
+                }
             }
             
-            const TString& textColumnName = indexKeys.KeyColumns.at(0);
-            Y_ABORT_UNLESS(baseColumnTypes.contains(textColumnName));
-            auto typeInfo = baseColumnTypes.at(textColumnName);
-    
-            // TODO: support utf-8 in fulltext index
-            if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
-                status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder() << "Text column '" << textColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
-                return false;
-            }
             break;
         }
         default:

@@ -24,11 +24,13 @@ private:
     NKikimr::NColumnShard::TCountersManager& CountersManager;
     ui64 StatsReportRound = 0;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> latestCSExecutorStats;
+    ui32 JitterIntervalMS = 200;
 
     void BuildSSPipe();
     void ReportBaseStatistics();
     void ReportExecutorStatistics();
     void SendPeriodicStats();
+    void ScheduleStatisticsReport();
 
     void FillWhateverCan(std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
 

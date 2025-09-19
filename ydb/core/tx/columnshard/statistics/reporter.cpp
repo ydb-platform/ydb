@@ -5,24 +5,24 @@
 namespace NKikimr::NOlap {
 
 
-void TColumnShardStatisticsReporter::Bootstrap(const TActorContext& /*ctx*/) {
+void TColumnShardStatisticsReporter::Bootstrap(const TActorContext&) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TColumnShardStatisticsReporter", "Bootstrapped");
-    Schedule(TDuration::MilliSeconds(ReportStatisticsPeriodMs), new NColumnShard::TEvPrivate::TEvReportStatistics);
-    // Schedule(TDuration::MilliSeconds(1000), new TEvReportStatistics);
-
+    ScheduleStatisticsReport();
     Become(&TThis::StateFunc);
+}
+
+void TColumnShardStatisticsReporter::ScheduleStatisticsReport() {
+    TDuration::Seconds(ReportStatisticsPeriodMs + RandomNumber<ui32>(JitterIntervalMS * 2) - JitterIntervalMS);
+    Schedule(TDuration::MilliSeconds(ReportStatisticsPeriodMs), new NColumnShard::TEvPrivate::TEvReportStatistics);
 }
 
 void TColumnShardStatisticsReporter::BuildSSPipe() {
     auto ctx = ActorContext();
-    NTabletPipe::TClientConfig clientConfig;
-    if (!ctx.SelfID) {
+    if (!ctx.SelfID || !SSId) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("", "Can't create pipe with 0 SelfID. Am I in test environment?");
         return;
     }
-    StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, SSId, clientConfig));
-
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("pipe", "built");
+    StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, SSId, NTabletPipe::TClientConfig()));
 }
 
 void TColumnShardStatisticsReporter::FillWhateverCan(std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
@@ -103,7 +103,12 @@ void TColumnShardStatisticsReporter::SendPeriodicStats() {
         return;
     }
 
-    const TActorContext& ctx = ActorContext();
+    if (latestCSExecutorStats) {
+        FillWhateverCan(latestCSExecutorStats);
+        NTabletPipe::SendData(ActorContext(), StatsReportPipe, latestCSExecutorStats.release());
+    }
+
+
 
     auto ev = [&]() {
         if (latestCSExecutorStats) {
@@ -116,20 +121,10 @@ void TColumnShardStatisticsReporter::SendPeriodicStats() {
 
 
     FillWhateverCan(ev);
-
-
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("hh", ev->Record.GetTableStats().GetRowCount())("ev", ev->ToString());
-
-
-    NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }
 
 void TColumnShardStatisticsReporter::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-    // auto tabletId = ev->Get()->TabletId;
     auto clientId = ev->Get()->ClientId;
-
-    // AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("Client pipe reset to ", tabletId)(" at tablet ", TabletID());
-
     AFL_VERIFY(clientId == StatsReportPipe);
     StatsReportPipe = {};
     BuildSSPipe();
@@ -149,15 +144,11 @@ void TColumnShardStatisticsReporter::Handle(TEvDataShard::TEvPeriodicTableStats:
 }
 
 void TColumnShardStatisticsReporter::Handle(NColumnShard::TEvPrivate::TEvReportStatistics::TPtr&) {
-            // TDuration::Seconds(SendStatsIntervalMinSeconds
-    //     + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds))
-    Schedule(TDuration::MilliSeconds(ReportStatisticsPeriodMs), new NColumnShard::TEvPrivate::TEvReportStatistics);
-    // Schedule(TDuration::MilliSeconds(1000), new TEvReportStatistics);
+    ScheduleStatisticsReport();
     SendPeriodicStats();
 }
 
 void TColumnShardStatisticsReporter::Handle(TEvSetSSId::TPtr& ev) {
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("SSId", SSId);
     SSId = ev->Get()->SSId;
     SSLocalId = ev->Get()->SSLocalId;
     BuildSSPipe();

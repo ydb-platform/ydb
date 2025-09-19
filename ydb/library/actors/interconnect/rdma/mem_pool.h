@@ -67,7 +67,7 @@ namespace NInterconnect::NRdma {
         uint32_t Size;
     };
 
-    using TMemRegionPtr = std::unique_ptr<TMemRegion>;
+    using TMemRegionPtr = TIntrusivePtr<TMemRegion>;
 
     TMemRegionSlice TryExtractFromRcBuf(const TRcBuf& rcBuf) noexcept;
 

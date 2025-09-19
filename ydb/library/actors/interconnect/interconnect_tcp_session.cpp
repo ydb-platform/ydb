@@ -274,7 +274,7 @@ namespace NActors {
             auto qp = std::move(ev->Get()->Qp);
             RdmaCtx = qp ? qp->GetCtx() : nullptr;
             if (RdmaCtx) {
-                Qp.reset(qp.release());
+                Qp = qp;
             }
         }
 

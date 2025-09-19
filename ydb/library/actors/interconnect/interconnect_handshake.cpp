@@ -249,7 +249,7 @@ namespace NActors {
         std::optional<TString> HandshakeId; // for XDC
         bool SubscribedForConnection = false;
         NInterconnect::NRdma::TRdmaCtx* RdmaCtx = nullptr;
-        std::unique_ptr<NInterconnect::NRdma::TQueuePair> RdmaQp;
+        std::shared_ptr<NInterconnect::NRdma::TQueuePair> RdmaQp;
         NInterconnect::NRdma::ICq::TPtr RdmaCq;
         NInterconnect::NRdma::TMemRegionPtr HandShakeMemRegion; // region which will be read by RDMA during handshake
         static const size_t RdmaHandshakeRegionSize = 4096;
@@ -379,7 +379,7 @@ namespace NActors {
                                     LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                                         "RDMA memory read failed, disable rdma on the initiator");
                                     RdmaQp.reset();
-                                    HandShakeMemRegion.reset();
+                                    HandShakeMemRegion.Reset();
                                 } else {
                                     Params.UseRdma = true;
                                 }
@@ -725,14 +725,14 @@ namespace NActors {
         }
 
         NActorsInterconnect::TRdmaHandshakeReadAck TryRdmaRead(const NActorsInterconnect::TRdmaCred& cred) {
+            using namespace NInterconnect::NRdma;
             NActorsInterconnect::TRdmaHandshakeReadAck rdmaReadAck;
             if (cred.GetSize() > RdmaHandshakeRegionSize) {
                 rdmaReadAck.SetErr("Unexpected rdma region size for READ request");
                 return rdmaReadAck;
             }
 
-            NInterconnect::NRdma::TMemRegionPtr mr; 
-            mr = std::move(Common->RdmaMemPool->Alloc(cred.GetSize(), NInterconnect::NRdma::IMemPool::EMPTY));
+            TMemRegionPtr mr = Common->RdmaMemPool->Alloc(cred.GetSize(),IMemPool::EMPTY);
             if (!mr) {
                 TString err("Unable to allocate memory region for handshake rdma read");
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
@@ -745,36 +745,38 @@ namespace NActors {
             bzero(addr, cred.GetSize());
 
             auto actorId = SelfActorId;
-            auto cb = [actorId](NActors::TActorSystem* as, NInterconnect::NRdma::TEvRdmaIoDone* ev){
+            // make sure mr is alive during the RDMA read
+            auto cb = [actorId, mr](NActors::TActorSystem* as, TEvRdmaIoDone* ev){
+                Y_UNUSED(mr);
                 as->Send(actorId, ev);
             };
 
-            NInterconnect::NRdma::ICq::IWr* wr;
-            auto allocResult = RdmaCq->AllocWr(cb);
-            if (!NInterconnect::NRdma::ICq::IsWrSuccess(allocResult)) {
-                TStringBuilder sb;
-                sb << "Unable to allocate work reqeust, cq is " << NInterconnect::NRdma::ICq::IsWrBusy(allocResult) ? TString("full") : TString("err");
-                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
-                    sb.c_str());
-                    rdmaReadAck.SetErr(sb);
-                return rdmaReadAck;
-            } else {
-                wr = std::get<0>(allocResult);
-            }
+            auto qp = RdmaQp;
 
-            int err = RdmaQp->SendRdmaReadWr(wr->GetId(), mr->GetAddr(), mr->GetLKey(RdmaCtx->GetDeviceIndex()), (void*)cred.GetAddress(), cred.GetRkey(), cred.GetSize());
+            auto wrTask = [qp, mr, cred, cb] (NActors::TActorSystem* as, ICq::IWr* wr) {
+                Y_ABORT_UNLESS(wr); //AllocWrAsync newer pass nullptr here
+                const auto lkey = mr->GetLKey(qp->GetCtx()->GetDeviceIndex());
+                int err = qp->SendRdmaReadWr(wr->GetId(),
+                    mr->GetAddr(), lkey,
+                    reinterpret_cast<void*>(cred.GetAddress()), cred.GetRkey(), cred.GetSize());
+                if (err) {
+                    wr->Release();
+                    cb(as,  TEvRdmaIoDone::WrError(err));
+                }
+            };
+
+            auto err = RdmaCq->AllocWrAsync(wrTask, cb);
             if (err) {
                 TStringBuilder sb;
-                sb << "Unable to post rdma READ work request, error " << err;
+                sb << "Unable to allocate work reqeust";
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                     sb.c_str());
                     rdmaReadAck.SetErr(sb);
-                wr->Release();
                 return rdmaReadAck;
             }
 
             {
-                auto ev = WaitForSpecificEvent<NInterconnect::NRdma::TEvRdmaIoDone>("TryRdmaRead");
+                auto ev = WaitForSpecificEvent<TEvRdmaIoDone>("TryRdmaRead");
                 if (ev->Get()->IsSuccess()) {
                     ui32 crc = Crc32cExtendMSanCompatible(0, mr->GetAddr(), cred.GetSize());
                     rdmaReadAck.SetDigest(crc);
@@ -782,6 +784,9 @@ namespace NActors {
                     if (ev->Get()->IsWcError()) {
                         LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                         "Unable to complete rdma READ work request due to wc error, code: %d", ev->Get()->GetErrCode());
+                    } else if (ev->Get()->IsWrError()) {
+                        LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                        "Unable to complete rdma READ work request due to wr error, code: %d", ev->Get()->GetErrCode());
                     } else {
                         LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                             "Unable to complete rdma READ work request due to cq runtime error");
@@ -981,13 +986,13 @@ namespace NActors {
                         LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                                 "Unable to promote QP to RTS, err: %d (%s), gid: %s", err, strerror(err), sb.data());
                         RdmaQp.reset();
-                        HandShakeMemRegion.reset();
+                        HandShakeMemRegion.Reset();
                     }
                 } else {
                     LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                         "Non success qp response from remote side");
                     RdmaQp.reset();
-                    HandShakeMemRegion.reset();
+                    HandShakeMemRegion.Reset();
                 }
 
                 // recover peer process info from peer's reply

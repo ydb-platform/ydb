@@ -129,12 +129,16 @@ namespace NActors {
             Y_UNUSED(memReg);
         };
 
-        auto wrTask = [memReg, readCtx, offset, cred](ICq::IWr* wr) {
+        auto wrTask = [memReg, readCtx, offset, cred, reply](NActors::TActorSystem* as, ICq::IWr* wr) {
             void* addr = static_cast<char*>(memReg.GetAddr()) + offset;
-            readCtx->Qp->SendRdmaReadWr(wr->GetId(),
+            int err = readCtx->Qp->SendRdmaReadWr(wr->GetId(),
                 addr, memReg.GetLKey(readCtx->Qp->GetCtx()->GetDeviceIndex()),
                 reinterpret_cast<void*>(cred.GetAddress()), cred.GetRkey(), cred.GetSize()
             );
+            if (err) {
+                wr->Release();
+                reply(as,  NInterconnect::NRdma::TEvRdmaIoDone::WrError(err));
+            }
         };
 
         auto allocResult = cq->AllocWrAsync(wrTask, cb);
@@ -345,7 +349,8 @@ namespace NActors {
 
     void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev) {
         if (!ev->Get()->Event->IsSuccess()) {
-            LOG_ERROR_IC_SESSION("ICRDMA", "Rdma IO failed %d", ev->Get()->Event->GetErrCode());
+            LOG_ERROR_IC_SESSION("ICRDMA", "Rdma IO failed, err source: %s, code %d",
+                ev->Get()->Event->GetErrSource().data(), ev->Get()->Event->GetErrCode());
             throw TExDestroySession({TDisconnectReason::RdmaError()});
         }
         TMonotonic cur = TMonotonic::Now();

@@ -183,7 +183,7 @@ namespace NActors {
                 TAutoPtr<TProgramInfo>&& programInfo,
                 TSessionParams params,
                 TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket,
-                std::unique_ptr<NInterconnect::NRdma::TQueuePair> qp,
+                std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp,
                 NInterconnect::NRdma::ICq::TPtr cqPtr)
             : Socket(std::move(socket))
             , Peer(peer)
@@ -204,7 +204,7 @@ namespace NActors {
         TAutoPtr<TProgramInfo> ProgramInfo;
         const TSessionParams Params;
         TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
-        std::unique_ptr<NInterconnect::NRdma::TQueuePair> Qp;
+        std::shared_ptr<NInterconnect::NRdma::TQueuePair> Qp;
         NInterconnect::NRdma::ICq::TPtr CqPtr;
     };
 

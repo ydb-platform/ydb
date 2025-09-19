@@ -1,6 +1,6 @@
 # Вставка и модификация данных с помощью REPLACE
 
-{% include [column-and-row-tables-in-read-only-tx](../../_includes/limitation-column-row-in-read-only-tx-warn.md) %}
+{% include [column-and-row-tables-in-read-only-tx](../../yql/reference/_includes/limitation-column-row-in-read-only-tx-warn.md) %}
 
 Добавьте новые данные в таблицы с одновременным обновлением уже существующих данных с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
 

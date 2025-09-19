@@ -67,4 +67,4 @@
 
 ## Транзакции с участием строковых и столбцовых таблиц {#mixed-transactions}
 
-{% include [limitation](../../_includes/limitation-column-row-in-read-only-tx.md) %}
+{% include [limitation](../../yql/reference/_includes/limitation-column-row-in-read-only-tx.md) %}

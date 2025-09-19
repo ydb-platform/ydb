@@ -1783,49 +1783,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
         return result
 
-    def _check_scheme_state(self):
-        """Проверяет состояние схемы базы данных"""
-        with allure.step("Checking scheme state"):
-            try:
 
-                ydb_cli_path = yatest.common.binary_path(
-                    os.getenv("YDB_CLI_BINARY"))
-                execution = yatest.common.execute(
-                    [
-                        ydb_cli_path,
-                        "--endpoint",
-                        f"{YdbCluster.ydb_endpoint}",
-                        "--database",
-                        f"/{YdbCluster.ydb_database}",
-                        "scheme",
-                        "ls",
-                        "-lR",
-                    ],
-                    wait=True,
-                    check_exit_code=False,
-                )
-                scheme_stdout = (
-                    execution.std_out.decode(
-                        "utf-8") if execution.std_out else ""
-                )
-                scheme_stderr = (
-                    execution.std_err.decode(
-                        "utf-8") if execution.std_err else ""
-                )
-            except Exception as e:
-                scheme_stdout = ""
-                scheme_stderr = str(e)
-
-            allure.attach(
-                scheme_stdout, "Scheme state stdout", allure.attachment_type.TEXT
-            )
-            if scheme_stderr:
-                allure.attach(
-                    scheme_stderr, "Scheme state stderr", allure.attachment_type.TEXT
-                )
-            logging.info(f"scheme stdout: {scheme_stdout}")
-            if scheme_stderr:
-                logging.warning(f"scheme stderr: {scheme_stderr}")
 
     def _process_single_run_result(
         self,
@@ -2176,9 +2134,6 @@ class WorkloadTestBase(LoadSuiteBase):
             successful_runs = execution_result["successful_runs"]
             total_runs = execution_result["total_runs"]
 
-            # Проверяем состояние схемы
-            self._check_scheme_state()
-
             # Анализируем результаты и добавляем ошибки/предупреждения
             self._analyze_execution_results(
                 overall_result, successful_runs, total_runs, use_iterations
@@ -2194,11 +2149,19 @@ class WorkloadTestBase(LoadSuiteBase):
                 use_iterations,
             )
 
-            # Финальная обработка с диагностикой
+            # Финальная обработка с диагностикой (подготавливает данные для выгрузки)
             overall_result.workload_start_time = execution_result["workload_start_time"]
             self.process_workload_result_with_diagnostics(
                 overall_result, workload_name, False, use_node_subcols=True
             )
+            
+            # Отдельный шаг для выгрузки результатов (ПОСЛЕ подготовки всех данных)
+            self._safe_upload_results(overall_result, workload_name)
+            
+            # Финальная обработка статуса (может выбросить исключение, но результаты уже выгружены)
+            # Используем node_errors, сохраненные из диагностики
+            node_errors = getattr(overall_result, '_node_errors', [])
+            self._handle_final_status(overall_result, workload_name, node_errors)
 
             logging.info(
                 f"Final result: success={
@@ -2277,6 +2240,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 logging.error(f"Error getting nodes state: {e}")
                 # Добавляем ошибку в результат
                 result.add_warning(f"Error getting nodes state: {e}")
+                node_errors = []  # Устанавливаем пустой список если диагностика не удалась
 
             # Вычисляем время выполнения
             end_time = time_module.time()
@@ -2349,41 +2313,63 @@ class WorkloadTestBase(LoadSuiteBase):
             # 4. Формирование allure-отчёта
             self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols)
 
-            # 5. Загрузка результатов (ВСЕГДА, даже если тест broken)
-            with allure.step("Upload results"):
-                self._safe_upload_results(result, workload_name)
+            # Сохраняем node_errors для использования после выгрузки
+            result._node_errors = node_errors
+            
+            # Данные подготовлены, теперь можно выгружать результаты
 
-            # 6. Обработка ошибок/статусов (fail, broken, etc) - может выбросить исключение
-            self._handle_final_status(result, workload_name, node_errors)
 
     def _safe_upload_results(self, result, workload_name):
         """Безопасная выгрузка результатов с обработкой ошибок и Allure отчетом"""
-        if not ResultsProcessor.send_results:
-            allure.attach("Results upload is disabled (send_results=false)",
-                          "Upload status", allure.attachment_type.TEXT)
-            return
+        with allure.step("Upload results to YDB"):
+            if not ResultsProcessor.send_results:
+                allure.attach("Results upload is disabled (send_results=false)",
+                              "Upload status", allure.attachment_type.TEXT)
+                return
 
-        try:
-            self._upload_results(result, workload_name)
-            self._upload_results_per_workload_run(result, workload_name)
-            allure.attach("Results uploaded successfully",
-                          "Upload status", allure.attachment_type.TEXT)
-        except Exception as e:
-            # Логируем ошибку выгрузки, но не прерываем выполнение
-            error_msg = f"Failed to upload results: {e}"
-            logging.error(error_msg)
-            result.add_warning(error_msg)
-            # После добавления warning нужно пересчитать summary флаги
-            self._update_summary_flags(result, workload_name)
+            try:
+                # Выгружаем агрегированные результаты
+                self._upload_results(result, workload_name)
+                
+                # Выгружаем результаты по каждому запуску
+                per_run_count = sum(len(getattr(iteration, "runs", [iteration])) 
+                                  for iteration in result.iterations.values())
+                self._upload_results_per_workload_run(result, workload_name)
+                
+                # Информативное сообщение о том, что было выгружено
+                upload_summary = [
+                    "Results uploaded successfully:",
+                    f"• Aggregate results: 1 record (kind=Stability)",
+                    f"• Per-run results: {per_run_count} records (kind=Stability)",
+                    f"• Total iterations: {len(result.iterations)}",
+                    f"• Workload: {workload_name}",
+                    f"• Suite: {type(self).suite()}",
+                ]
+                allure.attach("\n".join(upload_summary),
+                              "Upload summary", allure.attachment_type.TEXT)
+            except Exception as e:
+                # Логируем ошибку выгрузки, но не прерываем выполнение
+                error_msg = f"Failed to upload results: {e}"
+                logging.error(error_msg)
+                result.add_warning(error_msg)
+                # После добавления warning нужно пересчитать summary флаги
+                self._update_summary_flags(result, workload_name)
 
-            # Подробная информация об ошибке для Allure
-            error_details = [
-                f"Error type: {type(e).__name__}",
-                f"Error message: {str(e)}",
-                f"Timestamp: {time_module.strftime('%Y-%m-%d %H:%M:%S')}",
-            ]
-            allure.attach("\n".join(error_details),
-                          "Upload error details", allure.attachment_type.TEXT)
+                # Подробная информация об ошибке для Allure
+                error_details = [
+                    f"Error type: {type(e).__name__}",
+                    f"Error message: {str(e)}",
+                    f"Timestamp: {time_module.strftime('%Y-%m-%d %H:%M:%S')}",
+                ]
+                
+                # Добавляем дополнительную информацию если это YDB ошибка
+                if hasattr(e, 'issues'):
+                    error_details.append(f"YDB issues: {e.issues}")
+                if hasattr(e, 'status'):
+                    error_details.append(f"Status: {e.status}")
+                    
+                allure.attach("\n".join(error_details),
+                              "Upload error details", allure.attachment_type.TEXT)
 
     def _upload_results(self, result, workload_name):
         """Переопределенный метод для workload тестов"""

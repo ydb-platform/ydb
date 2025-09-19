@@ -118,8 +118,8 @@ arrow::Datum ConvertDatumToArrowFormat(arrow::Datum datum, arrow::MemoryPool& po
         result->type->id() == arrow::Type::SPARSE_UNION) {
         if (result->buffers[0]) {
             result->buffers[0] = MakeDenseBitmapCopy(result->buffers[0]->data(), result->length, result->offset, &pool);
-            result->offset = 0;
         }
+        result->offset = 0;
     }
 
     std::vector<std::shared_ptr<arrow::ArrayData>> children;

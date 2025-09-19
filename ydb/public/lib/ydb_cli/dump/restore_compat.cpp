@@ -131,6 +131,7 @@ public:
         opts.Rate = settings.RateLimiterSettings_.Rate_;
         opts.Interval = settings.RateLimiterSettings_.Interval_;
         opts.ReactionTime = settings.RateLimiterSettings_.ReactionTime_;
+        opts.RetryOperationMaxRetries =  settings.MaxRetries_;
 
         Uploader = MakeHolder<TUploader>(opts, TableClient, dataAccumulator->GetQueryString());
     }

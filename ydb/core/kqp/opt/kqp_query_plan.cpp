@@ -526,7 +526,7 @@ private:
             if (hashShuffle.HashFunc().IsValid()) {
                 hashFunc = hashShuffle.HashFunc().Cast().StringValue();
             } else {
-                hashFunc = "HashV1";
+                hashFunc = ToString(SerializerCtx.Config->DefaultHashShuffleFuncType);
             }
         } else if (auto merge = connection.Maybe<TDqCnMerge>()) {
             planNode.TypeName = "Merge";

@@ -247,7 +247,7 @@ void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvReportStatistics::TPtr& /*ev*/) {
-    ActorContext().Schedule(TDuration::MilliSeconds(1000), new TEvPrivate::TEvReportStatistics);
+    ActorContext().Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvReportStatistics);
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "TEvReportStatistics");
     LOG_S_DEBUG("Send periodic stats.");
 
@@ -278,9 +278,11 @@ void TColumnShard::Handle(TEvPrivate::TEvReportStatistics::TPtr& /*ev*/) {
 
     FillOlapStats(ctx, ev);
     FillColumnTableStats(ctx, ev);
-    ActorContext().Send(ColumnShardStatisticsReporter, ev.release());
 
-    // AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ev", ev->ToString());
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ev", ev->ToString());
+    ActorContext().Send(ColumnShardStatisticsReporter, ev.release());
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ev", "sent");
+
 
     // NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }

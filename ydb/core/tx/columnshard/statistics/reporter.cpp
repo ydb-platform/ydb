@@ -13,7 +13,7 @@ void TColumnShardStatisticsReporter::Bootstrap(const TActorContext&) {
 
 void TColumnShardStatisticsReporter::ScheduleStatisticsReport() {
     TDuration::Seconds(ReportStatisticsPeriodMs + RandomNumber<ui32>(JitterIntervalMS * 2) - JitterIntervalMS);
-    Schedule(TDuration::MilliSeconds(ReportStatisticsPeriodMs), new NColumnShard::TEvPrivate::TEvReportStatistics);
+    Schedule(TDuration::MilliSeconds(100), new NColumnShard::TEvPrivate::TEvReportStatistics);
 }
 
 void TColumnShardStatisticsReporter::BuildSSPipe() {
@@ -104,23 +104,19 @@ void TColumnShardStatisticsReporter::SendPeriodicStats() {
     }
 
     if (latestCSExecutorStats) {
+
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HOORAU", latestCSExecutorStats->ToString());
         FillWhateverCan(latestCSExecutorStats);
         NTabletPipe::SendData(ActorContext(), StatsReportPipe, latestCSExecutorStats.release());
+        return;
     }
 
 
 
-    auto ev = [&]() {
-        if (latestCSExecutorStats) {
-            return std::move(latestCSExecutorStats);
-        }
-        else {
-            return std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletId, SSLocalId);
-        }
-    }();
-
+    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletId, SSLocalId);
 
     FillWhateverCan(ev);
+     NTabletPipe::SendData(ActorContext(), StatsReportPipe, ev.release());
 }
 
 void TColumnShardStatisticsReporter::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {

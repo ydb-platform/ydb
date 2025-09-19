@@ -400,6 +400,30 @@ void TCommandImportFileBase::Parse(TConfig& config) {
             throw TMisuseException() << "File path is not allowed to be empty";
         }
     }
+    TVector<TString> expandedFilePaths;
+    for (const auto& filePath : FilePaths) {
+        TFsPath fsPath(filePath);
+        if (fsPath.IsDirectory()) {
+            TVector<TFsPath> dirs;
+            dirs.push_back(fsPath);
+            while (!dirs.empty()) {
+                TFsPath currentDir = dirs.back();
+                dirs.pop_back();
+                TVector<TFsPath> children;
+                currentDir.List(children);
+                for (const TFsPath& child : children) {
+                    if (child.IsDirectory()) {
+                        dirs.push_back(child);
+                    } else {
+                        expandedFilePaths.push_back(child.GetPath());
+                    }
+                }
+            }
+        } else {
+            expandedFilePaths.push_back(filePath);
+        }
+    }
+    FilePaths = expandedFilePaths;
     // If no filenames or stdin isn't connected to tty, read from stdin.
     if (FilePaths.empty() || !IsStdinInteractive()) {
         FilePaths.push_back("");

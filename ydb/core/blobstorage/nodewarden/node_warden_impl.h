@@ -592,6 +592,7 @@ namespace NKikimr::NStorage {
         void Handle(NPDisk::TEvSlayResult::TPtr ev);
         void Handle(NPDisk::TEvShredPDiskResult::TPtr ev);
         void Handle(NPDisk::TEvShredPDisk::TPtr ev);
+        void Handle(NPDisk::TEvChangeExpectedSlotCountResult::TPtr ev);
         void ProcessShredStatus(ui64 cookie, ui64 generation, std::optional<TString> error);
 
         void PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVersion, std::optional<TString> storageYaml,
@@ -608,6 +609,8 @@ namespace NKikimr::NStorage {
 
         void SendPDiskReport(ui32 pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::EPDiskPhase phase,
                 std::variant<std::monostate, ui64, TString> shredState = {});
+
+        void SendChangeExpectedSlotCount(ui32 pdiskId, ui64 expectedSlotCount);
 
         void Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);

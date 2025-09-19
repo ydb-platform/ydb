@@ -315,6 +315,13 @@ namespace NKikimr::NStorage {
         SendToController(std::move(report));
     }
 
+    void TNodeWarden::SendChangeExpectedSlotCount(ui32 pdiskId, ui64 expectedSlotCount) {
+        STLOG(PRI_DEBUG, BS_NODE, NW107, "SendChangeExpectedSlotCount", (PDiskId, pdiskId), (ExpectedSlotCount, expectedSlotCount));
+
+        const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
+        Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(expectedSlotCount));
+    }
+
     void TNodeWarden::AskBSCToRestartPDisk(ui32 pdiskId, bool ignoreDegradedGroups, ui64 requestCookie) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
 
@@ -522,7 +529,19 @@ namespace NKikimr::NStorage {
 
         auto processDisk = [&](const TServiceSetPDisk& pdisk) {
             const TPDiskKey key(pdisk);
-            if (!LocalPDisks.contains(key)) {
+            if (auto it = LocalPDisks.find(key); it != LocalPDisks.end()) {
+                const TPDiskRecord& localPDisk = it->second;
+                auto newPdiskConfig = CreatePDiskConfig(pdisk);
+                ui64 newExpectedSlotCount = newPdiskConfig->ExpectedSlotCount;
+                ui64 oldExpectedSlotCount = localPDisk.Record.GetPDiskConfig().GetExpectedSlotCount();
+                STLOG(PRI_DEBUG, BS_NODE, NW110, "ApplyServiceSetPDisks",
+                    (PDiskId, key.PDiskId),
+                    (NewExpectedSlotCount, newExpectedSlotCount),
+                    (OldExpectedSlotCount, oldExpectedSlotCount));
+                if (newExpectedSlotCount != oldExpectedSlotCount) {
+                    SendChangeExpectedSlotCount(key.PDiskId, newExpectedSlotCount);
+                }
+            } else {
                 StartLocalPDisk(pdisk, false);
             }
             pdiskToDelete.erase(key);

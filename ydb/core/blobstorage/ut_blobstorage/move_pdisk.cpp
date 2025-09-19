@@ -81,7 +81,6 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
                 }
                 NKikimrBlobStorage::TConfigRequest request;
                 auto *cmd = request.AddCommand()->MutableReassignGroupDisk();
-                request.SetIgnoreDisintegratedGroupsChecks(true);
                 request.SetIgnoreDegradedGroupsChecks(true);
                 request.SetIgnoreGroupFailModelChecks(true);
                 cmd->SetGroupId(vslot.GetGroupId());

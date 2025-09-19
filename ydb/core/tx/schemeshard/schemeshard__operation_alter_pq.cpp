@@ -252,6 +252,10 @@ public:
                 auto databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
                 alterConfig.SetYdbDatabaseId(databaseId);
             }
+            if (dbRootEl->UserAttrs->Attrs.contains("monitoring_project_id")) {
+                auto monitoringProjectId = dbRootEl->UserAttrs->Attrs.at("monitoring_project_id");
+                alterConfig.SetMonitoringProjectId(monitoringProjectId);
+            }
             const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
             alterConfig.SetYdbDatabasePath(databasePath);
 

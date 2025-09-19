@@ -110,9 +110,21 @@ struct TUserInfo: public TUserInfoBase {
     NKikimr::NPQ::TMultiCounter MsgsReadGrpc;
     TMap<TString, NKikimr::NPQ::TMultiCounter> BytesReadFromDC;
 
+    // Per partition counters
+    NMonitoring::TDynamicCounters::TCounterPtr BytesReadPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr MessagesReadPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr MessageLagByLastReadPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr MessageLagByCommittedPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastReadPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByCommittedPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastReadMsPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr ReadTimeLagMsPerPartition;
+
     ui32 ActiveReads;
     ui32 ReadsInQuotaQueue;
     ui32 Subscriptions;
+
+    ui32 Partition;
 
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgReadBytes;
 
@@ -123,6 +135,7 @@ struct TUserInfo: public TUserInfoBase {
 
     bool DoInternalRead = false;
     bool MeterRead = true;
+
 
     bool Parsed = false;
 
@@ -151,6 +164,12 @@ struct TUserInfo: public TUserInfoBase {
     void ReadDone(const TActorContext& ctx, const TInstant& now, ui64 readSize, ui32 readCount,
                   const TString& clientDC, const TActorId& tablet, bool isExternalRead, i64 endOffset) {
         Y_UNUSED(tablet);
+        if (BytesReadPerPartition) {
+            BytesReadPerPartition->Add(readSize);
+        }
+        if (MessagesReadPerPartition) {
+            MessagesReadPerPartition->Add(readCount);
+        }
         if (BytesRead && !clientDC.empty()) {
             BytesRead.Inc(readSize);
             if (!isExternalRead && BytesReadGrpc) {
@@ -195,6 +214,7 @@ struct TUserInfo: public TUserInfoBase {
     TUserInfo(
         const TActorContext& ctx,
         NMonitoring::TDynamicCounterPtr streamCountersSubgroup,
+        NMonitoring::TDynamicCounterPtr partitionCountersSubgroup,
         const TString& user,
         const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
         const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
@@ -219,6 +239,7 @@ struct TUserInfo: public TUserInfoBase {
         , ActiveReads(0)
         , ReadsInQuotaQueue(0)
         , Subscriptions(0)
+        , Partition(partition)
         , AvgReadBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000},
                        {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
         , WriteLagMs(TDuration::Minutes(1), 100)
@@ -226,6 +247,10 @@ struct TUserInfo: public TUserInfoBase {
         , MeterRead(meterRead)
     {
         if (AppData(ctx)->Counters) {
+            if (partitionCountersSubgroup) {
+                SetupDetailedMetrics(ctx, partitionCountersSubgroup);
+            }
+
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
                 LabeledCounters.Reset(new TUserLabeledCounters(
                     EscapeBadChars(user) + "||" + EscapeBadChars(topicConverter->GetClientsideName()), partition, dbPath));
@@ -239,6 +264,48 @@ struct TUserInfo: public TUserInfoBase {
                 SetupTopicCounters(ctx, dcId, ToString<ui32>(partition));
             }
         }
+    }
+
+    void SetupDetailedMetrics(const TActorContext& ctx, NMonitoring::TDynamicCounterPtr subgroup) {
+        Y_ABORT_UNLESS(subgroup);
+
+        if (BytesReadPerPartition) {
+            // Don't recreate the counters if they already exist.
+            return;
+        }
+
+        bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
+
+        auto consumerSubgroup = fcc
+            ? subgroup->GetSubgroup("consumer", User)
+            : subgroup->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx));
+
+        auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
+            return consumerSubgroup->GetExpiringNamedCounter(
+                fcc ? "name" : "sensor",
+                fcc ? "topic.partition." + forFCC : forFederation + "PerPartition",
+                deriv);
+        };
+
+        BytesReadPerPartition = getCounter("read.bytes", "BytesRead", true);
+        MessagesReadPerPartition = getCounter("read.messages", "MessagesRead", true);
+        MessageLagByLastReadPerPartition = getCounter("read.lag_messages", "MessageLagByLastRead", false);
+        MessageLagByCommittedPerPartition = getCounter("committed_lag_messages", "MessageLagByCommitted", false);
+        WriteTimeLagMsByLastReadPerPartition = getCounter("write.lag_milliseconds", "WriteTimeLagMsByLastRead", false);
+        WriteTimeLagMsByCommittedPerPartition = getCounter("committed_read_lag_milliseconds", "WriteTimeLagMsByCommitted", false);
+        TimeSinceLastReadMsPerPartition = getCounter("read.idle_milliseconds", "TimeSinceLastReadMs", false);
+        ReadTimeLagMsPerPartition = getCounter("read.lag_milliseconds", "ReadTimeLagMs", false);
+    }
+
+    void ResetDetailedMetrics() {
+        BytesReadPerPartition.Reset();
+        MessagesReadPerPartition.Reset();
+        MessageLagByLastReadPerPartition.Reset();
+        MessageLagByCommittedPerPartition.Reset();
+        WriteTimeLagMsByLastReadPerPartition.Reset();
+        WriteTimeLagMsByCommittedPerPartition.Reset();
+        TimeSinceLastReadMsPerPartition.Reset();
+        ReadTimeLagMsPerPartition.Reset();
     }
 
     void SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {
@@ -379,7 +446,8 @@ public:
         const TString& DbId,
         const TString& DbPath,
         const bool isServerless,
-        const TString& FolderId);
+        const TString& FolderId,
+        const TString& MonitoringProjectId);
 
     void Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx);
 
@@ -405,6 +473,11 @@ public:
     void Clear(const TActorContext& ctx);
 
     void Remove(const TString& user, const TActorContext& ctx);
+
+    ::NMonitoring::TDynamicCounterPtr GetPartitionCounterSubgroup(const TActorContext& ctx) const;
+    void SetupDetailedMetrics(const TActorContext& ctx);
+    void ResetDetailedMetrics();
+    bool DetailedMetricsAreEnabled() const;
 
 private:
 
@@ -437,6 +510,7 @@ private:
     TString DbPath;
     bool IsServerless;
     TString FolderId;
+    TString MonitoringProjectId;
     mutable ui64 CurReadRuleGeneration;
 };
 

@@ -1098,6 +1098,7 @@ private:
     bool ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime);
 
     bool CompactionInProgress = false;
+    TVector<std::pair<TDataKey, size_t>> KeysForCompaction;
     size_t CompactionBlobsCount = 0;
 
     void DumpZones(const char* file = nullptr, unsigned line = 0) const;
@@ -1118,6 +1119,18 @@ private:
     TDeque<NWilson::TSpan> TxForPersistSpans;
 
     bool CanProcessUserActionAndTransactionEvents() const;
+    ui64 GetCompactedBlobSizeLowerBound() const;
+
+    bool CompactRequestedBlob(const TRequestedBlob& requestedBlob,
+                              TProcessParametersBase& parameters,
+                              TEvKeyValue::TEvRequest* compactionRequest,
+                              ui64& blobCreationUnixTime,
+                              bool wasThePreviousBlobBig);
+    void RenameCompactedBlob(TDataKey& k,
+                             const size_t size,
+                             const bool needToCompactHead,
+                             TProcessParametersBase& parameters,
+                             TEvKeyValue::TEvRequest* compactionRequest);
 };
 
 } // namespace NKikimr::NPQ

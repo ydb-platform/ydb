@@ -15,7 +15,7 @@ items:
   href: change_actorsystem_configs.md
 - name: Расширение кластера
   href: cluster-expansion.md
-- name: Переконфигурирование State Storage
+- name: Конфигурирование State Storage
   href: state-storage-reconfiguration.md
 - name: Перемещение State Storage
   href: state-storage-move.md

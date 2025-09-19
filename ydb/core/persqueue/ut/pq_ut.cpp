@@ -2739,7 +2739,7 @@ Y_UNIT_TEST(IncompleteProxyResponse) {
     CmdRead(0, 7, 10, 20_MB, 3, false, tc, {7, 8, 9});
 }
 
-Y_UNIT_TEST(SmallMsgComactificationWithRebootsTest) {
+Y_UNIT_TEST(SmallMsgCompactificationWithRebootsTest) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();

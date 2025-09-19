@@ -85,4 +85,24 @@ Below are examples of the code for setting the "prefer the availability zone" ba
    }
    ```
 
+- С++
+
+  In the C++ SDK, you can select only one availability zone as the preferred one.
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+
+  int main() {
+    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+    auto driverConfig = NYdb::TDriverConfig(connectionString)
+      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation("datacenter1"));
+
+    NYdb::TDriver driver(driverConfig);
+    ...
+    driver.Stop(true);
+    return 0;
+  }
+  ```
+
 {% endlist %}

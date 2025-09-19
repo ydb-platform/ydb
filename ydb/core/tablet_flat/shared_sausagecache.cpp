@@ -166,7 +166,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     ui64 StatLoadInFlyBytes = 0;
 
     ui64 MemLimitBytes = 0;
-    ui64 TryKeepInMemoryBytes = 0;
+    ui64 TargetInMemoryBytes = 0;
 
     void ActualizeCacheSizeLimit() {
         ui64 limitBytes = MemLimitBytes;
@@ -180,7 +180,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // limit of cache depends only on config and mem because passive pages may go in and out arbitrary
         // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
         // because of that DoGC should be called to ensure limits
-        Cache.UpdateLimit(limitBytes, TryKeepInMemoryBytes);
+        Cache.UpdateLimit(limitBytes, TargetInMemoryBytes);
         Counters.ActiveLimitBytes->Set(limitBytes);
     }
 
@@ -1089,9 +1089,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change mode of page collection " << collection.Id
             << " to " << ECacheMode::Regular);
-        Y_ENSURE(TryKeepInMemoryBytes >= collection.TotalSize);
-        TryKeepInMemoryBytes -= collection.TotalSize;
-        Counters.TryKeepInMemoryBytes->Set(TryKeepInMemoryBytes);
+        Y_ENSURE(TargetInMemoryBytes >= collection.TotalSize);
+        TargetInMemoryBytes -= collection.TotalSize;
+        Counters.TargetInMemoryBytes->Set(TargetInMemoryBytes);
         ActualizeCacheSizeLimit();
         // TODO: move pages async and batched
         for (const auto& kv : collection.PageMap) {
@@ -1108,8 +1108,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (collection.InMemoryOwners.size() == 1) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change mode of page collection " << collection.Id
                 << " to " << ECacheMode::TryKeepInMemory);
-            TryKeepInMemoryBytes += collection.TotalSize;
-            Counters.TryKeepInMemoryBytes->Set(TryKeepInMemoryBytes);
+            TargetInMemoryBytes += collection.TotalSize;
+            Counters.TargetInMemoryBytes->Set(TargetInMemoryBytes);
             ActualizeCacheSizeLimit();
         }
 
@@ -1178,10 +1178,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 page->CacheMode = targetMode;
                 switch (page->CacheMode) {
                 case ECacheMode::Regular:
-                    Counters.ActiveKeepInMemoryBytes->Sub(TPageTraits::GetSize(page));
+                    Counters.ActiveInMemoryBytes->Sub(TPageTraits::GetSize(page));
                     break;
                 case ECacheMode::TryKeepInMemory:
-                    Counters.ActiveKeepInMemoryBytes->Add(TPageTraits::GetSize(page));
+                    Counters.ActiveInMemoryBytes->Add(TPageTraits::GetSize(page));
                     break;
                 }
                 Evict(Cache.Insert(page));
@@ -1260,7 +1260,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Counters.ActivePages->Inc();
         Counters.ActiveBytes->Add(sizeof(TPage) + page->Size);
         if (page->CacheMode == ECacheMode::TryKeepInMemory) {
-            Counters.ActiveKeepInMemoryBytes->Add(sizeof(TPage) + page->Size);
+            Counters.ActiveInMemoryBytes->Add(sizeof(TPage) + page->Size);
         }
     }
 
@@ -1270,7 +1270,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Counters.ActivePages->Dec();
         Counters.ActiveBytes->Sub(sizeof(TPage) + page->Size);
         if (page->CacheMode == ECacheMode::TryKeepInMemory) {
-            Counters.ActiveKeepInMemoryBytes->Sub(sizeof(TPage) + page->Size);
+            Counters.ActiveInMemoryBytes->Sub(sizeof(TPage) + page->Size);
         }
     }
 

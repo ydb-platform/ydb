@@ -353,7 +353,7 @@ void TCommandImportFileBase::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     config.Opts->GetOpts().SetTrailingArgTitle("<input files...>",
-            "One or more file paths to import from");
+            "One or more file paths to import from. If a directory is provided, all files in the directory will be imported.");
     config.Opts->AddLongOption("timeout", "Operation timeout. Operation should be executed on server within this timeout. "
             "There could also be a delay up to 200ms to receive timeout error from server")
         .RequiredArgument("VAL").StoreResult(&OperationTimeout).DefaultValue(TDuration::Seconds(5 * 60));
@@ -400,6 +400,30 @@ void TCommandImportFileBase::Parse(TConfig& config) {
             throw TMisuseException() << "File path is not allowed to be empty";
         }
     }
+    TVector<TString> expandedFilePaths;
+    for (const auto& filePath : FilePaths) {
+        TFsPath fsPath(filePath);
+        if (fsPath.IsDirectory()) {
+            TVector<TFsPath> dirs;
+            dirs.push_back(fsPath);
+            while (!dirs.empty()) {
+                TFsPath currentDir = dirs.back();
+                dirs.pop_back();
+                TVector<TFsPath> children;
+                currentDir.List(children);
+                for (const TFsPath& child : children) {
+                    if (child.IsDirectory()) {
+                        dirs.push_back(child);
+                    } else {
+                        expandedFilePaths.push_back(child.GetPath());
+                    }
+                }
+            }
+        } else {
+            expandedFilePaths.push_back(filePath);
+        }
+    }
+    FilePaths = expandedFilePaths;
     // If no filenames or stdin isn't connected to tty, read from stdin.
     if (FilePaths.empty() || !IsStdinInteractive()) {
         FilePaths.push_back("");

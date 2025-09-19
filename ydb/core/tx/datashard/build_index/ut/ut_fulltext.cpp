@@ -54,8 +54,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
 
         request.SetIndexName(kIndexTable);
 
-        request.AddKeyColumns("text");
-
         setupRequest(request);
 
         return datashards[0];
@@ -176,24 +174,17 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         }, "{ <main>: Error: Missing fulltext index settings }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.MutableSettings()->clear_columns();
-        }, "{ <main>: Error: fulltext index should have a single text key column settings but have 0 of them }");
+        }, "{ <main>: Error: settings columns should be set }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.MutableSettings()->mutable_columns()->at(0).mutable_analyzers()->clear_tokenizer();
         }, "{ <main>: Error: tokenizer should be set }");
-        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-            request.MutableSettings()->mutable_columns()->at(0).set_column("data");
-        }, "{ <main>: Error: fulltext index should have a single text key column text settings but have data }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.ClearIndexName();
         }, "{ <main>: Error: Empty index table name }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-            request.ClearKeyColumns();
-        }, "{ <main>: Error: fulltext index should have a single text key column but have 0 of them }");
-        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-            request.ClearKeyColumns();
-            request.AddKeyColumns("some");
+            request.MutableSettings()->mutable_columns()->at(0).set_column("some");
         }, "{ <main>: Error: Unknown key column: some }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.AddDataColumns("some");
@@ -202,9 +193,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         // test multiple issues:
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.ClearIndexName();
-            request.ClearKeyColumns();
-            request.AddKeyColumns("some");
-        }, "[ { <main>: Error: Empty index table name } { <main>: Error: Unknown key column: some } ]");
+            request.AddDataColumns("some");
+        }, "[ { <main>: Error: Empty index table name } { <main>: Error: Unknown data column: some } ]");
     }
 
     Y_UNIT_TEST(Build) {

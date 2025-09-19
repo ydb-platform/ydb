@@ -188,25 +188,19 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
-            //We have already checked this in IsCompatibleIndex
-            Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
+            for (const auto& column : indexDesc.GetFulltextIndexDescription().GetSettings().columns()) {
+                if (column.has_analyzers()) {
+                    auto typeInfo = baseColumnTypes.at(column.column());
     
-            if (indexKeys.KeyColumns.size() > 1) {
-                status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder() << "fulltext index should have a single text key column";
-                return false;
+                    // TODO: support utf-8 in fulltext index
+                    if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
+                        status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                        error = TStringBuilder() << "Fulltext column '" << column.column() << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
+                        return false;
+                    }
+                }
             }
             
-            const TString& textColumnName = indexKeys.KeyColumns.at(0);
-            Y_ABORT_UNLESS(baseColumnTypes.contains(textColumnName));
-            auto typeInfo = baseColumnTypes.at(textColumnName);
-    
-            // TODO: support utf-8 in fulltext index
-            if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
-                status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder() << "Text column '" << textColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
-                return false;
-            }
             break;
         }
         default:

@@ -9,6 +9,7 @@ namespace NKikimr::NFulltext {
 TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings);
 
 bool ValidateSettings(const NProtoBuf::RepeatedPtrField<TString>& keyColumns, const Ydb::Table::FulltextIndexSettings& settings, TString& error);
+bool ValidateSettings(const TVector<TString>& keyColumns, const Ydb::Table::FulltextIndexSettings& settings, TString& error);
 Ydb::Table::FulltextIndexSettings FillSettings(const TString& keyColumn, const TVector<std::pair<TString, TString>>& values, TString& error);
 
 }

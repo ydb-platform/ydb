@@ -272,7 +272,7 @@ namespace NActors {
         SetPrefix(Sprintf("InputSession %s [node %" PRIu32 "]", SelfId().ToString().data(), NodeId));
         Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
         if (RdmaQp) {
-            LOG_ERROR_IC_SESSION("ICIS01", "InputSession created, rdma qp num: %d", RdmaQp->GetQpNum());
+            LOG_DEBUG_IC_SESSION("ICIS01", "InputSession created, rdma qp num: %d", RdmaQp->GetQpNum());
         } else {
             LOG_DEBUG_IC_SESSION("ICIS01", "InputSession created");
         }

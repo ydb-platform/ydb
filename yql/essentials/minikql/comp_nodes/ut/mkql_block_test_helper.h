@@ -136,6 +136,15 @@ private:
     TMaybe<ui32> Value_{};
 };
 
+template <class T>
+struct TIsStdVector: std::false_type {};
+
+template <class T, class Alloc>
+struct TIsStdVector<std::vector<T, Alloc>>: std::true_type {};
+
+template <class T>
+constexpr bool TIsStdVectorV = TIsStdVector<std::remove_cvref_t<T>>::value;
+
 class TBlockHelper {
 public:
     constexpr static size_t SignleIteration = 1;
@@ -292,6 +301,36 @@ public:
         for (size_t i = 0; i < operand.size(); i++) {
             // Test subsequent scalars.
             TestKernel(operand[i], expected[i], unaryOp);
+        }
+    }
+
+    template <typename T, typename U, typename V>
+    void TestKernelFuzzied(T left, U right, V expected, std::function<TRuntimeNode(TSetup<false>&, TRuntimeNode, TRuntimeNode)> binaryOp) {
+        if constexpr (TIsStdVectorV<T> && TIsStdVectorV<U>) {
+            MKQL_ENSURE(left.size() == right.size(), "Size mismatch.");
+            MKQL_ENSURE(left.size() == expected.size(), "Size mismatch.");
+        }
+
+        if constexpr (TIsStdVectorV<T> && TIsStdVectorV<U>) {
+            TestKernel(std::pair{left, TFuzzOptions::FuzzAll()}, std::pair{right, TFuzzOptions::FuzzAll()}, expected, binaryOp);
+            for (size_t i = 0; i < left.size(); i++) {
+                // Test subsequent scalars.
+                TestKernel(left[i], right[i], expected[i], binaryOp);
+            }
+        } else if constexpr (TIsStdVectorV<T>) {
+            TestKernel(std::pair{left, TFuzzOptions::FuzzAll()}, right, expected, binaryOp);
+            for (size_t i = 0; i < left.size(); i++) {
+                // Test subsequent scalars.
+                TestKernel(left[i], right, expected[i], binaryOp);
+            }
+        } else if constexpr (TIsStdVectorV<U>) {
+            TestKernel(left, std::pair{right, TFuzzOptions::FuzzAll()}, expected, binaryOp);
+            for (size_t i = 0; i < right.size(); i++) {
+                // Test subsequent scalars.
+                TestKernel(left, right[i], expected[i], binaryOp);
+            }
+        } else {
+            TestKernel(left, right, expected, binaryOp);
         }
     }
 

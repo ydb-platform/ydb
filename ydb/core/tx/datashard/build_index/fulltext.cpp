@@ -390,12 +390,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         if (!request.HasSettings()) {
             badRequest(TStringBuilder() << "Missing fulltext index settings");
         } else {
-            TVector<TString> keyColumns(::Reserve(request.GetSettings().columns().size()));
-            for (auto column : request.GetSettings().columns()) {
-                keyColumns.push_back(column.column());
-            }
             TString error;
-            if (!NKikimr::NFulltext::ValidateSettings(keyColumns, request.GetSettings(), error)) {
+            if (!NKikimr::NFulltext::ValidateSettings(request.GetSettings(), error)) {
                 badRequest(error);
             }
         }

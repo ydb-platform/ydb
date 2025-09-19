@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         }, "{ <main>: Error: Missing fulltext index settings }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.MutableSettings()->clear_columns();
-        }, "{ <main>: Error: settings columns should be set }");
+        }, "{ <main>: Error: columns should be set }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.MutableSettings()->mutable_columns()->at(0).mutable_analyzers()->clear_tokenizer();
         }, "{ <main>: Error: tokenizer should be set }");

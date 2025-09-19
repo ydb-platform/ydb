@@ -797,12 +797,14 @@ void TestViewQueryTextIsPreserved(
     );
 }
 
-// The view might be restored to a different path from the original.
+// The view might be restored to a different path from the original. The path might be in a different database.
 void TestViewReferenceTableIsPreserved(
-    const char* view, const char* table, const char* restoredView, NQuery::TSession& session,
+    const char* view, const char* table, const char* restoredView,
+    NQuery::TSession& aliceSession, // first tenant's session
+    NQuery::TSession& bobSession, // second tenant's session (might be different from the first one)
     TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
-    ExecuteQuery(session, Sprintf(R"(
+    ExecuteQuery(aliceSession, Sprintf(R"(
                 CREATE TABLE `%s` (
                     Key Uint32,
                     Value Utf8,
@@ -811,7 +813,7 @@ void TestViewReferenceTableIsPreserved(
             )", table
         ), true
     );
-    ExecuteQuery(session, Sprintf(R"(
+    ExecuteQuery(aliceSession, Sprintf(R"(
             UPSERT INTO `%s` (
                 Key,
                 Value
@@ -828,35 +830,35 @@ void TestViewReferenceTableIsPreserved(
             SELECT * FROM `%s`
         )", table
     );
-    ExecuteQuery(session, Sprintf(R"(
+    ExecuteQuery(aliceSession, Sprintf(R"(
                 CREATE VIEW `%s` WITH security_invoker = TRUE AS %s;
             )", view, viewQuery.c_str()
         ), true
     );
-    const auto originalContent = GetTableContent(session, view);
+    const auto originalContent = GetTableContent(aliceSession, view);
 
     backup();
 
-    ExecuteQuery(session, Sprintf(R"(
+    ExecuteQuery(aliceSession, Sprintf(R"(
                 DROP VIEW `%s`;
             )", view
         ), true
     );
-    ExecuteQuery(session, Sprintf(R"(
+    ExecuteQuery(aliceSession, Sprintf(R"(
                 DROP TABLE `%s`;
             )", table
         ), true
     );
 
     restore();
-    CompareResults(GetTableContent(session, restoredView), originalContent);
+    CompareResults(GetTableContent(bobSession, restoredView), originalContent);
 }
 
 void TestViewReferenceTableIsPreserved(
     const char* view, const char* table, NQuery::TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
-    // view is restored to the original path
-    TestViewReferenceTableIsPreserved(view, table, view, session, std::move(backup), std::move(restore));
+    // view is restored to the original path in the original database
+    TestViewReferenceTableIsPreserved(view, table, view, session, session, std::move(backup), std::move(restore));
 }
 
 void TestViewDependentOnAnotherViewIsRestored(
@@ -1897,15 +1899,31 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreViewToDifferentDatabase) {
         TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableShowCreate(true);
 
         constexpr const char* alice = "/Root/tenants/alice";
         constexpr const char* bob = "/Root/tenants/bob";
         CreateDatabase(*server.Tenants_, alice, "ssd");
         CreateDatabase(*server.Tenants_, bob, "hdd");
 
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
-        NQuery::TQueryClient queryClient(driver);
-        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        auto aliceDriver = TDriver(TDriverConfig()
+            .SetEndpoint(Sprintf("localhost:%u", server.GetPort()))
+            .SetDatabase(alice)
+            .SetDiscoveryMode(EDiscoveryMode::Off) // workaround to enable tenant's sessions
+        );
+        NQuery::TQueryClient aliceQueryClient(aliceDriver);
+        auto aliceSessionCreator = aliceQueryClient.GetSession().ExtractValueSync();
+        UNIT_ASSERT_C(aliceSessionCreator.IsSuccess(), aliceSessionCreator.GetIssues().ToString());
+        auto aliceSession = aliceSessionCreator.GetSession();
+        auto bobDriver = TDriver(TDriverConfig()
+            .SetEndpoint(Sprintf("localhost:%u", server.GetPort()))
+            .SetDatabase(bob)
+            .SetDiscoveryMode(EDiscoveryMode::Off) // workaround to enable tenant's sessions
+        );
+        NQuery::TQueryClient bobQueryClient(bobDriver);
+        auto bobSessionCreator = bobQueryClient.GetSession().ExtractValueSync();
+        UNIT_ASSERT_C(bobSessionCreator.IsSuccess(), bobSessionCreator.GetIssues().ToString());
+        auto bobSession = bobSessionCreator.GetSession();
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
@@ -1920,9 +1938,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             view.c_str(),
             table.c_str(),
             restoredView.c_str(),
-            session,
-            CreateBackupLambda(driver, pathToBackup, alice),
-            CreateRestoreLambda(driver, pathToBackup, bob)
+            aliceSession,
+            bobSession,
+            CreateBackupLambda(aliceDriver, pathToBackup, alice),
+            CreateRestoreLambda(bobDriver, pathToBackup, bob)
         );
     }
 

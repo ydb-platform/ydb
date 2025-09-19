@@ -159,6 +159,16 @@ private:
         Result_ = false; // YQL_ENSURE(false, "ScalarExprType is not supported.");
     }
 
+    void Visit(const TLinearExprType& type) override {
+        Y_UNUSED(type);
+        Result_ = false; // YQL_ENSURE(false, "BlockExprType is not supported.");
+    }
+
+    void Visit(const TDynamicLinearExprType& type) override {
+        Y_UNUSED(type);
+        Result_ = false; // YQL_ENSURE(false, "ScalarExprType is not supported.");
+    }
+
 private:
     const TTypeAnnotationNode* Type_;
     bool Result_ = false;
@@ -451,6 +461,16 @@ private:
     void Visit(const TScalarExprType& type) override {
         Y_UNUSED(type);
         YQL_ENSURE(false, "ScalarExprType is not supported.");
+    }
+
+    void Visit(const TLinearExprType& type) override {
+        Y_UNUSED(type);
+        YQL_ENSURE(false, "LinearExprType is not supported.");
+    }
+
+    void Visit(const TDynamicLinearExprType& type) override {
+        Y_UNUSED(type);
+        YQL_ENSURE(false, "DynamicLinearExprType is not supported.");
     }
 
 private:

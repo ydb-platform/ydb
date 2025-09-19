@@ -14,5 +14,6 @@ constexpr TStringBuf ReadName = "Read!";
 constexpr TStringBuf WriteName = "Write!";
 constexpr TStringBuf ConfigureName = "Configure!";
 constexpr TStringBuf ConsName = "Cons!";
+constexpr TStringBuf SeqName = "Seq!";
 
 } // namespace NYql

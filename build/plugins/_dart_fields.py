@@ -592,6 +592,9 @@ class LintWrapperScript:
     def value(cls, unit, flat_args, spec_args):
         if spec_args.get('WRAPPER_SCRIPT'):
             return {cls.KEY: spec_args['WRAPPER_SCRIPT'][0]}
+        else:
+            ymake.report_configure_error('Lint wrapper script must be set')
+            raise DartValueError()
 
 
 class LintConfigs:

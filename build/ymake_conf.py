@@ -1452,9 +1452,18 @@ class GnuCompiler(Compiler):
         ]
 
         if self.target.is_arm or self.target.is_powerpc:
-            # On linux, ARM and PPC default to unsigned char
-            # However, Arcadia requires char to be signed
-            self.c_foptions.append('-fsigned-char')
+            self.c_foptions += [
+                # On linux, ARM and PPC default to unsigned char
+                # However, Arcadia requires char to be signed
+                '-fsigned-char',
+            ]
+
+        if self.tc.is_clang:
+            self.c_foptions += [
+                # Explicitly enable sized deallocations though they were enabled in clang-19 / -std=c++14.
+                # See: https://releases.llvm.org/19.1.0/tools/clang/docs/ReleaseNotes.html
+                '-fsized-deallocation',
+            ]
 
         if is_positive('NO_CXX_EXCEPTIONS'):
             self.c_foptions.append('-fno-exceptions')

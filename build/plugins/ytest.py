@@ -100,6 +100,7 @@ CHECK_FIELDS_BASE = (
 
 LINTER_FIELDS_BASE = (
     df.LintName.value,
+    df.LintWrapperScript.value,
     df.LintExtraParams.from_macro_args,
     df.TestName.name_from_macro_args,
     df.TestedProjectName.unit_name,
@@ -1019,7 +1020,6 @@ def onsetup_run_python(unit):
     (
         df.TestFiles.cpp_linter_files,
         df.LintConfigs.cpp_configs,
-        df.LintWrapperScript.value,
     )
     + LINTER_FIELDS_BASE
 )
@@ -1064,7 +1064,6 @@ def on_add_cpp_linter_check(fields, unit, *args):
     (
         df.TestFiles.py_linter_files,
         df.LintConfigs.python_configs,
-        df.LintWrapperScript.value,
     )
     + LINTER_FIELDS_BASE
 )

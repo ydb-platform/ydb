@@ -5388,6 +5388,11 @@ bool IsPureIsolatedLambdaImpl(const TExprNode& lambdaBody, TNodeSet& visited, TS
 
             return false;
         }
+
+        if (lambdaBody.IsCallable("WithWorld")) {
+            syncList->emplace(lambdaBody.ChildPtr(1), syncList->size());
+            return true;
+        }
     }
 
     if (!lambdaBody.GetTypeAnn()->IsComposable()) {
@@ -6117,6 +6122,20 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
     {
         auto ret = ctx.NewCallable(position, "ScalarType",
             { ExpandType(position, *type.Cast<TScalarExprType>()->GetItemType(), ctx) });
+        return ret;
+    }
+
+    case ETypeAnnotationKind::Linear:
+    {
+        auto ret = ctx.NewCallable(position, "LinearType",
+            { ExpandType(position, *type.Cast<TLinearExprType>()->GetItemType(), ctx) });
+        return ret;
+    }
+
+    case ETypeAnnotationKind::DynamicLinear:
+    {
+        auto ret = ctx.NewCallable(position, "DynamicLinearType",
+            { ExpandType(position, *type.Cast<TDynamicLinearExprType>()->GetItemType(), ctx) });
         return ret;
     }
 

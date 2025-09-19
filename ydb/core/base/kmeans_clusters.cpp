@@ -493,6 +493,7 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
         return false;
     }
 
+    error = "";
     return true;
 }
 
@@ -525,6 +526,7 @@ bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& 
         return false;
     }
 
+    error = "";
     return true;
 }
 

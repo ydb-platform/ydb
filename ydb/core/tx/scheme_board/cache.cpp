@@ -917,6 +917,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return NSchemeCache::ETableKind::KindAsyncIndexTable;
             case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
                 return NSchemeCache::ETableKind::KindVectorIndexTable;
+            case NKikimrSchemeOp::EPathSubTypeFulltextIndexImplTable:
+                return NSchemeCache::ETableKind::KindFulltextIndexTable;
             default:
                 return NSchemeCache::ETableKind::KindRegularTable;
             }

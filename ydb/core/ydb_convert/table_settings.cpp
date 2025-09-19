@@ -476,6 +476,13 @@ bool FillIndexTablePartitioning(
         }
         break;
     }
+    
+    case Ydb::Table::TableIndex::kGlobalFulltextIndex:
+        if (!fillIndexPartitioning(index.global_fulltext_index().settings(), indexImplTableDescriptions)) {
+            return false;
+        }
+        break;
+
     case Ydb::Table::TableIndex::TYPE_NOT_SET:
         break;
     }

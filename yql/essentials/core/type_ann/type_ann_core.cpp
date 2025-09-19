@@ -211,6 +211,8 @@ namespace NTypeAnnImpl {
         case ETypeAnnotationKind::Pg:
         case ETypeAnnotationKind::Block:
         case ETypeAnnotationKind::Scalar:
+        case ETypeAnnotationKind::Linear:
+        case ETypeAnnotationKind::DynamicLinear:
             return { input, type };
 
         case ETypeAnnotationKind::Optional: {
@@ -3115,6 +3117,60 @@ namespace NTypeAnnImpl {
 
         output = ctx.Expr.NewWorld(input->Pos());
         return IGraphTransformer::TStatus::Repeat;
+    }
+
+    IGraphTransformer::TStatus SeqExclamWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureWorldType(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;
+        for (size_t i = 1; i < input->ChildrenSize(); ++i) {
+            status = status.Combine(ConvertToLambda(input->ChildRef(i), ctx.Expr, 1));
+        }
+
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        auto headType = input->Head().GetTypeAnn();
+        bool rebuildRemaining = false;
+        TExprNode::EState prevChildState = TExprNode::EState::ExecutionComplete;
+        for (size_t i = 1; i < input->ChildrenSize(); ++i) {
+            auto& child = input->ChildRef(i);
+            if (child->GetState() > prevChildState) {
+                rebuildRemaining = true;
+            }
+            prevChildState = child->GetState();
+            if (rebuildRemaining) {
+                if (child->Head().Head().GetState() >= TExprNode::EState::TypeComplete) {
+                    auto newLambda = ctx.Expr.DeepCopyLambda(*child);
+                    child = std::move(newLambda);
+                    status = status.Combine(IGraphTransformer::TStatus::Repeat);
+                }
+            } else if (child->GetState() < TExprNode::EState::TypeComplete) {
+                if (!UpdateLambdaAllArgumentsTypes(input->ChildRef(i), {headType}, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+                status = status.Combine(IGraphTransformer::TStatus::Repeat);
+                rebuildRemaining = true;
+            } else {
+                if (!EnsureWorldType(*child, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        input->SetTypeAnn(headType);
+        return IGraphTransformer::TStatus::Ok;
     }
 
     IGraphTransformer::TStatus WithWorldWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -12747,6 +12803,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["RotRight"] = &ShiftWrapper;
         Functions[SyncName] = &SyncWrapper;
         Functions["World"] = &WorldWrapper;
+        Functions[SeqName] = &SeqExclamWrapper;
         Functions["WithWorld"] = &WithWorldWrapper;
         Functions["Concat"] = &ConcatWrapper;
         Functions["AggrConcat"] = &AggrConcatWrapper;
@@ -12898,25 +12955,27 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Zip"] = &ZipWrapper;
         Functions["ZipAll"] = &ZipAllWrapper;
         ExtFunctions["Enumerate"] = &EnumerateWrapper;
-        Functions["GenericType"] = &TypeWrapper<ETypeAnnotationKind::Generic>;
-        Functions["ResourceType"] = &TypeWrapper<ETypeAnnotationKind::Resource>;
-        Functions["ErrorType"] = &TypeWrapper<ETypeAnnotationKind::Error>;
-        Functions["DataType"] = &TypeWrapper<ETypeAnnotationKind::Data>;
-        Functions["ListType"] = &TypeWrapper<ETypeAnnotationKind::List>;
-        Functions["TupleType"] = &TypeWrapper<ETypeAnnotationKind::Tuple>;
-        Functions["MultiType"] = &TypeWrapper<ETypeAnnotationKind::Multi>;
-        Functions["StructType"] = &TypeWrapper<ETypeAnnotationKind::Struct>;
-        Functions["OptionalType"] = &TypeWrapper<ETypeAnnotationKind::Optional>;
-        Functions["TaggedType"] = &TypeWrapper<ETypeAnnotationKind::Tagged>;
-        Functions["VariantType"] = &TypeWrapper<ETypeAnnotationKind::Variant>;
-        Functions["StreamType"] = &TypeWrapper<ETypeAnnotationKind::Stream>;
-        Functions["FlowType"] = &TypeWrapper<ETypeAnnotationKind::Flow>;
-        Functions["BlockType"] = &TypeWrapper<ETypeAnnotationKind::Block>;
-        Functions["ScalarType"] = &TypeWrapper<ETypeAnnotationKind::Scalar>;
+        ExtFunctions["GenericType"] = &TypeWrapper<ETypeAnnotationKind::Generic>;
+        ExtFunctions["ResourceType"] = &TypeWrapper<ETypeAnnotationKind::Resource>;
+        ExtFunctions["ErrorType"] = &TypeWrapper<ETypeAnnotationKind::Error>;
+        ExtFunctions["DataType"] = &TypeWrapper<ETypeAnnotationKind::Data>;
+        ExtFunctions["ListType"] = &TypeWrapper<ETypeAnnotationKind::List>;
+        ExtFunctions["TupleType"] = &TypeWrapper<ETypeAnnotationKind::Tuple>;
+        ExtFunctions["MultiType"] = &TypeWrapper<ETypeAnnotationKind::Multi>;
+        ExtFunctions["StructType"] = &TypeWrapper<ETypeAnnotationKind::Struct>;
+        ExtFunctions["OptionalType"] = &TypeWrapper<ETypeAnnotationKind::Optional>;
+        ExtFunctions["TaggedType"] = &TypeWrapper<ETypeAnnotationKind::Tagged>;
+        ExtFunctions["VariantType"] = &TypeWrapper<ETypeAnnotationKind::Variant>;
+        ExtFunctions["StreamType"] = &TypeWrapper<ETypeAnnotationKind::Stream>;
+        ExtFunctions["FlowType"] = &TypeWrapper<ETypeAnnotationKind::Flow>;
+        ExtFunctions["BlockType"] = &TypeWrapper<ETypeAnnotationKind::Block>;
+        ExtFunctions["ScalarType"] = &TypeWrapper<ETypeAnnotationKind::Scalar>;
+        ExtFunctions["LinearType"] = &TypeWrapper<ETypeAnnotationKind::Linear>;
+        ExtFunctions["DynamicLinearType"] = &TypeWrapper<ETypeAnnotationKind::DynamicLinear>;
         Functions["Nothing"] = &NothingWrapper;
         Functions["AsOptionalType"] = &AsOptionalTypeWrapper;
         Functions["List"] = &ListWrapper;
-        Functions["DictType"] = &TypeWrapper<ETypeAnnotationKind::Dict>;
+        ExtFunctions["DictType"] = &TypeWrapper<ETypeAnnotationKind::Dict>;
         Functions["Dict"] = &DictWrapper;
         ExtFunctions["Variant"] = &VariantWrapper;
         Functions["Enum"] = &EnumWrapper;
@@ -12978,11 +13037,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["EmptyList"] = &EmptyListWrapper;
         Functions["EmptyDict"] = &EmptyDictWrapper;
         Functions["Error"] = &ErrorWrapper;
-        Functions["VoidType"] = &TypeWrapper<ETypeAnnotationKind::Void>;
-        Functions["UnitType"] = &TypeWrapper<ETypeAnnotationKind::Unit>;
-        Functions["NullType"] = &TypeWrapper<ETypeAnnotationKind::Null>;
-        Functions["EmptyListType"] = &TypeWrapper<ETypeAnnotationKind::EmptyList>;
-        Functions["EmptyDictType"] = &TypeWrapper<ETypeAnnotationKind::EmptyDict>;
+        ExtFunctions["VoidType"] = &TypeWrapper<ETypeAnnotationKind::Void>;
+        ExtFunctions["UnitType"] = &TypeWrapper<ETypeAnnotationKind::Unit>;
+        ExtFunctions["NullType"] = &TypeWrapper<ETypeAnnotationKind::Null>;
+        ExtFunctions["EmptyListType"] = &TypeWrapper<ETypeAnnotationKind::EmptyList>;
+        ExtFunctions["EmptyDictType"] = &TypeWrapper<ETypeAnnotationKind::EmptyDict>;
         Functions["Join"] = &JoinWrapper;
         Functions["JoinDict"] = &JoinDictWrapper;
         Functions["MapJoinCore"] = &MapJoinCoreWrapper;
@@ -12996,21 +13055,22 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["MultiHoppingCore"] = &MultiHoppingCoreWrapper;
         Functions["EquiJoin"] = &EquiJoinWrapper;
         Functions["OptionalReduce"] = &OptionalReduceWrapper;
-        Functions["OptionalItemType"] = &TypeArgWrapper<ETypeArgument::OptionalItem>;
-        Functions["ListItemType"] = &TypeArgWrapper<ETypeArgument::ListItem>;
-        Functions["StreamItemType"] = &TypeArgWrapper<ETypeArgument::StreamItem>;
-        Functions["TupleElementType"] = &TypeArgWrapper<ETypeArgument::TupleElement>;
-        Functions["StructMemberType"] = &TypeArgWrapper<ETypeArgument::StructMember>;
-        Functions["DictKeyType"] = &TypeArgWrapper<ETypeArgument::DictKey>;
-        Functions["DictPayloadType"] = &TypeArgWrapper<ETypeArgument::DictPayload>;
+        ExtFunctions["OptionalItemType"] = &TypeArgWrapper<ETypeArgument::OptionalItem>;
+        ExtFunctions["LinearItemType"] = &TypeArgWrapper<ETypeArgument::LinearItem>;
+        ExtFunctions["ListItemType"] = &TypeArgWrapper<ETypeArgument::ListItem>;
+        ExtFunctions["StreamItemType"] = &TypeArgWrapper<ETypeArgument::StreamItem>;
+        ExtFunctions["TupleElementType"] = &TypeArgWrapper<ETypeArgument::TupleElement>;
+        ExtFunctions["StructMemberType"] = &TypeArgWrapper<ETypeArgument::StructMember>;
+        ExtFunctions["DictKeyType"] = &TypeArgWrapper<ETypeArgument::DictKey>;
+        ExtFunctions["DictPayloadType"] = &TypeArgWrapper<ETypeArgument::DictPayload>;
         ExtFunctions["Apply"] = &ApplyWrapper;
         ExtFunctions["NamedApply"] = &NamedApplyWrapper;
         Functions["PositionalArgs"] = &PositionalArgsWrapper;
         ExtFunctions["SqlCall"] = &SqlCallWrapper;
         Functions["Callable"] = &CallableWrapper;
-        Functions["CallableType"] = &TypeWrapper<ETypeAnnotationKind::Callable>;
-        Functions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>;
-        Functions["CallableArgumentType"] = &TypeArgWrapper<ETypeArgument::CallableArgument>;
+        ExtFunctions["CallableType"] = &TypeWrapper<ETypeAnnotationKind::Callable>;
+        ExtFunctions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>;
+        ExtFunctions["CallableArgumentType"] = &TypeArgWrapper<ETypeArgument::CallableArgument>;
         Functions["CombineByKey"] = &CombineByKeyWrapper;
         Functions["FinalizeByKey"] = &CombineByKeyWrapper;
         ExtFunctions["NewMTRand"] = &NewMTRandWrapper;
@@ -13052,11 +13112,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SkipNullMembers"] = &SkipNullMembersWrapper;
         Functions["FilterNullElements"] = &FilterNullElementsWrapper;
         Functions["SkipNullElements"] = &SkipNullElementsWrapper;
-        Functions["AddMemberType"] = &TypeArgWrapper<ETypeArgument::AddMember>;
-        Functions["RemoveMemberType"] = &TypeArgWrapper<ETypeArgument::RemoveMember>;
-        Functions["ForceRemoveMemberType"] = &TypeArgWrapper<ETypeArgument::ForceRemoveMember>;
-        Functions["FlattenMembersType"] = &TypeArgWrapper<ETypeArgument::FlattenMembers>;
-        Functions["VariantUnderlyingType"] = &TypeArgWrapper<ETypeArgument::VariantUnderlying>;
+        ExtFunctions["AddMemberType"] = &TypeArgWrapper<ETypeArgument::AddMember>;
+        ExtFunctions["RemoveMemberType"] = &TypeArgWrapper<ETypeArgument::RemoveMember>;
+        ExtFunctions["ForceRemoveMemberType"] = &TypeArgWrapper<ETypeArgument::ForceRemoveMember>;
+        ExtFunctions["FlattenMembersType"] = &TypeArgWrapper<ETypeArgument::FlattenMembers>;
+        ExtFunctions["VariantUnderlyingType"] = &TypeArgWrapper<ETypeArgument::VariantUnderlying>;
         Functions["Guess"] = &GuessWrapper;
         Functions["SqlVariantItem"] = &SqlVariantItemWrapper;
         Functions["VariantItem"] = &VariantItemWrapper;
@@ -13150,6 +13210,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["DataTypeComponents"] = &SplitTypeHandleWrapper<ETypeAnnotationKind::Data>;
         ExtFunctions["DataTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::Data>;
         ExtFunctions["OptionalTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::Optional>;
+        ExtFunctions["LinearTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::Linear>;
+        ExtFunctions["DynamicLinearTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::DynamicLinear>;
         ExtFunctions["ListTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::List>;
         ExtFunctions["StreamTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::Stream>;
         Functions["TupleTypeComponents"] = &SplitTypeHandleWrapper<ETypeAnnotationKind::Tuple>;

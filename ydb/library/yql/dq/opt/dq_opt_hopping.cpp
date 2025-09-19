@@ -90,13 +90,6 @@ TMaybe<bool> BuildWatermarkMode(
         return Nothing();
     }
 
-    if (hoppingVersion == "v2" && !enableWatermarks) {
-        ctx.AddError(TIssue(
-            ctx.GetPosition(aggregate.Pos()),
-            "HoppingWindow requires watermarks to be enabled. Use HOP instead."));
-        return Nothing();
-    }
-
     return enableWatermarks;
 }
 
@@ -167,9 +160,10 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
         .template WatermarkMode<TCoAtom>().Build(ToString(*enableWatermarks));
 
     if (*enableWatermarks) {
-        const auto hop = TDuration::MicroSeconds(hopTraits.Hop);
+        const auto hop = hopTraits.Hop;
+        const auto delay = lateArrivalDelay ? (lateArrivalDelay.MicroSeconds() + hop - 1) / hop * hop : hop;
         multiHoppingCoreBuilder.template Delay<TCoInterval>()
-            .Literal().Build(ToString(Max(hop, lateArrivalDelay).MicroSeconds()))
+            .Literal().Build(ToString(delay))
             .Build();
     } else {
         multiHoppingCoreBuilder.Delay(hopTraits.Traits.Delay());

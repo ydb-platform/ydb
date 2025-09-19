@@ -1122,6 +1122,20 @@ namespace NActors {
             lastpair.first += GetCycleCountFast();
 
         OutputStuckFlag = state;
+
+        if (state) {
+            if (++Proxy->Common->NumSessionsWithDataInQueue == 1) {
+                const ui64 ts = GetCycleCountFast();
+                const ui64 prevts = Proxy->Common->CyclesOnLastSwitch.exchange(ts);
+                Proxy->Common->CyclesWithZeroSessions += ts - prevts;
+            }
+        } else {
+            if (!--Proxy->Common->NumSessionsWithDataInQueue) {
+                const ui64 ts = GetCycleCountFast();
+                const ui64 prevts = Proxy->Common->CyclesOnLastSwitch.exchange(ts);
+                Proxy->Common->CyclesWithNonzeroSessions += ts - prevts;
+            }
+        }
     }
 
     void TInterconnectSessionTCP::SwitchStuckPeriod() {

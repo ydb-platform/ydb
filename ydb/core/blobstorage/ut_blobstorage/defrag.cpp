@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
         UNIT_ASSERT_VALUES_EQUAL(caughtDone, true);
         UNIT_ASSERT_VALUES_EQUAL(caughtRestore, true);
         UNIT_ASSERT_VALUES_EQUAL(rewrittenRecs, 20 - (9 + 1));  // // defragmentation stopping if number of can be freed chunks is 9 + 1 chunk really used
-        UNIT_ASSERT_VALUES_EQUAL(rewrittenBytes, 5778432);
+        UNIT_ASSERT(rewrittenBytes == 5778432 /*AddHeader=false*/ || rewrittenBytes == 5778487);
 
     }
 

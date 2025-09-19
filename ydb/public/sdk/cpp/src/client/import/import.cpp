@@ -262,6 +262,10 @@ TAsyncImportFromS3Response TImportClient::ImportFromS3(const TImportFromS3Settin
         settingsProto.set_no_acl(settings.NoACL_.value());
     }
 
+    if (settings.SkipChecksumValidation_) {
+        settingsProto.set_skip_checksum_validation(settings.SkipChecksumValidation_.value());
+    }
+
     if (settings.SourcePrefix_) {
         settingsProto.set_source_prefix(settings.SourcePrefix_.value());
     }

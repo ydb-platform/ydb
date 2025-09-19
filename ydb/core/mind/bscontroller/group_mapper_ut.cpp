@@ -402,6 +402,12 @@ public:
         return str.Str();
     }
 
+    TString FormatGroup(ui32 groupId) {
+        const auto it = Groups.find(groupId);
+        UNIT_ASSERT(it != Groups.end());
+        return FormatGroup(it->second.Group);
+    }
+
     void CheckGroupErasure(const TGroupMapper::TGroupDefinition& group, ui32 decommittedDataCenter = 0) {
         TSet<ui32> dataCenters;
         for (const auto& realm : group) {
@@ -582,6 +588,13 @@ public:
         }
 
         return CheckLayoutByGroupDefinition(group, pdisks, geom, true, error);
+    }
+
+    TPDiskId GetGroupDiskId(ui32 groupId, ui32 realm = 0, ui32 domain = 0, ui32 disk = 0) const {
+        const auto it = Groups.find(groupId);
+        UNIT_ASSERT(it != Groups.end());
+        const TGroupRecord& group = it->second;
+        return group.Group[realm][domain][disk];
     }
 };
 
@@ -838,6 +851,87 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         TGroupMapper::TGroupDefinition newGroup = context.ReallocateGroup(mapper, 1, {TPDiskId(8, 1)});
 
         UNIT_ASSERT_EQUAL_C(TPDiskId(9, 1), newGroup[0][7][0], context.FormatGroup(newGroup));
+    }
+    
+    Y_UNIT_TEST(WithAttentionToRacksAndReplication) {
+        TTestContext context(
+            {
+                // DC 1
+                // Rack 1
+                {1, 1, 1, 1, 3},
+                {1, 1, 1, 2, 3},
+                // Rack 2
+                {1, 1, 2, 1, 3},
+                {1, 1, 2, 2, 3},
+                // Rack 3
+                {1, 1, 3, 1, 3},
+                {1, 1, 3, 2, 3},
+                // Rack 4
+                {1, 1, 4, 1, 3},
+                {1, 1, 4, 2, 3},
+
+                // DC 2
+                // Rack 1
+                {2, 1, 1, 1, 3},
+                {2, 1, 1, 2, 3},
+                // Rack 2
+                {2, 1, 2, 1, 3},
+                {2, 1, 2, 2, 3},
+                // Rack 3
+                {2, 1, 3, 1, 3},
+                {2, 1, 3, 2, 3},
+
+                // DC 3
+                // Rack 1
+                {3, 1, 1, 1, 3},
+                {3, 1, 1, 2, 3},
+                // Rack 2
+                {3, 1, 2, 1, 3},
+                {3, 1, 2, 2, 3},
+                // Rack 3
+                {3, 1, 3, 1, 3},
+                {3, 1, 3, 2, 3},
+            }
+        );
+
+        TGroupMapper::TGroupDefinition group;
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1), false, true, true);
+        TPDiskSlotTracker s;
+        mapper.SetPDiskSlotTracker(std::move(s));
+        context.PopulateGroupMapper(mapper, 8);
+
+        ui32 groupId = context.AllocateGroup(mapper, group);
+        
+        // All disks and racks are in the same state, so we pick a disk on node 7 (by NumDomainMatchingDisks heuristic)
+        TGroupMapper::TGroupDefinition newGroup = context.ReallocateGroup(mapper, groupId, {TPDiskId(1, 1)});
+        UNIT_ASSERT_EQUAL_C(TPDiskId(7, 1), context.GetGroupDiskId(1), context.FormatGroup(1));
+
+        // This time rack 4 has more free slots than other racks in DC 1, it will be picked
+        s = TPDiskSlotTracker();
+        s.AddFreeSlotsForRack("DC=1/M=1/4", 1);
+        mapper.SetPDiskSlotTracker(std::move(s));
+        newGroup = context.ReallocateGroup(mapper, groupId, {TPDiskId(7, 1)});
+        UNIT_ASSERT_EQUAL_C(TPDiskId(7, 2), context.GetGroupDiskId(1), context.FormatGroup(1));
+
+        // Now we only select from the first rack, but we will change replicating disks per node.
+        s = TPDiskSlotTracker();
+        s.AddFreeSlotsForRack("DC=1/M=1/1", 1);
+        // Now node 1 has more replicating disks, so other node will be picked.
+        s.AddReplicatingVSlot(TPDiskId(1, 1));
+        mapper.SetPDiskSlotTracker(std::move(s));
+        newGroup = context.ReallocateGroup(mapper, groupId, {TPDiskId(7, 2)});
+        UNIT_ASSERT_EQUAL_C(TPDiskId(2, 1), context.GetGroupDiskId(1), context.FormatGroup(1));
+
+        // Now select from the first node only. Pick the disk 
+        s = TPDiskSlotTracker();
+        s.AddFreeSlotsForRack("DC=1/M=1/1", 1);
+        // Both disks on node 1 has replicating slots, so we will pick disk 2 on node 2.
+        s.AddReplicatingVSlot(TPDiskId(1, 1));
+        s.AddReplicatingVSlot(TPDiskId(1, 2));
+        mapper.SetPDiskSlotTracker(std::move(s));
+        newGroup = context.ReallocateGroup(mapper, groupId, {TPDiskId(2, 1)});
+        UNIT_ASSERT_EQUAL_C(TPDiskId(2, 2), context.GetGroupDiskId(1), context.FormatGroup(1));
     }
 
     Y_UNIT_TEST(NonUniformClusterDifferentSlotsPerDisk) {

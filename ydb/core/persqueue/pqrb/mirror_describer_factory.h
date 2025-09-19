@@ -6,6 +6,7 @@
 namespace NKikimr::NPQ {
 
 NActors::IActor* CreateMirrorDescriber(
+    const ui64 tabletId,
     const NActors::TActorId& readBalancerActorId,
     const TString& topicName,
     const NKikimrPQ::TMirrorPartitionConfig& config

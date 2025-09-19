@@ -33,12 +33,14 @@
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <library/cpp/http/io/headers.h>
+#include <library/cpp/json/writer/json.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/monotonic_provider.h>
 
 #include <util/generic/xrange.h>
 #include <util/generic/ymath.h>
@@ -221,6 +223,7 @@ void TExecutor::Broken() {
         BootLogic->Cancel();
 
     if (Owner) {
+        ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
             Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
         Owner->Detach(OwnerCtx());
@@ -836,6 +839,7 @@ TExecutorCaches TExecutor::CleanupState() {
 
 void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     if (Stats->IsFollower()) {
+        ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
             Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
     }
@@ -926,6 +930,7 @@ void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &
 }
 
 void TExecutor::DetachTablet() {
+    ForceSendCounters();
     TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
         Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
     return PassAway();
@@ -4040,6 +4045,30 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
     Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateCounters());
 }
 
+void TExecutor::ForceSendCounters() {
+    TAutoPtr<TTabletCountersBase> executorCounters;
+    TAutoPtr<TTabletCountersBase> externalTabletCounters;
+
+    if (Counters && Owner && Stats) {
+        executorCounters = Counters->MakeDiffForAggr(*CountersBaseline);
+        Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
+
+        if (AppCounters) {
+            externalTabletCounters = AppCounters->MakeDiffForAggr(*AppCountersBaseline);
+            AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
+        }
+
+        // tablet id + tablet type
+        ui64 tabletId = Owner->TabletID();
+        auto tabletType = Owner->TabletType();
+        auto tenantPathId = Owner->Info()->TenantPathId;
+
+        TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
+        Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+    }
+}
+
 float TExecutor::GetRejectProbability() const {
     // Limit number of in-flight TXs
     // TODO: make configurable
@@ -4382,9 +4411,7 @@ const TExecutorStats& TExecutor::GetStats() const {
     return *Stats;
 }
 
-void TExecutor::RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
-    TStringStream str;
-
+void TExecutor::RenderHtmlCounters(TStringStream& str) const {
     if (Database) {
         HTML(str) {
             str << "<style>";
@@ -4409,8 +4436,60 @@ void TExecutor::RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
     } else {
         HTML(str) {str << "loading...";} // todo: populate from bootlogic
     }
+}
 
-    Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+void TExecutor::RenderJsonCounters(TStringStream& str) const {
+    NJsonWriter::TBuf json;
+    auto root = json.BeginObject();
+
+    if (Database) {
+        if (Counters) {
+            root.WriteKey("ExecutorCounters").UnsafeWriteValue(Counters->OutputJson());
+        }
+
+        if (AppCounters) {
+            root.WriteKey("AppCounters").UnsafeWriteValue(AppCounters->OutputJson());
+        }
+    }
+
+    root.EndObject();
+    json.FlushTo(&str);
+}
+
+void TExecutor::RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
+    TStringStream str;
+
+    TString contentType = "text/html";
+    if (ev->Get()->Cgi().Get("format") == "json") {
+        contentType = "application/json";
+    } else if (const auto& ext = ev->Get()->ExtendedQuery) {
+        THttpHeaders headers;
+        for (const auto& header : ext->GetHeaders()) {
+            headers.AddHeader(header.GetName(), header.GetValue());
+        }
+
+        if (const auto* header = headers.FindHeader("Accept")) {
+            if (header->Value() == "application/json") {
+                contentType = header->Value();
+            } else if (!header->Value().Contains("text/html") && !header->Value().Contains("*/*")) {
+                contentType = header->Value();
+            }
+        }
+    }
+
+    if (contentType == "text/html") {
+        RenderHtmlCounters(str);
+        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+    } else if (contentType == "application/json") {
+        RenderJsonCounters(str);
+        Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes(str.Str()));
+    } else {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+            "HTTP/1.1 400 Bad Request\r\n"
+            "Content-Type: text/plain\r\n"
+            "\r\nUnsupported Accept header value"
+        ));
+    }
 }
 
 void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {

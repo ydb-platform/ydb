@@ -1292,11 +1292,6 @@ class GnuToolchain(Toolchain):
             # to reduce code size
             self.c_flags_platform.append('-mthumb')
 
-        if target.is_arm or target.is_powerpc:
-            # On linux, ARM and PPC default to unsigned char
-            # However, Arcadia requires char to be signed
-            self.c_flags_platform.append('-fsigned-char')
-
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
 
@@ -1456,6 +1451,20 @@ class GnuCompiler(Compiler):
             '-fdata-sections'
         ]
 
+        if self.target.is_arm or self.target.is_powerpc:
+            self.c_foptions += [
+                # On linux, ARM and PPC default to unsigned char
+                # However, Arcadia requires char to be signed
+                '-fsigned-char',
+            ]
+
+        if self.tc.is_clang:
+            self.c_foptions += [
+                # Explicitly enable sized deallocations though they were enabled in clang-19 / -std=c++14.
+                # See: https://releases.llvm.org/19.1.0/tools/clang/docs/ReleaseNotes.html
+                '-fsized-deallocation',
+            ]
+
         if is_positive('NO_CXX_EXCEPTIONS'):
             self.c_foptions.append('-fno-exceptions')
         else:
@@ -1483,10 +1492,7 @@ class GnuCompiler(Compiler):
                 # Enable aligned allocation, unless explicitly disabled
                 self.c_foptions.append('-faligned-allocation')
         elif self.tc.is_gcc:
-            if self.target.is_tc32:
-                # tc32 toolchain does not support this flag
-                pass
-            else:
+            if self.tc.version_at_least(4, 9):
                 self.c_foptions += [
                     # Set up output colorization
                     '-fdiagnostics-color=always',
@@ -2104,6 +2110,10 @@ class MSVCCompiler(MSVC, Compiler):
                 '-Wno-invalid-offsetof',
                 '-Wno-undefined-var-template',
                 '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
+                '-Wno-deprecated-literal-operator',
+                '-Wno-explicit-specialization-storage-class',
+                '-Wno-missing-template-arg-list-after-template-kw',
+                '-Wno-nontrivial-memcall',
             ]
 
         defines.append('/D_WIN32_WINNT={0}'.format(WINDOWS_VERSION_MIN))

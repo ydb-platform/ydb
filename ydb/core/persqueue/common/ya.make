@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    actor.cpp
     common_app.cpp
     heartbeat.cpp
     key.cpp

@@ -3,7 +3,7 @@ val arcadia_root = "{{ arcadia_root }}"
 val output_root = "{{ output_root }}"
 val project_root = "{{ project_root }}"
 
-{%  if mainClass -%}
+{%  if not(proto_template) and mainClass -%}
 application {
     mainClass.set("{{ mainClass }}")
 }

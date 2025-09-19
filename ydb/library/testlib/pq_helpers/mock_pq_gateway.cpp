@@ -155,6 +155,7 @@ class TMockPqGateway : public IMockPqGateway {
             std::optional<TInstant> /*createTimestamp*/ = std::nullopt) override {
             std::vector<NYdb::NTopic::TWriteSessionEvent::TWriteAck> acks;
             NYdb::NTopic::TWriteSessionEvent::TWriteAck ack;
+            ack.State = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN;
             ack.SeqNo = *seqNo;
             acks.push_back(ack);
             Events.emplace_back(NYdb::NTopic::TWriteSessionEvent::TAcksEvent{.Acks = acks});

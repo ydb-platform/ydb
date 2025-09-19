@@ -502,7 +502,7 @@ namespace NKikimr {
                     .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                 }
             }),
-            TInstant::Max()
+            ev->Get()->Deadline
         );
     }
 

@@ -8,6 +8,42 @@ namespace NKikimr {
 
         class TGroupGeometryInfo;
 
+        class TPDiskSlotTracker {
+            absl::flat_hash_map<ui32, ui16> ReplicatingVDisksByNode;
+            absl::flat_hash_map<TPDiskId, ui8> ReplicatingVDisksByPDisk;
+            absl::flat_hash_map<TString, i32> FreeSlotsPerRack;
+        public:
+            ui16 GetReplicatingVDisksOnNode(ui32 nodeId) const {
+                if (const auto it = ReplicatingVDisksByNode.find(nodeId); it != ReplicatingVDisksByNode.end()) {
+                    return it->second;
+                }
+                return 0;
+            }
+
+            ui8 GetReplicatingVDisksOnPDisk(TPDiskId pdiskId) const {
+                if (const auto it = ReplicatingVDisksByPDisk.find(pdiskId); it != ReplicatingVDisksByPDisk.end()) {
+                    return it->second;
+                }
+                return 0;
+            }
+
+            i32 GetFreeSlotsOnRack(const TString& rack) const {
+                if (const auto it = FreeSlotsPerRack.find(rack); it != FreeSlotsPerRack.end()) {
+                    return it->second;
+                }
+                return 0;
+            }
+
+            void AddReplicatingVSlot(TPDiskId pdiskId) {
+                ++ReplicatingVDisksByNode[pdiskId.NodeId];
+                ++ReplicatingVDisksByPDisk[pdiskId];
+            }
+            
+            void AddFreeSlotsForRack(const TString& rack, i32 freeSlots) {
+                FreeSlotsPerRack[rack] += freeSlots;
+            }
+        };
+
         // TGroupMapper is a helper class used to create groups from a set of PDisks with their respective locations
         // over physical hardware
         class TGroupMapper {
@@ -67,14 +103,18 @@ namespace NKikimr {
             };
 
         public:
-            TGroupMapper(TGroupGeometryInfo geom, bool randomize = false);
+            TGroupMapper(TGroupGeometryInfo geom, bool randomize = false, bool preferLessOccupiedRack = false, bool withAttentionToReplication = false);
             ~TGroupMapper();
+
+            void SetPDiskSlotTracker(TPDiskSlotTracker&& state);
+
+            TPDiskSlotTracker& GetPDiskSlotTracker();
 
             // Register PDisk inside mapper to use it in subsequent map operations
             bool RegisterPDisk(const TPDiskRecord& pdisk);
 
             // Remove PDisk from the table.
-            void UnregisterPDisk(TPDiskId pdiskId);
+            TPDiskRecord UnregisterPDisk(TPDiskId pdiskId);
 
             // Adjust VDisk space quota.
             void AdjustSpaceAvailable(TPDiskId pdiskId, i64 increment);

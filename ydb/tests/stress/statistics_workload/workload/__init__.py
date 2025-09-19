@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import ydb
+import json
 import logging
 import time
 import os
@@ -127,6 +128,25 @@ class Workload(object):
             session.execute_scheme(f"ANALYZE `{table_path}`")
         self.run_query_ignore_errors(callee)
 
+    def get_planner_row_count_estimate(self, table_name):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            res = session_pool.explain_with_retries(f"SELECT count(*) FROM {table_name}")
+            logger.debug(f"SELECT count explain: {res}")
+            explain = json.loads(res)
+
+        def get_estimate(plan_node):
+            if plan_node.get("Name") == "TableFullScan" and plan_node.get("Table") == table_name:
+                rc = plan_node.get("E-Rows")
+                return int(rc) if rc is not None else None
+            for p in plan_node.get("Plans", []) + plan_node.get("Operators", []):
+                rc = get_estimate(p)
+                if rc is not None:
+                    return rc
+
+        rc = get_estimate(explain["Plan"])
+        logger.info(f"planner row count estimate: {rc}")
+        return rc
+
     def execute(self):
         table_name = table_name_with_prefix(self.table_prefix)
         table_path = self.database + "/" + table_name
@@ -164,6 +184,12 @@ class Workload(object):
             logger.info(f"[{trace_id}] number of rows in statistics table '{table_statistics}' {count}")
             if count == 0:
                 raise Exception(f"[{trace_id}] statistics table '{table_statistics}' is empty")
+
+            planner_rc = self.get_planner_row_count_estimate(table_name)
+            if planner_rc != self.batch_count * self.batch_size:
+                raise Exception(
+                    f"[{trace_id}] row count planner estimate for '{table_name}': {planner_rc}"
+                    f" does not match the expected value: {self.batch_count * self.batch_size}")
         except Exception as e:
             logger.error(f"[{trace_id}] {type(e)}, {e}")
 

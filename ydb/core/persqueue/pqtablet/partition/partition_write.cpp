@@ -1387,7 +1387,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
     if (newWrite && !newWrite->Value.empty()) {
         newWrite->Key.SetFastWrite();
-        AddCmdWrite(newWrite, request, ctx);
+        AddCmdWriteWithDeferredTimestamp(newWrite, request, ctx);
 
         LOG_D("Topic '" << TopicName() <<
                 "' partition " << Partition <<

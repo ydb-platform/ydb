@@ -55,7 +55,7 @@ struct THashV1 : public THashBase {
     )
     {
         for (const auto& column : keyColumns) {
-            Hashers.emplace_back(MakeHashImpl(column.Type));
+            Hashers.emplace_back(MakeHashImpl(column.DataType));
         }
     }
 
@@ -66,21 +66,11 @@ struct THashV1 : public THashBase {
 
 struct THashV2 : public THashBase {
     explicit THashV2(
-        const TVector<TColumnInfo>& keyColumns,
-        const NKikimr::NMiniKQL::TType* outputType
+        const TVector<TColumnInfo>& keyColumns
     )
     {
-        if (outputType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Multi) {
-            auto multiType = static_cast<const NMiniKQL::TMultiType*>(outputType);
-            for (const auto& column : keyColumns) {
-                Hashers.emplace_back(MakeHashImpl(multiType->GetElementType(column.Index)));
-            }
-        } else {
-            YQL_ENSURE(outputType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
-            auto structType = static_cast<const TStructType*>(outputType);
-            for (const auto& column : keyColumns) {
-                Hashers.emplace_back(MakeHashImpl(structType->GetMemberType(column.Index)));
-            }
+        for (const auto& column : keyColumns) {
+            Hashers.emplace_back(MakeHashImpl(column.OriginalType));
         }
     }
 
@@ -96,17 +86,12 @@ struct THashV2 : public THashBase {
 
 struct TBlockHashV1 {
     TBlockHashV1(
-        const TVector<TColumnInfo>& keyColumns,
-        const NKikimr::NMiniKQL::TType* outputType
+        const TVector<TColumnInfo>& keyColumns
     )
     {
         TBlockTypeHelper helper;
-        auto multiType = static_cast<const NMiniKQL::TMultiType*>(outputType);
         for (const auto& column : keyColumns) {
-            auto columnType = multiType->GetElementType(column.Index);
-            YQL_ENSURE(columnType->IsBlock());
-            auto blockType = static_cast<const NMiniKQL::TBlockType*>(columnType);
-            Hashers.emplace_back(helper.MakeHasher(blockType->GetItemType()));
+            Hashers.emplace_back(helper.MakeHasher(column.OriginalType));
         }
     }
 
@@ -130,10 +115,9 @@ protected:
 
 struct TBlockHashV2 : public TBlockHashV1 {
     TBlockHashV2(
-        const TVector<TColumnInfo>& keyColumns,
-        const NKikimr::NMiniKQL::TType* outputType
+        const TVector<TColumnInfo>& keyColumns
     )
-        : TBlockHashV1(keyColumns, outputType)
+        : TBlockHashV1(keyColumns)
     {}
 
     ui64 Finish(ui64 outputsSize) {
@@ -942,11 +926,11 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
         }
         case NDqProto::TTaskOutputHashPartition::kHashV2: {
             if (AnyOf(keyColumns, [](const auto& info) { return !info.IsBlockOrScalar(); })) {
-                THashV2 hashFunc(keyColumns, outputType);
+                THashV2 hashFunc(keyColumns);
                 return MakeIntrusive<TDqOutputHashPartitionConsumer<THashV2>>(std::move(outputs), std::move(keyColumns), outputWidth, std::move(hashFunc));
             }
 
-            TBlockHashV2 hashFunc(keyColumns, outputType);
+            TBlockHashV2 hashFunc(keyColumns);
             YQL_ENSURE(outputWidth.Defined(), "Expecting wide stream for block data");
             if (AllOf(keyColumns, [](const auto& info) { return *info.IsScalar; })) {
                 // all key columns are scalars - all data will go to single output
@@ -963,7 +947,7 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
                 return MakeIntrusive<TDqOutputHashPartitionConsumer<THashV1>>(std::move(outputs), std::move(keyColumns), outputWidth, std::move(hashFunc));
             }
 
-            TBlockHashV1 hashFunc(keyColumns, outputType);
+            TBlockHashV1 hashFunc(keyColumns);
             YQL_ENSURE(outputWidth.Defined(), "Expecting wide stream for block data");
             if (AllOf(keyColumns, [](const auto& info) { return *info.IsScalar; })) {
                 // all key columns are scalars - all data will go to single output

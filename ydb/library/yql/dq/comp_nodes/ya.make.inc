@@ -39,3 +39,5 @@ COPY(
        ${BINDIR}/yql/essentials/minikql/computation/mkql_computation_node_codegen.h
        ${BINDIR}/yql/essentials/minikql/computation/mkql_llvm_base.h
 )
+
+PROVIDES(YDB_DQ_COMP_NODES)

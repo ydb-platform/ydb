@@ -78,6 +78,18 @@ const TVector<SysViewsRegistryRecord> SysViewsRegistry::SysViews = {
     {"auth_owners", ESysViewType::EAuthOwners, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::AuthOwners>},
     {"auth_permissions", ESysViewType::EAuthPermissions, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::AuthPermissions>},
     {"auth_effective_permissions", ESysViewType::EAuthEffectivePermissions, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::AuthPermissions>},
+
+    {"store_primary_index_stats", ESysViewType::EStorePrimaryIndexStats, {ESource::OlapStore},  &FillSchema<Schema::PrimaryIndexStats>},
+    {"store_primary_index_schema_stats", ESysViewType::EStorePrimaryIndexSchemaStats, {ESource::OlapStore},  &FillSchema<Schema::PrimaryIndexSchemaStats>},
+    {"store_primary_index_portion_stats", ESysViewType::EStorePrimaryIndexPortionStats, {ESource::OlapStore},  &FillSchema<Schema::PrimaryIndexPortionStats>},
+    {"store_primary_index_granule_stats", ESysViewType::EStorePrimaryIndexGranuleStats, {ESource::OlapStore},  &FillSchema<Schema::PrimaryIndexGranuleStats>},
+    {"store_primary_index_optimizer_stats", ESysViewType::EStorePrimaryIndexOptimizerStats, {ESource::OlapStore},  &FillSchema<Schema::PrimaryIndexOptimizerStats>},
+
+    {"primary_index_stats", ESysViewType::ETablePrimaryIndexStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexStats>},
+    {"primary_index_schema_stats", ESysViewType::ETablePrimaryIndexSchemaStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexSchemaStats>},
+    {"primary_index_portion_stats", ESysViewType::ETablePrimaryIndexPortionStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexPortionStats>},
+    {"primary_index_granule_stats", ESysViewType::ETablePrimaryIndexGranuleStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexGranuleStats>},
+    {"primary_index_optimizer_stats", ESysViewType::ETablePrimaryIndexOptimizerStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexOptimizerStats>},
 };
 
 const TVector<SysViewsRegistryRecord> SysViewsRegistry::RewrittenSysViews = {

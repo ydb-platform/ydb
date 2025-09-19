@@ -70,14 +70,14 @@ public:
     TS3ConfSettingDefault<ui64, 0> ParallelDownloadCount;             // Number of files to read in parallel, min == 1
     TS3ConfSettingDefault<bool, true> UseBlocksSource;                // Deprecated and has to be removed after config cleanup
     TS3ConfSettingOptional<bool> UseBlocksSink;                       // Automatically enabled by default if all types are supported
-    TS3ConfSettingDefault<bool, false> AtomicUploadCommit;            // Commit each file independently, w/o transaction semantic over all files
+    TS3ConfSettingDefault<bool, true> AtomicUploadCommit;             // Commit each file independently, w/o transaction semantic over all files
     TS3ConfSettingOptional<bool> UseConcurrentDirectoryLister;        // By default TS3GatewayConfig::AllowConcurrentListings
     TS3ConfSettingOptional<ui64> MaxDiscoveryFilesPerDirectory;       // By default TS3GatewayConfig::MaxListingResultSizePerPartition
-    TS3ConfSettingDefault<bool, false> UseRuntimeListing;             // Enables runtime listing
+    TS3ConfSettingDefault<bool, true> UseRuntimeListing;              // Enables runtime listing
     TS3ConfSettingDefault<ui64, 1000'000> FileQueueBatchSizeLimit;    // Limits total size of files in one PathBatch from FileQueue
     TS3ConfSettingDefault<ui64, 1000> FileQueueBatchObjectCountLimit; // Limits count of files in one PathBatch from FileQueue
     TS3ConfSettingOptional<ui64> FileQueuePrefetchSize;
-    TS3ConfSettingDefault<bool, false> AsyncDecoding;                 // Parse and decode input data at separate mailbox/thread of TaskRunner
+    TS3ConfSettingDefault<bool, true> AsyncDecoding;                  // Parse and decode input data at separate mailbox/thread of TaskRunner
     TS3ConfSettingDefault<bool, false> UsePredicatePushdown;
     TS3ConfSettingDefault<bool, false> AsyncDecompressing;            // Decompression and parsing input data in different mailbox/thread
 };

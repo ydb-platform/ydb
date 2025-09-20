@@ -54,7 +54,7 @@ class StreamingImportTestBase(object):
             nodes=2
         )
         config.yaml_config["query_service_config"] = {}
-        config.yaml_config["query_service_config"]["available_external_data_sources"] = ["ObjectStorage", "Ydb"]
+        config.yaml_config["query_service_config"]["available_external_data_sources"] = ["ObjectStorage", "Ydb", "YdbTopics"]
         config.yaml_config["log_config"]["default_level"] = 8
 
         config.yaml_config["query_service_config"]["shared_reading"] = {}

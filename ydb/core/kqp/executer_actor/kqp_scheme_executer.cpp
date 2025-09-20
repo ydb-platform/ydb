@@ -122,6 +122,11 @@ public:
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(GetSessionDirName());
 
+        NACLib::TDiffACL diffAcl;
+        diffAcl.SetInterruptInheritance(true);
+        auto* modifyAcl = modifyScheme->MutableModifyACL();
+        modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
+
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
         IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
         RegisterWithSameMailbox(requestHandler);
@@ -164,6 +169,7 @@ public:
                 NACLib::EAccessType::Allow,
                 access,
                 UserToken->GetUserSID());
+            diffAcl.SetInterruptInheritance(true);
             auto* modifyAcl = modifyScheme->MutableModifyACL();
             modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
         }

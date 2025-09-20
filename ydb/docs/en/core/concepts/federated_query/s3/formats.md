@@ -118,7 +118,7 @@ Example of **INVALID** data (each line contains a separate JSON object, but they
 
 ### Format json_each_row {#json_each_row}
 
-This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data. Each file must contain a JSON object on each line without combining them into a JSON array. This format is used for data streaming systems like Apache Kafka or [{{ydb-full-name}} Topics](../../topic.md).
+This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data. Each file must contain a JSON object on each line without combining them into a JSON array. This format is used for data streaming systems like Apache Kafka or [{{ydb-full-name}} Topics](../../datamodel/topic.md).
 
 Example of valid data (each line contains a separate JSON object):
 

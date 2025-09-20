@@ -4976,6 +4976,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_like-like_rewrite_/sql.yql"
         }
     ],
+    "test_sql2yql.test[linear-block]": [
+        {
+            "checksum": "5781f2f114a59b12a56d782881af84de",
+            "size": 1094,
+            "uri": "https://{canondata_backend}/1916746/a4033d596240165caf2006fc0780a730bc526f0d/resource.tar.gz#test_sql2yql.test_linear-block_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[linear-types]": [
         {
             "checksum": "f756d489eb05467c7a6414636f47f37e",
@@ -12001,6 +12008,11 @@
     "test_sql_format.test[like-like_rewrite]": [
         {
             "uri": "file://test_sql_format.test_like-like_rewrite_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-block]": [
+        {
+            "uri": "file://test_sql_format.test_linear-block_/formatted.sql"
         }
     ],
     "test_sql_format.test[linear-types]": [

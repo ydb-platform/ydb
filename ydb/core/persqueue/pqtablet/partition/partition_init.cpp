@@ -982,6 +982,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     DbId = Config.GetYdbDatabaseId();
     DbPath = Config.GetYdbDatabasePath();
     FolderId = Config.GetYcFolderId();
+    MonitoringProjectId = Config.GetMonitoringProjectId();
 
     UsersInfoStorage.ConstructInPlace(DCId,
                                       TopicConverter,
@@ -991,17 +992,17 @@ void TPartition::Initialize(const TActorContext& ctx) {
                                       DbId,
                                       Config.GetYdbDatabasePath(),
                                       IsServerless,
-                                      FolderId);
+                                      FolderId,
+                                      MonitoringProjectId);
     TotalChannelWritesByHead.resize(NumChannels);
 
     if (!IsSupportive()) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
-                                                                        Partition.InternalPartitionId,
-                                                                        Config.GetYdbDatabasePath()));
+                                                                         Partition.InternalPartitionId,
+                                                                         Config.GetYdbDatabasePath()));
         } else {
-            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(),
-                                                                        Partition.InternalPartitionId));
+            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(), Partition.InternalPartitionId));
         }
     }
 
@@ -1040,7 +1041,14 @@ void TPartition::Initialize(const TActorContext& ctx) {
         } else {
             SetupTopicCounters(ctx);
         }
+        if (DetailedMetricsAreEnabled()) {
+            SetupDetailedMetrics();
+        }
     }
+}
+
+bool TPartition::DetailedMetricsAreEnabled() const {
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {

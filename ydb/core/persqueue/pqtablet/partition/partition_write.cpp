@@ -496,12 +496,20 @@ void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
         // If supportive - update counters only prior to write, otherwise - only after writes;
         return;
     }
+
+    if (BytesWrittenPerPartition) {
+        BytesWrittenPerPartition->Add(WriteNewSize);
+    }
     BytesWrittenGrpc.Inc(WriteNewSizeInternal);
     BytesWrittenTotal.Inc(WriteNewSize);
     BytesWrittenUncompressed.Inc(WriteNewSizeUncompressed);
-    if (BytesWrittenComp)
+    if (BytesWrittenComp) {
         BytesWrittenComp.Inc(WriteCycleSize);
+    }
 
+    if (MessagesWrittenPerPartition) {
+        MessagesWrittenPerPartition->Add(WriteNewMessages);
+    }
     MsgsWrittenGrpc.Inc(WriteNewMessagesInternal);
     MsgsWrittenTotal.Inc(WriteNewMessages);
 }

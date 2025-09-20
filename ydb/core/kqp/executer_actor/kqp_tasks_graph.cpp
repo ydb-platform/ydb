@@ -2827,7 +2827,7 @@ size_t TKqpTasksGraph::BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvm
     const TVector<IKqpGateway::TPhysicalTxData>& transactions,
     const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
     bool collectProfileStats, TQueryExecutionStats* stats,
-    size_t nodesCount, THashSet<ui64>* shardsWithEffects)
+    THashSet<ui64>* shardsWithEffects)
 {
     size_t sourceScanPartitionsCount = 0;
 
@@ -2923,6 +2923,10 @@ size_t TKqpTasksGraph::BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvm
             } else if (buildSysViewTasks) {
                 BuildSysViewScanTasks(stageInfo);
             } else if (buildComputeTasks) {
+                auto nodesCount = GetMeta().ShardsOnNode.size();
+                if (!isScan) {
+                    nodesCount = std::max<ui32>(resourcesSnapshot.size(), nodesCount);
+                }
                 GetMeta().UnknownAffectedShardCount |= BuildComputeTasks(stageInfo, nodesCount);
             } else if (buildScanTasks) {
                 BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination(), collectProfileStats ? stats : nullptr);

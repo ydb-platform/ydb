@@ -257,7 +257,7 @@ protected:
 
         TasksGraph.GetMeta().ShardIdToNodeId = std::move(reply.ShardNodes);
         for (const auto& [shardId, nodeId] : TasksGraph.GetMeta().ShardIdToNodeId) {
-            ShardsOnNode[nodeId].push_back(shardId);
+            TasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
             ParticipantNodes.emplace(nodeId);
             if (TxManager) {
                 TxManager->AddParticipantNode(nodeId);
@@ -267,7 +267,7 @@ protected:
         if (IsDebugLogEnabled()) {
             TStringBuilder sb;
             sb << "Shards on nodes: " << Endl;
-            for (auto& pair : ShardsOnNode) {
+            for (auto& pair : TasksGraph.GetMeta().ShardsOnNode) {
                 sb << "  node " << pair.first << ": [";
                 if (pair.second.size() <= 20) {
                     sb << JoinSeq(", ", pair.second) << "]" << Endl;
@@ -707,7 +707,7 @@ protected:
     }
 
     void InvalidateNode(ui64 node) {
-        for (auto tablet : ShardsOnNode[node]) {
+        for (auto tablet : TasksGraph.GetMeta().ShardsOnNode[node]) {
             auto ev = MakeHolder<TEvPipeCache::TEvForcePipeReconnect>(tablet);
             this->Send(MakePipePerNodeCacheID(false), ev.Release());
         }
@@ -1314,8 +1314,6 @@ protected:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
-
-    TMap<ui64, TVector<ui64>> ShardsOnNode;
 
     ui64 LastTaskId = 0;
     TString LastComputeActorId = "";

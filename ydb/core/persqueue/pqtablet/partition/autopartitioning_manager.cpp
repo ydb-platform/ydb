@@ -61,16 +61,22 @@ public:
 
     void CleanUp() {
         auto now = TInstant::Now();
+
+        // We reduce the number of calls as they can be potentially expensive operations if the number of SourceID writers is large.
+        if (now - LastCleanUp < TDuration::Seconds(1)) {
+            return;
+        };
+        LastCleanUp = now;
+
         for (auto it = WrittenBytes.begin(); it != WrittenBytes.end(); ++it) {
             auto& counter = it->second;
             counter.Update(now);
 
             if (0 == counter.GetValue()) {
-            it = WrittenBytes.erase(it);
+                it = WrittenBytes.erase(it);
             }
         }
     }
-
 
     std::optional<TString> SplitBoundary() override {
         CleanUp();
@@ -161,7 +167,7 @@ private:
     // SoureIdHash -> SlidingWindow
     std::unordered_map<TString, TSlidingWindow> WrittenBytes;
     TLastCounter SourceIdCounter;
-
+    TInstant LastCleanUp;
 };
 
 IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, bool supportive) {

@@ -587,12 +587,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
 
-    if (SplitMergeEnabled(Config) && !IsSupportive() && !MirroringEnabled(Config)) {
-        //AutopartitioningManager->OnWrite(); TODO
-        //SplitMergeAvgWriteBytes->Update(writeNewSizeFull, now);
-        auto needScaling = AutopartitioningManager->GetScaleStatus(ctx);
-        ChangeScaleStatusIfNeeded(needScaling);
-    }
+    ChangeScaleStatusIfNeeded(AutopartitioningManager->GetScaleStatus(ctx));
 
     //if EndOffset changed there could be subscriptions witch could be completed
     TVector<std::pair<TReadInfo, ui64>> reads = Subscriber.GetReads(BlobEncoder.EndOffset);
@@ -615,12 +610,14 @@ void TPartition::UpdateAvgWriteBytes(ui64 size, const TInstant& now)
 
 void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) {
     auto now = TInstant::Now();
-    if (scaleStatus == ScaleStatus || MirroringEnabled(Config) || LastScaleRequestTime + TDuration::Seconds(SCALE_REQUEST_REPEAT_MIN_SECONDS) > now) {
+    if (scaleStatus == ScaleStatus || LastScaleRequestTime + TDuration::Seconds(SCALE_REQUEST_REPEAT_MIN_SECONDS) > now) {
         return;
     }
+
     Send(TabletActorId, new TEvPQ::TEvPartitionScaleStatusChanged(Partition.OriginalPartitionId, scaleStatus));
-    LastScaleRequestTime = now;
+
     ScaleStatus = scaleStatus;
+    LastScaleRequestTime = now;
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
@@ -1123,6 +1120,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     ui64& curOffset = parameters.CurOffset;
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
+
+    AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size());
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written

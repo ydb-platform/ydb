@@ -571,7 +571,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
         SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
     }
 
-    auto writeNewSizeFull = WriteNewSizeFull + WriteNewSizeFromSupportivePartitions;
+    //auto writeNewSizeFull = WriteNewSizeFull + WriteNewSizeFromSupportivePartitions;
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
@@ -588,7 +588,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     SyncMemoryStateWithKVState(ctx);
 
     if (SplitMergeEnabled(Config) && !IsSupportive() && !MirroringEnabled(Config)) {
-        AutopartitioningManager->OnWrite();
+        //AutopartitioningManager->OnWrite(); TODO
         //SplitMergeAvgWriteBytes->Update(writeNewSizeFull, now);
         auto needScaling = AutopartitioningManager->GetScaleStatus(ctx);
         ChangeScaleStatusIfNeeded(needScaling);

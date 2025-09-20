@@ -151,7 +151,7 @@ public:
     }
 
     void RecreateSumWrittenBytes() {
-        SumWrittenBytes = std::move(TSlidingWindow(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), Precision));
+        SumWrittenBytes.ConstructInPlace(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), Precision);
     }
 
 private:

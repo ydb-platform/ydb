@@ -2100,9 +2100,7 @@ ui32 TKqpTasksGraph::GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOla
     return result;
 }
 
-void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, const TMap<ui64, ui64>& shardIdToNodeId,
-    TQueryExecutionStats* stats)
-{
+void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats) {
     THashMap<ui64, std::vector<ui64>> nodeTasks;
     THashMap<ui64, std::vector<TShardInfoWithId>> nodeShards;
     THashMap<ui64, ui64> assignedShardsCount;
@@ -2144,14 +2142,14 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
             YQL_ENSURE(!readSettings.IsReverse());
         }
 
-        for (auto&& i: partitions) {
-            const ui64 nodeId = shardIdToNodeId.at(i.first);
-            nodeShards[nodeId].emplace_back(TShardInfoWithId(i.first, std::move(i.second)));
+        for (auto&& [shardId, shardInfo]: partitions) {
+            const ui64 nodeId = GetMeta().ShardIdToNodeId.at(shardId);
+            nodeShards[nodeId].emplace_back(TShardInfoWithId(shardId, std::move(shardInfo)));
         }
 
         if (stats) {
-            for (auto&& i : nodeShards) {
-                stats->AddNodeShardsCount(stageInfo.Id.StageId, i.first, i.second.size());
+            for (const auto& [nodeId, shardsInfo] : nodeShards) {
+                stats->AddNodeShardsCount(stageInfo.Id.StageId, nodeId, shardsInfo.size());
             }
         }
 
@@ -2159,7 +2157,7 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
             THashMap<ui64 /* nodeId */, ui64 /* tasks count */> olapAndSortedTasksCount;
 
             auto AssignScanTaskToShard = [&](const ui64 shardId, const bool sorted) -> TTask& {
-                ui64 nodeId = shardIdToNodeId.at(shardId);
+                ui64 nodeId = GetMeta().ShardIdToNodeId.at(shardId);
                 if (stageInfo.Meta.IsOlap() && sorted) {
                     auto& task = AddTask(stageInfo);
                     task.Meta.NodeId = nodeId;
@@ -2188,23 +2186,22 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
                 }
             };
 
-            for (auto&& pair : nodeShards) {
-                auto& shardsInfo = pair.second;
-                for (auto&& shardInfo : shardsInfo) {
+            for (auto& [_, shardsInfo] : nodeShards) {
+                for (auto& shardInfo : shardsInfo) {
                     auto& task = AssignScanTaskToShard(shardInfo.ShardId, readSettings.IsSorted());
                     MergeReadInfoToTaskMeta(task.Meta, shardInfo.ShardId, shardInfo.KeyReadRanges, readSettings,
                         columns, op, /*isPersistentScan*/ true);
                 }
             }
 
-            for (const auto& pair : nodeTasks) {
-                for (const auto& taskIdx : pair.second) {
+            for (const auto& [nodeId, tasksId] : nodeTasks) {
+                for (const auto& taskIdx : tasksId) {
                     auto& task = GetTask(taskIdx);
                     task.Meta.SetEnableShardsSequentialScan(readSettings.IsSorted());
                     PrepareScanMetaForUsage(task.Meta, keyTypes);
                 }
 
-                intros.push_back("Actual number of scan tasks for node " + ToString(pair.first) + " - " + ToString(pair.second.size()));
+                intros.push_back("Actual number of scan tasks for node " + ToString(nodeId) + " - " + ToString(tasksId.size()));
             }
 
             for (const auto& [nodeId, count] : olapAndSortedTasksCount) {
@@ -2215,9 +2212,7 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
             columnShardHashV1Params.TaskIndexByHash = std::make_shared<TVector<ui64>>();
             columnShardHashV1Params.TaskIndexByHash->resize(columnShardHashV1Params.SourceShardCount);
 
-            for (auto&& pair : nodeShards) {
-                const auto nodeId = pair.first;
-                auto& shardsInfo = pair.second;
+            for (auto&& [nodeId, shardsInfo] : nodeShards) {
                 std::size_t maxTasksPerNode = std::min<std::size_t>(shardsInfo.size(), GetScanTasksPerNode(stageInfo, isOlapScan, nodeId, true));
                 std::vector<TTaskMeta> metas(maxTasksPerNode, TTaskMeta());
                 {
@@ -2277,9 +2272,7 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
             );
         } else {
             ui32 metaId = 0;
-            for (auto&& pair : nodeShards) {
-                const auto nodeId = pair.first;
-                auto& shardsInfo = pair.second;
+            for (auto&& [nodeId, shardsInfo] : nodeShards) {
                 const ui32 metaGlueingId = ++metaId;
                 TTaskMeta meta;
                 {
@@ -2448,9 +2441,7 @@ TVector<TVector<TShardRangesWithShardId>> DistributeShardsToTasks(TVector<TShard
     return result;
 }
 
-TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode,
-    const TMap<ui64, ui64>& shardIdToNodeId, TQueryExecutionStats* stats)
-{
+TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, TQueryExecutionStats* stats) {
     auto& intros = stageInfo.Introspections;
     THashMap<ui64, std::vector<ui64>> nodeTasks;
     THashMap<ui64, ui64> assignedShardsCount;
@@ -2610,7 +2601,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
         if (!nodeId) {
-            const auto nodeIdPtr = shardIdToNodeId.FindPtr(taskLocation);
+            const auto nodeIdPtr = GetMeta().ShardIdToNodeId.FindPtr(taskLocation);
             nodeId = nodeIdPtr ? TMaybe<ui64>{*nodeIdPtr} : Nothing();
         }
 
@@ -2882,7 +2873,7 @@ size_t TKqpTasksGraph::BuildAllTasks(bool isScan, bool limitTasksPerNode, std::o
             if (buildFromSourceTasks) {
                 switch (stage.GetSources(0).GetTypeCase()) {
                     case NKqpProto::TKqpSource::kReadRangesSource: {
-                        if (auto partitionsCount = BuildScanTasksFromSource(stageInfo, limitTasksPerNode, GetMeta().ShardIdToNodeId, stats)) {
+                        if (auto partitionsCount = BuildScanTasksFromSource(stageInfo, limitTasksPerNode, stats)) {
                             sourceScanPartitionsCount += *partitionsCount;
                         } else {
                             GetMeta().UnknownAffectedShardCount = true;
@@ -2901,8 +2892,7 @@ size_t TKqpTasksGraph::BuildAllTasks(bool isScan, bool limitTasksPerNode, std::o
             } else if (buildComputeTasks) {
                 GetMeta().UnknownAffectedShardCount |= BuildComputeTasks(stageInfo, nodesCount);
             } else if (buildScanTasks) {
-                BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination(), GetMeta().ShardIdToNodeId,
-                    collectProfileStats ? stats : nullptr);
+                BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination(), collectProfileStats ? stats : nullptr);
             } else {
                 if (!isScan) {
                     BuildDatashardTasks(stageInfo, shardsWithEffects);

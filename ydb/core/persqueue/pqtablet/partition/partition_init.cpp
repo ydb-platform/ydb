@@ -376,7 +376,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
 
 
 //
-// TInitInfoRangeStep!IsSupportive() && !MirroringEnabled(Config)
+// TInitInfoRangeStep
 //
 
 TInitInfoRangeStep::TInitInfoRangeStep(TInitializer* initializer)

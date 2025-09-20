@@ -491,8 +491,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
     // Disable blob cache. It hides evict-delete, evict-read races.
     {
-        TAtomic unused;
-        runtime.GetAppData().Icb->SetValue("BlobCache.MaxCacheDataSize", 0, unused);
+        TControlBoard::SetValue(0, runtime.GetAppData().Icb->BlobCache.MaxCacheDataSize);
     }
 
     ui64 writeId = 0;

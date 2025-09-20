@@ -4,92 +4,106 @@
 $run_id_limit = CAST(CurrentUtcTimestamp() AS Uint64) - 30UL * 86400UL * 1000000UL;
 
 -- Находим Suite с _Verification записями (успешно стартовавшие тесты)
-$verification_suites = SELECT DISTINCT
+$verification_suites = SELECT
     Db,
     Suite,
     RunId,
-    Success AS VerificationSuccess
+    Timestamp AS VerificationTimestamp,
+    Success AS VerificationSuccess,
+    Info AS VerificationInfo
 FROM `nemesis/tests_results`
 WHERE 
     CAST(RunId AS Uint64) / 1000UL > $run_id_limit
     AND Kind = 'Load'
     AND Test = '_Verification';
 
+-- Находим Suite со Stability записями
+$stability_suites = SELECT
+    Db,
+    Suite,
+    Test,
+    RunId,
+    Timestamp,
+    Success,
+    Stats,
+    Info
+FROM `nemesis/tests_results`
+WHERE 
+    CAST(RunId AS Uint64) / 1000UL > $run_id_limit
+    AND Kind = 'Stability'
+    AND JSON_VALUE(Stats, '$.aggregation_level') = 'aggregate';
+
 $aggregate_data = SELECT
-    main_table.Db AS Db,
-    main_table.Suite AS Suite,
-    main_table.Test AS Test,
-    main_table.RunId AS RunId,
-    main_table.Timestamp AS Timestamp,
-    main_table.Success AS Success,
+    v.Db AS Db,
+    v.Suite AS Suite,
+    COALESCE(s.Test, 'N/A') AS Test,
+    v.RunId AS RunId,
+    COALESCE(s.Timestamp, v.VerificationTimestamp) AS Timestamp,
+    COALESCE(s.Success, 0U) AS Success,
     
-    -- Извлекаем основные агрегированные метрики из Stats JSON
-    CAST(JSON_VALUE(main_table.Stats, '$.total_runs') AS Int32) AS TotalRuns,
-    CAST(JSON_VALUE(main_table.Stats, '$.successful_runs') AS Int32) AS SuccessfulRuns,
-    CAST(JSON_VALUE(main_table.Stats, '$.failed_runs') AS Int32) AS FailedRuns,
-    CAST(JSON_VALUE(main_table.Stats, '$.total_iterations') AS Int32) AS TotalIterations,
-    CAST(JSON_VALUE(main_table.Stats, '$.successful_iterations') AS Int32) AS SuccessfulIterations,
-    CAST(JSON_VALUE(main_table.Stats, '$.failed_iterations') AS Int32) AS FailedIterations,
+    -- Извлекаем основные агрегированные метрики из Stats JSON (NULL если нет Stability записи)
+    CAST(JSON_VALUE(s.Stats, '$.total_runs') AS Int32) AS TotalRuns,
+    CAST(JSON_VALUE(s.Stats, '$.successful_runs') AS Int32) AS SuccessfulRuns,
+    CAST(JSON_VALUE(s.Stats, '$.failed_runs') AS Int32) AS FailedRuns,
+    CAST(JSON_VALUE(s.Stats, '$.total_iterations') AS Int32) AS TotalIterations,
+    CAST(JSON_VALUE(s.Stats, '$.successful_iterations') AS Int32) AS SuccessfulIterations,
+    CAST(JSON_VALUE(s.Stats, '$.failed_iterations') AS Int32) AS FailedIterations,
     
     -- Временные метрики
-    CAST(JSON_VALUE(main_table.Stats, '$.planned_duration') AS Float) AS PlannedDuration,
-    CAST(JSON_VALUE(main_table.Stats, '$.actual_duration') AS Float) AS ActualDuration,
-    CAST(JSON_VALUE(main_table.Stats, '$.total_execution_time') AS Float) AS TotalExecutionTime,
+    CAST(JSON_VALUE(s.Stats, '$.planned_duration') AS Float) AS PlannedDuration,
+    CAST(JSON_VALUE(s.Stats, '$.actual_duration') AS Float) AS ActualDuration,
+    CAST(JSON_VALUE(s.Stats, '$.total_execution_time') AS Float) AS TotalExecutionTime,
     
     -- Метрики производительности
-    CAST(JSON_VALUE(main_table.Stats, '$.success_rate') AS Float) AS SuccessRate,
-    CAST(JSON_VALUE(main_table.Stats, '$.avg_threads_per_iteration') AS Int32) AS AvgThreadsPerIteration,
-    CAST(JSON_VALUE(main_table.Stats, '$.total_threads') AS Int32) AS TotalThreads,
-    CAST(JSON_VALUE(main_table.Stats, '$.nodes_percentage') AS Int32) AS NodesPercentage,
-    CAST(JSON_VALUE(main_table.Stats, '$.nodes_with_issues') AS Int32) AS NodesWithIssues,
+    CAST(JSON_VALUE(s.Stats, '$.success_rate') AS Float) AS SuccessRate,
+    CAST(JSON_VALUE(s.Stats, '$.avg_threads_per_iteration') AS Int32) AS AvgThreadsPerIteration,
+    CAST(JSON_VALUE(s.Stats, '$.total_threads') AS Int32) AS TotalThreads,
+    CAST(JSON_VALUE(s.Stats, '$.nodes_percentage') AS Int32) AS NodesPercentage,
+    CAST(JSON_VALUE(s.Stats, '$.nodes_with_issues') AS Int32) AS NodesWithIssues,
     
     -- Ошибки и диагностика
-    JSON_VALUE(main_table.Stats, '$.node_error_messages') AS NodeErrorMessages, -- JSON массив с подробностями ошибок нод
-    JSON_VALUE(main_table.Stats, '$.workload_error_messages') AS WorkloadErrorMessages, -- JSON массив с ошибками workload
-    JSON_VALUE(main_table.Stats, '$.workload_warning_messages') AS WorkloadWarningMessages, -- JSON массив с предупреждениями workload
+    JSON_VALUE(s.Stats, '$.node_error_messages') AS NodeErrorMessages, -- JSON массив с подробностями ошибок нод
+    JSON_VALUE(s.Stats, '$.workload_error_messages') AS WorkloadErrorMessages, -- JSON массив с ошибками workload
+    JSON_VALUE(s.Stats, '$.workload_warning_messages') AS WorkloadWarningMessages, -- JSON массив с предупреждениями workload
     
     -- Настройки теста
-    CASE WHEN JSON_VALUE(main_table.Stats, '$.use_iterations') = 'true' THEN 1U ELSE 0U END AS UseIterations,
-    CASE WHEN JSON_VALUE(main_table.Stats, '$.nemesis') = 'true' THEN 1U ELSE 0U END AS Nemesis,
-    CASE WHEN JSON_VALUE(main_table.Stats, '$.nemesis_enabled') = 'true' THEN 1U ELSE 0U END AS NemesisEnabled,
-    JSON_VALUE(main_table.Stats, '$.workload_type') AS WorkloadType,
-    JSON_VALUE(main_table.Stats, '$.path_template') AS PathTemplate,
+    CASE WHEN JSON_VALUE(s.Stats, '$.use_iterations') = 'true' THEN 1U ELSE 0U END AS UseIterations,
+    CASE WHEN JSON_VALUE(s.Stats, '$.nemesis') = 'true' THEN 1U ELSE 0U END AS Nemesis,
+    CASE WHEN JSON_VALUE(s.Stats, '$.nemesis_enabled') = 'true' THEN 1U ELSE 0U END AS NemesisEnabled,
+    JSON_VALUE(s.Stats, '$.workload_type') AS WorkloadType,
+    JSON_VALUE(s.Stats, '$.path_template') AS PathTemplate,
     
     -- Статус ошибок и предупреждений  
-    CASE WHEN JSON_VALUE(main_table.Stats, '$.node_errors') = 'true' THEN 1U ELSE 0U END AS NodeErrors,
-    CASE WHEN JSON_VALUE(main_table.Stats, '$.workload_errors') = 'true' THEN 1U ELSE 0U END AS WorkloadErrors,
-    CASE WHEN JSON_VALUE(main_table.Stats, '$.workload_warnings') = 'true' THEN 1U ELSE 0U END AS WorkloadWarnings,
+    CASE WHEN JSON_VALUE(s.Stats, '$.node_errors') = 'true' THEN 1U ELSE 0U END AS NodeErrors,
+    CASE WHEN JSON_VALUE(s.Stats, '$.workload_errors') = 'true' THEN 1U ELSE 0U END AS WorkloadErrors,
+    CASE WHEN JSON_VALUE(s.Stats, '$.workload_warnings') = 'true' THEN 1U ELSE 0U END AS WorkloadWarnings,
     
     -- Дополнительные поля
-    JSON_VALUE(main_table.Stats, '$.table_type') AS TableType, -- для SimpleQueue workload
+    JSON_VALUE(s.Stats, '$.table_type') AS TableType, -- для SimpleQueue workload
     
     -- Временная метка теста
-    CAST(JSON_VALUE(main_table.Stats, '$.test_timestamp') AS Uint64) AS TestTimestamp,
-    CAST(JSON_VALUE(main_table.Stats, '$.run_id') AS Uint64) AS StatsRunId,
+    CAST(JSON_VALUE(s.Stats, '$.test_timestamp') AS Uint64) AS TestTimestamp,
+    CAST(v.RunId AS Uint64) AS StatsRunId,  -- Используем RunId из verification вместо Stats
     
     -- Извлекаем информацию о кластере из Info JSON
-    JSON_VALUE(main_table.Info, '$.cluster.version') AS ClusterVersion,
-    JSON_VALUE(main_table.Info, '$.cluster.endpoint') AS ClusterEndpoint,
-    JSON_VALUE(main_table.Info, '$.cluster.database') AS ClusterDatabase,
-    CAST(JSON_VALUE(main_table.Info, '$.cluster.nodes_count') AS Int32) AS NodesCount,
-    JSON_VALUE(main_table.Info, '$.cluster.nodes_info') AS NodesInfo, -- JSON массив с информацией о нодах
-    JSON_VALUE(main_table.Info, '$.ci_version') AS CiVersion,
-    JSON_VALUE(main_table.Info, '$.test_tools_version') AS TestToolsVersion,
-    JSON_VALUE(main_table.Info, '$.report_url') AS ReportUrl,
-    JSON_VALUE(main_table.Info, '$.ci_launch_id') AS CiLaunchId,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.version') AS ClusterVersion,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.endpoint') AS ClusterEndpoint,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.database') AS ClusterDatabase,
+    CAST(JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.nodes_count') AS Int32) AS NodesCount,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.nodes_info') AS NodesInfo, -- JSON массив с информацией о нодах
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_version') AS CiVersion,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.test_tools_version') AS TestToolsVersion,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.report_url') AS ReportUrl,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_launch_id') AS CiLaunchId,
     
-    -- Флаг того, что тест имел успешную верификацию (значит упал во время выполнения, если Stability неуспешен)
-    COALESCE(v.VerificationSuccess, 0U) AS HadVerification
+    -- Флаг того, что тест имел успешную верификацию 
+    v.VerificationSuccess AS HadVerification
     
-FROM `nemesis/tests_results` AS main_table
-LEFT JOIN $verification_suites AS v 
-    ON main_table.Db = v.Db 
-    AND main_table.Suite = v.Suite 
-    AND main_table.RunId = v.RunId
-WHERE 
-    CAST(main_table.RunId AS Uint64) / 1000UL > $run_id_limit
-    AND main_table.Kind = 'Stability'
-    AND JSON_VALUE(main_table.Stats, '$.aggregation_level') = 'aggregate';
+FROM $verification_suites AS v
+LEFT JOIN $stability_suites AS s 
+    ON v.Db = s.Db 
+    AND v.Suite = s.Suite 
+    AND v.RunId = s.RunId;
 
 SELECT
     agg.Db,
@@ -176,8 +190,8 @@ SELECT
     
     -- Общий статус выполнения
     CASE
-        WHEN agg.Success = 0U AND agg.HadVerification = 1U THEN 'crashed_during_setup'
-        WHEN agg.Success = 1U AND agg.NodeErrors = 0U AND agg.WorkloadErrors = 0U THEN 'success'
+        WHEN agg.Test = 'N/A' THEN 'crashed_during_execution'  -- Нет Stability записи
+        WHEN agg.Success = 1U AND (agg.NodeErrors IS NULL OR agg.NodeErrors = 0U) AND (agg.WorkloadErrors IS NULL OR agg.WorkloadErrors = 0U) THEN 'success'
         WHEN agg.Success = 1U AND (agg.NodeErrors = 1U OR agg.WorkloadErrors = 1U) THEN 'success_with_errors'
         WHEN agg.Success = 0U AND agg.NodeErrors = 1U THEN 'node_failure'
         WHEN agg.Success = 0U AND agg.WorkloadErrors = 1U THEN 'workload_failure'

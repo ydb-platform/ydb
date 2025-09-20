@@ -2,6 +2,7 @@
 
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h> // TODO move to pubcli or common
 
 namespace NKikimr::NPQ {
 
@@ -44,8 +45,7 @@ public:
 
         SumWrittenBytes->Update(size, now);
 
-        /* TODO hash of sourceId*/
-        TString sourceIdHash = sourceId;
+        TString sourceIdHash = AsKeyBound(Hash(NSourceIdEncoding::Decode(sourceId)));
         auto it = WrittenBytes.find(sourceIdHash);
         if (it == WrittenBytes.end()) {
             auto [i,_] = WrittenBytes.emplace(sourceIdHash, TSlidingWindow(TDuration::Minutes(1), 6));
@@ -94,10 +94,14 @@ public:
             return lhs < rhs;
         });
 
+        if (sorted.size() == 2) {
+            return MiddleOf(sorted.front().first, sorted.back().first);
+        }
+
         ui64 lWrittenBytes = 0, rWrittenBytes = 0;
         size_t i = 0, j = sorted.size() - 1;
         bool lastIsLeft = false;
-        TString* lastLeft, *lastRight;
+        TString* lastLeft = &sorted[i].first, *lastRight = &sorted[j].first;
         while (i < j) {
             auto& lhs = sorted[i];
             auto& rhs = sorted[j];

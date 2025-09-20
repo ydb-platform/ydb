@@ -948,7 +948,7 @@ void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
 //
 
 TInitFieldsStep::TInitFieldsStep(TInitializer* initializer)
-    : TInitializerStep(initializer, "TInitFieldsStep", true) {
+    : TInitializerStep(initializer, "TInitFieldsStep", false) {
 }
 
 void TInitFieldsStep::Execute(const TActorContext &ctx) {

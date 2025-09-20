@@ -16,7 +16,7 @@ $per_run_data = SELECT
     CAST(JSON_VALUE(Stats, '$.iteration') AS Int32) AS Iteration,
     CAST(JSON_VALUE(Stats, '$.run_index') AS Int32) AS RunIndex,
     JSON_VALUE(Stats, '$.resolution') AS Resolution,
-    CAST(JSON_VALUE(Stats, '$.nemesis_enabled') AS Uint8) AS NemesisEnabled,
+    CASE WHEN JSON_VALUE(Stats, '$.nemesis_enabled') = 'true' THEN 1U ELSE 0U END AS NemesisEnabled,
     JSON_VALUE(Stats, '$.error_message') AS ErrorMessage,
     JSON_VALUE(Stats, '$.warning_message') AS WarningMessage,
     CAST(JSON_VALUE(Stats, '$.run_id') AS Uint64) AS StatsRunId,

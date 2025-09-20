@@ -2328,9 +2328,22 @@ class WorkloadTestBase(LoadSuiteBase):
                 # Добавляем в статистику
                 result.add_stat(workload_name, "node_error_messages", node_error_messages)
                 result.add_stat(workload_name, "workload_error_messages", workload_error_messages)
+                
+                # Добавляем boolean флаги
+                result.add_stat(workload_name, "node_errors", len(node_error_messages) > 0)
+                result.add_stat(workload_name, "workload_errors", len(workload_error_messages) > 0)
+                
+                # Собираем workload предупреждения (исключая node-специфичные)
+                workload_warning_messages = []
+                if result.warnings:
+                    for warn in result.warnings:
+                        if "coredump" not in warn.lower() and "oom" not in warn.lower():
+                            workload_warning_messages.append(warn)
+                
+                result.add_stat(workload_name, "workload_warning_messages", workload_warning_messages)
+                result.add_stat(workload_name, "workload_warnings", len(workload_warning_messages) > 0)
 
-            # 3. Формирование summary/статистики
-            self._update_summary_flags(result, workload_name)
+            # 3. Формирование summary/статистики (with_errors/with_warnings автоматически добавляются в ydb_cli.py)
 
             # 4. Формирование allure-отчёта
             self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols)
@@ -2375,7 +2388,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 logging.error(error_msg)
                 result.add_warning(error_msg)
                 # После добавления warning нужно пересчитать summary флаги
-                self._update_summary_flags(result, workload_name)
+                # summary флаги (with_errors/with_warnings) автоматически добавляются в ydb_cli.py
 
                 # Подробная информация об ошибке для Allure
                 error_details = [

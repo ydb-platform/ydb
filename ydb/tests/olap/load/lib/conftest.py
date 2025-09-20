@@ -562,34 +562,6 @@ class LoadSuiteBase:
             node_errors = []
         return node_errors
 
-    def _update_summary_flags(self, result, workload_name):
-        """Обновляет summary-флаги для warning/error по всем итерациям"""
-        has_warning = False
-        has_error = False
-
-        # Проверяем ошибки и предупреждения в итерациях
-        for iteration in getattr(result, "iterations", {}).values():
-            if hasattr(iteration, "warning_message") and iteration.warning_message:
-                has_warning = True
-            if hasattr(iteration, "error_message") and iteration.error_message:
-                has_error = True
-
-        # Проверяем ошибки и предупреждения в основном результате
-        if result.warnings:
-            has_warning = True
-        if result.errors:
-            has_error = True
-
-        # Для обратной совместимости также проверяем старые поля
-        if hasattr(result, "warning_message") and result.warning_message:
-            has_warning = True
-        if hasattr(result, "error_message") and result.error_message:
-            has_error = True
-
-        stats = result.get_stats(workload_name)
-        if stats is not None:
-            stats["with_warnings"] = has_warning
-            stats["with_errors"] = has_error
 
     def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols):
         """Формирует allure-отчёт по результатам workload"""

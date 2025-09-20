@@ -15,8 +15,8 @@ class NodeErrors:
     def __init__(self, node: YdbCluster.Node, message: str):
         self.node = node
         self.core_hashes: list[tuple[str, str]] = []    # id, aggregated hash
-        self.verifies: str
-        self.sanitizer_errors: str
+        self.verifies: str = None
+        self.sanitizer_errors: str = None
         self.was_oom: bool = False
         self.message: str = message
 

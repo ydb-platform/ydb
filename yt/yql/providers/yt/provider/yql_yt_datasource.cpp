@@ -358,6 +358,10 @@ public:
             .Done().Ptr();
     }
 
+    void RegisterWorldArg(const TExprNode::TPtr& arg, const TExprNode::TPtr& world) override {
+        State_->Configuration->CopyNodeVer(*world, *arg);
+    }
+
     bool CanExecute(const TExprNode& node) override {
         return ExecTransformer_->CanExec(node);
     }
@@ -757,6 +761,7 @@ private:
                 newReadNode = root;
                 ctx.Step
                     .Repeat(TExprStep::ExpandApplyForLambdas)
+                    .Repeat(TExprStep::ExpandSeq)
                     .Repeat(TExprStep::ExprEval)
                     .Repeat(TExprStep::DiscoveryIO)
                     .Repeat(TExprStep::Epochs)
@@ -870,6 +875,7 @@ private:
                 newReadNode = root;
                 ctx.Step
                     .Repeat(TExprStep::ExpandApplyForLambdas)
+                    .Repeat(TExprStep::ExpandSeq)
                     .Repeat(TExprStep::ExprEval)
                     .Repeat(TExprStep::RewriteIO);
             }

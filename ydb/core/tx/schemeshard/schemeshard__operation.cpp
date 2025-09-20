@@ -383,11 +383,15 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
             Response = MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId), "Failed to parse user token");
             return true;
         }
+        const auto& record = Request->Get()->Record;
         if (userToken) {
             UserSID = userToken->GetUserSID();
             SanitizedToken = userToken->GetSanitizedToken();
+        } else {
+            UserSID = record.GetUserSID();
+            SanitizedToken = record.GetSanitizedToken();
         }
-        PeerName = Request->Get()->Record.GetPeerName();
+        PeerName = record.GetPeerName();
 
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
@@ -1292,6 +1296,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropSecret:
         return CreateDropSecret(NextPartId(), txState);
 
+    // StreamingQuery
+    case TTxState::ETxType::TxCreateStreamingQuery:
+        return CreateNewStreamingQuery(NextPartId(), txState);
+    case TTxState::ETxType::TxDropStreamingQuery:
+        return CreateDropStreamingQuery(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterStreamingQuery:
+        return CreateAlterStreamingQuery(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1625,6 +1637,14 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return {CreateAlterSecret(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:
         return {CreateDropSecret(op.NextPartId(), tx)};
+
+    // StreamingQuery
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery:
+        return {CreateNewStreamingQuery(op.NextPartId(), tx, context)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery:
+        return {CreateDropStreamingQuery(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
+        return {CreateAlterStreamingQuery(op.NextPartId(), tx)};
     }
 
     Y_UNREACHABLE();

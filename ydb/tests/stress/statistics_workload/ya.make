@@ -5,9 +5,7 @@ PY_SRCS(
 )
 
 PEERDIR(
-    ydb/tests/library
-    ydb/public/sdk/python
-    library/python/monlib
+    ydb/tests/stress/statistics_workload/workload
 )
 
 END()

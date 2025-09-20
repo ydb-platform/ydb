@@ -388,6 +388,7 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
     int district,
     google::protobuf::Arena& arena,
     TReallyFastRng32& fastRng,
+    i64 baseTs,
     TLog* Log)
 {
     LOG_T("Loading customer history for warehouse " << wh << " district " << district);
@@ -395,16 +396,9 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
     auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
-    i64 prevTs = 0;
-    for (int customerId = 1; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
-        TInstant date = TInstant::Now();
-        // Match Benchbase: ensure monotonic nanosecond timestamps
-        i64 nanoTs = TInstant::Now().NanoSeconds();
-        if (nanoTs <= prevTs) {
-            nanoTs = prevTs + 1;
-        }
-        prevTs = nanoTs;
+    TInstant date = TInstant::Now();
 
+    for (int customerId = 1; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
         valueBuilder.AddListItem()
             .BeginStruct()
             .AddMember("H_C_W_ID").Int32(wh)
@@ -415,7 +409,7 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
             .AddMember("H_DATE").Timestamp(date)
             .AddMember("H_AMOUNT").Double(10.00)
             .AddMember("H_DATA").Utf8(RandomAlphaString(fastRng, 10, 24))
-            .AddMember("H_C_NANO_TS").Int64(nanoTs)
+            .AddMember("H_C_NANO_TS").Int64(baseTs++)
             .EndStruct();
     }
 
@@ -711,13 +705,23 @@ void LoadRange(
             }, arena, Log);
         }
 
+        i64 prevTs = 0;
         for (int district = DISTRICT_LOW_ID; district <= DISTRICT_HIGH_ID; ++district) {
             ExecuteWithRetry("LoadOrderLines", [&]() {
                 return LoadOrderLines(tableClient, orderLineTablePath, wh, district, arena, fastRng, Log);
             }, arena, Log);
+
+            // Match Benchbase: ensure monotonic nanosecond timestamps
+            i64 nanoTs = TInstant::Now().NanoSeconds();
+            if (nanoTs <= prevTs) {
+                nanoTs = prevTs + 1;
+            }
+            prevTs = nanoTs;
+
             ExecuteWithRetry("LoadCustomerHistory", [&]() {
-                return LoadCustomerHistory(tableClient, historyTablePath, wh, district, arena, fastRng, Log);
+                return LoadCustomerHistory(tableClient, historyTablePath, wh, district, arena, fastRng, nanoTs, Log);
             }, arena, Log);
+
             ExecuteWithRetry("LoadNewOrders", [&]() {
                 return LoadNewOrders(tableClient, newOrderTablePath, wh, district, arena, Log);
             }, arena, Log);
@@ -846,10 +850,35 @@ public:
         Config.SetDisplay();
         CalculateApproximateDataSize();
 
-        // TODO: detect number of threads
+        std::vector<TDriver> drivers;
+        drivers.reserve(10);
+        drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
+
         if (Config.LoadThreadCount == 0) {
-            LOG_W("Automatic calculation of loading threads is not implemented, falling back to the default");
-            Config.LoadThreadCount = DEFAULT_LOAD_THREAD_COUNT;
+            int32_t computeCores = 0;
+            std::string reason;
+            try {
+                computeCores = NumberOfComputeCpus(drivers[0]);
+            } catch (const std::exception& ex) {
+                reason = ex.what();
+            }
+
+            if (computeCores == 0) {
+                std::cerr << "Failed to autodetect max number of load threads";
+                if (!reason.empty()) {
+                    std::cerr << ": " << reason;
+                }
+
+                std::cerr << ". Please specify '--threads' manually." << std::endl;
+                std::exit(1);
+            }
+
+            const size_t clientCpuCount = NumberOfMyCpus();
+
+            const size_t optimalThreadCount =
+                (computeCores + COMPUTE_CORES_PER_IMPORT_THREAD - 1) / COMPUTE_CORES_PER_IMPORT_THREAD;
+
+            Config.LoadThreadCount = std::min(clientCpuCount, optimalThreadCount);
         }
 
         // TODO: detect number of threads
@@ -871,9 +900,9 @@ public:
                 threadCount << " threads and " << driverCount << " YDB drivers. Approximate data size: "
                 << GetFormattedSize(LoadState.ApproximateDataSize));
 
-        std::vector<TDriver> drivers;
+        // already have 1, add more if needed
         drivers.reserve(driverCount);
-        for (size_t i = 0; i < driverCount; ++i) {
+        for (size_t i = 1; i < driverCount; ++i) {
             drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
         }
 

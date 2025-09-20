@@ -5,8 +5,9 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/public/lib/base/msgbus.h>
+#include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/actor_persqueue_client_iface.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
@@ -14,7 +15,7 @@
 namespace NKikimr::NPQ {
 
 
-class TMirrorDescriber : public TActorBootstrapped<TMirrorDescriber> {
+class TMirrorDescriber : public TBaseActor<TMirrorDescriber>, private TConstantLogPrefix {
 private:
     static constexpr TDuration INIT_INTERVAL_MAX = TDuration::Seconds(240);
     static constexpr TDuration INIT_INTERVAL_START = TDuration::Seconds(1);
@@ -60,11 +61,12 @@ private:
 
     void DescribeTopic(const TActorContext& ctx);
 
-    TString LogDescription() const;
+    TString BuildLogPrefix() const override;
     TString GetCurrentState() const;
 
 public:
     TMirrorDescriber(
+        ui64 tabletId,
         TActorId readBalancerActorId,
         TString topicName,
         const NKikimrPQ::TMirrorPartitionConfig& config
@@ -76,9 +78,7 @@ public:
     void HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx);
     void HandleWakeup(const TActorContext& ctx);
     void HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
-
 private:
-    TActorId ReadBalancerActorId;
     TString TopicName;
     NKikimrPQ::TMirrorPartitionConfig Config;
 

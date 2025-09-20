@@ -2329,6 +2329,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         "CallableTypeHandle",
         "PgTypeName",
         "PgTypeHandle",
+        "LinearTypeHandle",
+        "DynamicLinearTypeHandle",
+        "LinearItemType",
         "WorldCode",
         "AtomCode",
         "ListCode",
@@ -2434,6 +2437,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable({"WithWorld", "WithSideEffectsMode"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
+    });
+
+    AddCallable("Block", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        return ctx.ProgramBuilder.Block([&](TRuntimeNode parent) {
+            return MkqlBuildLambda(node.Head(), ctx, {parent});
+        });
     });
 
     AddCallable("Error", [](const TExprNode& node, TMkqlBuildContext& ctx)->NKikimr::NMiniKQL::TRuntimeNode {

@@ -60,7 +60,7 @@ struct TDriverRequest
     std::optional<std::string> UserTag;
 
     //! Filled in the context of HTTP proxy.
-    std::optional<NNet::TNetworkAddress> UserRemoteAddress;
+    std::optional<std::string> UserRemoteAddress;
 
     //! User token.
     std::optional<TString> UserToken;

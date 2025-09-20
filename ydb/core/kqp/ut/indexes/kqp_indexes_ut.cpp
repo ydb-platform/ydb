@@ -1041,6 +1041,62 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         DoUpsertWithoutIndexUpdate(UniqIndex, UseSink);
     }
 
+    Y_UNIT_TEST(CoveredUniqueIndexUpdateKey) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto tableBuilder = db.GetTableBuilder();
+            tableBuilder
+                .AddNonNullableColumn("k1", EPrimitiveType::String)
+                .AddNonNullableColumn("fk1", EPrimitiveType::String)
+                .AddNonNullableColumn("Value", EPrimitiveType::String); /* NonNullable is important */
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"k1"});
+            tableBuilder.AddUniqueSecondaryIndex("Index12", std::vector<std::string>{"fk1"}, std::vector<std::string>{"Value"});
+            auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            // Insert
+            const TString query2 = Q1_(R"(
+                UPSERT INTO `/Root/TestTable` (k1, fk1, Value) VALUES
+                ("p1str1", "fk1_str1", "Value1_1");
+            )");
+            auto result = session.ExecuteDataQuery(query2, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index12/indexImplTable");
+            const TString expected = R"([[["fk1_str1"];["p1str1"];["Value1_1"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        {
+            // Update without Value change
+            const TString query2 = Q1_(R"(
+                UPDATE `/Root/TestTable` SET fk1="fk1_str2" WHERE k1="p1str1";
+            )");
+            auto result = session.ExecuteDataQuery(query2, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index12/indexImplTable");
+            const TString expected = R"([[["fk1_str2"];["p1str1"];["Value1_1"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(UpsertWithoutExtraNullDelete, UseSink) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});

@@ -11,6 +11,8 @@ PEERDIR(
 
     ydb/core/kqp/workload_service/actors
 
+    ydb/core/mind
+
     ydb/library/actors/interconnect
 )
 

@@ -4,6 +4,9 @@
 
 #include <yt/yt/core/misc/arithmetic_formula.h>
 
+#include <yt/yt/core/phoenix/context.h>
+#include <yt/yt/core/phoenix/type_decl.h>
+
 #include <yt/yt/core/yson/consumer.h>
 
 #include <yt/yt/core/ytree/permission.h>
@@ -49,7 +52,10 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYTree::INodePtr node);
 void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCursor* cursor);
 
 template <class TAce>
-[[nodiscard]] TError CheckAceCorrect(const TAce& ace);
+TError CheckAceCorrect(const TAce& ace);
+
+template <class TAce>
+void ValidateAceCorrect(const TAce& ace);
 
 struct TSerializableAccessControlList
 {
@@ -71,7 +77,12 @@ void Deserialize(TSerializableAccessControlList& acl, NYson::TYsonPullParserCurs
 struct TRowLevelAccessControlEntry
 {
     std::string Expression;
-    EInapplicableExpressionMode InapplicableExpressionMode;
+    EInapplicableExpressionMode InapplicableExpressionMode = EInapplicableExpressionMode::Fail;
+
+    using TLoadContext = NPhoenix::TLoadContext;
+    using TSaveContext = NPhoenix::TSaveContext;
+
+    PHOENIX_DECLARE_TYPE(TRowLevelAccessControlEntry, 0x01201ace);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

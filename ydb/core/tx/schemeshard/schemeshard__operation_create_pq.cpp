@@ -7,9 +7,9 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/mind/hive/hive.h>
-#include <ydb/core/persqueue/config/config.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/config.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -189,6 +189,11 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         auto databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
         tabletConfig.SetYdbDatabaseId(databaseId);
     }
+    if (dbRootEl->UserAttrs->Attrs.contains("monitoring_project_id")) {
+        auto monitoringProjectId = dbRootEl->UserAttrs->Attrs.at("monitoring_project_id");
+        tabletConfig.SetMonitoringProjectId(monitoringProjectId);
+    }
+
     const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
     tabletConfig.SetYdbDatabasePath(databasePath);
 

@@ -39,6 +39,8 @@
 {{ ydb-cli }} [connection options] admin database restore -i <PATH> [options]
 ```
 
+{% include [limitation](./limitation-restore-column-tables.md) %}
+
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
 {% include [restore-database-nodes.md](./restore-database-nodes.md) %}
@@ -67,6 +69,8 @@
 ```bash
 {{ ydb-cli }} [connection options] tools restore -p <PATH> -i <PATH> [options]
 ```
+
+{% include [limitation](./limitation-restore-column-tables.md) %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
@@ -103,6 +107,7 @@
 
 - `--verify-existence`: Используется с опцией `--replace` для вывода ошибки, если объект из резервной копии отсутствует в базе данных, вместо того чтобы молча пропускать его удаление.
 
+- `--retries`: Количество повторных попыток для каждого запроса загрузки данных. Значение по умолчанию: `10`.
 
 
 ### Параметры ограничения нагрузки {#limiters}

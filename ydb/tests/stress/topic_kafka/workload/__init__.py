@@ -1,6 +1,5 @@
 import logging
 import subprocess
-import tempfile
 import os
 import stat
 from library.python import resource
@@ -58,7 +57,7 @@ class YdbTopicWorkload(WorkloadBase):
         self._unpack_resource('ydb_cli')
 
     def _unpack_resource(self, name):
-        self.working_dir = os.path.join(tempfile.gettempdir(), "topic_kafka_ydb_cli")
+        self.working_dir = os.path.join(os.getcwd(), "topic_kafka_ydb_cli")
         os.makedirs(self.working_dir, exist_ok=True)
         res = resource.find(name)
         path_to_unpack = os.path.join(self.working_dir, name)

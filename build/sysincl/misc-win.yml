@@ -64,10 +64,10 @@
   - utime.h:       yql/essentials/parser/pg_wrapper/postgresql/src/include/port/win32_msvc/utime.h
   - dl.h
 
-- source_filter: "^contrib/libs/libx264"
+- source_filter: "^contrib/restricted/libx264"
   includes:
-  - inttypes.h:    contrib/libs/libx264/extras/inttypes.h
-  - stdint.h:      contrib/libs/libx264/extras/stdint.h
+  - inttypes.h:    contrib/restricted/libx264/extras/inttypes.h
+  - stdint.h:      contrib/restricted/libx264/extras/stdint.h
 
 - source_filter: "^contrib/tools/bison/"
   includes:

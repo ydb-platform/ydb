@@ -8,13 +8,14 @@ import time
 import unittest
 import urllib.request
 import tarfile
-import tempfile
 from library.python import resource
 import ydb
 
 
 class Workload(unittest.TestCase):
-    def __init__(self, endpoint, database, bootstrap, test_topic_path, target_topic_path, workload_consumer_name, num_workers, duration):
+    def __init__(self, endpoint, database, bootstrap, test_topic_path,
+                 target_topic_path, workload_consumer_name, num_workers,
+                 duration):
         self.endpoint = endpoint
         self.database = database
         self.bootstrap = bootstrap
@@ -26,11 +27,11 @@ class Workload(unittest.TestCase):
         self.duration = duration
         self.tmp_dirs = []
         self.archive_path = "https://storage.yandexcloud.net/ydb-ci/kafka/jdk-linux-x86_64.yandex.tgz"
-        self.jar_path = "https://storage.yandexcloud.net/ydb-ci/kafka/e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar"
+        self.jar_path = "https://storage.yandexcloud.net/ydb-ci/kafka/e2e-kafka-api-tests-1.0-with-parameter-choice.jar"
         self._unpack_resource('ydb_cli')
 
     def _unpack_resource(self, name):
-        working_dir = os.path.join(tempfile.gettempdir(), "kafka_ydb_cli")
+        working_dir = os.path.join(os.getcwd(), "kafka_ydb_cli")
         self.tmp_dirs.append(working_dir)
         os.makedirs(working_dir, exist_ok=True)
         res = resource.find(name)
@@ -44,7 +45,7 @@ class Workload(unittest.TestCase):
 
     def loop(self):
         TEST_FILES_DIRECTORY = "./test-files/"
-        JAR_FILE_NAME = "e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar"
+        JAR_FILE_NAME = "e2e-kafka-api-tests-1.0-with-parameter-choice.jar"
         JDK_FILE_NAME = "jdk-linux-x86_64.yandex.tgz"
         if not os.path.exists(TEST_FILES_DIRECTORY):
             os.makedirs(TEST_FILES_DIRECTORY)
@@ -65,11 +66,11 @@ class Workload(unittest.TestCase):
         jar_file_path = TEST_FILES_DIRECTORY + JAR_FILE_NAME
 
         workloadConsumerName = self.workload_consumer_name
-        checkerConsumer = "targetCheckerConsumer"
 
-        print("Creating topics")
-        self.create_topic(self.test_topic_path, [workloadConsumerName, checkerConsumer])
-        self.create_topic(self.target_topic_path, [checkerConsumer])
+        print("Creating test topic")
+        testOptions = [("1", "1"), ("0", "1"), ("0", "0")]
+        checkerConsumer = "targetCheckerConsumer"
+        self.create_topic(self.test_topic_path, [workloadConsumerName, checkerConsumer] + [f"{checkerConsumer}-{i}" for i in range(len(testOptions))])
 
         print("Running workload topic run")
         processes = [
@@ -77,8 +78,15 @@ class Workload(unittest.TestCase):
         ]
         print("NumWorkers: ", self.num_workers)
         print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
-        for i in range(self.num_workers):
-            processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap, f"streams-store-{i}"]))
+
+        for i, parameters in enumerate(testOptions):
+            use_transactions, use_idempotence = parameters
+            targetTopicName = f"{self.target_topic_path}-{i}"
+            self.create_topic(targetTopicName, [checkerConsumer, f"{checkerConsumer}-{i}"])
+            for j in range(self.num_workers):
+                processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap,
+                                                   f"streams-store-{i * self.num_workers + j}", self.test_topic_path,
+                                                   targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence]))
         processes[0].wait()
         assert processes[0].returncode == 0
 
@@ -87,28 +95,34 @@ class Workload(unittest.TestCase):
         time.sleep(self.duration)
 
         print("Killing processes")
-        for i in range(1, self.num_workers + 1):
+        for i in range(1, len(processes)):
             os.kill(processes[i].pid, signal.SIGKILL)
 
         topic_description = self.driver.topic_client.describe_topic(self.test_topic_path, include_stats=True)
         print(topic_description)
-
-        messages_info_target = self.read_messages(self.target_topic_path, checkerConsumer)
         messages_info_test = self.read_messages(self.test_topic_path, checkerConsumer)
 
-        totalMessCountTest = 0
-        totalMessCountTarget = 0
-        for partitionNum in messages_info_test.keys():
-            testPartitionMess = messages_info_test[partitionNum]
-            targetPartitionMess = messages_info_target[partitionNum]
-            testCount = len(testPartitionMess)
-            targetCount = len(targetPartitionMess)
-            totalMessCountTest += testCount
-            totalMessCountTarget += targetCount
+        for i in range(len(testOptions)):
+            messages_info_target = self.read_messages(f"{self.target_topic_path}-{i}", f"{checkerConsumer}-{i}")
+            totalMessCountTest = 0
+            totalMessCountTarget = 0
+            for partitionNum in messages_info_test.keys():
+                testPartitionMess = messages_info_test[partitionNum]
+                targetPartitionMess = messages_info_target[partitionNum]
+                testCount = len(testPartitionMess)
+                targetCount = len(targetPartitionMess)
+                totalMessCountTest += testCount
+                totalMessCountTarget += targetCount
 
-        print(f"totalMessCountTest = {totalMessCountTest}, totalMessCountTarget = {totalMessCountTarget}")
-        assert totalMessCountTest == totalMessCountTarget, f"Source and target topics total messages count are not equal: {totalMessCountTest} and {totalMessCountTarget} respectively."
-        print(f"Total num of messages: {totalMessCountTest}")
+            print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest},"
+                  "totalMessCountTarget = {totalMessCountTarget}")
+            if i >= 1:
+                assert totalMessCountTest <= totalMessCountTarget, "Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
+                       f"{totalMessCountTest} and {totalMessCountTarget} respectively."
+            else:
+                assert totalMessCountTest == totalMessCountTarget, f"Source and target {self.target_topic_path}-{i} topics total messages count are not equal:" + \
+                       "{totalMessCountTest} and {totalMessCountTarget} respectively."
+            print(f"Total num of messages: {totalMessCountTest}")
         return
 
     def read_messages(self, topic: str, consumer: str):

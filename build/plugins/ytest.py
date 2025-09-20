@@ -100,6 +100,7 @@ CHECK_FIELDS_BASE = (
 
 LINTER_FIELDS_BASE = (
     df.LintName.value,
+    df.LintWrapperScript.value,
     df.LintExtraParams.from_macro_args,
     df.TestName.name_from_macro_args,
     df.TestedProjectName.unit_name,
@@ -107,8 +108,8 @@ LINTER_FIELDS_BASE = (
     df.TestEnv.value,
     df.UseArcadiaPython.value,
     df.LintFileProcessingTime.from_macro_args,
-    df.Linter.value,
     df.CustomDependencies.depends_with_linter,
+    df.LintGlobalResources.value,
 )
 
 tidy_config_map = None
@@ -1020,7 +1021,6 @@ def onsetup_run_python(unit):
     (
         df.TestFiles.cpp_linter_files,
         df.LintConfigs.cpp_configs,
-        df.LintWrapperScript.value,
     )
     + LINTER_FIELDS_BASE
 )
@@ -1035,19 +1035,18 @@ def on_add_cpp_linter_check(fields, unit, *args):
     unlimited = -1
     keywords = {
         "NAME": 1,
-        "LINTER": 1,
         "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
         "CONFIGS": 1,
-        "GLOBAL_RESOURCES": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
         "CONFIG_TYPE": 1,
     }
     _, spec_args = _common.sort_by_keywords(keywords, args)
 
-    global_resources = spec_args.get('GLOBAL_RESOURCES', [])
-    for resource in global_resources:
+    name = spec_args['NAME'][0]
+    global_resources = consts.LINTER_TO_GLOBAL_RESOURCES.get(name, ())
+    for resource, _ in global_resources:
         unit.onpeerdir(resource)
     try:
         dart_record = create_dart_record(fields, unit, (), spec_args)
@@ -1066,7 +1065,6 @@ def on_add_cpp_linter_check(fields, unit, *args):
     (
         df.TestFiles.py_linter_files,
         df.LintConfigs.python_configs,
-        df.LintWrapperScript.value,
     )
     + LINTER_FIELDS_BASE
 )
@@ -1081,11 +1079,9 @@ def on_add_py_linter_check(fields, unit, *args):
     unlimited = -1
     keywords = {
         "NAME": 1,
-        "LINTER": 1,
         "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
         "CONFIGS": 1,
-        "GLOBAL_RESOURCES": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
         "FLAKE_MIGRATIONS_CONFIG": 1,
@@ -1093,8 +1089,9 @@ def on_add_py_linter_check(fields, unit, *args):
     }
     _, spec_args = _common.sort_by_keywords(keywords, args)
 
-    global_resources = spec_args.get('GLOBAL_RESOURCES', [])
-    for resource in global_resources:
+    name = spec_args['NAME'][0]
+    global_resources = consts.LINTER_TO_GLOBAL_RESOURCES.get(name, ())
+    for resource, _ in global_resources:
         unit.onpeerdir(resource)
     try:
         dart_record = create_dart_record(fields, unit, (), spec_args)

@@ -1,5 +1,7 @@
 #include "acl.h"
 
+#include <yt/yt/core/phoenix/type_def.h>
+
 #include <yt/yt/core/yson/pull_parser_deserialize.h>
 
 #include <yt/yt/core/ytree/fluent.h>
@@ -85,8 +87,7 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYTree::INodePtr node)
     } else {
         ace.InapplicableExpressionMode.reset();
     }
-    CheckAceCorrect(ace)
-        .ThrowOnError();
+    ValidateAceCorrect(ace);
 }
 
 void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCursor* cursor)
@@ -136,8 +137,7 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCur
     if (!(HasAction && HasSubjects && HasPermissions)) {
         THROW_ERROR_EXCEPTION("Error parsing ACE: \"action\", \"subject\" and \"permissions\" fields are required");
     }
-    CheckAceCorrect(ace)
-        .ThrowOnError();
+    ValidateAceCorrect(ace);
 }
 
 void TSerializableAccessControlEntry::Persist(const TStreamPersistenceContext& context)
@@ -176,6 +176,16 @@ void Deserialize(TSerializableAccessControlList& acl, NYson::TYsonPullParserCurs
 {
     Deserialize(acl.Entries, cursor);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRowLevelAccessControlEntry::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, Expression);
+    PHOENIX_REGISTER_FIELD(2, InapplicableExpressionMode);
+}
+
+PHOENIX_DEFINE_TYPE(TRowLevelAccessControlEntry);
 
 ////////////////////////////////////////////////////////////////////////////////
 

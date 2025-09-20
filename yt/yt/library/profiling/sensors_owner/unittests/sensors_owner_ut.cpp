@@ -72,7 +72,7 @@ TEST(TSensorsOwnerTest, Example)
 
 void DoSmth(/*... , */ const TSensorsOwner& sensorsOwner)
 {
-    // В функции можно прям по месту объявлять структуру с метриками и пользоваться.
+    // In a function, you can declare a structure with metrics right in place and use it.
     struct TSensors
     {
         TProfiler Profiler;
@@ -80,8 +80,8 @@ void DoSmth(/*... , */ const TSensorsOwner& sensorsOwner)
         TCounter FailedCount = Profiler.Counter(".failed_count");
     };
 
-    // Тут одна и та же ссылка на объект метрик при условии, что в функцию передается один и тот же sensorsOwner.
-    // Метод `.Get` достаточно эффективен, но всё же лучше не вызывать лишний раз.
+    // Here, it is the same reference to the metric object, assuming that the same sensorsOwner is passed into the function.
+    // The .Get method is quite efficient, but it is still better not to call it unnecessarily.
     const auto& sensors = sensorsOwner.Get<TSensors>();
 
     //...

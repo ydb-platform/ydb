@@ -140,7 +140,7 @@ void TSchemeShard::CollectSysViewUpdates(const TActorContext& ctx) {
     const auto sysViewDirType = IsDomainSchemeShard
         ? NSysView::ISystemViewResolver::ESource::Domain
         : NSysView::ISystemViewResolver::ESource::SubDomain;
-    const auto sysViewsRegistry = NSysView::CreateSystemViewResolver()->GetSystemViewsTypes(sysViewDirType);
+    const auto& sysViewsRegistry = NSysView::GetSystemViewResolver().GetSystemViewsTypes(sysViewDirType);
 
     // create absent system views only if there's no '.sys' entry or '.sys' is a directory
     if (needToMakeSysViewDir || sysViewDirExists) {
@@ -1474,6 +1474,9 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TS
                         case NKikimrSchemeOp::EPathType::EPathTypeSecret:
                             actualVersion = pathVersion.GetSecretVersion();
                             break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeStreamingQuery:
+                            actualVersion = pathVersion.GetStreamingQueryVersion();
+                            break;
                         default:
                             actualVersion = pathVersion.GetGeneralVersion();
                             break;
@@ -1740,6 +1743,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateSysView:
     case TTxState::TxCreateLongIncrementalBackupOp:
     case TTxState::TxCreateSecret:
+    case TTxState::TxCreateStreamingQuery:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1780,6 +1784,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterBackupCollection:
     case TTxState::TxChangePathState:
     case TTxState::TxAlterSecret:
+    case TTxState::TxAlterStreamingQuery:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1809,6 +1814,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropBackupCollection:
     case TTxState::TxDropSysView:
     case TTxState::TxDropSecret:
+    case TTxState::TxDropStreamingQuery:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
@@ -3451,6 +3457,34 @@ void TSchemeShard::PersistSecretAlterRemove(NIceDb::TNiceDb& db, TPathId pathId)
     db.Table<Schema::SecretsAlterData>().Key(pathId.LocalPathId).Delete();
 }
 
+void TSchemeShard::PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+
+    const auto path = PathsById.find(pathId);
+    Y_ABORT_UNLESS(path != PathsById.end());
+    Y_ABORT_UNLESS(path->second && path->second->IsStreamingQuery());
+
+    const auto streamingQueryIt = StreamingQueries.find(pathId);
+    Y_ABORT_UNLESS(streamingQueryIt != StreamingQueries.end());
+    const auto streamingQuery = streamingQueryIt->second;
+    Y_ABORT_UNLESS(streamingQuery);
+
+    db.Table<Schema::StreamingQueryState>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::StreamingQueryState::AlterVersion>{streamingQuery->AlterVersion},
+        NIceDb::TUpdate<Schema::StreamingQueryState::Properties>{streamingQuery->Properties.SerializeAsString()}
+    );
+}
+
+void TSchemeShard::PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    if (const auto it = StreamingQueries.find(pathId); it != StreamingQueries.end()) {
+        StreamingQueries.erase(it);
+        DecrementPathDbRefCount(pathId);
+    }
+
+    db.Table<Schema::StreamingQueryState>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
@@ -4412,10 +4446,8 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     Tables.erase(pathId);
     DecrementPathDbRefCount(pathId, "remove table");
 
-    if (AppData()->FeatureFlags.GetEnableSystemViews()) {
-        auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
-        Send(SysPartitionStatsCollector, ev.Release());
-    }
+    auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
+    Send(SysPartitionStatsCollector, ev.Release());
 }
 
 void TSchemeShard::PersistRemoveTableIndex(NIceDb::TNiceDb &db, TPathId pathId)
@@ -4787,6 +4819,13 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 Y_ABORT_UNLESS(it != SysViews.end());
                 result.SetSysViewVersion(it->second->AlterVersion);
                 generalVersion += result.GetSysViewVersion();
+                break;
+            }
+            case NKikimrSchemeOp::EPathType::EPathTypeStreamingQuery: {
+                const auto it = StreamingQueries.find(pathId);
+                Y_ABORT_UNLESS(it != StreamingQueries.end());
+                result.SetStreamingQueryVersion(it->second->AlterVersion);
+                generalVersion += result.GetStreamingQueryVersion();
                 break;
             }
 
@@ -5715,6 +5754,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         break;
     case TPathElement::EPathType::EPathTypeSecret:
         TabletCounters->Simple()[COUNTER_SECRET_COUNT].Sub(1);
+        break;
+    case TPathElement::EPathType::EPathTypeStreamingQuery:
+        TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_ABORT("impossible path type");
@@ -7037,10 +7079,7 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
             CachedTxIds.push_back(TTxId(txId));
         }
 
-        if (AppData()->FeatureFlags.GetEnableSystemViews() &&
-            AppData()->FeatureFlags.GetEnableRealSystemViewPaths() &&
-            !SysViewsRosterUpdateStarted)
-        {
+        if (AppData()->FeatureFlags.GetEnableRealSystemViewPaths() && !SysViewsRosterUpdateStarted) {
             SysViewsRosterUpdateStarted = true;
             CollectSysViewUpdates(ctx);
         }
@@ -7530,18 +7569,16 @@ bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 key
 }
 
 void TSchemeShard::SetPartitioning(TPathId pathId, const std::vector<TShardIdx>& partitioning) {
-    if (AppData()->FeatureFlags.GetEnableSystemViews()) {
-        TVector<std::pair<ui64, ui64>> shardIndices;
-        shardIndices.reserve(partitioning.size());
-        for (auto& shardIdx : partitioning) {
-            shardIndices.emplace_back(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()));
-        }
-
-        auto path = TPath::Init(pathId, this);
-        auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
-        ev->ShardIndices.swap(shardIndices);
-        Send(SysPartitionStatsCollector, ev.Release());
+    TVector<std::pair<ui64, ui64>> shardIndices;
+    shardIndices.reserve(partitioning.size());
+    for (auto& shardIdx : partitioning) {
+        shardIndices.emplace_back(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()));
     }
+
+    auto path = TPath::Init(pathId, this);
+    auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
+    ev->ShardIndices.swap(shardIndices);
+    Send(SysPartitionStatsCollector, ev.Release());
 }
 
 void TSchemeShard::SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo) {
@@ -7553,19 +7590,17 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableI
 }
 
 void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
-    if (AppData()->FeatureFlags.GetEnableSystemViews()) {
-        TVector<std::pair<ui64, ui64>> shardIndices;
-        shardIndices.reserve(newPartitioning.size());
-        for (auto& info : newPartitioning) {
-            shardIndices.push_back(
-                std::make_pair(ui64(info.ShardIdx.GetOwnerId()), ui64(info.ShardIdx.GetLocalId())));
-        }
-
-        auto path = TPath::Init(pathId, this);
-        auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
-        ev->ShardIndices.swap(shardIndices);
-        Send(SysPartitionStatsCollector, ev.Release());
+    TVector<std::pair<ui64, ui64>> shardIndices;
+    shardIndices.reserve(newPartitioning.size());
+    for (auto& info : newPartitioning) {
+        shardIndices.push_back(
+            std::make_pair(ui64(info.ShardIdx.GetOwnerId()), ui64(info.ShardIdx.GetLocalId())));
     }
+
+    auto path = TPath::Init(pathId, this);
+    auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
+    ev->ShardIndices.swap(shardIndices);
+    Send(SysPartitionStatsCollector, ev.Release());
 
     if (!tableInfo->IsBackup) {
         // partitions updated:

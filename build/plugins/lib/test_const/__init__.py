@@ -172,12 +172,14 @@ SANDBOX_RUN_TEST_YT_TOKEN_VALUE_NAME = 'YA_MAKE_SANDBOX_RUN_TEST_YT_TOKEN'
 # global resources
 ANDROID_AVD_ROOT = 'ANDROID_AVD_RESOURCE_GLOBAL'
 ANDROID_SDK_ROOT = 'ANDROID_SDK_RESOURCE_GLOBAL'
-FLAKE8_PY2_RESOURCE = 'FLAKE8_PY2_RESOURCE_GLOBAL'
-FLAKE8_PY3_RESOURCE = 'FLAKE8_PY3_RESOURCE_GLOBAL'
 GO_TOOLS_RESOURCE = 'GO_TOOLS_RESOURCE_GLOBAL'
 JSTYLE_RUNNER_LIB = 'JSTYLE_LIB_RESOURCE_GLOBAL'
 NODEJS_RESOURCE = 'NODEJS_RESOURCE_GLOBAL'
 NYC_RESOURCE = 'NYC_RESOURCE_GLOBAL'
+# XXX: These resource keys are used in linter tools in `tools/` which are run by test_tool.
+# test_tool and `tools/` have different release cycles. Beware when modifying.
+FLAKE8_PY2_RESOURCE = 'FLAKE8_PY2_RESOURCE_GLOBAL'
+FLAKE8_PY3_RESOURCE = 'FLAKE8_PY3_RESOURCE_GLOBAL'
 RUFF_RESOURCE = 'RUFF_RESOURCE_GLOBAL'
 CLANG_FORMAT_RESOURCE = 'CLANG_FORMAT_RESOURCE_GLOBAL'
 BLACK_RESOURCE = 'BLACK_RESOURCE_GLOBAL'
@@ -471,7 +473,15 @@ class LinterConfigsValidationRules(Enum):
     Python = "build/config/tests/py_style/configs_validation_rules.json"
 
 
-# XXX: if a new linter is added to this mapping respective path to rules file must be available in the json
+LINTER_TO_GLOBAL_RESOURCES = {
+    PythonLinterName.Black: (('build/external_resources/black', BLACK_RESOURCE),),
+    PythonLinterName.Ruff: (('build/external_resources/ruff', RUFF_RESOURCE),),
+    PythonLinterName.Flake8: (('build/external_resources/flake8_py3', FLAKE8_PY3_RESOURCE),),
+    PythonLinterName.Py2Flake8: (('build/external_resources/flake8_py2', FLAKE8_PY2_RESOURCE),),
+    CppLinterName.ClangFormat: (('build/platform/clang/clang-format', CLANG_FORMAT_RESOURCE),),
+}
+
+# XXX: if a new linter is added to this mapping respective path to default config file must be available in the json
 LINTER_TO_DEFAULT_CONFIGS = {
     CppLinterName.ClangFormat: DefaultLinterConfig.Cpp,
     PythonLinterName.Black: DefaultLinterConfig.Python,

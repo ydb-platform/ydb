@@ -26,11 +26,13 @@ namespace NKikimr {
         ui64 SyncerLsnToKeep = 0;
         ui64 HugeKeeperLsnToKeep = 0;
         ui64 ScrubLsnToKeep = 0;
+        ui64 MetadataLsnToKeep = 0;
         TInstant HullLastTime;
         TInstant SyncLogLastTime;
         TInstant SyncerLastTime;
         TInstant HugeKeeperLastTime;
         TInstant ScrubLastTime;
+        TInstant MetadataLastTime;
 
         TInstant LastCutTime;
         TDeque<ui64> FreeUpToLsn;
@@ -94,6 +96,9 @@ namespace NKikimr {
                 case TEvVDiskCutLog::Scrub:
                     update(ScrubLsnToKeep, ScrubLastTime, "Scrub");
                     break;
+                case TEvVDiskCutLog::Metadata:
+                    update(MetadataLsnToKeep, MetadataLastTime, "Metadata");
+                    break;
                 default:
                     Y_ABORT("Unexpected case: %d", msg->Component);
             }
@@ -115,11 +120,16 @@ namespace NKikimr {
             if (WriteInProgress)
                 return;
 
-            const ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep, ScrubLsnToKeep);
+            ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep,
+                HugeKeeperLsnToKeep, ScrubLsnToKeep);
+
+            if (AppData(ctx)->FeatureFlags.GetEnableTinyDisks()) {
+                curLsn = Min(curLsn, MetadataLsnToKeep);
+            }
 
             // only issue command if there is a progress in FreeUpToLsn queue
             bool progress = false;
-            for (; FreeUpToLsn && FreeUpToLsn.front() < curLsn; FreeUpToLsn.pop_front()) {
+            for (; FreeUpToLsn && FreeUpToLsn.front() <= curLsn; FreeUpToLsn.pop_front()) {
                 progress = true;
             }
 

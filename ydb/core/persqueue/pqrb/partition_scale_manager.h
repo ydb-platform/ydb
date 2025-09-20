@@ -5,7 +5,7 @@
 #include "partition_scale_manager_graph_cmp.h"
 
 #include <ydb/core/base/path.h>
-#include "ydb/core/persqueue/utils.h"
+#include "ydb/core/persqueue/public/utils.h"
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -54,7 +54,8 @@ private:
     struct TBuildSplitScaleRequestResult;
 
 public:
-TPartitionScaleManager(const TString& topicName, const TString& topicPath, const TString& databasePath, ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config, const TPartitionGraph& partitionGraph);
+    TPartitionScaleManager(const TString& topicName, const TString& topicPath, const TString& databasePath, ui64 pathId, int version,
+        const NKikimrPQ::TPQTabletConfig& config, const TPartitionGraph& partitionGraph);
 
 public:
     void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants, const TActorContext& ctx);

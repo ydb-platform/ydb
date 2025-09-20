@@ -9,7 +9,7 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -54,7 +54,8 @@ private:
 };
 
 
-class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTabletExecutedFlat {
+class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
+                               public TTabletExecutedFlat {
     struct TTxPreInit;
     struct TTxInit;
     struct TTxWrite;

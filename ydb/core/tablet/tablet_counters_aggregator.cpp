@@ -333,6 +333,16 @@ public:
         LabeledDbCounters.erase(dbPath);
     }
 
+    TVector<NPrivate::TTabletCounterValue> Find(const TString& name) const {
+        for (auto [_, counters] : CountersByTabletType) {
+            if (auto result = counters->Find(name)) {
+                return result;
+            }
+        }
+
+        return {};
+    }
+
 private:
     // subgroups
     class TTabletCountersForTabletType : public TThrRefBase {
@@ -426,6 +436,14 @@ private:
             if (TabletAppCounters.IsInitialized) {
                 TabletAppCounters.FromProto(*tabletCounters.MutableAppCounters(),
                     *tabletCounters.MutableMaxAppCounters());
+            }
+        }
+
+        TVector<NPrivate::TTabletCounterValue> Find(const TString& name) const {
+            if (auto result = TabletExecutorCounters.Find(name)) {
+                return result;
+            } else {
+                return TabletAppCounters.Find(name);
             }
         }
 
@@ -679,6 +697,18 @@ private:
                 NKikimrSysView::TDbCounters& maxCounters)
             {
                 Convert<false>(sumCounters, maxCounters);
+            }
+
+            TVector<NPrivate::TTabletCounterValue> Find(const TString& name) const {
+                if (!IsInitialized) {
+                    return {};
+                }
+
+                if (auto result = AggregatedSimpleCounters.Find(name)) {
+                    return result;
+                } else {
+                    return AggregatedCumulativeCounters.Find(name);
+                }
             }
 
         private:
@@ -1305,6 +1335,8 @@ private:
     void HandleWakeup(const TActorContext &ctx);
     void HandleWork(TEvTabletCounters::TEvRemoveDatabase::TPtr& ev);
 
+    TString RenderSearch(const TStringBuf relPath, const TString& name) const;
+
     //
     TAutoPtr<TTabletMon> TabletMon;
     TActorId DbWatcherActorId;
@@ -1344,6 +1376,11 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
             mon->RegisterActorPage(nullptr, "labeledcounters", "Labeled Counters", false, TActivationContext::ActorSystem(), SelfId(), false);
         else
             mon->RegisterActorPage(nullptr, "followercounters", "Follower Counters", false, TActivationContext::ActorSystem(), SelfId(), false);
+        if (!Follower) {
+            auto* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actorsMonPage, "tablet_counters_aggregator", "Tablet Counters Aggregator",
+                false, TActivationContext::ActorSystem(), SelfId(), false);
+        }
     }
 
     ctx.Schedule(TDuration::Seconds(WAKEUP_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
@@ -1532,12 +1569,88 @@ void TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvRemoveData
 }
 
 ////////////////////////////////////////////
-void
-TTabletCountersAggregatorActor::HandleWork(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
+TString TTabletCountersAggregatorActor::RenderSearch(const TStringBuf relPath, const TString& name) const {
+    TStringStream str;
 
-    TString reqTabletType = ev->Get()->Request.GetParams().Get("type");
+    HTML(str) {
+        const bool isIndex = !relPath || relPath == "/";
+
+        DIV_CLASS("page-header") {
+            TAG(TH3) {
+                str << "Counter search";
+            }
+        }
+
+        DIV_CLASS("alert alert-info") {
+            UL_CLASS("list-unstyled") {
+                LI() {
+                    str << "The search is performed by certain types of counters:";
+                    UL() {
+                        LI() { str << "Simple."; }
+                        LI() { str << "Cumulative."; }
+                    }
+                }
+                LI() { str << "The search stops when the first match is found. It is recommended to specify the full name of the counter."; }
+                LI() { str << "The instantaneous values of the counter are displayed."; }
+            }
+        }
+
+        FORM_CLASS("form-horizontal") {
+            DIV_CLASS("form-group") {
+                LABEL_CLASS_FOR("col-sm-2 control-label", "name") {
+                    str << "Counter name";
+                }
+                DIV_CLASS("col-sm-8") {
+                    str << "<input type='text' id='name' name='name' class='form-control' placeholder='DataShard/TxCompleteLag' value='" << name << "'>";
+                }
+                DIV_CLASS("col-sm-2") {
+                    const auto action = isIndex ? "tablet_counters_aggregator/search" : "";
+                    str << "<button type='submit' formaction='" << action << "' class='btn btn-primary'>"
+                        << "Find"
+                    << "</button>";
+                }
+            }
+        }
+
+        if (!isIndex && name) {
+            TABLE_CLASS("table table-sortable") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() { str << "#"; }
+                        TABLEH() { str << "Name"; }
+                        TABLEH() { str << "Tablet ID"; }
+                        TABLEH() { str << "Value"; }
+                    }
+                }
+                TABLEBODY() {
+                    int i = 1;
+                    for (const auto& x : TabletMon->Find(name)) {
+                        TABLER() {
+                            TABLED() { str << i++; }
+                            TABLED() { str << x.Name; }
+                            TABLED() { str << "<a href='../../tablets?TabletID=" << x.TabletId << "'>" << x.TabletId << "</a>"; }
+                            TABLED() { str << x.Value; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return str.Str();
+}
+
+void TTabletCountersAggregatorActor::HandleWork(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
+    const auto& request = ev->Get()->Request;
+    const auto& params = request.GetParams();
+
+    if (request.GetPath().StartsWith("/actors/tablet_counters_aggregator")) {
+        return (void)ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderSearch(request.GetPathInfo(), params.Get("name"))));
+    }
+
+    TString reqTabletType = params.Get("type");
     ui32 workers = 0;
-    TryFromString(ev->Get()->Request.GetParams().Get("workers"), workers);
+    TryFromString(params.Get("workers"), workers);
     for (ui32 tabletType = 0; tabletType < TTabletTypes::UserTypeStart; ++tabletType) {
         if (!NKikimrTabletBase::TTabletTypes::EType_IsValid(tabletType))
             continue;

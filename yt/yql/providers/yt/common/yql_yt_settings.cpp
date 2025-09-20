@@ -312,6 +312,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, EvaluationTableSizeLimit).Upper(10_MB); // Max 10Mb
     REGISTER_SETTING(*this, LookupJoinLimit).Upper(10_MB); // Same as EvaluationTableSizeLimit
     REGISTER_SETTING(*this, LookupJoinMaxRows).Upper(10000);
+    REGISTER_SETTING(*this, ConvertDynamicTablesToStatic).Parser([](const TString& v) { return FromString<EConvertDynamicTablesToStatic>(v); });
+    REGISTER_SETTING(*this, KeepMergeWithDynamicInput);
     REGISTER_SETTING(*this, DisableOptimizers);
     REGISTER_SETTING(*this, MaxInputTables).Lower(2).Upper(3000); // 3000 - default max limit on YT clusters
     REGISTER_SETTING(*this, MaxOutputTables).Lower(1).Upper(100); // https://ml.yandex-team.ru/thread/yt/166633186212752141/
@@ -590,6 +592,11 @@ size_t TYtVersionedConfiguration::FindNodeVer(const TExprNode& node) {
     }
     NodeIdToVer.emplace(node.UniqueId(), ver);
     return ver;
+}
+
+void TYtVersionedConfiguration::CopyNodeVer(const TExprNode& from, const TExprNode& to) {
+    const size_t ver = FindNodeVer(from);
+    NodeIdToVer.emplace(to.UniqueId(), ver);
 }
 
 void TYtVersionedConfiguration::FreezeZeroVersion() {

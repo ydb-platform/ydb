@@ -110,18 +110,25 @@ namespace NKikimr::NStorage {
             config->SetExpectedStorageYamlVersion(storageVersion + 1);
         }
 
-        if (!Cfg->DomainsConfig) { // no automatic configuration required
-        } else if (Cfg->DomainsConfig->StateStorageSize() == 1) { // the StateStorage config is already defined explicitly, just migrate it
+        if (Cfg->DomainsConfig && Cfg->DomainsConfig->StateStorageSize() == 1) { // the StateStorage config is already defined explicitly, just migrate it
             const auto& ss = Cfg->DomainsConfig->GetStateStorage(0);
             config->MutableStateStorageConfig()->CopyFrom(ss);
             config->MutableStateStorageBoardConfig()->CopyFrom(ss);
             config->MutableSchemeBoardConfig()->CopyFrom(ss);
-        } else if (!Cfg->DomainsConfig->StateStorageSize()) { // no StateStorage config, generate a new one
-            std::unordered_set<ui32> usedNodes;
-            GenerateStateStorageConfig(config->MutableStateStorageConfig(), *config, usedNodes);
-            GenerateStateStorageConfig(config->MutableStateStorageBoardConfig(), *config, usedNodes);
-            GenerateStateStorageConfig(config->MutableSchemeBoardConfig(), *config, usedNodes);
         }
+
+        std::unordered_set<ui32> usedNodes;
+#define UPDATE_EXPLICIT_CONFIG(NAME) \
+        if (Cfg->DomainsConfig && Cfg->DomainsConfig->HasExplicit##NAME##Config()) { \
+            config->Mutable##NAME##Config()->CopyFrom(Cfg->DomainsConfig->GetExplicit##NAME##Config()); \
+        } \
+        if (!config->Has##NAME##Config()) { \
+            GenerateStateStorageConfig(config->Mutable##NAME##Config(), *config, usedNodes); \
+        }
+
+        UPDATE_EXPLICIT_CONFIG(StateStorage)
+        UPDATE_EXPLICIT_CONFIG(StateStorageBoard)
+        UPDATE_EXPLICIT_CONFIG(SchemeBoard)
 
         config->SetSelfAssemblyUUID(selfAssemblyUUID);
 

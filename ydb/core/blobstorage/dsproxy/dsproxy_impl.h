@@ -189,6 +189,15 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
 
     void WakeupUnconfigured(TEvConfigureQueryTimeout::TPtr ev);
 
+    enum class EUnconfiguredStateReason : ui8 {
+        UnknownGroup = 0,
+        GenerationChanged,
+    };
+    static TString UnconfiguredStateReasonStr(EUnconfiguredStateReason reason);
+
+    EUnconfiguredStateReason UnconfiguredStateReason;
+    TMonotonic UnconfiguredStateTs = TMonotonic::Zero();
+
    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Establishing Sessions state
 
@@ -197,6 +206,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     void SwitchToWorkWhenGoodToGo();
     void WakeupEstablishingSessions(TEvEstablishingSessionTimeout::TPtr ev);
     void Handle(TEvProxyQueueState::TPtr& ev);
+
+    TMonotonic EstablishingSessionsStateTs = TMonotonic::Zero();
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Put to init queue
@@ -217,10 +228,15 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
                 << " UnconfiguredBufferSize# " << UnconfiguredBufferSize << " > " << UnconfiguredBufferSizeLimit
                 << ", dropping the queue (" << (ui64)InitQueue.size() << ")" << " Marker# DSP08");
             if (CurrentStateFunc() == &TThis::StateUnconfigured) {
-                ErrorDescription = "Too many requests while waiting for configuration (DSPE2).";
+                ErrorDescription = TStringBuilder() << "Too many requests while waiting for configuration (DSPE2)."
+                        << " GroupId# " << GroupId
+                        << " UnconfiguredStateTs# " << UnconfiguredStateTs
+                        << " UnconfiguredStateReason " << UnconfiguredStateReasonStr(UnconfiguredStateReason);
                 SetStateUnconfiguredTimeout();
             } else if (CurrentStateFunc() == &TThis::StateEstablishingSessions) {
-                ErrorDescription = "Too many requests while establishing sessions (DSPE5).";
+                ErrorDescription = TStringBuilder() << "Too many requests while establishing sessions (DSPE5)."
+                        << " GroupId# " << GroupId
+                        << " EstablishingSessionsStateTs# " << EstablishingSessionsStateTs;
                 SetStateEstablishingSessionsTimeout();
             }
         }

@@ -484,6 +484,17 @@ const std::vector<TCreatePathOp> CreatePathOperations({
             return CreateSecretRequest(0 /* txId */, workingDir, modifyScheme);
         }
     },
+    {
+        .Type = NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery,
+        .CreateRequest = [](const TString& workingDir, const TString& path) {
+            const TString modifyScheme = Sprintf(R"(
+                    Name: "%s"
+                )",
+                path.c_str()
+            );
+            return CreateStreamingQueryRequest(/* txId */ 0, workingDir, modifyScheme);
+        }
+    },
 
     //NOTE: ADD NEW ENTRY ABOVE THIS LINE
 });
@@ -798,6 +809,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysNames) {
             .EnableSystemNamesProtection(EnableSystemNamesProtection)
             .EnableDatabaseAdmin(EnableDatabaseAdmin)
             .EnableRealSystemViewPaths(false)
+            .RunFakeConfigDispatcher(true)
         ;
         if (op.SetupFlags) {
             op.SetupFlags(opts);

@@ -12,12 +12,26 @@
 {%-     if module == 'resources' -%}
 {%-         if not('**/*' in some_set.globs) -%}
 {{ IncludeGlobs(some_set, dir) }}
+{%-         else -%}
+.include("**/*")
 {%-         endif -%}
 {%-     else -%}
 {%-         if some_set.globs|join('')|replace('*', '') == some_set.globs|join('') -%}
 {#- Use single source file from each glob -#}
 {{ IncludeGlobs(some_set, dir) }}
+{%-         else -%}
+.include("**/*")
 {%-         endif -%}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- macro SomeSets(some_sets, module, reldir = "") -%}
+{%-     if some_sets|length -%}
+{%-         set dirs = some_sets|map(attribute='dir')|unique -%}
+{%-         for dir in dirs -%}
+{%-             set some_set = some_sets|selectattr('dir', 'eq', dir)|first -%}
+{{ SomeSet(some_set, module, reldir) }}
+{%-         endfor -%}
 {%-     endif -%}
 {%- endmacro -%}
 
@@ -31,11 +45,7 @@
 {%-     else -%}
 {%-         set source_sets = [] -%}
 {%-     endif -%}
-{%-     if source_sets|length -%}
-{%-         for source_set in source_sets -%}
-{{ SomeSet(source_set, "java", reldir) }}
-{%-         endfor -%}
-{%-     endif -%}
+{{ SomeSets(source_sets, "java", reldir) }}
 {%-     if current_target.resource_sets|length -%}
 {%-         set resource_sets = current_target.resource_sets -%}
 {%-     else -%}
@@ -47,11 +57,7 @@
 {%-             set resource_sets = resource_sets + source2resource_sets -%}
 {%-         endif -%}
 {%-     endif -%}
-{%-     if resource_sets|length -%}
-{%-         for resource_set in resource_sets -%}
-{{ SomeSet(resource_set, "resources", reldir) }}
-{%-         endfor -%}
-{%-     endif -%}
+{{ SomeSets(resource_sets, "resources", reldir) }}
 {%- endmacro %}
 
 sourceSets {
@@ -61,14 +67,14 @@ sourceSets {
 {{ TargetSets(target, "main") }}
 
 {%-     if proto_template and symlinks_to_generated %}
-        java.srcDir("generated/source/proto/main/java")
+        java.srcDir("generated/source/proto/main/java").include("**/*")
 {%-         if target.proto_grpc %}
-        java.srcDir("generated/source/proto/main/grpc")
+        java.srcDir("generated/source/proto/main/grpc").include("**/*")
 {%-         endif -%}
 {%-     elif proto_template %}
-        java.srcDir("$buildDir/generated/source/proto/main/java")
+        java.srcDir("$buildDir/generated/source/proto/main/java").include("**/*")
 {%-         if target.proto_grpc %}
-        java.srcDir("$buildDir/generated/source/proto/main/grpc")
+        java.srcDir("$buildDir/generated/source/proto/main/grpc").include("**/*")
 {%-         endif -%}
 {%-     endif %}
     }
@@ -101,6 +107,17 @@ tasks.withType<Jar>() {
 tasks.withType<Copy>() {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
+
+{%- if hasResources %}
+
+tasks.processResources.configure {
+    dependsOn("compileJava")
+}
+
+tasks.processTestResources.configure {
+    dependsOn("compileTestJava")
+}
+{%- endif %}
 
 tasks.getByName("sourcesJar").dependsOn(tasks.compileJava)
 tasks.getByName("sourcesJar").mustRunAfter(tasks.compileTestJava)

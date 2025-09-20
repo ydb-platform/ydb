@@ -90,12 +90,9 @@ bool TKqpExecuterTxResult::HasTrailingResults() {
 void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TResultSetFormatSettings& resultSetFormatSettings, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite) {
     YQL_ENSURE(ydbResult);
     YQL_ENSURE(!Rows.IsWide());
-    YQL_ENSURE(MkqlItemType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
+    YQL_ENSURE(MkqlItemType->GetKind() == NMiniKQL::TType::EKind::Struct);
 
     const auto* mkqlSrcRowStructType = static_cast<const TStructType*>(MkqlItemType);
-
-    std::vector<std::pair<TString, NScheme::TTypeInfo>> arrowSchema;
-    std::set<std::string> arrowNotNullColumns;
 
     if (fillSchema) {
         for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
@@ -110,6 +107,9 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TResultSetFo
         }
     }
 
+    std::vector<std::pair<TString, NMiniKQL::TType*>> arrowSchema;
+    std::set<std::string> arrowNotNullColumns;
+
     if (resultSetFormatSettings.IsArrowFormat()) {
         for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
             ui32 memberIndex = (!ColumnOrder || ColumnOrder->empty()) ? idx : (*ColumnOrder)[idx];
@@ -120,8 +120,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TResultSetFo
                 arrowNotNullColumns.insert(columnName);
             }
 
-            NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(columnType);
-            arrowSchema.emplace_back(std::move(columnName), std::move(typeInfo));
+            arrowSchema.emplace_back(std::move(columnName), std::move(columnType));
         }
     }
 
@@ -145,7 +144,6 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TResultSetFo
         batchBuilder.Reserve(Rows.RowCount());
         YQL_ENSURE(batchBuilder.Start(arrowSchema).ok());
 
-        TRowBuilder rowBuilder(arrowSchema.size());
         Rows.ForEachRow([&](const NUdf::TUnboxedValue& row) -> bool {
             if (rowsLimitPerWrite) {
                 if (*rowsLimitPerWrite == 0) {
@@ -155,14 +153,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TResultSetFo
                 --(*rowsLimitPerWrite);
             }
 
-            for (size_t i = 0; i < arrowSchema.size(); ++i) {
-                ui32 memberIndex = (!ColumnOrder || ColumnOrder->empty()) ? i : (*ColumnOrder)[i];
-                const auto& [name, type] = arrowSchema[i];
-                rowBuilder.AddCell(i, type, row.GetElement(memberIndex), type.GetPgTypeMod(name));
-            }
-
-            auto cells = rowBuilder.BuildCells();
-            batchBuilder.AddRow(cells);
+            batchBuilder.AddRow(row, arrowSchema.size(), ColumnOrder);
             return true;
         });
 

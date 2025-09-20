@@ -5,7 +5,7 @@
 #include <ydb/core/kafka_proxy/actors/kafka_create_topics_actor.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
-#include <ydb/core/persqueue/list_all_topics_actor.h>
+#include <ydb/core/persqueue/public/list_topics/list_all_topics_actor.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 
 namespace NKafka {
@@ -35,7 +35,7 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
         SendDiscoveryRequest();
 
         if (Message->Topics.size() == 0) {
-            ctx.Register(NKikimr::NPersQueue::MakeListAllTopicsActor(
+            ctx.Register(NKikimr::NPQ::MakeListAllTopicsActor(
                     SelfId(), Context->DatabasePath, GetUserSerializedToken(Context), true, {}, {}));
 
             PendingResponses++;
@@ -54,7 +54,7 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
 void TKafkaMetadataActor::SendDiscoveryRequest() {
     Y_VERIFY_DEBUG(DiscoveryCacheActor);
     PendingResponses++;
-    Register(CreateDiscoverer(&MakeEndpointsBoardPath, Context->DatabasePath, SelfId(), DiscoveryCacheActor));
+    Register(CreateDiscoverer(&MakeEndpointsBoardPath, Context->DatabasePath, true, SelfId(), DiscoveryCacheActor));
 }
 
 
@@ -79,17 +79,18 @@ void TKafkaMetadataActor::ProcessDiscoveryData(TEvDiscovery::TEvDiscoveryData::T
     Ydb::Discovery::ListEndpointsResponse leResponse;
     Ydb::Discovery::ListEndpointsResult leResult;
     TString const* cachedMessage;
+
     if (expectSsl) {
-        cachedMessage = &ev->Get()->CachedMessageData->CachedMessageSsl;
+        cachedMessage = &ev->Get()->CachedMessageSsl;
     } else {
-        cachedMessage = &ev->Get()->CachedMessageData->CachedMessage;
+        cachedMessage = &ev->Get()->CachedMessage;
     }
     auto ok = leResponse.ParseFromString(*cachedMessage);
     if (ok) {
         ok = leResponse.operation().result().UnpackTo(&leResult);
     }
     if (!ok) {
-        KAFKA_LOG_ERROR("Port discovery failed, unable to parse discovery respose for request " << CorrelationId);
+        KAFKA_LOG_ERROR("Port discovery failed, unable to parse discovery response for request " << CorrelationId);
         HaveError = true;
         return;
     }
@@ -299,6 +300,7 @@ void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32
     ContextForTopicCreation->ConnectionId = ctx.SelfID;
     ContextForTopicCreation->UserToken = Context->UserToken;
     ContextForTopicCreation->DatabasePath = Context->DatabasePath;
+    ContextForTopicCreation->ResourceDatabasePath = Context->ResourceDatabasePath;
     TActorId actorId = ctx.Register(new TKafkaCreateTopicsActor(ContextForTopicCreation,
         1,
         TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message)

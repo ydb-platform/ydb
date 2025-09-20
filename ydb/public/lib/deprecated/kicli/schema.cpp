@@ -147,6 +147,9 @@ void TSchemaObject::Drop() {
         // FIXME(+active)
         // drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection);
         // break;
+    case EPathType::StreamingQuery:
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery);
+        break;
     case EPathType::Unknown:
     case EPathType::SubDomain:
     case EPathType::RtmrVolume:
@@ -249,6 +252,8 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
         return TSchemaObject::EPathType::SysView;
     case NKikimrSchemeOp::EPathTypeSecret:
         return TSchemaObject::EPathType::Secret;
+    case NKikimrSchemeOp::EPathTypeStreamingQuery:
+        return TSchemaObject::EPathType::StreamingQuery;
     case NKikimrSchemeOp::EPathTypeTableIndex:
     case NKikimrSchemeOp::EPathTypeExtSubDomain:
     case NKikimrSchemeOp::EPathTypeCdcStream:

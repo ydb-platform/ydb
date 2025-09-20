@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/core/fq/libs/config/protos/row_dispatcher.pb.h>
 #include <ydb/core/fq/libs/config/protos/common.pb.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
@@ -13,6 +12,10 @@
 
 #include <memory>
 
+namespace NKikimrConfig {
+class TSharedReadingConfig;
+} // namespace NKikimrConfig
+
 namespace NFq {
 
 std::unique_ptr<NActors::IActor> NewTopicSession(
@@ -20,7 +23,8 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
-    const NConfig::TRowDispatcherConfig& config,
+    const NKikimrConfig::TSharedReadingConfig& config,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     NActors::TActorId rowDispatcherActorId,
     NActors::TActorId compileServiceActorId,
     ui32 partitionId,

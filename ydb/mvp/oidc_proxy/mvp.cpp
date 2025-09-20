@@ -170,10 +170,9 @@ int TMVP::Run() {
 }
 
 int TMVP::Shutdown() {
-    ActorSystemStoppingLock.AcquireWrite();
-    AtomicSet(ActorSystemStopping, true);
-    ActorSystemStoppingLock.ReleaseWrite();
     ActorSystem.Stop();
+    AppData.GRpcClientLow->Stop(true);
+    ActorSystem.Cleanup();
     return 0;
 }
 
@@ -191,9 +190,7 @@ NMvp::TTokensConfig TMVP::TokensConfig;
 TOpenIdConnectSettings TMVP::OpenIdConnectSettings;
 
 TMVP::TMVP(int argc, char** argv)
-    : ActorSystemStoppingLock()
-    , ActorSystemStopping(false)
-    , LoggerSettings(BuildLoggerSettings())
+    : LoggerSettings(BuildLoggerSettings())
     , ActorSystemSetup(BuildActorSystemSetup(argc, argv))
     , ActorSystem(ActorSystemSetup, &AppData, LoggerSettings)
 {}

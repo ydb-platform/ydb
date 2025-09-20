@@ -88,8 +88,12 @@ namespace NSQLHighlight {
         }
     }
 
-    NJson::TJsonValue ToMonarchMultiLineState(const TUnit& unit) {
+    NJson::TJsonValue ToMonarchMultiLineState(const TUnit& unit, bool ansi) {
         Y_ENSURE(unit.RangePattern);
+
+        TString group = ToMonarchSelector(unit.Kind);
+        TString begin = RE2::QuoteMeta(unit.RangePattern->Begin);
+        TString end = RE2::QuoteMeta(unit.RangePattern->End);
 
         NJson::TJsonValue json;
 
@@ -112,15 +116,13 @@ namespace NSQLHighlight {
                     {"goBack", 4},
                 },
             });
+        } else if (unit.Kind == EUnitKind::Comment && ansi) {
+            json.AppendValue(NJson::TJsonArray{begin, group, "@" + group});
         }
-
-        TString group = ToMonarchSelector(unit.Kind);
-        TString begin = RE2::QuoteMeta(unit.RangePattern->Begin);
-        TString end = RE2::QuoteMeta(unit.RangePattern->End);
 
         json.AppendValue(NJson::TJsonArray{"[^" + begin + "]", group});
         json.AppendValue(NJson::TJsonArray{end, group, "@pop"});
-        json.AppendValue(NJson::TJsonArray{"[" + begin + "]", group});
+        json.AppendValue(NJson::TJsonArray{begin, group});
 
         return json;
     }
@@ -156,7 +158,7 @@ namespace NSQLHighlight {
         return json;
     }
 
-    NJson::TJsonValue ToMonarchRootState(const THighlighting& highlighting) {
+    NJson::TJsonValue ToMonarchRootState(const THighlighting& highlighting, bool ansi) {
         NJson::TJsonValue json;
         json.AppendValue(NJson::TJsonMap{{"include", "@whitespace"}});
         for (const TUnit& unit : highlighting.Units) {
@@ -165,7 +167,13 @@ namespace NSQLHighlight {
             }
 
             TString group = ToMonarchSelector(unit.Kind);
-            for (const NSQLTranslationV1::TRegexPattern& pattern : unit.Patterns) {
+
+            const auto* patterns = &unit.Patterns;
+            if (!unit.PatternsANSI.Empty() && ansi) {
+                patterns = unit.PatternsANSI.Get();
+            }
+
+            for (const NSQLTranslationV1::TRegexPattern& pattern : *patterns) {
                 TString regex = ToMonarchRegex(unit, pattern);
                 json.AppendValue(NJson::TJsonArray{regex, group});
             }
@@ -173,7 +181,7 @@ namespace NSQLHighlight {
         return json;
     }
 
-    void GenerateMonarch(IOutputStream& out, const THighlighting& highlighting) {
+    void GenerateMonarch(IOutputStream& out, const THighlighting& highlighting, bool ansi) {
         NJsonWriter::TBuf buf(NJsonWriter::HEM_DONT_ESCAPE_HTML, &out);
         buf.SetIndentSpaces(4);
 
@@ -189,10 +197,10 @@ namespace NSQLHighlight {
 
         buf.WriteKey("tokenizer");
         buf.BeginObject();
-        write_json("root", ToMonarchRootState(highlighting));
+        write_json("root", ToMonarchRootState(highlighting, ansi));
         write_json("whitespace", ToMonarchWhitespaceState(highlighting));
         ForEachMultiLine(highlighting, [&](const TUnit& unit) {
-            write_json(ToMonarchStateName(unit.Kind), ToMonarchMultiLineState(unit));
+            write_json(ToMonarchStateName(unit.Kind), ToMonarchMultiLineState(unit, ansi));
         });
         write_json("embedded", MonarchEmbeddedState());
         buf.EndObject();

@@ -79,7 +79,8 @@ public:
         : TCallableTransformerBase<TCallableConstraintTransformer>(types, instantOnly)
         , SubGraph_(subGraph)
     {
-        Functions_["FailMe"] = &TCallableConstraintTransformer::FailMe;
+        Functions_["FailMe"] = &TCallableConstraintTransformer::FailMeWrap;
+        Functions_["Seq"] = &TCallableConstraintTransformer::SeqWrap;
         Functions_["Unordered"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions_["UnorderedSubquery"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions_["Sort"] = &TCallableConstraintTransformer::SortWrap;
@@ -254,6 +255,7 @@ public:
         Functions_["MultiHoppingCore"] = &TCallableConstraintTransformer::MultiHoppingCoreWrap;
         Functions_["StablePickle"] = &TCallableConstraintTransformer::PickleWrap;
         Functions_["Unpickle"] = &TCallableConstraintTransformer::FromSecond<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode>;
+        Functions_["Seq!"] = &TCallableConstraintTransformer::SeqExclamWrap;
     }
 
     std::optional<IGraphTransformer::TStatus> ProcessCore(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -334,11 +336,17 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus FailMe(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+    TStatus FailMeWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
         if (input->Child(0)->Content() == "constraint") {
             input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
 
+        return TStatus::Ok;
+    }
+
+    TStatus SeqWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        Y_UNUSED(ctx);
+        input->CopyConstraints(*input->Child(input->ChildrenSize() - 1));
         return TStatus::Ok;
     }
 
@@ -394,6 +402,32 @@ private:
         }
 
         return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
+    }
+
+    TStatus SeqExclamWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const {
+        IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;
+        bool rebuildRemaining = false;
+        TExprNode::EState prevChildState = TExprNode::EState::ExecutionComplete;
+        for (size_t i = 0; i < input->ChildrenSize(); ++i) {
+            auto& child = input->ChildRef(i);
+            if (child->GetState() > prevChildState) {
+                rebuildRemaining = true;
+            }
+            prevChildState = child->GetState();
+            if (rebuildRemaining) {
+                YQL_ENSURE(child->IsLambda());
+                if (child->Head().Head().GetState() >= TExprNode::EState::ConstrComplete) {
+                    auto newLambda = ctx.CopyLambdaWithTypes(*child);
+                    child = std::move(newLambda);
+                    status = status.Combine(TStatus::Repeat);
+                }
+            } else if (child->GetState() < TExprNode::EState::ConstrComplete) {
+                YQL_ENSURE(child->IsLambda());
+                status = status.Combine(UpdateLambdaConstraints(*child));
+                rebuildRemaining = true;
+            }
+        }
+        return status;
     }
 
     TStatus SortWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
@@ -3704,7 +3738,7 @@ IGraphTransformer::TStatus UpdateLambdaConstraints(const TExprNode& lambda) {
         args->SetState(TExprNode::EState::ConstrComplete);
     }
 
-    if (lambda.GetState() != TExprNode::EState::ConstrComplete) {
+    if (lambda.GetState() < TExprNode::EState::ConstrComplete) {
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -3762,7 +3796,7 @@ IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExp
         args->SetState(TExprNode::EState::ConstrComplete);
     }
 
-    if (lambda->GetState() != TExprNode::EState::ConstrComplete) {
+    if (lambda->GetState() < TExprNode::EState::ConstrComplete) {
         return IGraphTransformer::TStatus::Repeat;
     }
 

@@ -2,10 +2,10 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/key.h>
-#include <ydb/core/persqueue/partition.h>
+#include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -92,6 +92,15 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             if (parameters.enableCompactificationByKey) {
                 tabletConfig->SetEnableCompactification(true);
             }
+
+            if (parameters.metricsLevel) {
+                tabletConfig->SetMetricsLevel(static_cast<decltype(tabletConfig->GetMetricsLevel())>(*parameters.metricsLevel));
+            }
+
+            if (parameters.monitoringProjectId) {
+                tabletConfig->SetMonitoringProjectId(*parameters.monitoringProjectId);
+            }
+
             for (auto& u : users) {
                 auto* consumer = tabletConfig->AddConsumers();
                 consumer->SetName(u.first);
@@ -141,11 +150,12 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
 }
 
 
-void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset, TTestContext& tc, i64 ctime,
+i64 CmdGetOffset(const ui32 partition, const TString& user, const TMaybe<i64>& expectedOffset, TTestContext& tc, i64 ctime,
                   ui64 writeTime) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
     THolder<TEvPersQueue::TEvRequest> request;
+    i64 ret = -1;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
             tc.Runtime->ResetScheduledCount();
@@ -179,8 +189,12 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset,
                     }
                 }
             }
-            UNIT_ASSERT_C((expectedOffset == -1 && !resp.HasOffset()) || (i64)resp.GetOffset() == expectedOffset,
-                    "expectedOffset=" << expectedOffset << " resp.HasOffset()=" << resp.HasOffset() << " resp.GetOffset()=" << resp.GetOffset());
+            Cerr << "Got offset = " << resp.GetOffset() << " for user " << user << Endl;
+            ret = resp.GetOffset();
+            if (expectedOffset.Defined()) {
+                UNIT_ASSERT_C((expectedOffset == -1 && !resp.HasOffset()) || (i64)resp.GetOffset() == expectedOffset,
+                        "expectedOffset=" << expectedOffset << " resp.HasOffset()=" << resp.HasOffset() << " resp.GetOffset()=" << resp.GetOffset());
+            }
             if (writeTime > 0) {
                 UNIT_ASSERT(resp.HasWriteTimestampEstimateMS());
                 UNIT_ASSERT(resp.GetWriteTimestampEstimateMS() >= writeTime);
@@ -190,6 +204,7 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset,
             UNIT_ASSERT_VALUES_EQUAL(retriesLeft, 2);
         }
     }
+    return ret;
 }
 
 void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map, const ui64 ssId,
@@ -260,7 +275,7 @@ void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::p
     }
 }
 
-void PQGetPartInfo(ui64 startOffset, ui64 endOffset, TTestContext& tc) {
+void PQGetPartInfo(std::function<bool(ui64)> firstOffsetMatcher, ui64 endOffset, TTestContext& tc) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvOffsetsResponse *result;
     THolder<TEvPersQueue::TEvOffsets> request;
@@ -283,13 +298,18 @@ void PQGetPartInfo(ui64 startOffset, ui64 endOffset, TTestContext& tc) {
             }
 
             UNIT_ASSERT(result->Record.PartResultSize());
-            UNIT_ASSERT_VALUES_EQUAL((ui64)result->Record.GetPartResult(0).GetStartOffset(), startOffset);
+            Cerr << "Got start offset = " << result->Record.GetPartResult(0).GetStartOffset() << Endl;
+            UNIT_ASSERT_C(firstOffsetMatcher((ui64)result->Record.GetPartResult(0).GetStartOffset()), result->Record.GetPartResult(0).GetStartOffset());
             UNIT_ASSERT_VALUES_EQUAL((ui64)result->Record.GetPartResult(0).GetEndOffset(), endOffset);
             retriesLeft = 0;
         } catch (NActors::TSchedulingLimitReachedException) {
             UNIT_ASSERT(retriesLeft > 0);
         }
     }
+}
+
+void PQGetPartInfo(ui64 startOffset, ui64 endOffset, TTestContext& tc) {
+    return PQGetPartInfo([=](ui64 offset) { return offset == startOffset; }, endOffset, tc);
 }
 
 void PQTabletRestart(TTestContext& tc) {
@@ -664,6 +684,24 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
         }
     }
     ++msgSeqNo;
+}
+
+void CmdWrite(const TCmdWriteOptions& o) {
+    CmdWrite(
+        o.Partition,
+        o.SourceId,
+        o.Data,
+        o.TestContext,
+        o.Error,
+        o.AlreadyWrittenSeqNo,
+        o.IsFirst,
+        o.OwnerCookie,
+        o.MessageNo,
+        o.Offset,
+        o.TreatWrongCookieAsError,
+        o.TreatBadOffsetAsError,
+        o.DisableDeduplication
+    );
 }
 
 void ReserveBytes(const ui32 partition, TTestContext& tc,

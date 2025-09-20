@@ -398,7 +398,9 @@ runs:
             # Replace test history link
             cat $SUMMARY_LINKS | (grep -v "Test history"  || true) > $TMP_DIR/tmp_summary
             mv $TMP_DIR/tmp_summary $SUMMARY_LINKS
-            echo "10 [Test history](${TESTMO_HISTORY_URL})" >> $SUMMARY_LINKS
+
+            # We don't want testmo anymore. For fast revert uncomment line below
+            # echo "10 [Test history](${TESTMO_HISTORY_URL})" >> $SUMMARY_LINKS
           fi
 
           CURRENT_MESSAGE="ya make is running..."
@@ -490,6 +492,9 @@ runs:
             if [ -n "${{ github.event.number }}" ]; then
               PR_ARG="--pr_number ${{ github.event.number }}"
             fi
+            
+            # Set the correct commit SHA - use original head for accurate version tracking
+            export GITHUB_HEAD_SHA="$ORIGINAL_HEAD"
             
             GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
               --summary_links "$SUMMARY_LINKS" \

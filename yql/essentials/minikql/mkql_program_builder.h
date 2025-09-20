@@ -200,6 +200,25 @@ public:
     TRuntimeNode NewVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType);
     TRuntimeNode NewVariant(TRuntimeNode item, const std::string_view& member, TType* variantType);
 
+    TRuntimeNode ToDynamicLinear(TRuntimeNode item);
+    TRuntimeNode FromDynamicLinear(TRuntimeNode item, const std::string_view& file, ui32 row, ui32 column);
+
+    TRuntimeNode ToMutDict(TRuntimeNode dict, TType* mdictType, const TArrayRef<const TRuntimeNode>& dependentNodes);
+    TRuntimeNode MutDictCreate(TType* dictType, TType* mdictType, const TArrayRef<const TRuntimeNode>& dependentNodes);
+    TRuntimeNode MutDictInsert(TType* dictType, TRuntimeNode mdict, TRuntimeNode key, TRuntimeNode value);
+    TRuntimeNode MutDictUpsert(TType* dictType, TRuntimeNode mdict, TRuntimeNode key, TRuntimeNode value);
+    TRuntimeNode MutDictUpdate(TType* dictType, TRuntimeNode mdict, TRuntimeNode key, TRuntimeNode value);
+    TRuntimeNode MutDictRemove(TType* dictType, TRuntimeNode mdict, TRuntimeNode key);
+    TRuntimeNode MutDictPop(TType* dictType, TRuntimeNode mdict, TRuntimeNode key);
+    TRuntimeNode MutDictContains(TType* dictType, TRuntimeNode mdict, TRuntimeNode key);
+    TRuntimeNode MutDictLookup(TType* dictType, TRuntimeNode mdict, TRuntimeNode key);
+    TRuntimeNode MutDictLength(TType* dictType, TRuntimeNode mdict);
+    TRuntimeNode MutDictHasItems(TType* dictType, TRuntimeNode mdict);
+    TRuntimeNode MutDictItems(TType* dictType, TRuntimeNode mdict);
+    TRuntimeNode MutDictKeys(TType* dictType, TRuntimeNode mdict);
+    TRuntimeNode MutDictPayloads(TType* dictType, TRuntimeNode mdict);
+    TRuntimeNode FromMutDict(TType* dictType, TRuntimeNode mdict);
+
     // generic data transformation, some args could be optional
     TRuntimeNode Convert(TRuntimeNode data, TType* type);
     TRuntimeNode ToIntegral(TRuntimeNode data, TType* type);
@@ -222,6 +241,7 @@ public:
     TRuntimeNode FromBytes(TRuntimeNode data, TType* type);
     TRuntimeNode InversePresortString(TRuntimeNode data);
     TRuntimeNode InverseString(TRuntimeNode data);
+
     TRuntimeNode Random(const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode RandomNumber(const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode RandomUuid(const TArrayRef<const TRuntimeNode>& dependentNodes);
@@ -560,6 +580,7 @@ public:
 
     TRuntimeNode SourceOf(TType* returnType);
     TRuntimeNode Source();
+    TRuntimeNode Block(const TUnaryLambda& lambda);
 
     TRuntimeNode MakeHeap(TRuntimeNode list, const TBinaryLambda& comparator);
     TRuntimeNode PushHeap(TRuntimeNode list, const TBinaryLambda& comparator);
@@ -786,7 +807,6 @@ private:
     TRuntimeNode BuildBlockMergeManyFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, const TArrayRef<ui32>& keys,
         const TArrayRef<const TAggInfo>& aggs, ui32 streamIndex, const TVector<TVector<ui32>>& streams, TType* returnType);
 
-    TRuntimeNode DictItems(TRuntimeNode dict, EDictItems mode);
     TRuntimeNode If(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch, TType* resultType);
 
     TRuntimeNode ToDict(TRuntimeNode list, bool multi, const TUnaryLambda& keySelector,
@@ -868,6 +888,7 @@ private:
     TType* BuildWideBlockType(const TArrayRef<TType* const>& wideComponents);
 
     bool IsNull(TRuntimeNode arg);
+    void ValidateMutDictType(TType* type) const;
 protected:
     const IFunctionRegistry& FunctionRegistry_;
     const bool VoidWithEffects_;

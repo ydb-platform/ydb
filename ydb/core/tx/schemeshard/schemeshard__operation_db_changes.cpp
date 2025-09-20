@@ -124,6 +124,10 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
     for (const auto& id : IncrementalBackups) {
         ss->PersistIncrementalBackup(db, id);
     }
+
+    for (const auto& pId : StreamingQueries) {
+        ss->PersistStreamingQuery(db, pId);
+    }
 }
 
 }

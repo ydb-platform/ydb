@@ -17,37 +17,60 @@ Y_PRAGMA_DIAGNOSTIC_POP
 #include <util/system/platform.h>
 #include <util/datetime/base.h>
 
-typedef struct __emutls_control {
-    size_t size;  /* size of the object in bytes */
-    size_t align;  /* alignment of the object in bytes */
-    union {
-        uintptr_t index;  /* data[index-1] is the object address */
-        void* address;  /* object address, when in single thread env */
-    } object;
-    void* value;  /* null or non-zero initial value for the object */
-} __emutls_control;
-
 #if defined(_msan_enabled_)
-extern "C" void* __emutls_get_address(__emutls_control* control);
-#endif
 
-class TTlsManager {
-public:
-    void* Add(const TString& name, size_t size, size_t align) {
-        //Cerr << "name: " << name << ", size: " << size << ", align: " << align << "\n";
-        auto pair = Tls_.insert(std::make_pair(name, __emutls_control()));
-        if (pair.second) {
-            Zero(pair.first->second);
-            pair.first->second.size = size;
-            pair.first->second.align = align;
-        }
+extern __thread unsigned long long __msan_param_tls[];
+extern __thread unsigned int __msan_param_origin_tls[];
+extern __thread unsigned long long __msan_retval_tls[];
+extern __thread unsigned int __msan_retval_origin_tls;
+extern __thread unsigned long long __msan_va_arg_tls[];
+extern __thread unsigned int __msan_va_arg_origin_tls[];
+extern __thread unsigned long long __msan_va_arg_overflow_size_tls;
+extern __thread unsigned int __msan_origin_tls;
 
-        return &pair.first->second;
-    }
+namespace {
 
-private:
-    THashMap<TString, __emutls_control> Tls_;
+// See https://github.com/google/sanitizers/wiki/MemorySanitizerJIT
+// for information on making MSan, C++, and JIT compatible.
+enum class TMSanTLS {
+    Param = 1,          // __msan_param_tls
+    ParamOrigin,        // __msan_param_origin_tls
+    Retval,             // __msan_retval_tls
+    RetvalOrigin,       // __msan_retval_origin_tls
+    VaArg,              // __msan_va_arg_tls
+    VaArgOrigin,        // __msan_va_arg_origin_tls
+    VaArgOverflowSize,  // __msan_va_arg_overflow_size_tls
+    Origin              // __msan_origin_tls
 };
+
+static void* GetTLSAddress(void* control) {
+    auto tlsIndex = static_cast<TMSanTLS>(reinterpret_cast<uintptr_t>(control));
+    switch (tlsIndex) {
+        case TMSanTLS::Param:
+            return reinterpret_cast<void*>(&__msan_param_tls);
+        case TMSanTLS::ParamOrigin:
+            return reinterpret_cast<void*>(&__msan_param_origin_tls);
+        case TMSanTLS::Retval:
+            return reinterpret_cast<void*>(&__msan_retval_tls);
+        case TMSanTLS::RetvalOrigin:
+            return reinterpret_cast<void*>(&__msan_retval_origin_tls);
+        case TMSanTLS::VaArg:
+            return reinterpret_cast<void*>(&__msan_va_arg_tls);
+        case TMSanTLS::VaArgOrigin:
+            return reinterpret_cast<void*>(&__msan_va_arg_origin_tls);
+        case TMSanTLS::VaArgOverflowSize:
+            return reinterpret_cast<void*>(&__msan_va_arg_overflow_size_tls);
+        case TMSanTLS::Origin:
+            return reinterpret_cast<void*>(&__msan_origin_tls);
+        default:
+            Y_ENSURE(false, "Unknown TLS variable");
+            return nullptr;
+    }
+}
+
+} // namespace
+
+#endif
 
 #if !defined(_win_) || defined(__clang__)
 extern "C" void __divti3();
@@ -386,7 +409,15 @@ public:
 #endif
 
 #if defined(_msan_enabled_)
-        ReverseGlobalMapping_[(const void*)&__emutls_get_address] = "__emutls_get_address";
+        AddGlobalMapping("__emutls_get_address", reinterpret_cast<void*>(GetTLSAddress));
+        AddGlobalMapping("__emutls_v.__msan_param_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::Param)));
+        AddGlobalMapping("__emutls_v.__msan_param_origin_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::ParamOrigin)));
+        AddGlobalMapping("__emutls_v.__msan_retval_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::Retval)));
+        AddGlobalMapping("__emutls_v.__msan_retval_origin_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::RetvalOrigin)));
+        AddGlobalMapping("__emutls_v.__msan_va_arg_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::VaArg)));
+        AddGlobalMapping("__emutls_v.__msan_va_arg_origin_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::VaArgOrigin)));
+        AddGlobalMapping("__emutls_v.__msan_va_arg_overflow_size_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::VaArgOverflowSize)));
+        AddGlobalMapping("__emutls_v.__msan_origin_tls", reinterpret_cast<void*>(static_cast<uintptr_t>(TMSanTLS::Origin)));
 #endif
 #if defined(_win_)
         AddGlobalMapping("__security_check_cookie", (const void*)&__security_check_cookie);
@@ -534,8 +565,6 @@ public:
             compileStats->ModulePassTime = (Now() - modulePassStart).MilliSeconds();
         }
 #endif
-
-        AllocateTls();
 
         auto finalizeStart = Now();
         Engine_->finalizeObject();
@@ -720,29 +749,6 @@ private:
         return static_cast<TCodegen*>(context)->OnDiagnosticInfo(info);
     }
 
-    void AllocateTls() {
-        for (const auto& glob : Module_->globals()) {
-            auto nameRef = glob.getName();
-            if (glob.isThreadLocal()) {
-                llvm::Type* type = glob.getValueType();
-                const llvm::DataLayout& dataLayout = Module_->getDataLayout();
-                auto size = dataLayout.getTypeStoreSize(type);
-                auto align = glob.getAlignment();
-                if (!align) {
-                    // When LLVM IL declares a variable without alignment, use
-                    // the ABI default alignment for the type.
-                    align = dataLayout.getABITypeAlign(type).value();
-                }
-
-                TStringBuf name(nameRef.data(), nameRef.size());
-                TString fullName = TString("__emutls_v.") + name;
-                auto ctl = TlsManager_.Add(fullName, size, align);
-                Engine_->updateGlobalMapping(llvm::StringRef(fullName.data(), fullName.size()), (uint64_t)ctl);
-                ReverseGlobalMapping_[&ctl] = fullName;
-            }
-        }
-    }
-
     struct TPatterns {
         TPatterns()
             : Imm_(re2::StringPiece("\\s*movabs\\s+[0-9a-z]+\\s*,\\s*(\\d+)\\s*"))
@@ -777,7 +783,6 @@ private:
     TMaybe<THashSet<TString>> ExportedSymbols;
     THashMap<const void*, TString> ReverseGlobalMapping_;
     TMaybe<TPatterns> Patterns_;
-    TTlsManager TlsManager_;
     THashSet<TString> LoadedModules_;
 };
 

@@ -3,6 +3,7 @@
 
 #include "defs.h"
 #include "channel_profiles.h"
+#include "config_metrics.h"
 #include "domain.h"
 #include "feature_flags.h"
 #include "nameservice.h"
@@ -78,6 +79,8 @@ struct TAppData::TImpl {
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NKikimrConfig::TBridgeConfig BridgeConfig;
     NKikimrConfig::TStatisticsConfig StatisticsConfig;
+    TMetricsConfig MetricsConfig;
+    NKikimrConfig::TSystemTabletBackupConfig SystemTabletBackupConfig;
 };
 
 TAppData::TAppData(
@@ -141,6 +144,8 @@ TAppData::TAppData(
     , QueryServiceConfig(Impl->QueryServiceConfig)
     , BridgeConfig(Impl->BridgeConfig)
     , StatisticsConfig(Impl->StatisticsConfig)
+    , MetricsConfig(Impl->MetricsConfig)
+    , SystemTabletBackupConfig(Impl->SystemTabletBackupConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

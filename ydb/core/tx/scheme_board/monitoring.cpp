@@ -1,3 +1,4 @@
+#include "backup.h"
 #include "mon_events.h"
 #include "monitoring.h"
 
@@ -7,6 +8,7 @@
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/tx/tx.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -40,8 +42,45 @@ namespace NSchemeBoard {
 
 using namespace NJson;
 
+struct TBackupLimits {
+    ui32 DefaultInFlight = 1'000;
+    ui32 MinInFlight = 1;
+    ui32 MaxInFlight = 10'000;
+};
+
+void Alert(IOutputStream& str, TStringBuf type, TStringBuf text) {
+    HTML(str) {
+        DIV_CLASS(TStringBuilder() << "alert alert-" << type) {
+            if (type == "warning") {
+                STRONG() {
+                    str << "Warning: ";
+                }
+            }
+            str << text;
+        }
+    }
+}
+
+void Warning(IOutputStream& str, TStringBuf text) {
+    Alert(str, "warning", text);
+}
+void Danger(IOutputStream& str, TStringBuf text) {
+    Alert(str, "danger", text);
+}
+void Info(IOutputStream& str, TStringBuf text) {
+    Alert(str, "info", text);
+}
+void Success(IOutputStream& str, TStringBuf text) {
+    Alert(str, "success", text);
+}
+
 class TMonitoring: public TActorBootstrapped<TMonitoring> {
     static constexpr char ROOT[] = "scheme_board";
+    static constexpr TBackupLimits BackupLimits = TBackupLimits();
+
+    static constexpr TStringBuf LogPrefix() {
+        return "monitoring"sv;
+    }
 
     using TActivity = NKikimrServices::TActivity;
     using EActivityType = TActivity::EType;
@@ -60,6 +99,8 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         Describe,
         Resolver,
         Resolve,
+        Backup,
+        Restore,
     };
 
     enum class EAttributeType {
@@ -133,6 +174,10 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             return ERequestType::Resolver;
         } else if (relPath.StartsWith("/resolve")) {
             return ERequestType::Resolve;
+        } else if (relPath.StartsWith("/backup")) {
+            return ERequestType::Backup;
+        } else if (relPath.StartsWith("/restore")) {
+            return ERequestType::Restore;
         } else {
             return ERequestType::Unknown;
         }
@@ -168,6 +213,10 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             return str << "resolver";
         case ERequestType::Resolve:
             return str << "resolve";
+        case ERequestType::Backup:
+            return str << "backup";
+        case ERequestType::Restore:
+            return str << "restore";
         case ERequestType::Unknown:
             return str;
         }
@@ -195,7 +244,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             if (type->GetStringSafe() == "ACTOR_ID") {
                 return EAttributeType::ActorId;
             }
-            // can not detenmine map type, fallback to unknown
+            // can not determine map type, fallback to unknown
             [[fallthrough]];
         }
 
@@ -312,17 +361,6 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     template <>
     void Header(IOutputStream& str, const TString& activityType, const NActorsProto::TActorId& actorId) {
         Header(str, activityType, ActorIdFromProto(actorId));
-    }
-
-    static void Alert(IOutputStream& str, const TStringBuf text) {
-        HTML(str) {
-            DIV_CLASS("alert alert-warning") {
-                STRONG() {
-                    str << "Warning:";
-                }
-                str << " " << text << ".";
-            }
-        }
     }
 
     static void Panel(IOutputStream& str, TRenderer title, TRenderer body) {
@@ -526,21 +564,52 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
     static void Navbar(IOutputStream& str, ERequestType originRequestType) {
-        static THashMap<ERequestType, TStringBuf> requestTypeToTitle = {
+        static const TVector<std::pair<ERequestType, TStringBuf>> requestTypeToTitle = {
             {ERequestType::Index, "Main"},
             {ERequestType::Resolver, "Resolver"},
+            {ERequestType::Backup, "Backup"},
+            {ERequestType::Restore, "Restore"},
         };
 
         const bool isIndex = originRequestType == ERequestType::Index;
 
         HTML(str) {
+            str << "<style>"
+                << ".backup-tab, .restore-tab { color: red !important; }"
+                << ".backup-tab:hover, .restore-tab:hover { background-color: red !important; color: white !important; }"
+                << ".nav-pills > li.active > a.backup-tab, .nav-pills > li.active > a.restore-tab { background-color: red !important; color: white !important; }"
+                << ".nav-pills > li.active > a.backup-tab:hover, .nav-pills > li.active > a.restore-tab:hover { background-color: darkred !important; color: white !important; }"
+                << "</style>";
+
             TAG_CLASS(TNav, "navbar") {
                 UL_CLASS("nav nav-pills") {
                     for (const auto& [rt, title] : requestTypeToTitle) {
+                        const TStringBuf linkPrefix = isIndex
+                            ? ROOT
+                            : (rt == ERequestType::Index ? ".." : "");
+
+                        TString cssClass;
+                        if (rt == ERequestType::Backup || rt == ERequestType::Restore) {
+                            cssClass = TStringBuilder() << (rt == ERequestType::Backup ? "backup-tab" : "restore-tab");
+                        }
+
                         if (rt == originRequestType) {
-                            LI_CLASS("active") { Link(str, "#", title); }
+                            LI_CLASS("active") {
+                                if (!cssClass.empty()) {
+                                    str << "<a href='#' class='" << cssClass << "'>" << title << "</a>";
+                                } else {
+                                    Link(str, "#", title);
+                                }
+                            }
                         } else {
-                            LI() { Link(str, rt, title, isIndex ? ROOT : ".."); }
+                            LI() {
+                                if (!cssClass.empty()) {
+                                    str << "<a href='" << MakeLink(rt, linkPrefix)
+                                        << "' class='" << cssClass << "'>" << title << "</a>";
+                                } else {
+                                    Link(str, rt, title, linkPrefix);
+                                }
+                            }
                         }
                     }
                 }
@@ -658,7 +727,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         HTML(str) {
             Header(str, record.GetActivityType(), record.GetSelf());
             if (record.GetTruncated()) {
-                Alert(str, "some lists has been truncated");
+                Warning(str, "some lists have been truncated.");
             }
 
             SimplePanel(str, "Descriptions", [&record](IOutputStream& str) {
@@ -742,7 +811,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         HTML(str) {
             Header(str, record.GetActivityType(), record.GetSelf());
             if (record.GetTruncated()) {
-                Alert(str, "some lists has been truncated");
+                Warning(str, "some lists have been truncated.");
             }
 
             SimplePanel(str, "Info", [&record](IOutputStream& str) {
@@ -838,7 +907,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         HTML(str) {
             Header(str, record.GetActivityType(), record.GetSelf());
             if (record.GetTruncated()) {
-                Alert(str, "some lists has been truncated");
+                Warning(str, "some lists have been truncated.");
             }
 
             SimplePanel(str, "Info", [&response](IOutputStream& str) {
@@ -1055,8 +1124,325 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         return str.Str();
     }
 
-    static TActorId MakeStateStorageProxyId() {
-        return NKikimr::MakeStateStorageProxyID();
+    static TString RenderBackup(
+        const TBackupProgress& backupProgress,
+        bool backupStarted = false,
+        const TString& errorMessage = ""
+    ) {
+        TStringStream str;
+
+        HTML(str) {
+            Navbar(str, ERequestType::Backup);
+            Header(str, "Backup", "Backup path descriptions locally, see <a href='https://ydb.tech/docs' target='_blank'>docs</a>");
+
+            if (backupStarted) {
+                Info(str, "Backup started successfully!");
+            }
+            if (!errorMessage.empty()) {
+                Danger(str, errorMessage);
+            }
+
+            SimplePanel(str, "Backup Configuration", [&backupProgress](IOutputStream& str) {
+                HTML(str) {
+                    FORM_CLASS("form-horizontal") {
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "backupPath") {
+                                str << "File Path";
+                            }
+                            DIV_CLASS("col-sm-10") {
+                                str << "<input type='text' id='backupPath' name='backupPath' class='form-control' "
+                                    << "placeholder='/tmp/scheme_board_backup.jsonl' required>";
+                            }
+                        }
+
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "inFlightLimit") {
+                                str << "In-Flight Limit";
+                            }
+                            DIV_CLASS("col-sm-10") {
+                                str << "<input type='number' id='inFlightLimit' name='inFlightLimit' class='form-control' "
+                                    << "value='" << BackupLimits.DefaultInFlight << "'>";
+                                str << "<small class='form-text text-muted'>Recommended range: "
+                                    << BackupLimits.MinInFlight << " - " << BackupLimits.MaxInFlight
+                                    << ". Values outside this range may cause performance issues.</small>";
+                            }
+                        }
+
+                        DIV_CLASS("form-group") {
+                            DIV_CLASS("col-sm-offset-2 col-sm-10") {
+                                const char* state = backupProgress.IsRunning() ? "disabled" : "";
+                                str << "<button type='submit' name='startBackup' class='btn btn-primary' " << state << ">"
+                                    << "Start Backup"
+                                << "</button>";
+                            }
+                        }
+                    }
+
+                    DIV_CLASS_ID("alert alert-info", "backupStatus") {
+                        str << "Status: " << backupProgress.StatusToString();
+                    }
+
+                    double p = backupProgress.GetProgress();
+                    DIV_CLASS_ID("progress", "backupProgress") {
+                        TAG_CLASS_STYLE(TDiv, "progress-bar", TStringBuilder() << "width:" << p << "%;") {
+                            str << p << "%";
+                        }
+                    }
+
+                    TAG_ATTRS(TDiv, {{"id", "backupDetails"}}) {
+                        str << "Processed: " << backupProgress.ProcessedPaths
+                            << " / Total: " << backupProgress.TotalPaths;
+                    }
+
+                    str << R"(
+                    <script>
+                    $(document).ready(function() {
+                        $('button[name="startBackup"]').click(function(e) {
+                            e.preventDefault();
+
+                            var btn = this;
+                            var form = $(btn.form);
+
+                            var inFlightLimit = parseInt($('#inFlightLimit').val());
+                            var min = )" << BackupLimits.MinInFlight << R"(;
+                            var max = )" << BackupLimits.MaxInFlight << R"(;
+                            if (inFlightLimit < min || inFlightLimit > max) {
+                                var msg = 'Warning: in-flight limit (' + inFlightLimit +
+                                    ') is outside the recommended range (' + min + ' - ' + max + '). Proceed?';
+                                if (!confirm(msg))
+                                    return;
+                            }
+
+                            $.ajax({
+                                type: "GET",
+                                url: window.location.pathname,
+                                data: form.serialize() + '&startBackup=1',
+                                success: function(response) {
+                                    $('body').html(response);
+                                    if (window.history && window.history.replaceState) {
+                                        window.history.replaceState(null, '', window.location.pathname);
+                                    }
+                                },
+                                error: function(xhr, status, error) {
+                                    $(btn).prop('disabled', false);
+                                    alert('Failed to start backup: ' + error);
+                                }
+                            });
+                        });
+
+                        function updateBackupProgress() {
+                            $.ajax({
+                                url: window.location.pathname + '?backupProgress=1',
+                                dataType: 'json',
+                                success: function(data) {
+                                    var status = data.status.toLowerCase();
+                                    var progress = data.progress;
+                                    var processed = data.processed;
+                                    var total = data.total;
+
+                                    if (status === 'running' || status === 'starting') {
+                                        $('#backupProgress .progress-bar').css('width', progress + '%')
+                                            .text(progress.toFixed(1) + '%');
+                                        $('#backupStatus').text('Status: ' + status);
+                                        $('#backupDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                        setTimeout(updateBackupProgress, 1000);
+                                    } else if (status === 'completed') {
+                                        $('#backupProgress .progress-bar').css('width', '100%')
+                                            .text('100%');
+                                        $('#backupStatus').text('Status: backup completed successfully')
+                                            .removeClass('alert-info alert-danger').addClass('alert-success');
+                                        $('#backupDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                        $('button[name="startBackup"]').prop('disabled', false);
+                                    } else if (status.startsWith('error:')) {
+                                        $('#backupStatus').text('Status: ' + status)
+                                            .removeClass('alert-info alert-success').addClass('alert-danger');
+                                        $('button[name="startBackup"]').prop('disabled', false);
+                                    } else {
+                                        $('button[name="startBackup"]').prop('disabled', false);
+                                    }
+                                },
+                                error: function() {
+                                    setTimeout(updateBackupProgress, 1000);
+                                }
+                            });
+                        }
+
+                        )" << (backupProgress.IsRunning() ? "updateBackupProgress();" : "") << R"(
+                    });
+                    </script>
+                    )";
+                }
+            });
+        }
+
+        return str.Str();
+    }
+
+    static TString RenderRestore(
+        const TRestoreProgress& restoreProgress,
+        bool restoreStarted = false,
+        const TString& errorMessage = ""
+    ) {
+        TStringStream str;
+
+        HTML(str) {
+            Navbar(str, ERequestType::Restore);
+            Header(str, "Restore", "Restore path descriptions saved locally, see <a href='https://ydb.tech/docs' target='_blank'>docs</a>");
+
+            Warning(str,
+                "Emergency restore will override existing scheme board data. "
+                "Use only when the Scheme Shard is unavailable."
+            );
+
+            if (restoreStarted) {
+                Info(str, "Restore started successfully!");
+            }
+            if (!errorMessage.empty()) {
+                Danger(str, errorMessage);
+            }
+
+            SimplePanel(str, "Restore Configuration", [&restoreProgress](IOutputStream& str) {
+                HTML(str) {
+                    FORM_CLASS("form-horizontal") {
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "restorePath") {
+                                str << "Backup File Path";
+                            }
+                            DIV_CLASS("col-sm-10") {
+                                str << "<input type='text' id='restorePath' name='restorePath' class='form-control' "
+                                    << "placeholder='/tmp/scheme_board_backup.jsonl' required>";
+                            }
+                        }
+
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "schemeShardId") {
+                                str << "Scheme Shard Tablet ID";
+                            }
+                            DIV_CLASS("col-sm-10") {
+                                str << "<input type='number' id='schemeShardId' name='schemeShardId' class='form-control' "
+                                    << "placeholder='" << TTestTxConfig::SchemeShard << "' required>";
+                                str << "<small class='form-text text-muted'>"
+                                    << "Only paths owned by this specific SchemeShard will be restored from the backup file"
+                                    << "</small>";
+                            }
+                        }
+
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "generation") {
+                                str << "Generation";
+                            }
+                            DIV_CLASS("col-sm-10") {
+                                str << "<input type='number' id='generation' name='generation' class='form-control' "
+                                    << "value='1' min='1' required>";
+                            }
+                        }
+
+                        DIV_CLASS("form-group") {
+                            DIV_CLASS("col-sm-offset-2 col-sm-10") {
+                                const char* state = restoreProgress.IsRunning() ? "disabled" : "";
+                                str << "<button type='submit' name='startRestore' class='btn btn-danger' " << state << ">"
+                                    << "Start Emergency Restore"
+                                << "</button>";
+                            }
+                        }
+                    }
+
+                    DIV_CLASS_ID("alert alert-warning", "restoreStatus") {
+                        str << "Status: " << restoreProgress.StatusToString();
+                    }
+
+                    double p = restoreProgress.GetProgress();
+                    DIV_CLASS_ID("progress", "restoreProgress") {
+                        TAG_CLASS_STYLE(TDiv, "progress-bar progress-bar-danger", TStringBuilder() << "width:" << p << "%;") {
+                            str << p << "%";
+                        }
+                    }
+
+                    TAG_ATTRS(TDiv, {{"id", "restoreDetails"}}) {
+                        str << "Processed: " << restoreProgress.ProcessedPaths
+                            << " / Total: " << restoreProgress.TotalPaths;
+                    }
+
+                    str << R"(
+                    <script>
+                    $(document).ready(function() {
+                        $('button[name="startRestore"]').click(function(e) {
+                            e.preventDefault();
+
+                            var btn = this;
+                            var form = $(btn.form);
+
+                            if (!confirm('Are you sure you want to start emergency restore? This will override existing data!')) {
+                                return;
+                            }
+
+                            $.ajax({
+                                type: "GET",
+                                url: window.location.pathname,
+                                data: form.serialize() + '&startRestore=1',
+                                success: function(response) {
+                                    $('body').html(response);
+                                    if (window.history && window.history.replaceState) {
+                                        window.history.replaceState(null, '', window.location.pathname);
+                                    }
+                                },
+                                error: function(xhr, status, error) {
+                                    $(btn).prop('disabled', false);
+                                    alert('Failed to start restore: ' + error);
+                                }
+                            });
+                        });
+
+                        function updateRestoreProgress() {
+                            $.ajax({
+                                url: window.location.pathname + '?restoreProgress=1',
+                                dataType: 'json',
+                                success: function(data) {
+                                    var status = data.status.toLowerCase();
+                                    var progress = data.progress;
+                                    var processed = data.processed;
+                                    var total = data.total;
+
+                                    if (status === 'running' || status === 'starting') {
+                                        $('#restoreProgress .progress-bar').css('width', progress + '%')
+                                            .text(progress.toFixed(1) + '%');
+                                        $('#restoreStatus').text('Status: ' + status);
+                                        $('#restoreDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                        setTimeout(updateRestoreProgress, 1000);
+                                    } else if (status === 'completed') {
+                                        $('#restoreProgress .progress-bar').css('width', '100%')
+                                            .text('100%')
+                                            .removeClass('progress-bar-danger')
+                                            .addClass('progress-bar-success');
+                                        $('#restoreStatus').text('Status: restore completed successfully')
+                                            .removeClass('alert-warning alert-danger')
+                                            .addClass('alert-success');
+                                        $('#restoreDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                        $('button[name="startRestore"]').prop('disabled', false);
+                                    } else if (status.startsWith('error:')) {
+                                        $('#restoreStatus').text('Status: ' + status)
+                                            .removeClass('alert-warning alert-success')
+                                            .addClass('alert-danger');
+                                        $('button[name="startRestore"]').prop('disabled', false);
+                                    } else {
+                                        $('button[name="startRestore"]').prop('disabled', false);
+                                    }
+                                },
+                                error: function() {
+                                    setTimeout(updateRestoreProgress, 1000);
+                                }
+                            });
+                        }
+
+                        )" << (restoreProgress.IsRunning() ? "updateRestoreProgress();" : "") << R"(
+                    });
+                    </script>
+                    )";
+                }
+            });
+        }
+
+        return str.Str();
     }
 
     template <typename TDerived, typename TEvResponse>
@@ -1138,7 +1524,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
     public:
         explicit TReplicaEnumerator(const TActorId& replyTo)
-            : TBase(MakeStateStorageProxyId(), replyTo)
+            : TBase(MakeStateStorageProxyID(), replyTo)
         {
         }
 
@@ -1294,16 +1680,136 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             return (void)Register(new TReplicaEnumerator(ev->Sender));
 
         case ERequestType::Resolve:
-            if (RunFormAction<TReplicaResolver>(MakeStateStorageProxyId(), ev->Sender, params)) {
+            if (RunFormAction<TReplicaResolver>(MakeStateStorageProxyID(), ev->Sender, params)) {
                 return;
             }
             break;
+
+        case ERequestType::Backup:
+            if (params.Has("startBackup")) {
+                if (BackupProgress.IsRunning()) {
+                    return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                        RenderBackup(BackupProgress, false, "Backup is already running")
+                    ));
+                }
+
+                const TString filePath = params.Get("backupPath");
+                if (filePath.empty()) {
+                    return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                        RenderBackup(BackupProgress, false, "Backup file path is required")
+                    ));
+                }
+
+                ui32 inFlightLimit = BackupLimits.DefaultInFlight;
+                if (params.Has("inFlightLimit")) {
+                    if (!TryFromString(params.Get("inFlightLimit"), inFlightLimit)) {
+                        return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                            RenderBackup(BackupProgress, false, "Invalid in-flight limit value")
+                        ));
+                    }
+                }
+
+                BackupProgress = TBackupProgress();
+                BackupProgress.Status = TBackupProgress::EStatus::Starting;
+
+                SBB_LOG_I("Starting backup to " << filePath
+                    << " with in-flight limit " << inFlightLimit
+                );
+                Register(CreateSchemeBoardBackuper(filePath, inFlightLimit, SelfId()));
+
+                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                    RenderBackup(BackupProgress, true)
+                ));
+            }
+
+            if (params.Has("backupProgress")) {
+                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                    TStringBuilder() << NMonitoring::HTTPOKJSON << BackupProgress.ToJson(),
+                    0, EContentType::Custom
+                ));
+            }
+
+            return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderBackup(BackupProgress)));
+
+        case ERequestType::Restore:
+            if (params.Has("startRestore")) {
+                if (RestoreProgress.IsRunning()) {
+                    return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                        RenderRestore(RestoreProgress, false, "Restore is already running")
+                    ));
+                }
+
+                const TString filePath = params.Get("restorePath");
+                if (filePath.empty()) {
+                    return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                        RenderRestore(RestoreProgress, false, "Restore file path is required")
+                    ));
+                }
+
+                ui64 schemeShardId = 0;
+                if (!TryFromString(params.Get("schemeShardId"), schemeShardId)) {
+                    return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                        RenderRestore(RestoreProgress, false, "Invalid Scheme Shard ID")
+                    ));
+                }
+
+                ui64 generation = 1;
+                if (params.Has("generation")) {
+                    TryFromString(params.Get("generation"), generation);
+                }
+
+                RestoreProgress = TRestoreProgress();
+                RestoreProgress.Status = TRestoreProgress::EStatus::Starting;
+
+                SBB_LOG_I("Starting restore from " << filePath
+                    << " for SchemeShard ID: " << schemeShardId
+                    << " of generation: " << generation
+                );
+
+                Register(CreateSchemeBoardRestorer(filePath, schemeShardId, generation, SelfId()));
+
+                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                    RenderRestore(RestoreProgress, true)
+                ));
+            }
+
+            if (params.Has("restoreProgress")) {
+                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                    TStringBuilder() << NMonitoring::HTTPOKJSON << RestoreProgress.ToJson(),
+                    0, EContentType::Custom
+                ));
+            }
+
+            return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderRestore(RestoreProgress)));
 
         case ERequestType::Unknown:
             break;
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(NMonitoring::HTTPNOTFOUND, 0, EContentType::Custom));
+    }
+
+    template <typename TProgress, typename TEventPtr>
+    void Handle(TProgress& progress, TEventPtr& ev) {
+        const auto& msg = *ev->Get();
+        SBB_LOG_D("Handle " << msg.ToString());
+        progress = TProgress(msg);
+    }
+
+    void Handle(TSchemeBoardMonEvents::TEvBackupProgress::TPtr& ev) {
+        Handle(BackupProgress, ev);
+    }
+
+    void Handle(TSchemeBoardMonEvents::TEvBackupResult::TPtr& ev) {
+        Handle(BackupProgress, ev);
+    }
+
+    void Handle(TSchemeBoardMonEvents::TEvRestoreProgress::TPtr& ev) {
+        Handle(RestoreProgress, ev);
+    }
+
+    void Handle(TSchemeBoardMonEvents::TEvRestoreResult::TPtr& ev) {
+        Handle(RestoreProgress, ev);
     }
 
 public:
@@ -1328,6 +1834,11 @@ public:
 
             hFunc(NMon::TEvHttpInfo, Handle);
 
+            hFunc(TSchemeBoardMonEvents::TEvBackupProgress, Handle);
+            hFunc(TSchemeBoardMonEvents::TEvBackupResult, Handle);
+            hFunc(TSchemeBoardMonEvents::TEvRestoreProgress, Handle);
+            hFunc(TSchemeBoardMonEvents::TEvRestoreResult, Handle);
+
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         }
     }
@@ -1335,6 +1846,8 @@ public:
 private:
     THashMap<TActorId, TActorInfo> RegisteredActors;
     THashMap<EActivityType, THashSet<TActorId>> ByActivityType;
+    TBackupProgress BackupProgress;
+    TRestoreProgress RestoreProgress;
 
 }; // TMonitoring
 

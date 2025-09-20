@@ -910,6 +910,12 @@ const TPath::TChecker& TPath::TChecker::FailOnRestrictedCreateInTempZone(bool al
     }
 
     if (allowCreateInTemporaryDir) {
+        if (std::all_of(Path.Elements.begin(), Path.Elements.end(),
+                [](const auto& element) { return !element->IsTemporary(); })) {
+            return Fail(status, TStringBuilder() << "path is not temporary"
+                << " (" << BasicPathInfo(Path.Base()) << ")"
+            );
+        }
         return *this;
     }
 
@@ -1181,6 +1187,19 @@ const TPath::TChecker& TPath::TChecker::IsSecret(EStatus status) const {
     return Fail(status, TStringBuilder() << "path is not a secret"
         << " (" << BasicPathInfo(Path.Base()) << ")"
     );
+}
+
+const TPath::TChecker& TPath::TChecker::IsStreamingQuery(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsStreamingQuery()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a streaming query"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {

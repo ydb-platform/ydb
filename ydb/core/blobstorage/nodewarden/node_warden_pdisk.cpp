@@ -16,15 +16,15 @@ namespace NKikimr::NStorage {
         {NPDisk::DEVICE_TYPE_NVME, 300000000},
     };
 
-    void TNodeWarden::InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize, ui64 unitSizeInBytes) {
+    void TNodeWarden::InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize, ui64 unitSizeInBytes, ui32 maxSlots) {
         Y_ABORT_UNLESS(driveSize);
         Y_ABORT_UNLESS(unitSizeInBytes);
 
         const double slotCount = lround(double(driveSize) / unitSizeInBytes);
         ui32 slotSizeInUnits = 1u;
 
-        constexpr long MaxSlots = 16;
-        while (lround(slotCount/slotSizeInUnits) > MaxSlots) {
+        maxSlots = maxSlots ? maxSlots : 16;
+        while (lround(slotCount/slotSizeInUnits) > maxSlots) {
             slotSizeInUnits *= 2;
         }
 
@@ -153,7 +153,8 @@ namespace NKikimr::NStorage {
                 STLOG(PRI_ERROR, BS_NODE, NW96, "Unable to determine drive size for inferring PDisk slot count",
                     (Path, path), (Details, outDetails.Str()));
             } else {
-                InferPDiskSlotCount(pdiskConfig, driveSize, unitSizeInBytes);
+                ui32 maxSlots = pdisk.GetInferPDiskSlotCountMax();
+                InferPDiskSlotCount(pdiskConfig, driveSize, unitSizeInBytes, maxSlots);
             }
         }
 
@@ -576,7 +577,7 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(PDiskKey.NodeId == SelfId().NodeId());
             Send(MakeBlobStoragePDiskID(PDiskKey.NodeId, PDiskKey.PDiskId), ConvertedEv.release(),
                 IEventHandle::FlagTrackDelivery);
-            Become(&TThis::StateFunc, TDuration::Seconds(10), new TEvents::TEvWakeup);
+            Become(&TThis::StateFunc, TDuration::Seconds(30), new TEvents::TEvWakeup);
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr /*ev*/) {

@@ -1,6 +1,6 @@
 # ALTER TOPIC
 
-You can use the `ALTER TOPIC` command to change the [topic](../../../concepts/topic) settings, as well as add, update, or delete its consumers.
+You can use the `ALTER TOPIC` command to change the [topic](../../../concepts/datamodel/topic) settings, as well as add, update, or delete its consumers.
 
 Here is the general format of the `ALTER TOPIC` command:
 
@@ -12,7 +12,7 @@ ALTER TOPIC topic_path action1, action2, ..., actionN;
 
 ## Updating a set of consumers
 
-`ADD CONSUMER`: Adds a [consumer](../../../concepts/topic#consumer) to a topic.
+`ADD CONSUMER`: Adds a [consumer](../../../concepts/datamodel/topic#consumer) to a topic.
 
 The following example will add a consumer with default settings to the topic.
 
@@ -33,7 +33,7 @@ ALTER TOPIC `my_topic` ADD CONSUMER new_consumer2 WITH (important = false);
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs`: List of [codecs](../../../concepts/topic#message-codec) supported by the consumer.
+* `supported_codecs`: List of [codecs](../../../concepts/datamodel/topic#message-codec) supported by the consumer.
 
 {% endif %}
 
@@ -138,13 +138,13 @@ ALTER TOPIC `my_topic` RESET (
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs`: List of [codecs](../../../concepts/topic#message-codec) supported by the topic. Value type: `String`.
+* `supported_codecs`: List of [codecs](../../../concepts/datamodel/topic#message-codec) supported by the topic. Value type: `String`.
 
 {% endif %}
 
 ### Change autopartitioning strategies for the topic {#autopartitioning}
 
-The following command sets the [autopartitioning](../../../concepts/topic.md#autopartitioning) strategy to `UP`:
+The following command sets the [autopartitioning](../../../concepts/datamodel/topic.md#autopartitioning) strategy to `UP`:
 
 ```yql
 ALTER TOPIC `my_topic` SET (
@@ -154,7 +154,7 @@ ALTER TOPIC `my_topic` SET (
 );
 ```
 
-The following command pauses the topic [autopartitioning](../../../concepts/topic.md#autopartitioning):
+The following command pauses the topic [autopartitioning](../../../concepts/datamodel/topic.md#autopartitioning):
 
 ```yql
 ALTER TOPIC `my_topic` SET (
@@ -162,7 +162,7 @@ ALTER TOPIC `my_topic` SET (
 );
 ```
 
-The following command unpauses the topic [autopartitioning](../../../concepts/topic.md#autopartitioning):
+The following command unpauses the topic [autopartitioning](../../../concepts/datamodel/topic.md#autopartitioning):
 
 ```yql
 ALTER TOPIC `my_topic` SET (

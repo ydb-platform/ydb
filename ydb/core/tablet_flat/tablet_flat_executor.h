@@ -522,6 +522,8 @@ namespace NFlatExecutorSetup {
         virtual void OnFollowerSchemaUpdated();
         virtual void OnFollowerDataUpdated();
 
+        bool NeedBackup() const;
+
         // create transaction?
     protected:
         ITablet(TTabletStorageInfo *info, const TActorId &tablet)

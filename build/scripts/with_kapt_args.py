@@ -38,11 +38,17 @@ def get_ap_options(ap_options):
 
     kvs = bytes()  # all key-values
     for ap_option in ap_options:
-        k, v = ap_option.split('=', 1)
-        k = bytes(k)  # UTF-8 supported
+        try:
+            k, v = ap_option.split('=', 1)
+        except ValueError:
+            import logging
+
+            logging.error("Expect key=value format at '" + ap_option + "' in KAPT_ANNOTATION_PROCESSOR_OPTIONS")
+            continue
+        k = bytes(k.encode('UTF-8'))  # UTF-8 supported
         kvs += struct.pack(">H", len(k))
         kvs += k
-        v = bytes(v)  # UTF-8 supported
+        v = bytes(v.encode('UTF-8'))  # UTF-8 supported
         kvs += struct.pack(">H", len(v))
         kvs += v
 

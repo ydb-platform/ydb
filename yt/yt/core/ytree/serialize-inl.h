@@ -477,7 +477,7 @@ void Serialize(const TEnumIndexedArray<E, T, Min, Max>& vector, NYson::IYsonCons
             continue;
         }
         const auto& value = vector[key];
-        if (!NDetail::CanOmitValue(&value, nullptr)) {
+        if (!NDetail::CanOmitValue(&value, static_cast<T*>(nullptr))) {
             consumer->OnKeyedItem(FormatEnum(key));
             Serialize(value, consumer);
         }

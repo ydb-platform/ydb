@@ -34,6 +34,10 @@ protected:
         Hive->RemoveSubActor(this);
         for (TGetNodes getNodes{Hive}; auto nodeId : std::visit(getNodes, Target)) {
             Hive->BalancerNodes.erase(nodeId);
+            auto node = Hive->FindNode(nodeId);
+            if (node) {
+                node->DrainActor = nullptr;
+            }
         }
         return IActor::PassAway();
     }
@@ -231,9 +235,16 @@ public:
             cFunc(TEvPrivate::EvCanMoveTablets, KickNextTablet);
         }
     }
+
+    float GetProgress() {
+        if (Tablets.empty()) {
+            return 0.0;
+        }
+        return (float)Movements / Tablets.size();
+    }
 };
 
-void THive::StartHiveDrain(TDrainTarget target, TDrainSettings settings) {
+THiveDrain* THive::StartHiveDrain(TDrainTarget target, TDrainSettings settings) {
     bool shouldStart = false;
     for (TGetNodes getNodes{this}; auto nodeId : std::visit(getNodes, target)) {
         if (BalancerNodes.emplace(nodeId).second) {
@@ -244,9 +255,38 @@ void THive::StartHiveDrain(TDrainTarget target, TDrainSettings settings) {
         auto* balancer = new THiveDrain(this, target, std::move(settings));
         SubActors.emplace_back(balancer);
         RegisterWithSameMailbox(balancer);
+        return balancer;
     } else {
         BLOG_W("It's not possible to start drain on " << target << ", it is already busy");
+        return nullptr;
     }
+}
+
+void THive::Handle(TEvHive::TEvRequestDrainInfo::TPtr& ev) {
+    auto nodeId = ev->Get()->Record.GetNodeId();
+    auto* node = FindNode(nodeId);
+    auto tenantHive = GetPipeToTenantHive(node);
+    if (tenantHive) {
+        auto sender = ev->Sender;
+        NTabletPipe::SendData(sender, *tenantHive, std::move(ev)->Get());
+        return;
+    }
+    auto response = std::make_unique<TEvHive::TEvResponseDrainInfo>();
+    if (node) {
+        response->Record.SetNodeId(nodeId);
+        response->Record.SetDrainSeqNo(node->DrainSeqNo);
+        if (node->Drain) {
+            response->Record.MutableDrainInProgress();
+            if (node->DrainActor) {
+                auto progress = node->DrainActor->GetProgress();
+                response->Record.MutableDrainInProgress()->SetProgress(progress);
+            }
+        } else {
+            response->Record.MutableNotRunning();
+        }
+    }
+
+    Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
 } // NHive

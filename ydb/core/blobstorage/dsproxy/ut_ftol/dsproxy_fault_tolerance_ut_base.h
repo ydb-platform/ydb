@@ -106,7 +106,7 @@ public:
 
     NKikimrProto::EReplyStatus PutToVDisk(ui32 vdiskOrderNum, const TLogoBlobID& id, const TString& part) {
         Send(Info->GetActorId(vdiskOrderNum), new TEvBlobStorage::TEvVPut(id, TRope(part), Info->GetVDiskId(vdiskOrderNum),
-            false, nullptr, TInstant::Max(), NKikimrBlobStorage::TabletLog));
+            false, nullptr, TInstant::Max(), NKikimrBlobStorage::TabletLog, false));
         auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvVPutResult>(&TFaultToleranceTestBase::ProcessUnexpectedEvent);
         return ev->Get()->Record.GetStatus();
     }

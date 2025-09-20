@@ -530,7 +530,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideAnyCerts) {
         TDriverConfig config;
         config.SetEndpoint(location);
 
-        const TString expectedError = "failed to connect to all addresses";
+        const TString expectedError = "connections to all backends failing";
         CheckAccessDenied(RegisterNode(config), expectedError);
         CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
         CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
@@ -549,7 +549,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideAnyCerts) {
         TDriverConfig config;
         config.SetEndpoint(location);
 
-        const TString expectedError = "failed to connect to all addresses";
+        const TString expectedError = "connections to all backends failing";
         CheckAccessDenied(RegisterNode(config), expectedError);
         CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
         CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
@@ -575,7 +575,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
             .UseClientCertificate(serverCert.Certificate.c_str(),serverCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "failed to connect to all addresses";
+        const TString expectedError = "connections to all backends failing";
         CheckAccessDenied(RegisterNode(config), expectedError);
         CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
         CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
@@ -596,7 +596,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
             .UseClientCertificate(serverCert.Certificate.c_str(),serverCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "failed to connect to all addresses";
+        const TString expectedError = "connections to all backends failing";
         CheckAccessDenied(RegisterNode(config), expectedError);
         CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
         CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
@@ -729,7 +729,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesExpiredCert) {
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "failed to connect to all addresses";
+        const TString expectedError = "connections to all backends failing";
         CheckAccessDenied(RegisterNode(config), expectedError);
         CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
         CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
@@ -753,7 +753,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesExpiredCert) {
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "failed to connect to all addresses";
+        const TString expectedError = "connections to all backends failing";
         CheckAccessDenied(RegisterNode(config), expectedError);
         CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
         CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);

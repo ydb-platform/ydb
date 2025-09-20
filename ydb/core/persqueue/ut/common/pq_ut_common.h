@@ -2,7 +2,7 @@
 
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/user_info.h>
+#include <ydb/core/persqueue/pqtablet/partition/user_info.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -262,6 +262,8 @@ struct TTabletPreparationParameters {
     TString account{"federationAccount"};
     ::NKikimrPQ::TPQTabletConfig_EMeteringMode meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY;
     bool enableCompactificationByKey{false};
+    std::optional<uint32_t> metricsLevel;
+    std::optional<TString> monitoringProjectId;
 };
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
@@ -348,6 +350,12 @@ void PQGetPartInfo(
     ui64 startOffset,
     ui64 endOffset,
     TTestContext& tc);
+
+void PQGetPartInfo(
+    std::function<bool(ui64)> firstOffsetMatcher,
+    ui64 endOffset,
+    TTestContext& tc
+);
 
 void ReserveBytes(
     TTestContext& tc,
@@ -495,10 +503,10 @@ std::pair<TString, TActorId> CmdSetOwner(
 
 TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc);
 
-void CmdGetOffset(
+i64 CmdGetOffset(
     const ui32 partition,
     const TString& user,
-    i64 expectedOffset,
+    const TMaybe<i64>& expectedOffset,
     TTestContext& tc,
     i64 ctime = -1,
     ui64 writeTime = 0);
@@ -587,6 +595,23 @@ void CmdWrite(
     bool treatWrongCookieAsError = false,
     bool treatBadOffsetAsError = true,
     bool disableDeduplication = false);
+
+struct TCmdWriteOptions {
+    ui32 Partition;
+    TString SourceId;
+    TVector<std::pair<ui64, TString>> Data;
+    TTestContext& TestContext;
+    bool Error = false;
+    const THashSet<ui32>& AlreadyWrittenSeqNo = {};
+    bool IsFirst = false;
+    const TString& OwnerCookie = "";
+    i32 MessageNo = -1;
+    i64 Offset = -1;
+    bool TreatWrongCookieAsError = false;
+    bool TreatBadOffsetAsError = true;
+    bool DisableDeduplication = false;
+};
+void CmdWrite(const TCmdWriteOptions&);
 
 THolder<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(TTestActorRuntime& runtime, ui64 balancerId);
 

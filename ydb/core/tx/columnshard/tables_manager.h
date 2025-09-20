@@ -167,7 +167,8 @@ private:
     THashMap<TInternalPathId, std::map<NOlap::TSnapshot, std::optional<NOlap::TTiering>>> Ttl;
 
     void AddVersion(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, std::optional<NOlap::TTiering> ttl) {
-        AFL_VERIFY(Ttl[pathId].emplace(snapshot, ttl).second)("snapshot", snapshot);
+        auto [it, inserted] = Ttl[pathId].emplace(snapshot, ttl);
+        AFL_VERIFY(inserted || it->second == ttl)("snapshot", snapshot);
     }
 
 public:

@@ -87,6 +87,7 @@ void TGetVersionCommand::DoExecute(ICommandContextPtr context)
 
 // These features are guaranteed to be deployed before or with this code.
 constexpr auto StaticFeatures = std::to_array<std::pair<TStringBuf, bool>>({
+    {"structured_web_json", true},
     {"user_tokens_metadata", true},
 });
 
@@ -179,7 +180,7 @@ void TCheckPermissionCommand::DoExecute(ICommandContextPtr context)
                                 // EInapplicableExpressionMode::Ignore is not a good choice in the common case
                                 // from security perspective, but it may be necessary to be able to have
                                 // tables with completely different schemas in one directory.
-                                .DoIf(rlAce.InapplicableExpressionMode != EInapplicableExpressionMode::Deny, [&] (auto fluent) {
+                                .DoIf(rlAce.InapplicableExpressionMode != EInapplicableExpressionMode::Fail, [&] (auto fluent) {
                                     fluent
                                         .Item(TSerializableAccessControlEntry::InapplicableExpressionModeKey)
                                         .Value(rlAce.InapplicableExpressionMode);

@@ -177,8 +177,8 @@ private:
             }
         }
 
-        TasksGraph.BuildAllTasks(true, EnableReadsMerge, LlvmSettings,
-            Request.Transactions, ResourcesSnapshot, CollectProfileStats(Request.StatsMode), Stats.get(), ShardsOnNode.size(), nullptr);
+        TasksGraph.BuildAllTasks(EnableReadsMerge, LlvmSettings, Request.Transactions, ResourcesSnapshot,
+            CollectProfileStats(Request.StatsMode), Stats.get(), ShardsOnNode.size(), nullptr);
         OnEmptyResult();
 
         TIssue validateIssue;

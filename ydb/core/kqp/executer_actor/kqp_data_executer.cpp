@@ -1965,7 +1965,7 @@ private:
             }
         }
 
-        size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks(false, TasksGraph.GetMeta().StreamResult || EnableReadsMerge, {},
+        size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks(TasksGraph.GetMeta().StreamResult || EnableReadsMerge, {},
             Request.Transactions, ResourcesSnapshot, CollectProfileStats(Request.StatsMode), Stats.get(),
             std::max<ui32>(ShardsOnNode.size(), ResourcesSnapshot.size()), &ShardsWithEffects);
         OnEmptyResult();

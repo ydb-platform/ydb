@@ -24,7 +24,6 @@ public:
     virtual void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) = 0;
 };
 
-IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config);
-IAutopartitioningManager* CreateNoneAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config);
+IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, bool supportive);
 
 }

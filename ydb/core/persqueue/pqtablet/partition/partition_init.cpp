@@ -895,7 +895,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 return;
             case NKikimrProto::ERROR:
                 PQ_LOG_ERROR("tablet " << Partition()->TabletId << " HandleOnInit ReadResult "
-                        << i << " status NKikimrProto::ERROR result message: \"" << read.GetMessage()
+                        << i << " sta // TODO enabled or disabled autopartitioningtus NKikimrProto::ERROR result message: \"" << read.GetMessage()
                         << " \" errorReason: \"" << response.GetErrorReason() << "\""
                 );
                 PoisonPill(ctx);
@@ -954,10 +954,7 @@ TInitFieldsStep::TInitFieldsStep(TInitializer* initializer)
 void TInitFieldsStep::Execute(const TActorContext &ctx) {
     auto& config = Partition()->Config;
 
-    IAutopartitioningManager* autopartitioningManager = SplitMergeEnabled(config) && !Partition()->IsSupportive() && !MirroringEnabled(config)
-        ? CreateAutopartitioningManager(config)
-        : CreateNoneAutopartitioningManager(config);
-    Partition()->AutopartitioningManager.reset(autopartitioningManager);
+    Partition()->AutopartitioningManager.reset(CreateAutopartitioningManager(config, Partition()->IsSupportive()));
 
     return Done(ctx);
 }

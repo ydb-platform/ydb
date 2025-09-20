@@ -1,4 +1,4 @@
-#include "autopartitioning_maanager.h"
+#include "autopartitioning_manager.h"
 #include "partition_util.h"
 #include "partition.h"
 
@@ -300,7 +300,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             bool already = false;
 
-            SourceIdCounter.Use(s, now);
+            // SourceIdCounter.Use(s, now); TODO
             auto it = SourceIdStorage.GetInMemorySourceIds().find(s);
 
             ui64 maxSeqNo = 0;
@@ -524,7 +524,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
             ui64 seqNo = std::max(info.SeqNo, it->second.SeqNo);
             SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, now, info.KafkaProducerEpoch));
         }
-        SourceIdCounter.Use(sourceId, now);
+        // SourceIdCounter.Use(sourceId, now); TODO
     }
     TxSourceIdForPostPersist.clear();
     TxInflightMaxSeqNoPerSourceId.clear();

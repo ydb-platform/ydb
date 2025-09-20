@@ -119,14 +119,14 @@ public:
         const auto sourceIdCount = SourceIdCounter.Count(ctx.Now() - sourceIdWindow);
         const auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
 
-        LOG_D("TPartition::CheckScaleStatus"
-                << " splitMergeAvgWriteBytes# " << SumWrittenBytes->GetValue()
-                << " writeSpeedUsagePercent# " << writeSpeedUsagePercent
-                << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
-                << " totalPartitionWriteSpeed# " << Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond()
-                << " sourceIdCount=" << sourceIdCount
-                << " canSplit=" << canSplit
-        );
+        // LOG_D("TPartition::CheckScaleStatus"
+        //         << " splitMergeAvgWriteBytes# " << SumWrittenBytes->GetValue()
+        //         << " writeSpeedUsagePercent# " << writeSpeedUsagePercent
+        //         << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
+        //         << " totalPartitionWriteSpeed# " << Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond()
+        //         << " sourceIdCount=" << sourceIdCount
+        //         << " canSplit=" << canSplit
+        // );
 
         auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
             || Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
@@ -134,11 +134,11 @@ public:
         auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
 
         if (splitEnabled && canSplit && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
-            LOG_D("TPartition::CheckScaleStatus NEED_SPLIT.");
+            // LOG_D("TPartition::CheckScaleStatus NEED_SPLIT.");
             return NKikimrPQ::EScaleStatus::NEED_SPLIT;
         } else if (mergeEnabled && writeSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
-            LOG_D("TPartition::CheckScaleStatus NEED_MERGE."
-                    << " writeSpeedUsagePercent: " << writeSpeedUsagePercent);
+            // LOG_D("TPartition::CheckScaleStatus NEED_MERGE."
+            //        << " writeSpeedUsagePercent: " << writeSpeedUsagePercent);
             return NKikimrPQ::EScaleStatus::NEED_MERGE;
         }
         return NKikimrPQ::EScaleStatus::NORMAL;
@@ -164,11 +164,10 @@ private:
 
 };
 
-IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config) {
-    return new TAutopartitioningManager(config);
-}
-IAutopartitioningManager* CreateNoneAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config) {
-    return new TNoneAutopartitioningManager(config);
+IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, bool supportive) {
+    return !supportive && SplitMergeEnabled(config) && !MirroringEnabled(config)
+        ? static_cast<IAutopartitioningManager*>(new TAutopartitioningManager(config))
+        : static_cast<IAutopartitioningManager*>(new TNoneAutopartitioningManager(config));
 }
 
 }

@@ -3132,6 +3132,8 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
                                           NPersQueue::TTopicConverterPtr topicConverter,
                                           const TActorContext& ctx)
 {
+    bool autopartitioningChanged = SplitMergeEnabled(Config) != SplitMergeEnabled(config);
+
     Config = std::move(config);
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
@@ -3149,7 +3151,11 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 
     PQ_ENSURE(Config.GetPartitionConfig().GetTotalPartitions() > 0);
 
-    AutopartitioningManager->UpdateConfig(Config); // TODO enabled or disabled autopartitioning
+    if (autopartitioningChanged) {
+        AutopartitioningManager.reset(CreateAutopartitioningManager(Config, IsSupportive()));
+    } else {
+        AutopartitioningManager->UpdateConfig(Config);
+    }
 
     Send(ReadQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));

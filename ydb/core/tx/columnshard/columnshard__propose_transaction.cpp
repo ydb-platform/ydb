@@ -23,7 +23,7 @@ public:
         AFL_VERIFY(!!Ev);
     }
 
-    virtual bool Execute(TTransactionContext& txc, const TActorContext& /* ctx */) override {
+    virtual bool Execute(TTransactionContext& txc, const TActorContext&) override {
         txc.DB.NoMoreReadsForTx();
         NIceDb::TNiceDb db(txc.DB);
 

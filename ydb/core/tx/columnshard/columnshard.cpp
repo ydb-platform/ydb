@@ -5,6 +5,7 @@
 #include "counters/aggregation/table_stats.h"
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor2.h"
+#include "statistics/reporter.h"
 #include "hooks/abstract/abstract.h"
 #include "resource_subscriber/actor.h"
 #include "transactions/locks/read_finished.h"
@@ -88,6 +89,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());
+    ctx.Send(SelfId(), new TEvPrivate::TEvReportStatistics());
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
     AFL_VERIFY(!!StartInstant);
     Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
@@ -128,6 +130,9 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
+
+    auto statistics = AppDataVerified().ColumnShardConfig.GetStatistics();
+    ColumnShardStatisticsReporter = ctx.Register(new NOlap::TColumnShardStatisticsReporter(TabletID(), statistics.GetReportBaseStatisticsPeriodMs(), Counters));
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(SelfId());
     ColumnDataManager = std::make_shared<NOlap::NColumnFetching::TColumnDataManager>(SelfId());
     NormalizerController.SetDataAccessorsManager(DataAccessorsManager);
@@ -241,6 +246,47 @@ void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const
     ctx.Schedule(NYDBTest::TControllers::GetColumnShardController()->GetStalenessLivetimePing(ping), new TEvPrivate::TEvPingSnapshotsUsage());
 }
 
+void TColumnShard::Handle(TEvPrivate::TEvReportStatistics::TPtr& /*ev*/) {
+    ActorContext().Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvReportStatistics);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "TEvReportStatistics");
+    LOG_S_DEBUG("Send periodic stats.");
+
+    if (!CurrentSchemeShardId || !TablesManager.GetTabletPathIdOptional()) {
+        LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
+        return;
+    }
+    const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
+
+    const TActorContext& ctx = ActorContext();
+    const TInstant now = TAppData::TimeProvider->Now();
+
+    if (LastStatsReport + StatsReportInterval > now) {
+        LOG_S_TRACE("Skip send periodic stats: report interval = " << StatsReportInterval);
+        return;
+    }
+    LastStatsReport = now;
+
+    if (!StatsReportPipe) {
+        LOG_S_DEBUG("Create periodic stats pipe to " << CurrentSchemeShardId << " at tablet " << TabletID());
+        NTabletPipe::TClientConfig clientConfig;
+        StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
+    }
+
+    LOG_S_ERROR("iurii Shard id " << CurrentSchemeShardId << " " << tabletSchemeShardLocalPathId.GetRawValue());
+
+    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
+
+    FillOlapStats(ctx, ev);
+    FillColumnTableStats(ctx, ev);
+
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ev", ev->ToString());
+    ActorContext().Send(ColumnShardStatisticsReporter, ev.release());
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ev", "sent");
+
+
+    // NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
+}
+
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->Manual) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup::MANUAL")("tablet_id", TabletID());
@@ -249,7 +295,6 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup")("tablet_id", TabletID());
         SendWaitPlanStep(GetOutdatedStep());
 
-        SendPeriodicStats();
         EnqueueBackgroundActivities();
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
@@ -422,7 +467,23 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
     }
 }
 
+void TColumnShard::FillExecutorStats(const TActorContext&, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+    ev->Record.SetGeneration(Executor()->Generation());
+    ev->Record.SetStartTime(StartTime().MilliSeconds());
+
+    auto& tableStats = *ev->Record.MutableTableStats();
+    auto& tableMetrics = *ev->Record.MutableTabletMetrics();
+
+    if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
+        resourceMetrics->Fill(tableMetrics);
+    }
+
+    tableStats.SetInFlightTxCount(Executor()->GetStats().TxInFly);
+    tableStats.SetHasLoanedParts(Executor()->HasLoanedParts());
+}
+
 void TColumnShard::SendPeriodicStats() {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("old", "SendPeriodicStats");
     LOG_S_DEBUG("Send periodic stats.");
 
     if (!CurrentSchemeShardId || !TablesManager.GetTabletPathIdOptional()) {
@@ -446,10 +507,13 @@ void TColumnShard::SendPeriodicStats() {
         StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
     }
 
+    LOG_S_ERROR("iurii Shard id " << CurrentSchemeShardId << " " << tabletSchemeShardLocalPathId.GetRawValue());
+
     auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
 
     FillOlapStats(ctx, ev);
     FillColumnTableStats(ctx, ev);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ev", ev->ToString());
 
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }

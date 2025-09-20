@@ -29,8 +29,7 @@ bool TUploader::Push(const TString& path, TValue&& value) {
         return false;
     }
 
-    auto task = [this, taskValue = std::move(value), &path, retrySleep = BulkUpsertRetryDuration] () mutable {
-        ui32 retry = 0;
+    auto task = [this, taskValue = std::move(value), &path] () mutable {
         while (true) {
             while (!RequestLimiter.IsAvail()) {
                 Sleep(Min(TDuration::MicroSeconds(RequestLimiter.GetWaitTime()), Opts.ReactionTime));
@@ -55,7 +54,8 @@ bool TUploader::Push(const TString& path, TValue&& value) {
                 return Client.BulkUpsert(path, TValue(taskValue), settings).GetValueSync();
             };
             auto settings = NYdb::NTable::TRetryOperationSettings()
-                .MaxRetries(Opts.RetryOperaionMaxRetries);
+                .MaxRetries(Opts.RetryOperationMaxRetries)
+                .Idempotent(true);
             auto status = Client.RetryOperationSync(upsert, settings);
 
             if (status.IsSuccess()) {
@@ -63,19 +63,6 @@ bool TUploader::Push(const TString& path, TValue&& value) {
                     LOG_W("Bulk upsert was completed with issues: " << status.GetIssues().ToOneLineString());
                 }
                 return;
-            // Since upsert of data is an idempotent operation it is possible to retry transport errors
-            } else if (status.IsTransportError() && retry < Opts.TransportErrorsMaxRetries) {
-                LOG_D("Retry bulk upsert: " << status.GetIssues().ToOneLineString());
-                ++retry;
-                TInstant deadline = retrySleep.ToDeadLine();
-                while (TInstant::Now() < deadline) {
-                    if (IsStopped()) {
-                        return;
-                    }
-                    Sleep(TDuration::Seconds(1));
-                }
-                retrySleep *= 2;
-                continue;
             } else {
                 LOG_E("Bulk upsert failed: " << status.GetIssues().ToOneLineString());
                 PleaseStop();
@@ -117,7 +104,7 @@ bool TUploader::Push(TParams params) {
         RequestLimiter.Use(1);
 
         auto settings = NYdb::NTable::TRetryOperationSettings()
-            .MaxRetries(Opts.RetryOperaionMaxRetries)
+            .MaxRetries(Opts.RetryOperationMaxRetries)
             .FastBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(10)).Ceiling(10))
             .SlowBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::Seconds(2)).Ceiling(6))
             .Idempotent(true);

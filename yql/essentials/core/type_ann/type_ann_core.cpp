@@ -10933,6 +10933,34 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus BlockWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto& lambda = input->ChildRef(0);
+        auto status = ConvertToLambda(lambda, ctx.Expr, 1);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(lambda, { ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Uint32) }, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!lambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (!EnsureComputable(*lambda->Child(1), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(lambda->Child(1)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     TMaybe<EDataSlot> ExtractDataType(const TExprNode& node, TExprContext& ctx) {
         if (node.IsAtom()) {
             auto dataType = node.Content();
@@ -13191,7 +13219,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["InnerDependsOn"] = &InnerDependsOnWrapper;
         Functions["Seq"] = &SeqWrapper;
         Functions["Parameter"] = &ParameterWrapper;
-        ExtFunctions["WithSideEffectsMode"] = WithSideEffectsModeWrapper;
+        ExtFunctions["WithSideEffectsMode"] = &WithSideEffectsModeWrapper;
+        ExtFunctions["Block"] = &BlockWrapper;
         ExtFunctions["WeakField"] = &WeakFieldWrapper;
         ExtFunctions["TryWeakMemberFromDict"] = &TryWeakMemberFromDictWrapper;
         Functions["ByteString"] = &ByteStringWrapper;

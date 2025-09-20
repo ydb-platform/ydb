@@ -87,7 +87,7 @@ For more information about YQL support in {{ ydb-short-name }}, see the [YQL doc
 
 A database [table](../datamodel/table.md) in {{ ydb-short-name }} can be sharded by the range of the primary key values. Different table shards can be served by different distributed database servers (including ones in different locations). They can also move independently between servers to enable rebalancing or ensure shard operability if servers or network equipment goes offline.
 
-A [topic](../topic.md) in {{ ydb-short-name }} can be sharded into several partitions. Different topic partitions, similar to table shards, can be served by different distributed database servers.
+A [topic](../datamodel/topic.md) in {{ ydb-short-name }} can be sharded into several partitions. Different topic partitions, similar to table shards, can be served by different distributed database servers.
 
 {{ ydb-short-name }} supports distributed transactions. Distributed transactions are transactions that affect more than one shard of one or more tables and topics. They require more resources and take more time. While point reads and writes may take up to 10 ms in the 99th percentile, distributed transactions typically take from 20 to 500 ms.
 
@@ -101,7 +101,7 @@ A [topic](../topic.md) in {{ ydb-short-name }} can be sharded into several parti
 
 {{ ydb-short-name }} supports transactions involving [row-oriented tables](../glossary.md#row-oriented-table) and/or [topics](../glossary.md#topic). This makes it possible to transactionally transfer data from tables to topics and vice versa, as well as between topics. This ensures that data is neither lost nor duplicated in case of a network outage or other issues. This enables the implementation of the transactional outbox pattern within {{ ydb-short-name }}.
 
-For more information about transactions with tables and topics in {{ ydb-short-name }}, see [{#T}](../topic.md#topic-transactions) and [{#T}](../../reference/ydb-sdk/topic.md).
+For more information about transactions with tables and topics in {{ ydb-short-name }}, see [{#T}](../datamodel/topic.md#topic-transactions) and [{#T}](../../reference/ydb-sdk/topic.md).
 
 ## Transactions with Column and Row Tables {#mixed-transactions}
 

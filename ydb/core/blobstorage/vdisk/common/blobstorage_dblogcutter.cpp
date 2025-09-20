@@ -120,11 +120,12 @@ namespace NKikimr {
             if (WriteInProgress)
                 return;
 
-            // change in next version
-            const ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep,
+            ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep,
                 HugeKeeperLsnToKeep, ScrubLsnToKeep);
-            //const ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep,
-            //    HugeKeeperLsnToKeep, ScrubLsnToKeep, MetadataLsnToKeep);
+
+            if (AppData(ctx)->FeatureFlags.GetEnableTinyDisks()) {
+                curLsn = Min(curLsn, MetadataLsnToKeep);
+            }
 
             // only issue command if there is a progress in FreeUpToLsn queue
             bool progress = false;

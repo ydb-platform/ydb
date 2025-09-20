@@ -51,7 +51,7 @@ concept CHasWriteSchema = requires (
 ////////////////////////////////////////////////////////////////////////////////
 
 #define DEFINE_SCHEMA_FOR_SIMPLE_TYPE(type, name) \
-inline void WriteSchema(type, NYson::IYsonConsumer* consumer) \
+inline void WriteSchema(type, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& /*options*/) \
 { \
     BuildYsonFluently(consumer) \
         .Value(#name); \
@@ -86,7 +86,7 @@ DEFINE_SCHEMA_FOR_SIMPLE_TYPE(TGuid, guid)
 #undef DEFINE_SCHEMA_FOR_SIMPLE_TYPE
 
 template <CEnum T>
-void WriteSchema(const T&, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T&, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
     BuildYsonFluently(consumer)
         .BeginMap()
@@ -97,80 +97,105 @@ void WriteSchema(const T&, NYson::IYsonConsumer* consumer)
                 TEnumTraits<T>::GetDomainNames(), [] (auto fluent, TStringBuf name) {
                     fluent.Item().Value(EncodeEnumValue(name));
                 })
+            .DoIf(options.AddCppTypeNames, [] (auto fluent) {
+                fluent.Item("cpp_type_name").Value(TypeName<T>());
+            })
         .EndMap();
 }
 
 template <CHasWriteSchema T>
-void WriteSchemaForNull(NYson::IYsonConsumer* consumer)
+void WriteSchemaForNull(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
     if constexpr (std::is_same_v<T, TYsonStruct>) {
        // It is not allowed to instantiate object of type `TYsonStruct`.
        BuildYsonFluently(consumer)
             .BeginMap()
                 .Item("type_name").Value("struct")
+                .DoIf(options.AddCppTypeNames, [] (auto fluent) {
+                    fluent.Item("cpp_type_name").Value(TypeName<T>());
+                })
                 .Item("members").BeginList().EndList()
             .EndMap();
     } else {
-         New<T>()->WriteSchema(consumer);
+        New<T>()->WriteSchema(consumer, options);
     }
 }
 
-template <CHasWriteSchema T>
-void WriteSchema(const NYT::TIntrusivePtr<T>& value, NYson::IYsonConsumer* consumer)
+template <class T>
+void WriteSchema(const NYT::TIntrusivePtr<T>& value, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("type_name").Value("optional")
+            .DoIf(options.AddCppTypeNames, [] (auto fluent) {
+                fluent.Item("cpp_type_name").Value(TypeName<NYT::TIntrusivePtr<T>>());
+            })
             .Item("item").Do([&] (auto fluent) {
-                if (value) {
-                    value->WriteSchema(fluent.GetConsumer());
+                if constexpr (CHasWriteSchema<T>) {
+                    if (value) {
+                        value->WriteSchema(fluent.GetConsumer(), options);
+                    } else {
+                        WriteSchemaForNull<T>(fluent.GetConsumer(), options);
+                    }
                 } else {
-                    WriteSchemaForNull<T>(fluent.GetConsumer());
+                    if (value) {
+                        auto node = ConvertToNode(value);
+                        fluent.Value(FormatEnum(node->GetType()));
+                    } else {
+                        fluent.Value(FormatEnum(ENodeType::Entity));
+                    }
                 }
             })
         .EndMap();
 }
 
 template <CHasWriteSchema T>
-void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T& value, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
-    return value.WriteSchema(consumer);
+    return value.WriteSchema(consumer, options);
 }
 
 template <CProtobufMessageAsYson T>
-void WriteSchema(const T&, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T&, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
-    return NYson::WriteSchema(NYson::ReflectProtobufMessageType<T>(), consumer);
+    return NYson::WriteSchema(NYson::ReflectProtobufMessageType<T>(), consumer, options);
 }
 
 template <CProtobufMessageAsString T>
-void WriteSchema(const T&, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T&, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
-    return WriteSchema(TStringBuf(), consumer);
+    return WriteSchema(TStringBuf(), consumer, options);
 }
 
 template <CArray T>
-void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T& value, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("type_name").Value("list")
+            .DoIf(options.AddCppTypeNames, [] (auto fluent) {
+                fluent.Item("cpp_type_name").Value(TypeName<T>());
+            })
             .Item("item").Do([&] (auto fluent) {
                 WriteSchema(
                     std::begin(value) != std::end(value)
                         ? *std::begin(value)
                         : std::decay_t<decltype(*std::begin(value))>{},
-                    fluent.GetConsumer());
+                    fluent.GetConsumer(),
+                    options);
             })
         .EndMap();
 }
 
 template <CTuple T>
-void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T& value, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("type_name").Value("tuple")
+            .DoIf(options.AddCppTypeNames, [] (auto fluent) {
+                fluent.Item("cpp_type_name").Value(TypeName<T>());
+            })
             .Item("elements")
                 .DoList([&] (auto fluent) {
                     std::apply(
@@ -178,7 +203,7 @@ void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
                             (fluent.Item()
                                 .BeginMap()
                                     .Item("type").Do([&] (auto fluent) {
-                                        WriteSchema(args, fluent.GetConsumer());
+                                        WriteSchema(args, fluent.GetConsumer(), options);
                                     })
                                 .EndMap(), ...);
                         },
@@ -188,34 +213,40 @@ void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
 }
 
 template <CAssociativeArray T>
-void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T& value, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("type_name").Value("dict")
+            .DoIf(options.AddCppTypeNames, [] (auto fluent) {
+                fluent.Item("cpp_type_name").Value(TypeName<T>());
+            })
             .Item("key").Do([&] (auto fluent) {
-                WriteSchema(value.empty() ? typename T::key_type{} : value.begin()->first, fluent.GetConsumer());
+                WriteSchema(value.empty() ? typename T::key_type{} : value.begin()->first, fluent.GetConsumer(), options);
             })
             .Item("value").Do([&] (auto fluent) {
-                WriteSchema(value.empty() ? typename T::mapped_type{} : value.begin()->second, fluent.GetConsumer());
+                WriteSchema(value.empty() ? typename T::mapped_type{} : value.begin()->second, fluent.GetConsumer(), options);
             })
         .EndMap();
 }
 
 template <CNullable T>
-void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T& value, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("type_name").Value("optional")
+            .DoIf(options.AddCppTypeNames, [] (auto fluent) {
+                fluent.Item("cpp_type_name").Value(TypeName<T>());
+            })
             .Item("item").Do([&] (auto fluent) {
-                WriteSchema(value ? *value : std::decay_t<decltype(*value)>{}, fluent.GetConsumer());
+                WriteSchema(value ? *value : std::decay_t<decltype(*value)>{}, fluent.GetConsumer(), options);
             })
         .EndMap();
 }
 
 template <class T>
-void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T& value, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& /*options*/)
 {
     auto node = ConvertToNode(value);
     BuildYsonFluently(consumer).Value(FormatEnum(node->GetType()));

@@ -816,6 +816,7 @@ message TStatusResponse {
 
         optional EScaleStatus ScaleStatus = 35;
         optional TPartitionScaleParticipants ScaleParticipatingPartitions = 36;
+        optional string SplitBoundary = 37;
     }
 
     message TConsumerResult {

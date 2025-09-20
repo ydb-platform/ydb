@@ -611,6 +611,7 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
     }
 
     ScaleStatus = scaleStatus;
+    SplitBoundary.Clear();
     LastScaleRequestTime = now;
 
     auto ev = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>(Partition.OriginalPartitionId, ScaleStatus);
@@ -618,6 +619,7 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
         auto splitBoundary = AutopartitioningManager->SplitBoundary();
         if (splitBoundary) {
             ev->Record.SetSplitBoundary(*splitBoundary);
+            SplitBoundary = *splitBoundary;
         }
     }
     Send(TabletActorId, std::move(ev));

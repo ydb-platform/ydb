@@ -477,6 +477,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
                 partitionId,
                 partRes.GetScaleStatus(),
                 partRes.HasScaleParticipatingPartitions() ? MakeMaybe(partRes.GetScaleParticipatingPartitions()) : Nothing(),
+                partRes.HasSplitBoundary() ? MakeMaybe(partRes.GetSplitBoundary()) : Nothing(),
                 ctx
             );
         }
@@ -997,6 +998,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
             record.GetPartitionId(),
             record.GetScaleStatus(),
             record.HasParticipatingPartitions() ? MakeMaybe(record.GetParticipatingPartitions()) : Nothing(),
+            record.HasSplitBoundary() ? MakeMaybe(record.GetSplitBoundary()) : Nothing(),
             ctx
         );
     } else {

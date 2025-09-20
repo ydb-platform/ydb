@@ -947,6 +947,7 @@ private:
     std::unique_ptr<IAutopartitioningManager> AutopartitioningManager;
     TInstant LastScaleRequestTime = TInstant::Zero();
     TMaybe<NKikimrPQ::TPartitionScaleParticipants> PartitionScaleParticipants;
+    TMaybe<TString> SplitBoundary;
     NKikimrPQ::EScaleStatus ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
 
     ui64 ReservedSize;

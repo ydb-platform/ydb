@@ -1018,6 +1018,9 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         if (PartitionScaleParticipants.Defined()) {
             result.MutableScaleParticipatingPartitions()->CopyFrom(*PartitionScaleParticipants);
         }
+        if (SplitBoundary.Defined()) {
+            result.SetSplitBoundary(*SplitBoundary);
+        }
         result.SetScaleStatus(ScaleStatus);
     } else {
         result.SetScaleStatus(NKikimrPQ::EScaleStatus::NORMAL);

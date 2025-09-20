@@ -18,10 +18,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockHugeBlobOneCorruptedMainOneCorruptedHandoff
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockHugeBlobTwoCorrruptedMain
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockHugeBlobTwoCorruptedHandoff
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockSmallBlobTwoCorrruptedMain
 ydb/core/blobstorage/ut_blobstorage/ut_scrub unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_statestorage TStateStorageRingGroupState.TestProxyConfigMismatch
 ydb/core/blobstorage/ut_vdisk TBsLocalRecovery.WriteRestartReadHugeDecreased

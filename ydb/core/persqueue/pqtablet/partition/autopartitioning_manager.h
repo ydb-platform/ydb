@@ -18,7 +18,7 @@ public:
 
     virtual void OnWrite(const TString& sourceId, ui64 size) = 0;
 
-    virtual NKikimrPQ::EScaleStatus GetScaleStatus(const NActors::TActorContext& ctx) = 0;
+    virtual NKikimrPQ::EScaleStatus GetScaleStatus() = 0;
     virtual std::optional<TString> SplitBoundary() = 0;
 
     virtual void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) = 0;

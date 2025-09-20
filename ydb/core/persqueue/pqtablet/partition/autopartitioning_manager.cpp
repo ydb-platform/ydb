@@ -19,8 +19,7 @@ public:
         return std::nullopt;
     }
 
-    NKikimrPQ::EScaleStatus GetScaleStatus(const NActors::TActorContext& ctx) override {
-        Y_UNUSED(ctx);
+    NKikimrPQ::EScaleStatus GetScaleStatus() override {
         return NKikimrPQ::EScaleStatus::NORMAL;
     }
 
@@ -119,10 +118,10 @@ public:
         return MiddleOf(*lastLeft, *lastRight);
     }
 
-    NKikimrPQ::EScaleStatus GetScaleStatus(const NActors::TActorContext& ctx) override {
+    NKikimrPQ::EScaleStatus GetScaleStatus() override {
         const auto writeSpeedUsagePercent = SumWrittenBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
         const auto sourceIdWindow = TDuration::Seconds(std::min<ui32>(5, Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
-        const auto sourceIdCount = SourceIdCounter.Count(ctx.Now() - sourceIdWindow);
+        const auto sourceIdCount = SourceIdCounter.Count(TInstant::Now() - sourceIdWindow);
         const auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
 
         // LOG_D("TPartition::CheckScaleStatus"

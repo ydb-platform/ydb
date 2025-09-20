@@ -300,7 +300,6 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             bool already = false;
 
-            // SourceIdCounter.Use(s, now); TODO
             auto it = SourceIdStorage.GetInMemorySourceIds().find(s);
 
             ui64 maxSeqNo = 0;
@@ -524,7 +523,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
             ui64 seqNo = std::max(info.SeqNo, it->second.SeqNo);
             SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, now, info.KafkaProducerEpoch));
         }
-        // SourceIdCounter.Use(sourceId, now); TODO
     }
     TxSourceIdForPostPersist.clear();
     TxInflightMaxSeqNoPerSourceId.clear();
@@ -571,8 +569,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
         SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
     }
 
-    //auto writeNewSizeFull = WriteNewSizeFull + WriteNewSizeFromSupportivePartitions;
-
     WriteCycleSize = 0;
     WriteNewSize = 0;
     WriteNewSizeFull = 0;
@@ -587,7 +583,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
 
-    ChangeScaleStatusIfNeeded(AutopartitioningManager->GetScaleStatus(ctx));
+    ChangeScaleStatusIfNeeded(AutopartitioningManager->GetScaleStatus());
 
     //if EndOffset changed there could be subscriptions witch could be completed
     TVector<std::pair<TReadInfo, ui64>> reads = Subscriber.GetReads(BlobEncoder.EndOffset);
@@ -614,10 +610,17 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
         return;
     }
 
-    Send(TabletActorId, new TEvPQ::TEvPartitionScaleStatusChanged(Partition.OriginalPartitionId, scaleStatus));
-
     ScaleStatus = scaleStatus;
     LastScaleRequestTime = now;
+
+    auto ev = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>(Partition.OriginalPartitionId, ScaleStatus);
+    if (ScaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
+        auto splitBoundary = AutopartitioningManager->SplitBoundary();
+        if (splitBoundary) {
+            ev->Record.SetSplitBoundary(*splitBoundary);
+        }
+    }
+    Send(TabletActorId, std::move(ev));
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {

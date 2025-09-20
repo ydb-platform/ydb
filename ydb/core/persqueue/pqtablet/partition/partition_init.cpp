@@ -895,7 +895,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 return;
             case NKikimrProto::ERROR:
                 PQ_LOG_ERROR("tablet " << Partition()->TabletId << " HandleOnInit ReadResult "
-                        << i << " sta // TODO enabled or disabled autopartitioningtus NKikimrProto::ERROR result message: \"" << read.GetMessage()
+                        << i << " status NKikimrProto::ERROR result message: \"" << read.GetMessage()
                         << " \" errorReason: \"" << response.GetErrorReason() << "\""
                 );
                 PoisonPill(ctx);

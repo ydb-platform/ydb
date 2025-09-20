@@ -373,7 +373,7 @@ public:
         TActorId bufferActorId
     );
 
-    size_t BuildAllTasks(bool isScan, bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings,
+    size_t BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings,
         const TVector<IKqpGateway::TPhysicalTxData>& transactions,
         const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
         bool collectProfileStats, TQueryExecutionStats* stats,

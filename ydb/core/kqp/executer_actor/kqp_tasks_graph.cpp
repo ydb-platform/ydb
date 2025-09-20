@@ -2823,13 +2823,46 @@ void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TSta
     }
 }
 
-size_t TKqpTasksGraph::BuildAllTasks(bool isScan, bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings,
+size_t TKqpTasksGraph::BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings,
     const TVector<IKqpGateway::TPhysicalTxData>& transactions,
     const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
     bool collectProfileStats, TQueryExecutionStats* stats,
     size_t nodesCount, THashSet<ui64>* shardsWithEffects)
 {
     size_t sourceScanPartitionsCount = 0;
+
+    // Figure out if is Scan or Data execution.
+    bool isScan = false;
+    {
+        if (transactions.empty()) {
+            isScan = false;
+        }
+
+        TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;
+        for (auto& tx : transactions) {
+            if (txsType) {
+                YQL_ENSURE(*txsType == tx.Body->GetType(), "Mixed physical tx types in executer.");
+                YQL_ENSURE((*txsType == NKqpProto::TKqpPhyTx::TYPE_DATA)
+                    || (*txsType == NKqpProto::TKqpPhyTx::TYPE_GENERIC),
+                    "Cannot execute multiple non-data physical txs.");
+            } else {
+                txsType = tx.Body->GetType();
+            }
+        }
+
+        switch (*txsType) {
+            case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
+            case NKqpProto::TKqpPhyTx::TYPE_DATA:
+            case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
+                isScan = false;
+                break;
+            case NKqpProto::TKqpPhyTx::TYPE_SCAN:
+                isScan = true;
+                break;
+            default:
+                YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)*txsType);
+        }
+    }
 
     Y_ENSURE(stats);
 

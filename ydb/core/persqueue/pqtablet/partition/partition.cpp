@@ -347,6 +347,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , AvgWriteBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , AvgReadBytes(TDuration::Minutes(1), 1000)
     , AvgQuotaBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
+    , AutopartitioningManager(CreateAutopartitioningManager(Config, IsSupportive()))
     , ReservedSize(0)
     , Channel(0)
     , NumChannels(numChannels)

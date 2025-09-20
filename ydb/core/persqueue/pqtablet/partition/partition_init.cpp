@@ -1,3 +1,4 @@
+#include "autopartitioning_manager.h"
 #include "offload_actor.h"
 #include "partition.h"
 #include "partition_compactification.h"
@@ -34,6 +35,7 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataStep>(this));
     Steps.push_back(MakeHolder<TInitEndWriteTimestampStep>(this));
+    Steps.push_back(MakeHolder<TInitFieldsStep>(this));
 
     CurrentStep = Steps.begin();
 }
@@ -374,7 +376,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
 
 
 //
-// TInitInfoRangeStep
+// TInitInfoRangeStep!IsSupportive() && !MirroringEnabled(Config)
 //
 
 TInitInfoRangeStep::TInitInfoRangeStep(TInitializer* initializer)
@@ -942,6 +944,25 @@ void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
 }
 
 //
+// TInitFieldsStep
+//
+
+TInitFieldsStep::TInitFieldsStep(TInitializer* initializer)
+    : TInitializerStep(initializer, "TInitFieldsStep", true) {
+}
+
+void TInitFieldsStep::Execute(const TActorContext &ctx) {
+    auto& config = Partition()->Config;
+
+    IAutopartitioningManager* autopartitioningManager = SplitMergeEnabled(config) && !Partition()->IsSupportive() && !MirroringEnabled(config)
+        ? CreateAutopartitioningManager(config)
+        : CreateNoneAutopartitioningManager(config);
+    Partition()->AutopartitioningManager.reset(autopartitioningManager);
+
+    return Done(ctx);
+}
+
+//
 // TPartition
 //
 
@@ -975,8 +996,6 @@ void TPartition::Initialize(const TActorContext& ctx) {
     WriteTimestamp = ctx.Now();
     LastUsedStorageMeterTimestamp = ctx.Now();
     WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
-
-    InitSplitMergeSlidingWindow();
 
     CloudId = Config.GetYcCloudId();
     DbId = Config.GetYdbDatabaseId();
@@ -1273,11 +1292,6 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
                             {1000, "1000"}, {2500, "2500"}, {5000, "5000"},
                             {10'000, "10000"}, {9'999'999, "999999"}}, true)
     );
-}
-
-void TPartition::InitSplitMergeSlidingWindow() {
-    using Tui64SumSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;
-    SplitMergeAvgWriteBytes = std::make_unique<Tui64SumSlidingWindow>(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), 1000);
 }
 
 void TPartition::CreateCompacter() {

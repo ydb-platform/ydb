@@ -1,3 +1,4 @@
+#include "autopartitioning_maanager.h"
 #include "partition_util.h"
 #include "partition.h"
 
@@ -587,8 +588,9 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     SyncMemoryStateWithKVState(ctx);
 
     if (SplitMergeEnabled(Config) && !IsSupportive() && !MirroringEnabled(Config)) {
-        SplitMergeAvgWriteBytes->Update(writeNewSizeFull, now);
-        auto needScaling = CheckScaleStatus(ctx);
+        AutopartitioningManager->OnWrite();
+        //SplitMergeAvgWriteBytes->Update(writeNewSizeFull, now);
+        auto needScaling = AutopartitioningManager->GetScaleStatus(ctx);
         ChangeScaleStatusIfNeeded(needScaling);
     }
 
@@ -609,42 +611,6 @@ void TPartition::UpdateAvgWriteBytes(ui64 size, const TInstant& now)
     for (auto& avg : AvgWriteBytes) {
         avg.Update(size, now);
     }
-}
-
-NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
-    const auto writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed;
-    const auto sourceIdWindow = TDuration::Seconds(std::min<ui32>(5, Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
-    const auto sourceIdCount = SourceIdCounter.Count(ctx.Now() - sourceIdWindow);
-    const auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
-
-    LOG_D("TPartition::CheckScaleStatus"
-            << " splitMergeAvgWriteBytes# " << SplitMergeAvgWriteBytes->GetValue()
-            << " writeSpeedUsagePercent# " << writeSpeedUsagePercent
-            << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
-            << " totalPartitionWriteSpeed# " << TotalPartitionWriteSpeed
-            << " sourceIdCount=" << sourceIdCount
-            << " canSplit=" << canSplit
-            << " Topic: \"" << TopicName() << "\"." <<
-        " Partition: " << Partition
-    );
-
-    auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
-        || Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
-
-    auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
-
-    if (splitEnabled && canSplit && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
-        LOG_D("TPartition::CheckScaleStatus NEED_SPLIT" << " Topic: \"" << TopicName() << "\"."
-                << " Partition: " << Partition);
-        return NKikimrPQ::EScaleStatus::NEED_SPLIT;
-    } else if (mergeEnabled && writeSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
-        LOG_D("TPartition::CheckScaleStatus NEED_MERGE" << " Topic: \"" << TopicName() << "\"."
-                << " Partition: " << Partition << " writeSpeedUsagePercent: " << writeSpeedUsagePercent
-                << " Threshold: " << Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()
-        );
-        return NKikimrPQ::EScaleStatus::NEED_MERGE;
-    }
-    return NKikimrPQ::EScaleStatus::NORMAL;
 }
 
 void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) {

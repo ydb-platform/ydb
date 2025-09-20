@@ -47,6 +47,7 @@ PEERDIR(
     yql/essentials/public/issue
     yql/essentials/public/types
     ydb/library/yql/udfs/common/clickhouse/client
+    yql/essentials/minikql
     yql/essentials/utils
 )
 

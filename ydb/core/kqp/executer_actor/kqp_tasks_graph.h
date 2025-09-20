@@ -223,13 +223,15 @@ struct TGraphMeta {
     TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
     bool CreateSuspended = false;
     bool CheckDuplicateRows = false;
-    bool ShardsResolved = false;
     TMaybe<ui64> MaxBatchSize;
     bool UnknownAffectedShardCount = false; // used by Data executer
-    TMap<ui64, ui64> ShardIdToNodeId;
     std::map<TString, TString> SecureParams;
     bool AllowOlapDataQuery = true; // used by Data executer - always true for Scan executer
     bool StreamResult = false;
+
+    bool ShardsResolved = false;
+    TMap<ui64, ui64> ShardIdToNodeId;
+    TMap<ui64, TVector<ui64>> ShardsOnNode;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;
@@ -377,7 +379,7 @@ public:
         const TVector<IKqpGateway::TPhysicalTxData>& transactions,
         const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
         bool collectProfileStats, TQueryExecutionStats* stats,
-        size_t nodesCount, THashSet<ui64>* ShardsWithEffects
+        THashSet<ui64>* ShardsWithEffects
     );
 
     void FillKqpTasksGraphStages(const TVector<IKqpGateway::TPhysicalTxData>& txs);

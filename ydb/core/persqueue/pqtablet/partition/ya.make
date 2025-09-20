@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     account_read_quoter.cpp
+    autopartitioning_manager.cpp
     offload_actor.cpp
     ownerinfo.cpp
     partition.cpp

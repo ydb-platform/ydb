@@ -49,6 +49,7 @@ private:
     struct TPartitionScaleOperationInfo {
         ui32 PartitionId{};
         TMaybe<NKikimrPQ::TPartitionScaleParticipants> PartitionScaleParticipants;
+        TMaybe<TString> SplitBoundary;
     };
 
     struct TBuildSplitScaleRequestResult;
@@ -58,7 +59,10 @@ public:
         const NKikimrPQ::TPQTabletConfig& config, const TPartitionGraph& partitionGraph);
 
 public:
-    void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants, const TActorContext& ctx);
+    void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus,
+        TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants,
+        TMaybe<TString> splitBoundary,
+        const TActorContext& ctx);
     void HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
     std::expected<void, std::string> HandleMirrorTopicDescriptionResult(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
 

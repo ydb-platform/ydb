@@ -380,16 +380,8 @@ public:
         size_t nodesCount, THashSet<ui64>* ShardsWithEffects
     );
 
-    void BuildSysViewScanTasks(TStageInfo& stageInfo);
-    bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
-    void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects
-    void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, const TMap<ui64, ui64>& shardIdToNodeId, TQueryExecutionStats* stats);
-    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount);
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, const TMap<ui64, ui64>& shardIdToNodeId, TQueryExecutionStats* stats);
-
     void FillKqpTasksGraphStages(const TVector<IKqpGateway::TPhysicalTxData>& txs);
     void BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
-    void BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);
 
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
     void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;
@@ -397,7 +389,6 @@ public:
 
     void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling) const;
-    bool IsCrossShardChannel(const NYql::NDq::TChannel& channel) const;
 
     void UpdateRemoteTasksNodeId(const THashMap<ui64, TVector<ui64>>& remoteComputeTasks);
 
@@ -406,6 +397,16 @@ public:
     THolder<TPartitionPruner> PartitionPruner; // TODO: temporary public
 
 private:
+    void BuildSysViewScanTasks(TStageInfo& stageInfo);
+    bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
+    void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects
+    void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, const TMap<ui64, ui64>& shardIdToNodeId, TQueryExecutionStats* stats);
+    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount);
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, const TMap<ui64, ui64>& shardIdToNodeId, TQueryExecutionStats* stats);
+
+    void BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);
+    bool IsCrossShardChannel(const NYql::NDq::TChannel& channel) const;
+
     void BuildTransformChannels(const NYql::NDq::TTransform& transform, const TTaskInputMeta& meta, const TString& name,
         const TStageInfo& stageInfo, ui32 inputIndex,
         const TStageInfo& inputStageInfo, ui32 outputIndex, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);

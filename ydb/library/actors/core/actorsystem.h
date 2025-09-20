@@ -162,9 +162,9 @@ namespace NActors {
         TMutex ProxyCreationLock;
         mutable std::vector<TActorId> DynamicProxies;
 
-        bool StartExecuted = false;
-        bool StopExecuted = false;
-        bool CleanupExecuted = false;
+        std::atomic_bool StartExecuted = false;
+        std::atomic_bool StopExecuted = false;
+        std::atomic_bool CleanupExecuted = false;
 
         std::deque<std::function<void()>> DeferredPreStop;
     public:

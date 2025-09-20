@@ -32,12 +32,16 @@ TString TPartitionScaleManager::LogPrefix() const {
     return TStringBuilder() << "[TPartitionScaleManager: " << TopicName << "] ";
 }
 
-void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus, TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants, const TActorContext& ctx) {
+void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus,
+    TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants,
+    TMaybe<TString> splitBoundary,
+    const TActorContext& ctx) {
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
         PQ_LOG_D("::HandleScaleStatusChange need to split partition " << partitionId);
         TPartitionScaleOperationInfo op{
             .PartitionId = partitionId,
             .PartitionScaleParticipants = std::move(participants),
+            .SplitBoundary = std::move(splitBoundary)
         };
         PartitionsToSplit.insert_or_assign(partitionId, std::move(op));
         TrySendScaleRequest(ctx);
@@ -237,7 +241,7 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
     if (node->DirectChildren.empty()) {
         auto from = node->From;
         auto to = node->To;
-        auto mid = MiddleOf(from, to);
+        auto mid = splitParameters.SplitBoundary.GetOrElse(MiddleOf(from, to));
         if (mid.empty()) {
             PQ_LOG_ERROR("wrong partition key range. Can't get mid. Partition# " << partitionId);
             return {.Split = Nothing(), .Remove = true};

@@ -123,6 +123,16 @@ void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKey
     }
     // TODO (yurikiselev): Assert that request->ResultSet.front().SecretInfo->Description.GetValue() is empty
 
+    const auto secretIt = SecretNameToValue.find(secretName);
+    if (secretIt != SecretNameToValue.end()) { // some secret version is in cache
+        const auto secretDescription = request->ResultSet.front().SecretInfo->Description;
+        if (secretDescription.GetVersion() <= secretIt->second.Version) { // cache contains the most recent version
+            FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(std::vector<TString>{secretIt->second.Value}));
+            return;
+        }
+        SecretNameToValue.erase(secretIt); // no need to store outdated value
+    }
+
     TAutoPtr<TEvTxUserProxy::TEvNavigate> req(new TEvTxUserProxy::TEvNavigate());
     NKikimrSchemeOp::TDescribePath* record = req->Record.MutableDescribePath();
     record->SetPath(secretName);
@@ -138,7 +148,9 @@ void TDescribeSchemaSecretsService::Handle(NSchemeShard::TEvSchemeShard::TEvDesc
         return;
     }
 
-    const auto &secretValue = rec.GetPathDescription().GetSecretDescription().GetValue();
+    const auto& secretValue = rec.GetPathDescription().GetSecretDescription().GetValue();
+    const auto& secretVersion = rec.GetPathDescription().GetSecretDescription().GetVersion();
+    SecretNameToValue[secretName] = TVersionedSecret{.Version = secretVersion, .Value = secretValue};
     FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(std::vector<TString>{secretValue}));
 }
 

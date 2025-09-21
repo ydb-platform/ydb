@@ -61,9 +61,15 @@ public:
     }
 
 private:
+    struct TVersionedSecret {
+        ui64 Version;
+        TString Value;
+    };
+
     ui64 LastCookie = 0;
     THashMap<ui64, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription>> ResolveInFlight;
     THashMap<ui64, TString> SecretNameInFlight;
+    THashMap<TString, TVersionedSecret> SecretNameToValue;
 };
 
 IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise);

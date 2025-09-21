@@ -157,6 +157,9 @@ public:
         });
 
         auto inRange = [&](const TString& sourceIdHash) {
+            if (sourceIdHash.empty()) {
+                return false;
+            }
             if (partition->GetKeyRange().HasFromBound() && sourceIdHash < partition->GetKeyRange().GetFromBound()) {
                 return false;
             }

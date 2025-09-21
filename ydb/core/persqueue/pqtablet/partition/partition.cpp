@@ -478,6 +478,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     UpdateCompactionCounters();
 
     TryRunCompaction();
+
+    AutopartitioningManager->CleanUp();
 }
 
 void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {

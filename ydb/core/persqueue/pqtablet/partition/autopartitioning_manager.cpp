@@ -9,6 +9,21 @@ namespace NKikimr::NPQ {
 
 using TSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;
 
+namespace {
+    void DoCleanUp(std::unordered_map<TString, TSlidingWindow>& writtenBytes) {
+        auto now = TInstant::Now();
+
+        for (auto it = writtenBytes.begin(); it != writtenBytes.end(); ++it) {
+            auto& counter = it->second;
+            counter.Update(now);
+
+            if (0 == counter.GetValue()) {
+                it = writtenBytes.erase(it);
+            }
+        }
+    }
+}
+
 class TNoneAutopartitioningManager : public IAutopartitioningManager {
 public:
     TNoneAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config) {
@@ -19,6 +34,10 @@ public:
         Y_UNUSED(sourceId);
         Y_UNUSED(size);
     }
+
+    void CleanUp() override {
+    }
+
     std::optional<TString> SplitBoundary() override {
         return std::nullopt;
     }
@@ -53,6 +72,10 @@ public:
 
         auto& counter = it->second;
         counter.Update(size, now);
+    }
+
+    void CleanUp() override {
+        DoCleanUp(WrittenBytes);
     }
 
     std::optional<TString> SplitBoundary() override {
@@ -116,23 +139,8 @@ public:
         SourceIdCounter.Use(sourceIdHash, now);
     }
 
-    void CleanUp() {
-        auto now = TInstant::Now();
-
-        // We reduce the number of calls as they can be potentially expensive operations if the number of SourceID writers is large.
-        if (now - LastCleanUp < TDuration::Seconds(1)) {
-            return;
-        };
-        LastCleanUp = now;
-
-        for (auto it = WrittenBytes.begin(); it != WrittenBytes.end(); ++it) {
-            auto& counter = it->second;
-            counter.Update(now);
-
-            if (0 == counter.GetValue()) {
-                it = WrittenBytes.erase(it);
-            }
-        }
+    void CleanUp() override {
+        DoCleanUp(WrittenBytes);
     }
 
     std::optional<TString> SplitBoundary() override {
@@ -172,7 +180,7 @@ public:
         ui64 lWrittenBytes = 0, rWrittenBytes = 0, oWrittenBytes = 0;
         size_t i = 0, j = sorted.size() - 1;
         TString* lastLeft, *lastRight;
-        do {
+        while (i <= j) {
             auto& lhs = sorted[i];
             auto& rhs = sorted[j];
 
@@ -191,7 +199,7 @@ public:
                 --j;
                 lastRight = &rhs.first;
             }
-        } while (i <= j);
+        }
 
         if (oWrittenBytes >= lWrittenBytes || oWrittenBytes >= rWrittenBytes) {
             // The volume of entries in the partition with the SourceID manually linked to the partition is significant.

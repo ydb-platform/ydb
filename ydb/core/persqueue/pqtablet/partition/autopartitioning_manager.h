@@ -19,6 +19,7 @@ public:
     virtual ~IAutopartitioningManager() = default;
 
     virtual void OnWrite(const TString& sourceId, ui64 size) = 0;
+    virtual void CleanUp() = 0;
 
     virtual NKikimrPQ::EScaleStatus GetScaleStatus() = 0;
     virtual std::optional<TString> SplitBoundary() = 0;

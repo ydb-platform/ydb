@@ -353,6 +353,8 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(MultiWriteInTime) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
+        settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferVolumeBytes(32_MB);
+        settings.AppConfig.MutableColumnShardConfig()->SetOnlyBulkUpsertWritingBuffer(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
@@ -410,9 +412,11 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(MultiWriteInTimeDiffSchemas) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
+        settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferVolumeBytes(32_MB);
+        settings.AppConfig.MutableColumnShardConfig()->SetBulkUpsertRequireAllColumns(false);
+        settings.AppConfig.MutableColumnShardConfig()->SetOnlyBulkUpsertWritingBuffer(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
-        kikimr.GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetBulkUpsertRequireAllColumns(false);
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         TTypedLocalHelper helper("Utf8", "Utf8", kikimr);
         helper.CreateTestOlapTable();
@@ -472,6 +476,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetMaxReadStaleness_ms(300000);
 
         TKikimrRunner kikimr(settings);
         auto helper = TLocalHelper(kikimr);

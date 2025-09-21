@@ -2,8 +2,7 @@
 
 ### Functionality
 
-* Added support for creating unique indexes on existing tables. This feature is enabled by setting the `enable_add_unique_index` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
-* Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
+* None:Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 15186:Increased [the query text limit size](../dev/system-views#query-metrics) in system views from 4 KB to 10 KB. [#15186](https://github.com/ydb-platform/ydb/pull/15186) ([spuchin](https://github.com/spuchin))
 * 15693:Added a health check configuration that administrators can customize: the number of node restarts, tablets, the time difference between database dynodes,
 and timeout (by default, the maximum response time from healthcheck). Documentation is under construction. [#15693](https://github.com/ydb-platform/ydb/pull/15693) ([Andrei Rykov](https://github.com/StekPerepolnen))
@@ -72,6 +71,14 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20303:Add `--iam-token-file` argument to ydb-dstool. [#20303](https://github.com/ydb-platform/ydb/pull/20303) ([kruall](https://github.com/kruall))
 * 22511:Added the ICB control to change ReadRequestsInFlightLimit via changing dynconfig. [#22511](https://github.com/ydb-platform/ydb/pull/22511) ([kruall](https://github.com/kruall))
 * 21997:Enabled the new compute scheduler based on the HDRF model. [#21997](https://github.com/ydb-platform/ydb/pull/21997) ([Ivan](https://github.com/abyss7))
+* 25237:Set and show pdisk maintenance status in dstool. Show maintenance and decommit status in blobstorage controller internal table. [#25237](https://github.com/ydb-platform/ydb/pull/25237) ([Semyon Danilov](https://github.com/SammyVimes))
+* 25106:Add support for VDisk checksums [#25106](https://github.com/ydb-platform/ydb/pull/25106) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 25090:IAM authentication support has been added to asynchronous replication. [#25090](https://github.com/ydb-platform/ydb/pull/25090) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
+* 25062:PreferLessOccupiedRack and WithAttentionToReplication were added only to one instance of ReassignGroupDisk command, now added it for the second one [#25062](https://github.com/ydb-platform/ydb/pull/25062) ([Semyon Danilov](https://github.com/SammyVimes))
+* 24939:Stop gRPC server when in DISCONNECTED state [#24939](https://github.com/ydb-platform/ydb/pull/24939) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 24759:do not report nonexistent databases as missing nodes and pools in healthcheck api [#24759](https://github.com/ydb-platform/ydb/pull/24759) ([vporyadke](https://github.com/vporyadke))
+* 24599:Fix timeout logic in dsproxy for TEvStatus, TEvMultiPut and TEvPatch requests, also introduce timeout UTs for all types of requests. These fixes were previously reverted because of the leaking scheduled messages in Put Actor. New iterations avoid this issue by limiting maximum possible timeout to 60sec. [#24599](https://github.com/ydb-platform/ydb/pull/24599) ([Sergey Belyakov](https://github.com/serbel324))
+* 23996:Add SIMD-based implementation of TTupleLayout interface. [#23996](https://github.com/ydb-platform/ydb/pull/23996) ([Alexander](https://github.com/san-kir-k))
 
 ### Bug fixes
 
@@ -132,6 +139,23 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20670:Resolved the issue with DDL errors for external sources and added more information to the `ALTER TABLE ... RENAME TO` error. [#20670](https://github.com/ydb-platform/ydb/pull/20670) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20519:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20520) that caused VDisk to freeze in infinite local recovery mode when a ChunkRead request failed. This change will allow loader actor to terminate properly on PDisk errors, and LocalRecovery to get notified about this error and to finish with proper status. [#20519](https://github.com/ydb-platform/ydb/pull/20519) ([Sergey Belyakov](https://github.com/serbel324))
 * 22298:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20812) where attach streams remained active after session shutdown, causing unexpected BadSession errors. [#22298](https://github.com/ydb-platform/ydb/pull/22298) ([Kirill Kurdyukov](https://github.com/KirillKurdyukov))
+* 25331:https://github.com/ydb-platform/ydb/issues/24903 [#25331](https://github.com/ydb-platform/ydb/pull/25331) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
+* 25309:fixes access checking.
+improves scheme cache fallback and data collection.
+closes #25121 [#25309](https://github.com/ydb-platform/ydb/pull/25309) ([Alexey Efimov](https://github.com/adameat))
+* 25232:Added kikimr init waiting and fixed ULID gen usage (stabilization of tests TestReadLargeParquetFile and OverridePlannerDefaults) [#25232](https://github.com/ydb-platform/ydb/pull/25232) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 25196:fixes https://github.com/ydb-platform/ydb/issues/24953
+... [#25196](https://github.com/ydb-platform/ydb/pull/25196) ([Filitov Mikhail](https://github.com/lll-phill-lll))
+* 25194:Fix crashing on select from sys-view after an olap table is dropped [#25194](https://github.com/ydb-platform/ydb/pull/25194) ([Semyon](https://github.com/swalrus1))
+* 25191:fixes https://github.com/ydb-platform/ydb/issues/24954
+
+The issue here is the same that was fixed in https://github.com/ydb-platform/ydb/issues/24148
+... [#25191](https://github.com/ydb-platform/ydb/pull/25191) ([Filitov Mikhail](https://github.com/lll-phill-lll))
+* 24937:fix crash after follower alter https://github.com/ydb-platform/ydb/issues/20866 https://github.com/ydb-platform/ydb/issues/20868 [#24937](https://github.com/ydb-platform/ydb/pull/24937) ([vporyadke](https://github.com/vporyadke))
+* 24877:https://github.com/ydb-platform/ydb/issues/24671 Check AppData before audit enabled [#24877](https://github.com/ydb-platform/ydb/pull/24877) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 24736:Write stats for Column Store even in NoTx mode. Column shards were not reporting table access statistics when queries were executed in immediate transaction mode (all DDL and queries without BEGIN ... COMMIT). 
+
+https://github.com/ydb-platform/ydb/issues/22446 [#24736](https://github.com/ydb-platform/ydb/pull/24736) ([neyrox](https://github.com/neyrox))
 
 ### YDB UI
 
@@ -157,3 +181,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
+* 25084:Optimize TEvAssimilate [#25084](https://github.com/ydb-platform/ydb/pull/25084) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 25000:Always set ArrayBufferMinFillPercentage from default value [#25000](https://github.com/ydb-platform/ydb/pull/25000) ([Ivan](https://github.com/abyss7))
+* 24944:Optimized forget operation for script executions (~ x4.3 speedup) [#24944](https://github.com/ydb-platform/ydb/pull/24944) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+

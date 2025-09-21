@@ -954,7 +954,7 @@ TInitFieldsStep::TInitFieldsStep(TInitializer* initializer)
 void TInitFieldsStep::Execute(const TActorContext &ctx) {
     auto& config = Partition()->Config;
 
-    Partition()->AutopartitioningManager.reset(CreateAutopartitioningManager(config, Partition()->IsSupportive()));
+    Partition()->AutopartitioningManager.reset(CreateAutopartitioningManager(config, Partition()->Partition));
 
     return Done(ctx);
 }

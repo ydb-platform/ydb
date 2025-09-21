@@ -12,6 +12,8 @@
 
 namespace NKikimr::NPQ {
 
+class TPartitionId;
+
 class IAutopartitioningManager {
 public:
     virtual ~IAutopartitioningManager() = default;
@@ -25,6 +27,6 @@ public:
     virtual void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) = 0;
 };
 
-IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, bool supportive);
+IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId);
 
 }

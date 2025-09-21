@@ -3160,7 +3160,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     PQ_ENSURE(Config.GetPartitionConfig().GetTotalPartitions() > 0);
 
     if (autopartitioningChanged) {
-        AutopartitioningManager.reset(CreateAutopartitioningManager(Config, IsSupportive()));
+        AutopartitioningManager.reset(CreateAutopartitioningManager(Config, Partition));
     } else {
         AutopartitioningManager->UpdateConfig(Config);
     }

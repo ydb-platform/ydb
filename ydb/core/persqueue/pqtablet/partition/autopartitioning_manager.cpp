@@ -1,5 +1,6 @@
 #include "autopartitioning_manager.h"
 
+#include <ydb/core/persqueue/common/partition_id.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h> // TODO move to pubcli or common
@@ -87,8 +88,9 @@ private:
 class TAutopartitioningManager : public IAutopartitioningManager {
     static constexpr size_t Precision = 100;
 public:
-    TAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config)
+    TAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId)
         : Config(config)
+        , PartitionId(partitionId)
     {
         RecreateSumWrittenBytes();
     }
@@ -99,6 +101,7 @@ public:
         SumWrittenBytes->Update(size, now);
 
         TString sourceIdHash = AsKeyBound(Hash(NSourceIdEncoding::Decode(sourceId)));
+
         auto it = WrittenBytes.find(sourceIdHash);
         if (it == WrittenBytes.end()) {
             auto [i,_] = WrittenBytes.emplace(sourceIdHash, TSlidingWindow(TDuration::Minutes(1), 6));
@@ -147,29 +150,48 @@ public:
             return lhs < rhs;
         });
 
-        if (sorted.size() == 2) {
-            return MiddleOf(sorted.front().first, sorted.back().first);
-        }
+        auto* partition = FindIfPtr(Config.GetPartitions(), [&](const auto& v) {
+            return v.GetPartitionId() == PartitionId;
+        });
 
-        ui64 lWrittenBytes = 0, rWrittenBytes = 0;
+        auto inRange = [&](const TString& sourceIdHash) {
+            if (partition->GetKeyRange().HasFromBound() && sourceIdHash < partition->GetKeyRange().GetFromBound()) {
+                return false;
+            }
+            if (partition->GetKeyRange().HasToBound() && sourceIdHash >= partition->GetKeyRange().GetToBound()) {
+                return false;
+            }
+            return true;
+        };
+
+        ui64 lWrittenBytes = 0, rWrittenBytes = 0, oWrittenBytes = 0;
         size_t i = 0, j = sorted.size() - 1;
-        bool lastIsLeft = false;
-        TString* lastLeft = &sorted[i].first, *lastRight = &sorted[j].first;
-        while (i < j) {
+        TString* lastLeft, *lastRight;
+        do {
             auto& lhs = sorted[i];
             auto& rhs = sorted[j];
 
-            if (lWrittenBytes < rWrittenBytes) {
+            if (!inRange(lhs.first)) {
+                oWrittenBytes += lhs.second;
+                ++i;
+            } else if (!inRange(rhs.first)) {
+                oWrittenBytes += rhs.second;
+                --j;
+            } else if (lWrittenBytes < rWrittenBytes) {
                 lWrittenBytes += lhs.second;
                 ++i;
-                lastIsLeft = true;
                 lastLeft = &lhs.first;
             } else {
                 rWrittenBytes += rhs.second;
                 --j;
-                lastIsLeft = false;
                 lastRight = &rhs.first;
             }
+        } while (i < j);
+
+        if (oWrittenBytes >= lWrittenBytes / 2 || oWrittenBytes >= rWrittenBytes / 2) {
+            // The volume of entries in the partition with the SourceID manually linked to the partition is significant.
+            //  We divide the partition in half.
+            return MiddleOf(partition->GetKeyRange().GetFromBound(), partition->GetKeyRange().GetToBound());
         }
 
         return MiddleOf(*lastLeft, *lastRight);
@@ -222,6 +244,7 @@ public:
 
 private:
     const NKikimrPQ::TPQTabletConfig& Config;
+    const ui32 PartitionId;
 
     TMaybe<TSlidingWindow> SumWrittenBytes;
     // SoureIdHash -> SlidingWindow
@@ -232,17 +255,17 @@ private:
 
 
 
-IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, bool supportive) {
+IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId) {
     auto withAutopartitioning = SplitMergeEnabled(config) && !MirroringEnabled(config);
     if (!withAutopartitioning) {
         return new TNoneAutopartitioningManager(config);
     }
 
-    if (supportive) {
+    if (partitionId.IsSupportivePartition()) {
         return new TSupprotiveAutopartitioningManager(config);
     }
 
-    return new TAutopartitioningManager(config);
+    return new TAutopartitioningManager(config, partitionId.OriginalPartitionId);
 }
 
 }

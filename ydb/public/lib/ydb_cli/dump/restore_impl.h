@@ -238,7 +238,7 @@ class TRestoreClient {
     TRestoreResult Restore(NScheme::ESchemeEntryType type, const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings, bool delay);
     TRestoreResult DropAndRestore(const TFsPath& fsPath, const TString& dbRestoreRoot, const TRestoreSettings& settings);
     TRestoreResult DropAndRestoreExternals(const TVector<NPrivate::TFsBackupEntry>& backupEntries, const TVector<size_t>& externalDataSources, const THashMap<TString, size_t>& externalTables, const TRestoreSettings& settings);
-    TRestoreResult DropAndRestoreTablesAndDependents(const TVector<NPrivate::TFsBackupEntry>& backupEntries, const THashMap<TString, size_t>& tables, const TVector<size_t>& views, const THashMap<TString, size_t>& replications, const TString& dbRestoreRoot, const TRestoreSettings& settings);
+    TRestoreResult DropAndRestoreTablesAndDependents(const TVector<NPrivate::TFsBackupEntry>& backupEntries, const THashMap<TString, size_t>& tables, const TVector<size_t>& views, const THashMap<TString, size_t>& replications, const TVector<size_t>& transfers, const TString& dbRestoreRoot, const TRestoreSettings& settings);
 
 public:
     explicit TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log);

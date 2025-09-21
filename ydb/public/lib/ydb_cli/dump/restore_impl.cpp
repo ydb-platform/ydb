@@ -1270,7 +1270,7 @@ TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEn
     return Result<TRestoreResult>();
 }
 
-TRestoreResult TRestoreClient::DropAndRestoreTablesAndDependents(const TVector<TFsBackupEntry>& backupEntries, const THashMap<TString, size_t>& tables, const TVector<size_t>& views, const THashMap<TString, size_t>& replications, const TString& dbRestoreRoot, const TRestoreSettings& settings) {
+TRestoreResult TRestoreClient::DropAndRestoreTablesAndDependents(const TVector<TFsBackupEntry>& backupEntries, const THashMap<TString, size_t>& tables, const TVector<size_t>& views, const THashMap<TString, size_t>& replications, const TVector<size_t>& transfers, const TString& dbRestoreRoot, const TRestoreSettings& settings) {
     // to do: verify that no replication in the entire database (not just the restore root!) depends on the tables we are going to drop
     for (const auto& [dbPath, type] : ExistingEntries) {
         if (type == ESchemeEntryType::Replication && !replications.contains(dbPath)) {
@@ -1306,6 +1306,15 @@ TRestoreResult TRestoreClient::DropAndRestoreTablesAndDependents(const TVector<T
         }
     }
 
+    for (size_t i : transfers) {
+        const auto& [fsPath, dbPath, type] = backupEntries[i];
+        if (ExistingEntries.contains(dbPath)) {
+            if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
+                return result;
+            }
+        }
+    }
+
     // the main loop: tables are restored here
     for (const auto& [_, i] : tables) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
@@ -1330,6 +1339,11 @@ TRestoreResult TRestoreClient::DropAndRestoreTablesAndDependents(const TVector<T
         const auto& [fsPath, dbPath, type] = backupEntries[i];
         Y_ENSURE(dbPath.StartsWith(dbRestoreRoot), "dbPath must be built by appending a relative path to dbRestoreRoot");
         // views might depend on other views, so we restore them with the help of a dedicated manager
+        DelayedRestoreManager.Add(type, fsPath, dbRestoreRoot, dbPath.substr(dbRestoreRoot.size()), settings);
+    }
+
+    for (size_t i : transfers) {
+        const auto& [fsPath, dbPath, type] = backupEntries[i];
         DelayedRestoreManager.Add(type, fsPath, dbRestoreRoot, dbPath.substr(dbRestoreRoot.size()), settings);
     }
 
@@ -1367,9 +1381,9 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
     TVector<size_t> views;
     TVector<size_t> systemViews;
     THashMap<TString, size_t> replications;
+    TVector<size_t> transfers;
     TVector<size_t> externalDataSources;
     THashMap<TString, size_t> externalTables;
-
     // scheme entries that do not require special handling (i.e. cannot have dependents)
     TVector<size_t> regular;
 
@@ -1390,6 +1404,9 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
                 break;
             case ESchemeEntryType::Replication:
                 replications.emplace(dbPath, i);
+                break;
+            case ESchemeEntryType::Transfer:
+                transfers.emplace_back(i);
                 break;
             case ESchemeEntryType::View:
                 views.emplace_back(i);
@@ -1420,7 +1437,8 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
     if (auto result = DropAndRestoreExternals(backupEntries, externalDataSources, externalTables, settings); !result.IsSuccess()) {
         return result;
     }
-    if (auto result = DropAndRestoreTablesAndDependents(backupEntries, tables, views, replications, dbRestoreRoot, settings); !result.IsSuccess()) {
+    
+    if (auto result = DropAndRestoreTablesAndDependents(backupEntries, tables, views, replications, transfers, dbRestoreRoot, settings); !result.IsSuccess()) {
         return result;
     }
 

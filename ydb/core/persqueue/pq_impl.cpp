@@ -2760,12 +2760,11 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
 
     const TWriteId writeId = GetWriteId(req);
     ui32 originalPartitionId = req.GetPartition();
-
-    if (writeId.KafkaApiTransaction && TxWrites.contains(writeId) && !TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
+    if (writeId.IsKafkaApiTransaction() && TxWrites.contains(writeId) && TxWrites.at(writeId).Deleting) {
         // This branch happens when previous Kafka transaction has committed and we recieve write for next one
         // after PQ has deleted supportive partition and before it has deleted writeId from TxWrites (tx has not transaitioned to DELETED state)
         PQ_LOG_D("GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%01");
-        KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId] = event;
+        KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId].push_back(event);
         return;
     } else if (TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
         //
@@ -2786,7 +2785,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
             // This branch happens when previous Kafka transaction has committed and we recieve write for next one
             // before PQ has deleted supportive partition for previous transaction
             PQ_LOG_D("GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%02");
-            KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId] = event;
+            KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId].push_back(event);
             return;
         }
 
@@ -3329,7 +3328,9 @@ void TPersQueue::TryContinueKafkaWrites(const TMaybe<TWriteId> writeId, const TA
     if (writeId.Defined() && writeId->IsKafkaApiTransaction()) {
         auto it = KafkaNextTransactionRequests.find(writeId->KafkaProducerInstanceId);
         if (it != KafkaNextTransactionRequests.end()) {
-            Handle(it->second, ctx);
+            for (auto& request : it->second) {
+                Handle(request, ctx);
+            }
             KafkaNextTransactionRequests.erase(it);
         }
     }

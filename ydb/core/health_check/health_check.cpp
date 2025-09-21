@@ -197,6 +197,9 @@ public:
                 if (info.tabletbootmode() != NKikimrHive::TABLET_BOOT_MODE_DEFAULT) {
                     return state;
                 }
+                if (info.has_lockedtoactor()) {
+                    return state;
+                }
                 if (info.lastalivetimestamp() != 0 && TInstant::MilliSeconds(info.lastalivetimestamp()) < settings.AliveBarrier) {
                     // Tablet is not alive for a long time
                     // We should report it as dead unless it's just waiting to be created

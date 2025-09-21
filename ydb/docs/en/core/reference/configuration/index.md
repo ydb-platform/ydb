@@ -476,13 +476,38 @@ actor_system_config:
 
 ## Memory controller {#memory-controller}
 
-There are many components inside {{ ydb-short-name }} [database nodes](../../concepts/glossary.md#database-node) that utilize memory. Most of them need a fixed amount, but some are flexible and can use varying amounts of memory, typically to improve performance. If {{ ydb-short-name }} components allocate more memory than is physically available, the operating system is likely to [terminate](https://en.wikipedia.org/wiki/Out_of_memory#Recovery) the entire {{ ydb-short-name }} process, which is undesirable. The memory controller's goal is to allow {{ ydb-short-name }} to avoid out-of-memory situations while still efficiently using the available memory.
+There are many components inside {{ ydb-short-name }} [database nodes](../../concepts/glossary.md#database-node) that utilize memory. Most of them need a fixed amount, but some are flexible and can use varying amounts of memory, typically to improve performance.
+
+### General Overview of Memory Consumption by Components within a YDB process
+
+```mermaid
+---
+config:
+  sankey:
+    showValues: false
+---
+sankey-beta
+
+Activity Components,"KQP", 20
+Activity Components,Compaction, 10
+
+Cache Components,Shared cache, 40
+Cache Components,MemTable, 10
+
+YDB process memory,Cache Components,50
+YDB process memory,Activity Components, 30
+YDB process memory,Allocator caches, 10
+YDB process memory,Other,10
+```
+
+If {{ ydb-short-name }} components allocate more memory than is physically available, the operating system is likely to [terminate](https://en.wikipedia.org/wiki/Out_of_memory#Recovery) the entire {{ ydb-short-name }} process, which is undesirable. The memory controller's goal is to allow {{ ydb-short-name }} to avoid out-of-memory situations while still efficiently using the available memory.
 
 Examples of components managed by the memory controller:
 
 - [Shared cache](../../concepts/glossary.md#shared-cache): stores recently accessed data pages read from [distributed storage](../../concepts/glossary.md#distributed-storage) to reduce disk I/O and accelerate data retrieval.
 - [MemTable](../../concepts/glossary.md#memtable): holds data that has not yet been flushed to [SST](../../concepts/glossary.md#sst).
 - [KQP](../../concepts/glossary.md#kqp): stores intermediate query results.
+- [Compaction](../../concepts/glossary.md#compaction): The process of organizing and cleaning up data, which is performed automatically (in the background) to optimize storage space.
 - Allocator caches: keep memory blocks that have been released but not yet returned to the operating system.
 
 Memory limits can be configured to control overall memory usage, ensuring the database operates efficiently within the available resources.
@@ -556,8 +581,9 @@ memory_controller_config:
 The activity components include:
 
 - KQP
+- Compaction
 
-The memory limit for each activity component specifies the maximum amount of memory it can attempt to use. However, to prevent the {{ ydb-short-name }} process from exceeding the soft memory limit, the total consumption of activity components is further constrained by an additional limit known as the activities memory limit. If the total memory usage of the activity components exceeds this limit, any additional memory requests will be denied.
+The memory limit for each activity component specifies the maximum amount of memory it can attempt to use. However, to prevent the {{ ydb-short-name }} process from exceeding the soft memory limit, the total consumption of activity components is further constrained by an additional limit known as the activities memory limit. If the total memory usage of the activity components exceeds this limit, any additional memory requests will be denied. When query execution approaches memory limits, {{ ydb-short-name }} activates [spilling](../../concepts/spilling.md) to temporarily save intermediate data to disk, preventing memory limit violations.
 
 As a result, while the combined individual limits of the activity components might collectively exceed the activities memory limit, each component's individual limit should be less than this overall cap. Additionally, the sum of the minimum memory limits for the cache components, plus the activities memory limit, must be less than the soft memory limit.
 
@@ -595,6 +621,7 @@ $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\
 | `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit. |
 | `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit. |
 | `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | KQP memory limit. |
+| `compaction_limit_percent`&nbsp;/<br/>`compaction_limit_bytes` | 10% | Compaction memory limit. |
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 
@@ -810,6 +837,38 @@ healthcheck_config:
 | `thresholds.nodes_time_difference_orange` | `25000` | Max allowed time difference (in us) between dynamic nodes for `ORANGE` issue  |
 | `thresholds.tablets_restarts_orange`      | `30`    | Number of tablet restarts to trigger an `ORANGE` alert                        |
 | `timeout`                                 | `20000` | Maximum health check response time (in ms)                                    |
+
+## Configuring Kafka API {#kafka-proxy-config}
+
+The `kafka_proxy_config` section of the {{ ydb-short-name }} configuration file enables and configures Kafka Proxy, which provides access to work with [{{ ydb-short-name }} Topics](../../concepts/topic.md) via [Kafka API](../../reference/kafka-api/index.md).
+
+### Description of parameters {#kafka-proxy-config-parameters}
+
+| Parameter | Type | Default value | Description |
+| --- | --- | --- | --- |
+| `enable_kafka_proxy` | bool | `false` | Enables or disables Kafka Proxy. |
+| `listening_port` | int32 | `9092` | The port on which the Kafka API will be available. |
+| `transaction_timeout_ms` | uint32 | `300000` (5 minutes) | The maximum timeout for Kafka transactions, after which the transaction will be cancelled. |
+| `auto_create_topics_enable` | bool | `false` | Enables automatic creation of topics when they are accessed. Analogous to [the same option](https://kafka.apache.org/documentation/#brokerconfigs_auto.create.topics.enable) in Apache Kafka. |
+| `auto_create_consumers_enable` | bool | `true` | Enables automatic registration of consumers when they are accessed. |
+| `topic_creation_default_partitions` | uint32 | `1` | The number of partitions that will be created if the number of partitions is not specified when adding a topic via the Kafka protocol. Analogous to [num.partitions](https://kafka.apache.org/documentation/#brokerconfigs_num.partitions) option in Apache Kafka. |
+| `ssl_cerificate` | string | — | The path to the SSL certificate file, which includes both the certificate file and the key file. When this parameter is specified, Kafka Proxy automatically starts processing requests using the specified SSL certificate. |
+| `cert` | string | — | The path to the SSL certificate file. When this parameter is specified, Kafka Proxy automatically starts processing requests using the specified SSL certificate. |
+| `key` | string | — | The path to the SSL key file. |
+
+### Example of a completed config {#kafka-proxy-config-example}
+
+```yaml
+kafka_proxy_config:
+  enable_kafka_proxy: true
+  listening_port: 9092
+  transaction_timeout_ms: 300000 # 5 minutes
+  auto_create_topics_enable: true
+  auto_create_consumers_enable: true
+  topic_creation_default_partitions: 1
+  cert: /path/to/cert.pem
+  key: /path/to/key.pem
+```
 
 ## Sample cluster configurations {#examples}
 

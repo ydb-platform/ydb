@@ -37,8 +37,6 @@
 
 {% endif %}
 
-* [RETURNING](returning.md)
-
 {% if feature_upsert %}
 
 * [UPSERT](upsert_into.md)

@@ -28,6 +28,28 @@ DELETE FROM my_table ON
 SELECT * FROM $to_delete;
 ```
 
+## DELETE FROM ... RETURNING {delete-from-returning}
+
+Return values based on rows deleted. It allows to get the results immediately without a separate SELECT query.
+
+### Examples
+
+* Return all values of modified rows
+
+```yql
+DELETE FROM orders
+WHERE status = 'cancelled'
+RETURNING *;
+```
+
+* Return specific columns
+
+```yql
+DELETE FROM orders
+WHERE status = 'cancelled'
+RETURNING order_id, order_date;
+```
+
 {% if feature_batch_operations %}
 
 ## See also

@@ -32,6 +32,30 @@ UPDATE my_table ON
 SELECT * FROM $to_update;
 ```
 
+## UPDATE ... RETURNING {update-returning}
+
+Return values based on rows updated. It allows to get the results immediately without a separate SELECT query.
+
+### Examples
+
+* Return all values of modified rows
+
+```yql
+UPDATE orders
+SET status = 'shipped'
+WHERE order_date < '2023-01-01'
+RETURNING *;
+```
+
+* Return specific columns
+
+```yql
+UPDATE products
+SET price = price * 0.9 
+WHERE category = 'Electronics'
+RETURNING product_id, name, price AS new_price;
+```
+
 {% if feature_batch_operations %}
 
 ## See also

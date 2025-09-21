@@ -33,3 +33,24 @@ VALUES ( 1, 10, 'Some text', Date('2021-10-07')),
        ( 2, 10, 'Some text', Date('2021-10-08'))
 ```
 
+## UPSERT INTO ... RETURNING {upsert-into-returning}
+
+Return values based on rows updated or inserted. It allows to get the results immediately without a separate SELECT query. For new rows the `RETURNING` clause outputs the values that were inserted, and for updated rows - the new values after the update.
+
+### Examples
+
+* Return all values of modified row
+
+```yql
+UPSERT INTO orders (order_id, status, amount)
+VALUES (1001, 'shipped', 500)
+RETURNING *;
+```
+
+* Return specific columns
+
+```yql
+UPSERT INTO users (user_id, name, email)
+VALUES (42, 'John Doe', 'john@example.com')
+RETURNING user_id, email;
+```

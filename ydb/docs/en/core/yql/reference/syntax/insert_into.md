@@ -69,4 +69,26 @@ SELECT key FROM my_table_source;
 
 {% endif %}
 
+## INSERT INTO ... RETURNING {insert-into-returning}
 
+Return values based on rows inserted. It allows to get the results immediately without a separate SELECT query.
+
+### Examples
+
+* Return all values of modified rows
+
+```yql
+INSERT INTO some_table (id, year, color, price)
+VALUES (1103, 2023, 'blue', 400)
+RETURNING *;
+```
+
+* Return specific columns
+
+```yql
+INSERT INTO some_table (id, color, price)
+VALUES 
+    (1101, 'red', 200),
+    (1102, 'green', 300)
+RETURNING id, price;
+```

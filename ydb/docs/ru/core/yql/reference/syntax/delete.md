@@ -30,6 +30,28 @@ DELETE FROM my_table ON
 SELECT * FROM $to_delete;
 ```
 
+## DELETE FROM ... RETURNING {delete-from-returning}
+
+Используется для возврата значений строк, которые были удалены. Это позволяет сразу получить результаты без отдельного запроса SELECT. 
+
+### Примеры
+
+* Возврат всех значений удаленных строк
+
+```yql
+DELETE FROM orders
+WHERE status = 'cancelled'
+RETURNING *;
+```
+
+* Возврат конкретных столбцов
+
+```yql
+DELETE FROM orders
+WHERE status = 'cancelled'
+RETURNING order_id, order_date;
+```
+
 {% if feature_batch_operations %}
 
 ## См. также

@@ -33,6 +33,30 @@ UPDATE my_table ON
 SELECT * FROM $to_update;
 ```
 
+## UPDATE ... RETURNING {update-returning}
+
+Используется для возврата значений строк, которые были обновлены. Это позволяет сразу получить результаты без отдельного запроса SELECT. 
+
+### Примеры
+
+* Возврат всех значений обновленных строк
+
+```yql
+UPDATE orders
+SET status = 'shipped'
+WHERE order_date < '2023-01-01'
+RETURNING *;
+```
+
+* Возврат конкретных столбцов
+
+```yql
+UPDATE products
+SET price = price * 0.9 
+WHERE category = 'Electronics'
+RETURNING product_id, name, price AS new_price;
+```
+
 {% if feature_batch_operations %}
 
 ## См. также

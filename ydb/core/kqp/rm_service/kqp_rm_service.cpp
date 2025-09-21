@@ -595,8 +595,10 @@ public:
     void Registered(TActorSystem* sys, const TActorId& owner) override {
         ResourceManager->Bootstrap(Config, sys, SelfId());
         with_lock (ResourceManagers.Lock) {
+            if (ResourceManagers.Default.expired()) { // There can be several managers in tests
+                ResourceManagers.Default = ResourceManager;
+            }
             ResourceManagers.ByNodeId[NodeId] = ResourceManager;
-            ResourceManagers.Default = ResourceManager;
         }
 
         TActorBootstrapped::Registered(sys, owner);
@@ -992,10 +994,7 @@ std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _no
 
 std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> _nodeId) {
     ui32 nodeId = _nodeId ? *_nodeId : TActivationContext::ActorSystem()->NodeId;
-    std::shared_ptr<NRm::TKqpResourceManager> rm;
-    with_lock (NRm::ResourceManagers.Lock) {
-        rm = NRm::ResourceManagers.Default.lock();
-    }
+    std::shared_ptr<NRm::TKqpResourceManager> rm = NRm::ResourceManagers.Default.lock();
     if (Y_LIKELY(rm && rm->GetNodeId() == nodeId)) {
         return rm;
     }

@@ -100,7 +100,9 @@ public:
 
         SumWrittenBytes->Update(size, now);
 
-        TString sourceIdHash = AsKeyBound(Hash(NSourceIdEncoding::Decode(sourceId)));
+        TString sourceIdHash = sourceId // Kinesis protocol use empty sourceId
+            ? AsKeyBound(Hash(NSourceIdEncoding::Decode(sourceId)))
+            : sourceId;
 
         auto it = WrittenBytes.find(sourceIdHash);
         if (it == WrittenBytes.end()) {

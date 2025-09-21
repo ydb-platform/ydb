@@ -4,7 +4,7 @@
 
 ### Release candidate 25.2.1.10 {#25-2-1-10-rc}
 
-Release date: September 22, 2025.
+Release date: September 21, 2025.
 
 #### Functionality
 
@@ -20,6 +20,8 @@ Release date: September 22, 2025.
   * support for changefeeds in backup and restore operations,
   * the ability to [enable followers (read replicas)](./yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes,
   * system views with [history of overloaded partitions](./dev/system-views.md#top-overload-partitions).
+
+* Increased the maximum amount of time allowed for a single query to execute from 30 minutes to 2 hours.
 
 
 #### Backward Incompatible Changes

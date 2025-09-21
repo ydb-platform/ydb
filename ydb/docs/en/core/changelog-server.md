@@ -8,18 +8,18 @@ Release date: September 22, 2025.
 
 #### Functionality
 
-* Added [YDB Transfer](./concepts/transfer.md) thats allows transfer both small and giant (gb/s) amounts of data from a topic to a table in seconds. You can create a transfer use the new [CREATE TRANSFER](./yql/reference/syntax/create-transfer.md) command in YQL. We have also prepared [instructions](./recipes/transfer/nginx.md) with an example for a quick start.
-* Added [spilling](./concepts/spilling.md), a memory management mechanism, that enables execution of user queries that require processing large data volumes exceeding available node memory.
+* Added the ability to transfer data from a topic to a table. [YDB Transfer](./concepts/transfer.md) allows you to transfer both small and giant (gb/s) amounts of data from a topic to a table in seconds. You can create a transfer using the new [CREATE TRANSFER](./yql/reference/syntax/create-transfer.md) command in YQL. [instructions with an example](./recipes/transfer/quickstart.md) have been prepared for a quick start.
+* Added [spilling](./concepts/spilling.md), a memory management mechanism, that temporarily offloads intermediate data arising from computations and exceeding available node RAM capacity to external storage. In YDB, disk storage is currently used for spilling. Spilling enables execution of user queries that require processing large data volumes exceeding available node memory.
 * Enabled by default:
 
   * [vector index](./dev/vector-indexes.md) for approximate vector similarity search,
   * supported in [YDB Topics Kafka API](./reference/kafka-api/) client-side consumer balancing, [compacted topics](https://docs.confluent.io/kafka/design/log_compaction.html) and [transactions](https://www.confluent.io/blog/transactions-apache-kafka/),
-  * support for [auto-partitioning topics](./concepts/cdc.md?version=v25.1#topic-partitions) for row-oriented tables in CDC,
+  * support for [auto-partitioning topics](./concepts/cdc.md?#topic-partitions) for row-oriented tables in CDC,
   * parameterized [Decimal type](./yql/reference/types/primitive.md#numeric),
   * automatic cleanup of temporary tables and directories during export to S3,
   * support for changefeeds in backup and restore operations,
   * the ability to [enable followers (read replicas)](./yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes,
-  * system views with information about [history of overloaded partitions](./dev/system-views.md?version=v25.1#top-overload-partitions),
+  * system views with [history of overloaded partitions](./dev/system-views.md#top-overload-partitions).
 
 
 #### Backward Incompatible Changes

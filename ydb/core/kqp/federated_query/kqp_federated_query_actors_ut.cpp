@@ -19,6 +19,12 @@ namespace {
         UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
     }
 
+    void DropSchemaSecret(const TString& secretName, NYdb::NTable::TSession& session) {
+        auto createSecretQuery = "DROP  SECRET `" + secretName + "`;";
+        auto createSecretQueryResult = session.ExecuteSchemeQuery(createSecretQuery).GetValueSync();
+        UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
+    }
+
     NThreading::TPromise<NKikimr::NKqp::TEvDescribeSecretsResponse::TDescription>
     ResolveSecret(const TString& userId, const TString& secretName, NKikimr::NKqp::TKikimrRunner& kikimr) {
         auto promise = NThreading::NewPromise<NKikimr::NKqp::TEvDescribeSecretsResponse::TDescription>();
@@ -42,9 +48,10 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         TString secretValue = "secret-value";
         CreateSchemaSecret(secretName, secretValue, session);
 
-        auto promise = ResolveSecret("ownerId", "/Root/secret-name", kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+        for (int i = 0; i < 3; ++i) {
+            auto promise = ResolveSecret("ownerId", "/Root/secret-name", kikimr);
+            UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+        }
     }
 
     Y_UNIT_TEST(GetUpdatedValue) {
@@ -59,15 +66,13 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         TString secretValue = "secret-value";
         CreateSchemaSecret(secretName, secretValue, session);
 
-        {
-            auto promise = ResolveSecret("ownerId", "/Root/secret-name", kikimr);
-            UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
-        }
+        auto promise = ResolveSecret("ownerId", "/Root/secret-name", kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
 
-        TString newSecretValue = "new-secret-value";
-        AlterSchemaSecret(secretName, newSecretValue, session);
+        for (int i = 0; i < 3; ++i) {
+            TString newSecretValue = secretName + "-" + ToString(i);
+            AlterSchemaSecret(secretName, newSecretValue, session);
 
-        {
             auto promise = ResolveSecret("ownerId", "/Root/secret-name", kikimr);
             UNIT_ASSERT_VALUES_EQUAL(newSecretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
         }
@@ -83,6 +88,27 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
         auto promise = ResolveSecret("ownerId", "/Root/secret-not-exist", kikimr);
 
+        UNIT_ASSERT_VALUES_EQUAL(Ydb::StatusIds::BAD_REQUEST, promise.GetFuture().GetValueSync().Status);
+    }
+
+    Y_UNIT_TEST(GetDroppedValue) {
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        NKikimr::NKqp::TKikimrRunner kikimr{ NKikimr::NKqp::TKikimrSettings(appCfg) };
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString secretName = "/Root/secret-name";
+        TString secretValue = "secret-value";
+        CreateSchemaSecret(secretName, secretValue, session);
+
+        auto promise = ResolveSecret("ownerId", "/Root/secret-name", kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+
+        DropSchemaSecret(secretName, session);
+
+        promise = ResolveSecret("ownerId", "/Root/secret-name", kikimr);
         UNIT_ASSERT_VALUES_EQUAL(Ydb::StatusIds::BAD_REQUEST, promise.GetFuture().GetValueSync().Status);
     }
 

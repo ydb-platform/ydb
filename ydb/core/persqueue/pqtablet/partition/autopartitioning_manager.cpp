@@ -188,7 +188,7 @@ public:
             }
         } while (i < j);
 
-        if (oWrittenBytes >= lWrittenBytes / 2 || oWrittenBytes >= rWrittenBytes / 2) {
+        if (oWrittenBytes >= lWrittenBytes || oWrittenBytes >= rWrittenBytes) {
             // The volume of entries in the partition with the SourceID manually linked to the partition is significant.
             //  We divide the partition in half.
             return MiddleOf(partition->GetKeyRange().GetFromBound(), partition->GetKeyRange().GetToBound());

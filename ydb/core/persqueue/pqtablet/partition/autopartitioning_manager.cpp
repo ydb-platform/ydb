@@ -186,7 +186,7 @@ public:
                 --j;
                 lastRight = &rhs.first;
             }
-        } while (i < j);
+        } while (i <= j);
 
         if (oWrittenBytes >= lWrittenBytes || oWrittenBytes >= rWrittenBytes) {
             // The volume of entries in the partition with the SourceID manually linked to the partition is significant.

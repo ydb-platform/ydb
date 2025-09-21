@@ -295,6 +295,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteInflightSize(0)
     , Tablet(tablet)
     , BlobCache(blobCache)
+    , DeletedKeys(std::make_shared<std::deque<TString>>())
     , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB)
     , NewHeadKey{TKey{}, 0, TInstant::Zero(), 0}
     , BodySize(0)
@@ -2330,10 +2331,10 @@ void TPartition::RunPersist() {
 
 bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
 {
-    bool haveChanges = !DeletedKeys.empty();
+    bool haveChanges = !DeletedKeys->empty();
 
-    while (!DeletedKeys.empty()) {
-        auto& k = DeletedKeys.back();
+    while (!DeletedKeys->empty()) {
+        auto& k = DeletedKeys->back();
 
         auto* cmd = PersistRequest->Record.AddCmdDeleteRange();
         auto* range = cmd->MutableRange();
@@ -2343,7 +2344,7 @@ bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
         range->SetTo(k.data(), k.size());
         range->SetIncludeTo(true);
 
-        DeletedKeys.pop_back();
+        DeletedKeys->pop_back();
     }
 
     return haveChanges;
@@ -2379,9 +2380,9 @@ TBlobKeyTokenPtr TPartition::MakeBlobKeyToken(const TString& key)
     // which adds the key to the queue for deletion before freeing the memory.
     auto ptr = std::make_unique<TBlobKeyToken>(key);
 
-    auto deleter = [this](TBlobKeyToken* token) {
+    auto deleter = [keys = DeletedKeys](TBlobKeyToken* token) {
         if (token->NeedDelete) {
-            DeletedKeys.emplace_back(std::move(token->Key));
+            keys->emplace_back(std::move(token->Key));
         }
         delete token;
     };

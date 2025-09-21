@@ -1446,6 +1446,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
     response->MessagesWrittenGrpc = MsgsWrittenGrpc.Value();
     response->MessagesSizes = std::move(MessageSize.GetValues());
     response->InputLags = std::move(SupportivePartitionTimeLag);
+    response->WrittenBytes = AutopartitioningManager->GetWrittenBytes();
 
     LOG_D("Send TEvPQ::TEvGetWriteInfoResponse");
     ctx.Send(originalPartition, response);
@@ -2424,6 +2425,10 @@ void TPartition::RunPersist() {
             MsgsWrittenGrpc.Inc(writeInfo->MessagesWrittenTotal);
 
             WriteNewSizeFromSupportivePartitions += writeInfo->BytesWrittenTotal;
+
+            for (auto& [sourceId, writtenBytes] : writeInfo->WrittenBytes) {
+                AutopartitioningManager->OnWrite(sourceId, writtenBytes);
+            }
         }
         WriteInfosApplied.clear();
         //Done with counters.

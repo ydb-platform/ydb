@@ -6,6 +6,8 @@
 
 namespace NKikimr::NPQ {
 
+using TSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;
+
 class TNoneAutopartitioningManager : public IAutopartitioningManager {
 public:
     TNoneAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config) {
@@ -27,11 +29,62 @@ public:
     void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) override {
         Y_UNUSED(config);
     }
+
+    std::vector<std::pair<TString, ui64>> GetWrittenBytes() override {
+        return {};
+    }
+};
+
+class TSupprotiveAutopartitioningManager : public IAutopartitioningManager {
+public:
+    TSupprotiveAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config) {
+        Y_UNUSED(config);
+    }
+
+    void OnWrite(const TString& sourceId, ui64 size) override {
+        auto now = TInstant::Now();
+
+        auto it = WrittenBytes.find(sourceId);
+        if (it == WrittenBytes.end()) {
+            auto [i,_] = WrittenBytes.emplace(sourceId, TSlidingWindow(TDuration::Minutes(1), 6));
+            it = i;
+        }
+
+        auto& counter = it->second;
+        counter.Update(size, now);
+    }
+
+    std::optional<TString> SplitBoundary() override {
+        return std::nullopt;
+    }
+
+    NKikimrPQ::EScaleStatus GetScaleStatus() override {
+        return NKikimrPQ::EScaleStatus::NORMAL;
+    }
+
+    void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) override {
+        Y_UNUSED(config);
+    }
+
+    std::vector<std::pair<TString, ui64>> GetWrittenBytes() override {
+        auto  now = TInstant::Now();
+        std::vector<std::pair<TString, ui64>> result;
+
+        for (auto& [sourceId, counter] : WrittenBytes) {
+            counter.Update(now);
+            if (counter.GetValue() > 0) {
+                result.emplace_back(sourceId, counter.GetValue());
+            }
+        }
+
+        return result;
+    }
+
+private:
+    std::unordered_map<TString, TSlidingWindow> WrittenBytes;
 };
 
 class TAutopartitioningManager : public IAutopartitioningManager {
-    using TSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;
-
     static constexpr size_t Precision = 100;
 public:
     TAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config)
@@ -159,6 +212,10 @@ public:
         }
     }
 
+    std::vector<std::pair<TString, ui64>> GetWrittenBytes() override {
+        return {};
+    }
+
     void RecreateSumWrittenBytes() {
         SumWrittenBytes.ConstructInPlace(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), Precision);
     }
@@ -173,10 +230,19 @@ private:
     TInstant LastCleanUp;
 };
 
+
+
 IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, bool supportive) {
-    return !supportive && SplitMergeEnabled(config) && !MirroringEnabled(config)
-        ? static_cast<IAutopartitioningManager*>(new TAutopartitioningManager(config))
-        : static_cast<IAutopartitioningManager*>(new TNoneAutopartitioningManager(config));
+    auto withAutopartitioning = SplitMergeEnabled(config) && !MirroringEnabled(config);
+    if (!withAutopartitioning) {
+        return new TNoneAutopartitioningManager(config);
+    }
+
+    if (supportive) {
+        return new TSupprotiveAutopartitioningManager(config);
+    }
+
+    return new TAutopartitioningManager(config);
 }
 
 }

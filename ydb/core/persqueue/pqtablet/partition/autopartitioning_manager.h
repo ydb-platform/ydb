@@ -20,6 +20,7 @@ public:
 
     virtual NKikimrPQ::EScaleStatus GetScaleStatus() = 0;
     virtual std::optional<TString> SplitBoundary() = 0;
+    virtual std::vector<std::pair<TString, ui64>> GetWrittenBytes() = 0;
 
     virtual void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) = 0;
 };

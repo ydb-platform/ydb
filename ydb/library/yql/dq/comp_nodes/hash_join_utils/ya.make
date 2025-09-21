@@ -24,10 +24,6 @@ CFLAGS(
     -mavx2
 )
 
-RECURSE(
-    simd
-)
-
 ENDIF()
 
 YQL_LAST_ABI_VERSION()

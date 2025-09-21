@@ -4,6 +4,7 @@
 
 * 23346:Cherry-pick multiple commits for Distconf group configuration cache [#23346](https://github.com/ydb-platform/ydb/pull/23346) ([Sergey Belyakov](https://github.com/serbel324))
 * 23027:Added support for [compacted topics](https://docs.confluent.io/kafka/design/log_compaction.html) in [YDB Topics Kafka API](https://ydb.tech/docs/en/reference/kafka-api/). Enabled via the `enable_topic_compactification_by_key` flag.
+* 24977:Added the sending metrics from external boot tablets to hive. This new behavior hidden under the flag LockedTabletsSendMetrics that 'false' by default. We need to publish Hive after the HealthChecker and then set LockedTabletsSendMetrics to 'true'. [#24977](https://github.com/ydb-platform/ydb/pull/24977) ([Andrei Galibin](https://github.com/agalibin))
 
 ### Bug fixes
 
@@ -13,3 +14,4 @@
   * YQ-4447 disabled thread pool in s3 by default (https://github.com/ydb-platform/ydb/pull/22160)
   * YQ-4454 fixed clickhouse udf includes (https://github.com/ydb-platform/ydb/pull/21698)
 * 22678:Fixed [false-positive unresponsive tablet issues](https://github.com/ydb-platform/ydb/issues/22390) in healthcheck during restarts. [#22678](https://github.com/ydb-platform/ydb/pull/22678) ([vporyadke](https://github.com/vporyadke))
+

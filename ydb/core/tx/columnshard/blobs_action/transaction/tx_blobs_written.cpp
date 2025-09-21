@@ -69,7 +69,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             operation->OnWriteFinish(txc, InsertWriteIds, false);
             Self->OperationsManager->LinkInsertWriteIdToOperationWriteId(InsertWriteIds, operation->GetWriteId());
         }
-        if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
+        if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite || !Self->OperationsManager->GetLockForTxOptional(operation->GetLockId())) {
             LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, operation->GetCookie(), "no_tx_write", true, "");
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
             AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
@@ -120,7 +120,9 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
             if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite || Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
                 auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
                     writeMeta.GetPathId().InternalPathId, writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
-                Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
+                if (Self->GetOperationsManager().GetLockOptional(op->GetLockId())) {
+                    Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
+                }
             }
         }
     }

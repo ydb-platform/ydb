@@ -384,6 +384,21 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), record.GetTxId(), status, message);
         ctx.Send(source, result.release(), 0, cookie);
     };
+
+    const auto inFlightLocksRangesBytes = NOlap::TPKRangeFilter::GetFiltersTotalMemorySize();
+    const ui64 inFlightLocksRangesBytesLimit = AppDataVerified().ColumnShardConfig.GetInFlightLocksRangesBytesLimit();
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Comparing size")("inFlightLocksRangesBytesLimit", inFlightLocksRangesBytesLimit)("inFlightLocksRangesBytes", inFlightLocksRangesBytes)(
+        "record.GetTxId()", record.GetTxId())("record.GetLockTxId()", record.GetLockTxId())(
+        "record.GetLocks().GetLocks()[0].GetLockId()", record.HasLocks() ? record.GetLocks().GetLocks()[0].GetLockId() : 0)("record.GetLockNodeId()", record.GetLockNodeId());
+
+    if (behaviour == EOperationBehaviour::WriteWithLock && inFlightLocksRangesBytes > inFlightLocksRangesBytesLimit) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "In flight locks ranges bytes limit exceeded")
+            ("inFlightLocksRangesBytes", inFlightLocksRangesBytes)
+            ("inFlightLocksRangesBytesLimit", inFlightLocksRangesBytesLimit);
+        sendError("overloaded by in flight locks ranges memory limit", NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        return;
+    }
+
     if (behaviour == EOperationBehaviour::CommitWriteLock) {
         auto commitOperation = std::make_shared<TCommitOperation>(TabletID());
         auto conclusionParse = commitOperation->Parse(*ev->Get());
@@ -545,7 +560,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", true, operation.GetIsBulk(), "", "");
 
-    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, ev->Recipient, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId, *mType, behaviour, writeTimeout, record.GetTxId(),
+    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, ev->Recipient, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId, record.GetLockNodeId(), *mType, behaviour, writeTimeout, record.GetTxId(),
         isBulk, record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>()));
     WriteTasksQueue->Drain(false, ctx);
 }

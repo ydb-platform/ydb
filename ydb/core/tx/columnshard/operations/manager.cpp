@@ -128,6 +128,10 @@ void TOperationsManager::AbortTransactionOnExecute(TColumnShard& owner, const ui
     OnTransactionFinishOnExecute(aborted, *lock, txId, txc);
 }
 
+void TOperationsManager::AbortLock(TColumnShard& /*owner*/, const ui64 lockId) {
+    LockFeatures.erase(lockId);
+}
+
 void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId) {
     auto* lock = GetLockFeaturesForTxOptional(txId);
     if (!lock) {

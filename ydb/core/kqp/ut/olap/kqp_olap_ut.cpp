@@ -302,6 +302,54 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(ConstantIfPushDown) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `statistics2` (
+                        username Utf8 NOT NULL,
+                        PRIMARY KEY (username)
+                    )
+                    PARTITION BY HASH(username)
+                    WITH (
+                        STORE = COLUMN,
+                        PARTITION_COUNT=1
+                    );
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(
+                    R"(
+                    UPSERT INTO `statistics2`
+                    ( `username`)
+                    VALUES ( "a" ), ( "b" ), ( "c" ), ( "d" );
+                    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+                ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                --!syntax_v1
+                select count(*) as cnt
+                from statistics2 where IF(len(String::Strip(' '))>0,username = ' ', True)
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(status.GetResultSet(0).RowsCount(), 1);
+        }
+    }
+
     Y_UNIT_TEST(SimpleQueryOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -4164,6 +4212,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
 
         TTestHelper testHelper(runnerSettings);
+        testHelper.GetKikimr().GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_TRACE);
         auto client = testHelper.GetKikimr().GetQueryClient();
 
         TVector<TTestHelper::TColumnSchema> schema = {

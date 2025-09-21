@@ -772,7 +772,6 @@ feature_flags:
 |---------------------------| ----------------------------------------------------|
 | `enable_vector_index`                                    | Support for [vector indexes](../../dev/vector-indexes.md) for approximate vector similarity search |
 | `enable_batch_updates`                                   | Support for `BATCH UPDATE` and `BATCH DELETE` statements |
-| `enable_kafka_native_balancing`                          | Client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
 | `enable_topic_autopartitioning_for_cdc`                  | [Auto-partitioning topics](../../concepts/cdc.md#topic-partitions) for row-oriented tables in CDC |
 | `enable_access_to_index_impl_tables`                     | Support for [followers (read replicas)](../../yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Support for changefeeds in backup and restore operations |
@@ -782,6 +781,9 @@ feature_flags:
 | `enable_strict_acl_check`                                | Strict ACL checks — do not allow granting rights to non-existent users and delete users with permissions |
 | `enable_strict_user_management`                          | Strict checks for local users — only the cluster or database administrator can administer local users |
 | `enable_database_admin`                                  | The role of a database administrator |
+| `enable_kafka_native_balancing`                          | Client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
+| `enable_topic_compactification_by_key`                   | Enabling topic compactification in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
+| `enable_kafka_transactions`                              | Enabling transactions in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
 
 ## Configuring Health Check {#healthcheck-config}
 
@@ -810,6 +812,38 @@ healthcheck_config:
 | `thresholds.nodes_time_difference_orange` | `25000` | Max allowed time difference (in us) between dynamic nodes for `ORANGE` issue  |
 | `thresholds.tablets_restarts_orange`      | `30`    | Number of tablet restarts to trigger an `ORANGE` alert                        |
 | `timeout`                                 | `20000` | Maximum health check response time (in ms)                                    |
+
+## Configuring Kafka API {#kafka-proxy-config}
+
+The `kafka_proxy_config` section of the {{ ydb-short-name }} configuration file enables and configures Kafka Proxy, which provides access to work with [{{ ydb-short-name }} Topics](../../concepts/topic.md) via [Kafka API](../../reference/kafka-api/index.md).
+
+### Description of parameters {#kafka-proxy-config-parameters}
+
+| Parameter | Type | Default value | Description |
+| --- | --- | --- | --- |
+| `enable_kafka_proxy` | bool | `false` | Enables or disables Kafka Proxy. |
+| `listening_port` | int32 | `9092` | The port on which the Kafka API will be available. |
+| `transaction_timeout_ms` | uint32 | `300000` (5 minutes) | The maximum timeout for Kafka transactions, after which the transaction will be cancelled. |
+| `auto_create_topics_enable` | bool | `false` | Enables automatic creation of topics when they are accessed. Analogous to [the same option](https://kafka.apache.org/documentation/#brokerconfigs_auto.create.topics.enable) in Apache Kafka. |
+| `auto_create_consumers_enable` | bool | `true` | Enables automatic registration of consumers when they are accessed. |
+| `topic_creation_default_partitions` | uint32 | `1` | The number of partitions that will be created if the number of partitions is not specified when adding a topic via the Kafka protocol. Analogous to [num.partitions](https://kafka.apache.org/documentation/#brokerconfigs_num.partitions) option in Apache Kafka. |
+| `ssl_cerificate` | string | — | The path to the SSL certificate file, which includes both the certificate file and the key file. When this parameter is specified, Kafka Proxy automatically starts processing requests using the specified SSL certificate. |
+| `cert` | string | — | The path to the SSL certificate file. When this parameter is specified, Kafka Proxy automatically starts processing requests using the specified SSL certificate. |
+| `key` | string | — | The path to the SSL key file. |
+
+### Example of a completed config {#kafka-proxy-config-example}
+
+```yaml
+kafka_proxy_config:
+  enable_kafka_proxy: true
+  listening_port: 9092
+  transaction_timeout_ms: 300000 # 5 minutes
+  auto_create_topics_enable: true
+  auto_create_consumers_enable: true
+  topic_creation_default_partitions: 1
+  cert: /path/to/cert.pem
+  key: /path/to/key.pem
+```
 
 ## Sample cluster configurations {#examples}
 

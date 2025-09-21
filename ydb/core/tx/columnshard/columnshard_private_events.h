@@ -78,7 +78,6 @@ struct TEvPrivate {
 
         EvRequestFilter,
         EvFilterRequestResourcesAllocated,
-        EvDuplicateSourceCacheResult,
         EvFilterConstructionResult,
 
         EvEnd

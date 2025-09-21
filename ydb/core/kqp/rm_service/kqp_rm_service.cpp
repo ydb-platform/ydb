@@ -172,11 +172,11 @@ public:
     }
 
     void Bootstrap(NKikimrConfig::TTableServiceConfig::TResourceManager& config, TActorSystem* actorSystem, TActorId selfId) {
-        if (!Counters) {
-            Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters);
-        }
         ActorSystem = actorSystem;
         SelfId = selfId;
+        if (!Counters) {
+            Counters = MakeIntrusive<TKqpCounters>(AppData(ActorSystem)->Counters);
+        }
         UpdatePatternCache(config.GetKqpPatternCacheCapacityBytes(),
             config.GetKqpPatternCacheCompiledCapacityBytes(),
             config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
@@ -590,13 +590,19 @@ public:
         ResourceManager = std::make_shared<TKqpResourceManager>(config, counters);
     }
 
-    void Bootstrap() {
-        ResourceManager->Bootstrap(Config, TlsActivationContext->ActorSystem(), SelfId());
+    // Is called right after service registration
+    // and before any usual actor can try to get ResourceManager
+    void Registered(TActorSystem* sys, const TActorId& owner) override {
+        ResourceManager->Bootstrap(Config, sys, SelfId());
         with_lock (ResourceManagers.Lock) {
             ResourceManagers.ByNodeId[NodeId] = ResourceManager;
             ResourceManagers.Default = ResourceManager;
         }
 
+        TActorBootstrapped::Registered(sys, owner);
+    }
+
+    void Bootstrap() {
         LOG_D("Start KqpResourceManagerActor at " << SelfId() << " with ResourceBroker at " << ResourceBrokerId);
 
         // Subscribe for tenant changes

@@ -3,7 +3,9 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 #include <ydb/services/metadata/secret/snapshot.h>
+#include <ydb/library/actors/core/log.h>
 
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, stream)
 
 namespace NKikimr::NKqp {
 
@@ -100,6 +102,7 @@ private:
 }  // anonymous namespace
 
 void TDescribeSchemaSecretsService::Handle(TEvResolveSecret::TPtr& ev) {
+    LOG_D("TEvResolveSecret: name=" << ev->Get()->SecretName << ", request cookie=" << LastCookie);
     const auto currentRequestCookie = LastCookie++;
     ResolveInFlight[currentRequestCookie] = ev->Get()->Promise;
     SecretNameInFlight[currentRequestCookie] = ev->Get()->SecretName;
@@ -115,18 +118,25 @@ void TDescribeSchemaSecretsService::Handle(TEvResolveSecret::TPtr& ev) {
 }
 
 void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie);
+
+    Y_ENSURE(SecretNameInFlight.contains(ev->Cookie), "such request cookie is not registered");
     const auto& secretName = SecretNameInFlight[ev->Cookie];
+
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request = ev->Get()->Request;
     if (request->ResultSet.empty() || request->ResultSet.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+        LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie << ", SchemeCache error");
         FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret `" + secretName + "` not found") }));
         return;
     }
-    // TODO (yurikiselev): Assert that request->ResultSet.front().SecretInfo->Description.GetValue() is empty
+
+    // TODO (yurikiselev): Assert that request->ResultSet.front().SecretInfo->Description.GetValue() is empty [issue:23462]
 
     const auto secretIt = SecretNameToValue.find(secretName);
     if (secretIt != SecretNameToValue.end()) { // some secret version is in cache
         const auto secretDescription = request->ResultSet.front().SecretInfo->Description;
         if (secretDescription.GetVersion() <= secretIt->second.Version) { // cache contains the most recent version
+            LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie << ", fill value from secret cache");
             FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(std::vector<TString>{secretIt->second.Value}));
             return;
         }
@@ -141,9 +151,12 @@ void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKey
 }
 
 void TDescribeSchemaSecretsService::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    LOG_D("TEvDescribeSchemeResult: request cookie=" << ev->Cookie);
+    Y_ENSURE(SecretNameInFlight.contains(ev->Cookie), "such request cookie is not registered");
     const auto& secretName = SecretNameInFlight[ev->Cookie];
     const auto &rec = ev->Get()->GetRecord();
     if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
+        LOG_D("TEvDescribeSchemeResult: request cookie=" << ev->Cookie << ", SchemeShard error");
         FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret `" + secretName + "` not found") }));
         return;
     }
@@ -158,6 +171,11 @@ void TDescribeSchemaSecretsService::FillResponse(const ui64 requestId, const TEv
     SecretNameInFlight.erase(requestId);
     ResolveInFlight[requestId].SetValue(response);
     ResolveInFlight.erase(requestId);
+}
+
+void TDescribeSchemaSecretsService::Bootstrap() {
+    LOG_D("Bootstrap");
+    Become(&TDescribeSchemaSecretsService::StateWait);
 }
 
 NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(const TString& secretName, const TString& ownerUserId, TActorSystem* actorSystem) {

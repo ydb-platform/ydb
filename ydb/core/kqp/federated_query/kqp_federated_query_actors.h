@@ -56,9 +56,7 @@ private:
 public:
     TDescribeSchemaSecretsService() = default;
 
-    void Bootstrap() {
-        Become(&TDescribeSchemaSecretsService::StateWait);
-    }
+    void Bootstrap();
 
 private:
     struct TVersionedSecret {

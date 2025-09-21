@@ -5,7 +5,7 @@
 * 21474:Added the ability to configure tablet boot priorities via `HiveConfig` [#21474](https://github.com/ydb-platform/ydb/pull/21474) ([Constantine Gamora](https://github.com/ya-ksgamora))
 * 23332:Added support for a user-defined Certificate Authority (CA) in asynchronous replication. [#23332](https://github.com/ydb-platform/ydb/pull/23332) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
 
-### Performance 
+### Performance
 
 * 23496:Added the new mode of operating [actor system](./concepts/glossary#actor-system), which allows for more efficient use of computing resources – the performance of a 4-core node is increased by 40%, now the performance per core is the same as that of a 10-core node; the performance of a 2-core node is increased by 110%, the performance per core is only 5% less than that of a 10-core node (previously it was 50% less). It is enabled by setting the `use_shared_threads` flag in the [actor-system configuration](./devops/configuration-management/configuration-v1/change_actorsystem_configs). [#23496](https://github.com/ydb-platform/ydb/pull/23496) ([kruall](https://github.com/kruall))
 

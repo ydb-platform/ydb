@@ -592,6 +592,9 @@ class LintWrapperScript:
     def value(cls, unit, flat_args, spec_args):
         if spec_args.get('WRAPPER_SCRIPT'):
             return {cls.KEY: spec_args['WRAPPER_SCRIPT'][0]}
+        else:
+            ymake.report_configure_error('Lint wrapper script must be set')
+            raise DartValueError()
 
 
 class LintConfigs:
@@ -701,6 +704,17 @@ class LintName:
         if lint_name in ('flake8', 'py2_flake8') and (unit.get('DISABLE_FLAKE8') or 'no') == 'yes':
             raise DartValueError()
         return {cls.KEY: lint_name}
+
+
+class LintGlobalResources:
+    KEY = 'LINT-GLOBAL-RESOURCES'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        lint_name = spec_args['NAME'][0]
+        global_resources = consts.LINTER_TO_GLOBAL_RESOURCES.get(lint_name)
+        if global_resources:
+            return {cls.KEY: serialize_list([key for _, key in global_resources])}
 
 
 class ModuleLang:

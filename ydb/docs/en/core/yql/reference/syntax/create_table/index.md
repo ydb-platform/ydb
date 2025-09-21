@@ -67,7 +67,11 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
 
 {% endif %}
 
-{% include [table naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md) %}
+{% note info %}
+
+When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+
+{% endnote %}
 
 ## Examples of table creation {#examples-tables-creation}
 

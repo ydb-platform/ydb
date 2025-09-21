@@ -1,6 +1,7 @@
 #include "pq_impl.h"
 
 #include <ydb/core/persqueue/common/common_app.h>
+#include <ydb/library/actors/core/log.h>
 #include <fmt/format.h>
 
 namespace NKikimr::NPQ {
@@ -11,7 +12,7 @@ static TString MakeReadSetData(bool commit)
     data.SetDecision(commit ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT);
 
     TString encoded;
-    Y_ABORT_UNLESS(data.SerializeToString(&encoded));
+    AFL_ENSURE(data.SerializeToString(&encoded));
 
     return encoded;
 }

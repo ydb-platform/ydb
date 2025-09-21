@@ -390,6 +390,10 @@ class ScenarioTestHelper:
             self._run_with_expected_status(
                 lambda: _upsert(),
                 expected_status,
+                {
+                    ydb.StatusCode.SCHEME_ERROR
+                },
+                3,
             )
 
     @staticmethod

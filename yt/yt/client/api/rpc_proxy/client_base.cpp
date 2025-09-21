@@ -182,6 +182,7 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
     req->set_sticky(sticky);
     req->set_ping(options.Ping);
     req->set_ping_ancestors(options.PingAncestors);
+    YT_OPTIONAL_SET_PROTO(req, pinger_address, options.PingerAddress);
     req->set_atomicity(static_cast<NProto::EAtomicity>(options.Atomicity));
     req->set_durability(static_cast<NProto::EDurability>(options.Durability));
     if (options.Attributes) {
@@ -223,6 +224,7 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
                 options.Durability,
                 timeout,
                 options.PingAncestors,
+                options.PingerAddress,
                 pingPeriod,
                 std::move(stickyParameters),
                 rsp->sequence_number_source_id(),

@@ -6,6 +6,8 @@
 
 #include <memory>
 
+#define PQ_INIT_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", Partition()->TabletId)("partition_id", Partition()->Partition)
+
 namespace NKikimr::NPQ {
 
 static const ui32 LEVEL0 = 32;
@@ -37,13 +39,13 @@ TInitializer::TInitializer(TPartition* partition)
 }
 
 void TInitializer::Execute(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(!InProgress, "Initialization already in progress");
+    AFL_ENSURE(!InProgress)("description", "Initialization already in progress");
     InProgress = true;
     DoNext(ctx);
 }
 
 bool TInitializer::Handle(STFUNC_SIG) {
-    Y_ABORT_UNLESS(InProgress, "Initialization is not started");
+    AFL_ENSURE(InProgress)("description", "Initialization is not started");
     return CurrentStep->Get()->Handle(ev);
 }
 
@@ -111,7 +113,7 @@ const TPartitionId& TInitializerStep::PartitionId() const {
 }
 
 void TInitializerStep::PoisonPill(const TActorContext& ctx) {
-    ctx.Send(Partition()->Tablet, new TEvents::TEvPoisonPill());
+    ctx.Send(Partition()->TabletActorId, new TEvents::TEvPoisonPill());
 }
 
 const TString& TInitializerStep::TopicName() const {
@@ -160,7 +162,7 @@ void TInitConfigStep::Execute(const TActorContext& ctx) {
     auto read = event->Record.AddCmdRead();
     read->SetKey(Partition()->GetKeyConfig());
 
-    ctx.Send(Partition()->Tablet, event.Release());
+    ctx.Send(Partition()->TabletActorId, event.Release());
 }
 
 void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -170,13 +172,13 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
     }
 
     auto& res = ev->Get()->Record;
-    Y_ABORT_UNLESS(res.ReadResultSize() == 1);
+    PQ_INIT_ENSURE(res.ReadResultSize() == 1);
 
     auto& response = res.GetReadResult(0);
 
     switch (response.GetStatus()) {
     case NKikimrProto::OK:
-        Y_ABORT_UNLESS(Partition()->Config.ParseFromString(response.GetValue()));
+        PQ_INIT_ENSURE(Partition()->Config.ParseFromString(response.GetValue()));
 
         Migrate(Partition()->Config);
 
@@ -203,7 +205,7 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
 
     // There should be no consumers in the configuration of the background partition. When creating a partition,
     // the PQ tablet specifically removes all consumer settings from the config.
-    Y_ABORT_UNLESS(!Partition()->IsSupportive() ||
+    PQ_INIT_ENSURE(!Partition()->IsSupportive() ||
                    (Partition()->Config.GetConsumers().empty() && Partition()->TabletConfig.GetConsumers().empty()));
 
     Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition.OriginalPartitionId);
@@ -240,7 +242,7 @@ void TInitDiskStatusStep::Execute(const TActorContext& ctx) {
 
     AddCheckDiskRequest(request.Get(), Partition()->NumChannels);
 
-    ctx.Send(Partition()->Tablet, request.Release());
+    ctx.Send(Partition()->TabletActorId, request.Release());
 }
 
 void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -250,7 +252,7 @@ void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActo
     }
 
     auto& response = ev->Get()->Record;
-    Y_ABORT_UNLESS(response.GetStatusResultSize());
+    PQ_INIT_ENSURE(response.GetStatusResultSize());
 
     Partition()->DiskIsFull = DiskIsFull(ev);
     if (Partition()->DiskIsFull) {
@@ -281,7 +283,7 @@ void TInitMetaStep::Execute(const TActorContext& ctx) {
     addKey(request->Record, TKeyPrefix::TypeMeta, PartitionId());
     addKey(request->Record, TKeyPrefix::TypeTxMeta, PartitionId());
 
-    ctx.Send(Partition()->Tablet, request.Release());
+    ctx.Send(Partition()->TabletActorId, request.Release());
 }
 
 void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
@@ -291,7 +293,7 @@ void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     }
 
     auto& response = ev->Get()->Record;
-    Y_ABORT_UNLESS(response.ReadResultSize() == 2);
+    PQ_INIT_ENSURE(response.ReadResultSize() == 2);
     LoadMeta(response, ctx);
     Done(ctx);
 }
@@ -322,7 +324,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
     auto loadMeta = [&](const NKikimrClient::TKeyValueResponse::TReadResult& response) {
         NKikimrPQ::TPartitionMeta meta;
         bool res = meta.ParseFromString(response.GetValue());
-        Y_ABORT_UNLESS(res);
+        PQ_INIT_ENSURE(res);
 
         Partition()->BlobEncoder.StartOffset = meta.GetStartOffset();
         Partition()->BlobEncoder.EndOffset = meta.GetEndOffset();
@@ -358,7 +360,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
     auto loadTxMeta = [this](const NKikimrClient::TKeyValueResponse::TReadResult& response) {
         NKikimrPQ::TPartitionTxMeta meta;
         bool res = meta.ParseFromString(response.GetValue());
-        Y_ABORT_UNLESS(res);
+        PQ_INIT_ENSURE(res);
 
         if (meta.HasPlanStep()) {
             Partition()->PlanStep = meta.GetPlanStep();
@@ -380,7 +382,7 @@ TInitInfoRangeStep::TInitInfoRangeStep(TInitializer* initializer)
 }
 
 void TInitInfoRangeStep::Execute(const TActorContext &ctx) {
-    RequestInfoRange(ctx, Partition()->Tablet, PartitionId(), "");
+    RequestInfoRange(ctx, Partition()->TabletActorId, PartitionId(), "");
 }
 
 void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
@@ -390,14 +392,14 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     }
 
     auto& response = ev->Get()->Record;
-    Y_ABORT_UNLESS(response.ReadRangeResultSize() == 1);
+    PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
 
     auto& range = response.GetReadRangeResult(0);
     auto now = ctx.Now();
 
-    Y_ABORT_UNLESS(response.ReadRangeResultSize() == 1);
+    PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
     //megaqc check here all results
-    Y_ABORT_UNLESS(range.HasStatus());
+    PQ_INIT_ENSURE(range.HasStatus());
     const TString *key = nullptr;
     switch (range.GetStatus()) {
         case NKikimrProto::OK:
@@ -408,7 +410,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 
             for (ui32 i = 0; i < range.PairSize(); ++i) {
                 const auto& pair = range.GetPair(i);
-                Y_ABORT_UNLESS(pair.HasStatus());
+                PQ_INIT_ENSURE(pair.HasStatus());
                 if (pair.GetStatus() != NKikimrProto::OK) {
                     PQ_LOG_ERROR("read range error got status " << pair.GetStatus() << " for key " << (pair.HasKey() ? pair.GetKey() : "unknown")
                     );
@@ -417,8 +419,8 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
                     return;
                 }
 
-                Y_ABORT_UNLESS(pair.HasKey());
-                Y_ABORT_UNLESS(pair.HasValue());
+                PQ_INIT_ENSURE(pair.HasKey());
+                PQ_INIT_ENSURE(pair.HasValue());
 
                 key = &pair.GetKey();
                 const auto type = (*key)[TKeyPrefix::MarkPosition()];
@@ -434,8 +436,8 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             }
             //make next step
             if (range.GetStatus() == NKikimrProto::OVERRUN) {
-                Y_ABORT_UNLESS(key);
-                RequestInfoRange(ctx, Partition()->Tablet, PartitionId(), *key);
+                PQ_INIT_ENSURE(key);
+                RequestInfoRange(ctx, Partition()->TabletActorId, PartitionId(), *key);
             } else {
                 PostProcessing(ctx);
             }
@@ -473,7 +475,7 @@ TInitDataRangeStep::TInitDataRangeStep(TInitializer* initializer)
 }
 
 void TInitDataRangeStep::Execute(const TActorContext &ctx) {
-    RequestDataRange(ctx, Partition()->Tablet, PartitionId(), "");
+    RequestDataRange(ctx, Partition()->TabletActorId, PartitionId(), "");
 }
 
 void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
@@ -483,11 +485,11 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     }
 
     auto& response = ev->Get()->Record;
-    Y_ABORT_UNLESS(response.ReadRangeResultSize() == 1);
+    PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
 
     auto& range = response.GetReadRangeResult(0);
 
-    Y_ABORT_UNLESS(range.HasStatus());
+    PQ_INIT_ENSURE(range.HasStatus());
     switch(range.GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
@@ -495,8 +497,8 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             FillBlobsMetaData(range, ctx);
 
             if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
-                Y_ABORT_UNLESS(range.PairSize());
-                RequestDataRange(ctx, Partition()->Tablet, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
+                PQ_INIT_ENSURE(range.PairSize());
+                RequestDataRange(ctx, Partition()->TabletActorId, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
                 return;
             }
             FormHeadAndProceed();
@@ -530,7 +532,7 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
 
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         const auto& pair = range.GetPair(i);
-        Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+        AFL_ENSURE(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
         keys.push_back(pair.GetKey());
     }
 
@@ -565,9 +567,8 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
             if (lastKey.GetOffset() == candidate.GetOffset()) {
                 if (lastKey.GetPartNo() == candidate.GetPartNo()) {
                     // candidate содержит lastKey
-                    Y_ABORT_UNLESS(lastKey.GetCount() <= candidate.GetCount(),
-                                   "lastKey=%s, candidate=%s",
-                                   lastKey.ToString().data(), candidate.ToString().data());
+                    AFL_ENSURE(lastKey.GetCount() <= candidate.GetCount())
+                        ("lastKey", lastKey.ToString())("candidate", candidate.ToString().data());
                     if (lastKey.GetCount() < candidate.GetCount()) {
                         PQ_LOG_D("replace key " << filtered.back() << " to " << k);
                         filtered.back() = std::move(k);
@@ -577,7 +578,7 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
                     PQ_LOG_D("ignore key " << k);
                 } else {
                     // candidate после lastKey
-                    //Y_ABORT_UNLESS(lastKey.GetPartNo() + lastKey.GetInternalPartsCount() == candidate.GetPartNo(),
+                    //PQ_INIT_ENSURE(lastKey.GetPartNo() + lastKey.GetInternalPartsCount() == candidate.GetPartNo(),
                     //               "lastKey=%s, candidate=%s",
                     //               lastKey.ToString().data(), candidate.ToString().data());
                     PQ_LOG_D("add key " << k);
@@ -618,7 +619,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
 
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         const auto& pair = range.GetPair(i);
-        Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+        PQ_INIT_ENSURE(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
         PQ_LOG_D("check key " << pair.GetKey());
         const auto k = TKey::FromString(pair.GetKey(), PartitionId());
         if (!actualKeys.contains(pair.GetKey())) {
@@ -633,16 +634,14 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
             }
             head.PartNo = 0;
         } else {
-            Y_ABORT_UNLESS(endOffset <= k.GetOffset(),
-                           "endOffset=%" PRIu64 ", key=%s",
-                           endOffset, pair.GetKey().data());
+            PQ_INIT_ENSURE(endOffset <= k.GetOffset())("endOffset", endOffset)("key", pair.GetKey());
             if (endOffset < k.GetOffset()) {
                 gapOffsets.push_back(std::make_pair(endOffset, k.GetOffset()));
                 gapSize += k.GetOffset() - endOffset;
             }
         }
-        Y_ABORT_UNLESS(k.GetCount() + k.GetInternalPartsCount() > 0);
-        Y_ABORT_UNLESS(k.GetOffset() >= endOffset);
+        PQ_INIT_ENSURE(k.GetCount() + k.GetInternalPartsCount() > 0);
+        PQ_INIT_ENSURE(k.GetOffset() >= endOffset);
         endOffset = k.GetOffset() + k.GetCount();
         //at this point EndOffset > StartOffset
         if (!k.HasSuffix() || !k.IsHead()) { //head.Size will be filled after read or head blobs
@@ -659,7 +658,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
                                   Partition()->MakeBlobKeyToken(k.ToString()));
     }
 
-    Y_ABORT_UNLESS(endOffset >= startOffset);
+    PQ_INIT_ENSURE(endOffset >= startOffset);
 }
 
 struct TKeyBoundaries {
@@ -689,7 +688,7 @@ TKeyBoundaries SplitBodyHeadAndFastWrite(const std::deque<TDataKey>& keys)
         }
     }
 
-    Y_ABORT_UNLESS(b.Head <= b.FastWrite);
+    AFL_ENSURE(b.Head <= b.FastWrite);
 
     return b;
 }
@@ -796,13 +795,13 @@ void TInitDataRangeStep::FormHeadAndProceed() {
         cz.Head.Offset = fwz.StartOffset;
     }
 
-    Y_ABORT_UNLESS((cz.StartOffset <= cz.EndOffset) && (fwz.StartOffset <= fwz.EndOffset) && (cz.EndOffset <= fwz.StartOffset),
-                   "cz.StartOffset=%" PRIu64 ", cz.EndOffset=%" PRIu64 ", fwz.StartOffset=%" PRIu64 ", fwz.EndOffset=%" PRIu64,
-                   cz.StartOffset, cz.EndOffset, fwz.StartOffset, fwz.EndOffset);
+    PQ_INIT_ENSURE((cz.StartOffset <= cz.EndOffset) && (fwz.StartOffset <= fwz.EndOffset) && (cz.EndOffset <= fwz.StartOffset))
+        ("cz.StartOffset", cz.StartOffset)("cz.EndOffset", cz.EndOffset)
+        ("fwz.StartOffset", fwz.StartOffset)("fwz.EndOffset", fwz.EndOffset);
 
-    Y_ABORT_UNLESS(fwz.HeadKeys.empty() || fwz.Head.Offset == fwz.HeadKeys.front().Key.GetOffset() && fwz.Head.PartNo == fwz.HeadKeys.front().Key.GetPartNo());
-    Y_ABORT_UNLESS(fwz.Head.Offset < endOffset || fwz.Head.Offset == endOffset && fwz.HeadKeys.empty());
-    Y_ABORT_UNLESS(fwz.Head.Offset >= startOffset || fwz.Head.Offset == startOffset - 1 && fwz.Head.PartNo > 0);
+    PQ_INIT_ENSURE(fwz.HeadKeys.empty() || fwz.Head.Offset == fwz.HeadKeys.front().Key.GetOffset() && fwz.Head.PartNo == fwz.HeadKeys.front().Key.GetPartNo());
+    PQ_INIT_ENSURE(fwz.Head.Offset < endOffset || fwz.Head.Offset == endOffset && fwz.HeadKeys.empty());
+    PQ_INIT_ENSURE(fwz.Head.Offset >= startOffset || fwz.Head.Offset == startOffset - 1 && fwz.Head.PartNo > 0);
 }
 
 
@@ -820,7 +819,7 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
     for (const auto& p : Partition()->CompactionBlobEncoder.HeadKeys) {
         keys.emplace_back(p.Key.Data(), p.Key.Size());
     }
-    Y_ABORT_UNLESS(keys.size() < Partition()->TotalMaxCount);
+    PQ_INIT_ENSURE(keys.size() < Partition()->TotalMaxCount);
     if (keys.empty()) {
         Done(ctx);
         return;
@@ -831,7 +830,7 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
         auto read = request->Record.AddCmdRead();
         read->SetKey(key);
     }
-    ctx.Send(Partition()->Tablet, request.Release());
+    ctx.Send(Partition()->TabletActorId, request.Release());
 }
 
 void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
@@ -841,7 +840,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     }
 
     auto& response = ev->Get()->Record;
-    Y_ABORT_UNLESS(response.ReadResultSize());
+    PQ_INIT_ENSURE(response.ReadResultSize());
 
     auto& head = Partition()->CompactionBlobEncoder.Head;
     auto& headKeys = Partition()->CompactionBlobEncoder.HeadKeys;
@@ -850,35 +849,34 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     auto totalLevels = Partition()->TotalLevels;
 
     ui32 currentLevel = 0;
-    Y_ABORT_UNLESS(headKeys.size() == response.ReadResultSize());
+    PQ_INIT_ENSURE(headKeys.size() == response.ReadResultSize());
     for (ui32 i = 0; i < response.ReadResultSize(); ++i) {
         auto& read = response.GetReadResult(i);
-        Y_ABORT_UNLESS(read.HasStatus());
+        PQ_INIT_ENSURE(read.HasStatus());
         switch(read.GetStatus()) {
             case NKikimrProto::OK: {
                 const TKey& key = headKeys[i].Key;
-                Y_ABORT_UNLESS(key.HasSuffix());
+                PQ_INIT_ENSURE(key.HasSuffix());
 
                 ui32 size = headKeys[i].Size;
                 ui64 offset = key.GetOffset();
                 while (currentLevel + 1 < totalLevels && size < compactLevelBorder[currentLevel + 1])
                     ++currentLevel;
-                Y_ABORT_UNLESS(size < compactLevelBorder[currentLevel]);
+                PQ_INIT_ENSURE(size < compactLevelBorder[currentLevel]);
 
                 dataKeysHead[currentLevel].AddKey(key, size);
-                Y_ABORT_UNLESS(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
-                Y_ABORT_UNLESS(!dataKeysHead[currentLevel].NeedCompaction());
+                PQ_INIT_ENSURE(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
+                PQ_INIT_ENSURE(!dataKeysHead[currentLevel].NeedCompaction());
 
                 PQ_LOG_D("read res partition offset " << offset << " endOffset " << Partition()->BlobEncoder.EndOffset
                         << " key " << key.GetOffset() << "," << key.GetCount() << " valuesize " << read.GetValue().size()
                         << " expected " << size
                 );
 
-                Y_ABORT_UNLESS(offset + 1 >= Partition()->CompactionBlobEncoder.StartOffset);
-                Y_ABORT_UNLESS(offset < Partition()->CompactionBlobEncoder.EndOffset,
-                               "offset=%" PRIu64 ", CompactionBlobEncoder.EndOffset=%" PRIu64,
-                               offset, Partition()->CompactionBlobEncoder.EndOffset);
-                Y_ABORT_UNLESS(size == read.GetValue().size(), "size=%d == read.GetValue().size() = %d", size, read.GetValue().size());
+                PQ_INIT_ENSURE(offset + 1 >= Partition()->CompactionBlobEncoder.StartOffset);
+                PQ_INIT_ENSURE(offset < Partition()->CompactionBlobEncoder.EndOffset)
+                    ("offset", offset)("CompactionBlobEncoder.EndOffset", Partition()->CompactionBlobEncoder.EndOffset);
+                PQ_INIT_ENSURE(size == read.GetValue().size())("size", size)("read.GetValue().size()", read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
                     head.AddBatch(it.GetBatch());
@@ -894,7 +892,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 Y_ABORT("NODATA can't be here");
                 return;
             case NKikimrProto::ERROR:
-                PQ_LOG_ERROR("tablet " << Partition()->TabletID << " HandleOnInit ReadResult "
+                PQ_LOG_ERROR("tablet " << Partition()->TabletId << " HandleOnInit ReadResult "
                         << i << " status NKikimrProto::ERROR result message: \"" << read.GetMessage()
                         << " \" errorReason: \"" << response.GetErrorReason() << "\""
                 );
@@ -967,9 +965,9 @@ void TPartition::Initialize(const TActorContext& ctx) {
         TopicConverter,
         Config,
         Partition,
-        Tablet,
+        TabletActorId,
         SelfId(),
-        TabletID,
+        TabletId,
         Counters
     ));
 
@@ -984,6 +982,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     DbId = Config.GetYdbDatabaseId();
     DbPath = Config.GetYdbDatabasePath();
     FolderId = Config.GetYcFolderId();
+    MonitoringProjectId = Config.GetMonitoringProjectId();
 
     UsersInfoStorage.ConstructInPlace(DCId,
                                       TopicConverter,
@@ -993,23 +992,23 @@ void TPartition::Initialize(const TActorContext& ctx) {
                                       DbId,
                                       Config.GetYdbDatabasePath(),
                                       IsServerless,
-                                      FolderId);
+                                      FolderId,
+                                      MonitoringProjectId);
     TotalChannelWritesByHead.resize(NumChannels);
 
     if (!IsSupportive()) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
-                                                                        Partition.InternalPartitionId,
-                                                                        Config.GetYdbDatabasePath()));
+                                                                         Partition.InternalPartitionId,
+                                                                         Config.GetYdbDatabasePath()));
         } else {
-            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(),
-                                                                        Partition.InternalPartitionId));
+            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(), Partition.InternalPartitionId));
         }
     }
 
-    UsersInfoStorage->Init(Tablet, SelfId(), ctx);
+    UsersInfoStorage->Init(TabletActorId, SelfId(), ctx);
 
-    Y_ABORT_UNLESS(AppData(ctx)->PQConfig.GetMaxBlobsPerLevel() > 0);
+    PQ_ENSURE(AppData(ctx)->PQConfig.GetMaxBlobsPerLevel() > 0);
     ui32 border = LEVEL0;
     MaxSizeCheck = 0;
     MaxBlobSize = AppData(ctx)->PQConfig.GetMaxBlobSize();
@@ -1017,7 +1016,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     for (ui32 i = 0; i < TotalLevels; ++i) {
         CompactLevelBorder.push_back(border);
         MaxSizeCheck += border;
-        Y_ABORT_UNLESS(i + 1 < TotalLevels && border < MaxBlobSize || i + 1 == TotalLevels && border == MaxBlobSize);
+        PQ_ENSURE(i + 1 < TotalLevels && border < MaxBlobSize || i + 1 == TotalLevels && border == MaxBlobSize);
         border *= AppData(ctx)->PQConfig.GetMaxBlobsPerLevel();
         border = Min(border, MaxBlobSize);
     }
@@ -1031,10 +1030,10 @@ void TPartition::Initialize(const TActorContext& ctx) {
     }
 
     if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {
-        OffloadActor = Register(CreateOffloadActor(Tablet, TabletID, Partition, Config.GetOffloadConfig()));
+        OffloadActor = Register(CreateOffloadActor(TabletActorId, TabletId, Partition, Config.GetOffloadConfig()));
     }
 
-    PQ_LOG_I("bootstrapping " << Partition << " " << ctx.SelfID);
+    LOG_I("bootstrapping " << Partition << " " << ctx.SelfID);
 
     if (AppData(ctx)->Counters) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
@@ -1042,7 +1041,14 @@ void TPartition::Initialize(const TActorContext& ctx) {
         } else {
             SetupTopicCounters(ctx);
         }
+        if (DetailedMetricsAreEnabled()) {
+            SetupDetailedMetrics();
+        }
     }
+}
+
+bool TPartition::DetailedMetricsAreEnabled() const {
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {
@@ -1363,7 +1369,7 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TP
     const TKeyPrefix& to = keyPrefixes.second;
 
     if (!key.empty()) {
-        Y_ABORT_UNLESS(key.StartsWith(TStringBuf(from.Data(), from.Size())));
+        AFL_ENSURE(key.StartsWith(TStringBuf(from.Data(), from.Size())));
         from.Clear();
         from.Append(key.data(), key.size());
     }

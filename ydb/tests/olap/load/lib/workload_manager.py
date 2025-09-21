@@ -329,3 +329,4 @@ class TestWorkloadManagerTpchComputeSchedulerS100(WorkloadManagerTpchBase, Workl
     tables_size = tpch.TestTpch100.tables_size
     scale = tpch.TestTpch100.scale
     timeout = tpch.TestTpch100.timeout * len(WorkloadManagerComputeScheduler.get_resource_pools())
+    threads = 1

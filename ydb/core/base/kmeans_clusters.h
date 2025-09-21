@@ -47,6 +47,6 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
 
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error);
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
-Ydb::Table::KMeansTreeSettings FillSettings(const TVector<std::pair<TString, TString>>& values, TString& error);
+bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, const TString& value, TString& error);
 
 }

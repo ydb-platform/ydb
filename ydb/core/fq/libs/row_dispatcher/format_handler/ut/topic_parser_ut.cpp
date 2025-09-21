@@ -157,7 +157,12 @@ class TJsonParserFixture : public TBaseParserFixture {
 public:
     TJsonParserFixture()
         : TBase()
-        , Config({.BatchSize = 1_MB, .LatencyLimit = TDuration::Zero(), .BufferCellCount = 1000})
+        , Config({
+            .FunctionRegistry = FunctionRegistry,
+            .BatchSize = 1_MB,
+            .LatencyLimit = TDuration::Zero(),
+            .BufferCellCount = 1000
+        })
     {}
 
 protected:
@@ -172,7 +177,7 @@ public:
 class TRawParserFixture : public TBaseParserFixture {
 protected:
     TValueStatus<ITopicParser::TPtr> CreateParser() override {
-        return CreateRawParser(ParserHandler, {});
+        return CreateRawParser(ParserHandler, FunctionRegistry, {});
     }
 };
 
@@ -330,6 +335,59 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         });
     }
 
+    Y_UNIT_TEST_F(ChangeParserSchema, TJsonParserFixture) {
+        ExpectedBatches = 1;
+
+        CheckSuccess(MakeParser({{"a", "[DataType; Bool]"}}, [&](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+            UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
+
+            UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+            UNIT_ASSERT_VALUES_EQUAL(true, result[0]->at(0).Get<bool>());
+            UNIT_ASSERT_VALUES_EQUAL(false, result[0]->at(1).Get<bool>());
+        }));
+
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET, R"({"a": true, "b": 42})"),
+            GetMessage(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
+        });
+
+        CheckSuccess(Parser->ChangeConsumer(MakeIntrusive<TParsedDataConsumer>(
+            *this,
+            TVector<TSchemaColumn>{{"a", "[DataType; Bool]"}, {"b", "[DataType; Int64]"}},
+            [&](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+                UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
+
+                UNIT_ASSERT_VALUES_EQUAL(2, result.size());
+                UNIT_ASSERT_VALUES_EQUAL(true, result[0]->at(0).Get<bool>());
+                UNIT_ASSERT_VALUES_EQUAL(false, result[0]->at(1).Get<bool>());
+                UNIT_ASSERT_VALUES_EQUAL(42, result[1]->at(0).Get<i64>());
+                UNIT_ASSERT_VALUES_EQUAL(84, result[1]->at(1).Get<i64>());
+            }
+        )));
+
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET, R"({"a": true, "b": 42})"),
+            GetMessage(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
+        });
+
+        CheckSuccess(Parser->ChangeConsumer(MakeIntrusive<TParsedDataConsumer>(
+            *this,
+            TVector<TSchemaColumn>{{"b", "[DataType; Int64]"}},
+            [&](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+                UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
+
+                UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+                UNIT_ASSERT_VALUES_EQUAL(42, result[0]->at(0).Get<i64>());
+                UNIT_ASSERT_VALUES_EQUAL(84, result[0]->at(1).Get<i64>());
+            }
+        )));
+
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET, R"({"a": true, "b": 42})"),
+            GetMessage(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
+        });
+    }
+
     Y_UNIT_TEST_F(ManyBatches, TJsonParserFixture) {
         ExpectedBatches = 2;
         Config.BufferCellCount = 1;
@@ -453,6 +511,33 @@ Y_UNIT_TEST_SUITE(TestRawParser) {
             GetMessage(FIRST_OFFSET + 1, data[1]),
             GetMessage(FIRST_OFFSET + 2, data[2])
         });
+    }
+
+    Y_UNIT_TEST_F(ChangeParserSchema, TRawParserFixture) {
+        CheckSuccess(MakeParser({{"data", "[OptionalType; [DataType; String]]"}}, [](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+            UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
+            UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+
+            NYql::NUdf::TUnboxedValue value = result[0]->at(0).GetOptionalValue();
+            UNIT_ASSERT_VALUES_EQUAL(R"({"a1": "hello1__large_str", "a2": 101, "event": "event1"})", TString(value.AsStringRef()));
+        }));
+
+        PushToParser(FIRST_OFFSET, R"({"a1": "hello1__large_str", "a2": 101, "event": "event1"})");
+
+        ExpectedBatches = 0;
+        CheckSuccess(Parser->ChangeConsumer(MakeIntrusive<TParsedDataConsumer>(
+            *this,
+            TVector<TSchemaColumn>{{"data", "[DataType; String]"}},
+            [&](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+                UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
+                UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+
+                NYql::NUdf::TUnboxedValue value = result[0]->at(0);
+                UNIT_ASSERT_VALUES_EQUAL(R"({"a1": "hello2__large_str", "a2": 101, "event": "event2"})", TString(value.AsStringRef()));
+            }
+        )));
+
+        PushToParser(FIRST_OFFSET, R"({"a1": "hello2__large_str", "a2": 101, "event": "event2"})");
     }
 
     Y_UNIT_TEST_F(TypeKindsValidation, TRawParserFixture) {

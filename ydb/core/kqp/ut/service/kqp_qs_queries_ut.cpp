@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
                 auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).GetValueSync();
                 if (!result.IsSuccess()) {
-                    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_SESSION);
+                    UNIT_ASSERT_C(IsIn({EStatus::BAD_SESSION, EStatus::CANCELLED}, result.GetStatus()), result.GetIssues().ToString());
                     Cerr << "received non-success status for session " << id << Endl;
                     return;
                 }
@@ -363,6 +363,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                         switch (execResult.GetStatus()) {
                             case EStatus::SUCCESS:
                             case EStatus::BAD_SESSION:
+                            case EStatus::CANCELLED:
                                 break;
                             default:
                                 UNIT_ASSERT_C(false, "unexpected status: " << execResult.GetStatus());

@@ -1,8 +1,10 @@
 import hashlib
+import json
 import os
 import shutil
 
 from .constants import (
+    PNPM_PRE_LOCKFILE_FILENAME,
     LOCAL_PNPM_INSTALL_HASH_FILENAME,
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
     VIRTUAL_STORE_DIRNAME,
@@ -17,8 +19,13 @@ from .utils import (
 )
 from .workspace import PnpmWorkspace
 from ..base import BasePackageManager, PackageManagerError
-from ..base.constants import NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
+from ..base.constants import (
+    NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
+    PACKAGE_JSON_FILENAME,
+    PNPM_LOCKFILE_FILENAME,
+)
 from ..base.node_modules_bundler import bundle_node_modules
+from ..base.package_json import PackageJson
 from ..base.timeit import timeit
 from ..base.utils import (
     b_rooted,
@@ -170,6 +177,38 @@ class PnpmPackageManager(BasePackageManager):
         return sha256.hexdigest()
 
     @timeit
+    def _create_local_node_modules(self, nm_store_path: str, store_dir: str, virtual_store_dir: str):
+        """
+        Creates ~/.nots/nm_store/$MODDIR/node_modules folder (with installed packages and .pnpm/virtual-store)
+        Should be used after build for local development ($SOURCE_DIR/node_modules should be a symlink to this folder).
+        But now it is also a workaround to provide valid node_modules structure in the parent folder of virtual-store
+        It is needed for fixing custom module resolvers (like in tsc, webpack, etc...), which are trying to find modules in the parents directories
+        """
+        # provide files required for `pnpm install`
+        pj = PackageJson.load(os.path.join(self.build_path, PACKAGE_JSON_FILENAME))
+        required_files = [
+            PACKAGE_JSON_FILENAME,
+            PNPM_LOCKFILE_FILENAME,
+            *list(pj.bins_iter()),
+            *pj.get_pnpm_patched_dependencies().values(),
+        ]
+        for f in required_files:
+            src = os.path.join(self.build_path, f)
+            if os.path.exists(src):
+                dst = os.path.join(nm_store_path, f)
+                try:
+                    os.remove(dst)
+                except FileNotFoundError:
+                    pass
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                shutil.copy(src, dst)
+        self._run_pnpm_install(store_dir, virtual_store_dir, nm_store_path, True)
+        # Write node_modules.json to prevent extra `pnpm install` running 1
+        with open(os.path.join(nm_store_path, "node_modules.json"), "w") as f:
+            pre_pnpm_lockfile_hash = self._get_file_hash(build_pre_lockfile_path(self.build_path))
+            json.dump({PNPM_PRE_LOCKFILE_FILENAME: {"hash": pre_pnpm_lockfile_hash}}, f)
+
+    @timeit
     def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, nm_bundle=False, original_lf_path=None):
         """
         Creates node_modules directory according to the lockfile.
@@ -189,6 +228,8 @@ class PnpmPackageManager(BasePackageManager):
             nm_store_path = build_nm_store_path(self.module_path)
             # Use single virtual-store location in ~/.nots/nm_store/$MODDIR/node_modules/.pnpm
             virtual_store_dir = os.path.join(build_nm_path(nm_store_path), VIRTUAL_STORE_DIRNAME)
+
+            self._create_local_node_modules(nm_store_path, store_dir, virtual_store_dir)
 
         self._run_pnpm_install(store_dir, virtual_store_dir, self.build_path, local_cli)
 

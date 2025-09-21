@@ -1,5 +1,7 @@
 use plato;
 pragma SeqMode;
+pragma config.flags("DisableEarlyExpandSeq");
+
 insert into @foo
 select 1;
 commit;

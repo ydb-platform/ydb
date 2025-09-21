@@ -75,7 +75,17 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+class TStubTypeVisitor7: public TStubTypeVisitor6
+{
+public:
+    void OnLinear(const TType* itemType, bool isDynamic) override;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+using TStubTypeVisitor = TStubTypeVisitor7;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 using TStubTypeVisitor = TStubTypeVisitor6;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 using TStubTypeVisitor = TStubTypeVisitor5;
@@ -522,6 +532,35 @@ private:
 };
 #endif
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+//////////////////////////////////////////////////////////////////////////////
+// TLinearTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TLinearTypeInspector: public TStubTypeVisitor
+{
+public:
+    TLinearTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Linear) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return ItemType_ != 0; }
+    const TType* GetItemType() const { return ItemType_; }
+    bool IsDynamic() const { return IsDynamic_; }
+
+private:
+    void OnLinear(const TType* itemType, bool isDynamic) override {
+        ItemType_ = itemType;
+        IsDynamic_ = isDynamic;
+    }
+
+private:
+    const TType* ItemType_ = nullptr;
+    bool IsDynamic_ = false;
+};
+#endif
+
 inline void TStubTypeVisitor1::OnDataType(TDataTypeId typeId)
 {
     Y_UNUSED(typeId);
@@ -606,6 +645,13 @@ inline void TStubTypeVisitor5::OnPg(ui32) {
 inline void TStubTypeVisitor6::OnBlock(const TType* itemType, bool isScalar) {
     Y_UNUSED(itemType);
     Y_UNUSED(isScalar);
+    Y_ABORT("Not implemented");
+}
+#endif
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+inline void TStubTypeVisitor7::OnLinear(const TType* itemType, bool isDynamic) {
+    Y_UNUSED(itemType);
+    Y_UNUSED(isDynamic);
     Y_ABORT("Not implemented");
 }
 #endif

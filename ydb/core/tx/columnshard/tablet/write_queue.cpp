@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
@@ -15,16 +16,17 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) co
     auto writeOperation = owner->OperationsManager->CreateWriteOperation(PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, IsBulk);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
-        "in_flight", owner->Counters.GetWritesMonitor()->GetWritesInFlight())(
-        "size_in_flight", owner->Counters.GetWritesMonitor()->GetWritesSizeInFlight());
+        "in_flight", NOverload::TOverloadManagerServiceOperator::GetShardWritesInFly())(
+        "size_in_flight", NOverload::TOverloadManagerServiceOperator::GetShardWritesSizeInFly());
 
     AFL_VERIFY(writeOperation);
     writeOperation->SetBehaviour(Behaviour);
     const auto& applyToMvccSnapshot = MvccSnapshot.Valid() ? MvccSnapshot : NOlap::TSnapshot::Max();
     NOlap::TWritingContext wContext(owner->TabletID(), owner->SelfId(), Schema, owner->StoragesManager,
-        owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, applyToMvccSnapshot,
-        writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationPortionsWriteActorId);
-    ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId.InternalPathId)->GetBucketPositions());
+        owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, applyToMvccSnapshot, LockId,
+        writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationPortionsWriteActorId, IsBulk);
+    // We don't need to split here portions by the last level
+    // ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId.InternalPathId)->GetBucketPositions());
     writeOperation->Start(*owner, ArrowData, SourceId, wContext);
     return true;
 }
@@ -34,13 +36,14 @@ void TWriteTask::Abort(TColumnShard* owner, const TString& reason, const TActorC
     auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
         owner->TabletID(), TxId, status, reason);
     owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
-    owner->UpdateOverloadsStatus();
-    ctx.Send(SourceId, result.release(), 0, Cookie);
     if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED && OverloadSubscribeSeqNo) {
-        const auto rejectReasons = NOverload::MakeRejectReasons(EOverloadStatus::ShardWritesInFly);
-        owner->OverloadSubscribers.SetOverloadSubscribed(*OverloadSubscribeSeqNo, owner->SelfId(), SourceId, rejectReasons, result->Record);
-        owner->OverloadSubscribers.ScheduleNotification(owner->SelfId());
+        result->Record.SetOverloadSubscribed(*OverloadSubscribeSeqNo);
+        ctx.Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+            std::make_unique<NOverload::TEvOverloadSubscribe>(NOverload::TColumnShardInfo{.ColumnShardId = owner->SelfId(), .TabletId = owner->TabletID()},
+                NOverload::TPipeServerInfo{.PipeServerId = RecipientId, .InterconnectSessionId = owner->PipeServersInterconnectSessions[RecipientId]},
+                NOverload::TOverloadSubscriberInfo{.PipeServerId = RecipientId, .OverloadSubscriberId = SourceId, .SeqNo = *OverloadSubscribeSeqNo}));
     }
+    ctx.Send(SourceId, result.release(), 0, Cookie);
 }
 
 bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {

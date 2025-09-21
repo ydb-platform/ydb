@@ -8,6 +8,35 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
+class TFilterBuildingGuard: TMoveOnly {
+private:
+    const std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ProcessGuard;
+    const std::shared_ptr<NGroupedMemoryManager::TScopeGuard> ScopeGuard;
+    const std::shared_ptr<NGroupedMemoryManager::TGroupGuard> GroupGuard;
+
+    static std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> GetStageFeatures() {
+        static const std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> StageFeatures = {
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("INTERSECTIONS", 10000000),   // 10 MiB
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("ACCESSORS", 100000000),   // 100 MiB
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 10000000000),   // 10 GiB
+        };
+        return StageFeatures;
+    }
+
+public:
+    ui64 GetMemoryProcessId() const {
+        return ProcessGuard->GetProcessId();
+    }
+    ui64 GetMemoryScopeId() const {
+        return ScopeGuard->GetScopeId();
+    }
+    ui64 GetMemoryGroupId() const {
+        return GroupGuard->GetGroupId();
+    }
+
+    TFilterBuildingGuard();
+};
+
 class TFilterAccumulator: TMoveOnly {
 public:
     enum class EFetchingStage {
@@ -18,9 +47,6 @@ public:
 
 private:
     const TEvRequestFilter::TPtr OriginalRequest;
-    const std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ProcessGuard;
-    const std::shared_ptr<NGroupedMemoryManager::TScopeGuard> ScopeGuard;
-    const std::shared_ptr<NGroupedMemoryManager::TGroupGuard> GroupGuard;
     bool Done = false;
 
     std::vector<std::optional<NArrow::TColumnFilter>> Filters;
@@ -48,15 +74,6 @@ private:
     }
 
 public:
-    static std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> GetStageFeatures() {
-        static const std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> StageFeatures = {
-            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("INTERSECTIONS", 10000000),   // 10 MiB
-            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("ACCESSORS", 100000000),   // 100 MiB
-            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 10000000000),   // 10 GiB
-        };
-        return StageFeatures;
-    }
-
     void SetIntervalsCount(const ui32 cnt) {
         AFL_VERIFY(Filters.empty());
         AFL_VERIFY(cnt);
@@ -106,16 +123,6 @@ public:
         return sb;
     }
 
-    ui64 GetMemoryProcessId() const {
-        return ProcessGuard->GetProcessId();
-    }
-    ui64 GetMemoryScopeId() const {
-        return ScopeGuard->GetScopeId();
-    }
-    ui64 GetMemoryGroupId() const {
-        return GroupGuard->GetGroupId();
-    }
-
     ui64 GetDataSize() const {
         return Filters.capacity() * sizeof(std::optional<NArrow::TColumnFilter>);
     }
@@ -135,6 +142,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NColumnFetching::TColumnDataManager>, ColumnDataManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>, Counters);
+    YDB_READONLY_DEF(std::unique_ptr<TFilterBuildingGuard>, RequestGuard);
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> SelfMemory;
 
 public:
@@ -142,7 +150,7 @@ public:
         std::vector<std::pair<TColumnDataSplitter::TBorder, TColumnDataSplitter::TBorder>>&& intervals, const TFieldByColumn& columns,
         const std::shared_ptr<arrow::Schema>& pkSchema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters,
+        const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory)
         : Owner(owner)
         , Context(context)
@@ -153,6 +161,7 @@ public:
         , ColumnDataManager(columnDataManager)
         , DataAccessorsManager(dataAccessorsManager)
         , Counters(counters)
+        , RequestGuard(std::move(requestGuard))
         , SelfMemory(contextMemory)
     {
         AFL_VERIFY(Owner);

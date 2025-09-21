@@ -51,6 +51,9 @@ public:
 
             tablet.LockedToActor = ActorIdFromProto(protoTabletInfo.GetLockedToActor());
             tablet.LockedReconnectTimeout = TDuration::MilliSeconds(protoTabletInfo.GetLockedReconnectTimeout());
+            if (Self->CurrentConfig.GetLockedTabletsSendMetrics() && tablet.LockedToActor) {
+                tablet.BecomeUnknown(tablet.Hive.FindNode(tablet.LockedToActor.NodeId()));
+            }
 
             db.Table<Schema::Tablet>().Key(tabletId).Update(
                         NIceDb::TUpdate<Schema::Tablet::Owner>(owner),

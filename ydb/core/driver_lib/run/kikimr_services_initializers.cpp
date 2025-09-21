@@ -145,6 +145,7 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/replication/service/service.h>
@@ -2353,6 +2354,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             protoLink.SetWeight(1);
             protoWorkersPool.SetDefaultFractionOfThreadsCount(0.33);
+            protoWorkersPool.SetMaxBatchSize(1);
         }
 
         if (Config.HasInsertConveyorConfig()) {
@@ -2379,6 +2381,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             protoLink.SetWeight(1);
             protoWorkersPool.SetDefaultFractionOfThreadsCount(0.2);
+            protoWorkersPool.SetMaxBatchSize(1);
         }
         if (Config.HasScanConveyorConfig()) {
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
@@ -2974,6 +2977,18 @@ void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, c
     Y_UNUSED(setup);
     Y_UNUSED(appData);
     GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
+}
+
+TOverloadManagerInitializer::TOverloadManagerInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TOverloadManagerInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "CS_OVERLOAD_MANAGER");
+
+    setup->LocalServices.push_back(std::make_pair(NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+        TActorSetupCmd(NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(countersGroup), TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
 } // namespace NKikimr::NKikimrServicesInitializers

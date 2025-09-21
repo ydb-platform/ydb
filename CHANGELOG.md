@@ -1,4 +1,4 @@
-## Unreleased
+## 25.1.4
 
 ### Functionality
 
@@ -15,3 +15,4 @@
 * 23367:[Fixed](https://github.com/ydb-platform/ydb/pull/23367) an [issue](https://github.com/ydb-platform/ydb/issues/23171) with transaction validation memory limit during execution plan increase memory limit for run execution plan. ([Vitalii Gridnev](https://github.com/gridnevvvit))
 * 24278:Fixed an issue where only the first message from a batch was saved when writing Kafka messages, with all other messages in the batch being ignored. [#24278](https://github.com/ydb-platform/ydb/pull/24278) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 24077:Fixed problem with access denied on /viewer/capabilities handler. Closes #24013. [#24077](https://github.com/ydb-platform/ydb/pull/24077) ([Alexey Efimov](https://github.com/adameat))
+* 24666:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/23895) that scalar and block hash shuffles may be incompatible and it causes incorrect results, for example, in hash joins. Now no 2 different kinds of shuffles (SCALAR and BLOCK) should be inputs to the single stage. (#24033) [#24666](https://github.com/ydb-platform/ydb/pull/24666) ([Ivan](https://github.com/abyss7))

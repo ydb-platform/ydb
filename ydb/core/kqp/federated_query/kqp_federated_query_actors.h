@@ -52,6 +52,8 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
     void FillResponse(const ui64 requestId, const TEvDescribeSecretsResponse::TDescription& response);
+    void SaveIncomingRequestInfo(const TEvResolveSecret& req);
+    void SendSchemeCacheRequest(const TString& secretName);
 
 public:
     TDescribeSchemaSecretsService() = default;

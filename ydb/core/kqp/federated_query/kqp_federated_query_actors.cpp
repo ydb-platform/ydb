@@ -103,18 +103,9 @@ private:
 
 void TDescribeSchemaSecretsService::Handle(TEvResolveSecret::TPtr& ev) {
     LOG_D("TEvResolveSecret: name=" << ev->Get()->SecretName << ", request cookie=" << LastCookie);
-    const auto currentRequestCookie = LastCookie++;
-    ResolveInFlight[currentRequestCookie] = ev->Get()->Promise;
-    SecretNameInFlight[currentRequestCookie] = ev->Get()->SecretName;
 
-    TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-    entry.Path = SplitPath(ev->Get()->SecretName);
-    request->ResultSet.emplace_back(entry);
-    // TODO(yurikiselev): Deal with UserToken
-
-    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, currentRequestCookie);
+    SaveIncomingRequestInfo(*ev->Get());
+    SendSchemeCacheRequest(ev->Get()->SecretName);
 }
 
 void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -146,12 +137,13 @@ void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKey
     TAutoPtr<TEvTxUserProxy::TEvNavigate> req(new TEvTxUserProxy::TEvNavigate());
     NKikimrSchemeOp::TDescribePath* record = req->Record.MutableDescribePath();
     record->SetPath(secretName);
-    // TODO(yurikiselev): Deal with UserToken
+    // TODO(yurikiselev): Deal with UserToken [issue:25472]
     Send(MakeTxProxyID(), req.Release(), 0, ev->Cookie);
 }
 
 void TDescribeSchemaSecretsService::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
     LOG_D("TEvDescribeSchemeResult: request cookie=" << ev->Cookie);
+
     Y_ENSURE(SecretNameInFlight.contains(ev->Cookie), "such request cookie is not registered");
     const auto& secretName = SecretNameInFlight[ev->Cookie];
     const auto &rec = ev->Get()->GetRecord();
@@ -176,6 +168,22 @@ void TDescribeSchemaSecretsService::FillResponse(const ui64 requestId, const TEv
 void TDescribeSchemaSecretsService::Bootstrap() {
     LOG_D("Bootstrap");
     Become(&TDescribeSchemaSecretsService::StateWait);
+}
+
+void TDescribeSchemaSecretsService::SaveIncomingRequestInfo(const TEvResolveSecret& req) {
+    ResolveInFlight[LastCookie] = req.Promise;
+    SecretNameInFlight[LastCookie] = req.SecretName;
+}
+
+void TDescribeSchemaSecretsService::SendSchemeCacheRequest(const TString& secretName) {
+    TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+    entry.Path = SplitPath(secretName);
+    request->ResultSet.emplace_back(entry);
+    // TODO(yurikiselev): Deal with UserToken [issue:25472]
+
+    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, LastCookie++);
 }
 
 NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(const TString& secretName, const TString& ownerUserId, TActorSystem* actorSystem) {

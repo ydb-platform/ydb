@@ -943,8 +943,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
         }
 
-        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TString{TEST_TOPIC}, false);
-        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TString{TEST_TOPIC}, false);
+        auto writeSession2_1 = CreateWriteSession(client, "producer-2", 1, TString{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-3", 1, TString{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));

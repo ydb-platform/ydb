@@ -372,7 +372,7 @@ message TTableServiceConfig {
 
     optional bool AllowMultiBroadcasts = 79 [default = false];
 
-    optional bool DefaultEnableShuffleElimination = 80 [default = false];
+    optional bool DefaultEnableShuffleElimination = 80 [default = true];
 
     message TBatchOperationSettings {
         optional uint64 MaxBatchSize = 1 [ default = 10000 ];

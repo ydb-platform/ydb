@@ -1,6 +1,6 @@
 # Overview
 
-{{ ydb-short-name }} is a distributed, fault-tolerant database that provides components for building an enterprise data warehouse (EDW) on a unified platform.
+{{ ydb-short-name }} is a distributed, fault-tolerant database that provides components for building a data warehouse (DWH) on a unified platform.
 
 Using {{ ydb-short-name }} allows you to consolidate the functionality of several technologies (for example, separate systems for streaming, storage, and analytics) into a single solution. You can use familiar tools and approaches while gaining the benefits of a distributed system.
 

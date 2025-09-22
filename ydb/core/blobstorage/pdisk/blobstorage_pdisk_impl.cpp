@@ -2107,7 +2107,10 @@ void TPDisk::YardResize(TYardResize &ev) {
 void TPDisk::ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request) {
     TGuard<TMutex> guard(StateMutex);
     ExpectedSlotCount = request.ExpectedSlotCount;
+    Cfg->ExpectedSlotCount = request.ExpectedSlotCount;
+    Cfg->SlotSizeInUnits = request.SlotSizeInUnits;
     Keeper.SetExpectedOwnerCount(ExpectedSlotCount);
+    // TODO: recalculate the weight of all owners
 
     auto result = std::make_unique<NPDisk::TEvChangeExpectedSlotCountResult>(NKikimrProto::OK, TString());
     Mon.ChangeExpectedSlotCount.CountResponse();

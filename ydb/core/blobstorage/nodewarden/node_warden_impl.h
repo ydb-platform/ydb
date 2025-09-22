@@ -610,8 +610,6 @@ namespace NKikimr::NStorage {
         void SendPDiskReport(ui32 pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::EPDiskPhase phase,
                 std::variant<std::monostate, ui64, TString> shredState = {});
 
-        void SendChangeExpectedSlotCount(ui32 pdiskId, ui64 expectedSlotCount);
-
         void Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
         void Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&);

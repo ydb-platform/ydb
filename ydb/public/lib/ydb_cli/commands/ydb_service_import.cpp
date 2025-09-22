@@ -456,7 +456,7 @@ TString TCommandImportFileBase::GetFileExtension() const {
         case EDataFormat::Parquet:
             return "parquet";
         default:
-            return {};
+            throw TMisuseException() << "No known file extension for " << InputFormat << " format";
     }
 }
 

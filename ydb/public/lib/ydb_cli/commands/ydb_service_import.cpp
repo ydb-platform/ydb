@@ -353,7 +353,7 @@ void TCommandImportFileBase::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     config.Opts->GetOpts().SetTrailingArgTitle("<input files...>",
-            "One or more file paths to import from. If a directory is provided, all files in the directory will be imported.");
+            "One or more file paths to import from. If a directory is provided, all files in the directory with supported extension will be imported.");
     config.Opts->AddLongOption("timeout", "Operation timeout. Operation should be executed on server within this timeout. "
             "There could also be a delay up to 200ms to receive timeout error from server")
         .RequiredArgument("VAL").StoreResult(&OperationTimeout).DefaultValue(TDuration::Seconds(5 * 60));

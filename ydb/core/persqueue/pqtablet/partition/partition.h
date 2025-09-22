@@ -1145,6 +1145,7 @@ private:
 
     bool CompactRequestedBlob(const TRequestedBlob& requestedBlob,
                               TProcessParametersBase& parameters,
+                              bool needToCompactiHead,
                               TEvKeyValue::TEvRequest* compactionRequest,
                               ui64& blobCreationUnixTime,
                               bool wasThePreviousBlobBig);

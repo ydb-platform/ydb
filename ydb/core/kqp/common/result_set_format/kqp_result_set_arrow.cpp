@@ -309,7 +309,7 @@ void AppendDataValue(arrow::ArrayBuilder *builder, NUdf::TUnboxedValue value) {
 
 template <>
 void AppendDataValue<arrow::UInt64Type>(arrow::ArrayBuilder *builder, NUdf::TUnboxedValue value) {
-    YQL_ENSURE(builder->type()->id() == arrow::Type::UINT64);
+    YQL_ENSURE(builder->type()->id() == arrow::Type::UINT64, "Unexpected builder type");
     auto typedBuilder = reinterpret_cast<arrow::UInt64Builder *>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
@@ -322,7 +322,7 @@ void AppendDataValue<arrow::UInt64Type>(arrow::ArrayBuilder *builder, NUdf::TUnb
 
 template <>
 void AppendDataValue<arrow::Int64Type>(arrow::ArrayBuilder *builder, NUdf::TUnboxedValue value) {
-    YQL_ENSURE(builder->type()->id() == arrow::Type::INT64);
+    YQL_ENSURE(builder->type()->id() == arrow::Type::INT64, "Unexpected builder type");
     auto typedBuilder = reinterpret_cast<arrow::Int64Builder *>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
@@ -335,7 +335,7 @@ void AppendDataValue<arrow::Int64Type>(arrow::ArrayBuilder *builder, NUdf::TUnbo
 
 template <>
 void AppendDataValue<arrow::StringType>(arrow::ArrayBuilder *builder, NUdf::TUnboxedValue value) {
-    YQL_ENSURE(builder->type()->id() == arrow::Type::STRING);
+    YQL_ENSURE(builder->type()->id() == arrow::Type::STRING, "Unexpected builder type");
     auto typedBuilder = reinterpret_cast<arrow::StringBuilder *>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
@@ -349,7 +349,7 @@ void AppendDataValue<arrow::StringType>(arrow::ArrayBuilder *builder, NUdf::TUnb
 
 template <>
 void AppendDataValue<arrow::BinaryType>(arrow::ArrayBuilder *builder, NUdf::TUnboxedValue value) {
-    YQL_ENSURE(builder->type()->id() == arrow::Type::BINARY);
+    YQL_ENSURE(builder->type()->id() == arrow::Type::BINARY, "Unexpected builder type");
     auto typedBuilder = reinterpret_cast<arrow::BinaryBuilder *>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
@@ -364,7 +364,7 @@ void AppendDataValue<arrow::BinaryType>(arrow::ArrayBuilder *builder, NUdf::TUnb
 // Only for timezone datetime types
 template <>
 void AppendDataValue<arrow::StructType>(arrow::ArrayBuilder *builder, NUdf::TUnboxedValue value) {
-    YQL_ENSURE(builder->type()->id() == arrow::Type::STRUCT);
+    YQL_ENSURE(builder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
     auto typedBuilder = reinterpret_cast<arrow::StructBuilder *>(builder);
     YQL_ENSURE(typedBuilder->num_fields() == 2, "StructBuilder of timezone datetime types should have 2 fields");
 
@@ -420,7 +420,7 @@ template <typename TArrowType>
 void AppendFixedSizeDataValue(arrow::ArrayBuilder *builder, NUdf::TUnboxedValue value, NUdf::EDataSlot dataSlot) {
     static_assert(std::is_same_v<TArrowType, arrow::FixedSizeBinaryType>, "This function is only for FixedSizeBinaryType");
 
-    YQL_ENSURE(builder->type()->id() == arrow::Type::FIXED_SIZE_BINARY);
+    YQL_ENSURE(builder->type()->id() == arrow::Type::FIXED_SIZE_BINARY, "Unexpected builder type");
     auto typedBuilder = reinterpret_cast<arrow::FixedSizeBinaryBuilder *>(builder);
     arrow::Status status;
 
@@ -703,14 +703,14 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder *builder, cons
 
             if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
                 ui32 numberOfGroups = (variantType->GetAlternativesCount() - 1) / arrow::UnionType::kMaxTypeCode + 1;
-                YQL_ENSURE(static_cast<ui32>(unionBuilder->num_children()) == numberOfGroups);
+                YQL_ENSURE(static_cast<ui32>(unionBuilder->num_children()) == numberOfGroups, "Unexpected variant number of groups");
 
                 ui32 groupIndex = variantIndex / arrow::UnionType::kMaxTypeCode;
                 auto status = unionBuilder->Append(groupIndex);
                 YQL_ENSURE(status.ok(), "Failed to append variant value: " << status.ToString());
 
                 auto innerBuilder = unionBuilder->child_builder(groupIndex);
-                YQL_ENSURE(innerBuilder->type()->id() == arrow::Type::DENSE_UNION);
+                YQL_ENSURE(innerBuilder->type()->id() == arrow::Type::DENSE_UNION, "Unexpected builder type");
                 auto innerUnionBuilder = reinterpret_cast<arrow::DenseUnionBuilder *>(innerBuilder.get());
 
                 ui32 innerVariantIndex = variantIndex % arrow::UnionType::kMaxTypeCode;
@@ -941,9 +941,9 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array> &arr
         case NMiniKQL::TType::EKind::Struct: {
             auto structType = static_cast<const NMiniKQL::TStructType *>(itemType);
 
-            YQL_ENSURE(array->type_id() == arrow::Type::STRUCT);
+            YQL_ENSURE(array->type_id() == arrow::Type::STRUCT, "Unexpected array type");
             auto typedArray = static_pointer_cast<arrow::StructArray>(array);
-            YQL_ENSURE(static_cast<ui32>(typedArray->num_fields()) == structType->GetMembersCount());
+            YQL_ENSURE(static_cast<ui32>(typedArray->num_fields()) == structType->GetMembersCount(), "Unexpected count of fields");
 
             NUdf::TUnboxedValue *itemsPtr = nullptr;
             auto result = holderFactory.CreateDirectArrayHolder(structType->GetMembersCount(), itemsPtr);
@@ -958,9 +958,9 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array> &arr
         case NMiniKQL::TType::EKind::Tuple: {
             auto tupleType = static_cast<const NMiniKQL::TTupleType *>(itemType);
 
-            YQL_ENSURE(array->type_id() == arrow::Type::STRUCT);
+            YQL_ENSURE(array->type_id() == arrow::Type::STRUCT, "Unexpected array type");
             auto typedArray = static_pointer_cast<arrow::StructArray>(array);
-            YQL_ENSURE(static_cast<ui32>(typedArray->num_fields()) == tupleType->GetElementsCount());
+            YQL_ENSURE(static_cast<ui32>(typedArray->num_fields()) == tupleType->GetElementsCount(), "Unexpected count of fields");
 
             NUdf::TUnboxedValue *itemsPtr = nullptr;
             auto result = holderFactory.CreateDirectArrayHolder(tupleType->GetElementsCount(), itemsPtr);
@@ -977,7 +977,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array> &arr
             auto innerOptionalType = optionalType->GetItemType();
 
             if (NeedWrapByExternalOptional(innerOptionalType)) {
-                YQL_ENSURE(array->type_id() == arrow::Type::STRUCT);
+                YQL_ENSURE(array->type_id() == arrow::Type::STRUCT, "Unexpected array type");
 
                 auto innerArray = array;
                 auto innerType = itemType;
@@ -987,7 +987,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array> &arr
 
                 while (innerArray->type_id() == arrow::Type::STRUCT) {
                     auto structArray = static_pointer_cast<arrow::StructArray>(innerArray);
-                    YQL_ENSURE(structArray->num_fields() == 1);
+                    YQL_ENSURE(structArray->num_fields() == 1, "Unexpected count of fields");
 
                     if (structArray->IsNull(row)) {
                         value = NUdf::TUnboxedValuePod();
@@ -1019,7 +1019,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array> &arr
         case NMiniKQL::TType::EKind::List: {
             auto listType = static_cast<const NMiniKQL::TListType *>(itemType);
 
-            YQL_ENSURE(array->type_id() == arrow::Type::LIST);
+            YQL_ENSURE(array->type_id() == arrow::Type::LIST, "Unexpected array type");
             auto typedArray = static_pointer_cast<arrow::ListArray>(array);
 
             auto arraySlice = typedArray->value_slice(row);
@@ -1046,26 +1046,26 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array> &arr
             ui64 dictLength = 0;
             ui64 offset = 0;
 
-            YQL_ENSURE(array->type_id() == arrow::Type::STRUCT);
+            YQL_ENSURE(array->type_id() == arrow::Type::STRUCT, "Unexpected array type");
             auto wrapArray = static_pointer_cast<arrow::StructArray>(array);
-            YQL_ENSURE(wrapArray->num_fields() == 2);
+            YQL_ENSURE(wrapArray->num_fields() == 2, "Unexpected count of fields");
 
             auto dictSlice = wrapArray->field(0);
 
             if (keyType->GetKind() == NMiniKQL::TType::EKind::Optional) {
-                YQL_ENSURE(dictSlice->type_id() == arrow::Type::LIST);
+                YQL_ENSURE(dictSlice->type_id() == arrow::Type::LIST, "Unexpected array type");
                 auto listArray = static_pointer_cast<arrow::ListArray>(dictSlice);
 
                 auto arraySlice = listArray->value_slice(row);
-                YQL_ENSURE(arraySlice->type_id() == arrow::Type::STRUCT);
+                YQL_ENSURE(arraySlice->type_id() == arrow::Type::STRUCT, "Unexpected array type");
                 auto structArray = static_pointer_cast<arrow::StructArray>(arraySlice);
-                YQL_ENSURE(structArray->num_fields() == 2);
+                YQL_ENSURE(structArray->num_fields() == 2, "Unexpected count of fields");
 
                 dictLength = arraySlice->length();
                 keyArray = structArray->field(0);
                 payloadArray = structArray->field(1);
             } else {
-                YQL_ENSURE(dictSlice->type_id() == arrow::Type::MAP);
+                YQL_ENSURE(dictSlice->type_id() == arrow::Type::MAP, "Unexpected array type");
                 auto mapArray = static_pointer_cast<arrow::MapArray>(dictSlice);
 
                 dictLength = mapArray->value_length(row);
@@ -1087,7 +1087,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array> &arr
             // types?
             auto variantType = static_cast<const NMiniKQL::TVariantType *>(itemType);
 
-            YQL_ENSURE(array->type_id() == arrow::Type::DENSE_UNION);
+            YQL_ENSURE(array->type_id() == arrow::Type::DENSE_UNION, "Unexpected array type");
             auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
 
             auto variantIndex = unionArray->child_id(row);
@@ -1096,7 +1096,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array> &arr
 
             if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
                 // Go one step deeper
-                YQL_ENSURE(valuesArray->type_id() == arrow::Type::DENSE_UNION);
+                YQL_ENSURE(valuesArray->type_id() == arrow::Type::DENSE_UNION, "Unexpected array type");
                 auto innerUnionArray = static_pointer_cast<arrow::DenseUnionArray>(valuesArray);
                 auto innerVariantIndex = innerUnionArray->child_id(rowInChild);
 

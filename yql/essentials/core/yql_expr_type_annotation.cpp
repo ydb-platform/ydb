@@ -3881,6 +3881,69 @@ bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationN
     return true;
 }
 
+IGraphTransformer::TStatus ConvertToLinearType(TExprNode::TPtr& node, TExprContext& ctx) {
+    if (HasError(node->GetTypeAnn(), ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!node->GetTypeAnn()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() <<
+            "Expected (dynamic) linear type, but got lambda"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Linear) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::DynamicLinear) {
+        node = ctx.NewCallable(node->Pos(), "FromDynamicLinear", { node });
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() <<
+        "Expected (dynamic) linear type, but got: " << *node->GetTypeAnn()));
+    return IGraphTransformer::TStatus::Error;
+}
+
+bool EnsureLinearType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected linear type, but got lambda"));
+        return false;
+    }
+
+    if (node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Linear) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected linear type, but got: " << *node.GetTypeAnn()));
+        return false;
+    }
+
+    return true;
+}
+
+bool EnsureDynamicLinearType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected dynamic linear type, but got lambda"));
+        return false;
+    }
+
+    if (node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::DynamicLinear) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected dynamic linear type, but got: " << *node.GetTypeAnn()));
+        return false;
+    }
+
+    return true;
+}
+
 bool EnsurePersistable(const TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx)) {
         return false;

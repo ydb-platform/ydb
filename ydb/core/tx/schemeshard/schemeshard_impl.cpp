@@ -4083,6 +4083,17 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId)
         storeInfo->ColumnTablesUnderOperation.erase(pathId);
         storeInfo->ColumnTables.erase(pathId);
     }
+    
+    auto subDomainId = ResolvePathIdForDomain(pathId);
+    auto subDomainInfo = ResolveDomainInfo(pathId);
+    subDomainInfo->AggrDiskSpaceUsage(this, TPartitionStats(), tableInfo.GetStats().Aggregated);
+    if (subDomainInfo->CheckDiskSpaceQuotas(this)) {
+        PersistSubDomainState(db, subDomainId, *subDomainInfo);
+        // Publish is done in a separate transaction, so we may call this directly
+        TDeque<TPathId> toPublish;
+        toPublish.push_back(subDomainId);
+        PublishToSchemeBoard(TTxId(), std::move(toPublish), TActorContext::AsActorContext());
+    }
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
     ColumnTables.Drop(pathId);

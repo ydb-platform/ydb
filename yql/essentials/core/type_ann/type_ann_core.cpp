@@ -3,6 +3,7 @@
 #include "type_ann_expr.h"
 #include "type_ann_impl.h"
 #include "type_ann_list.h"
+#include "type_ann_dict.h"
 #include "type_ann_columnorder.h"
 #include "type_ann_wide.h"
 #include "type_ann_types.h"
@@ -51,6 +52,29 @@ namespace NYql {
     }
 
 namespace NTypeAnnImpl {
+    const TTypeAnnotationNode* ParseTypeCached(const TString& typeStr, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
+        if (!ctx.ParseTypeCache.contains(typeStr)) {
+            auto typeNode = ctx.Builder({})
+                .Callable("ParseType")
+                    .Atom(0, typeStr)
+                .Seal()
+                .Build();
+
+            TExtContext extContext(ctx, typeCtx);
+            auto status = ParseTypeWrapper(typeNode, typeNode, extContext);
+            if (status == IGraphTransformer::TStatus::Error) {
+                return nullptr;
+            }
+            if (!EnsureType(*typeNode, ctx)) {
+                return nullptr;
+            }
+
+            ctx.ParseTypeCache[typeStr] = typeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        }
+
+        return ctx.ParseTypeCache[typeStr];
+    }
+
     enum class EDictItems {
         Both = 0,
         Keys = 1,
@@ -12671,6 +12695,36 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus ToDynamicLinearWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureLinearType(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto retType = ctx.Expr.MakeType<TDynamicLinearExprType>(input->Head().GetTypeAnn()->Cast<TLinearExprType>()->GetItemType());
+        input->SetTypeAnn(retType);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus FromDynamicLinearWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureDynamicLinearType(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto retType = ctx.Expr.MakeType<TLinearExprType>(input->Head().GetTypeAnn()->Cast<TDynamicLinearExprType>()->GetItemType());
+        input->SetTypeAnn(retType);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus AssumeAllMembersNullableAtOnceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
@@ -13000,6 +13054,23 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["ScalarType"] = &TypeWrapper<ETypeAnnotationKind::Scalar>;
         ExtFunctions["LinearType"] = &TypeWrapper<ETypeAnnotationKind::Linear>;
         ExtFunctions["DynamicLinearType"] = &TypeWrapper<ETypeAnnotationKind::DynamicLinear>;
+        ExtFunctions["ToDynamicLinear"] = &ToDynamicLinearWrapper;
+        ExtFunctions["FromDynamicLinear"] = &FromDynamicLinearWrapper;
+        ExtFunctions["MutDictCreate"] = &MutDictCreateWrapper;
+        ExtFunctions["FromMutDict"] = &FromMutDictWrapper;
+        ExtFunctions["ToMutDict"] = &ToMutDictWrapper;
+        ExtFunctions["MutDictInsert"] = &MutDictBlindOpWrapper<true>;
+        ExtFunctions["MutDictUpsert"] = &MutDictBlindOpWrapper<true>;
+        ExtFunctions["MutDictUpdate"] = &MutDictBlindOpWrapper<true>;
+        ExtFunctions["MutDictRemove"] = &MutDictBlindOpWrapper<false>;
+        ExtFunctions["MutDictPop"] = &MutDictPopWrapper;
+        ExtFunctions["MutDictContains"] = &MutDictContainsWrapper;
+        ExtFunctions["MutDictLookup"] = &MutDictPopWrapper;
+        ExtFunctions["MutDictHasItems"] = &MutDictHasItemsWrapper;
+        ExtFunctions["MutDictLength"] = &MutDictLengthWrapper;
+        ExtFunctions["MutDictItems"] = &MutDictItemsWrapper;
+        ExtFunctions["MutDictKeys"] = &MutDictKeysWrapper;
+        ExtFunctions["MutDictPayloads"] = &MutDictPayloadsWrapper;
         Functions["Nothing"] = &NothingWrapper;
         Functions["AsOptionalType"] = &AsOptionalTypeWrapper;
         Functions["List"] = &ListWrapper;

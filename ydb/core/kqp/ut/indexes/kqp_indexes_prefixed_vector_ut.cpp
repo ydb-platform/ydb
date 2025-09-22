@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         std::string_view right,
         bool covered = false) {
         constexpr std::string_view init = 
-            "$target = \"\x67\x68\x03\";\n"
+            "$target = \"\x67\x68\x02\";\n"
             "$user = \"user_b\";";
         std::string metric = std::format("Knn::{}({}, {})", function, left, right);
         // no metric in result
@@ -218,38 +218,38 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         {
             const TString query1(Q_(R"(
                 UPSERT INTO `/Root/TestTable` (pk, user, emb, data) VALUES)"
-                "( 1, \"user_a\", \"\x03\x30\x03\", \"10\"),"
-                "(11, \"user_a\", \"\x13\x31\x03\", \"11\"),"
-                "(21, \"user_a\", \"\x23\x32\x03\", \"12\"),"
-                "(31, \"user_a\", \"\x53\x33\x03\", \"13\"),"
-                "(41, \"user_a\", \"\x43\x34\x03\", \"14\"),"
-                "(51, \"user_a\", \"\x50\x60\x03\", \"15\"),"
-                "(61, \"user_a\", \"\x61\x61\x03\", \"16\"),"
-                "(71, \"user_a\", \"\x12\x62\x03\", \"17\"),"
-                "(81, \"user_a\", \"\x75\x76\x03\", \"18\"),"
-                "(91, \"user_a\", \"\x76\x76\x03\", \"19\"),"
+                "( 1, \"user_a\", \"\x03\x30\x02\", \"10\"),"
+                "(11, \"user_a\", \"\x13\x31\x02\", \"11\"),"
+                "(21, \"user_a\", \"\x23\x32\x02\", \"12\"),"
+                "(31, \"user_a\", \"\x53\x33\x02\", \"13\"),"
+                "(41, \"user_a\", \"\x43\x34\x02\", \"14\"),"
+                "(51, \"user_a\", \"\x50\x60\x02\", \"15\"),"
+                "(61, \"user_a\", \"\x61\x61\x02\", \"16\"),"
+                "(71, \"user_a\", \"\x12\x62\x02\", \"17\"),"
+                "(81, \"user_a\", \"\x75\x76\x02\", \"18\"),"
+                "(91, \"user_a\", \"\x76\x76\x02\", \"19\"),"
 
-                "( 2, \"user_b\", \"\x03\x30\x03\", \"20\"),"
-                "(12, \"user_b\", \"\x13\x31\x03\", \"21\"),"
-                "(22, \"user_b\", \"\x23\x32\x03\", \"22\"),"
-                "(32, \"user_b\", \"\x53\x33\x03\", \"23\"),"
-                "(42, \"user_b\", \"\x43\x34\x03\", \"24\"),"
-                "(52, \"user_b\", \"\x50\x60\x03\", \"25\"),"
-                "(62, \"user_b\", \"\x61\x61\x03\", \"26\"),"
-                "(72, \"user_b\", \"\x12\x62\x03\", \"27\"),"
-                "(82, \"user_b\", \"\x75\x76\x03\", \"28\"),"
-                "(92, \"user_b\", \"\x76\x76\x03\", \"29\"),"
+                "( 2, \"user_b\", \"\x03\x30\x02\", \"20\"),"
+                "(12, \"user_b\", \"\x13\x31\x02\", \"21\"),"
+                "(22, \"user_b\", \"\x23\x32\x02\", \"22\"),"
+                "(32, \"user_b\", \"\x53\x33\x02\", \"23\"),"
+                "(42, \"user_b\", \"\x43\x34\x02\", \"24\"),"
+                "(52, \"user_b\", \"\x50\x60\x02\", \"25\"),"
+                "(62, \"user_b\", \"\x61\x61\x02\", \"26\"),"
+                "(72, \"user_b\", \"\x12\x62\x02\", \"27\"),"
+                "(82, \"user_b\", \"\x75\x76\x02\", \"28\"),"
+                "(92, \"user_b\", \"\x76\x76\x02\", \"29\"),"
 
-                "( 3, \"user_c\", \"\x03\x30\x03\", \"30\"),"
-                "(13, \"user_c\", \"\x13\x31\x03\", \"31\"),"
-                "(23, \"user_c\", \"\x23\x32\x03\", \"32\"),"
-                "(33, \"user_c\", \"\x53\x33\x03\", \"33\"),"
-                "(43, \"user_c\", \"\x43\x34\x03\", \"34\"),"
-                "(53, \"user_c\", \"\x50\x60\x03\", \"35\"),"
-                "(63, \"user_c\", \"\x61\x61\x03\", \"36\"),"
-                "(73, \"user_c\", \"\x12\x62\x03\", \"37\"),"
-                "(83, \"user_c\", \"\x75\x76\x03\", \"38\"),"
-                "(93, \"user_c\", \"\x76\x76\x03\", \"39\");"
+                "( 3, \"user_c\", \"\x03\x30\x02\", \"30\"),"
+                "(13, \"user_c\", \"\x13\x31\x02\", \"31\"),"
+                "(23, \"user_c\", \"\x23\x32\x02\", \"32\"),"
+                "(33, \"user_c\", \"\x53\x33\x02\", \"33\"),"
+                "(43, \"user_c\", \"\x43\x34\x02\", \"34\"),"
+                "(53, \"user_c\", \"\x50\x60\x02\", \"35\"),"
+                "(63, \"user_c\", \"\x61\x61\x02\", \"36\"),"
+                "(73, \"user_c\", \"\x12\x62\x02\", \"37\"),"
+                "(83, \"user_c\", \"\x75\x76\x02\", \"38\"),"
+                "(93, \"user_c\", \"\x76\x76\x02\", \"39\");"
             ));
 
             auto result = session.ExecuteDataQuery(
@@ -511,10 +511,10 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         {
             TString query1(Q_(R"(
                 INSERT INTO `/Root/TestTable` (pk, user, emb, data) VALUES
-                (101, "user_a", "\x03\x29\x03", "101"),
-                (102, "user_b", "\x03\x29\x03", "102"),
-                (111, "user_a", "\x76\x75\x03", "111"),
-                (112, "user_b", "\x76\x75\x03", "112")
+                (101, "user_a", "\x03\x29\x02", "101"),
+                (102, "user_b", "\x03\x29\x02", "102"),
+                (111, "user_a", "\x76\x75\x02", "111"),
+                (112, "user_b", "\x76\x75\x02", "112")
             )"));
             query1 += (returning ? " RETURNING data, emb, user, pk;" : ";");
 
@@ -523,10 +523,10 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             UNIT_ASSERT(result.IsSuccess());
             if (returning) {
                 UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
-                    "[[\"101\";\"\\3)\\3\";\"user_a\";101];"
-                    "[\"102\";\"\\3)\\3\";\"user_b\";102];"
-                    "[\"111\";\"vu\\3\";\"user_a\";111];"
-                    "[\"112\";\"vu\\3\";\"user_b\";112]]");
+                    "[[\"101\";\"\\3)\\2\";\"user_a\";101];"
+                    "[\"102\";\"\\3)\\2\";\"user_b\";102];"
+                    "[\"111\";\"vu\\2\";\"user_a\";111];"
+                    "[\"112\";\"vu\\2\";\"user_b\";112]]");
             }
         }
 
@@ -582,7 +582,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             if (returning) {
-                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[\"19\";\"user_a\";\"vv\\3\";91]]");
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[\"19\";\"user_a\";\"vv\\2\";91]]");
             }
         }
 
@@ -681,7 +681,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         // Update to the table with index should succeed (embedding changes, but the cluster does not)
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/TestTable` SET `emb`="\x76\x75\x03" WHERE `pk`=91;
+                UPDATE `/Root/TestTable` SET `emb`="\x76\x75\x02" WHERE `pk`=91;
             )"));
 
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
         const TString updated = ReadTablePartToYson(session, "/Root/TestTable/index/indexImplPostingTable");
         if (Covered) {
-            SubstGlobal(orig, "\"\x76\x76\\3\"];[\"19", "\"\x76\x75\\3\"];[\"19");
+            SubstGlobal(orig, "\"\x76\x76\\2\"];[\"19", "\"\x76\x75\\2\"];[\"19");
         }
         UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
     }
@@ -719,7 +719,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             if (returning) {
-                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"19\"];[\"\\0031\\3\"];[\"user_a\"];[91]]]");
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"19\"];[\"\\0031\\2\"];[\"user_a\"];[91]]]");
             }
         }
 
@@ -740,27 +740,27 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
     }
 
     Y_UNIT_TEST_TWIN(PrefixedVectorIndexUpdatePkClusterChange, Covered) {
-        DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=91;)"), false, Covered);
+        DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `pk`=91;)"), false, Covered);
     }
 
     Y_UNIT_TEST_TWIN(PrefixedVectorIndexUpdateFilterClusterChange, Covered) {
-        DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="19" AND `user`="user_a";)"), false, Covered);
+        DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `data`="19" AND `user`="user_a";)"), false, Covered);
     }
 
     Y_UNIT_TEST_TWIN(PrefixedVectorIndexUpsertClusterChange, Covered) {
-        DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `user`, `emb`, `data`) VALUES (91, "user_a", "\x03\x31\x03", "19");)"), false, Covered);
+        DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `user`, `emb`, `data`) VALUES (91, "user_a", "\x03\x31\x02", "19");)"), false, Covered);
     }
 
     Y_UNIT_TEST_TWIN(PrefixedVectorIndexUpdatePkClusterChangeReturning, Covered) {
-        DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=91 RETURNING `data`, `emb`, `user`, `pk`;)"), true, Covered);
+        DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `pk`=91 RETURNING `data`, `emb`, `user`, `pk`;)"), true, Covered);
     }
 
     Y_UNIT_TEST_TWIN(PrefixedVectorIndexUpdateFilterClusterChangeReturning, Covered) {
-        DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="19" AND `user`="user_a" RETURNING `data`, `emb`, `user`, `pk`;)"), true, Covered);
+        DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `data`="19" AND `user`="user_a" RETURNING `data`, `emb`, `user`, `pk`;)"), true, Covered);
     }
 
     Y_UNIT_TEST_TWIN(PrefixedVectorIndexUpsertClusterChangeReturning, Covered) {
-        DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `user`, `emb`, `data`) VALUES (91, "user_a", "\x03\x31\x03", "19") RETURNING `data`, `emb`, `user`, `pk`;)"), true, Covered);
+        DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `user`, `emb`, `data`) VALUES (91, "user_a", "\x03\x31\x02", "19") RETURNING `data`, `emb`, `user`, `pk`;)"), true, Covered);
     }
 
 }

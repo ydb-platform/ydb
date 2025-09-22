@@ -5445,6 +5445,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImportChangefeeds(1, AddedScheme);
     }
 
+    // ydb.tech/docs/ru/concepts/cdc#topic-partitions
     Y_UNIT_TEST(ChangefeedWithPartitioning) {
         TestImportChangefeeds(1, AddedScheme, "UINT32");
     }

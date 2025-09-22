@@ -292,6 +292,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     const auto& keyIds = tableDesc.GetKeyColumnIds()[0];
     bool isPartitioningAvaliable = false;
     
+    // ydb.tech/docs/ru/concepts/cdc#topic-partitions
     for (const auto& column : tableDesc.GetColumns()) {
         if (column.GetId() == keyIds) {
             isPartitioningAvaliable = column.GetType() == "Uint32" || column.GetType() == "Uint64";

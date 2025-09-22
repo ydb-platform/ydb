@@ -164,8 +164,7 @@ private:
             }
         }
 
-        TasksGraph.BuildAllTasks(EnableReadsMerge, LlvmSettings, ResourcesSnapshot,
-            CollectProfileStats(Request.StatsMode), Stats.get(), nullptr);
+        TasksGraph.BuildAllTasks(EnableReadsMerge, LlvmSettings, ResourcesSnapshot, Stats.get(), nullptr);
         OnEmptyResult();
 
         Cerr << TasksGraph.DumpToString();

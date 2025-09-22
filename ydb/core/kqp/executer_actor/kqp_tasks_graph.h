@@ -229,6 +229,7 @@ struct TGraphMeta {
     std::map<TString, TString> SecureParams;
     bool AllowOlapDataQuery = true; // used by Data executer - always true for Scan executer
     bool StreamResult = false;
+    Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
 
     bool ShardsResolved = false;
     TMap<ui64 /* shardId */, ui64 /* nodeId */> ShardIdToNodeId;
@@ -379,9 +380,7 @@ public:
     );
 
     size_t BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings,
-        const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
-        bool collectProfileStats, TQueryExecutionStats* stats,
-        THashSet<ui64>* ShardsWithEffects
+        const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats, THashSet<ui64>* ShardsWithEffects
     );
 
     // TODO: public used by TKqpLiteralExecuter

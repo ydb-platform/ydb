@@ -2770,9 +2770,7 @@ void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TSta
 }
 
 size_t TKqpTasksGraph::BuildAllTasks(bool enableReadsMerge, std::optional<TLlvmSettings> llvmSettings,
-    const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
-    bool collectProfileStats, TQueryExecutionStats* stats,
-    THashSet<ui64>* shardsWithEffects)
+    const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats, THashSet<ui64>* shardsWithEffects)
 {
     size_t sourceScanPartitionsCount = 0;
 
@@ -2845,7 +2843,7 @@ size_t TKqpTasksGraph::BuildAllTasks(bool enableReadsMerge, std::optional<TLlvmS
                 }
                 GetMeta().UnknownAffectedShardCount |= BuildComputeTasks(stageInfo, nodesCount);
             } else if (buildScanTasks) {
-                BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination(), collectProfileStats ? stats : nullptr);
+                BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination(), CollectProfileStats(GetMeta().StatsMode) ? stats : nullptr);
             } else {
                 if (!GetMeta().IsScan) {
                     BuildDatashardTasks(stageInfo, shardsWithEffects);
@@ -2859,7 +2857,7 @@ size_t TKqpTasksGraph::BuildAllTasks(bool enableReadsMerge, std::optional<TLlvmS
                 for (auto& taskId : stageInfo.Tasks) {
                     GetTask(taskId).SetUseLlvm(useLlvm);
                 }
-                if (collectProfileStats && stats) {
+                if (CollectProfileStats(GetMeta().StatsMode) && stats) {
                     stats->SetUseLlvm(stageInfo.Id.StageId, useLlvm);
                 }
             }

@@ -614,7 +614,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             table.c_str(),
             restoredView.c_str(),
             session,
-            CreateBackupLambda(driver, pathToBackup, alice),
+            [&driver, &pathToBackup]() {
+                NBackup::BackupFolder(driver, alice, ".", pathToBackup, {}, false, false);
+            },
             CreateRestoreLambda(driver, pathToBackup, bob)
         );
     }

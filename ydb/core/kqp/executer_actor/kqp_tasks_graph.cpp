@@ -1940,8 +1940,6 @@ void MergeReadInfoToTaskMeta(TTaskMeta& meta, ui64 shardId, TMaybe<TShardKeyRang
 }
 
 void TKqpTasksGraph::BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects) {
-    Y_ENSURE(shardsWithEffects);
-
     THashMap<ui64, ui64> shardTasks; // shardId -> taskId
     auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
@@ -1999,7 +1997,9 @@ void TKqpTasksGraph::BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* 
                         taskColumnWrite.MaxValueSizeBytes = std::max(taskColumnWrite.MaxValueSizeBytes,
                             info.MaxValueSizeBytes);
                     }
-                    shardsWithEffects->insert(shardId);
+                    if (shardsWithEffects) {
+                        shardsWithEffects->insert(shardId);
+                    }
                 }
 
                 break;
@@ -2136,10 +2136,8 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
         }
 
         if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) {
-            stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(),
-                                                op.GetReadRange().GetSkipNullKeys().end());
-            // not supported for scan queries
-            YQL_ENSURE(!readSettings.IsReverse());
+            stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(), op.GetReadRange().GetSkipNullKeys().end());
+            YQL_ENSURE(!readSettings.IsReverse(), "Not supported for scan queries");
         }
 
         for (auto&& [shardId, shardInfo]: partitions) {
@@ -2607,8 +2605,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
 
         YQL_ENSURE(!GetMeta().ShardsResolved || nodeId);
 
-        YQL_ENSURE(stats);
-        if (shardId) {
+        if (shardId && stats) {
             stats->AffectedShards.insert(*shardId);
         }
 
@@ -2675,9 +2672,10 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
     if (partitions.size() > 0 && (isSequentialInFlight || singlePartitionedStage)) {
         auto [startShard, shardInfo] = PartitionPruner->MakeVirtualTablePartition(source, stageInfo);
 
-        YQL_ENSURE(stats);
-        for (auto& [shardId, _] : partitions) {
-            stats->AffectedShards.insert(shardId);
+        if (stats) {
+            for (auto& [shardId, _] : partitions) {
+                stats->AffectedShards.insert(shardId);
+            }
         }
 
         TMaybe<ui64> inFlightShards = Nothing();
@@ -2836,8 +2834,6 @@ size_t TKqpTasksGraph::BuildAllTasks(bool enableReadsMerge, std::optional<TLlvmS
         limitTasksPerNode |= GetMeta().StreamResult;
     }
 
-    Y_ENSURE(stats);
-
     for (ui32 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
         const auto& tx = Transactions.at(txIdx);
         auto scheduledTaskCount = ScheduleByCost(tx, resourcesSnapshot);
@@ -2915,7 +2911,7 @@ size_t TKqpTasksGraph::BuildAllTasks(bool enableReadsMerge, std::optional<TLlvmS
                 for (auto& taskId : stageInfo.Tasks) {
                     GetTask(taskId).SetUseLlvm(useLlvm);
                 }
-                if (collectProfileStats) {
+                if (collectProfileStats && stats) {
                     stats->SetUseLlvm(stageInfo.Id.StageId, useLlvm);
                 }
             }
@@ -3013,8 +3009,20 @@ TKqpTasksGraph::TKqpTasksGraph(
     FillKqpTasksGraphStages();
 }
 
-TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const
-{
+TString TKqpTasksGraph::DumpToString() const {
+    THashMap<TStageId, ui64> stageTasks;
+    for (const auto& task : GetTasks()) {
+        stageTasks[task.StageId]++;
+    }
+
+    TStringStream dump;
+    for (const auto& [stageId, tasks] : stageTasks) {
+        dump << "Stage " << stageId << " has " << tasks << " tasks" << Endl;
+    }
+    return dump.Str();
+}
+
+TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const {
     TStringBuilder sb;
     sb << "TTaskMeta{ ShardId: " << ShardId << ", Reads: { ";
 

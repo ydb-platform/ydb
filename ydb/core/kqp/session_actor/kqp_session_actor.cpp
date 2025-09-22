@@ -17,6 +17,8 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/executer_actor/kqp_locks_helper.h>
 #include <ydb/core/kqp/executer_actor/kqp_partitioned_executer.h>
+#include <ydb/core/kqp/executer_actor/kqp_table_resolver.h>
+#include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -40,6 +42,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
+#include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -787,11 +790,47 @@ public:
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
             QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
         {
-            return ReplyPrepareResult();
+            TVector<IKqpGateway::TPhysicalTxData> txs;
+            txs.emplace_back(QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx), QueryState->QueryData);
+
+            auto txAlloc = std::make_shared<TTxAllocatorState>(AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
+            auto tasksGraph = TKqpTasksGraph(txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {});
+            tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
+
+            // Resolve tables
+            {
+                auto kqpTableResolver = CreateKqpTableResolver(SelfId(), 0, QueryState->UserToken, tasksGraph);
+                RegisterWithSameMailbox(kqpTableResolver);
+                auto resolveEv = co_await ActorWaitForEvent<TEvKqpExecuter::TEvTableResolveStatus>(0);
+                // TODO: check resolveEv status and handle errors.
+            }
+
+            // Resolve shards
+            {
+                TSet<ui64> shardIds;
+                for (const auto& [stageId, stageInfo] : tasksGraph.GetStagesInfo()) {
+                    if (stageInfo.Meta.ShardKey) {
+                        for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                            shardIds.insert(partition.ShardId);
+                        }
+                    }
+                }
+                // TODO: initialize tasksGraph.GetMeta().UseFollowers ?
+                auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), 0, false, std::move(shardIds));
+                RegisterWithSameMailbox(kqpShardsResolver);
+                auto resolveEv = co_await ActorWaitForEvent<NShardResolver::TEvShardsResolveStatus>(0);
+                tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
+            }
+
+            tasksGraph.BuildAllTasks(false, {}, {}, false, nullptr, nullptr);
+
+            Cerr << tasksGraph.DumpToString();
+
+            co_return ReplyPrepareResult();
         }
 
         if (!PrepareQueryContext()) {
-            return;
+            co_return;
         }
 
         Become(&TKqpSessionActor::ExecuteState);
@@ -800,10 +839,10 @@ public:
 
         if (QueryState->NeedPersistentSnapshot()) {
             AcquirePersistentSnapshot();
-            return;
+            co_return;
         } else if (QueryState->NeedSnapshot(*Config)) {
             AcquireMvccSnapshot();
-            return;
+            co_return;
         }
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
@@ -1246,7 +1285,7 @@ public:
     }
 
     bool CheckTransactionLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
-        auto& txCtx = *QueryState->TxCtx;
+        const auto& txCtx = *QueryState->TxCtx;
         const bool broken = txCtx.TxManager
             ? !!txCtx.TxManager->GetLockIssue()
             : txCtx.Locks.Broken();
@@ -1267,7 +1306,7 @@ public:
     }
 
     bool CheckTopicOperations() {
-        auto& txCtx = *QueryState->TxCtx;
+        const auto& txCtx = *QueryState->TxCtx;
 
         if (txCtx.TopicOperations.IsValid()) {
             return true;
@@ -1413,7 +1452,7 @@ public:
                 "BATCH operation can be executed only in the implicit transaction mode.");
         }
 
-        auto& txCtx = *QueryState->TxCtx;
+        const auto& txCtx = *QueryState->TxCtx;
         auto request = PrepareRequest(tx, false, QueryState.get());
 
         try {

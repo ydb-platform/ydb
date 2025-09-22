@@ -297,6 +297,8 @@ class KikimrConfigGenerator(object):
         if os.getenv('YDB_KQP_ENABLE_IMMEDIATE_EFFECTS', 'false').lower() == 'true':
             self.yaml_config["table_service_config"]["enable_kqp_immediate_effects"] = True
 
+        # disable kqp pattern cache on darwin platform to avoid using llvm versions of computational
+        # nodes. These compute nodes are not properly tested and maintained.
         if sys.platform == "darwin":
             self.yaml_config["table_service_config"]["resource_manager"]["kqp_pattern_cache_compiled_capacity_bytes"] = 0
 

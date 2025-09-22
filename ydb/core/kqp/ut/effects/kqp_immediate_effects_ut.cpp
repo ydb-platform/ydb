@@ -898,7 +898,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
-        auto TAuthScanBase = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
 
         CreateShardedTestTable(session1);
 

@@ -562,7 +562,6 @@ class LoadSuiteBase:
             node_errors = []
         return node_errors
 
-
     def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols):
         """Формирует allure-отчёт по результатам workload"""
         end_time = time()

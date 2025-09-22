@@ -1783,8 +1783,6 @@ class WorkloadTestBase(LoadSuiteBase):
 
         return result
 
-
-
     def _process_single_run_result(
         self,
         overall_result,
@@ -2154,10 +2152,10 @@ class WorkloadTestBase(LoadSuiteBase):
             self.process_workload_result_with_diagnostics(
                 overall_result, workload_name, False, use_node_subcols=True
             )
-            
+
             # Отдельный шаг для выгрузки результатов (ПОСЛЕ подготовки всех данных)
             self._safe_upload_results(overall_result, workload_name)
-            
+
             # Финальная обработка статуса (может выбросить исключение, но результаты уже выгружены)
             # Используем node_errors, сохраненные из диагностики
             node_errors = getattr(overall_result, '_node_errors', [])
@@ -2306,11 +2304,11 @@ class WorkloadTestBase(LoadSuiteBase):
                     workload_name,
                     "nodes_with_issues",
                     len(node_errors))
-                
+
                 # Формируем списки ошибок для выгрузки
                 node_error_messages = []
                 workload_error_messages = []
-                
+
                 # Собираем ошибки нод с подробностями
                 for node_error in node_errors:
                     if node_error.core_hashes:
@@ -2318,28 +2316,28 @@ class WorkloadTestBase(LoadSuiteBase):
                             node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
                     if node_error.was_oom:
                         node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
-                
+
                 # Собираем workload ошибки (не связанные с нодами)
                 if result.errors:
                     for err in result.errors:
                         if "coredump" not in err.lower() and "oom" not in err.lower():
                             workload_error_messages.append(err)
-                
+
                 # Добавляем в статистику
                 result.add_stat(workload_name, "node_error_messages", node_error_messages)
                 result.add_stat(workload_name, "workload_error_messages", workload_error_messages)
-                
+
                 # Добавляем boolean флаги
                 result.add_stat(workload_name, "node_errors", len(node_error_messages) > 0)
                 result.add_stat(workload_name, "workload_errors", len(workload_error_messages) > 0)
-                
+
                 # Собираем workload предупреждения (исключая node-специфичные)
                 workload_warning_messages = []
                 if result.warnings:
                     for warn in result.warnings:
                         if "coredump" not in warn.lower() and "oom" not in warn.lower():
                             workload_warning_messages.append(warn)
-                
+
                 result.add_stat(workload_name, "workload_warning_messages", workload_warning_messages)
                 result.add_stat(workload_name, "workload_warnings", len(workload_warning_messages) > 0)
 
@@ -2350,9 +2348,8 @@ class WorkloadTestBase(LoadSuiteBase):
 
             # Сохраняем node_errors для использования после выгрузки
             result._node_errors = node_errors
-            
-            # Данные подготовлены, теперь можно выгружать результаты
 
+            # Данные подготовлены, теперь можно выгружать результаты
 
     def _safe_upload_results(self, result, workload_name):
         """Безопасная выгрузка результатов с обработкой ошибок и Allure отчетом"""
@@ -2365,16 +2362,16 @@ class WorkloadTestBase(LoadSuiteBase):
             try:
                 # Выгружаем агрегированные результаты
                 self._upload_results(result, workload_name)
-                
+
                 # Выгружаем результаты по каждому запуску
-                per_run_count = sum(len(getattr(iteration, "runs", [iteration])) 
-                                  for iteration in result.iterations.values())
+                per_run_count = sum(len(getattr(iteration, "runs", [iteration]))
+                                    for iteration in result.iterations.values())
                 self._upload_results_per_workload_run(result, workload_name)
-                
+
                 # Информативное сообщение о том, что было выгружено
                 upload_summary = [
                     "Results uploaded successfully:",
-                    f"• Aggregate results: 1 record (kind=Stability)",
+                    "• Aggregate results: 1 record (kind=Stability)",
                     f"• Per-run results: {per_run_count} records (kind=Stability)",
                     f"• Total iterations: {len(result.iterations)}",
                     f"• Workload: {workload_name}",
@@ -2396,13 +2393,13 @@ class WorkloadTestBase(LoadSuiteBase):
                     f"Error message: {str(e)}",
                     f"Timestamp: {time_module.strftime('%Y-%m-%d %H:%M:%S')}",
                 ]
-                
+
                 # Добавляем дополнительную информацию если это YDB ошибка
                 if hasattr(e, 'issues'):
                     error_details.append(f"YDB issues: {e.issues}")
                 if hasattr(e, 'status'):
                     error_details.append(f"Status: {e.status}")
-                    
+
                 allure.attach("\n".join(error_details),
                               "Upload error details", allure.attachment_type.TEXT)
 

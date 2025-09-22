@@ -168,6 +168,9 @@ SELECT
     agg.TestToolsVersion,
     agg.ReportUrl,
     agg.CiLaunchId,
+    agg.CiLaunchUrl,
+    agg.CiLaunchStartTime,
+    agg.CiJobTitle,
     agg.HadVerification,
     
     -- Извлекаем ветки из версий

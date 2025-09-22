@@ -12,6 +12,7 @@ namespace {
             TDuration::Seconds(5),
             idlePartitionsEnabled,
             TDuration::Seconds(1),
+            TDuration::Seconds(1),
             TInstant::Now()
         );
     }

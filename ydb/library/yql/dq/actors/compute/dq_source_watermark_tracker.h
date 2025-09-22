@@ -11,10 +11,12 @@ public:
         TDuration granularity,
         bool idlePartitionsEnabled,
         TDuration lateArrivalDelay,
+        TDuration idleDelay,
         TInstant systemTime)
         : Granularity_(granularity)
         , IdlePartitionsEnabled_(idlePartitionsEnabled)
         , LateArrivalDelay_(lateArrivalDelay)
+        , IdleDelay_(idleDelay)
         , LastTimeNotifiedAt_(systemTime)
     {}
 
@@ -108,10 +110,10 @@ public:
            if (it == ArrivalQueue_.end()) {
                break;
            }
-           if (it->Time + LateArrivalDelay_ >= systemTime) {
+           if (it->Time + IdleDelay_ >= systemTime) {
                break;
            }
-           Cerr << "Mark partition " << it->Iterator->first << " idle " << it->Time << '+' << LateArrivalDelay_ << ">=" << systemTime << Endl;
+           Cerr << "Mark partition " << it->Iterator->first << " idle " << it->Time << '+' << IdleDelay_ << ">=" << systemTime << Endl;
            auto removed = WatermarksQueue_.erase(TWatermarksQueueItem {
                    it->Iterator->second.Watermark,
                    it->Iterator
@@ -189,6 +191,7 @@ private:
     const TDuration Granularity_;
     const bool IdlePartitionsEnabled_;
     const TDuration LateArrivalDelay_;
+    const TDuration IdleDelay_;
 
     THashMap<TPartitionKey, TPartitionState> Data_;
     using TArrivalQueueItem = TTimeState<TInstant, decltype(Data_)>;

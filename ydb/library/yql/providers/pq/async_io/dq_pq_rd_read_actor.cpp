@@ -843,10 +843,12 @@ TDuration TDqPqRdReadActor::GetCpuTime() {
 }
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
+    auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
+    auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
     SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
         << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds"
-        << " lateArrivalDelay: " << SourceParams.GetWatermarks().GetLateArrivalDelayUs() << " microseconds"
-        << ", idle: " << SourceParams.GetWatermarks().GetIdlePartitionsEnabled()
+        << " idle delay: " << idleDelayUs << " microseconds"
+        << " idle: " << SourceParams.GetWatermarks().GetIdlePartitionsEnabled()
         );
 
     if (!SourceParams.GetWatermarks().GetEnabled()) {
@@ -856,7 +858,8 @@ void TDqPqRdReadActor::InitWatermarkTracker() {
     WatermarkTracker.ConstructInPlace(
         TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
         SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
-        LateArrivalDelay,
+        TDuration::Zero(),
+        TDuration::MicroSeconds(idleDelayUs),
         TInstant::Now()
     );
 }
@@ -1186,7 +1189,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
             const auto watermark = TInstant::MicroSeconds(watermarkUs);
             const auto maybeNewWatermark = Parent->WatermarkTracker->NotifyNewPartitionTime(
                 partitionKey,
-                watermark + LateArrivalDelay, // XXX dirty hack; untangle watermark delay and idle delay
+                watermark,
                 TInstant::Now()
             );
             if (!maybeNewWatermark) {

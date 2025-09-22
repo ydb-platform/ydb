@@ -611,8 +611,13 @@ private:
     }
 
     void InitWatermarkTracker() {
+        auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
+        auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
         SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
-            << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds");
+            << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds"
+            << " idle delay: " << idleDelayUs << " microseconds "
+            << " late arrival delay: " << lateArrivalDelayUs << " microseconds"
+            );
 
         if (!SourceParams.GetWatermarks().GetEnabled()) {
             return;
@@ -621,7 +626,8 @@ private:
         WatermarkTracker.ConstructInPlace(
             TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
             SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
-            TDuration::MicroSeconds(SourceParams.GetWatermarks().GetLateArrivalDelayUs()),
+            TDuration::MicroSeconds(lateArrivalDelayUs),
+            TDuration::MicroSeconds(idleDelayUs),
             TInstant::Now()
         );
     }

@@ -439,6 +439,8 @@ enum EServiceKikimr {
     TOKEN_MANAGER = 3600;
 
     LOCAL_DB_BACKUP = 3700;
+
+    SCHEMA_SECRET_CACHE = 3800;
 };
 
 message TActivity {

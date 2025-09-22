@@ -70,39 +70,14 @@ namespace NKikimr::NKqp::NFormats {
  */
 std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType *type);
 
-/**
- * @brief Check if type can be converted to arrow format using only native arrow
- * classes.
- *
- * @param type Type of UnboxedValue to check.
- * @return true if type does not contain neither nested Optional, nor Dicts with
- * Optional keys, nor Variants between more than 255 types.
- * @return false otherwise
- */
+void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder *builder, const NMiniKQL::TType *type);
+
+namespace NTestUtils {
+
 bool IsArrowCompatible(const NMiniKQL::TType *type);
 
 std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NMiniKQL::TType *type);
 
-/**
- * @brief Append UnboxedValue to arrow Array via arrow Builder
- *
- * @param value unboxed value to append
- * @param builder arrow Builder with proper type used to append converted value
- * array
- * @param type type of element to parse it and to construct corresponding arrow
- * type
- * @return std::shared_ptr<arrow::Array> data in arrow format
- */
-void AppendElement(NYql::NUdf::TUnboxedValue value, arrow::ArrayBuilder *builder, const NMiniKQL::TType *type);
-
-/**
- * @brief Convert UnboxedValue-s to arrow Array
- *
- * @param values elements of future array
- * @param itemType type of each element to parse it and to construct
- * corresponding arrow type
- * @return std::shared_ptr<arrow::Array> data in arrow format
- */
 std::shared_ptr<arrow::Array> MakeArray(NMiniKQL::TUnboxedValueVector &values, const NMiniKQL::TType *itemType);
 
 NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array> &array, ui64 row,
@@ -110,5 +85,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array> &arr
 
 NMiniKQL::TUnboxedValueVector ExtractUnboxedValues(const std::shared_ptr<arrow::Array> &array,
     const NMiniKQL::TType *itemType, const NMiniKQL::THolderFactory &holderFactory);
+
+} // namespace NTestUtils
 
 } // namespace NKikimr::NKqp::NFormats

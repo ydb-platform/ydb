@@ -711,10 +711,10 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto structType = context.GetStructType();
-        UNIT_ASSERT(NFormats::IsArrowCompatible(structType));
+        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(structType));
 
         auto values = context.CreateStructs(100);
-        auto array = NFormats::MakeArray(values, structType);
+        auto array = NFormats::NTestUtils::MakeArray(values, structType);
 
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
@@ -752,10 +752,10 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto tupleType = context.GetTupleType();
-        UNIT_ASSERT(NFormats::IsArrowCompatible(tupleType));
+        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(tupleType));
 
         auto values = context.CreateTuples(100);
-        auto array = NFormats::MakeArray(values, tupleType);
+        auto array = NFormats::NTestUtils::MakeArray(values, tupleType);
         UNIT_ASSERT(array->ValidateFull().ok());
 
         UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
@@ -792,10 +792,10 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto listType = context.GetListOfJsonsType();
-        Y_ABORT_UNLESS(NFormats::IsArrowCompatible(listType));
+        Y_ABORT_UNLESS(NFormats::NTestUtils::IsArrowCompatible(listType));
 
         auto values = context.CreateListOfJsons(100);
-        auto array = NFormats::MakeArray(values, listType);
+        auto array = NFormats::NTestUtils::MakeArray(values, listType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
         UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
@@ -825,10 +825,10 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto listType = context.GetOptionalListOfOptional();
-        Y_ABORT_UNLESS(NFormats::IsArrowCompatible(listType));
+        Y_ABORT_UNLESS(NFormats::NTestUtils::IsArrowCompatible(listType));
 
         auto values = context.CreateOptionalListOfOptional(100);
-        auto array = NFormats::MakeArray(values, listType);
+        auto array = NFormats::NTestUtils::MakeArray(values, listType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
         UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
@@ -867,10 +867,10 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto variantType = context.GetVariantOverStructType();
-        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
+        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(variantType));
 
         auto values = context.CreateVariantOverStruct(100);
-        auto array = NFormats::MakeArray(values, variantType);
+        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
         UNIT_ASSERT(array->type_id() == arrow::Type::DENSE_UNION);
@@ -917,10 +917,10 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto variantType = context.GetOptionalVariantOverStructType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(variantType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(variantType));
 
         auto values = context.CreateOptionalVariantOverStruct(100);
-        auto array = NFormats::MakeArray(values, variantType);
+        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
         UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
@@ -980,10 +980,10 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto variantType = context.GetDoubleOptionalVariantOverStructType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(variantType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(variantType));
 
         auto values = context.CreateDoubleOptionalVariantOverStruct(100);
-        auto array = NFormats::MakeArray(values, variantType);
+        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
         UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
@@ -1052,10 +1052,10 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto variantType = context.GetVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
+        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(variantType));
 
         auto values = context.CreateVariantOverTupleWithOptionals(100);
-        auto array = NFormats::MakeArray(values, variantType);
+        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
         UNIT_ASSERT(array->type_id() == arrow::Type::DENSE_UNION);
@@ -1110,10 +1110,10 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto variantType = context.GetOptionalVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(variantType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(variantType));
 
         auto values = context.CreateOptionalVariantOverTupleWithOptionals(100);
-        auto array = NFormats::MakeArray(values, variantType);
+        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
         UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
@@ -1180,10 +1180,10 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto variantType = context.GetDoubleOptionalVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(variantType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(variantType));
 
         auto values = context.CreateDoubleOptionalVariantOverTupleWithOptionals(100);
-        auto array = NFormats::MakeArray(values, variantType);
+        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
         UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
@@ -1259,10 +1259,10 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         TTestContext context;
 
         auto dictType = context.GetDictUtf8ToIntervalType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(dictType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(dictType));
 
         auto values = context.CreateDictUtf8ToInterval(100);
-        auto array = NFormats::MakeArray(values, dictType);
+        auto array = NFormats::NTestUtils::MakeArray(values, dictType);
         UNIT_ASSERT(array->ValidateFull().ok());
 
         UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
@@ -1304,10 +1304,10 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         TTestContext context;
 
         auto dictType = context.GetDictOptionalToTupleType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(dictType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(dictType));
 
         auto values = context.CreateDictOptionalToTuple(100);
-        auto array = NFormats::MakeArray(values, dictType);
+        auto array = NFormats::NTestUtils::MakeArray(values, dictType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT_EQUAL(static_cast<ui64>(array->length()), values.size());
         UNIT_ASSERT_EQUAL(array->type_id(), arrow::Type::STRUCT);
@@ -1359,10 +1359,10 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         TTestContext context;
 
         auto doubleOptionalType = context.GetOptionalOfOptionalType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(doubleOptionalType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(doubleOptionalType));
 
         auto values = context.CreateOptionalOfOptional(100);
-        auto array = NFormats::MakeArray(values, doubleOptionalType);
+        auto array = NFormats::NTestUtils::MakeArray(values, doubleOptionalType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT_EQUAL(static_cast<ui64>(array->length()), values.size());
 
@@ -1413,11 +1413,11 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
 
         ui32 numberOfTypes = 500;
         auto variantType = context.GetLargeVariantType(numberOfTypes);
-        bool isCompatible = NFormats::IsArrowCompatible(variantType);
+        bool isCompatible = NFormats::NTestUtils::IsArrowCompatible(variantType);
         UNIT_ASSERT(!isCompatible);
 
         auto values = context.CreateLargeVariant(1000);
-        auto array = NFormats::MakeArray(values, variantType);
+        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT_EQUAL(static_cast<ui64>(array->length()), values.size());
         UNIT_ASSERT_EQUAL(array->type_id(), arrow::Type::DENSE_UNION);
@@ -1439,8 +1439,8 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
 
         auto structType = context.GetStructType();
         auto values = context.CreateStructs(100);
-        auto array = NFormats::MakeArray(values, structType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, structType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, structType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, structType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], structType);
@@ -1451,11 +1451,11 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto tupleType = context.GetTupleType();
-        UNIT_ASSERT(NFormats::IsArrowCompatible(tupleType));
+        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(tupleType));
 
         auto values = context.CreateTuples(100);
-        auto array = NFormats::MakeArray(values, tupleType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, tupleType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, tupleType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, tupleType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], tupleType);
@@ -1466,11 +1466,11 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto dictType = context.GetDictUtf8ToIntervalType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(dictType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(dictType));
 
         auto values = context.CreateDictUtf8ToInterval(100);
-        auto array = NFormats::MakeArray(values, dictType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, dictType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, dictType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, dictType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], dictType);
@@ -1481,11 +1481,11 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto listType = context.GetListOfJsonsType();
-        Y_ABORT_UNLESS(NFormats::IsArrowCompatible(listType));
+        Y_ABORT_UNLESS(NFormats::NTestUtils::IsArrowCompatible(listType));
 
         auto values = context.CreateListOfJsons(100);
-        auto array = NFormats::MakeArray(values, listType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, listType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, listType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, listType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], listType);
@@ -1496,11 +1496,11 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto listType = context.GetOptionalListOfOptional();
-        Y_ABORT_UNLESS(NFormats::IsArrowCompatible(listType));
+        Y_ABORT_UNLESS(NFormats::NTestUtils::IsArrowCompatible(listType));
 
         auto values = context.CreateOptionalListOfOptional(100);
-        auto array = NFormats::MakeArray(values, listType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, listType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, listType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, listType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], listType);
@@ -1511,11 +1511,11 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto variantType = context.GetVariantOverStructType();
-        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
+        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(variantType));
 
         auto values = context.CreateVariantOverStruct(100);
-        auto array = NFormats::MakeArray(values, variantType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, variantType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, variantType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], variantType);
@@ -1526,11 +1526,11 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto optionalVariantType = context.GetOptionalVariantOverStructType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(optionalVariantType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(optionalVariantType));
 
         auto values = context.CreateOptionalVariantOverStruct(100);
-        auto array = NFormats::MakeArray(values, optionalVariantType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, optionalVariantType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, optionalVariantType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, optionalVariantType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], optionalVariantType);
@@ -1541,11 +1541,11 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto doubleOptionalVariantType = context.GetDoubleOptionalVariantOverStructType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(doubleOptionalVariantType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(doubleOptionalVariantType));
 
         auto values = context.CreateDoubleOptionalVariantOverStruct(100);
-        auto array = NFormats::MakeArray(values, doubleOptionalVariantType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, doubleOptionalVariantType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, doubleOptionalVariantType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, doubleOptionalVariantType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], doubleOptionalVariantType);
@@ -1556,11 +1556,11 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto variantType = context.GetVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
+        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(variantType));
 
         auto values = context.CreateVariantOverTupleWithOptionals(100);
-        auto array = NFormats::MakeArray(values, variantType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, variantType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, variantType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], variantType);
@@ -1571,11 +1571,11 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto optionalVariantType = context.GetOptionalVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(optionalVariantType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(optionalVariantType));
 
         auto values = context.CreateOptionalVariantOverTupleWithOptionals(100);
-        auto array = NFormats::MakeArray(values, optionalVariantType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, optionalVariantType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, optionalVariantType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, optionalVariantType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], optionalVariantType);
@@ -1586,11 +1586,11 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto doubleOptionalVariantType = context.GetDoubleOptionalVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(doubleOptionalVariantType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(doubleOptionalVariantType));
 
         auto values = context.CreateDoubleOptionalVariantOverTupleWithOptionals(100);
-        auto array = NFormats::MakeArray(values, doubleOptionalVariantType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, doubleOptionalVariantType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, doubleOptionalVariantType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, doubleOptionalVariantType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], doubleOptionalVariantType);
@@ -1601,11 +1601,11 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto dictType = context.GetDictOptionalToTupleType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(dictType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(dictType));
 
         auto values = context.CreateDictOptionalToTuple(100);
-        auto array = NFormats::MakeArray(values, dictType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, dictType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, dictType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, dictType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], dictType);
@@ -1616,11 +1616,11 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto doubleOptionalType = context.GetOptionalOfOptionalType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(doubleOptionalType));
+        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(doubleOptionalType));
 
         auto values = context.CreateOptionalOfOptional(100);
-        auto array = NFormats::MakeArray(values, doubleOptionalType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, doubleOptionalType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, doubleOptionalType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, doubleOptionalType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], doubleOptionalType);
@@ -1631,12 +1631,12 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto variantType = context.GetLargeVariantType(500);
-        bool isCompatible = NFormats::IsArrowCompatible(variantType);
+        bool isCompatible = NFormats::NTestUtils::IsArrowCompatible(variantType);
         UNIT_ASSERT(!isCompatible);
 
         auto values = context.CreateLargeVariant(1000);
-        auto array = NFormats::MakeArray(values, variantType);
-        auto restoredValues = NFormats::ExtractUnboxedValues(array, variantType, context.HolderFactory);
+        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
+        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, variantType, context.HolderFactory);
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], variantType);

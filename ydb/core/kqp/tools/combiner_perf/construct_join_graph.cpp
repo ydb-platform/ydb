@@ -60,8 +60,6 @@ bool IsBlockJoin(ETestedJoinAlgo kind) {
 }
 
 THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, TInnerJoinDescription descr) {
-    Y_ABORT_IF(algo == ETestedJoinAlgo::kBlockHash || algo == ETestedJoinAlgo::kScalarHash,
-               "{Block,Scalar}HashJoin bench is not implemented");
 
     const EJoinKind kInnerJoin = EJoinKind::Inner;
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
@@ -98,9 +96,9 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, T
         return pb.Arg(pb.NewListType(MakeBlockTupleType(pb, pb.NewTupleType(columns), kNotScalar)));
     };
 
-    auto makeArgs = [&](ETestedJoinAlgo kind) {
+    auto args = [&]() {
         TJoinArgs ret;
-        bool scalar = !IsBlockJoin(kind);
+        bool scalar = !IsBlockJoin(algo);
         ret.Left =
             scalar ? asTupleListArg(descr.LeftSource.ColumnTypes) : asBlockTupleListArg(descr.LeftSource.ColumnTypes);
         ret.Right =
@@ -108,8 +106,23 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, T
         ret.Entrypoints.push_back(ret.Left.GetNode());
         ret.Entrypoints.push_back(ret.Right.GetNode());
         return ret;
+    }();
+
+    auto blockGraphFrom = [&](TRuntimeNode blockWideStreamJoin) {
+        THolder<IComputationGraph> graph = descr.Setup->BuildGraph(blockWideStreamJoin, args.Entrypoints);
+        TComputationContext& ctx = graph->GetContext();
+        const int kBlockSize = 128;
+        SetEntryPointValues(*graph,
+                            ToBlocks(ctx, kBlockSize, descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList),
+                            ToBlocks(ctx, kBlockSize, descr.RightSource.ColumnTypes, descr.RightSource.ValuesList));
+        return graph;
     };
-    TJoinArgs args = makeArgs(algo);
+
+    auto scalarGraphFrom = [&](TRuntimeNode wideStreamJoin) {
+        THolder<IComputationGraph> graph = descr.Setup->BuildGraph(wideStreamJoin, args.Entrypoints);
+        SetEntryPointValues(*graph, descr.LeftSource.ValuesList, descr.RightSource.ValuesList);
+        return graph;
+    };
 
     TType* multiResultType = dqPb.NewMultiType(resultTypesArr);
 
@@ -120,9 +133,7 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, T
         TRuntimeNode wideStream = dqPb.FromFlow(dqPb.GraceJoin(
             ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), kInnerJoin, descr.LeftSource.KeyColumnIndexes,
             descr.RightSource.KeyColumnIndexes, leftRenames, rightRenames, dqPb.NewFlowType(multiResultType)));
-        THolder<IComputationGraph> graph = descr.Setup->BuildGraph(wideStream, args.Entrypoints);
-        SetEntryPointValues(*graph, descr.LeftSource.ValuesList, descr.RightSource.ValuesList);
-        return graph;
+        return scalarGraphFrom(wideStream);
     }
     case NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap: {
         Y_ABORT_IF(descr.RightSource.KeyColumnIndexes.size() > 1,
@@ -161,9 +172,7 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, T
                 return pb.NewTuple(items);
             })));
 
-        THolder<IComputationGraph> graph = descr.Setup->BuildGraph(wideStream, args.Entrypoints);
-        SetEntryPointValues(*graph, descr.LeftSource.ValuesList, descr.RightSource.ValuesList);
-        return graph;
+        return scalarGraphFrom(wideStream);
     }
     case ETestedJoinAlgo::kBlockMap: {
         TVector<ui32> kEmptyColumnDrops;
@@ -174,17 +183,20 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, T
         TRuntimeNode wideStream =
             BuildBlockJoin(pb, kInnerJoin, args.Left, descr.LeftSource.KeyColumnIndexes, kEmptyColumnDrops, args.Right,
                            descr.RightSource.KeyColumnIndexes, kRightDroppedColumns, false);
-        THolder<IComputationGraph> graph = descr.Setup->BuildGraph(wideStream, args.Entrypoints);
-        TComputationContext& ctx = graph->GetContext();
-        const int kBlockSize = 128;
-        SetEntryPointValues(*graph,
-                            ToBlocks(ctx, kBlockSize, descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList),
-                            ToBlocks(ctx, kBlockSize, descr.RightSource.ColumnTypes, descr.RightSource.ValuesList));
-        return graph;
+        return blockGraphFrom(wideStream);
     }
-    case ETestedJoinAlgo::kBlockHash:
-    case ETestedJoinAlgo::kScalarHash:
-        Y_ABORT("{Block,Scalar}HashJoin bench is not implemented");
+    case ETestedJoinAlgo::kBlockHash: {
+        auto wideStream = dqPb.DqBlockHashJoin(ToWideStream(dqPb, args.Left), ToWideStream(dqPb, args.Right),
+                                               kInnerJoin, descr.LeftSource.KeyColumnIndexes,
+                                               descr.RightSource.KeyColumnIndexes, pb.NewStreamType(multiResultType));
+        return blockGraphFrom(wideStream);
+    }
+    case ETestedJoinAlgo::kScalarHash: {
+        auto wideStream = pb.FromFlow(dqPb.DqScalarHashJoin(
+            ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), kInnerJoin, descr.LeftSource.KeyColumnIndexes,
+            descr.RightSource.KeyColumnIndexes, pb.NewFlowType(multiResultType)));
+        return scalarGraphFrom(wideStream);
+    }
     default:
         Y_ABORT("unreachable");
     }

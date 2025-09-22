@@ -798,8 +798,19 @@ public:
                             indexDesc->AddDataColumnNames(col);
                         }
 
-                        if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                        switch (index.Type) {
+                            case TIndexDescription::EType::GlobalSync:
+                            case TIndexDescription::EType::GlobalAsync:
+                            case TIndexDescription::EType::GlobalSyncUnique:
+                                // no specialized index description
+                                Y_ASSERT(std::holds_alternative<std::monostate>(index.SpecializedIndexDescription));
+                                break;
+                            case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                                *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                                break;
+                            case TIndexDescription::EType::GlobalFulltext:
+                                *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrKqp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
+                                break;
                         }
                     }
                     FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);

@@ -699,13 +699,19 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
     if (node.GetRule_table_index_type3().HasBlock2()) {
         const TString subType = to_upper(IdEx(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetRule_an_id1(), *this).Name) ;
-        if (subType == "VECTOR_KMEANS_TREE") {
+        if (subType == "VECTOR_KMEANS_TREE" || subType == "FULLTEXT") {
             if (indexes.back().Type != TIndexDescription::EType::GlobalSync) {
                 Ctx_.Error() << subType << " index can only be GLOBAL [SYNC]";
                 return false;
             }
 
-            indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
+            if (subType == "VECTOR_KMEANS_TREE") {
+                indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
+            } else if (subType == "FULLTEXT") {
+                indexes.back().Type = TIndexDescription::EType::GlobalFulltext;
+            } else {
+                Y_ABORT("Unreachable");
+            }
         } else {
             Ctx_.Error() << subType << " index subtype is not supported";
             return false;
@@ -716,7 +722,7 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
     if (node.HasBlock10()) {
         //const auto& with = node.GetBlock4();
         auto& index = indexes.back();
-        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree) {
+        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree || index.Type == TIndexDescription::EType::GlobalFulltext) {
             if (!FillIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.IndexSettings)) {
                 return false;
             }

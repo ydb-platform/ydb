@@ -25,23 +25,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     const auto& item = importInfo.Items.at(itemIdx);
     Y_ABORT_UNLESS(item.Table);
 
-    // const auto& pk0 = item.Table->primary_key()[0];
-    // const auto& columns = item.Table->columns();
-    // ::Ydb::Table::ColumnMeta pkColumn;
-
-    // for (const auto& column : columns) {
-    //     if (column.name() == pk0) {
-    //         pkColumn = column;
-    //         break;
-    //     }
-    // }
-
-    // if (pkColumn.type().has_type_id() 
-    //     && pkColumn.type().type_id() != ::Ydb::Type_PrimitiveTypeId_UINT32
-    //     && && pkColumn.type().type_id() != ::Ydb::Type_PrimitiveTypeId_UINT64) {
-
-    // }
-
     auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
     auto& record = propose->Record;
 

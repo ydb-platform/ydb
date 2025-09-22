@@ -1793,6 +1793,10 @@ namespace Tests {
             YqSharedResources->Stop();
         }
 
+        if (Settings->FederatedQuerySetupFactory) {
+            Settings->FederatedQuerySetupFactory->Cleanup();
+        }
+
         if (Runtime) {
             WaitFinalization();
             SysViewsRosterUpdateObserver.Remove();

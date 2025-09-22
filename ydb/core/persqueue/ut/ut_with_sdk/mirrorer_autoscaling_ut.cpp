@@ -962,6 +962,7 @@ namespace NKikimr::NPersQueueTests {
                 SplitPartition(txId++, srcTopicFullName, partitionId, bound, *ctx.Runtime(), TDuration::Zero());
             }
 
+            TInstant end = TDuration::Minutes(1).ToDeadLine();
             while (true) {
                 const auto srcStat = CountPartitionsByStatus(srcTopicFullName, server);
                 const auto dstStat = CountPartitionsByStatus(dstTopicFullName, server);
@@ -970,8 +971,12 @@ namespace NKikimr::NPersQueueTests {
                     PrintTopicDescription(name, "WAIT", server);
                 }
 
+                Cerr << "Wait partition count equals: " << srcStat.Partitions << " == " << dstStat.Partitions << Endl;
                 if (srcStat.Partitions == dstStat.Partitions) {
                     break;
+                }
+                if (end < TInstant::Now()) {
+                    UNIT_ASSERT_VALUES_EQUAL(srcStat.Partitions, dstStat.Partitions);
                 }
                 Sleep(TDuration::MilliSeconds(1000));
             }

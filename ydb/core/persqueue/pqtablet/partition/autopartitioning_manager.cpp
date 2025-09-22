@@ -13,12 +13,14 @@ namespace {
     void DoCleanUp(std::unordered_map<TString, TSlidingWindow>& writtenBytes) {
         auto now = TInstant::Now();
 
-        for (auto it = writtenBytes.begin(); it != writtenBytes.end(); ++it) {
+        for (auto it = writtenBytes.begin(); it != writtenBytes.end();) {
             auto& counter = it->second;
             counter.Update(now);
 
             if (0 == counter.GetValue()) {
                 it = writtenBytes.erase(it);
+            } else {
+                 ++it;
             }
         }
     }

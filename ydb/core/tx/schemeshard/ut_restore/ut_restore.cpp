@@ -19,7 +19,6 @@
 #include <ydb/library/dynumber/dynumber.h>
 #include <ydb/library/uuid/uuid.h>
 
-
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
 #include <aws/core/Aws.h>
@@ -33,6 +32,8 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
+
+#include <format>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr::NWrappers::NTestHelpers;

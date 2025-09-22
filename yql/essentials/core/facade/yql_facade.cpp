@@ -1691,6 +1691,10 @@ TMaybe<TString> TProgram::GetDiagnostics() {
         return Nothing();
     }
 
+    if (VolatileResults_) {
+        return Nothing();
+    }
+
     TStringStream out;
     NYson::TYsonWriter writer(&out, DiagnosticFormat_.GetOrElse(ResultFormat_));
 

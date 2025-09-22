@@ -864,8 +864,8 @@ struct Schema : NIceDb::Schema {
     };
 
     struct CompileCacheQueries : Table<25> {
-        struct QueryId : Column<1, NScheme::NTypeIds::Utf8> {};
-        struct NodeId : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct NodeId : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct QueryId : Column<2, NScheme::NTypeIds::Utf8> {};
         struct Query : Column<3, NScheme::NTypeIds::Utf8> {};
         struct AccessCount : Column<4, NScheme::NTypeIds::Uint64> {};
         struct CompiledAt : Column<5, NScheme::NTypeIds::Timestamp> {};

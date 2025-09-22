@@ -1,4 +1,5 @@
 #include "result.h"
+#include <ydb/core/util/proto_duration.h>
 
 namespace NKikimr::NKqp {
 
@@ -19,7 +20,10 @@ void TKqpCompileResult::SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to, std:
         to->SetLastAccessedAt(lastAccessedAt.value());
     }
     to->SetWarnings(SerializeIssues());
-    to->SetMetaInfo(CompileMeta->GetStringRobust());
+    if (CompileMeta) {
+        to->SetMetaInfo(NJson::WriteJson(*CompileMeta, false));
+    }
+    SetDuration(CompilationDuration, *to->MutableCompilationDuration());
     if (Query.Defined()) {
         if (Query->Text.size() > QUERY_TEXT_LIMIT) {
             TString truncatedText = Query->Text.substr(0, QUERY_TEXT_LIMIT);

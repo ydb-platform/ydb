@@ -5,6 +5,7 @@
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
+#include <ydb/core/sys_view/auth/auth_scan_base.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -82,14 +83,14 @@ public:
         : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
     {
         const auto& cellsFrom = TableRange.From.GetCells();
-        if (cellsFrom.size() == 1 && !cellsFrom[0].IsNull()) {
-            QueryIdFrom = cellsFrom[0].AsBuf();
+        if (cellsFrom.size() > 1 && !cellsFrom[1].IsNull()) {
+            QueryIdFrom = cellsFrom[1].AsBuf();
             QueryIdFromInclusive = TableRange.FromInclusive;
         }
 
         const auto& cellsTo = TableRange.To.GetCells();
-        if (cellsTo.size() == 1 && !cellsTo[0].IsNull()) {
-            QueryIdTo = cellsTo[0].AsBuf();
+        if (cellsTo.size() > 1 && !cellsTo[1].IsNull()) {
+            QueryIdTo = cellsTo[1].AsBuf();
             QueryIdToInclusive = TableRange.ToInclusive;
         }
 
@@ -240,6 +241,7 @@ private:
     void ProcessRows() {
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         auto nodeId = LastResponse.GetNodeId();
+
         for(int idx = 0; idx < LastResponse.GetCacheCacheQueries().size(); ++idx) {
             TVector<TCell> cells;
             for (auto extractor : ColumnsExtractors) {
@@ -289,7 +291,7 @@ private:
     std::vector<ui32> ColumnsToRead;
     NKikimrKqp::TEvListCompileCacheQueriesResponse LastResponse;
 };
-
+// todo anely-d think about inherit from TAuthScanBase to restrict only for admin
 THolder<NActors::IActor> CreateCompileCacheQueriesScan(const NActors::TActorId& ownerId, ui32 scanId,
     const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)

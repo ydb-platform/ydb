@@ -621,18 +621,6 @@ public:
 
     bool HasUserToken() const;
 
-    NJson::TJsonValue CollectMeta() {
-        NJson::TJsonValue meta;
-        meta.AppendValue("metadata");
-        if (RequestEv && !RequestEv->GetYdbParameters().empty()) {
-            NJson::TJsonValue parameters;
-            for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
-                parameters[name] = typedValue.Getvalue().GetTypeName();
-            }
-            meta["parameters"] = parameters;
-        }
-        return meta;
-    }
 };
 
 

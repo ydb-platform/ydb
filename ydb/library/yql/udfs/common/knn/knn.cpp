@@ -1,6 +1,5 @@
-#include "knn-enumerator.h"
-#include "knn-serializer.h"
 #include "knn-distance.h"
+#include "knn-serializer.h"
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_printer.h>
@@ -113,7 +112,7 @@ public:
     }
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
-        return TKnnBitVectorSerializer<TFrom>::Serialize(valueBuilder, args[0]);
+        return TKnnVectorSerializer<bool, TFrom>::Serialize(valueBuilder, args[0]);
     }
 };
 

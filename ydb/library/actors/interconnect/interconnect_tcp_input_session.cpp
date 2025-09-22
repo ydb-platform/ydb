@@ -792,6 +792,9 @@ namespace NActors {
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
                     TQueuePair& qp = *RdmaQp.get();
+                    // Qp can be moved in to err (or init) state by output session actor (which is works on the same mailbox)
+                    // some verbs implementations lost notifications in case of post WR on the QP with unexpected state so check state here
+                    // allows to prevent such situations
                     TQueuePair::TQpState res = qp.GetState(false);
                     if (std::holds_alternative<TQueuePair::TQpErr>(res)) {
                         LOG_ERROR_IC_SESSION("ICRDMA", "unable to get qp state, %d err is: %s",

@@ -539,15 +539,22 @@ public:
         }
     }
 
-    void AlterUserAttribute(const TActorContext &ctx) {
-        BLOG_D("TSubDomainManip(" << Tenant->Path << ") alter user attribute ");
+    THolder<TEvTxUserProxy::TEvProposeTransaction> MakeProposeTransaction() {
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
 
         request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
         request->Record.SetExecTimeoutPeriod(Max<ui64>());
+        request->Record.SetPeerName(Tenant->PeerName);
 
         if (Tenant->UserToken.GetUserSID())
             request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
+
+        return request;
+    }
+
+    void AlterUserAttribute(const TActorContext &ctx) {
+        BLOG_D("TSubDomainManip(" << Tenant->Path << ") alter user attribute ");
+        auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
         tx.SetWorkingDir(Subdomain.first);
@@ -566,13 +573,7 @@ public:
     void AlterSubdomain(const TActorContext &ctx)
     {
         BLOG_D("TSubDomainManip(" << Tenant->Path << ") alter subdomain version " << Version);
-
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
-        request->Record.SetExecTimeoutPeriod(Max<ui64>());
-
-        if (Tenant->UserToken.GetUserSID())
-            request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
+        auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
         tx.SetWorkingDir(Subdomain.first);
@@ -594,13 +595,7 @@ public:
     void CreateSubdomain(const TActorContext &ctx)
     {
         BLOG_D("TSubDomainManip(" << Tenant->Path << ") create subdomain");
-
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
-        request->Record.SetExecTimeoutPeriod(Max<ui64>());
-
-        if (Tenant->UserToken.GetUserSID())
-            request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
+        auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
         tx.SetWorkingDir(Subdomain.first);
@@ -632,12 +627,8 @@ public:
     void DropSubdomain(const TActorContext &ctx)
     {
         BLOG_D("TSubDomainManip(" << Tenant->Path << ") drop subdomain");
+        auto request = MakeProposeTransaction();
 
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
-        request->Record.SetExecTimeoutPeriod(Max<ui64>());
-        if (Tenant->UserToken.GetUserSID())
-            request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
         if (Tenant->IsExternalSubdomain) {
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain);

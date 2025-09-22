@@ -694,7 +694,7 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
                     ) {
                         return [](const std::shared_ptr<arrow::Array>& value) {
                             auto decimals = std::static_pointer_cast<arrow::Decimal128Array>(value);
-                            auto output = std::make_shared<arrow::FixedSizeBinaryArray>(arrow::fixed_size_binary(16), decimals->length(), decimals->values());
+                            auto output = std::make_shared<arrow::FixedSizeBinaryArray>(arrow::fixed_size_binary(16), decimals->length(), decimals->values(), decimals->null_bitmap(), decimals->null_count());
                             return output;
                         };
                     }
@@ -731,29 +731,39 @@ TColumnConverter YqlBlockTzDateToArrow(const std::string& columnName, const std:
     };
 }
 
-TColumnConverter DecimalToArrowConverter(const std::shared_ptr<arrow::DataType>& originalType, const std::shared_ptr<arrow::DataType>& targetType) {
-    return [originalType, targetType](const std::shared_ptr<arrow::Array>& value) {
-        arrow::Decimal256Builder builder(targetType, arrow::default_memory_pool());
-        ::NYql::NUdf::TFixedSizeBlockReader<NYql::NDecimal::TInt128, false> reader;
-
-        int32_t precision = (static_cast<arrow::Decimal128Type&>(*targetType)).precision();
-        int32_t scale = (static_cast<arrow::Decimal128Type&>(*targetType)).scale();
+template <bool isOptional>
+TColumnConverter DecimalToArrowBaseConverter(const std::shared_ptr<arrow::DataType>& targetType) {
+    return [targetType](const std::shared_ptr<arrow::Array>& value) {
+        arrow::Decimal128Builder builder(targetType, arrow::default_memory_pool());
+        ::NYql::NUdf::TFixedSizeBlockReader<NYql::NDecimal::TInt128, isOptional> reader;
 
         for (i64 i = 0; i < value->length(); ++i) {
             NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
 
+            if (true) {
+                if (!item) {
+                    THROW_ARROW_NOT_OK(builder.AppendNull());
+                    continue;
+                }
+            }
+
             NYql::NDecimal::TInt128 val = item.GetInt128();
-            arrow::Decimal256 newValue;
-            int32_t calculatedPrecision;
-            int32_t calculatedScale;
-            THROW_ARROW_NOT_OK(arrow::Decimal256::FromString(NYql::NDecimal::ToString(val, precision, scale), &newValue, &calculatedPrecision, &calculatedScale));
-            THROW_ARROW_NOT_OK(builder.Append(newValue.Rescale(calculatedScale, scale).ValueOrDie()));
+            arrow::Decimal128 newValue((uint8_t*)(&val));
+            THROW_ARROW_NOT_OK(builder.Append(newValue));
         }
 
         std::shared_ptr<arrow::Array> array;
         THROW_ARROW_NOT_OK(builder.Finish(&array));
         return array;
     };
+}
+
+TColumnConverter DecimalToArrowConverter(bool isOptional, const std::shared_ptr<arrow::DataType>& targetType) {
+    if (isOptional) {
+        return DecimalToArrowBaseConverter<true>(targetType);
+    } else {
+        return DecimalToArrowBaseConverter<false>(targetType);
+    }
 }
 
 }
@@ -793,7 +803,9 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
     YQL_ENSURE(ConvertArrowType(columnType, yqlArrowType), "Got unsupported yql block type: " << *columnType << " in column " << columnName);
     YQL_ENSURE(S3ConvertArrowOutputType(columnType, s3OutputType), "Got unsupported s3 output block type: " << *columnType << " in column " << columnName);
 
-    if (columnType->IsOptional()) {
+    bool isOptional = columnType->IsOptional();
+
+    if (isOptional) {
         columnType = AS_TYPE(TOptionalType, columnType)->GetItemType();
     }
     YQL_ENSURE(columnType->IsData(), "Allowed only data types for S3 output, but got: " << *columnType << " in column " << columnName);
@@ -828,7 +840,7 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
         case NUdf::EDataSlot::TzTimestamp:
             return YqlBlockTzDateToArrow(columnName, yqlArrowType);
         case NUdf::EDataSlot::Decimal:
-            return DecimalToArrowConverter(yqlArrowType, s3OutputType);
+            return DecimalToArrowConverter(isOptional, s3OutputType);
         default:
             YQL_ENSURE(false, "Got unsupported s3 output block type: " << *columnType << " in column " << columnName);
     }
@@ -936,9 +948,9 @@ bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataT
         case NUdf::EDataSlot::Decimal: {
             if (itemType) {
                 auto [precision, scale] = static_cast<TDataDecimalType*>(itemType)->GetParams();
-                type = arrow::decimal256(precision, scale);
+                type = arrow::decimal128(precision, scale);
             } else {
-                type = arrow::decimal256(22, 9);
+                type = arrow::decimal128(22, 9);
             }
             return true;
         }

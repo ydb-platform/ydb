@@ -207,7 +207,7 @@ class TestTypesAndFormats(S3ImportTestBase):
                     Float("0.5"),
                     Double("-0.5"),
                     "hello",
-                    "world", 
+                    "world",
                     Json("[10, 20, 30]"),
                     Date("2025-08-25"),
                     Date32("2025-08-25"),
@@ -216,7 +216,7 @@ class TestTypesAndFormats(S3ImportTestBase):
                     Timestamp("2025-08-25T10:00:00Z"),
                     Timestamp64("2025-08-25T10:00:00Z"),
                     CAST("12.34" AS Decimal(22, 9))
-                )
+                ),
                 (
                     NULL,
                     NULL,

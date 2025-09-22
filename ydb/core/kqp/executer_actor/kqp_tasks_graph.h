@@ -231,8 +231,8 @@ struct TGraphMeta {
     bool StreamResult = false;
 
     bool ShardsResolved = false;
-    TMap<ui64, ui64> ShardIdToNodeId;
-    TMap<ui64, TVector<ui64>> ShardsOnNode;
+    TMap<ui64 /* shardId */, ui64 /* nodeId */> ShardIdToNodeId;
+    TMap<ui64 /* nodeId */, TVector<ui64 /* shardId */>> ShardsOnNode;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;
@@ -384,20 +384,24 @@ public:
         THashSet<ui64>* ShardsWithEffects
     );
 
+    // TODO: public used by TKqpLiteralExecuter
     void BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
 
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
     void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;
     void RestoreTasksGraphInfo(const NKikimrKqp::TQueryPhysicalGraph& graphInfo);
 
+    // TODO: public used by TKqpPlanner
     void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling) const;
 
     void UpdateRemoteTasksNodeId(const THashMap<ui64, TVector<ui64>>& remoteComputeTasks);
 
+    TString DumpToString() const;
+
 public:
     static constexpr ui64 PriorityTxShift = 32;
-    THolder<TPartitionPruner> PartitionPruner; // TODO: temporary public
+    THolder<TPartitionPruner> PartitionPruner; // TODO: temporary public - used by Data Executer
 
 private:
     void FillKqpTasksGraphStages();

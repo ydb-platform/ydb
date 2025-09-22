@@ -21,7 +21,7 @@ public:
     virtual void OnWrite(const TString& sourceId, ui64 size) = 0;
     virtual void CleanUp() = 0;
 
-    virtual NKikimrPQ::EScaleStatus GetScaleStatus() = 0;
+    virtual NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus currentState) = 0;
     virtual std::optional<TString> SplitBoundary() = 0;
     virtual std::vector<std::pair<TString, ui64>> GetWrittenBytes() = 0;
 

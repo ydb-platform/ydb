@@ -583,7 +583,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
 
-    ChangeScaleStatusIfNeeded(AutopartitioningManager->GetScaleStatus());
+    ChangeScaleStatusIfNeeded(AutopartitioningManager->GetScaleStatus(ScaleStatus));
 
     //if EndOffset changed there could be subscriptions witch could be completed
     TVector<std::pair<TReadInfo, ui64>> reads = Subscriber.GetReads(BlobEncoder.EndOffset);

@@ -36,6 +36,7 @@ void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKi
     TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants,
     TMaybe<TString> splitBoundary,
     const TActorContext& ctx) {
+    PQ_LOG_D("Handle HandleScaleStatusChange. Scale status: " << NKikimrPQ::EScaleStatus_Name(scaleStatus));
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
         PQ_LOG_D("::HandleScaleStatusChange need to split partition " << partitionId);
         TPartitionScaleOperationInfo op{
@@ -58,6 +59,7 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
 
     auto splitMergeRequest = BuildScaleRequest(ctx);
     if (splitMergeRequest.Empty()) {
+        PQ_LOG_D("splitMergeRequest empty");
         return;
     }
 
@@ -288,10 +290,11 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
     auto result = ev->Get();
     PQ_LOG_D("HandleScaleRequestResult scale request result: " << result->Status);
     if (result->Status == TEvTxUserProxy::TResultStatus::ExecComplete) {
+        RequestTimeout = TDuration::Zero();
+        Backoff.Reset();
         TrySendScaleRequest(ctx);
     } else {
-        ui64 newTimeout = RequestTimeout.MilliSeconds() == 0 ? MIN_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT + RandomNumber<ui64>(50) : RequestTimeout.MilliSeconds() * 2;
-        RequestTimeout = TDuration::MilliSeconds(std::min(newTimeout, static_cast<ui64>(MAX_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT)));
+        RequestTimeout = Backoff.Next();
         ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup(TRY_SCALE_REQUEST_WAKE_UP_TAG));
     }
 }

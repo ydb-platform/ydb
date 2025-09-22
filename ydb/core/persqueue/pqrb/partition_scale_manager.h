@@ -10,6 +10,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/system/types.h>
@@ -112,14 +113,12 @@ public:
     static const ui64 TRY_SCALE_REQUEST_WAKE_UP_TAG = 10;
 
 private:
-    static const ui32 MIN_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT = 10;
-    static const ui32 MAX_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT = 1000;
-
     const TString TopicName;
     const TString TopicPath;
     TString DatabasePath = "";
     TActorId CurrentScaleRequest;
-    TDuration RequestTimeout = TDuration::MilliSeconds(0);
+    TBackoff Backoff = TBackoff(TDuration::Seconds(1), TDuration::Minutes(15));
+    TDuration RequestTimeout;
     TInstant LastResponseTime = TInstant::Zero();
 
     TPartitionsToSplitMap PartitionsToSplit;

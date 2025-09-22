@@ -4063,10 +4063,10 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
     }
 }
 
-void TSchemeShard::UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, const TPartitionStats& oldPartitionStats) {
+void TSchemeShard::UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, const TPartitionStats& newPartitionStats, const TPartitionStats& oldPartitionStats) {
     auto subDomainId = ResolvePathIdForDomain(pathId);
     auto subDomainInfo = ResolveDomainInfo(pathId);
-    subDomainInfo->AggrDiskSpaceUsage(this, TPartitionStats(), oldPartitionStats);
+    subDomainInfo->AggrDiskSpaceUsage(this, newPartitionStats, oldPartitionStats);
     if (subDomainInfo->CheckDiskSpaceQuotas(this)) {
         PersistSubDomainState(db, subDomainId, *subDomainInfo);
         // Publish is done in a separate transaction, so we may call this directly
@@ -4097,7 +4097,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId)
         storeInfo->ColumnTables.erase(pathId);
     }
     
-    UpdateDiskSpaceUsage(db, pathId, tableInfo.GetStats().Aggregated);
+    UpdateDiskSpaceUsage(db, pathId, TPartitionStats(), tableInfo.GetStats().Aggregated);
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
     ColumnTables.Drop(pathId);
@@ -4441,7 +4441,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     }
 
     if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
-        UpdateDiskSpaceUsage(db, pathId, tableInfo->GetStats().Aggregated);
+        UpdateDiskSpaceUsage(db, pathId, TPartitionStats(), tableInfo->GetStats().Aggregated);
     }
 
     // sanity check: by this time compaction queue and metrics must be updated already

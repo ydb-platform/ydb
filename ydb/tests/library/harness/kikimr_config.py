@@ -138,6 +138,7 @@ class KikimrConfigGenerator(object):
             enable_pqcd=True,
             enable_metering=False,
             enable_audit_log=False,
+            audit_log_config=None,
             grpc_tls_data_path=None,
             fq_config_path=None,
             public_http_config_path=None,
@@ -359,7 +360,7 @@ class KikimrConfigGenerator(object):
             self.__set_enable_metering()
 
         if enable_audit_log:
-            self.__set_enable_audit_log()
+            self.__set_audit_log(audit_log_config)
 
         self.naming_config = config_pb2.TAppConfig()
         dc_it = itertools.cycle(self._dcs)
@@ -631,15 +632,23 @@ class KikimrConfigGenerator(object):
             metering_file.write('')
         self.yaml_config['metering_config'] = {'metering_file_path': metering_file_path}
 
-    def __set_enable_audit_log(self):
-        audit_file_path = os.path.join(self.__working_dir, 'audit.txt')
-        with open(audit_file_path, "w") as audit_file:
-            audit_file.write('')
-        self.yaml_config['audit_config'] = dict(
-            file_backend=dict(
-                file_path=audit_file_path,
-            )
-        )
+    def __set_audit_log(self, audit_log_config):
+        if audit_log_config is None:
+            cfg = dict(file_backend=dict())
+        else:
+            cfg = audit_log_config.copy()
+        file_backend_cfg = cfg.get('file_backend')
+
+        # Generate path for audit file
+        if file_backend_cfg is not None:
+            file_path = file_backend_cfg.get('file_path')
+            if file_path is None:
+                audit_file = tempfile.NamedTemporaryFile('w', prefix="audit_log.", suffix=".txt",
+                                                         dir=self.__working_dir)
+                file_backend_cfg['file_path'] = audit_file.name
+                with audit_file:
+                    audit_file.write('')
+        self.yaml_config['audit_config'] = cfg
 
     @property
     def metering_file_path(self):

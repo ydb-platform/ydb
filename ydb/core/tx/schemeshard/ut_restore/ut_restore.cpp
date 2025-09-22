@@ -5238,7 +5238,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         std::function<void(TTestBasicRuntime&)> Checker;
     };
 
-    TGeneratedChangefeed GenChangefeed(ui64 num = 1, bool isPartitioningAvaliable = true) {
+    TGeneratedChangefeed GenChangefeed(ui64 num = 1, bool isPartitioningAvailable = true) {
         const TString changefeedName = TStringBuilder() << "updates_feed" << num;
         const auto changefeedPath = TStringBuilder() << "/" << changefeedName;
 
@@ -5303,7 +5303,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, topicDesc);
         return {
             {changefeedPath, GenerateTestData({EPathTypeCdcStream, changefeedDesc, std::move(attr)})},
-            [changefeedPath = TString(changefeedPath), isPartitioningAvaliable](TTestBasicRuntime& runtime) {
+            [changefeedPath = TString(changefeedPath), isPartitioningAvailable](TTestBasicRuntime& runtime) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath, false, false, true), {
                     NLs::PathExist,
                 });
@@ -5311,7 +5311,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 TestDescribeResult(topicDesc, {
                     NLs::ConsumerExist("my_consumer"),
                 });
-                if (isPartitioningAvaliable) {
+                if (isPartitioningAvailable) {
                     TestDescribeResult(topicDesc, {
                         NLs::MinTopicPartitionsCountEqual(2),
                         NLs::MaxTopicPartitionsCountEqual(3),
@@ -5327,12 +5327,12 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     TVector<std::function<void(TTestBasicRuntime&)>> GenChangefeeds(
         THashMap<TString, TTestDataWithScheme>& bucketContent, 
         ui64 count = 1, 
-        bool isPartitioningAvaliable = true) 
+        bool isPartitioningAvailable = true) 
     {
         TVector<std::function<void(TTestBasicRuntime&)>> checkers;
         checkers.reserve(count);
         for (ui64 i = 1; i <= count; ++i) {
-            auto genChangefeed = GenChangefeed(i, isPartitioningAvaliable);
+            auto genChangefeed = GenChangefeed(i, isPartitioningAvailable);
             bucketContent.emplace(genChangefeed.Changefeed);
             checkers.push_back(genChangefeed.Checker);
         }

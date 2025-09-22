@@ -290,17 +290,17 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
 
     auto tableDesc = GetTableDescription(ss, dstPath->PathId);
     const auto& keyIds = tableDesc.GetKeyColumnIds()[0];
-    bool isPartitioningAvaliable = false;
+    bool isPartitioningAvailable = false;
     
     // ydb.tech/docs/ru/concepts/cdc#topic-partitions
     for (const auto& column : tableDesc.GetColumns()) {
         if (column.GetId() == keyIds) {
-            isPartitioningAvaliable = column.GetType() == "Uint32" || column.GetType() == "Uint64";
+            isPartitioningAvailable = column.GetType() == "Uint32" || column.GetType() == "Uint64";
             break;
         }
     }
 
-    if (topic.has_partitioning_settings() && isPartitioningAvaliable) {
+    if (topic.has_partitioning_settings() && isPartitioningAvailable) {
         i64 minActivePartitions =
             topic.partitioning_settings().min_active_partitions();
         if (minActivePartitions < 0) {

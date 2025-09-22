@@ -95,6 +95,9 @@ $aggregate_data = SELECT
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.test_tools_version') AS TestToolsVersion,
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.report_url') AS ReportUrl,
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_launch_id') AS CiLaunchId,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_launch_url') AS CiLaunchUrl,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_launch_start_time') AS CiLaunchStartTime,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_job_title') AS CiJobTitle,
     
     -- Флаг того, что тест имел успешную верификацию 
     v.VerificationSuccess AS HadVerification

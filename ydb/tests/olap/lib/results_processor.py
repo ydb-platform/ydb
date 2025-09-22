@@ -147,8 +147,18 @@ class ResultsProcessor:
                 info['report_url'] = report_url
 
             ci_launch_id = os.getenv('CI_LAUNCH_ID', None)
+            ci_launch_url = os.getenv('CI_LAUNCH_URL', None)
+            ci_launch_start_time = os.getenv('CI_LAUNCH_START_TIME', None)
+            ci_job_title = os.getenv('CI_JOB_TITLE', None)
+
             if ci_launch_id:
                 info['ci_launch_id'] = ci_launch_id
+            if ci_launch_url:
+                info['ci_launch_url'] = ci_launch_url
+            if ci_launch_start_time:
+                info['ci_launch_start_time'] = ci_launch_start_time
+            if ci_job_title:
+                info['ci_job_title'] = ci_job_title
             if get_ci_version():
                 info['ci_version'] = get_ci_version()
             info['test_tools_version'] = get_self_version()

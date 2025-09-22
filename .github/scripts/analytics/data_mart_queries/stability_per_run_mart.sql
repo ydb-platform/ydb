@@ -33,7 +33,10 @@ $per_run_data = SELECT
     JSON_VALUE(Info, '$.test_tools_version') AS TestToolsVersion,
     JSON_VALUE(Info, '$.report_url') AS ReportUrl,
     JSON_VALUE(Info, '$.ci_launch_id') AS CiLaunchId,
-    
+    JSON_VALUE(Info, '$.ci_launch_url') AS CiLaunchUrl,
+    JSON_VALUE(Info, '$.ci_launch_start_time') AS CiLaunchStartTime,
+    JSON_VALUE(Info, '$.ci_job_title') AS CiJobTitle,
+
 FROM `nemesis/tests_results`
 WHERE 
     CAST(RunId AS Uint64) / 1000 > $run_id_limit

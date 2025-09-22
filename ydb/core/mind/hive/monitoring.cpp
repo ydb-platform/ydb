@@ -1921,6 +1921,12 @@ public:
                                    </div>
                                </div>
                                <div class='row'>
+                                 <div class='col-md-12'>
+                                   <input id='reassign_async' type='checkbox' name='Async'>
+                                   <label for='reassign_async'>Async</label>
+                                 </div>
+                               </div>
+                               <div class='row'>
                                    <div class='col-md-12'>
                                        <hr>
                                    </div>
@@ -2161,8 +2167,9 @@ function continueReassign() {
             type: 'POST',
             url: 'app?TabletID=' + hiveId
                 + '&page=ReassignTablet&tablet=' + tablet.tabletId
-                + '&channels=' + tablet.channels
-                + '&wait=1',
+                + '&channel=' + tablet.channels
+                + '&wait=1'
+                + '&async=' + ($('#reassign_async')[0].checked ? '1' : '0'),
             success: function() {
 
             },
@@ -3297,6 +3304,7 @@ public:
     TVector<ui32> ForcedGroupIds;
     TString Error;
     bool Wait = true;
+    bool Async = false;
     bool BypassLimit = false;
 
     static constexpr size_t REASSIGN_SOFT_LIMIT = 500;
@@ -3311,6 +3319,7 @@ public:
         GroupId = FromStringWithDefault(params.Get("group"), GroupId);
         ForcedGroupIds = Scan<ui32>(SplitString(params.Get("forcedGroup"), ","));
         Wait = FromStringWithDefault(params.Get("wait"), Wait);
+        Async = FromStringWithDefault(params.Get("async"), Async);
         BypassLimit = FromStringWithDefault(params.Get("bypassLimit"), BypassLimit);
     }
 
@@ -3324,6 +3333,9 @@ public:
                         TabletChannels.begin(),
                         TabletChannels.end(),
                         channel.Channel) != TabletChannels.end()) {
+                if (tablet->ChannelProfileNewGroup.test(channel.Channel)) {
+                    return TInstant::Max();
+                }
                 const auto* latest = channel.LatestEntry();
                 if (latest != nullptr && latest->Timestamp > max) {
                     max = latest->Timestamp;
@@ -3340,6 +3352,10 @@ public:
         }
         if (!ForcedGroupIds.empty() && ForcedGroupIds.size() != TabletChannels.size()) {
             Error = "forcedGroup size should be equal to channel size";
+            return true;
+        }
+        if (!ForcedGroupIds.empty() && Async) {
+            Error = "cannot provide force groups in async mode";
             return true;
         }
         if (!TabletFilter.IsValidFilter(Error)) {
@@ -3390,7 +3406,7 @@ public:
             if (Wait) {
                 waitActor->AddTablet(tablet);
             }
-            operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds));
+            operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds, Async));
             if (!BypassLimit && operations.size() >= REASSIGN_SOFT_LIMIT) {
                 if (Wait) {
                     waitActor->AddContext("limit_reached", "true");

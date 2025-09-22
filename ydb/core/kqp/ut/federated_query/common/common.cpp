@@ -118,7 +118,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetWithSampleTables(false)
             .SetDomainRoot(options.DomainRoot)
             .SetNodeCount(options.NodeCount)
-            .SetEnableStorageProxy(true);
+            .SetEnableStorageProxy(true)
+            .SetCheckpointPeriod(options.CheckpointPeriod);
 
         settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;
 

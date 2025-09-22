@@ -427,6 +427,7 @@ void TTopicSession::PassAway() {
 
 void TTopicSession::SubscribeOnNextEvent() {
     if (!ReadSession || IsWaitingEvents) {
+        LOG_ROW_DISPATCHER_TRACE("Skip SubscribeOnNextEvent, has ReadSession: " << (ReadSession ? "true" : "false") << ", IsWaitingEvents: " << IsWaitingEvents);
         return;
     }
 

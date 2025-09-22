@@ -7,15 +7,29 @@ namespace {
     void ExpectEqualSecretDescription(
         const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
         const TString& name,
-        const TString& value,
+        const TMaybe<TString>& value,
         const ui64 version
     ) {
         UNIT_ASSERT(describeResult.HasPathDescription());
         UNIT_ASSERT(describeResult.GetPathDescription().HasSecretDescription());
         const auto& secretDescription = describeResult.GetPathDescription().GetSecretDescription();
         UNIT_ASSERT_VALUES_EQUAL(secretDescription.GetName(), name);
-        UNIT_ASSERT_VALUES_EQUAL(secretDescription.GetValue(), value);
+        if (value) {
+            UNIT_ASSERT_VALUES_EQUAL(secretDescription.GetValue(), *value);
+        } else {
+            UNIT_ASSERT(!secretDescription.HasValue());
+        }
+
         UNIT_ASSERT_VALUES_EQUAL(secretDescription.GetVersion(), version);
+    }
+
+    NKikimrScheme::TEvDescribeSchemeResult DescribePathWithSecretValue(
+        TTestBasicRuntime& runtime,
+        const TString& path
+    ) {
+        NKikimrSchemeOp::TDescribeOptions opts;
+        opts.SetReturnSecretValue(true);
+        return DescribePath(runtime, path, opts);
     }
 }
 
@@ -37,7 +51,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         env.TestWaitNotification(runtime, txId);
 
         {
-            const auto describeResult = DescribePath(runtime, "/MyRoot/dir/test-secret");
+            const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
             ExpectEqualSecretDescription(describeResult, "test-secret", "test-value", 0);
         }
@@ -46,9 +60,47 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         {
-            const auto describeResult = DescribePath(runtime, "/MyRoot/dir/test-secret");
+            const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
             ExpectEqualSecretDescription(describeResult, "test-secret", "test-value", 0);
+        }
+    }
+
+    Y_UNIT_TEST(DefaultDescribeSecret) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "dir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateSecret(runtime, ++txId, "/MyRoot/dir",
+            R"(
+                Name: "test-secret"
+                Value: "test-value"
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/dir/test-secret");
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
+            ExpectEqualSecretDescription(describeResult, "test-secret", /* value */ Nothing(), 0);
+        }
+
+        // check that empty value is not the same as not set value
+        TestAlterSecret(runtime, ++txId, "/MyRoot/dir",
+            R"(
+                Name: "test-secret"
+                Value: ""
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/dir/test-secret");
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
+            ExpectEqualSecretDescription(describeResult, "test-secret", /* value */ Nothing(), 1);
         }
     }
 
@@ -66,7 +118,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         env.TestWaitNotification(runtime, txId);
 
         {
-            const auto describeResult = DescribePath(runtime, "/MyRoot/dir1/dir2/test-secret");
+            const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir1/dir2/test-secret");
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
             ExpectEqualSecretDescription(describeResult, "test-secret", "test-value", 0);
         }
@@ -91,7 +143,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         env.TestWaitNotification(runtime, txId);
 
         {
-            const auto describeResult = DescribePath(runtime, "/MyRoot/SubDomain/test-secret");
+            const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/SubDomain/test-secret");
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
             ExpectEqualSecretDescription(describeResult, "test-secret", "test-value", 0);
         }
@@ -122,7 +174,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
             {EStatus::StatusSchemeError, EStatus::StatusAlreadyExists}
         );
         env.TestWaitNotification(runtime, txId);
-        const auto describeResult = DescribePath(runtime, "/MyRoot/dir/test-secret");
+        const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
         ExpectEqualSecretDescription(describeResult, "test-secret", "test-value-init", 0);
     }
@@ -262,7 +314,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         env.TestWaitNotification(runtime, {txId - 1, txId});
 
         for (int i = 1; i <= 2; ++i){
-            const auto describeResult = DescribePath(runtime, "/MyRoot/dir/test-secret-" + ToString(i));
+            const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret-" + ToString(i));
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
             ExpectEqualSecretDescription(
                 describeResult,
@@ -296,7 +348,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         TestModificationResults(runtime, txId, expectedResults);
         env.TestWaitNotification(runtime, {txId - 1, txId});
 
-        const auto describeResult = DescribePath(runtime, "/MyRoot/dir/test-secret");
+        const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
         ExpectEqualSecretDescription(describeResult, "test-secret", "test-value", 0);
     }
@@ -469,7 +521,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
             )"
         );
         env.TestWaitNotification(runtime, txId);
-        auto describeResult = DescribePath(runtime, "/MyRoot/dir/test-secret");
+        auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
         ExpectEqualSecretDescription(describeResult, "test-secret", "test-value-1", 1);
 
@@ -480,13 +532,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
             )"
         );
         env.TestWaitNotification(runtime, txId);
-        describeResult = DescribePath(runtime, "/MyRoot/dir/test-secret");
+        describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
         ExpectEqualSecretDescription(describeResult, "test-secret", "test-value-2", 2);
 
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-        describeResult = DescribePath(runtime, "/MyRoot/dir/test-secret");
+        describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
         ExpectEqualSecretDescription(describeResult, "test-secret", "test-value-2", 2);
     }
@@ -543,7 +595,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         TestModificationResults(runtime, txId, expectedResults);
         env.TestWaitNotification(runtime, {txId - 1, txId});
 
-        const auto describeResult = DescribePath(runtime, "/MyRoot/dir/test-secret");
+        const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
         ExpectEqualSecretDescription(describeResult, "test-secret", "test-value-new", 1);
     }

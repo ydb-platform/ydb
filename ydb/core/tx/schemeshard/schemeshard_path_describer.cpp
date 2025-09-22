@@ -1132,7 +1132,9 @@ void TPathDescriber::DescribeSecret(const TActorContext&, TPathId pathId, TPathE
 
     auto entry = Result->Record.MutablePathDescription()->MutableSecretDescription();
     entry->SetName(pathEl->Name);
-    entry->SetValue(secretInfo->Description.GetValue()); // TODO(yurikiselev): Hide this value by default [issue:23462]
+    if (Params.GetOptions().GetReturnSecretValue()) {
+        entry->SetValue(secretInfo->Description.GetValue());
+    }
     entry->SetVersion(secretInfo->Description.GetVersion());
 }
 

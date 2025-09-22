@@ -20,6 +20,7 @@
 
 namespace NYdb::NDump {
     extern const char SCHEME_FILE_NAME[];
+    extern const char CREATE_VIEW_FILE_NAME[];
 }
 
 namespace NYdb::NConsoleClient {
@@ -159,7 +160,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
                 token = listResult.NextToken;
                 for (TStringBuf key : listResult.Keys) {
                     if (key.ChopSuffix(NDump::SCHEME_FILE_NAME)
-                        || key.ChopSuffix(NDump::NFiles::CreateView().FileName)
+                        || key.ChopSuffix(NDump::CREATE_VIEW_FILE_NAME)
                     ) {
                         TString destination = item.Destination + key.substr(item.Source.Size());
                         settings.AppendItem({TString(key), std::move(destination)});

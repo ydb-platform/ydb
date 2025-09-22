@@ -13,6 +13,7 @@
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
+#include <ydb/core/persqueue/pqtablet/partition/autopartitioning_manager.h>
 #include <ydb/core/persqueue/pqtablet/partition/mirrorer/mirrorer_factory.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/counters_pq.pb.h>
@@ -477,6 +478,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     UpdateCompactionCounters();
 
     TryRunCompaction();
+
+    AutopartitioningManager->CleanUp();
 }
 
 void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
@@ -1017,6 +1020,9 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         if (PartitionScaleParticipants.Defined()) {
             result.MutableScaleParticipatingPartitions()->CopyFrom(*PartitionScaleParticipants);
         }
+        if (SplitBoundary.Defined()) {
+            result.SetSplitBoundary(*SplitBoundary);
+        }
         result.SetScaleStatus(ScaleStatus);
     } else {
         result.SetScaleStatus(NKikimrPQ::EScaleStatus::NORMAL);
@@ -1442,6 +1448,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
     response->MessagesWrittenGrpc = MsgsWrittenGrpc.Value();
     response->MessagesSizes = std::move(MessageSize.GetValues());
     response->InputLags = std::move(SupportivePartitionTimeLag);
+    response->WrittenBytes = AutopartitioningManager->GetWrittenBytes();
 
     LOG_D("Send TEvPQ::TEvGetWriteInfoResponse");
     ctx.Send(originalPartition, response);
@@ -2478,6 +2485,10 @@ void TPartition::RunPersist() {
             MsgsWrittenGrpc.Inc(writeInfo->MessagesWrittenTotal);
 
             WriteNewSizeFromSupportivePartitions += writeInfo->BytesWrittenTotal;
+
+            for (auto& [sourceId, writtenBytes] : writeInfo->WrittenBytes) {
+                AutopartitioningManager->OnWrite(sourceId, writtenBytes);
+            }
         }
         WriteInfosApplied.clear();
         //Done with counters.
@@ -3189,6 +3200,8 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
                                           NPersQueue::TTopicConverterPtr topicConverter,
                                           const TActorContext& ctx)
 {
+    bool autopartitioningChanged = SplitMergeEnabled(Config) != SplitMergeEnabled(config);
+
     Config = std::move(config);
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
@@ -3206,8 +3219,10 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 
     PQ_ENSURE(Config.GetPartitionConfig().GetTotalPartitions() > 0);
 
-    if (Config.GetPartitionStrategy().GetScaleThresholdSeconds() != SplitMergeAvgWriteBytes->GetDuration().Seconds()) {
-        InitSplitMergeSlidingWindow();
+    if (autopartitioningChanged) {
+        AutopartitioningManager.reset(CreateAutopartitioningManager(Config, Partition));
+    } else {
+        AutopartitioningManager->UpdateConfig(Config);
     }
 
     Send(ReadQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));

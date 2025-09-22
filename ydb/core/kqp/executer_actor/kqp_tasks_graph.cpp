@@ -96,9 +96,9 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo&
     );
 }
 
-void TKqpTasksGraph::FillKqpTasksGraphStages(const TVector<IKqpGateway::TPhysicalTxData>& txs) {
-    for (size_t txIdx = 0; txIdx < txs.size(); ++txIdx) {
-        auto& tx = txs[txIdx];
+void TKqpTasksGraph::FillKqpTasksGraphStages() {
+    for (size_t txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
+        const auto& tx = Transactions.at(txIdx);
 
         for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
             const auto& stage = tx.Body->GetStages(stageIdx);
@@ -3009,6 +3009,8 @@ TKqpTasksGraph::TKqpTasksGraph(
         default:
             YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)*txsType);
     }
+
+    FillKqpTasksGraphStages();
 }
 
 TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const

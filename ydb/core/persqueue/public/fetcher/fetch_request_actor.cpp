@@ -119,6 +119,7 @@ private:
     TString ErrorReason;
     TActorId RequesterId;
     ui64 PendingQuotaAmount;
+    bool AnyCdcTopicInRequest = false;
 
     std::unordered_map<TString, TString> PrivateTopicPathToCdcPath;
     std::unordered_map<TString, TString> CdcPathToPrivateTopicPath;
@@ -235,7 +236,7 @@ public:
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         LOG_D("Handle SchemeCache response");
         auto& result = ev->Get()->Request;
-        bool anyCdcTopicInRequest = false;
+        AnyCdcTopicInRequest = false;
         for (const auto& entry : result->ResultSet) {
             auto path = CanonizePath(NKikimr::JoinPath(entry.Path));
             switch (entry.Status) {
@@ -259,7 +260,7 @@ public:
                     );
             }
             if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                anyCdcTopicInRequest = true;
+                AnyCdcTopicInRequest = true;
                 AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1);
                 auto privateTopicPath = CanonizePath(JoinPath(ChildPath(NKikimr::SplitPath(path), entry.ListNodeEntry->Children.at(0).Name)));
                 PrivateTopicPathToCdcPath[privateTopicPath] = path;
@@ -316,22 +317,16 @@ public:
                         consumerIsAdded = true;
                     }
                 }
-                // если нет консьюмера у топика
-                // получить Context через AppData()
+                // consumer is not assigned to this topic
                 TAppData* appData = AppData(ctx);
                 if (!consumerIsAdded && (appData->KafkaProxyConfig.GetAutoCreateConsumersEnable() || appData->KafkaProxyConfig.GetAutoCreateTopicsEnable())) {
                     CreateConsumerGroupIfNecessary(entry.Path.back(), path, entry.Path.back(), groupId);
                 }
-                // (Context->Config.GetAutoCreateConsumersEnable() || Context->Config.GetAutoCreateTopicsEnable()) {
-                // for (auto topicReq: Message->Topics) {
-                //     TString topicPath = NormalizePath(Context->DatabasePath, *topicReq.Name); // как для serverless?
-                //     CreateConsumerGroupIfNecessary(*topicReq.Name, topicPath, *topicReq.Name, *Message->GroupId);
-                // }
             }
         }
 
         if (InflyTopics == 0) {
-            if (anyCdcTopicInRequest) {
+            if (AnyCdcTopicInRequest) {
                 SendSchemeCacheRequest(ctx);
                 return;
             }
@@ -382,34 +377,23 @@ public:
 
     }
 
-    void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext&) {
+    void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
         NYdb::TStatus& result = ev->Get()->Result;
-        // KAFKA_LOG_D("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+        InflyTopics--;
         if (result.GetStatus() != NYdb::EStatus::SUCCESS) {
-            InflyTopics--;
-        //     if (InflyTopics == 0) {
-        //         auto response = GetOffsetFetchResponse();
-        //         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
-        //         Die(ctx);
-        //     }
-        //     return;
+            Response = CreateErrorReply(Ydb::StatusIds::UNAUTHORIZED, "Consumer is not added to this topic");
+            return SendReplyAndDie(std::move(Response), ctx);
         }
+        if (InflyTopics == 0) {
+            if (AnyCdcTopicInRequest) {
+                SendSchemeCacheRequest(ctx);
+                return;
+            }
 
-        // const TString& alteredTopicName = AlterTopicCookieToName[ev->Cookie];
-        // NKikimr::NGRpcProxy::V1::TLocalRequestBase locationRequest{
-        //     NormalizePath(Context->DatabasePath, alteredTopicName),
-        //     Context->DatabasePath,
-        //     GetUserSerializedToken(Context),
-        // };
-        // TActorId actorId = SelfId();
-        // ctx.Register(new TTopicOffsetActor(
-        //     TopicToEntities[alteredTopicName].Consumers,
-        //     locationRequest,
-        //     actorId,
-        //     TopicToEntities[alteredTopicName].Partitions,
-        //     alteredTopicName,
-        //     GetUsernameOrAnonymous(Context)
-        // ));
+            for (auto& p: TopicInfo) {
+                ProcessMetadata(p.first, p.second, ctx);
+            }
+        }
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {

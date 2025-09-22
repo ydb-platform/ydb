@@ -614,6 +614,13 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            THashSet<TGroupId> groupIds;
+            for (auto&& [base, overlay] : state.Groups.Diff()) {
+                if (base) {
+                    groupIds.emplace(overlay->first);
+                }
+            }
+
             TNodeWardenUpdateNotifier(this, state).Execute();
 
             state.CheckConsistency();
@@ -621,6 +628,7 @@ namespace NKikimr::NBsController {
             ValidateInternalState();
 
             ScheduleVSlotReadyUpdate();
+            UpdateWaitingGroups(groupIds);
 
             return true;
         }

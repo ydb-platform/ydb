@@ -23,6 +23,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         bool EnableScriptExecutionBackgroundChecks = true;
         TIntrusivePtr<NYql::IPqGateway> PqGateway;
+        TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     };
 
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(

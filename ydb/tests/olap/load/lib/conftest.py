@@ -250,11 +250,10 @@ ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | 
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
 
-        verify_regex_params = r'(VERIFY failed.*\n)(\D.*\n)*(\d+\..*\n)+'
+        verify_regex_params = r'(VERIFY failed.*\n)([^0-9]*.*\n){0,2}(\d+\..*\n)+'
 
         core_processes = {
-            h: cls.execute_ssh(h, f"\
-ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -E -i '{verify_regex_params}'")
+            h: cls.execute_ssh(h, fr"ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -Pzo -i '{verify_regex_params}'")
             for h in hosts
         }
 

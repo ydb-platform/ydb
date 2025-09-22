@@ -500,6 +500,11 @@ private:
     void CreateCompacter();
     void SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request);
 
+    ::NMonitoring::TDynamicCounterPtr GetPerPartitionCounterSubgroup() const;
+    void SetupDetailedMetrics();
+    void ResetDetailedMetrics();
+    bool DetailedMetricsAreEnabled() const;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
@@ -771,6 +776,7 @@ private:
     TString DbPath;
     bool IsServerless;
     TString FolderId;
+    TString MonitoringProjectId;
 
     TMaybe<TUsersInfoStorage> UsersInfoStorage;
 
@@ -910,6 +916,14 @@ private:
 
     TTabletCountersBase TabletCounters;
     THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
+
+    // Per partition counters
+    NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWritePerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr SourceIdCountPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastWriteMsPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr BytesWrittenPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr MessagesWrittenPerPartition;
+
     TInstant LastCountersUpdate;
 
     TSubscriber Subscriber;
@@ -1113,11 +1127,25 @@ private:
 
     void TryCorrectStartOffset(TMaybe<ui64> offset);
 
+    ui64 GetStartOffset() const;
+    ui64 GetEndOffset() const;
+
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
     TDeque<NWilson::TTraceId> TxForPersistTraceIds;
     TDeque<NWilson::TSpan> TxForPersistSpans;
 
     bool CanProcessUserActionAndTransactionEvents() const;
 };
+
+inline ui64 TPartition::GetStartOffset() const {
+    if (CompactionBlobEncoder.IsEmpty()) {
+        return BlobEncoder.StartOffset;
+    }
+    return CompactionBlobEncoder.StartOffset;
+}
+
+inline ui64 TPartition::GetEndOffset() const {
+    return BlobEncoder.EndOffset;
+}
 
 } // namespace NKikimr::NPQ

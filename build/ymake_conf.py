@@ -1458,7 +1458,7 @@ class GnuCompiler(Compiler):
                 '-fsigned-char',
             ]
 
-        if self.tc.is_clang:
+        if self.tc.is_clang and self.tc.version_at_least(14):
             self.c_foptions += [
                 # Explicitly enable sized deallocations though they were enabled in clang-19 / -std=c++14.
                 # See: https://releases.llvm.org/19.1.0/tools/clang/docs/ReleaseNotes.html

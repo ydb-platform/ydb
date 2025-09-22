@@ -154,25 +154,30 @@ class ConnectionParams:
             location = endpoint.host_with_port
         return urllib.parse.urlunsplit((endpoint.protocol, location, path, urllib.parse.urlencode(params), ''))
 
+    def assign_token(self, typed_token):
+        self.token_type, self.token = typed_token
+        if self.token and self.token.endswith('@builtin'):
+            self.token_type = None
+
     def parse_token(self, token_file, iam_token_file=None):
         if token_file:
-            self.token_type, self.token = self.read_token_from_file(token_file, 'OAuth')
+            self.assign_token(self.read_token_from_file(token_file, 'OAuth'))
             token_file.close()
             return
 
         if iam_token_file:
-            self.token_type, self.token = self.read_token_from_file(iam_token_file, 'Bearer')
+            self.assign_token(self.read_token_from_file(iam_token_file, 'Bearer'))
             iam_token_file.close()
             return
 
         token_value = os.getenv('YDB_TOKEN')
         if token_value is not None:
-            self.token_type, self.token = self.parse_token_value(token_value, 'OAuth')
+            self.assign_token(self.parse_token_value(token_value, 'OAuth'))
             return
 
         token_value = os.getenv('IAM_TOKEN')
         if token_value is not None:
-            self.token_type, self.token = self.parse_token_value(token_value, 'Bearer')
+            self.assign_token(self.parse_token_value(token_value, 'Bearer'))
             return
 
         default_token_paths = [
@@ -180,7 +185,7 @@ class ConnectionParams:
             ('Bearer', os.path.expanduser(os.path.join('~', '.ydb', 'iam_token'))),
         ]
         for token_type, token_file_path in default_token_paths:
-            self.token_type, self.token = self.read_token_file(token_file_path, token_type)
+            self.assign_token(self.read_token_file(token_file_path, token_type))
             if self.token is not None:
                 return
 
@@ -497,7 +502,11 @@ def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True
         print('INFO: fetching %s' % url, file=sys.stderr)
     request = urllib.request.Request(url, data=data, method=method)
     if connection_params.token and url.startswith('http'):
-        request.add_header('Authorization', '%s %s' % (connection_params.token_type, connection_params.token))
+        if connection_params.token_type:
+            authorization = '%s %s' % (connection_params.token_type, connection_params.token)
+        else:
+            authorization = connection_params.token
+        request.add_header('Authorization', authorization)
     if content_type is not None:
         request.add_header('Content-Type', content_type)
     if accept is not None:

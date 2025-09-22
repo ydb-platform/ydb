@@ -12,10 +12,17 @@ PY_SRCS(
     TOP_LEVEL
     google-stubs/_upb/_message.pyi
     google-stubs/protobuf/__init__.pyi
+    google-stubs/protobuf/any_pb2.pyi
+    google-stubs/protobuf/api_pb2.pyi
     google-stubs/protobuf/compiler/__init__.pyi
+    google-stubs/protobuf/compiler/plugin_pb2.pyi
     google-stubs/protobuf/descriptor.pyi
     google-stubs/protobuf/descriptor_database.pyi
+    google-stubs/protobuf/descriptor_pb2.pyi
     google-stubs/protobuf/descriptor_pool.pyi
+    google-stubs/protobuf/duration_pb2.pyi
+    google-stubs/protobuf/empty_pb2.pyi
+    google-stubs/protobuf/field_mask_pb2.pyi
     google-stubs/protobuf/internal/__init__.pyi
     google-stubs/protobuf/internal/api_implementation.pyi
     google-stubs/protobuf/internal/builder.pyi
@@ -34,13 +41,19 @@ PY_SRCS(
     google-stubs/protobuf/message_factory.pyi
     google-stubs/protobuf/reflection.pyi
     google-stubs/protobuf/runtime_version.pyi
+    google-stubs/protobuf/source_context_pb2.pyi
+    google-stubs/protobuf/struct_pb2.pyi
     google-stubs/protobuf/symbol_database.pyi
     google-stubs/protobuf/text_format.pyi
+    google-stubs/protobuf/timestamp_pb2.pyi
+    google-stubs/protobuf/type_pb2.pyi
     google-stubs/protobuf/util/__init__.pyi
+    google-stubs/protobuf/wrappers_pb2.pyi
 )
 
 RESOURCE_FILES(
     PREFIX contrib/python/types-protobuf/
+    .arcignore
     .dist-info/METADATA
     .dist-info/top_level.txt
     google-stubs/METADATA.toml

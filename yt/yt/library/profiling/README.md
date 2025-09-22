@@ -22,7 +22,7 @@ Main features:
 | Local Projections         | Yes       | No     |
 | Sparse Sensors            | Yes       | No     |
 | Sensor Deregistration     | Yes       | No     |
-| MemOnly Metrics           | No        | Yes    |
+| MemOnly Metrics           | Yes       | Yes    |
 
 ## Separation of interface and implementation
 

@@ -4,6 +4,8 @@
 #include "util.h"
 #include "constants.h"
 
+#include <util/generic/scope.h>
+
 #include <array>
 
 //-----------------------------------------------------------------------------
@@ -101,10 +103,7 @@ void TTerminal::Start() {
 TTerminalTask TTerminal::Run() {
     auto& Log = Context.Log; // to make LOG_* macros working
 
-    auto guard = std::unique_ptr<void, std::function<void(void*)>>(
-        (void*)1,
-        [&](void*) { Stopped = true; }
-    );
+    Y_DEFER { Stopped = true; };
 
     LOG_D("Terminal " << Context.TerminalID << " has started");
 

@@ -2,10 +2,10 @@
 
 #include <library/cpp/protobuf/interop/cast.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/core/sys_view/auth/auth_scan_base.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
-#include <ydb/core/sys_view/auth/auth_scan_base.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -35,12 +35,12 @@ public:
 
     struct TExtractorsMap : public THashMap<NTable::TTag, TExtractor> {
         TExtractorsMap() {
-            insert({TSchema::QueryId::ColumnId, [] (const TCompileCacheQuery& info, ui32) { // 1
-                return TCell(info.GetQueryId().data(), info.GetQueryId().size());
+            insert({TSchema::NodeId::ColumnId, [] (const TCompileCacheQuery&, ui32 nodeId) {  // 1
+                return TCell::Make<ui32>(nodeId);
             }});
 
-            insert({TSchema::NodeId::ColumnId, [] (const TCompileCacheQuery&, ui32 nodeId) {  // 2
-                return TCell::Make<ui32>(nodeId);
+            insert({TSchema::QueryId::ColumnId, [] (const TCompileCacheQuery& info, ui32) { // 2
+                return TCell(info.GetQueryId().data(), info.GetQueryId().size());
             }});
 
             insert({TSchema::Query::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 3
@@ -79,9 +79,14 @@ public:
 
     TCompileCacheQueriesScan(const NActors::TActorId& ownerId, ui32 scanId,
         const NKikimrSysView::TSysViewDescription& sysViewInfo,
-        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
         : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        , UserToken(std::move(userToken))
     {
+        bool isClusterAdmin = IsAdministrator(AppData(), UserToken.Get());
+        bool isDatabaseAdmin = (AppData()->FeatureFlags.GetEnableDatabaseAdmin() && IsDatabaseAdministrator(UserToken.Get(), TBase::DatabaseOwner));
+        IsAdmin = isClusterAdmin || isDatabaseAdmin;
+
         const auto& cellsFrom = TableRange.From.GetCells();
         if (cellsFrom.size() > 1 && !cellsFrom[1].IsNull()) {
             QueryIdFrom = cellsFrom[1].AsBuf();
@@ -154,16 +159,15 @@ private:
             ReplyEmptyAndDie();
             return;
         }
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "PendingNodesInitialized=" << PendingNodesInitialized);
+        if (!IsAdmin) {
+            ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "User is not a database administrator.");
+            return;
+        }
 
         if (!PendingNodesInitialized) {
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKikimr::NKqp::TEvKqp::TEvListProxyNodesRequest());
             return;
         }
-
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "PendingNodes.empty()=" << PendingNodes.empty() << ", PendingRequest=" << PendingRequest);
 
         if (!PendingNodes.empty() && !PendingRequest)  {
             const auto& nodeId = PendingNodes.front();
@@ -196,8 +200,6 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvListProxyNodesResponse::TPtr& ev) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "got TEvListProxyNodesResponse from " << ev->Sender.NodeId());
         auto& proxies = ev->Get()->ProxyNodes;
         std::sort(proxies.begin(), proxies.end());
         PendingNodes = std::deque<ui32>(proxies.begin(), proxies.end());
@@ -206,15 +208,11 @@ private:
     }
 
     void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "got TEvScanDataAck from " << ev->Sender.NodeId());
         FreeSpace = ev->Get()->FreeSpace;
         StartScan();
     }
 
     void Handle(NKqp::TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& ev) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "got TEvListQueryCacheQueriesResponse from " << ev->Sender.NodeId());
         auto& record = ev->Get()->Record;
         LastResponse = std::move(record);
         ProcessRows();
@@ -241,7 +239,6 @@ private:
     void ProcessRows() {
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         auto nodeId = LastResponse.GetNodeId();
-
         for(int idx = 0; idx < LastResponse.GetCacheCacheQueries().size(); ++idx) {
             TVector<TCell> cells;
             for (auto extractor : ColumnsExtractors) {
@@ -290,13 +287,15 @@ private:
     std::vector<TExtractor> ColumnsExtractors;
     std::vector<ui32> ColumnsToRead;
     NKikimrKqp::TEvListCompileCacheQueriesResponse LastResponse;
+    
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    bool IsAdmin = false;
 };
-// todo anely-d think about inherit from TAuthScanBase to restrict only for admin
 THolder<NActors::IActor> CreateCompileCacheQueriesScan(const NActors::TActorId& ownerId, ui32 scanId,
     const NKikimrSysView::TSysViewDescription& sysViewInfo,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TCompileCacheQueriesScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
+    return MakeHolder<TCompileCacheQueriesScan>(ownerId, scanId, sysViewInfo, tableRange, columns, std::move(userToken));
 }
 
 } // NKikimr::NSysView

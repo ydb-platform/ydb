@@ -64,7 +64,7 @@ struct TKqpCompileResult {
     TMaybe<TString> ReplayMessageUserView;
 
     std::shared_ptr<const TPreparedQueryHolder> PreparedQuery;
-    mutable std::atomic<ui64> UsageFrequency; // todo: anely-d think to move to query meta in snapshot rather than keeping mutable 
+    mutable std::atomic<ui64> UsageFrequency;
     TInstant CompiledAt = TInstant::Now();
     TDuration CompilationDuration;
     TMaybe<NJson::TJsonValue> CompileMeta; // consist of parameters of query

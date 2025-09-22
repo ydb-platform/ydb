@@ -99,7 +99,7 @@ struct TKqpCompileRequest {
     bool FindInCache = true;
 
     TInstant CompileQueueEnqueuedAt = TInstant::Now();
-    
+
     bool IsIntrestedInResult() const {
         return IntrestedInResult->load();
     }

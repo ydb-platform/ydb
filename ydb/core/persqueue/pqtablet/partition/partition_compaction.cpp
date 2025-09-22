@@ -24,7 +24,9 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
 
     bool needCompactHead = poffset > curOffset;
     if (needCompactHead) { //got gap
-        AFL_ENSURE(p.Msg.PartNo == 0);
+        // проверка не нужна. мы можем начать с блоба в середины сообщения
+        //AFL_ENSURE(p.Msg.PartNo == 0)
+        //    ("p.Msg.PartNo", p.Msg.PartNo);
         curOffset = poffset;
     }
 
@@ -257,6 +259,7 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
 
 bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
                                       TProcessParametersBase& parameters,
+                                      bool needToCompactHead,
                                       TEvKeyValue::TEvRequest* compactionRequest,
                                       TInstant& blobCreationUnixTime,
                                       bool wasThePreviousBlobBig)
@@ -278,7 +281,7 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
                                                          blob.PartData->TotalParts,
                                                          blob.PartData->TotalSize,
                                                          parameters.HeadCleared,
-                                                         false,
+                                                         needToCompactHead,
                                                          MaxBlobSize,
                                                          blob.PartData->PartNo);
             }
@@ -370,28 +373,23 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(blobs.size() == CompactionBlobsCount);
 
-    const auto& firstKey = KeysForCompaction.front().first.Key;
-
     // Empty partition may will be filling from offset great than zero from mirror actor if source partition old and was clean by retantion time
     if (!CompactionBlobEncoder.Head.GetCount() &&
         !CompactionBlobEncoder.NewHead.GetCount() &&
-        CompactionBlobEncoder.DataKeysBody.empty() &&
-        CompactionBlobEncoder.HeadKeys.empty()) {
+        CompactionBlobEncoder.IsEmpty()) {
         // если это первое сообщение, то надо поправить StartOffset
-        CompactionBlobEncoder.StartOffset = firstKey.GetOffset();
+        CompactionBlobEncoder.StartOffset = BlobEncoder.StartOffset;
         CompactionBlobEncoder.EndOffset = CompactionBlobEncoder.StartOffset;
     }
 
-    TProcessParametersBase parameters;
-    parameters.CurOffset = CompactionBlobEncoder.PartitionedBlob.IsInited()
-        ? CompactionBlobEncoder.PartitionedBlob.GetOffset()
-        : CompactionBlobEncoder.EndOffset;
-    parameters.HeadCleared = (CompactionBlobEncoder.Head.PackedSize == 0);
-
     CompactionBlobEncoder.NewHead.Clear();
-    CompactionBlobEncoder.NewHead.Offset = firstKey.GetOffset();
-    CompactionBlobEncoder.NewHead.PartNo = firstKey.GetPartNo();
+    CompactionBlobEncoder.NewHead.Offset = BlobEncoder.StartOffset;
+    CompactionBlobEncoder.NewHead.PartNo = 0;
     CompactionBlobEncoder.NewHead.PackedSize = 0;
+
+    TProcessParametersBase parameters;
+    parameters.CurOffset = CompactionBlobEncoder.PartitionedBlob.IsInited() ? CompactionBlobEncoder.PartitionedBlob.GetOffset() : CompactionBlobEncoder.EndOffset;
+    parameters.HeadCleared = (CompactionBlobEncoder.Head.PackedSize == 0);
 
     auto compactionRequest = MakeHolder<TEvKeyValue::TEvRequest>();
     compactionRequest->Record.SetCookie(ERequestCookie::WriteBlobsForCompaction);
@@ -404,13 +402,13 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     for (size_t i = 0; i < KeysForCompaction.size(); ++i) {
         auto& [k, pos] = KeysForCompaction[i];
+        bool needToCompactHead = ((i ? CompactionBlobEncoder.NewHead : CompactionBlobEncoder.Head).PackedSize != 0);
+        LOG_D("Need to compact head " << needToCompactHead);
 
         if (pos == Max<size_t>()) {
             // большой блоб надо переименовать
             LOG_D("Rename key " << k.Key.ToString());
 
-            bool needToCompactHead = (headForCompaction->PackedSize != 0);
-            LOG_D("need to compact head " << needToCompactHead);
 
             RenameCompactedBlob(k, k.Size,
                                 needToCompactHead,
@@ -427,7 +425,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
             LOG_D("Append blob for key " << k.Key.ToString());
 
             const TRequestedBlob& requestedBlob = blobs[pos];
-            if (!CompactRequestedBlob(requestedBlob, parameters, compactionRequest.Get(), blobCreationUnixTime, wasTheLastBlobBig)) {
+            if (!CompactRequestedBlob(requestedBlob, parameters, needToCompactHead, compactionRequest.Get(), blobCreationUnixTime, wasTheLastBlobBig)) {
                 LOG_D("Can't append blob for key " << k.Key.ToString());
                 Y_FAIL("Something went wrong");
                 return;
@@ -435,8 +433,6 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
             wasTheLastBlobBig = false;
         }
-
-        headForCompaction = &CompactionBlobEncoder.NewHead;
     }
 
     if (!CompactionBlobEncoder.IsLastBatchPacked()) {

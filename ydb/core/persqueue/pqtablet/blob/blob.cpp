@@ -300,7 +300,9 @@ ui32 THead::GetCount() const
         return 0;
 
     //how much offsets before last batch and how much offsets in last batch
-    AFL_ENSURE(Batches.front().GetOffset() == Offset)("front.Offset", Batches.front().GetOffset())("offset", Offset);
+    AFL_ENSURE(Batches.front().GetOffset() == Offset)
+        ("front.Offset", Batches.front().GetOffset())
+        ("offset", Offset);
 
     return Batches.back().GetOffset() - Offset + Batches.back().GetCount();
 }
@@ -542,7 +544,7 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
 auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
 {
     AFL_ENSURE(NewHead.Offset >= Head.Offset)("Head.Offset", Head.Offset)("NewHead.Offset", NewHead.Offset);
-    ui32 size = blob.GetSerializedSize();
+    const ui32 size = blob.GetSerializedSize();
     AFL_ENSURE(InternalPartsCount < 1000); //just check for future packing
     if (HeadSize + BlobsSize + size + GetMaxHeaderSize() > MaxBlobSize) {
         NeedCompactHead = true;

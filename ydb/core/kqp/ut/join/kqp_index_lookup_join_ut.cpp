@@ -1174,10 +1174,6 @@ Y_UNIT_TEST_TWIN(LeftJoinNonPkJoinConditions, StreamLookupJoin) {
 }
 
 Y_UNIT_TEST_TWIN(LeftJoinPointPredicateAndJoinAfterThat, StreamLookupJoin) {
-    if (StreamLookupJoin) {
-        return;
-    }
-
     auto tester = TTester{
         .Query=R"(
            	DECLARE $idx_a AS List<String>;

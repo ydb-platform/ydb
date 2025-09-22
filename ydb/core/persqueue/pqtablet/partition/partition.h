@@ -295,6 +295,7 @@ private:
 
     void AddMetaKey(TEvKeyValue::TEvRequest* request);
     void CheckHeadConsistency() const;
+    void CheckTimestampsOrderInZones(TStringBuf validateReason = {}) const;
     void HandlePendingRequests(const TActorContext& ctx);
     void HandleQuotaWaitingRequests(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);

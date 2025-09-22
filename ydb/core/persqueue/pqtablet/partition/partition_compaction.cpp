@@ -566,7 +566,7 @@ TInstant TPartition::GetFirstUncompactedBlobTimestamp() const
 }
 
 
-void TPartition::ValidateTimestampsOrderInZones(TStringBuf validateReason) const {
+void TPartition::CheckTimestampsOrderInZones(TStringBuf validateReason) const {
     TInstant prev = TInstant::Zero();
     size_t global_index = 0;
     auto check = [&](const auto& seq, TStringBuf zoneName) {

@@ -17,14 +17,14 @@
 * Добавлена поддержка Certificate Authority (CA) и [Yandex Identity and Access Management (IAM)](https://yandex.cloud/ru/docs/iam) аутентификации в [асинхронной репликации](./yql/reference/syntax/create-async-replication.md).
 * Включены по умолчанию:
 
-  * [векторный индекс](./dev/vector-indexes.md) для приближённого векторного поиска,
-  * поддержка в [YDB Topics Kafka API](./reference/kafka-api/index.md) [клиентской балансировки читателей](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb), [компактифицированных топиков](https://docs.confluent.io/kafka/design/log_compaction.html) и [транзакций](https://www.confluent.io/blog/transactions-apache-kafka),
-  * поддержка [автопартиционирования топиков](./concepts/cdc.md#topic-partitions) в CDC для строковых таблиц,
-  * поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md#numeric),
-  * поддержка [типа DateTime64](./yql/reference/types/primitive.md#datetime),
-  * автоудаление временных директорий и таблиц при экспорте в S3,
-  * поддержка потока изменений в операциях резервного копирования и восстановления,
-  * возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md) для вторичного индекса,
+  * [векторный индекс](./dev/vector-indexes.md) для приближённого векторного поиска;
+  * поддержка в [YDB Topics Kafka API](./reference/kafka-api/index.md) [клиентской балансировки читателей](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb), [компактифицированных топиков](https://docs.confluent.io/kafka/design/log_compaction.html) и [транзакций](https://www.confluent.io/blog/transactions-apache-kafka);
+  * поддержка [автопартиционирования топиков](./concepts/cdc.md#topic-partitions) в CDC для строковых таблиц;
+  * поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md#numeric);
+  * поддержка [типа DateTime64](./yql/reference/types/primitive.md#datetime);
+  * автоудаление временных директорий и таблиц при экспорте в S3;
+  * поддержка [потока изменений](./concepts/cdc.md) в операциях резервного копирования и восстановления;
+  * возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md) для вторичного индекса;
   * системные представления с [историей перегруженных партиций](./dev/system-views#top-overload-partitions).
 
 

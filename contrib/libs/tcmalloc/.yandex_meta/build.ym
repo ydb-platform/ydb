@@ -35,7 +35,7 @@ SRCS(
 INCLUDE(common.inc)
 
 CFLAGS(
-    -DTCMALLOC_256K_PAGES
+    -DTCMALLOC_INTERNAL_256K_PAGES
 )
 {% endblock %}
 

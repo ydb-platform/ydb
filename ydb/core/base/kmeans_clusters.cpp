@@ -3,6 +3,7 @@
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
+#include <ydb/library/yql/udfs/common/knn/knn-defines.h>
 
 #include <span>
 
@@ -262,7 +263,7 @@ public:
             return false;
         }
         for (const auto& cluster: newClusters) {
-            if (!IsExpectedSize(cluster)) {
+            if (!IsExpectedFormat(cluster)) {
                 return false;
             }
         }
@@ -344,7 +345,7 @@ public:
     }
 
     std::optional<ui32> FindCluster(TArrayRef<const char> embedding) override {
-        if (!IsExpectedSize(embedding)) {
+        if (!IsExpectedFormat(embedding)) {
             return {};
         }
         auto min = TMetric::Init();
@@ -368,14 +369,22 @@ public:
     void AggregateToCluster(ui32 pos, const TArrayRef<const char>& embedding, ui64 weight) override {
         auto& aggregate = NextClusters.at(pos);
         auto* coords = aggregate.data();
-        Y_ENSURE(IsExpectedSize(embedding));
+        Y_ENSURE(IsExpectedFormat(embedding));
         for (auto coord : this->GetCoords(embedding.data())) {
             *coords++ += (TSum)coord * weight;
         }
         NextClusterSizes.at(pos) += weight;
     }
 
-    bool IsExpectedSize(const TArrayRef<const char>& data) override {
+    bool IsExpectedFormat(const TArrayRef<const char>& data) override {
+        if (TypeByte != data.back()) {
+            return false;
+        }
+
+        if (IsBitQuantized()) {
+            return data.size() >= 2 && Dimensions == (data.size() - 2) * 8 - data[data.size() - 2];
+        }
+
         return data.size() == 1 + sizeof(TCoord) * Dimensions;
     }
 
@@ -387,6 +396,10 @@ public:
     }
 
 private:
+    inline bool IsBitQuantized() const {
+        return TypeByte == Format<bool>;
+    }
+
     auto GetCoords(const char* coords) {
         return std::span{reinterpret_cast<const TCoord*>(coords), Dimensions};
     }

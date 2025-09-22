@@ -503,13 +503,13 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             }
             FormHeadAndProceed();
 
-            if (GetContext().StartOffset && *GetContext().StartOffset != Partition()->CompactionBlobEncoder.StartOffset) {
-                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->CompactionBlobEncoder.StartOffset);
+            if (GetContext().StartOffset && *GetContext().StartOffset != Partition()->GetStartOffset()) {
+                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->GetStartOffset());
                 Y_ABORT("meta is broken");
                 return PoisonPill(ctx);
             }
-            if (GetContext().EndOffset && *GetContext().EndOffset != Partition()->BlobEncoder.EndOffset) {
-                PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->BlobEncoder.EndOffset);
+            if (GetContext().EndOffset && *GetContext().EndOffset != Partition()->GetEndOffset()) {
+                PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->GetEndOffset());
                 Y_ABORT("meta is broken");
                 return PoisonPill(ctx);
             }
@@ -982,6 +982,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     DbId = Config.GetYdbDatabaseId();
     DbPath = Config.GetYdbDatabasePath();
     FolderId = Config.GetYcFolderId();
+    MonitoringProjectId = Config.GetMonitoringProjectId();
 
     UsersInfoStorage.ConstructInPlace(DCId,
                                       TopicConverter,
@@ -991,17 +992,17 @@ void TPartition::Initialize(const TActorContext& ctx) {
                                       DbId,
                                       Config.GetYdbDatabasePath(),
                                       IsServerless,
-                                      FolderId);
+                                      FolderId,
+                                      MonitoringProjectId);
     TotalChannelWritesByHead.resize(NumChannels);
 
     if (!IsSupportive()) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
-                                                                        Partition.InternalPartitionId,
-                                                                        Config.GetYdbDatabasePath()));
+                                                                         Partition.InternalPartitionId,
+                                                                         Config.GetYdbDatabasePath()));
         } else {
-            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(),
-                                                                        Partition.InternalPartitionId));
+            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(), Partition.InternalPartitionId));
         }
     }
 
@@ -1040,7 +1041,14 @@ void TPartition::Initialize(const TActorContext& ctx) {
         } else {
             SetupTopicCounters(ctx);
         }
+        if (DetailedMetricsAreEnabled()) {
+            SetupDetailedMetrics();
+        }
     }
+}
+
+bool TPartition::DetailedMetricsAreEnabled() const {
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {

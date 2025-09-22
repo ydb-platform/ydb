@@ -80,6 +80,12 @@ public:
             Kikimr = MakeKikimrRunner(true, nullptr, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
                 .PqGateway = PqGateway
             });
+
+            if (GetTestParam("DEFAULT_LOG", "enabled") == "enabled") {
+                auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+                runtime.SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
+                runtime.SetLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
+            }
         }
 
         return Kikimr;

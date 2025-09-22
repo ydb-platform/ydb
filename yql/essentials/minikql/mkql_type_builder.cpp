@@ -1599,9 +1599,9 @@ bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>
 
 // TODO(YQL): This must be rewrited via traits dispatcher.
 bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail, bool output) {
+    itemType = SkipTaggedType(itemType);
     bool isOptional;
-    auto unpacked = UnpackOptional(itemType, isOptional);
-
+    auto unpacked = SkipTaggedType(UnpackOptional(itemType, isOptional));
     if (output && !unpacked->IsData()) {
         // output supports only data and optional data types
         if (onFail) {
@@ -1617,7 +1617,7 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         do {
             ++nestLevel;
             previousType = currentType;
-            currentType = AS_TYPE(TOptionalType, currentType)->GetItemType();
+            currentType = SkipTaggedType(AS_TYPE(TOptionalType, currentType)->GetItemType());
         } while (currentType->IsOptional());
 
         if (NeedWrapWithExternalOptional(previousType)) {
@@ -1647,7 +1647,7 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         for (ui32 i = 0; i < structType->GetMembersCount(); i++) {
             std::shared_ptr<arrow::DataType> childType;
             const TString memberName(structType->GetMemberName(i));
-            auto memberType = structType->GetMemberType(i);
+            auto memberType = SkipTaggedType(structType->GetMemberType(i));
             if (!ConvertArrowTypeImpl(memberType, childType, onFail, output)) {
                 return false;
             }
@@ -1663,7 +1663,7 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         std::vector<std::shared_ptr<arrow::Field>> fields;
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
             std::shared_ptr<arrow::DataType> childType;
-            auto elementType = tupleType->GetElementType(i);
+            auto elementType = SkipTaggedType(tupleType->GetElementType(i));
             if (!ConvertArrowTypeImpl(elementType, childType, onFail, output)) {
                 return false;
             }
@@ -1692,11 +1692,7 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         return true;
     }
 
-    if (itemType->IsTagged()) {
-        auto taggedType = AS_TYPE(TTaggedType, itemType);
-        auto baseType = taggedType->GetBaseType();
-        return ConvertArrowTypeImpl(baseType, type, onFail, output);
-    }
+    Y_ENSURE(!itemType->IsTagged(), "All tagged types must be handled above");
 
     if (IsSingularType(unpacked)) {
         type = arrow::null();
@@ -2692,7 +2688,7 @@ struct TComparatorTraits {
     using TTzDateComparator = NUdf::TTzDateBlockItemComparator<T, Nullable>;
     using TSingularType = NUdf::TSingularTypeBlockItemComparator;
 
-    constexpr static bool PassType = false;
+     constexpr static bool PassType = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);

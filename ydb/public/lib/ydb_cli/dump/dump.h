@@ -113,6 +113,7 @@ struct TRestoreSettings: public TOperationRequestSettings<TRestoreSettings> {
     FLUENT_SETTING_DEFAULT(ui64, FileBufferSize, 2_MB);
     FLUENT_SETTING_DEFAULT(ui32, MaxInFlight, 0);
     FLUENT_SETTING_DEFAULT(TRateLimiterSettings, RateLimiterSettings, {});
+    FLUENT_SETTING_DEFAULT(ui32, MaxRetries, 10);
 
 }; // TRestoreSettings
 

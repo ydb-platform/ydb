@@ -98,6 +98,12 @@ namespace NYT::NPhoenix::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// COMPAT(coteeq): Older snapshots are broken: they have virtual fields in schema,
+// but these fields may not be physically serialized. As we need to check
+// the version manually inside the load callback, we need to be able to capture the version.
+template <class TThis, class TContext>
+using TScheduledFieldLoadHandler = std::function<void(TThis*, TContext&)>;
+
 template <class TThis, class TContext>
 using TFieldMissingHandler = void (*)(TThis*, TContext&);
 
@@ -756,7 +762,7 @@ void LoadImpl(TThis* this_, TContext& context)
 template <class TThis, class TContext>
 struct TRuntimeFieldDescriptor
 {
-    TFieldLoadHandler<TThis, TContext> LoadHandler = nullptr;
+    TScheduledFieldLoadHandler<TThis, TContext> LoadHandler;
     TFieldMissingHandler<TThis, TContext> MissingHandler = nullptr;
 };
 
@@ -826,18 +832,23 @@ public:
         : Descriptor_(descriptor)
     { }
 
-    auto SinceVersion(auto /*version*/) &&
+    using TVersion = typename TTraits<TThis>::TVersion;
+
+    auto SinceVersion(TVersion version) &&
     {
+        MinVersion_ = version;
         return *this;
     }
 
-    auto BeforeVersion(auto /*version*/) &&
+    auto BeforeVersion(TVersion version) &&
     {
+        BeforeVersion_ = version;
         return *this;
     }
 
-    auto InVersions(auto /*filter*/) &&
+    auto InVersions(TVersionFilter<TThis> filter) &&
     {
+        VersionFilter_ = filter;
         return *this;
     }
 
@@ -854,10 +865,33 @@ public:
     }
 
     void operator()() &&
-    { }
+    {
+        bool haveSimpleFilter =
+            MinVersion_ != static_cast<TVersion>(std::numeric_limits<int>::min()) ||
+            BeforeVersion_ != static_cast<TVersion>(std::numeric_limits<int>::max());
+
+        YT_VERIFY(
+            !haveSimpleFilter || !VersionFilter_,
+            "Cannot specify SinceVersion/BeforeVersion and InVersions at the same time");
+
+        Descriptor_->LoadHandler = [
+            since = MinVersion_,
+            before = BeforeVersion_,
+            filter = VersionFilter_,
+            underlyingHandler = Descriptor_->LoadHandler
+        ] (TThis* this_, TContext& context) {
+            auto version = context.GetVersion();
+            if (since <= version && version < before && (!filter || filter(version))) {
+                underlyingHandler(this_, context);
+            }
+        };
+    }
 
 private:
     TRuntimeFieldDescriptor* const Descriptor_;
+    TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
+    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
+    TVersionFilter<TThis> VersionFilter_ = nullptr;
 };
 
 template <class TThis, class TContext>
@@ -947,7 +981,7 @@ template <class TThis, class TContext>
 struct TRuntimeTypeLoadSchedule
     : public TRuntimeTypeLoadScheduleBase
 {
-    std::vector<TFieldLoadHandler<TThis, TContext>> LoadFieldHandlers;
+    std::vector<TScheduledFieldLoadHandler<TThis, TContext>> LoadFieldHandlers;
     std::vector<TFieldMissingHandler<TThis, TContext>> MissingFieldHandlers;
 };
 

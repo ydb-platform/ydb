@@ -9,6 +9,7 @@
 #include <yt/yt/core/ypath/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+#include <yt/yt/core/ytree/yson_schema_options.h>
 
 #include <library/cpp/yt/misc/variant.h>
 
@@ -287,7 +288,7 @@ void SetProtobufInteropConfig(TProtobufInteropConfigPtr config);
 
 //! Returns type v3 schema for protobuf message type.
 //! Note: Recursive types (message has field with self type) are not supported.
-void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer);
+void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer, const NYTree::TYsonStructWriteSchemaOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

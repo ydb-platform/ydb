@@ -434,7 +434,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         return;
     }
 
-    PQ_ENSURE(BlobEncoder.EndOffset == BlobEncoder.Head.GetNextOffset());
+    PQ_ENSURE(BlobEncoder.EndOffset == BlobEncoder.Head.GetNextOffset())("EndOffset", GetEndOffset())("NextOffset", BlobEncoder.Head.GetNextOffset());
 
     // a) !CompactedKeys.empty() && NewHead.PackedSize == 0
     // b) !CompactedKeys.empty() && NewHead.PackedSize != 0
@@ -496,12 +496,20 @@ void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
         // If supportive - update counters only prior to write, otherwise - only after writes;
         return;
     }
+
+    if (BytesWrittenPerPartition) {
+        BytesWrittenPerPartition->Add(WriteNewSize);
+    }
     BytesWrittenGrpc.Inc(WriteNewSizeInternal);
     BytesWrittenTotal.Inc(WriteNewSize);
     BytesWrittenUncompressed.Inc(WriteNewSizeUncompressed);
-    if (BytesWrittenComp)
+    if (BytesWrittenComp) {
         BytesWrittenComp.Inc(WriteCycleSize);
+    }
 
+    if (MessagesWrittenPerPartition) {
+        MessagesWrittenPerPartition->Add(WriteNewMessages);
+    }
     MsgsWrittenGrpc.Inc(WriteNewMessagesInternal);
     MsgsWrittenTotal.Inc(WriteNewMessages);
 }

@@ -178,7 +178,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
     record.SetScanId(scanId);
     AFL_VERIFY(!pathIds.empty());
     record.SetLocalPathId(pathIds[0]);
-    record.SetTablePath(TString("/") + NSysView::SysPathName + "/" + NSysView::StorePrimaryIndexPortionStatsName);
+    record.SetTablePath("/.sys/store_primary_index_portion_stats");
 
     // Schema: pathId, kind, rows, bytes, rawBytes. PK: {pathId, kind}
     //record.SetSchemaVersion(0);

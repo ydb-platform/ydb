@@ -322,6 +322,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                     new TEvTxUserProxy::TEvProposeTransaction());
 
             SetDatabase(proposal.get(), *this->Request_);
+            SetPeerName(proposal.get(), *this->Request_);
 
             if (this->Request_->GetSerializedToken().empty() && !InternalRequest) {
                 if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {

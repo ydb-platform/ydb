@@ -165,6 +165,9 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
                  {"start", toBill.Start.Seconds()},
                  {"finish", toBill.End.Seconds()}
              }},
+             {"labels", NJson::TJsonMap {
+                 {"Category", "Table"},
+             }},
         };
 
         for (const auto& [k, v] : dbRootEl->UserAttrs->Attrs) {

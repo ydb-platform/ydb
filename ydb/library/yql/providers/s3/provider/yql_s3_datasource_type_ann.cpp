@@ -1,15 +1,14 @@
 #include "yql_s3_provider_impl.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -453,6 +452,8 @@ public:
     }
 
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
+        State_->Configuration->CheckDisabledPragmas(ctx);
+
         if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx)) {
             return TStatus::Error;
         }
@@ -487,7 +488,7 @@ public:
 
         std::vector<TString> partitionedBy;
         TString projection;
-        const auto useCoro = State_->Configuration->SourceCoroActor.Get();
+        const auto useCoro = State_->Configuration->SourceCoroActor.GetOrDefault();
         {
             TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
             auto format = s3Object.Format().Ref().Content();
@@ -530,7 +531,7 @@ public:
                 return TStatus::Error;
             }
 
-            if (!NS3Util::ValidateS3ReadSchema(rowTypeNode.Pos(), format, structRowType, !useCoro || *useCoro, ctx)) {
+            if (!NS3Util::ValidateS3ReadSchema(rowTypeNode.Pos(), format, structRowType, useCoro, ctx)) {
                 return TStatus::Error;
             }
 
@@ -551,7 +552,7 @@ public:
             return TStatus::Error;
         }
 
-        if (objectNode->Child(TS3Object::idx_Format)->Content() == "parquet" && (!useCoro || *useCoro)) {
+        if (objectNode->Child(TS3Object::idx_Format)->Content() == "parquet" && useCoro) {
             YQL_ENSURE(State_->Types->ArrowResolver);
             bool allTypesSupported = true;
             for (const auto& item : rowType->Cast<TStructExprType>()->GetItems()) {
@@ -827,7 +828,7 @@ private:
     const TS3State::TPtr State_;
 };
 
-}
+} // anonymous namespace
 
 THolder<TVisitorTransformerBase> CreateS3DataSourceTypeAnnotationTransformer(TS3State::TPtr state) {
     return MakeHolder<TS3DataSourceTypeAnnotationTransformer>(state);

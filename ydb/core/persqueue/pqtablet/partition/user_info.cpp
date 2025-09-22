@@ -46,7 +46,8 @@ TUsersInfoStorage::TUsersInfoStorage(
     const TString& dbId,
     const TString& dbPath,
     const bool isServerless,
-    const TString& folderId
+    const TString& folderId,
+    const TString& monitoringProjectId
 )
     : DCId(std::move(dcId))
     , TopicConverter(topicConverter)
@@ -57,6 +58,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     , DbPath(dbPath)
     , IsServerless(isServerless)
     , FolderId(folderId)
+    , MonitoringProjectId(monitoringProjectId)
     , CurReadRuleGeneration(0)
 {
 }
@@ -157,6 +159,64 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
     return it->second;
 }
 
+::NMonitoring::TDynamicCounterPtr TUsersInfoStorage::GetPartitionCounterSubgroup(const TActorContext& ctx) const {
+    if (!DetailedMetricsAreEnabled()) {
+        return nullptr;
+    }
+    auto counters = AppData(ctx)->Counters;
+    if (!counters) {
+        return nullptr;
+    }
+    if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        auto s = counters
+            ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")
+            ->GetSubgroup("host", "");
+        if (!MonitoringProjectId.empty()) {
+            s = s->GetSubgroup("monitoring_project_id", MonitoringProjectId);
+        }
+        return s
+            ->GetSubgroup("database", Config.GetYdbDatabasePath())
+            ->GetSubgroup("cloud_id", CloudId)
+            ->GetSubgroup("folder_id", FolderId)
+            ->GetSubgroup("database_id", DbId)
+            ->GetSubgroup("topic", TopicConverter->GetClientsideName())
+            ->GetSubgroup("partition_id", ToString(Partition));
+    } else {
+        auto s = counters
+            ->GetSubgroup("counters", "topics_per_partition")
+            ->GetSubgroup("host", "cluster");
+        if (!MonitoringProjectId.empty()) {
+            s = s->GetSubgroup("monitoring_project_id", MonitoringProjectId);
+        }
+        return s
+            ->GetSubgroup("Account", TopicConverter->GetAccount())
+            ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
+            ->GetSubgroup("OriginDC", TopicConverter->GetCluster())
+            ->GetSubgroup("Partition", ToString(Partition));
+    }
+}
+
+
+void TUsersInfoStorage::SetupDetailedMetrics(const TActorContext& ctx) {
+    auto subgroup = GetPartitionCounterSubgroup(ctx);
+    if (!subgroup) {
+        return;  // TODO(qyryq) Y_ABORT_UNLESS?
+    }
+    for (auto& userInfo : GetAll()) {
+        userInfo.second.SetupDetailedMetrics(ctx, subgroup);
+    }
+}
+
+void TUsersInfoStorage::ResetDetailedMetrics() {
+    for (auto& userInfo : GetAll()) {
+        userInfo.second.ResetDetailedMetrics();
+    }
+}
+
+bool TUsersInfoStorage::DetailedMetricsAreEnabled() const {
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
+}
+
 const TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) const {
     auto it = UsersInfo.find(user);
     return it != UsersInfo.end() ? &it->second : nullptr;
@@ -193,7 +253,7 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
     bool meterRead = userServiceType.empty() || userServiceType == defaultServiceType;
 
     return {
-        ctx, StreamCountersSubgroup,
+        ctx, StreamCountersSubgroup, GetPartitionCounterSubgroup(ctx),
         user, readRuleGeneration, important, TopicConverter, Partition,
         session, partitionSessionId, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, DbPath,
         meterRead, pipeClient, anyCommits, committedMetadata

@@ -171,6 +171,9 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->MutableExternalStorage()->SetEndpoint(GetEnv("YDB_ENDPOINT"));
         appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->MutableExternalStorage()->SetDatabase(GetEnv("YDB_DATABASE"));
     }
+    if (!appConfig.GetQueryServiceConfig().HasAllExternalDataSourcesAreAvailable()) {
+        appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
+    }
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
     ServerSettings->SetNodeCount(settings.NodeCount);

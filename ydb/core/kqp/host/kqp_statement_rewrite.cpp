@@ -264,7 +264,7 @@ namespace {
         const TString tmpTableName = TStringBuilder()
             << tableName
             << "_cas_"
-            << TAppData::RandomProvider->GenRand();
+            << TAppData::RandomProvider->GenUuid4().AsUuidString();
 
         const TString createTableName = (TStringBuilder()
                 << CanonizePath(sessionCtx->GetDatabase())

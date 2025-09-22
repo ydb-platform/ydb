@@ -1,6 +1,6 @@
 # DROP TOPIC
 
-`DROP TOPIC` deletes the specified [topic](../../../concepts/topic.md).
+`DROP TOPIC` deletes the specified [topic](../../../concepts/datamodel/topic.md).
 
 ## Syntax
 

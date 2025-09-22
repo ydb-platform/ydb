@@ -38,6 +38,7 @@ namespace {
 // TODO(YQL): This must be rewrited via traits dispatcher.
 template<typename T>
 arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& pool) {
+    type = SkipTaggedType(type);
     std::shared_ptr<arrow::DataType> arrowType;
     MKQL_ENSURE(ConvertArrowType(type, arrowType), "Unsupported type of scalar " << *type);
     if (!value) {
@@ -48,6 +49,7 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
     if (type->IsOptional()) {
         type = AS_TYPE(TOptionalType, type)->GetItemType();
     }
+    type = SkipTaggedType(type);
 
     if (needWrapWithExternalOptional) {
         std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
@@ -59,7 +61,7 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
         auto structType = AS_TYPE(TStructType, type);
         std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
         for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-            arrowValue.emplace_back(DoConvertScalar(structType->GetMemberType(i), value.GetElement(i), pool).scalar());
+            arrowValue.emplace_back(DoConvertScalar(SkipTaggedType(structType->GetMemberType(i)), value.GetElement(i), pool).scalar());
         }
 
         return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));
@@ -69,7 +71,7 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
         auto tupleType = AS_TYPE(TTupleType, type);
         std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-            arrowValue.emplace_back(DoConvertScalar(tupleType->GetElementType(i), value.GetElement(i), pool).scalar());
+            arrowValue.emplace_back(DoConvertScalar(SkipTaggedType(tupleType->GetElementType(i)), value.GetElement(i), pool).scalar());
         }
 
         return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));

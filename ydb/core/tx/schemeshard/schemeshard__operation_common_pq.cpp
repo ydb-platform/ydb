@@ -51,7 +51,8 @@ void MakePQTabletConfig(const TOperationContext& context,
                                 const TString& cloudId,
                                 const TString& folderId,
                                 const TString& databaseId,
-                                const TString& databasePath)
+                                const TString& databasePath,
+                                const TString& monitoringProjectId)
 {
     ParsePQTabletConfig(config, pqGroup);
 
@@ -63,6 +64,7 @@ void MakePQTabletConfig(const TOperationContext& context,
     config.SetYcFolderId(folderId);
     config.SetYdbDatabaseId(databaseId);
     config.SetYdbDatabasePath(databasePath);
+    config.SetMonitoringProjectId(monitoringProjectId);
 
     if (pqGroup.AlterData) {
         config.SetVersion(pqGroup.AlterData->AlterVersion);
@@ -161,6 +163,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
         const TString& folderId,
         const TString& databaseId,
         const TString& databasePath,
+        const TString& monitoringProjectId,
         TTxState::ETxType txType,
         const TOperationContext& context
     )
@@ -178,7 +181,8 @@ THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
                        cloudId,
                        folderId,
                        databaseId,
-                       databasePath);
+                       databasePath,
+                       monitoringProjectId);
     if (bootstrapConfig) {
         Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup);
         event->PreSerializedData += bootstrapConfig->GetPreSerializedProposeTransaction();
@@ -202,6 +206,7 @@ THolder<TEvPersQueue::TEvUpdateConfig> MakeEvUpdateConfig(
         const TString& folderId,
         const TString& databaseId,
         const TString& databasePath,
+        const TString& monitoringProjectId,
         TTxState::ETxType txType,
         const TOperationContext& context
     )
@@ -218,7 +223,8 @@ THolder<TEvPersQueue::TEvUpdateConfig> MakeEvUpdateConfig(
                        cloudId,
                        folderId,
                        databaseId,
-                       databasePath);
+                       databasePath,
+                       monitoringProjectId);
     if (bootstrapConfig) {
         Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup);
         event->PreSerializedData += bootstrapConfig->GetPreSerializedUpdateConfig();
@@ -431,6 +437,10 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
     if (dbRootEl->UserAttrs->Attrs.contains("database_id")) {
         databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
     }
+    TString monitoringProjectId;
+    if (dbRootEl->UserAttrs->Attrs.contains("monitoring_project_id")) {
+        monitoringProjectId = dbRootEl->UserAttrs->Attrs.at("monitoring_project_id");
+    }
 
     TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
     auto topicPath = TPath::Init(txState->TargetPathId, context.SS);
@@ -494,6 +504,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                                                     folderId,
                                                     databaseId,
                                                     databasePath,
+                                                    monitoringProjectId,
                                                     txState->TxType,
                                                     context);
             } else {
@@ -507,6 +518,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                                             folderId,
                                             databaseId,
                                             databasePath,
+                                            monitoringProjectId,
                                             txState->TxType,
                                             context);
             }

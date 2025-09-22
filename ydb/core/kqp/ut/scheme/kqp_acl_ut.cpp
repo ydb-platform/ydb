@@ -1034,6 +1034,179 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         driverRead.Stop(true);
     }
 
+    Y_UNIT_TEST_TWIN(AclTemporaryInterruptInheritance, IsOlap) {
+        auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
+        TKikimrRunner kikimr(settings);
+
+        const TString UserWriteName = "user_write@builtin";
+        const TString UserReadName = "root@builtin";
+
+        auto driverWriteConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken(UserWriteName)
+            .SetDatabase("/Root");
+        auto driverWrite = TDriver(driverWriteConfig);
+        auto clientWrite = NYdb::NQuery::TQueryClient(driverWrite);
+
+        auto sessionWrite = CreateSession(clientWrite);
+        auto sessionWriteOther = CreateSession(clientWrite);
+
+        auto driverReadConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken(UserReadName)
+            .SetDatabase("/Root");
+        auto driverRead = TDriver(driverReadConfig);
+        auto clientRead = NYdb::NQuery::TQueryClient(driverRead);
+
+        auto sessionRead = CreateSession(clientRead);
+
+        auto schemeClientWrite = NYdb::NScheme::TSchemeClient(driverWrite);
+        auto schemeClientRead = NYdb::NScheme::TSchemeClient(driverRead);
+
+
+        {
+            const TString queryWrite = Sprintf(R"(
+                CREATE TEMPORARY TABLE `/Root/Test` (
+                    id Uint64 NOT NULL,
+                    name String,
+                    primary key (id)
+                ) WITH (STORE=%s);
+            )", IsOlap ? "COLUMN" : "ROW");
+
+            auto result = sessionWrite.ExecuteQuery(queryWrite, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        kikimr.GetTestClient().TestGrant("/", "Root", UserReadName, NACLib::EAccessRights::GenericRead);
+
+        {
+            auto result = schemeClientRead.ListDirectory("/Root/.tmp/sessions").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        kikimr.GetTestClient().TestGrant("/Root/.tmp", "sessions", UserReadName, NACLib::EAccessRights::GenericRead);
+
+        {
+            auto result = schemeClientRead.ListDirectory("/Root/.tmp/sessions").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        const TVector<TString> sessionIdSplitted = StringSplitter(sessionWrite.GetId()).SplitByString("&id=");
+
+        {
+            auto result = schemeClientRead.ListDirectory(TStringBuilder()
+                << "/Root/.tmp/sessions/" << sessionIdSplitted.back() << "/").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientWrite.ListDirectory(TStringBuilder()
+                << "/Root/.tmp/sessions/" << sessionIdSplitted.back() << "/").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        driverWrite.Stop(true);
+        driverRead.Stop(true);
+    }
+
+    Y_UNIT_TEST(AclInterruptInheritance) {
+        auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
+        TKikimrRunner kikimr(settings);
+        kikimr.GetTestClient().GrantConnect("write@builtin");
+        kikimr.GetTestClient().GrantConnect("read@builtin");
+
+        const TString UserWriteName = "write@builtin";
+        const TString UserReadName = "read@builtin";
+
+        auto driverWriteConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken(UserWriteName)
+            .SetDatabase("/Root");
+        auto driverWrite = TDriver(driverWriteConfig);
+        auto clientWrite = NYdb::NQuery::TQueryClient(driverWrite);
+
+        auto sessionWrite = CreateSession(clientWrite);
+
+        auto driverReadConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken(UserReadName)
+            .SetDatabase("/Root");
+        auto driverRead = TDriver(driverReadConfig);
+        auto clientRead = NYdb::NQuery::TQueryClient(driverRead);
+
+        auto sessionRead = CreateSession(clientRead);
+
+        kikimr.GetTestClient().TestGrant("/", "Root", "write@builtin",
+            NACLib::EAccessRights::GenericWrite);
+        kikimr.GetTestClient().TestGrant("/", "Root", "write@builtin", 
+            NACLib::EAccessRights::GenericRead);
+
+        {
+            auto result = sessionWrite.ExecuteQuery(R"(
+                CREATE TABLE `/Root/test1/test2/Test` (
+                    id Uint64 NOT NULL,
+                    primary key (id)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto schemeClientWrite = NYdb::NScheme::TSchemeClient(driverWrite);
+            auto result = schemeClientWrite.ListDirectory("/Root/test1/test2").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto schemeClientRead = NYdb::NScheme::TSchemeClient(driverRead);
+            auto result = schemeClientRead.ListDirectory("/Root/test1/test2").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+        }
+
+        kikimr.GetTestClient().TestGrant("/", "Root", "read@builtin", NACLib::EAccessRights::GenericRead);
+
+        {
+            auto schemeClientWrite = NYdb::NScheme::TSchemeClient(driverWrite);
+            auto result = schemeClientWrite.ListDirectory("/Root/test1/test2").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto schemeClientRead = NYdb::NScheme::TSchemeClient(driverRead);
+            auto result = schemeClientRead.ListDirectory("/Root/test1/test2").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        NACLib::TDiffACL diffAcl;
+        diffAcl.SetInterruptInheritance(true);
+        kikimr.GetTestClient().ModifyACL("/Root", "test1", diffAcl.SerializeAsString());
+
+
+        {
+            auto schemeClientWrite = NYdb::NScheme::TSchemeClient(driverWrite);
+            auto result = schemeClientWrite.ListDirectory("/Root/test1/test2").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto schemeClientRead = NYdb::NScheme::TSchemeClient(driverRead);
+            auto result = schemeClientRead.ListDirectory("/Root/test1/test2").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString()); // Bug?
+        }
+    }
+
     Y_UNIT_TEST_QUAD(AclCreateTableAs, IsOlap, UseAdmin) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableMoveColumnTable(true);

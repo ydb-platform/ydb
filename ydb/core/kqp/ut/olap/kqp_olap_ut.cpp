@@ -3495,6 +3495,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetBlockChannelsMode(blockChannelsMode);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");
+        settings.AppConfig.MutableTableServiceConfig()->SetDefaultHashShuffleFuncType(NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
 
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();

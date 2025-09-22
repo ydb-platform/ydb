@@ -2823,51 +2823,23 @@ void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TSta
     }
 }
 
-size_t TKqpTasksGraph::BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings,
-    const TVector<IKqpGateway::TPhysicalTxData>& transactions,
+size_t TKqpTasksGraph::BuildAllTasks(bool enableReadsMerge, std::optional<TLlvmSettings> llvmSettings,
     const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
     bool collectProfileStats, TQueryExecutionStats* stats,
     THashSet<ui64>* shardsWithEffects)
 {
     size_t sourceScanPartitionsCount = 0;
 
-    // Figure out if is Scan or Data execution.
-    bool isScan = false;
-    {
-        if (transactions.empty()) {
-            isScan = false;
-        }
+    bool limitTasksPerNode = enableReadsMerge;
 
-        TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;
-        for (auto& tx : transactions) {
-            if (txsType) {
-                YQL_ENSURE(*txsType == tx.Body->GetType(), "Mixed physical tx types in executer.");
-                YQL_ENSURE((*txsType == NKqpProto::TKqpPhyTx::TYPE_DATA)
-                    || (*txsType == NKqpProto::TKqpPhyTx::TYPE_GENERIC),
-                    "Cannot execute multiple non-data physical txs.");
-            } else {
-                txsType = tx.Body->GetType();
-            }
-        }
-
-        switch (*txsType) {
-            case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
-            case NKqpProto::TKqpPhyTx::TYPE_DATA:
-            case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
-                isScan = false;
-                break;
-            case NKqpProto::TKqpPhyTx::TYPE_SCAN:
-                isScan = true;
-                break;
-            default:
-                YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)*txsType);
-        }
+    if (!GetMeta().IsScan) {
+        limitTasksPerNode |= GetMeta().StreamResult;
     }
 
     Y_ENSURE(stats);
 
-    for (ui32 txIdx = 0; txIdx < transactions.size(); ++txIdx) {
-        const auto& tx = transactions[txIdx];
+    for (ui32 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
+        const auto& tx = Transactions.at(txIdx);
         auto scheduledTaskCount = ScheduleByCost(tx, resourcesSnapshot);
         for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
             const auto& stage = tx.Body->GetStages(stageIdx);
@@ -2881,8 +2853,8 @@ size_t TKqpTasksGraph::BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvm
             // build task conditions
             const bool buildFromSourceTasks = stage.SourcesSize() > 0;
             const bool buildSysViewTasks = stageInfo.Meta.IsSysView();
-            const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!isScan && stage.SinksSize() > 0);
-            const bool buildScanTasks = isScan
+            const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!GetMeta().IsScan && stage.SinksSize() > 0);
+            const bool buildScanTasks = GetMeta().IsScan
                 ? stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()
                 : (GetMeta().AllowOlapDataQuery || GetMeta().StreamResult) && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0
                 ;
@@ -2913,7 +2885,7 @@ size_t TKqpTasksGraph::BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvm
                         }
                     } break;
                     case NKqpProto::TKqpSource::kExternalSource: {
-                        YQL_ENSURE(!isScan);
+                        YQL_ENSURE(!GetMeta().IsScan);
                         auto it = scheduledTaskCount.find(stageIdx);
                         BuildReadTasksFromSource(stageInfo, resourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
                     } break;
@@ -2924,14 +2896,14 @@ size_t TKqpTasksGraph::BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvm
                 BuildSysViewScanTasks(stageInfo);
             } else if (buildComputeTasks) {
                 auto nodesCount = GetMeta().ShardsOnNode.size();
-                if (!isScan) {
+                if (!GetMeta().IsScan) {
                     nodesCount = std::max<ui32>(resourcesSnapshot.size(), nodesCount);
                 }
                 GetMeta().UnknownAffectedShardCount |= BuildComputeTasks(stageInfo, nodesCount);
             } else if (buildScanTasks) {
                 BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination(), collectProfileStats ? stats : nullptr);
             } else {
-                if (!isScan) {
+                if (!GetMeta().IsScan) {
                     BuildDatashardTasks(stageInfo, shardsWithEffects);
                 } else {
                     YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);
@@ -2985,17 +2957,59 @@ void TKqpTasksGraph::UpdateRemoteTasksNodeId(const THashMap<ui64, TVector<ui64>>
     }
 }
 
-TKqpTasksGraph::TKqpTasksGraph(const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
+TKqpTasksGraph::TKqpTasksGraph(
+    const TVector<IKqpGateway::TPhysicalTxData>& transactions,
+    const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
     const TPartitionPrunerConfig& partitionPrunerConfig,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
     const TKqpRequestCounters::TPtr& counters,
     TActorId bufferActorId)
     : PartitionPruner(MakeHolder<TPartitionPruner>(txAlloc->HolderFactory, txAlloc->TypeEnv, std::move(partitionPrunerConfig)))
+    , Transactions(transactions)
     , TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
     , Counters(counters)
     , BufferActorId(bufferActorId)
-{}
+{
+    if (Transactions.empty()) {
+        return;
+    }
+
+    TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;
+    for (const auto& tx : Transactions) {
+        if (txsType) {
+            YQL_ENSURE(*txsType == tx.Body->GetType(), "Mixed physical tx types in executer.");
+            YQL_ENSURE((*txsType == NKqpProto::TKqpPhyTx::TYPE_DATA)
+                || (*txsType == NKqpProto::TKqpPhyTx::TYPE_GENERIC),
+                "Cannot execute multiple non-data physical txs.");
+        } else {
+            txsType = tx.Body->GetType();
+        }
+    }
+
+    switch (*txsType) {
+        case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
+            GetMeta().StreamResult = true;
+            break;
+        case NKqpProto::TKqpPhyTx::TYPE_SCAN: {
+            size_t resultsSize = Transactions.at(0).Body->ResultsSize();
+            YQL_ENSURE(resultsSize != 0);
+
+            GetMeta().StreamResult = Transactions.at(0).Body->GetResults(0).GetIsStream();
+
+            if (GetMeta().StreamResult) {
+                YQL_ENSURE(resultsSize == 1);
+            } else {
+                for (size_t i = 1; i < resultsSize; ++i) {
+                    YQL_ENSURE(Transactions.at(0).Body->GetResults(i).GetIsStream() == GetMeta().StreamResult);
+                }
+            }
+            GetMeta().IsScan = true;
+        }   break;
+        default:
+            YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)*txsType);
+    }
+}
 
 TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const
 {

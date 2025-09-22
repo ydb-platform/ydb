@@ -202,6 +202,7 @@ struct TStageInfoMeta {
 
 // things which are common for all tasks in the graph.
 struct TGraphMeta {
+    bool IsScan = false;
     bool IsRestored = false;
     IKqpGateway::TKqpSnapshot Snapshot;
     TMaybe<ui64> LockTxId;
@@ -368,7 +369,9 @@ using TTask = NYql::NDq::TTask<TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskO
 
 class TKqpTasksGraph : public NYql::NDq::TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskOutputMeta> {
 public:
-    explicit TKqpTasksGraph(const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
+    explicit TKqpTasksGraph(
+        const TVector<IKqpGateway::TPhysicalTxData>& transactions,
+        const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
         const TPartitionPrunerConfig& partitionPrunerConfig,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
         const TKqpRequestCounters::TPtr& counters,
@@ -376,7 +379,6 @@ public:
     );
 
     size_t BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings,
-        const TVector<IKqpGateway::TPhysicalTxData>& transactions,
         const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
         bool collectProfileStats, TQueryExecutionStats* stats,
         THashSet<ui64>* ShardsWithEffects
@@ -445,6 +447,7 @@ private:
     void BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, TKqpTasksGraph::TTaskType& task) const;
 
 private:
+    const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
     NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     TKqpRequestCounters::TPtr Counters;

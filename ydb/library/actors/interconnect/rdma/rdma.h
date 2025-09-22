@@ -83,6 +83,13 @@ ICq::TPtr CreateSimpleCqMock(const TRdmaCtx* ctx, NActors::TActorSystem* as, int
 
 class TQueuePair: public NNonCopyable::TMoveOnly {
 public:
+    struct TQpS {
+        int State;
+    };
+    struct TQpErr {
+        int Err;
+    };
+    using TQpState = std::variant<TQpS, TQpErr>;
     TQueuePair() = default;
     ~TQueuePair();
     int Init(TRdmaCtx* ctx, ICq* cq, int maxWr) noexcept;
@@ -92,7 +99,7 @@ public:
     int SendRdmaReadWr(ui64 wrId, void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize) noexcept;
     ui32 GetQpNum() const noexcept;
     void Output(IOutputStream&) const noexcept;
-    int GetState(bool forseUpdate) const noexcept;
+    TQpState GetState(bool forseUpdate) const noexcept;
     TRdmaCtx* GetCtx() const noexcept;
 
 private:

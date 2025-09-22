@@ -529,21 +529,24 @@ void TQueuePair::Output(IOutputStream& os) const noexcept {
     }
 }
 
-int TQueuePair::GetState(bool forseUpdate) const noexcept {
+TQueuePair::TQpState TQueuePair::GetState(bool forseUpdate) const noexcept {
     static_assert(sizeof(ibv_qp_state) <= sizeof(int));
     struct ibv_qp_attr attr;
     struct ibv_qp_init_attr init_attr;
 
     if (LastState != UnknownQpState && !forseUpdate) {
-        return LastState;
+        return TQpS { .State = LastState };
     }
 
     int err = ibv_query_qp(Qp, &attr, IBV_QP_STATE, &init_attr);
-    Y_ABORT_UNLESS(!err);
+
+    if (err) {
+        return TQpErr { .Err = err };
+    }
 
     LastState = attr.qp_state;
 
-    return attr.qp_state;
+    return TQpS { .State = attr.qp_state };
 }
 
 TRdmaCtx* TQueuePair::GetCtx() const noexcept {

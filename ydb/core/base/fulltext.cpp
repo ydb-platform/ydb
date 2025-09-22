@@ -5,16 +5,18 @@ namespace NKikimr::NFulltext {
 
 namespace {
 
-    Ydb::Table::FulltextIndexSettings::Layout ParseLayout(const TString& layout, TString& error) {
+    Ydb::Table::FulltextIndexSettings::Layout ParseLayout(const TString& layout_, TString& error) {
+        const TString layout = to_lower(layout_);
         if (layout == "flat")
             return Ydb::Table::FulltextIndexSettings::FLAT;
         else {
-            error = TStringBuilder() << "Invalid layout: " << layout;
+            error = TStringBuilder() << "Invalid layout: " << layout_;
             return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
         }
     };
 
-    Ydb::Table::FulltextIndexSettings::Tokenizer ParseTokenizer(const TString& tokenizer, TString& error) {
+    Ydb::Table::FulltextIndexSettings::Tokenizer ParseTokenizer(const TString& tokenizer_, TString& error) {
+        const TString tokenizer = to_lower(tokenizer_);
         if (tokenizer == "whitespace")
             return Ydb::Table::FulltextIndexSettings::WHITESPACE;
         else if (tokenizer == "standard")
@@ -22,7 +24,7 @@ namespace {
         else if (tokenizer == "keyword")
             return Ydb::Table::FulltextIndexSettings::KEYWORD;
         else {
-            error = TStringBuilder() << "Invalid tokenizer: " << tokenizer;
+            error = TStringBuilder() << "Invalid tokenizer: " << tokenizer_;
             return Ydb::Table::FulltextIndexSettings::TOKENIZER_UNSPECIFIED;
         }
     };
@@ -147,7 +149,6 @@ bool ValidateColumnsMatches(const TVector<TString>& columns, const Ydb::Table::F
         settingsColumns.push_back(column.column());
     }
 
-
     if (columns != settingsColumns) {
         error = TStringBuilder() << "columns " << settingsColumns << " should be " << columns;
         return false;
@@ -194,55 +195,44 @@ bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString
     return true;
 }
 
-Ydb::Table::FulltextIndexSettings FillSettings(const TString& keyColumn, const TVector<std::pair<TString, TString>>& settings, TString& error) {
-    Ydb::Table::FulltextIndexSettings result;
-    Ydb::Table::FulltextIndexSettings::Analyzers resultAnalyzers;
+bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& name, const TString& value, TString& error) {
+    error = "";
 
-    for (const auto& [name, value] : settings) {
-        if (name == "layout") {
-            result.set_layout(ParseLayout(value, error));
-        } else if (name == "tokenizer") {
-            resultAnalyzers.set_tokenizer(ParseTokenizer(value, error));
-        } else if (name == "language") {
-            resultAnalyzers.set_language(value);
-        } else if (name == "use_filter_lowercase") {
-            resultAnalyzers.set_use_filter_lowercase(ParseBool(name, value, error));
-        } else if (name == "use_filter_stopwords") {
-            resultAnalyzers.set_use_filter_stopwords(ParseBool(name, value, error));
-        } else if (name == "use_filter_ngram") {
-            resultAnalyzers.set_use_filter_ngram(ParseBool(name, value, error));
-        } else if (name == "use_filter_edge_ngram") {
-            resultAnalyzers.set_use_filter_edge_ngram(ParseBool(name, value, error));
-        } else if (name == "filter_ngram_min_length") {
-            resultAnalyzers.set_filter_ngram_min_length(ParseInt32(name, value, error));
-        } else if (name == "filter_ngram_max_length") {
-            resultAnalyzers.set_filter_ngram_max_length(ParseInt32(name, value, error));
-        } else if (name == "use_filter_length") {
-            resultAnalyzers.set_use_filter_length(ParseBool(name, value, error));
-        } else if (name == "filter_length_min") {
-            resultAnalyzers.set_filter_length_min(ParseInt32(name, value, error));
-        } else if (name == "filter_length_max") {
-            resultAnalyzers.set_filter_length_max(ParseInt32(name, value, error));
-        } else {
-            error = TStringBuilder() << "Unknown index setting: " << name;
-            return result;
-        }
+    Ydb::Table::FulltextIndexSettings::Analyzers* analyzers = settings.columns().empty()
+        ? settings.add_columns()->mutable_analyzers()
+        : settings.mutable_columns()->rbegin()->mutable_analyzers();
 
-        if (error) {
-            return result;
-        }
+    const TString nameLower = to_lower(name);
+    if (nameLower == "layout") {
+        settings.set_layout(ParseLayout(value, error));
+    } else if (nameLower == "tokenizer") {
+        analyzers->set_tokenizer(ParseTokenizer(value, error));
+    } else if (nameLower == "language") {
+        analyzers->set_language(value);
+    } else if (nameLower == "use_filter_lowercase") {
+        analyzers->set_use_filter_lowercase(ParseBool(name, value, error));
+    } else if (nameLower == "use_filter_stopwords") {
+        analyzers->set_use_filter_stopwords(ParseBool(name, value, error));
+    } else if (nameLower == "use_filter_ngram") {
+        analyzers->set_use_filter_ngram(ParseBool(name, value, error));
+    } else if (nameLower == "use_filter_edge_ngram") {
+        analyzers->set_use_filter_edge_ngram(ParseBool(name, value, error));
+    } else if (nameLower == "filter_ngram_min_length") {
+        analyzers->set_filter_ngram_min_length(ParseInt32(name, value, error));
+    } else if (nameLower == "filter_ngram_max_length") {
+        analyzers->set_filter_ngram_max_length(ParseInt32(name, value, error));
+    } else if (nameLower == "use_filter_length") {
+        analyzers->set_use_filter_length(ParseBool(name, value, error));
+    } else if (nameLower == "filter_length_min") {
+        analyzers->set_filter_length_min(ParseInt32(name, value, error));
+    } else if (nameLower == "filter_length_max") {
+        analyzers->set_filter_length_max(ParseInt32(name, value, error));
+    } else {
+        error = TStringBuilder() << "Unknown index setting: " << name;
+        return false;
     }
 
-    {
-        // only single-columned index is supported for now
-        auto columnAnalyzers = result.add_columns();
-        columnAnalyzers->set_column(keyColumn);
-        columnAnalyzers->mutable_analyzers()->CopyFrom(resultAnalyzers);
-    }
-
-    ValidateSettings(result, error);
-
-    return result;
+    return !error;
 }
 
 

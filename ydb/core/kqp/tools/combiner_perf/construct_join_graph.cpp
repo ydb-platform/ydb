@@ -62,6 +62,7 @@ bool IsBlockJoin(ETestedJoinAlgo kind) {
 THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, TInnerJoinDescription descr) {
 
     const EJoinKind kInnerJoin = EJoinKind::Inner;
+    const bool scalar = !IsBlockJoin(algo);
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
     TProgramBuilder& pb = static_cast<TProgramBuilder&>(dqPb);
 
@@ -98,7 +99,6 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, T
 
     auto args = [&]() {
         TJoinArgs ret;
-        bool scalar = !IsBlockJoin(algo);
         ret.Left =
             scalar ? asTupleListArg(descr.LeftSource.ColumnTypes) : asBlockTupleListArg(descr.LeftSource.ColumnTypes);
         ret.Right =
@@ -124,82 +124,87 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, T
         return graph;
     };
 
+    auto graphFrom = [&](TRuntimeNode wideStreamJoin) {
+        if (scalar) {
+            return scalarGraphFrom(wideStreamJoin);
+        } else {
+            return blockGraphFrom(wideStreamJoin);
+        }
+    };
+
     TType* multiResultType = dqPb.NewMultiType(resultTypesArr);
 
-    switch (algo) {
+    auto wideStream = [&] {
+        switch (algo) {
 
-    case ETestedJoinAlgo::kScalarGrace: {
+        case ETestedJoinAlgo::kScalarGrace: {
 
-        TRuntimeNode wideStream = dqPb.FromFlow(dqPb.GraceJoin(
-            ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), kInnerJoin, descr.LeftSource.KeyColumnIndexes,
-            descr.RightSource.KeyColumnIndexes, leftRenames, rightRenames, dqPb.NewFlowType(multiResultType)));
-        return scalarGraphFrom(wideStream);
-    }
-    case NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap: {
-        Y_ABORT_IF(descr.RightSource.KeyColumnIndexes.size() > 1,
-                   "composite key types are not supported yet for ScalarMapJoin "
-                   "benchmark");
-        TRuntimeNode rightDict = pb.ToSortedDict(
-            args.Right, true, [&](TRuntimeNode tuple) { return pb.Nth(tuple, descr.RightSource.KeyColumnIndexes[0]); },
-            [&](TRuntimeNode tuple) {
-                auto types = AS_TYPE(TTupleType, tuple.GetStaticType())->GetElements();
-                TVector<TRuntimeNode> valueTupleElements;
-                for (ui32 idx = 0; idx < std::ssize(types); ++idx) {
-                    if (idx != descr.RightSource.KeyColumnIndexes[0]) {
-                        valueTupleElements.push_back(pb.Nth(tuple, idx));
+            return dqPb.FromFlow(dqPb.GraceJoin(ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), kInnerJoin,
+                                                descr.LeftSource.KeyColumnIndexes, descr.RightSource.KeyColumnIndexes,
+                                                leftRenames, rightRenames, dqPb.NewFlowType(multiResultType)));
+        }
+        case NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap: {
+            Y_ABORT_IF(descr.RightSource.KeyColumnIndexes.size() > 1,
+                       "composite key types are not supported yet for ScalarMapJoin "
+                       "benchmark");
+            TRuntimeNode rightDict = pb.ToSortedDict(
+                args.Right, true,
+                [&](TRuntimeNode tuple) { return pb.Nth(tuple, descr.RightSource.KeyColumnIndexes[0]); },
+                [&](TRuntimeNode tuple) {
+                    auto types = AS_TYPE(TTupleType, tuple.GetStaticType())->GetElements();
+                    TVector<TRuntimeNode> valueTupleElements;
+                    for (ui32 idx = 0; idx < std::ssize(types); ++idx) {
+                        if (idx != descr.RightSource.KeyColumnIndexes[0]) {
+                            valueTupleElements.push_back(pb.Nth(tuple, idx));
+                        }
                     }
+                    return pb.NewTuple(valueTupleElements);
+                });
+
+            TRuntimeNode source = pb.ExpandMap(pb.ToFlow(args.Left), [&pb](TRuntimeNode item) -> TRuntimeNode::TList {
+                TRuntimeNode::TList values;
+                for (ui32 idx = 0; idx < AS_TYPE(TTupleType, item.GetStaticType())->GetElementsCount(); ++idx) {
+                    values.push_back(pb.Nth(item, idx));
                 }
-                return pb.NewTuple(valueTupleElements);
+                return values;
             });
 
-        TRuntimeNode source = pb.ExpandMap(pb.ToFlow(args.Left), [&pb](TRuntimeNode item) -> TRuntimeNode::TList {
-            TRuntimeNode::TList values;
-            for (ui32 idx = 0; idx < AS_TYPE(TTupleType, item.GetStaticType())->GetElementsCount(); ++idx) {
-                values.push_back(pb.Nth(item, idx));
-            }
-            return values;
-        });
+            TRenames scalarMapRenames = MakeScalarMapJoinRenames(std::ssize(descr.LeftSource.ColumnTypes),
+                                                                 std::ssize(descr.RightSource.ColumnTypes) -
+                                                                     descr.RightSource.KeyColumnIndexes.size());
+            TRuntimeNode mapJoinSomething =
+                pb.MapJoinCore(source, rightDict, kInnerJoin, descr.LeftSource.KeyColumnIndexes, scalarMapRenames.Left,
+                               scalarMapRenames.Right, pb.NewFlowType(pb.NewTupleType(resultTypesArr)));
 
-        TRenames scalarMapRenames = MakeScalarMapJoinRenames(std::ssize(descr.LeftSource.ColumnTypes),
-                                                             std::ssize(descr.RightSource.ColumnTypes) -
-                                                                 descr.RightSource.KeyColumnIndexes.size());
-        TRuntimeNode mapJoinSomething =
-            pb.MapJoinCore(source, rightDict, kInnerJoin, descr.LeftSource.KeyColumnIndexes, scalarMapRenames.Left,
-                           scalarMapRenames.Right, pb.NewFlowType(pb.NewTupleType(resultTypesArr)));
+            return ToWideStream(
+                pb, pb.Collect(pb.NarrowMap(mapJoinSomething, [&pb](TRuntimeNode::TList items) -> TRuntimeNode {
+                    return pb.NewTuple(items);
+                })));
+        }
+        case ETestedJoinAlgo::kBlockMap: {
+            TVector<ui32> kEmptyColumnDrops;
+            TVector<ui32> kRightDroppedColumns;
+            std::copy(descr.RightSource.KeyColumnIndexes.begin(), descr.RightSource.KeyColumnIndexes.end(),
+                      std::back_inserter(kRightDroppedColumns));
 
-        TRuntimeNode wideStream = ToWideStream(
-            pb, pb.Collect(pb.NarrowMap(mapJoinSomething, [&pb](TRuntimeNode::TList items) -> TRuntimeNode {
-                return pb.NewTuple(items);
-            })));
-
-        return scalarGraphFrom(wideStream);
-    }
-    case ETestedJoinAlgo::kBlockMap: {
-        TVector<ui32> kEmptyColumnDrops;
-        TVector<ui32> kRightDroppedColumns;
-        std::copy(descr.RightSource.KeyColumnIndexes.begin(), descr.RightSource.KeyColumnIndexes.end(),
-                  std::back_inserter(kRightDroppedColumns));
-
-        TRuntimeNode wideStream =
-            BuildBlockJoin(pb, kInnerJoin, args.Left, descr.LeftSource.KeyColumnIndexes, kEmptyColumnDrops, args.Right,
-                           descr.RightSource.KeyColumnIndexes, kRightDroppedColumns, false);
-        return blockGraphFrom(wideStream);
-    }
-    case ETestedJoinAlgo::kBlockHash: {
-        auto wideStream = dqPb.DqBlockHashJoin(ToWideStream(dqPb, args.Left), ToWideStream(dqPb, args.Right),
-                                               kInnerJoin, descr.LeftSource.KeyColumnIndexes,
-                                               descr.RightSource.KeyColumnIndexes, pb.NewStreamType(multiResultType));
-        return blockGraphFrom(wideStream);
-    }
-    case ETestedJoinAlgo::kScalarHash: {
-        auto wideStream = pb.FromFlow(dqPb.DqScalarHashJoin(
-            ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), kInnerJoin, descr.LeftSource.KeyColumnIndexes,
-            descr.RightSource.KeyColumnIndexes, pb.NewFlowType(multiResultType)));
-        return scalarGraphFrom(wideStream);
-    }
-    default:
-        Y_ABORT("unreachable");
-    }
+            return BuildBlockJoin(pb, kInnerJoin, args.Left, descr.LeftSource.KeyColumnIndexes, kEmptyColumnDrops,
+                                  args.Right, descr.RightSource.KeyColumnIndexes, kRightDroppedColumns, false);
+        }
+        case ETestedJoinAlgo::kBlockHash: {
+            return dqPb.DqBlockHashJoin(ToWideStream(dqPb, args.Left), ToWideStream(dqPb, args.Right), kInnerJoin,
+                                        descr.LeftSource.KeyColumnIndexes, descr.RightSource.KeyColumnIndexes,
+                                        pb.NewStreamType(multiResultType));
+        }
+        case ETestedJoinAlgo::kScalarHash: {
+            return pb.FromFlow(dqPb.DqScalarHashJoin(
+                ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), kInnerJoin, descr.LeftSource.KeyColumnIndexes,
+                descr.RightSource.KeyColumnIndexes, pb.NewFlowType(multiResultType)));
+        }
+        default:
+            Y_ABORT("unreachable");
+        }
+    }();
+    return graphFrom(wideStream);
 }
 
 i32 ResultColumnCount(ETestedJoinAlgo algo, TInnerJoinDescription descr) {

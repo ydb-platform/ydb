@@ -202,7 +202,7 @@ void TPartition::TryRunCompaction()
     if (blobsSize < GetCumulativeSizeLimit()) {
         LOG_D("Need more data for compaction. " <<
                  "Blobs " << BlobEncoder.DataKeysBody.size() <<
-                 ", size " << blobsSize);
+                 ", size " << blobsSize << " (" << GetCumulativeSizeLimit() << ")");
         return;
     }
 

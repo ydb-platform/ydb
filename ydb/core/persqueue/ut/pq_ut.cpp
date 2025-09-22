@@ -1457,7 +1457,7 @@ Y_UNIT_TEST(TestCompactifiedWithRetention) {
         CmdWrite(0, "sourceid0", data, tc, false, {}, true);
         CmdWrite(0, "sourceid1", data, tc, false);
         CmdWrite(0, "sourceid2", data, tc, false);
-        PQGetPartInfo(0, 30, tc);
+        PQGetPartInfo(10, 30, tc);
 
         PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=0, .lowWatermark=100, .enableCompactificationByKey = false}, {}, tc);
         CmdWrite(0, "sourceid3", data, tc, false);

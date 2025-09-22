@@ -627,10 +627,11 @@ void TDqPqRdReadActor::ProcessGlobalState() {
         }
         auto partitionToRead = GetPartitionsToRead();
         if (WatermarkTracker) {
+            auto now = TInstant::Now();
             TPartitionKey partitionKey { .Cluster = Cluster };
             for (auto partitionId: partitionToRead) {
                 partitionKey.PartitionId = partitionId;
-                WatermarkTracker->RegisterPartition(partitionKey);
+                WatermarkTracker->RegisterPartition(partitionKey, now);
             }
         }
         auto cookie = ++CoordinatorRequestCookie;
@@ -766,6 +767,20 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         return 0;
     }
 
+    if (WatermarkTracker) {
+        const auto idleWatermark = WatermarkTracker->HandleIdleness(now);
+
+        if (idleWatermark) {
+            SRC_LOG_D("SessionId: " << GetSessionId() << " Fake watermark " << idleWatermark << " was produced");
+            if (ReadyBuffer.empty()) {
+                watermark = *idleWatermark;
+            } else {
+                Y_ENSURE(ReadyBuffer.back().Watermark < *idleWatermark);
+                ReadyBuffer.back().Watermark = *idleWatermark;
+            }
+        }
+    }
+
     i64 usedSpace = 0;
     while (!ReadyBuffer.empty()) {
         auto readyBatch = std::move(ReadyBuffer.front());
@@ -782,21 +797,6 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         SRC_LOG_T("NextOffset " << readyBatch.NextOffset);
         if (freeSpace <= 0 || !watermark.Empty()) {
             break;
-        }
-    }
-
-    if (WatermarkTracker) {
-        const auto idleWatermark = WatermarkTracker->HandleIdleness(now);
-
-        if (idleWatermark) {
-            SRC_LOG_D("SessionId: " << GetSessionId() << " Fake watermark " << idleWatermark << " was produced");
-            if (ReadyBuffer.empty()) {
-                Y_ENSURE(watermark < *idleWatermark);
-                watermark = *idleWatermark;
-            } else {
-                Y_ENSURE(ReadyBuffer.back().Watermark < *idleWatermark);
-                ReadyBuffer.back().Watermark = *idleWatermark;
-            }
         }
     }
 
@@ -1186,7 +1186,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
             const auto watermark = TInstant::MicroSeconds(watermarkUs);
             const auto maybeNewWatermark = Parent->WatermarkTracker->NotifyNewPartitionTime(
                 partitionKey,
-                watermark + LateArrivalDelay, // XXX dirty hack: add here to compensate subtraction inside WT
+                watermark + LateArrivalDelay, // XXX dirty hack; untangle watermark delay and idle delay
                 TInstant::Now()
             );
             if (!maybeNewWatermark) {

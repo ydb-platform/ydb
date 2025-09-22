@@ -294,9 +294,10 @@ public:
             SRC_LOG_I("SessionId: " << GetSessionId(clusterState.Index) << " CreateReadSession");
             if (WatermarkTracker) {
                 TPartitionKey partitionKey { .Cluster = TString(clusterState.Info.Name) };
+                auto now = TInstant::Now();
                 for (const auto partitionId : GetPartitionsToRead(clusterState)) { // XXX duplicated, but rare
                     partitionKey.PartitionId = partitionId;
-                    WatermarkTracker->RegisterPartition(partitionKey);
+                    WatermarkTracker->RegisterPartition(partitionKey, now);
                 }
             }
         }
@@ -540,7 +541,7 @@ private:
 
         i64 usedSpace = 0;
         if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
-            freeSpace = 0;
+            return usedSpace;
         }
 
         bool recheckBatch = false;

@@ -171,7 +171,7 @@ public:
         SetConfigValues(config);
     }
 
-    void Bootstrap(NKikimrConfig::TTableServiceConfig::TResourceManager& config, TActorSystem* actorSystem, TActorId selfId) {
+    void Registered(NKikimrConfig::TTableServiceConfig::TResourceManager& config, TActorSystem* actorSystem, TActorId selfId) {
         ActorSystem = actorSystem;
         SelfId = selfId;
         if (!Counters) {
@@ -593,15 +593,16 @@ public:
     // Is called right after service registration
     // and before any usual actor can try to get ResourceManager
     void Registered(TActorSystem* sys, const TActorId& owner) override {
-        ResourceManager->Bootstrap(Config, sys, SelfId());
+        TActorBootstrapped::Registered(sys, owner);
+
+        ResourceManager->Registered(Config, sys, SelfId());
+
         with_lock (ResourceManagers.Lock) {
             if (ResourceManagers.Default.expired()) { // There can be several managers in tests
                 ResourceManagers.Default = ResourceManager;
             }
             ResourceManagers.ByNodeId[NodeId] = ResourceManager;
         }
-
-        TActorBootstrapped::Registered(sys, owner);
     }
 
     void Bootstrap() {

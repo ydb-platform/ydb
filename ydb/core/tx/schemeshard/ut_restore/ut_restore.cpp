@@ -5344,8 +5344,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         const TString& permissions,
         const TString& pkType)
     {
-        const TString shardConfUTF8 = "a";
-
         const auto data = GenerateTestData(Sprintf(R"(
             columns {
               name: "key"
@@ -5356,7 +5354,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               type { optional_type { item { type_id: UTF8 } } }
             }
             primary_key: "key"
-        )", pkType.c_str()), {{pkType == "UTF8" ? shardConfUTF8 : "", 1}}, permissions);
+        )", pkType.c_str()), {{pkType == "UTF8" ? "a" : "", 1}}, permissions);
 
         bucketContent.emplace("", data);
         return [](TTestBasicRuntime& runtime) {

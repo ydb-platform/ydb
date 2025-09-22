@@ -1127,11 +1127,30 @@ private:
 
     void TryCorrectStartOffset(TMaybe<ui64> offset);
 
+    ui64 GetStartOffset() const;
+    ui64 GetEndOffset() const;
+    ui64 GetLastOffset() const;
+
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
     TDeque<NWilson::TTraceId> TxForPersistTraceIds;
     TDeque<NWilson::TSpan> TxForPersistSpans;
 
     bool CanProcessUserActionAndTransactionEvents() const;
 };
+
+inline ui64 TPartition::GetStartOffset() const {
+    if (CompactionBlobEncoder.IsEmpty()) {
+        return BlobEncoder.StartOffset;
+    }
+    return CompactionBlobEncoder.StartOffset;
+}
+
+inline ui64 TPartition::GetEndOffset() const {
+    return BlobEncoder.EndOffset;
+}
+
+inline ui64 TPartition::GetLastOffset() const {
+    return BlobEncoder.Head.GetNextOffset();
+}
 
 } // namespace NKikimr::NPQ

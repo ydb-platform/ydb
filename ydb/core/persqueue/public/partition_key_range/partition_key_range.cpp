@@ -11,7 +11,7 @@ namespace NKikimr {
 namespace NPQ {
 
 TString MiddleOf(const TString& from, const TString& to) {
-    AFL_ENSURE(to.empty() || from < to)("from", from)("to", to);
+    AFL_ENSURE(to.empty() || from < to);
 
     auto GetChar = [](const TString& str, size_t i, unsigned char defaultValue) {
         if (i >= str.size()) {

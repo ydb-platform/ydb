@@ -57,9 +57,9 @@ public:
     }
 };
 
-class TSupprotiveAutopartitioningManager : public IAutopartitioningManager {
+class TSupportiveAutopartitioningManager : public IAutopartitioningManager {
 public:
-    TSupprotiveAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config) {
+    TSupportiveAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config) {
         Y_UNUSED(config);
     }
 
@@ -107,6 +107,7 @@ public:
     }
 
 private:
+    // SourceId -> SlidingWindow
     std::unordered_map<TString, TSlidingWindow> WrittenBytes;
 };
 
@@ -127,7 +128,7 @@ public:
 
         TString sourceIdHash = sourceId // Kinesis protocol use empty sourceId
             ? AsKeyBound(Hash(NSourceIdEncoding::Decode(sourceId)))
-            : sourceId;
+            : "";
 
         auto it = WrittenBytes.find(sourceIdHash);
         if (it == WrittenBytes.end()) {
@@ -181,7 +182,7 @@ public:
 
         ui64 lWrittenBytes = 0, rWrittenBytes = 0, oWrittenBytes = 0;
         size_t i = 0, j = sorted.size() - 1;
-        TString* lastLeft, *lastRight;
+        TString* lastLeft = nullptr, *lastRight = nullptr;
         while (i <= j) {
             auto& lhs = sorted[i];
             auto& rhs = sorted[j];
@@ -205,7 +206,7 @@ public:
 
         if (oWrittenBytes >= lWrittenBytes || oWrittenBytes >= rWrittenBytes) {
             // The volume of entries in the partition with the SourceID manually linked to the partition is significant.
-            //  We divide the partition in half.
+            // We divide the partition in half.
             return MiddleOf(partition->GetKeyRange().GetFromBound(), partition->GetKeyRange().GetToBound());
         }
 
@@ -262,7 +263,7 @@ private:
     const ui32 PartitionId;
 
     TMaybe<TSlidingWindow> SumWrittenBytes;
-    // SoureIdHash -> SlidingWindow
+    // SourceIdHash -> SlidingWindow
     std::unordered_map<TString, TSlidingWindow> WrittenBytes;
     TLastCounter SourceIdCounter;
     TInstant LastCleanUp;
@@ -277,7 +278,7 @@ IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabl
     }
 
     if (partitionId.IsSupportivePartition()) {
-        return new TSupprotiveAutopartitioningManager(config);
+        return new TSupportiveAutopartitioningManager(config);
     }
 
     return new TAutopartitioningManager(config, partitionId.OriginalPartitionId);

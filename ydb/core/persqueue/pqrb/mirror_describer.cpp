@@ -45,9 +45,7 @@ void TMirrorDescriber::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr&
         ev->Get()->Config.GetPartitionConfig().GetMirrorFrom()
     );
     LOG_D("got new config, equal with previous: " << equalConfigs);
-    if (equalConfigs) {
-        DescribeTopic(ctx);
-    } else {
+    if (!equalConfigs) {
         Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
         LOG_I("changing config");
         StartInit(ctx);

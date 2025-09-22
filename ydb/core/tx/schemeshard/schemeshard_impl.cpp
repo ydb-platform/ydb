@@ -4063,6 +4063,19 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
     }
 }
 
+void TSchemeShard::PersistDiskSpaceUsage(NIceDb::TNiceDb& db, const TPathId& pathId, const TPartitionStats& oldPartitionStats) {
+    auto subDomainId = ResolvePathIdForDomain(pathId);
+    auto subDomainInfo = ResolveDomainInfo(pathId);
+    subDomainInfo->AggrDiskSpaceUsage(this, TPartitionStats(), oldPartitionStats);
+    if (subDomainInfo->CheckDiskSpaceQuotas(this)) {
+        PersistSubDomainState(db, subDomainId, *subDomainInfo);
+        // Publish is done in a separate transaction, so we may call this directly
+        TDeque<TPathId> toPublish;
+        toPublish.push_back(subDomainId);
+        PublishToSchemeBoard(TTxId(), std::move(toPublish), TActorContext::AsActorContext());
+    }
+}
+
 void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId)
 {
     Y_ABORT_UNLESS(IsLocalId(pathId));
@@ -4084,16 +4097,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId)
         storeInfo->ColumnTables.erase(pathId);
     }
     
-    auto subDomainId = ResolvePathIdForDomain(pathId);
-    auto subDomainInfo = ResolveDomainInfo(pathId);
-    subDomainInfo->AggrDiskSpaceUsage(this, TPartitionStats(), tableInfo.GetStats().Aggregated);
-    if (subDomainInfo->CheckDiskSpaceQuotas(this)) {
-        PersistSubDomainState(db, subDomainId, *subDomainInfo);
-        // Publish is done in a separate transaction, so we may call this directly
-        TDeque<TPathId> toPublish;
-        toPublish.push_back(subDomainId);
-        PublishToSchemeBoard(TTxId(), std::move(toPublish), TActorContext::AsActorContext());
-    }
+    PersistDiskSpaceUsage(db, pathId, tableInfo.GetStats().Aggregated);
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
     ColumnTables.Drop(pathId);
@@ -4437,16 +4441,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     }
 
     if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
-        auto subDomainId = ResolvePathIdForDomain(pathId);
-        auto subDomainInfo = ResolveDomainInfo(pathId);
-        subDomainInfo->AggrDiskSpaceUsage(this, TPartitionStats(), tableInfo->GetStats().Aggregated);
-        if (subDomainInfo->CheckDiskSpaceQuotas(this)) {
-            PersistSubDomainState(db, subDomainId, *subDomainInfo);
-            // Publish is done in a separate transaction, so we may call this directly
-            TDeque<TPathId> toPublish;
-            toPublish.push_back(subDomainId);
-            PublishToSchemeBoard(TTxId(), std::move(toPublish), ctx);
-        }
+        PersistDiskSpaceUsage(db, pathId, tableInfo->GetStats().Aggregated);
     }
 
     // sanity check: by this time compaction queue and metrics must be updated already

@@ -612,7 +612,10 @@ private:
 
     void InitWatermarkTracker() {
         auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
-        auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
+        auto idleDelayUs = // TODO remove fallback
+            SourceParams.GetWatermarks().HasIdleDelayUs() ?
+            SourceParams.GetWatermarks().GetIdleDelayUs() :
+            lateArrivalDelayUs;
         SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
             << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds"
             << " idle delay: " << idleDelayUs << " microseconds "

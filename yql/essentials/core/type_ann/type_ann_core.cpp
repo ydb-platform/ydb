@@ -52,6 +52,11 @@ namespace NYql {
     }
 
 namespace NTypeAnnImpl {
+    TExprNodeBuilder& AddChildren(TExprNodeBuilder& builder, ui32 index, const TExprNode::TPtr& input) {
+        const auto i = index;
+        return i >= input->ChildrenSize() ? builder : AddChildren(builder.Add(i, input->ChildPtr(i)), ++index, input);
+    }
+
     const TTypeAnnotationNode* ParseTypeCached(const TString& typeStr, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
         if (!ctx.ParseTypeCache.contains(typeStr)) {
             auto typeNode = ctx.Builder({})
@@ -13093,6 +13098,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["MutDictItems"] = &MutDictItemsWrapper;
         ExtFunctions["MutDictKeys"] = &MutDictKeysWrapper;
         ExtFunctions["MutDictPayloads"] = &MutDictPayloadsWrapper;
+        ExtFunctions["DictInsert"] = &DictBlindOpWrapper<true>;
+        ExtFunctions["DictUpsert"] = &DictBlindOpWrapper<true>;
+        ExtFunctions["DictUpdate"] = &DictBlindOpWrapper<true>;
+        ExtFunctions["DictRemove"] = &DictBlindOpWrapper<false>;
         Functions["Nothing"] = &NothingWrapper;
         Functions["AsOptionalType"] = &AsOptionalTypeWrapper;
         Functions["List"] = &ListWrapper;

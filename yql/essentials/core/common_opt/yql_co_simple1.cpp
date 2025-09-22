@@ -6370,6 +6370,35 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
+    map["DictInsert"] = map["DictUpsert"] = map["DictUpdate"] = map["DictRemove"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        Y_UNUSED(optCtx);
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return ctx.Builder(node->Pos())
+            .Callable("Block")
+                .Lambda(0)
+                    .Param("parent")
+                    .Callable("FromMutDict")
+                        .Callable(0, TString("Mut") + node->Content())
+                            .Callable(0, "ToMutDict")
+                                .Add(0, node->HeadPtr())
+                                .Callable(1, "DependsOn")
+                                    .Arg(0, "parent")
+                                .Seal()
+                            .Seal()
+                        .Do([&](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                            for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
+                                builder.Add(i, node->ChildPtr(i));
+                            }
+
+                            return builder;
+                        })
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    };
+
     map["HasNull"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         YQL_CLOG(DEBUG, Core) << node->Content();
 

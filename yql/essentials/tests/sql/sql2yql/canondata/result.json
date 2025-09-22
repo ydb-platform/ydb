@@ -4983,6 +4983,34 @@
             "uri": "https://{canondata_backend}/1916746/a4033d596240165caf2006fc0780a730bc526f0d/resource.tar.gz#test_sql2yql.test_linear-block_/sql.yql"
         }
     ],
+    "test_sql2yql.test[linear-dict_insert]": [
+        {
+            "checksum": "dc725f2114edde83cfb60cf48740edfc",
+            "size": 1489,
+            "uri": "https://{canondata_backend}/1942278/f5fdbe9e3fc56fe8d0f7d73b0c46910a2483dcbd/resource.tar.gz#test_sql2yql.test_linear-dict_insert_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-dict_remove]": [
+        {
+            "checksum": "cb1a67570ed65c20bb711055110d6025",
+            "size": 1450,
+            "uri": "https://{canondata_backend}/1942278/f5fdbe9e3fc56fe8d0f7d73b0c46910a2483dcbd/resource.tar.gz#test_sql2yql.test_linear-dict_remove_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-dict_update]": [
+        {
+            "checksum": "e632c8feda80959be7ee08ffd8a65958",
+            "size": 1489,
+            "uri": "https://{canondata_backend}/1942278/f5fdbe9e3fc56fe8d0f7d73b0c46910a2483dcbd/resource.tar.gz#test_sql2yql.test_linear-dict_update_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-dict_upsert]": [
+        {
+            "checksum": "c54d36ea40f1b790bb4c553d9d1913a5",
+            "size": 1489,
+            "uri": "https://{canondata_backend}/1942278/f5fdbe9e3fc56fe8d0f7d73b0c46910a2483dcbd/resource.tar.gz#test_sql2yql.test_linear-dict_upsert_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[linear-mutdict_contains]": [
         {
             "checksum": "dcd70eb662e088e8f1e8b937f86447b4",
@@ -12118,6 +12146,26 @@
     "test_sql_format.test[linear-block]": [
         {
             "uri": "file://test_sql_format.test_linear-block_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-dict_insert]": [
+        {
+            "uri": "file://test_sql_format.test_linear-dict_insert_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-dict_remove]": [
+        {
+            "uri": "file://test_sql_format.test_linear-dict_remove_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-dict_update]": [
+        {
+            "uri": "file://test_sql_format.test_linear-dict_update_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-dict_upsert]": [
+        {
+            "uri": "file://test_sql_format.test_linear-dict_upsert_/formatted.sql"
         }
     ],
     "test_sql_format.test[linear-mutdict_contains]": [

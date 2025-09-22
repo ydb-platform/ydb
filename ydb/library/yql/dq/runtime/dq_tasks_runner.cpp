@@ -949,10 +949,6 @@ private:
     NKikimr::NMiniKQL::TScopedAlloc& Alloc() const {
         return GetTypeEnv().GetAllocator();
     }
-    void FinishImpl() {
-        LOG(TStringBuilder() << "task" << TaskId << ", execution finished, finish consumers");
-        AllocatedHolder->Output->Finish();
-    }
 
     ERunStatus FetchAndDispatch() {
         if (!AllocatedHolder->Output) {
@@ -974,14 +970,6 @@ private:
         };
 
         auto guard = BindAllocator();
-        if (AllocatedHolder->Output->IsFinishing()) {
-            if (AllocatedHolder->Output->TryFinish()) {
-                FinishImpl();
-                return ERunStatus::Finished;
-            } else {
-                return ERunStatus::PendingOutput;
-            }
-        }
 
         TUnboxedValueVector wideBuffer;
         const bool isWide = AllocatedHolder->OutputWideType != nullptr;
@@ -1007,10 +995,8 @@ private:
                     break;
                 }
                 case NUdf::EFetchStatus::Finish: {
-                    if (!AllocatedHolder->Output->TryFinish()) {
-                        break;
-                    }
-                    FinishImpl();
+                    LOG(TStringBuilder() << "task" << TaskId << ", execution finished, finish consumers");
+                    AllocatedHolder->Output->Finish();
                     return ERunStatus::Finished;
                 }
                 case NUdf::EFetchStatus::Yield: {

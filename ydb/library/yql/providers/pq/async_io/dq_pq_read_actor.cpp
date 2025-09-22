@@ -598,7 +598,10 @@ private:
 
     void InitWatermarkTracker() override {
         auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
-        auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
+        auto idleDelayUs = // TODO remove fallback
+            SourceParams.GetWatermarks().HasIdleDelayUs() ?
+            SourceParams.GetWatermarks().GetIdleDelayUs() :
+            lateArrivalDelayUs;
         TDqPqReadActorBase::InitWatermarkTracker(lateArrivalDelayUs, idleDelayUs);
     }
 

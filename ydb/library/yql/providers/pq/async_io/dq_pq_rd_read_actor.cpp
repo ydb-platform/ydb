@@ -817,7 +817,10 @@ void TDqPqRdReadActor::ScheduleSourcesCheck(TInstant at) {
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
     auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
-    auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
+    auto idleDelayUs = // TODO remove fallback
+        SourceParams.GetWatermarks().HasIdleDelayUs() ?
+        SourceParams.GetWatermarks().GetIdleDelayUs() :
+        lateArrivalDelayUs;
     TDqPqReadActorBase::InitWatermarkTracker(
             0, // lateArrivalDelay is embedded into calculation of WatermarkExpr
             idleDelayUs);

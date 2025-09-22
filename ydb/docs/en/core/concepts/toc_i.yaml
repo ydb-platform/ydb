@@ -1,6 +1,8 @@
 items:
 - name: Glossary
   href: glossary.md
+- name: Architecture
+  href: architecture.md
 - name: Connecting to a database
   href: connect.md
 - name: Data model and schema
@@ -16,6 +18,8 @@ items:
   href: secondary_indexes.md
 - name: Vector search
   href: vector_search.md
+- name: Spilling
+  href: spilling.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed

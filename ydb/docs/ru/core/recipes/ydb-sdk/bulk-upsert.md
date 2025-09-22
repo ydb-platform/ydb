@@ -2,6 +2,12 @@
 
 {{ ydb-short-name }} поддерживает пакетную вставку большого количества строк без гарантий атомарности. Запись данных разбивается на несколько независимых транзакций, каждая их которых затрагивает единственную партицию, с параллельным исполнением. За счет этого такой подход более эффективен чем `YQL`. В случае успеха метод `BulkUpsert` гарантирует вставку всех данных, переданных в рамках данного запроса.
 
+{% note warning %}
+
+При использовании `BulkUpsert` для вставки данных в [колоночные таблицы](../../concepts/datamodel/table.md#column-oriented-tables) необходимо передавать значения **всех** колонок, включая `NULL`-значения.
+
+{% endnote %}
+
 Ниже приведены примеры кода использования встроенных в {{ ydb-short-name }} SDK средств выполнения пакетной вставки:
 
 {% list tabs %}
@@ -93,7 +99,7 @@
         String connectionString = args[0];
 
         try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(NopAuthProvider.INSTANCE) // анонимная аутентификация 
+                .withAuthProvider(NopAuthProvider.INSTANCE) // анонимная аутентификация
                 .build()) {
 
             // Для bulk upsert необходимо использовать полный путь к таблице

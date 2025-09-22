@@ -103,9 +103,12 @@ std::shared_ptr<arrow::Field> IIndexInfo::GetColumnFieldOptional(const ui32 colu
     }
 }
 
-std::shared_ptr<arrow::Field> IIndexInfo::GetColumnFieldVerified(const ui32 columnId) {
+std::optional<std::shared_ptr<arrow::Field>> IIndexInfo::GetColumnFieldVerified(const ui32 columnId) {
     auto result = GetColumnFieldOptional(columnId);
-    AFL_VERIFY(result);
+    if (!result) {
+        return std::nullopt;
+    }
+
     return result;
 }
 

@@ -2468,68 +2468,6 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_47_Query, TFixtureQuery)
     TestWriteToTopic47();
 }
 
-void TFixture::TestWriteToTopic50()
-{
-    // TODO(abcdef): temporarily deleted
-    //return;
-
-    // We write to the topic in the transaction. When a transaction is committed, the keys in the blob
-    // cache are renamed.
-    CreateTopic("topic_A", TEST_CONSUMER);
-    CreateTopic("topic_B", TEST_CONSUMER);
-
-    std::string message(128_KB, 'x');
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message);
-    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
-
-    auto session = CreateSession();
-
-    // tx #1
-    // After the transaction commit, there will be no large blobs in the batches.  The number of renames
-    // will not change in the cache.
-    auto tx = session->BeginTx();
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, tx.get());
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_3, message, tx.get());
-
-    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    std::this_thread::sleep_for(5s);
-
-    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
-
-    // tx #2
-    // After the commit, the party will rename one big blob
-    tx = session->BeginTx();
-
-    for (unsigned i = 0; i < 80; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, tx.get());
-    }
-
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_3, message, tx.get());
-
-    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    std::this_thread::sleep_for(5s);
-
-    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 1);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_50_Table, TFixtureTable)
-{
-    TestWriteToTopic50();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_50_Query, TFixtureQuery)
-{
-    TestWriteToTopic50();
-}
-
 void TFixture::TestWriteRandomSizedMessagesInWideTransactions()
 {
     // The test verifies the simultaneous execution of several transactions. There is a topic

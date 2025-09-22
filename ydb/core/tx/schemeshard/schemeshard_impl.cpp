@@ -4063,7 +4063,7 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
     }
 }
 
-void TSchemeShard::PersistDiskSpaceUsage(NIceDb::TNiceDb& db, const TPathId& pathId, const TPartitionStats& oldPartitionStats) {
+void TSchemeShard::UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, const TPartitionStats& oldPartitionStats) {
     auto subDomainId = ResolvePathIdForDomain(pathId);
     auto subDomainInfo = ResolveDomainInfo(pathId);
     subDomainInfo->AggrDiskSpaceUsage(this, TPartitionStats(), oldPartitionStats);

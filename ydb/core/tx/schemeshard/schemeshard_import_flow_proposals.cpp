@@ -305,7 +305,18 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
         cdcStream.SetRetentionPeriodSeconds(topic.retention_period().seconds());
     }
 
-    if (topic.has_partitioning_settings()) {
+    auto tableDesc = GetTableDescription(ss, dstPath->PathId);
+    const auto& keyIds = tableDesc.GetKeyColumnIds()[0];
+    bool isPartitioningAvaliable = false;
+    
+    for (const auto& column : tableDesc.GetColumns()) {
+        if (column.GetId() == keyIds) {
+            isPartitioningAvaliable = column.GetType() == "Uint32" || column.GetType() == "Uint64";
+            break;
+        }
+    }
+
+    if (topic.has_partitioning_settings() && isPartitioningAvaliable) {
         i64 minActivePartitions =
             topic.partitioning_settings().min_active_partitions();
         if (minActivePartitions < 0) {

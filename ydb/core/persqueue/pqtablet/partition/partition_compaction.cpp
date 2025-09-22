@@ -202,14 +202,16 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
             break;
         }
 
-        blobs.emplace_back(k.Key.GetOffset(),
-                           k.Key.GetPartNo(),
-                           k.Key.GetCount(),
-                           k.Key.GetInternalPartsCount(),
-                           k.Size,
-                           TString(),
-                           k.Key,
-                           k.Timestamp.Seconds());
+        blobs.push_back(TRequestedBlob(
+            k.Key.GetOffset(),
+            k.Key.GetPartNo(),
+            k.Key.GetCount(),
+            k.Key.GetInternalPartsCount(),
+            k.Size,
+            TString(),
+            k.Key,
+            k.Timestamp.Seconds()
+        ));
         tokens.Append(k.BlobKeyToken);
     }
 #else
@@ -561,6 +563,34 @@ TInstant TPartition::GetFirstUncompactedBlobTimestamp() const
     }
 
     return BlobEncoder.DataKeysBody[GetBodyKeysCountLimit()].Timestamp;
+}
+
+
+void TPartition::ValidateTimestampsOrderInZones(TStringBuf validateReason) const {
+    TInstant prev = TInstant::Zero();
+    size_t global_index = 0;
+    auto check = [&](const auto& seq, TStringBuf zoneName) {
+        size_t zone_index = 0;
+        for (const TDataKey& k : seq) {
+            const auto curr = k.Timestamp;
+            const bool disorder = (curr < prev);
+            PQ_ENSURE(!disorder)
+                ("prev_tmestamp", prev.MicroSeconds())
+                ("curr_timestamp", curr.MicroSeconds())
+                ("zone", zoneName)
+                ("offset", k.Key.GetOffset())
+                ("part_no", k.Key.GetPartNo())
+                ("global_index", global_index)
+                ("zone_index", zone_index)
+                ("validate_reason", validateReason);
+           prev = curr;
+            ++global_index;
+            ++zone_index;
+        }
+    };
+    check(CompactionBlobEncoder.DataKeysBody, "compacted_body");
+    check(CompactionBlobEncoder.HeadKeys, "compacted_head");
+    check(BlobEncoder.DataKeysBody, "fastwrite_body");
 }
 
 }

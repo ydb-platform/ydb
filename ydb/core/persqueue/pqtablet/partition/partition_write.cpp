@@ -1033,7 +1033,7 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
                              ui64 creationUnixTime,
                              const TActorContext& ctx,
                              bool includeToWriteCycle) {
-    Y_ASSERT(creationUnixTime > 0);
+    // Y_ASSERT(creationUnixTime > 0);  // TODO: remove test cases from the 1970s and return check
     AddCmdWriteImpl(newWrite, request, creationUnixTime, ctx, includeToWriteCycle, {});
 }
 

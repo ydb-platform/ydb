@@ -15,6 +15,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
+#include <ydb/core/kafka_proxy/actors/kafka_topic_group_path_struct.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
 #include "events/global.h"
@@ -75,18 +76,6 @@ struct TEvPrivate {
 
 };
 
-struct TTopicGroupIdAndPath {
-    TString GroupId;
-    TString TopicPath;
-
-    bool operator==(const TTopicGroupIdAndPath& topicGroupIdAndPath) const {
-        return GroupId == topicGroupIdAndPath.GroupId && TopicPath == topicGroupIdAndPath.TopicPath;
-    }
-};
-
-struct TStructHash { size_t operator()(const TTopicGroupIdAndPath& alterTopicRequest) const { return CombineHashes(std::hash<TString>()(alterTopicRequest.GroupId), std::hash<TString>()(alterTopicRequest.TopicPath)); } };
-
-
 private:
     TFetchRequestSettings Settings;
 
@@ -95,17 +84,17 @@ private:
     ui64 FetchRequestCurrentReadTablet;
     ui64 CurrentCookie;
     ui32 AlterTopicCookie = 0;
+    ui32 PendingAlterTopicResponses = 0;
     ui32 FetchRequestBytesLeft;
     THolder<TEvPQ::TEvFetchResponse> Response;
     TVector<TActorId> PQClient;
     const TActorId SchemeCache;
-    ui32 InflyTopics = 0;
 
     THashMap<TString, TTopicInfo> TopicInfo;
     THashMap<ui64, TTabletInfo> TabletInfo;
 
     std::unordered_map<ui32, TString> AlterTopicCookieToName;
-    std::unordered_set<TTopicGroupIdAndPath, TStructHash> ConsumerTopicAlterRequestAttempts;
+    std::unordered_set<NKafka::TTopicGroupIdAndPath, NKafka::TTopicGroupIdAndPathHash> ConsumerTopicAlterRequestAttempts;
 
     ui32 TopicsAnswered;
     THashSet<ui64> TabletsDiscovered;
@@ -312,7 +301,6 @@ public:
                         consumerIsAdded = true;
                     }
                 }
-                // consumer is not assigned to this topic
                 TAppData* appData = AppData(ctx);
                 if (!consumerIsAdded && (appData->KafkaProxyConfig.GetAutoCreateConsumersEnable() || appData->KafkaProxyConfig.GetAutoCreateTopicsEnable())) {
                     CreateConsumerGroupIfNecessary(entry.Path.back(), path, groupId);
@@ -320,7 +308,7 @@ public:
             }
         }
 
-        if (InflyTopics == 0) {
+        if (PendingAlterTopicResponses == 0) {
             if (AnyCdcTopicInRequest) {
                 SendSchemeCacheRequest(ctx);
                 return;
@@ -336,14 +324,14 @@ public:
     void CreateConsumerGroupIfNecessary(const TString& topicName,
                                     const TString& topicPath,
                                     const TString& groupId) {
-        TTopicGroupIdAndPath consumerTopicRequest = TTopicGroupIdAndPath{groupId, topicPath};
+        NKafka::TTopicGroupIdAndPath consumerTopicRequest = NKafka::TTopicGroupIdAndPath{groupId, topicPath};
         if (ConsumerTopicAlterRequestAttempts.find(consumerTopicRequest) == ConsumerTopicAlterRequestAttempts.end()) {
             ConsumerTopicAlterRequestAttempts.insert(consumerTopicRequest);
         } else {
             // it is enough to send a consumer addition request only once for a particular topic
             return;
         }
-        InflyTopics++;
+        PendingAlterTopicResponses++;
 
         auto topicSettings = NYdb::NTopic::TAlterTopicSettings();
         topicSettings.BeginAddConsumer(groupId).EndAddConsumer();
@@ -373,12 +361,12 @@ public:
 
     void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
         NYdb::TStatus& result = ev->Get()->Result;
-        InflyTopics--;
+        PendingAlterTopicResponses--;
         if (result.GetStatus() != NYdb::EStatus::SUCCESS) {
             Response = CreateErrorReply(Ydb::StatusIds::UNAUTHORIZED, "Consumer is not added to this topic");
             return SendReplyAndDie(std::move(Response), ctx);
         }
-        if (InflyTopics == 0) {
+        if (PendingAlterTopicResponses == 0) {
             if (AnyCdcTopicInRequest) {
                 SendSchemeCacheRequest(ctx);
                 return;

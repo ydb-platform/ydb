@@ -10,6 +10,9 @@
 
 namespace NMonitoring::NAudit {
 
+TString ExtractRemoteAddress(const NHttp::THttpIncomingRequest* request);
+TString ExtractRemoteAddress(const IMonHttpRequest* request);
+
 using TAuditParts = TVector<std::pair<TString, TString>>;
 
 enum ERequestStatus {

@@ -117,10 +117,12 @@ class ConnectionParams:
             except Exception:
                 pass
 
-        if self.token is not None and len(self.token.split(' ')) == 2:
-            self.token_type, self.token = self.token.split(' ')
-        else:
-            self.token_type = 'OAuth'
+        if self.token is not None:
+            if len(self.token.split(' ')) == 2:
+                self.token_type, self.token = self.token.split(' ')
+            else:
+                if not self.token.endswith('@builtin'):
+                    self.token_type = 'OAuth'
 
     def apply_args(self, args, with_localhost=True):
         self.grpc_port = args.grpc_port
@@ -303,7 +305,11 @@ def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True
         print('INFO: fetching %s' % url, file=sys.stderr)
     request = urllib.request.Request(url, data=data, method=method)
     if connection_params.token and url.startswith('http'):
-        request.add_header('Authorization', '%s %s' % (connection_params.token_type, connection_params.token))
+        if connection_params.token_type:
+            authorization = '%s %s' % (connection_params.token_type, connection_params.token)
+        else:
+            authorization = connection_params.token
+        request.add_header('Authorization', authorization)
     if content_type is not None:
         request.add_header('Content-Type', content_type)
     if accept is not None:

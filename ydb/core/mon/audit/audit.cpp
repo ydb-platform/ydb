@@ -59,6 +59,35 @@ namespace {
     }
 }
 
+TString ExtractRemoteAddress(const NHttp::THttpIncomingRequest* request) {
+    if (!request) {
+        return {};
+    }
+    NHttp::THeaders headers(request->Headers);
+
+    TString remoteAddress = ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
+    if (remoteAddress.empty()) {
+        remoteAddress = NKikimr::NAddressClassifier::ExtractAddress(request->Address->ToString());
+    }
+    return remoteAddress;
+}
+
+TString ExtractRemoteAddress(const IMonHttpRequest* request) {
+    if (!request) {
+        return {};
+    }
+    const auto& headers = request->GetHeaders();
+    const auto* forwardedHeader = headers.FindHeader(X_FORWARDED_FOR_HEADER);
+    TString remoteAddress;
+    if (forwardedHeader) {
+        remoteAddress = ToString(TStringBuf(forwardedHeader->Value()).Before(',')); // Get the first address in the list
+    }
+    if (remoteAddress.empty()) {
+        remoteAddress = NKikimr::NAddressClassifier::ExtractAddress(request->GetRemoteAddr());
+    }
+    return remoteAddress;
+}
+
 bool TAuditCtx::AuditEnabled(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase, NACLibProto::ESubjectType subjectType)
 {
     if (NKikimr::HasAppData()) {
@@ -101,19 +130,15 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
     const TString url(request->URL.Before('?'));
     const auto params = request->URL.After('?');
     const auto cgiParams = TCgiParameters(params);
-    NHttp::THeaders headers(request->Headers);
 
     if (!(Auditable = AuditableRequest(ev->Get()->Request))) {
         return;
     }
 
-    TString remoteAddress = ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
-    if (remoteAddress.empty()) {
-        remoteAddress = NKikimr::NAddressClassifier::ExtractAddress(request->Address->ToString());
-    }
+    TString remoteAddress = ExtractRemoteAddress(request.Get());
 
     AddAuditLogPart("component", MONITORING_COMPONENT_NAME);
-    AddAuditLogPart("remote_address", remoteAddress);
+    AddAuditLogPart("remote_address", remoteAddress ? remoteAddress : EMPTY_VALUE);
     AddAuditLogPart("operation", DEFAULT_OPERATION);
     AddAuditLogPart("method", method);
     AddAuditLogPart("url", url);

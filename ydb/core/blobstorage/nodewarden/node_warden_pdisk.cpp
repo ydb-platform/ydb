@@ -531,14 +531,18 @@ namespace NKikimr::NStorage {
             const TPDiskKey key(pdisk);
             if (auto it = LocalPDisks.find(key); it != LocalPDisks.end()) {
                 const TPDiskRecord& localPDisk = it->second;
-                auto newPdiskConfig = CreatePDiskConfig(pdisk);
-                ui64 newExpectedSlotCount = newPdiskConfig->ExpectedSlotCount;
-                ui64 oldExpectedSlotCount = localPDisk.Record.GetPDiskConfig().GetExpectedSlotCount();
+                TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(pdisk);
+                const NKikimrBlobStorage::TPDiskConfig& oldPDiskConfig = localPDisk.Record.GetPDiskConfig();
+                ui64 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
+                ui64 oldExpectedSlotCount = oldPDiskConfig.GetExpectedSlotCount();
+                ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
+                ui32 oldSlotSizeInUnits = oldPDiskConfig.GetSlotSizeInUnits();
                 STLOG(PRI_DEBUG, BS_NODE, NW110, "ApplyServiceSetPDisks",
                     (PDiskId, key.PDiskId),
                     (NewExpectedSlotCount, newExpectedSlotCount),
                     (OldExpectedSlotCount, oldExpectedSlotCount));
-                if (newExpectedSlotCount != oldExpectedSlotCount) {
+                if (newExpectedSlotCount != oldExpectedSlotCount ||
+                        newSlotSizeInUnits != oldSlotSizeInUnits) {
                     SendChangeExpectedSlotCount(key.PDiskId, newExpectedSlotCount);
                 }
             } else {

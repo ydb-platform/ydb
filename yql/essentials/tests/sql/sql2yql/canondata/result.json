@@ -4983,6 +4983,111 @@
             "uri": "https://{canondata_backend}/1916746/a4033d596240165caf2006fc0780a730bc526f0d/resource.tar.gz#test_sql2yql.test_linear-block_/sql.yql"
         }
     ],
+    "test_sql2yql.test[linear-mutdict_contains]": [
+        {
+            "checksum": "dcd70eb662e088e8f1e8b937f86447b4",
+            "size": 1437,
+            "uri": "https://{canondata_backend}/1814674/21399a4fba4aa71b42218f9b8d019826241116fe/resource.tar.gz#test_sql2yql.test_linear-mutdict_contains_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_copy]": [
+        {
+            "checksum": "0a13f2b9523620e7f6b52d95c82c7f93",
+            "size": 1211,
+            "uri": "https://{canondata_backend}/1899731/7a85171d2673a7b1d85bbaa29214968fbc28cac6/resource.tar.gz#test_sql2yql.test_linear-mutdict_copy_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_empty]": [
+        {
+            "checksum": "77bc3e15315122af03d1a4b6cd0ab7a5",
+            "size": 1157,
+            "uri": "https://{canondata_backend}/1937150/06ecd2ead920abcd58c404a9b3177c1f8c97a86d/resource.tar.gz#test_sql2yql.test_linear-mutdict_empty_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_empty_dyn]": [
+        {
+            "checksum": "68c896eda3bb4ddc92c87a37bc3e975b",
+            "size": 1175,
+            "uri": "https://{canondata_backend}/1937150/06ecd2ead920abcd58c404a9b3177c1f8c97a86d/resource.tar.gz#test_sql2yql.test_linear-mutdict_empty_dyn_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_hasitems]": [
+        {
+            "checksum": "04263f0ab61a80abf5fd832456eb2875",
+            "size": 1423,
+            "uri": "https://{canondata_backend}/1814674/21399a4fba4aa71b42218f9b8d019826241116fe/resource.tar.gz#test_sql2yql.test_linear-mutdict_hasitems_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_insert]": [
+        {
+            "checksum": "13af0a4338b11da6dbc41c24a01489d6",
+            "size": 1317,
+            "uri": "https://{canondata_backend}/1600758/ca7590f81f77cd0383bef19046f6357dcefa222e/resource.tar.gz#test_sql2yql.test_linear-mutdict_insert_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_items]": [
+        {
+            "checksum": "4fd1a499358747f3cfc23f5ecdac2bb6",
+            "size": 1512,
+            "uri": "https://{canondata_backend}/1814674/21399a4fba4aa71b42218f9b8d019826241116fe/resource.tar.gz#test_sql2yql.test_linear-mutdict_items_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_keys]": [
+        {
+            "checksum": "9c54aa6ac97ac0c6dddc365b422bea56",
+            "size": 1511,
+            "uri": "https://{canondata_backend}/1814674/21399a4fba4aa71b42218f9b8d019826241116fe/resource.tar.gz#test_sql2yql.test_linear-mutdict_keys_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_length]": [
+        {
+            "checksum": "d9cba511be0e5af47b6e4af80b3e4336",
+            "size": 1421,
+            "uri": "https://{canondata_backend}/1814674/21399a4fba4aa71b42218f9b8d019826241116fe/resource.tar.gz#test_sql2yql.test_linear-mutdict_length_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_lookup]": [
+        {
+            "checksum": "d5563b42b6e4c7e8ca24776bc7dc0eeb",
+            "size": 1435,
+            "uri": "https://{canondata_backend}/1814674/21399a4fba4aa71b42218f9b8d019826241116fe/resource.tar.gz#test_sql2yql.test_linear-mutdict_lookup_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_payloads]": [
+        {
+            "checksum": "ff9b67d8c888477de146d52cd8c977f7",
+            "size": 1515,
+            "uri": "https://{canondata_backend}/1814674/21399a4fba4aa71b42218f9b8d019826241116fe/resource.tar.gz#test_sql2yql.test_linear-mutdict_payloads_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_pop]": [
+        {
+            "checksum": "68e3f0ce94eacf8016f18d30aaf553aa",
+            "size": 1432,
+            "uri": "https://{canondata_backend}/1814674/21399a4fba4aa71b42218f9b8d019826241116fe/resource.tar.gz#test_sql2yql.test_linear-mutdict_pop_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_remove]": [
+        {
+            "checksum": "a21c2749fcd9fc712341db241cecefb3",
+            "size": 1304,
+            "uri": "https://{canondata_backend}/1597364/0dfdd9be36ea9ae7f51895a91916fc4ec61ed0d8/resource.tar.gz#test_sql2yql.test_linear-mutdict_remove_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_update]": [
+        {
+            "checksum": "6d9a2e728058b0ea7e58a122b65d97a7",
+            "size": 1317,
+            "uri": "https://{canondata_backend}/1597364/0dfdd9be36ea9ae7f51895a91916fc4ec61ed0d8/resource.tar.gz#test_sql2yql.test_linear-mutdict_update_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_upsert]": [
+        {
+            "checksum": "6eb7cb361f85206d9538b9165b4d914b",
+            "size": 1317,
+            "uri": "https://{canondata_backend}/1597364/0dfdd9be36ea9ae7f51895a91916fc4ec61ed0d8/resource.tar.gz#test_sql2yql.test_linear-mutdict_upsert_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[linear-types]": [
         {
             "checksum": "f756d489eb05467c7a6414636f47f37e",
@@ -12013,6 +12118,81 @@
     "test_sql_format.test[linear-block]": [
         {
             "uri": "file://test_sql_format.test_linear-block_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_contains]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_contains_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_copy]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_copy_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_empty]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_empty_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_empty_dyn]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_empty_dyn_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_hasitems]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_hasitems_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_insert]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_insert_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_items]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_items_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_keys]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_keys_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_length]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_length_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_lookup]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_lookup_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_payloads]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_payloads_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_pop]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_pop_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_remove]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_remove_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_update]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_update_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_upsert]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_upsert_/formatted.sql"
         }
     ],
     "test_sql_format.test[linear-types]": [

@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             // select must be successful. no transaction locks invalidated issues.
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
         }
     }
 

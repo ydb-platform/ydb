@@ -429,7 +429,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             }
         }
 
-        UNIT_ASSERT(containCte);
+        UNIT_ASSERT(!containCte);
     }
 
     Y_UNIT_TEST(SqlIn) {

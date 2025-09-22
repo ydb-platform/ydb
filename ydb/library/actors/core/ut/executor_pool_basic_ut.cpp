@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
             }
 
             auto now = TInstant::Now();
-            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter);
+            UNIT_ASSERT_C(now - begin == TDuration::Seconds(5), "Max counter is " << maxCounter);
 
             Sleep(TDuration::MilliSeconds(1));
         }

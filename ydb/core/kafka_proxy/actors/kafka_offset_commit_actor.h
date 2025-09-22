@@ -6,6 +6,7 @@
 #include <ydb/core/grpc_services/service_topic.h>
 #include "ydb/core/kafka_proxy/actors/actors.h"
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/actors/kafka_topic_group_path_struct.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
@@ -33,17 +34,6 @@ struct TRequestInfo {
     TRequestInfo(const TString& topicName, ui64 partitionId)
         : TopicName(topicName), PartitionId(partitionId) {}
 };
-
-struct TTopicGroupIdAndPath {
-    TString GroupId;
-    TString TopicPath;
-
-    bool operator==(const TTopicGroupIdAndPath& topicGroupIdAndPath) const {
-        return GroupId == topicGroupIdAndPath.GroupId && TopicPath == topicGroupIdAndPath.TopicPath;
-    }
-};
-
-struct TStructHash { size_t operator()(const TTopicGroupIdAndPath& alterTopicRequest) const { return CombineHashes(std::hash<TString>()(alterTopicRequest.GroupId), std::hash<TString>()(alterTopicRequest.TopicPath)); } };
 
 public:
     using TBase = NActors::TActorBootstrapped<TKafkaOffsetCommitActor>;
@@ -93,16 +83,16 @@ private:
     const TMessagePtr<TOffsetCommitRequestData> Message;
     const TOffsetCommitResponseData::TPtr Response;
 
-    ui64 PendingResponses = 0;
     ui64 NextCookie = 0;
     ui32 AlterTopicCookie = 0;
+    ui64 PendingResponses = 0;
     std::unordered_map<ui64, TVector<ui64>> TabletIdToCookies;
     std::unordered_map<ui64, TRequestInfo> CookieToRequestInfo;
     std::unordered_map<TString, ui64> ResponseTopicIds;
     NKikimr::NGRpcProxy::TTopicInitInfoMap TopicAndTablets;
     std::unordered_map<ui64, TActorId> TabletIdToPipe;
     std::unordered_map<ui32, TString> AlterTopicCookieToName;
-    std::unordered_set<TTopicGroupIdAndPath, TStructHash> ConsumerTopicAlterRequestAttempts;
+    std::unordered_set<NKafka::TTopicGroupIdAndPath, NKafka::TTopicGroupIdAndPathHash> ConsumerTopicAlterRequestAttempts;
     TActorId AuthInitActor;
     EKafkaErrors Error = NONE_ERROR;
 

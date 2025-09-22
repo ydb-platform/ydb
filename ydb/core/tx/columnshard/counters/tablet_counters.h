@@ -113,16 +113,26 @@ public:
     }
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 10);
         output.SetRowUpdates(GetValue(COUNTER_OPERATIONS_ROWS_WRITTEN) + GetValue(COUNTER_OPERATIONS_BULK_ROWS_WRITTEN));
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 11);
         output.SetRowDeletes(GetValue(COUNTER_ROWS_ERASED));
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 12);
         output.SetRowReads(0);   // all reads are range reads
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 13);
         output.SetRangeReadRows(GetValue(COUNTER_READ_INDEX_ROWS));
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 14);
 
         output.SetImmediateTxCompleted(GetValue(COUNTER_IMMEDIATE_TX_COMPLETED));
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 15);
         output.SetTxRejectedByOverload(GetValue(COUNTER_WRITE_OVERLOAD));
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 16);
         output.SetTxRejectedBySpace(GetValue(COUNTER_OUT_OF_SPACE));
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 17);
         output.SetPlannedTxCompleted(GetValue(COUNTER_PLANNED_TX_COMPLETED));
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 18);
         output.SetTxCompleteLagMsec(GetValue(COUNTER_TX_COMPLETE_LAG));
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 19);
     }
 };
 

@@ -26,23 +26,40 @@ void TColumnShardStatisticsReporter::BuildSSPipe() {
 }
 
 void TColumnShardStatisticsReporter::FillWhateverCan(std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", "ho");
     ev->Record.SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
+
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", "ho");
     ev->Record.SetRound(StatsReportRound++);
+
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", "ho");
     ev->Record.SetNodeId(ActorContext().SelfID.NodeId());
+
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", "ho");
     // ev->Record.SetStartTime(StartTime().MilliSeconds());
     // if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
     //     resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
     // }
     auto tableStats = ev->Record.MutableTableStats();
+
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", tableStats->GetRowCount());
     CountersManager.FillTotalTableStats(*tableStats);
+
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", tableStats->GetRowCount());
 
     // tableStats.SetInFlightTxCount(Executor.GetStats().TxInFly);
     // tableStats.SetHasLoanedParts(Executor.HasLoanedParts());
 
     auto activeStats = CountersManager.GetPortionIndexCounters()->GetTotalStats(NColumnShard::TPortionIndexStats::TActivePortions());
 
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", tableStats->GetRowCount());
+
     tableStats->SetRowCount(activeStats.GetRecordsCount());
+
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", tableStats->GetRowCount());
     tableStats->SetDataSize(activeStats.GetBlobBytes());
+
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", tableStats->GetRowCount());
 
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", tableStats->GetRowCount());
 
@@ -116,7 +133,7 @@ void TColumnShardStatisticsReporter::SendPeriodicStats() {
     auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletId, SSLocalId);
 
     FillWhateverCan(ev);
-     NTabletPipe::SendData(ActorContext(), StatsReportPipe, ev.release());
+    NTabletPipe::SendData(ActorContext(), StatsReportPipe, ev.release());
 }
 
 void TColumnShardStatisticsReporter::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {

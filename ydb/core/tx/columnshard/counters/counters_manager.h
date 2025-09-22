@@ -85,10 +85,15 @@ public:
     }
 
     void FillTotalTableStats(::NKikimrTableStats::TTableStats& tableStats) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 1);
         ColumnTablesCounters->FillStats(tableStats);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 2);
         TabletCounters->FillStats(tableStats);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 3);
         BackgroundControllerCounters->FillTotalStats(tableStats);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 4);
         ScanCounters.FillStats(tableStats);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 5);
     }
 
     void OnWritePutBlobsSuccess(const TDuration d, const ui64 rowsWritten) const {

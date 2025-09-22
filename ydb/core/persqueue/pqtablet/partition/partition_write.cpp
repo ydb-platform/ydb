@@ -434,7 +434,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         return;
     }
 
-    PQ_ENSURE(BlobEncoder.EndOffset == BlobEncoder.Head.GetNextOffset());
+    PQ_ENSURE(BlobEncoder.EndOffset == BlobEncoder.Head.GetNextOffset())("EndOffset", GetEndOffset())("NextOffset", BlobEncoder.Head.GetNextOffset());
 
     // a) !CompactedKeys.empty() && NewHead.PackedSize == 0
     // b) !CompactedKeys.empty() && NewHead.PackedSize != 0

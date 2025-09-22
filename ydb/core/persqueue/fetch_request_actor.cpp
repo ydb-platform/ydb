@@ -315,7 +315,7 @@ public:
                 // consumer is not assigned to this topic
                 TAppData* appData = AppData(ctx);
                 if (!consumerIsAdded && (appData->KafkaProxyConfig.GetAutoCreateConsumersEnable() || appData->KafkaProxyConfig.GetAutoCreateTopicsEnable())) {
-                    CreateConsumerGroupIfNecessary(entry.Path.back(), path, entry.Path.back(), groupId);
+                    CreateConsumerGroupIfNecessary(entry.Path.back(), path, groupId);
                 }
             }
         }
@@ -335,7 +335,6 @@ public:
 
     void CreateConsumerGroupIfNecessary(const TString& topicName,
                                     const TString& topicPath,
-                                    const TString& originalTopicName,
                                     const TString& groupId) {
         TTopicGroupIdAndPath consumerTopicRequest = TTopicGroupIdAndPath{groupId, topicPath};
         if (ConsumerTopicAlterRequestAttempts.find(consumerTopicRequest) == ConsumerTopicAlterRequestAttempts.end()) {
@@ -355,7 +354,7 @@ public:
             consumer->set_name(c.ConsumerName_);
         }
         AlterTopicCookie++;
-        AlterTopicCookieToName[AlterTopicCookie] = originalTopicName;
+        AlterTopicCookieToName[AlterTopicCookie] = topicName;
         auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = topicName, this]
             (Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
             NYdb::NIssue::TIssues issues;

@@ -4097,7 +4097,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId)
         storeInfo->ColumnTables.erase(pathId);
     }
     
-    PersistDiskSpaceUsage(db, pathId, tableInfo.GetStats().Aggregated);
+    UpdateDiskSpaceUsage(db, pathId, tableInfo.GetStats().Aggregated);
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
     ColumnTables.Drop(pathId);

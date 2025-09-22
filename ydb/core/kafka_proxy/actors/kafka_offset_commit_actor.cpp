@@ -26,7 +26,7 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvClo
     if (Error == GROUP_ID_NOT_FOUND && (Context->Config.GetAutoCreateConsumersEnable() || Context->Config.GetAutoCreateTopicsEnable())) {
         for (auto topicReq: Message->Topics) {
             TString topicPath = NormalizePath(Context->DatabasePath, *topicReq.Name); // как для serverless?
-            CreateConsumerGroupIfNecessary(*topicReq.Name, topicPath, *topicReq.Name, *Message->GroupId);
+            CreateConsumerGroupIfNecessary(*topicReq.Name, topicPath, *Message->GroupId);
         }
         if (PendingResponses == 0) { // case when AlterTopic requests have already sent and returned and unsuccessful response
             SendFailedForAllPartitions(Error, ctx);
@@ -38,7 +38,6 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvClo
 
 void TKafkaOffsetCommitActor::CreateConsumerGroupIfNecessary(const TString& topicName,
                                     const TString& topicPath,
-                                    const TString& originalTopicName,
                                     const TString& groupId) {
     TTopicGroupIdAndPath consumerTopicRequest = TTopicGroupIdAndPath{groupId, topicPath};
     if (ConsumerTopicAlterRequestAttempts.find(consumerTopicRequest) == ConsumerTopicAlterRequestAttempts.end()) {
@@ -58,7 +57,7 @@ void TKafkaOffsetCommitActor::CreateConsumerGroupIfNecessary(const TString& topi
         consumer->set_name(c.ConsumerName_);
     }
     AlterTopicCookie++;
-    AlterTopicCookieToName[AlterTopicCookie] = originalTopicName;
+    AlterTopicCookieToName[AlterTopicCookie] = topicName;
     auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = topicName, this]
         (Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
         NYdb::NIssue::TIssues issues;

@@ -82,7 +82,6 @@ private:
     void SendAuthRequest(const NActors::TActorContext& ctx);
     void CreateConsumerGroupIfNecessary(const TString& topicName,
                                     const TString& topicPath,
-                                    const TString& originalTopicName,
                                     const TString& groupId);
     void AddPartitionResponse(EKafkaErrors error, const TString& topicName, ui64 partitionId, const TActorContext& ctx);
     void ProcessPipeProblem(ui64 tabletId, const TActorContext& ctx);

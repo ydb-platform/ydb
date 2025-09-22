@@ -25,8 +25,20 @@ $per_run_data = SELECT
     
     -- Извлекаем информацию о кластере из Info JSON
     JSON_VALUE(Info, '$.cluster.version') AS ClusterVersion,
+    -- Создаем ссылку на GitHub commit из версии кластера (main.108fc20 -> https://github.com/ydb-platform/ydb/commit/108fc20)
+    CASE
+        WHEN JSON_VALUE(Info, '$.cluster.version') IS NOT NULL THEN
+            'https://github.com/ydb-platform/ydb/commit/' || String::SplitToList(JSON_VALUE(Info, '$.cluster.version'), '.')[1]
+        ELSE NULL
+    END AS ClusterVersionLink,
     JSON_VALUE(Info, '$.cluster.endpoint') AS ClusterEndpoint,
     JSON_VALUE(Info, '$.cluster.database') AS ClusterDatabase,
+    -- Извлекаем мониторинг кластера из endpoint (@grpc://host:port/ -> host:monitoring_port)
+        CASE
+            WHEN JSON_VALUE(Info, '$.cluster.endpoint') IS NOT NULL THEN
+                String::SplitToList(String::SplitToList(JSON_VALUE(Info, '$.cluster.endpoint'), '//')[1], ':')[0] || ':8765'
+            ELSE NULL
+        END AS ClusterMonitoring,
     CAST(JSON_VALUE(Info, '$.cluster.nodes_count') AS Int32) AS NodesCount,
     JSON_VALUE(Info, '$.cluster.nodes_info') AS NodesInfo, -- JSON массив с информацией о нодах
     JSON_VALUE(Info, '$.ci_version') AS CiVersion,
@@ -36,6 +48,7 @@ $per_run_data = SELECT
     JSON_VALUE(Info, '$.ci_launch_url') AS CiLaunchUrl,
     JSON_VALUE(Info, '$.ci_launch_start_time') AS CiLaunchStartTime,
     JSON_VALUE(Info, '$.ci_job_title') AS CiJobTitle,
+    JSON_VALUE(Info, '$.ci_cluster_name') AS CiClusterName,
 
 FROM `nemesis/tests_results`
 WHERE 
@@ -59,14 +72,17 @@ SELECT
     WarningMessage,
     StatsRunId,
     ClusterVersion,
+    ClusterVersionLink,
     ClusterEndpoint,
     ClusterDatabase,
+    ClusterMonitoring,
     NodesCount,
     NodesInfo,
     CiVersion,
     CiLaunchUrl,
     CiLaunchStartTime,
     CiJobTitle,
+    CiClusterName,
     TestToolsVersion,
     ReportUrl,
     CiLaunchId,

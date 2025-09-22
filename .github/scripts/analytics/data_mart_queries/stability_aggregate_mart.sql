@@ -36,7 +36,8 @@ WHERE
 $aggregate_data = SELECT
     v.Db AS Db,
     v.Suite AS Suite,
-    COALESCE(s.Test, 'N/A') AS Test,
+    COALESCE(s.Test, String::ReplaceAll(v.Suite, 'Workload', '') || 'Workload') AS Test,
+    CASE WHEN s.Test IS NULL THEN 1U ELSE 0U END AS IsCrashed,
     v.RunId AS RunId,
     COALESCE(s.Timestamp, v.VerificationTimestamp) AS Timestamp,
     COALESCE(s.Success, 0U) AS Success,
@@ -87,8 +88,20 @@ $aggregate_data = SELECT
     
     -- Извлекаем информацию о кластере из Info JSON
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.version') AS ClusterVersion,
+    -- Создаем ссылку на GitHub commit из версии кластера (main.108fc20 -> https://github.com/ydb-platform/ydb/commit/108fc20)
+    CASE
+        WHEN JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.version') IS NOT NULL THEN
+            'https://github.com/ydb-platform/ydb/commit/' || String::SplitToList(JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.version'), '.')[1]
+        ELSE NULL
+    END AS ClusterVersionLink,
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.endpoint') AS ClusterEndpoint,
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.database') AS ClusterDatabase,
+    -- Извлекаем мониторинг кластера из endpoint (@grpc://host:port/ -> host:monitoring_port)
+        CASE
+            WHEN JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.endpoint') IS NOT NULL THEN
+                String::SplitToList(String::SplitToList(JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.endpoint'), '//')[1], ':')[0] || ':8765'
+            ELSE NULL
+        END AS ClusterMonitoring,
     CAST(JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.nodes_count') AS Int32) AS NodesCount,
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.nodes_info') AS NodesInfo, -- JSON массив с информацией о нодах
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_version') AS CiVersion,
@@ -98,6 +111,7 @@ $aggregate_data = SELECT
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_launch_url') AS CiLaunchUrl,
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_launch_start_time') AS CiLaunchStartTime,
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_job_title') AS CiJobTitle,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_cluster_name') AS CiClusterName,
     
     -- Флаг того, что тест имел успешную верификацию 
     v.VerificationSuccess AS HadVerification
@@ -160,8 +174,10 @@ SELECT
     
     -- Информация о кластере
     agg.ClusterVersion,
+    agg.ClusterVersionLink,
     agg.ClusterEndpoint,
     agg.ClusterDatabase,
+    agg.ClusterMonitoring,
     agg.NodesCount,
     agg.NodesInfo,
     agg.CiVersion,
@@ -171,6 +187,7 @@ SELECT
     agg.CiLaunchUrl,
     agg.CiLaunchStartTime,
     agg.CiJobTitle,
+    agg.CiClusterName,
     agg.HadVerification,
     
     -- Извлекаем ветки из версий
@@ -196,7 +213,7 @@ SELECT
     
     -- Общий статус выполнения
     CASE
-        WHEN agg.Test = 'N/A' THEN 'crashed_during_execution'  -- Нет Stability записи
+        WHEN agg.IsCrashed = 1U THEN 'crashed_during_execution'  -- Нет Stability записи
         WHEN agg.Success = 1U AND (agg.NodeErrors IS NULL OR agg.NodeErrors = 0U) AND (agg.WorkloadErrors IS NULL OR agg.WorkloadErrors = 0U) THEN 'success'
         WHEN agg.Success = 1U AND (agg.NodeErrors = 1U OR agg.WorkloadErrors = 1U) THEN 'success_with_errors'
         WHEN agg.Success = 0U AND agg.NodeErrors = 1U THEN 'node_failure'

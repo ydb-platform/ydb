@@ -1,8 +1,11 @@
 #include "kqp_federated_query_actors.h"
 
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 #include <ydb/services/metadata/secret/snapshot.h>
+#include <ydb/library/actors/core/log.h>
 
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, stream)
 
 namespace NKikimr::NKqp {
 
@@ -98,6 +101,103 @@ private:
 
 }  // anonymous namespace
 
+void TDescribeSchemaSecretsService::Handle(TEvResolveSecret::TPtr& ev) {
+    LOG_D("TEvResolveSecret: name=" << ev->Get()->SecretName << ", request cookie=" << LastCookie);
+
+    SaveIncomingRequestInfo(*ev->Get());
+    SendSchemeCacheRequest(ev->Get()->SecretName);
+}
+
+void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie);
+
+    Y_ENSURE(SecretNameInFlight.contains(ev->Cookie), "such request cookie is not registered");
+    const auto& secretName = SecretNameInFlight[ev->Cookie];
+
+    TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request = ev->Get()->Request;
+    if (request->ResultSet.empty() || request->ResultSet.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+        LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie << ", SchemeCache error");
+        FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret `" + secretName + "` not found") }));
+        return;
+    }
+
+    // TODO (yurikiselev): Assert that request->ResultSet.front().SecretInfo->Description.GetValue() is empty [issue:23462]
+
+    const auto secretIt = SecretNameToValue.find(secretName);
+    if (secretIt != SecretNameToValue.end()) { // some secret version is in cache
+        const auto secretDescription = request->ResultSet.front().SecretInfo->Description;
+        if (secretDescription.GetVersion() <= secretIt->second.Version) { // cache contains the most recent version
+            LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie << ", fill value from secret cache");
+            FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(std::vector<TString>{secretIt->second.Value}));
+            return;
+        }
+        SecretNameToValue.erase(secretIt); // no need to store outdated value
+    }
+
+    TAutoPtr<TEvTxUserProxy::TEvNavigate> req(new TEvTxUserProxy::TEvNavigate());
+    NKikimrSchemeOp::TDescribePath* record = req->Record.MutableDescribePath();
+    record->SetPath(secretName);
+    // TODO(yurikiselev): Deal with UserToken [issue:25472]
+    Send(MakeTxProxyID(), req.Release(), 0, ev->Cookie);
+}
+
+void TDescribeSchemaSecretsService::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    LOG_D("TEvDescribeSchemeResult: request cookie=" << ev->Cookie);
+
+    Y_ENSURE(SecretNameInFlight.contains(ev->Cookie), "such request cookie is not registered");
+    const auto& secretName = SecretNameInFlight[ev->Cookie];
+    const auto &rec = ev->Get()->GetRecord();
+    if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
+        LOG_D("TEvDescribeSchemeResult: request cookie=" << ev->Cookie << ", SchemeShard error");
+        FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret `" + secretName + "` not found") }));
+        return;
+    }
+
+    const auto& secretValue = rec.GetPathDescription().GetSecretDescription().GetValue();
+    const auto& secretVersion = rec.GetPathDescription().GetSecretDescription().GetVersion();
+    SecretNameToValue[secretName] = TVersionedSecret{.Version = secretVersion, .Value = secretValue};
+    FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(std::vector<TString>{secretValue}));
+}
+
+void TDescribeSchemaSecretsService::FillResponse(const ui64 requestId, const TEvDescribeSecretsResponse::TDescription& response) {
+    SecretNameInFlight.erase(requestId);
+    ResolveInFlight[requestId].SetValue(response);
+    ResolveInFlight.erase(requestId);
+}
+
+void TDescribeSchemaSecretsService::Bootstrap() {
+    LOG_D("Bootstrap");
+    Become(&TDescribeSchemaSecretsService::StateWait);
+}
+
+void TDescribeSchemaSecretsService::SaveIncomingRequestInfo(const TEvResolveSecret& req) {
+    ResolveInFlight[LastCookie] = req.Promise;
+    SecretNameInFlight[LastCookie] = req.SecretName;
+}
+
+void TDescribeSchemaSecretsService::SendSchemeCacheRequest(const TString& secretName) {
+    TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+    entry.Path = SplitPath(secretName);
+    request->ResultSet.emplace_back(entry);
+    // TODO(yurikiselev): Deal with UserToken [issue:25472]
+
+    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, LastCookie++);
+}
+
+NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(const TString& secretName, const TString& ownerUserId, TActorSystem* actorSystem) {
+    auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
+    if (actorSystem->AppData<TAppData>()->FeatureFlags.GetEnableSchemaSecrets() && TStringBuf(secretName).StartsWith("/")) {
+        actorSystem->Send(
+            MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId),
+            new TDescribeSchemaSecretsService::TEvResolveSecret(ownerUserId, secretName, promise));
+    } else {
+        actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {secretName}, promise));
+    }
+    return promise.GetFuture();
+}
+
 IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise) {
     return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
 }
@@ -115,9 +215,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
     switch (authDescription.identity_case()) {
         case NKikimrSchemeOp::TAuth::kServiceAccount: {
             const TString& saSecretId = authDescription.GetServiceAccount().GetSecretName();
-            auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {saSecretId}, promise));
-            return promise.GetFuture();
+            return DescribeSecret(saSecretId, ownerUserId, actorSystem);
         }
 
         case NKikimrSchemeOp::TAuth::kNone:
@@ -125,9 +223,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
 
         case NKikimrSchemeOp::TAuth::kBasic: {
             const TString& passwordSecretId = authDescription.GetBasic().GetPasswordSecretName();
-            auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {passwordSecretId}, promise));
-            return promise.GetFuture();
+            return DescribeSecret(passwordSecretId, ownerUserId, actorSystem);
         }
 
         case NKikimrSchemeOp::TAuth::kMdbBasic: {
@@ -148,14 +244,16 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
 
         case NKikimrSchemeOp::TAuth::kToken: {
             const TString& tokenSecretId = authDescription.GetToken().GetTokenSecretName();
-            auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {tokenSecretId}, promise));
-            return promise.GetFuture();
+            return DescribeSecret(tokenSecretId, ownerUserId, actorSystem);
         }
 
         case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
             return NThreading::MakeFuture(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("identity case is not specified") }));
     }
+}
+
+IActor* CreateDescribeSchemaSecretsService() {
+    return new TDescribeSchemaSecretsService();
 }
 
 }  // namespace NKikimr::NKqp

@@ -401,6 +401,8 @@ void TCommandImportFileBase::Parse(TConfig& config) {
         }
     }
     TVector<TString> expandedFilePaths;
+    const TString supportedExtension = GetFileExtension();
+
     for (const auto& filePath : FilePaths) {
         TFsPath fsPath(filePath);
         if (fsPath.IsDirectory()) {
@@ -412,14 +414,22 @@ void TCommandImportFileBase::Parse(TConfig& config) {
                 TVector<TFsPath> children;
                 currentDir.List(children);
                 for (const TFsPath& child : children) {
+                    const TString name = child.GetName();
+                    if (name.StartsWith('.')) {
+                        continue; // skip hidden files/dirs
+                    }
                     if (child.IsDirectory()) {
                         dirs.push_back(child);
                     } else {
-                        expandedFilePaths.push_back(child.GetPath());
+                        // Include only supported extensions
+                        if (to_lower(child.GetExtension()) == supportedExtension) {
+                            expandedFilePaths.push_back(child.GetPath());
+                        }
                     }
                 }
             }
         } else {
+            // Explicitly provided file paths should be accepted even if extension doesn't match
             expandedFilePaths.push_back(filePath);
         }
     }
@@ -433,6 +443,21 @@ void TCommandImportFileBase::Parse(TConfig& config) {
 void TCommandImportFileBase::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
     AdjustPath(config);
+}
+
+TString TCommandImportFileBase::GetFileExtension() const {
+    switch (InputFormat) {
+        case EDataFormat::Csv:
+            return "csv";
+        case EDataFormat::Tsv:
+            return "tsv";
+        case EDataFormat::JsonUnicode:
+            return "json";
+        case EDataFormat::Parquet:
+            return "parquet";
+        default:
+            return {};
+    }
 }
 
 /// Import CSV

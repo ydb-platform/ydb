@@ -169,6 +169,7 @@ public:
         TasksGraph.GetMeta().ChannelTransportVersion = executerConfig.TableServiceConfig.GetChannelTransportVersion();
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
+        TasksGraph.GetMeta().StatsMode = Request.StatsMode;
         if (BatchOperationSettings) {
             TasksGraph.GetMeta().MaxBatchSize = BatchOperationSettings->MaxBatchSize;
         }

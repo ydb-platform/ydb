@@ -1965,8 +1965,7 @@ private:
             }
         }
 
-        size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks(EnableReadsMerge, {},
-            ResourcesSnapshot, CollectProfileStats(Request.StatsMode), Stats.get(), &ShardsWithEffects);
+        size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks(EnableReadsMerge, {}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
         OnEmptyResult();
 
         Cerr << TasksGraph.DumpToString();

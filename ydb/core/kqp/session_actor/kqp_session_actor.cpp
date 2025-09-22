@@ -822,7 +822,7 @@ public:
                 tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
             }
 
-            tasksGraph.BuildAllTasks(false, {}, {}, false, nullptr, nullptr);
+            tasksGraph.BuildAllTasks(false, {}, {}, nullptr, nullptr);
 
             Cerr << tasksGraph.DumpToString();
 

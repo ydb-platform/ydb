@@ -123,11 +123,9 @@ public:
         }
 
         LOG_D("Begin literal execution, txs: " << Request.Transactions.size());
-        auto& transactions = Request.Transactions;
-        TasksGraph.FillKqpTasksGraphStages(transactions);
 
-        for (ui32 txIdx = 0; txIdx < transactions.size(); ++txIdx) {
-            auto& tx = transactions[txIdx];
+        for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
+            auto& tx = Request.Transactions.at(txIdx);
 
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);

@@ -384,7 +384,6 @@ public:
         THashSet<ui64>* ShardsWithEffects
     );
 
-    void FillKqpTasksGraphStages(const TVector<IKqpGateway::TPhysicalTxData>& txs);
     void BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
 
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
@@ -401,6 +400,8 @@ public:
     THolder<TPartitionPruner> PartitionPruner; // TODO: temporary public
 
 private:
+    void FillKqpTasksGraphStages();
+
     void BuildSysViewScanTasks(TStageInfo& stageInfo);
     bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
     void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects

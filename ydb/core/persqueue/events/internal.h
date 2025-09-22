@@ -1152,6 +1152,8 @@ struct TEvPQ {
 
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
+        // SourceId->WritenBytes
+        std::vector<std::pair<TString, ui64>> WrittenBytes;
 
         ui64 BytesWrittenTotal;
         ui64 BytesWrittenGrpc;

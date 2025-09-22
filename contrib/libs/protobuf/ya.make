@@ -4,7 +4,6 @@ LIBRARY()
 
 LICENSE(
     BSD-3-Clause AND
-    MIT AND
     Protobuf-License
 )
 
@@ -12,9 +11,9 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PROVIDES(protobuf)
 
-VERSION(3.22.5)
+VERSION(22.5)
 
-ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.22.5.tar.gz)
+ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v22.5.tar.gz)
 
 IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
     OPENSOURCE_EXPORT_REPLACEMENT(
@@ -42,12 +41,14 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    contrib/libs/protobuf/third_party/utf8_range
     contrib/libs/zlib
     contrib/restricted/abseil-cpp-tstring
     library/cpp/sanitizer/include
 )
 
 ADDINCL(
+    contrib/libs/protobuf/src
     contrib/libs/protobuf/third_party/utf8_range
 )
 
@@ -141,7 +142,6 @@ SRCS(
     src/google/protobuf/wire_format.cc
     src/google/protobuf/wire_format_lite.cc
     src/google/protobuf/wrappers.pb.cc
-    third_party/utf8_range/utf8_validity.cc
 )
 
 FILES(
@@ -162,4 +162,5 @@ END()
 
 RECURSE(
     builtin_proto
+    third_party/utf8_range
 )

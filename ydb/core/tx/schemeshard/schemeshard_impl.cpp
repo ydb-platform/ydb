@@ -140,7 +140,7 @@ void TSchemeShard::CollectSysViewUpdates(const TActorContext& ctx) {
     const auto sysViewDirType = IsDomainSchemeShard
         ? NSysView::ISystemViewResolver::ESource::Domain
         : NSysView::ISystemViewResolver::ESource::SubDomain;
-    const auto sysViewsRegistry = NSysView::CreateSystemViewResolver()->GetSystemViewsTypes(sysViewDirType);
+    const auto& sysViewsRegistry = NSysView::GetSystemViewResolver().GetSystemViewsTypes(sysViewDirType);
 
     // create absent system views only if there's no '.sys' entry or '.sys' is a directory
     if (needToMakeSysViewDir || sysViewDirExists) {
@@ -4087,6 +4087,9 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId)
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
     ColumnTables.Drop(pathId);
     DecrementPathDbRefCount(pathId);
+
+    auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
+    Send(SysPartitionStatsCollector, ev.Release());
 }
 
 void TSchemeShard::PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo) {

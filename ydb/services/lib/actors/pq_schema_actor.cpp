@@ -1102,6 +1102,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, messageAndCode.PQCode);
             }
         }
+
         return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST),
                            Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
     }
@@ -1342,6 +1343,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return Ydb::StatusIds::BAD_REQUEST;
             }
         }
+
         return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
     }
 }

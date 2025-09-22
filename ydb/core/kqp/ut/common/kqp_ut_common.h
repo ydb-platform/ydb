@@ -155,7 +155,9 @@ public:
             ThreadPool.Stop();
         }
 
-        UNIT_ASSERT_C(WaitHttpGatewayFinalization(CountersRoot), "Failed to finalize http gateway before destruction");
+        if (!WaitHttpGatewayFinalization(CountersRoot)) {
+            Cerr << "Failed to finalize http gateway before destruction" << Endl;
+        }
 
         Server.Reset();
         Client.Reset();

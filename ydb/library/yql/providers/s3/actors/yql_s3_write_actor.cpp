@@ -387,12 +387,13 @@ private:
     }
 
     void StartUploadParts() {
-        while (auto part = Parts->Pop()) {
+        for (auto part = Parts->Pop(); part || (!SentCount && Parts->IsSealed()); part = Parts->Pop()) {
             const auto size = part.size();
             const auto index = Tags.size();
             Tags.emplace_back();
             InFlight += size;
             SentSize += size;
+            SentCount++;
             auto authInfo = Credentials.GetAuthInfo();
             Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId,
                 IHTTPGateway::MakeYcHeaders(RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
@@ -460,6 +461,7 @@ private:
 
     size_t InFlight = 0ULL;
     size_t SentSize = 0ULL;
+    size_t SentCount = 0ULL;
 
     const TTxId TxId;
     const IHTTPGateway::TPtr Gateway;

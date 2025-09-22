@@ -152,6 +152,7 @@ public:
         KikimrServer = std::unique_ptr<TKikimr>(new TKikimr(std::move(appConfig), {}, {}, false, nullptr, nullptr, 0));
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KAFKA_PROXY, NActors::NLog::PRI_TRACE);
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
+        KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_FETCH_REQUEST, NActors::NLog::PRI_TRACE);
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_TRACE);
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
@@ -1282,6 +1283,68 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             break;
         }
     } // Y_UNIT_TEST(FetchScenario)
+
+    Y_UNIT_TEST(FetchScenarioWithJoinGroup) {
+        TInsecureTestServer testServer("2");
+
+        TString protocolName = "roundrobin";
+
+        TString topicName = "/Root/topic-0-test";
+        TString shortTopicName = "topic-0-test";
+        TString group = "group-0-test";
+
+        TString key = "";
+        TString value = "value";
+
+        ui64 minActivePartitions = 10;
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, minActivePartitions, { group });
+
+        TKafkaTestClient client(testServer.Port);
+
+        client.AuthenticateToKafka();
+
+        {
+            auto msg = client.InitProducerId();
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        {
+            // Produce
+            TKafkaRecordBatch batch;
+            batch.BaseOffset = 3;
+            batch.BaseSequence = 5;
+            batch.Magic = 2; // Current supported
+            batch.Records.resize(1);
+            batch.Records[0].Key = TKafkaRawBytes(key.data(), key.size());
+            batch.Records[0].Value = TKafkaRawBytes(value.data(), value.size());
+
+            auto msg = client.Produce(topicName, 0, batch);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Name, topicName);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].Index, 0);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode,
+                                        static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        {
+            std::vector<TString> topics = { topicName };
+            auto msg = client.JoinGroup(topics, group, protocolName, 10000);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        {
+            // Check FETCH
+            std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
+            auto msg = client.Fetch(topics);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), true);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records->Records.size(), 1);
+        }
+    } // Y_UNIT_TEST(FetchScenarioWithJoinGroup)
 
     void RunBalanceScenarionTest(bool forFederation) {
         TString protocolName = "roundrobin";

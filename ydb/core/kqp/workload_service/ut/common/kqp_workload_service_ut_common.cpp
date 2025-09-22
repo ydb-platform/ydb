@@ -257,6 +257,7 @@ private:
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
         appConfig.MutableFeatureFlags()->SetEnableResourcePoolsCounters(true);
         appConfig.MutableFeatureFlags()->SetEnableStreamingQueries(true);
+        appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         *appConfig.MutableWorkloadManagerConfig() = Settings_.WorkloadManagerConfig_;
 
         appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");

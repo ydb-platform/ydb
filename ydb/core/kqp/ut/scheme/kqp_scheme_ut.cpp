@@ -8255,7 +8255,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DisableCreateExternalDataSource) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(false);
+        TKikimrRunner kikimr(appCfg);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString externalDataSourceName = "/Root/ExternalDataSource";
@@ -8266,8 +8269,28 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 AUTH_METHOD="NONE"
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToOneLineString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External data sources are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(DisableCreateExternalDataSourceByAvailableFlag) {
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+        appCfg.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
+        TKikimrRunner kikimr(appCfg);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External source with type ObjectStorage is disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(DisableS3ExternalDataSource) {
@@ -8406,7 +8429,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DisableDropExternalDataSource) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(false);
+        TKikimrRunner kikimr(appCfg);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString externalDataSourceName = "/Root/ExternalDataSource";
@@ -8524,7 +8550,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DisableCreateExternalTable) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(false);
+        TKikimrRunner kikimr(appCfg);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto query = TStringBuilder() << R"(
@@ -8536,8 +8565,29 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 LOCATION="/"
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External tables are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(DisableCreateExternalTableByAvailableFlag) {
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+        appCfg.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
+        TKikimrRunner kikimr(appCfg);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL TABLE `/Root/ExternalTable` (
+                Key Uint64,
+                Value String
+            ) WITH (
+                DATA_SOURCE="/Root/ExternalDataSource",
+                LOCATION="/"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Check failed: path: '/Root/ExternalDataSource', error: path hasn't been resolved, nearest resolved path: '/Root'", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateExternalTableCheckPrimaryKey) {
@@ -8629,7 +8679,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DisableDropExternalTable) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(false);
+        TKikimrRunner kikimr(appCfg);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto query = TStringBuilder() << R"( DROP EXTERNAL TABLE `/Root/ExternalDataSource`)";
@@ -8915,7 +8968,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive", result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -8978,6 +9031,53 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided", result.GetIssues().ToOneLineString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    SERVICE_ACCOUNT_ID = "foo",
+                    INITIAL_TOKEN = "bar",
+                    INITIAL_TOKEN_SECRET_NAME = "baz"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "INITIAL_TOKEN and INITIAL_TOKEN_SECRET_NAME are mutually exclusive", result.GetIssues().ToOneLineString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    SERVICE_ACCOUNT_ID = "foo"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Neither INITIAL_TOKEN nor INITIAL_TOKEN_SECRET_NAME are provided", result.GetIssues().ToOneLineString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    INITIAL_TOKEN = "foo"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "SERVICE_ACCOUNT_ID is not provided", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -9154,6 +9254,40 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )", kikimr.GetEndpoint().c_str());
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithIamAuth, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
+        // ok
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpcs://localhost:2135/?database=/Root",
+                    SERVICE_ACCOUNT_ID = "foo",
+                    INITIAL_TOKEN_SECRET_NAME = "bar"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = executeQuery(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
@@ -9495,7 +9629,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive", result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
 
         // TOKEN and TOKEN_SECRET_NAME are mutually exclusive
@@ -9892,7 +10026,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -10180,7 +10314,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -10598,7 +10732,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
 
         // TOKEN and TOKEN_SECRET_NAME are mutually exclusive
@@ -10984,7 +11118,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
 
         // TOKEN and TOKEN_SECRET_NAME are mutually exclusive

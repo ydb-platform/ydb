@@ -814,6 +814,18 @@ namespace {
             } else if (name == "password_secret_name") {
                 dstSettings.EnsureStaticCredentials().PasswordSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "service_account_id") {
+                dstSettings.EnsureIamCredentials().ServiceAccountId =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "initial_token") {
+                dstSettings.EnsureIamCredentials().InitialToken.Token =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "initial_token_secret_name") {
+                dstSettings.EnsureIamCredentials().InitialToken.TokenSecretName =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "resource_id") {
+                dstSettings.EnsureIamCredentials().ResourceId =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "ca_cert") {
                 dstSettings.CaCert = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "state") {
@@ -849,9 +861,12 @@ namespace {
             return false;
         }
 
-        if (dstSettings.OAuthToken && dstSettings.StaticCredentials) {
+        const auto authCredentials = int(!!dstSettings.OAuthToken)
+            + int(!!dstSettings.StaticCredentials)
+            + int(!!dstSettings.IamCredentials);
+        if (authCredentials > 1) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
-                "TOKEN and USER/PASSWORD are mutually exclusive"));
+                "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive"));
             return false;
         }
 
@@ -864,6 +879,12 @@ namespace {
         if (const auto& x = dstSettings.StaticCredentials; x && x->Password && x->PasswordSecretName) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
                 "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
+            return false;
+        }
+
+        if (const auto& x = dstSettings.IamCredentials; x && x->InitialToken.Token && x->InitialToken.TokenSecretName) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                "INITIAL_TOKEN and INITIAL_TOKEN_SECRET_NAME are mutually exclusive"));
             return false;
         }
 
@@ -2537,6 +2558,18 @@ public:
                 return SyncError();
             }
 
+            if (const auto& x = settings.Settings.IamCredentials; x && !x->ServiceAccountId) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    "SERVICE_ACCOUNT_ID is not provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.IamCredentials; x && !x->InitialToken.Token && !x->InitialToken.TokenSecretName) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    "Neither INITIAL_TOKEN nor INITIAL_TOKEN_SECRET_NAME are provided"));
+                return SyncError();
+            }
+
             auto cluster = TString(createReplication.DataSink().Cluster());
             auto future = Gateway->CreateReplication(cluster, settings);
 
@@ -2633,6 +2666,18 @@ public:
             if (const auto& x = settings.Settings.StaticCredentials; x && !x->Password && !x->PasswordSecretName) {
                 ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
                     "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.IamCredentials; x && !x->ServiceAccountId) {
+                ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
+                    "SERVICE_ACCOUNT_ID is not provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.IamCredentials; x && !x->InitialToken.Token && !x->InitialToken.TokenSecretName) {
+                ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
+                    "Neither INITIAL_TOKEN nor INITIAL_TOKEN_SECRET_NAME are provided"));
                 return SyncError();
             }
 

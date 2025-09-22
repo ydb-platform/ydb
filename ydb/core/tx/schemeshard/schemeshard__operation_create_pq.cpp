@@ -189,6 +189,11 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         auto databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
         tabletConfig.SetYdbDatabaseId(databaseId);
     }
+    if (dbRootEl->UserAttrs->Attrs.contains("monitoring_project_id")) {
+        auto monitoringProjectId = dbRootEl->UserAttrs->Attrs.at("monitoring_project_id");
+        tabletConfig.SetMonitoringProjectId(monitoringProjectId);
+    }
+
     const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
     tabletConfig.SetYdbDatabasePath(databasePath);
 

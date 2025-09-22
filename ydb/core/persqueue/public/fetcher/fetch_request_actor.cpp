@@ -19,8 +19,12 @@
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
+#define LOG_E(stream) LOG_ERROR_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, stream)
+#define LOG_I(stream) LOG_INFO_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, stream)
+#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, stream)
 
 namespace NKikimr::NPQ {
 
@@ -182,13 +186,13 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Fetch request actor boostrapped. Request is valid: " << (!Response));
+        LOG_I("Fetch request actor boostrapped. Request is valid: " << (!Response));
 
         // handle error from constructor
         if (Response) {
             return SendReplyAndDie(std::move(Response), ctx);
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "scheduling HasDataInfoResponse in " << Settings.MaxWaitTimeMs);
+        LOG_D("scheduling HasDataInfoResponse in " << Settings.MaxWaitTimeMs);
         ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(Settings.MaxWaitTimeMs, 30000)), new TEvPersQueue::TEvHasDataInfoResponse);
 
         SendSchemeCacheRequest(ctx);
@@ -197,7 +201,7 @@ public:
     }
 
     void SendSchemeCacheRequest(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "SendSchemeCacheRequest");
+        LOG_D("SendSchemeCacheRequest");
 
         auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>(1);
         schemeCacheRequest->DatabaseName = Settings.Database;
@@ -230,7 +234,7 @@ public:
     }
 
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Handle SchemeCache response");
+        LOG_D("Handle SchemeCache response");
         auto& result = ev->Get()->Request;
         AnyCdcTopicInRequest = false;
         for (const auto& entry : result->ResultSet) {
@@ -397,7 +401,7 @@ public:
     }
 
     void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr&, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got HasDatainfoResponse");
+        LOG_D("got HasDatainfoResponse");
         ProceedFetchRequest(ctx);
     }
 
@@ -406,11 +410,11 @@ public:
 
         ++TopicsAnswered;
         auto it = TopicInfo.find(name);
-        Y_ABORT_UNLESS(it != TopicInfo.end(), "topic '%s'", name.c_str());
+        AFL_ENSURE(it != TopicInfo.end())("topic", name);
         it->second.Config = pqDescr.GetPQTabletConfig();
         it->second.Config.SetVersion(pqDescr.GetAlterVersion());
         it->second.NumParts = pqDescr.PartitionsSize();
-        Y_ABORT_UNLESS(it->second.BalancerTabletId);
+        AFL_ENSURE(it->second.BalancerTabletId);
 
         for (ui32 i = 0; i < pqDescr.PartitionsSize(); ++i) {
             ui32 part = pqDescr.GetPartitions(i).GetPartitionId();
@@ -419,7 +423,7 @@ public:
                 continue;
             }
             bool res = it->second.PartitionToTablet.insert({part, tabletId}).second;
-            Y_ABORT_UNLESS(res);
+            AFL_ENSURE(res);
             if (TabletInfo.find(tabletId) == TabletInfo.end()) {
                 auto& tabletInfo = TabletInfo[tabletId];
                 tabletInfo.Topic = name;
@@ -440,7 +444,7 @@ public:
             } else {
                 const auto& tabletInfo = TabletInfo[tabletId];
                 auto& fetchInfo = it->second.FetchInfo[part];
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "sending HasDataInfoResponse " << fetchInfo->Record.DebugString());
+                LOG_D("sending HasDataInfoResponse " << fetchInfo->Record.DebugString());
 
                 NTabletPipe::SendData(ctx, tabletInfo.PipeClient, it->second.FetchInfo[part].Release());
                 ++PartTabletsRequested;
@@ -450,7 +454,7 @@ public:
             auto reason = TStringBuilder() << "no one of requested partitions in topic " << name << ", Marker# PQ12";
             return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::BAD_REQUEST, reason), ctx);
         }
-        Y_ABORT_UNLESS(!TabletInfo.empty()); // if TabletInfo is empty - topic is empty
+        AFL_ENSURE(!TabletInfo.empty()); // if TabletInfo is empty - topic is empty
     }
 
     bool HandlePipeError(const ui64 tabletId, const TActorContext& ctx)
@@ -522,7 +526,7 @@ public:
             CreateOkResponse();
             return SendReplyAndDie(std::move(Response), ctx);
         }
-        Y_ABORT_UNLESS(FetchRequestReadsDone < Settings.Partitions.size());
+        AFL_ENSURE(FetchRequestReadsDone < Settings.Partitions.size());
         auto& req = Settings.Partitions[FetchRequestReadsDone];
 
         auto& topic = req.Topic;
@@ -538,20 +542,23 @@ public:
         const auto& readTimestampMs = req.ReadTimestampMs;
         const auto& clientId = req.ClientId;
         auto it = TopicInfo.find(CanonizePath(topic));
-        Y_ABORT_UNLESS(it != TopicInfo.end());
+        AFL_ENSURE(it != TopicInfo.end());
         if (it->second.PartitionToTablet.find(part) == it->second.PartitionToTablet.end()) {
             return;
         }
         ui64 tabletId = it->second.PartitionToTablet[part];
-        Y_ABORT_UNLESS(tabletId);
+        AFL_ENSURE(tabletId);
         FetchRequestCurrentReadTablet = tabletId;
         ++CurrentCookie;
         auto jt = TabletInfo.find(tabletId);
-        Y_ABORT_UNLESS(jt != TabletInfo.end());
+        AFL_ENSURE(jt != TabletInfo.end());
         if (jt->second.BrokenPipe || FetchRequestBytesLeft == 0) { //answer right now
             ctx.Send(ctx.SelfID, FormEmptyCurrentRead(CurrentCookie).Release());
             return;
         }
+
+        LOG_D("Send request. Topic " << topic << " partition " << part << " offset " << offset
+            << " clientId " << clientId << " tabletId " << tabletId);
 
         //Form read request
         TAutoPtr<TEvPersQueue::TEvRequest> preq(new TEvPersQueue::TEvRequest);
@@ -576,13 +583,12 @@ public:
 
     void ProcessFetchRequestResult(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
-        Y_ABORT_UNLESS(record.HasPartitionResponse());
+        AFL_ENSURE(record.HasPartitionResponse());
         if (record.GetPartitionResponse().GetCookie() != CurrentCookie || FetchRequestCurrentReadTablet == 0) {
-            LOG_ERROR_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "proxy fetch error: got response from tablet " << record.GetPartitionResponse().GetCookie()
+            LOG_E("proxy fetch error: got response from tablet " << record.GetPartitionResponse().GetCookie()
                                 << " while waiting from " << CurrentCookie << " and requested tablet is " << FetchRequestCurrentReadTablet);
             return;
         }
-
 
         if (FetchRequestBytesLeft >= (ui32)record.ByteSize())
             FetchRequestBytesLeft -= (ui32)record.ByteSize();
@@ -594,7 +600,7 @@ public:
         }
 
         auto res = Response->Response.AddPartResult();
-        Y_ABORT_UNLESS(FetchRequestReadsDone < Settings.Partitions.size());
+        AFL_ENSURE(FetchRequestReadsDone < Settings.Partitions.size());
         const auto& req = Settings.Partitions[FetchRequestReadsDone];
         const auto& topic = req.Topic;
         const auto& part = req.Partition;
@@ -618,7 +624,7 @@ public:
         ++FetchRequestReadsDone;
 
         auto it = TopicInfo.find(CanonizePath(topic));
-        Y_ABORT_UNLESS(it != TopicInfo.end());
+        AFL_ENSURE(it != TopicInfo.end());
 
         SetMeteringMode(it->second.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
 

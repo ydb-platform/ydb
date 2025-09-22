@@ -910,7 +910,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
         // compare expected and actual children lists
         for (const auto& cname : children) {
-            bool res = actualChildren.count(cname);
+            bool res = actualChildren.contains(cname);
             UNIT_ASSERT_C(res, "Child not found: " + cname);
         }
     }
@@ -1049,7 +1049,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
         // compare expected and actual children lists
         for (const auto& cname : children) {
-            bool res = actualChildren.count(cname);
+            bool res = actualChildren.contains(cname);
             UNIT_ASSERT_C(res, "Child not found: " + cname);
         }
     }

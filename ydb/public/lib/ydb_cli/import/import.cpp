@@ -52,6 +52,7 @@
 #include <io.h>
 #elif defined(_unix_)
 #include <unistd.h>
+#include <sys/resource.h>
 #endif
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
@@ -59,6 +60,48 @@
 namespace NYdb {
 namespace NConsoleClient {
 namespace {
+
+// Computes a safe upper bound for concurrent file openings.
+// - On Unix-like platforms, caps by RLIMIT_NOFILE with a reserve.
+// - On Windows, uses only CPU cores (no RLIMIT available).
+// Applies a practical minimum of 32, but never exceeds the RLIMIT-based cap.
+static ui64 ComputeSafeFileConcurrency(bool verbose) {
+    const unsigned hw = std::thread::hardware_concurrency();
+    const ui64 cpuCap = Max<ui64>(32, static_cast<ui64>(hw));
+
+#if defined(_win32_)
+    if (verbose) {
+        Cerr << "Hardware concurrency (cores): " << hw << Endl;
+        Cerr << "Open files soft limit (RLIMIT_NOFILE): not available on this OS" << Endl;
+        Cerr << "File concurrency used: " << cpuCap << Endl;
+    }
+    return cpuCap;
+#else
+    rlimit lim{};
+    const bool haveRlimit = (getrlimit(RLIMIT_NOFILE, &lim) == 0);
+    const ui64 soft = haveRlimit ? (lim.rlim_cur == RLIM_INFINITY ? 65536ULL : static_cast<ui64>(lim.rlim_cur)) : 0ULL;
+    ui64 result = cpuCap;
+    if (haveRlimit) {
+        const ui64 reserve = Min<ui64>(Max<ui64>(soft / 5, 64), 512); // keep headroom for sockets/logs/etc
+        if (soft <= reserve) {
+            result = 1; // extremely low limit, allow at least one
+        } else {
+            const ui64 rlimitCap = Max<ui64>(1, (soft - reserve)); // per-file budget = 1
+            result = Min<ui64>(rlimitCap, cpuCap);
+        }
+    }
+    if (verbose) {
+        Cerr << "Hardware concurrency (cores): " << hw << Endl;
+        if (haveRlimit) {
+            Cerr << "Open files soft limit (RLIMIT_NOFILE): " << soft << Endl;
+        } else {
+            Cerr << "Open files soft limit (RLIMIT_NOFILE): unknown" << Endl;
+        }
+        Cerr << "File concurrency used: " << result << Endl;
+    }
+    return result;
+#endif
+}
 
 std::shared_ptr<IInputStream> SkipBOMIfPresent(IInputStream* input, bool verbose) {
     char bom[3];
@@ -683,7 +726,9 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
 
 
     TThreadPool jobPool(IThreadPool::TParams().SetThreadNamePrefix("FileWorker"));
-    jobPool.Start(filePathsSize);
+    const ui64 safeFileConcurrency = ComputeSafeFileConcurrency(Settings.Verbose_);
+    const size_t fileWorkerThreads = static_cast<size_t>(Min<ui64>(filePathsSize, safeFileConcurrency));
+    jobPool.Start(fileWorkerThreads);
     TVector<NThreading::TFuture<TStatus>> asyncResults;
 
     // If the single empty filename passed, read from stdin, else from the file
@@ -1449,7 +1494,7 @@ TStatus TImportFileClient::TImpl::UpsertJson(IInputStream& input, const TString&
 TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& filename,
                                          [[maybe_unused]] const TString& dbPath,
                                          [[maybe_unused]] ProgressCallbackFunc & progressCallback) {
-#if defined(_WIN64) || defined(_WIN32) || defined(__WIN32__)
+#if defined(_win32_)
     return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Not supported on Windows");
 #else
     std::shared_ptr<arrow::io::ReadableFile> infile;

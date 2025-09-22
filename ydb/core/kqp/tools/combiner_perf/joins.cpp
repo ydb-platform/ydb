@@ -1,11 +1,12 @@
 #include "joins.h"
 #include "construct_join_graph.h"
 #include "factories.h"
+#include <ranges>
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 namespace {
-TVector<ui64> GenerateKeyColumn(i32 size, i32 seed) {
+TVector<ui64> GenerateIntegerKeyColumn(i32 size, i32 seed) {
     std::default_random_engine eng;
     std::uniform_int_distribution<uint64_t> unif(0, size / 2);
     eng.seed(seed);
@@ -14,27 +15,28 @@ TVector<ui64> GenerateKeyColumn(i32 size, i32 seed) {
     return keyCoumn;
 }
 
-NKikimr::NMiniKQL::TInnerJoinDescription PrepareSameSizeTables(NKikimr::NMiniKQL::TDqSetup<false>* setup) {
-    NKikimr::NMiniKQL::TInnerJoinDescription descr;
-    descr.Setup = setup;
-    const int size = 1 << 16;
-
-    std::tie(descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList) = ConvertVectorsToRuntimeTypesAndValue(
-        *setup, GenerateKeyColumn(size, 123), TVector<ui64>(size, 111), TVector<TString>(size, "meow"));
-    std::tie(descr.RightSource.ColumnTypes, descr.RightSource.ValuesList) =
-        ConvertVectorsToRuntimeTypesAndValue(*setup, GenerateKeyColumn(size, 111), TVector<TString>(size, "woo"));
-    return descr;
+TVector<TString> GenerateStringKeyColumn(i32 size, i32 seed) {
+    TVector<ui64> ints = GenerateIntegerKeyColumn(size, seed);
+    TVector<TString> strings;
+    strings.reserve(ints.size());
+    for (ui64 num : ints) {
+        num += 1234567;
+        strings.push_back(Sprintf("%08u.%08u.%08u.", num, num, num));
+    }
+    return strings;
 }
 
-NKikimr::NMiniKQL::TInnerJoinDescription PrepareSmallRightTable(NKikimr::NMiniKQL::TDqSetup<false>* setup) {
+template <typename KeyType>
+NKikimr::NMiniKQL::TInnerJoinDescription PrepareDescription(NKikimr::NMiniKQL::TDqSetup<false>* setup,
+                                                            TVector<KeyType> leftKeys, TVector<KeyType> rightKeys) {
+    const int leftSize = std::ssize(leftKeys);
+    const int rightSize = std::ssize(rightKeys);
     NKikimr::NMiniKQL::TInnerJoinDescription descr;
     descr.Setup = setup;
-    const int leftSize = 1 << 16;
-    const int rightSize = leftSize >> 7;
     std::tie(descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList) = ConvertVectorsToRuntimeTypesAndValue(
-        *setup, GenerateKeyColumn(leftSize, 123), TVector<ui64>(leftSize, 111), TVector<TString>(leftSize, "meow"));
-    std::tie(descr.RightSource.ColumnTypes, descr.RightSource.ValuesList) = ConvertVectorsToRuntimeTypesAndValue(
-        *setup, GenerateKeyColumn(rightSize, 111), TVector<TString>(rightSize, "woo"));
+        *setup, std::move(leftKeys), TVector<ui64>(leftSize, 111), TVector<TString>(leftSize, "meow"));
+    std::tie(descr.RightSource.ColumnTypes, descr.RightSource.ValuesList) =
+        ConvertVectorsToRuntimeTypesAndValue(*setup, std::move(rightKeys), TVector<TString>(rightSize, "woo"));
     return descr;
 }
 
@@ -61,18 +63,35 @@ void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams& params, TTestResultColle
 
     const TVector<const ui32> keyColumns{0};
 
-    TVector<std::pair<NYKQL::ETestedJoinAlgo, std::string_view>> cases = {
+    TVector<std::pair<NYKQL::ETestedJoinAlgo, std::string_view>> algos = {
         {NYKQL::ETestedJoinAlgo::kScalarGrace, "ScalarGrace"},
         {NYKQL::ETestedJoinAlgo::kScalarMap, "ScalarMap"},
         {NYKQL::ETestedJoinAlgo::kBlockMap, "BlockMap"},
     };
-    TVector<std::pair<NYKQL::TInnerJoinDescription, std::string_view>> inputs = {
-        {PrepareSameSizeTables(&setup), "SameSizeTables"},
-        {PrepareSmallRightTable(&setup), "SmallRight"},
+    const int bigSize = 1 << 17;
+    const int smallSize = bigSize >> 7;
+    auto addStringAndIntInputs = [&](TVector<std::pair<NYKQL::TInnerJoinDescription, std::string>>& all, int leftSize,
+                                     int rightSize, std::string name) {
+        Cout << "Adding " << name << "test cases" << Endl;
+        all.emplace_back(PrepareDescription(&setup, GenerateIntegerKeyColumn(leftSize, 123),
+                                            GenerateIntegerKeyColumn(rightSize, 111)), name + "_Integer");
+        all.emplace_back(PrepareDescription(&setup, GenerateStringKeyColumn(leftSize, 123),
+                                            GenerateStringKeyColumn(rightSize, 111)), name + "_String");
     };
 
-    for (auto [algo, algo_name] : cases) {
-        for (auto [descr, descr_name] : inputs) {
+    TVector<std::pair<NYKQL::TInnerJoinDescription, std::string>> scaled_inputs;
+    for (int scale_log : std::views::iota(1) | std::views::take(8)) {
+        int scale = 1 << scale_log;
+        int leftSize = bigSize * scale;
+        // todo(becalm): there is a lot of input generation which can be optimised like: generate only the biggest list
+        // and add node that takes only first k lines of list for input size of k. it introduces some runtime overhead
+        // in benchmark tho.
+        addStringAndIntInputs(scaled_inputs, leftSize, leftSize, Sprintf("SameSize_%i", leftSize));
+        addStringAndIntInputs(scaled_inputs, leftSize, smallSize * scale, Sprintf("BigLeft_%i", leftSize));
+    }
+
+    for (auto [algo, algo_name] : algos) {
+        for (auto [descr, descr_name] : scaled_inputs) {
             descr.LeftSource.KeyColumnIndexes = keyColumns;
             descr.RightSource.KeyColumnIndexes = keyColumns;
 

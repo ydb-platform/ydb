@@ -188,6 +188,10 @@ void SetupServices(TTestActorRuntime &runtime,
         SetupSchemeCache(runtime, nodeIndex, DOMAIN_NAME);
     }
 
+    app.FeatureFlags.SetEnableNodeBrokerSingleDomainMode(true);
+    app.FeatureFlags.SetEnableStableNodeNames(true);
+    app.FeatureFlags.SetEnableNodeBrokerDeltaProtocol(enableNodeBrokerDeltaProtocol);
+
     runtime.Initialize(app.Unwrap());
 
     runtime.GetAppData().DynamicNameserviceConfig = new TDynamicNameserviceConfig;
@@ -195,9 +199,6 @@ void SetupServices(TTestActorRuntime &runtime,
     dnConfig->MaxStaticNodeId = 1023;
     dnConfig->MinDynamicNodeId = 1024;
     dnConfig->MaxDynamicNodeId = 1024 + (maxDynNodes - 1);
-    runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerSingleDomainMode(true);
-    runtime.GetAppData().FeatureFlags.SetEnableStableNodeNames(true);
-    runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerDeltaProtocol(enableNodeBrokerDeltaProtocol);
 
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;

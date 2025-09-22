@@ -850,10 +850,35 @@ public:
         Config.SetDisplay();
         CalculateApproximateDataSize();
 
-        // TODO: detect number of threads
+        std::vector<TDriver> drivers;
+        drivers.reserve(10);
+        drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
+
         if (Config.LoadThreadCount == 0) {
-            LOG_W("Automatic calculation of loading threads is not implemented, falling back to the default");
-            Config.LoadThreadCount = DEFAULT_LOAD_THREAD_COUNT;
+            int32_t computeCores = 0;
+            std::string reason;
+            try {
+                computeCores = NumberOfComputeCpus(drivers[0]);
+            } catch (const std::exception& ex) {
+                reason = ex.what();
+            }
+
+            if (computeCores == 0) {
+                std::cerr << "Failed to autodetect max number of load threads";
+                if (!reason.empty()) {
+                    std::cerr << ": " << reason;
+                }
+
+                std::cerr << ". Please specify '--threads' manually." << std::endl;
+                std::exit(1);
+            }
+
+            const size_t clientCpuCount = NumberOfMyCpus();
+
+            const size_t optimalThreadCount =
+                (computeCores + COMPUTE_CORES_PER_IMPORT_THREAD - 1) / COMPUTE_CORES_PER_IMPORT_THREAD;
+
+            Config.LoadThreadCount = std::min(clientCpuCount, optimalThreadCount);
         }
 
         // TODO: detect number of threads
@@ -875,9 +900,9 @@ public:
                 threadCount << " threads and " << driverCount << " YDB drivers. Approximate data size: "
                 << GetFormattedSize(LoadState.ApproximateDataSize));
 
-        std::vector<TDriver> drivers;
+        // already have 1, add more if needed
         drivers.reserve(driverCount);
-        for (size_t i = 0; i < driverCount; ++i) {
+        for (size_t i = 1; i < driverCount; ++i) {
             drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
         }
 

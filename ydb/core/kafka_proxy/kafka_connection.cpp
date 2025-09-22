@@ -544,6 +544,7 @@ protected:
 
     void Handle(TEvKafka::TEvReadSessionInfo::TPtr readInfo, const TActorContext& /*ctx*/) {
         auto r = readInfo->Get();
+        KAFKA_LOG_D("Initializing GroupId=" << r->GroupId);
         Context->GroupId = r->GroupId;
     }
 
@@ -592,8 +593,7 @@ protected:
         if (ReadSessionActorId) {
             Send(ReadSessionActorId, new TEvents::TEvPoison());
 
-            TActorId emptyActor;
-            ReadSessionActorId = emptyActor;
+            ReadSessionActorId = {};
         }
     }
 

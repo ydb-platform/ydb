@@ -132,6 +132,10 @@
     "kind": "Agg"
   },
   {
+    "name": "Block",
+    "kind": "Normal"
+  },
+  {
     "name": "BlockWardHistogram",
     "kind": "Agg"
   },
@@ -384,6 +388,10 @@
     "kind": "Normal"
   },
   {
+    "name": "DynamicLinearTypeHandle",
+    "kind": "Normal"
+  },
+  {
     "name": "DynamicVariant",
     "kind": "Normal"
   },
@@ -626,6 +634,18 @@
   {
     "name": "LinearHistogramCDF",
     "kind": "Agg"
+  },
+  {
+    "name": "LinearItemType",
+    "kind": "Normal"
+  },
+  {
+    "name": "LinearType",
+    "kind": "Normal"
+  },
+  {
+    "name": "LinearTypeHandle",
+    "kind": "Normal"
   },
   {
     "name": "ListAggregate",

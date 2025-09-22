@@ -1986,7 +1986,7 @@ void ParseRequest(
 void FillRequest(
     TReqFinishDistributedWriteSession* req,
     const TDistributedWriteSessionWithResults& sessionWithResults,
-    const TDistributedWriteSessionFinishOptions& options)
+    const TDistributedWriteSessionFinishOptions& /*options*/)
 {
     YT_VERIFY(sessionWithResults.Session);
 
@@ -1995,12 +1995,14 @@ void FillRequest(
         YT_VERIFY(writeResult);
         req->add_signed_write_results(ConvertToYsonString(writeResult).ToString());
     }
-    req->set_max_children_per_attach_request(options.MaxChildrenPerAttachRequest);
+    // TODO(achains): Remove after updated server binaries
+    // Setting default value for MaxChildrenPerAttachRequest from TDistributedWriteDynamicConfig
+    req->set_max_children_per_attach_request(10'000);
 }
 
 void ParseRequest(
     TDistributedWriteSessionWithResults* mutableSessionWithResults,
-    TDistributedWriteSessionFinishOptions* mutableOptions,
+    TDistributedWriteSessionFinishOptions* /*mutableOptions*/,
     const TReqFinishDistributedWriteSession& req)
 {
     mutableSessionWithResults->Results.reserve(req.signed_write_results().size());
@@ -2009,8 +2011,6 @@ void ParseRequest(
     }
 
     mutableSessionWithResults->Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
-
-    mutableOptions->MaxChildrenPerAttachRequest = req.max_children_per_attach_request();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

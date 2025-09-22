@@ -9,8 +9,6 @@
 //!
 //! At the moment, only strict equivalence is implemented because others are not yet standartized.
 
-#include <type_traits>
-
 #include "fwd.h"
 
 #include <util/system/types.h>

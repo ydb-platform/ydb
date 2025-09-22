@@ -114,6 +114,8 @@ ui64 GetNativeYtTypeFlagsImpl(const TTypeAnnotationNode* itemType) {
         case ETypeAnnotationKind::Type:
         case ETypeAnnotationKind::Block:
         case ETypeAnnotationKind::Scalar:
+        case ETypeAnnotationKind::Linear:
+        case ETypeAnnotationKind::DynamicLinear:
         case ETypeAnnotationKind::LastType:
             break;
     }

@@ -1,5 +1,6 @@
 #include "config.h"
 #include "serialize.h"
+#include "fluent.h"
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
@@ -76,8 +77,8 @@ EUploadDeduplicationMode TConfig::GetUploadingDeduplicationMode(
         const char* var,
         EUploadDeduplicationMode defaultValue)
 {
-    const TString deduplicationMode = GetEnv(var, TEnumTraits<EUploadDeduplicationMode>::ToString(defaultValue));
-    return TEnumTraits<EUploadDeduplicationMode>::FromString(deduplicationMode);
+    const TString deduplicationMode = GetEnv(var, ::ToString(defaultValue));
+    return ::FromString(deduplicationMode);
 }
 
 void TConfig::ValidateToken(const TString& token)
@@ -297,6 +298,191 @@ TConfigPtr TConfig::Get()
     };
 
     return Singleton<TConfigHolder>()->Config;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// const auto& nodeMap = node.AsMap();
+#define DESERIALIZE_ITEM(NAME, MEMBER) \
+    if (const auto* item = nodeMap.FindPtr(NAME)) { \
+        Deserialize(MEMBER, *item); \
+    }
+
+void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
+{
+    BuildYsonFluently(consumer).BeginMap()
+        .Item("hosts").Value(config.Hosts)
+        .Item("pool").Value(config.Pool)
+        .Item("token").Value(config.Token)
+        .Item("prefix").Value(config.Prefix)
+        .Item("api_version").Value(config.ApiVersion)
+        .Item("log_level").Value(config.LogLevel)
+        .Item("log_path").Value(config.LogPath)
+        .Item("log_exclude_categories")
+            .BeginList()
+                .DoFor(config.LogExcludeCategories, [&](TFluentList list, const auto& category){
+                    list.Item().Value(category);
+                })
+            .EndList()
+        .Item("structured_log").Value(config.StructuredLog)
+        .Item("http_proxy_role").Value(config.HttpProxyRole)
+        .Item("rpc_proxy_role").Value(config.RpcProxyRole)
+        .Item("proxy_url_aliasing_rules")
+            .BeginMap()
+                .DoFor(config.ProxyUrlAliasingRules, [&](TFluentMap map, const auto& item){
+                    map.Item(item.first).Value(item.second);
+                })
+            .EndMap()
+        .Item("log_use_core").Value(config.LogUseCore)
+        .Item("content_encoding").Value(::ToString(config.ContentEncoding))
+        .Item("accept_encoding").Value(::ToString(config.AcceptEncoding))
+        .Item("global_tx_id").Value(config.GlobalTxId)
+        .Item("force_ipv4").Value(config.ForceIpV4)
+        .Item("force_ipv6").Value(config.ForceIpV6)
+        .Item("use_hosts").Value(config.UseHosts)
+        .Item("host_list_update_interval").Value(config.HostListUpdateInterval.ToString())
+        .Item("spec").Value(config.Spec)
+        .Item("table_writer").Value(config.TableWriter)
+        .Item("connect_timeout").Value(config.ConnectTimeout.ToString())
+        .Item("socket_timeout").Value(config.SocketTimeout.ToString())
+        .Item("address_cache_expiration_timeout").Value(config.AddressCacheExpirationTimeout.ToString())
+        .Item("tx_timeout").Value(config.TxTimeout.ToString())
+        .Item("ping_timeout").Value(config.PingTimeout.ToString())
+        .Item("ping_interval").Value(config.PingInterval.ToString())
+        .Item("async_http_client_threads").Value(config.AsyncHttpClientThreads)
+        .Item("async_tx_pinger_pool_threads").Value(config.AsyncTxPingerPoolThreads)
+        .Item("wait_lock_poll_interval").Value(config.WaitLockPollInterval.ToString())
+        .Item("retry_interval").Value(config.RetryInterval.ToString())
+        .Item("chunk_errors_retry_interval").Value(config.ChunkErrorsRetryInterval.ToString())
+        .Item("rate_limit_exceeded_retry_interval").Value(config.RateLimitExceededRetryInterval.ToString())
+        .Item("start_operation_retry_interval").Value(config.StartOperationRetryInterval.ToString())
+        .Item("retry_count").Value(config.RetryCount)
+        .Item("read_retry_count").Value(config.ReadRetryCount)
+        .Item("start_operation_retry_count").Value(config.StartOperationRetryCount)
+        .Item("operation_tracker_poll_period").Value(config.OperationTrackerPollPeriod.ToString())
+        .Item("remote_temp_files_directory").Value(config.RemoteTempFilesDirectory)
+        .Item("remote_temp_tables_directory").Value(config.RemoteTempTablesDirectory)
+        .Item("keep_temp_tables").Value(config.KeepTempTables)
+        .Item("infer_table_schema").Value(config.InferTableSchema)
+        .Item("use_client_protobuf").Value(config.UseClientProtobuf)
+        .Item("node_reader_format").Value(::ToString(config.NodeReaderFormat))
+        .Item("protobuf_format_with_descriptors").Value(config.ProtobufFormatWithDescriptors)
+        .Item("connection_pool_size").Value(config.ConnectionPoolSize)
+        .Item("file_cache_replication_factor").Value(config.FileCacheReplicationFactor)
+        .Item("cache_lock_timeout_per_gb").Value(config.CacheLockTimeoutPerGb.ToString())
+        .Item("cache_upload_deduplication_mode").Value(::ToString(config.CacheUploadDeduplicationMode))
+        .Item("cache_upload_deduplication_threshold").Value(config.CacheUploadDeduplicationThreshold)
+        .Item("mount_sandbox_in_tmpfs").Value(config.MountSandboxInTmpfs)
+        .Item("api_file_path_options").Value(config.ApiFilePathOptions)
+        .Item("use_abortable_response").Value(config.UseAbortableResponse)
+        .Item("enable_debug_metrics").Value(config.EnableDebugMetrics)
+        .Item("enable_local_mode_optimization").Value(config.EnableLocalModeOptimization)
+        .Item("write_stderr_successful_jobs").Value(config.WriteStderrSuccessfulJobs)
+        .Item("trace_http_requests_mode").Value(::ToString(config.TraceHttpRequestsMode))
+        .Item("skynet_api_host").Value(config.SkynetApiHost)
+        .DoIf(config.SocketPriority.Defined(), [&] (TFluentMap fluentMap) {
+            fluentMap.Item("socket_priority").Value(*config.SocketPriority);
+        })
+        .Item("commands_with_framing")
+            .BeginList()
+                .DoFor(config.CommandsWithFraming, [&](TFluentList list, const auto& command){
+                    list.Item().Value(command);
+                })
+            .EndList()
+        .Item("table_writer_version").Value(::ToString(config.TableWriterVersion))
+        .Item("redirect_stdout_to_stderr").Value(config.RedirectStdoutToStderr)
+        .Item("enable_debug_command_line_arguments").Value(config.EnableDebugCommandLineArguments)
+    .EndMap();
+}
+
+void Deserialize(TConfig& config, const TNode& node)
+{
+    const auto& nodeMap = node.AsMap();
+    DESERIALIZE_ITEM("hosts", config.Hosts);
+    DESERIALIZE_ITEM("pool", config.Pool);
+    DESERIALIZE_ITEM("token", config.Token);
+    DESERIALIZE_ITEM("prefix", config.Prefix);
+    DESERIALIZE_ITEM("api_version", config.ApiVersion);
+    DESERIALIZE_ITEM("log_level", config.LogLevel);
+    DESERIALIZE_ITEM("log_path", config.LogPath);
+    DESERIALIZE_ITEM("log_exclude_categories", config.LogExcludeCategories);
+    DESERIALIZE_ITEM("structured_log", config.StructuredLog);
+    DESERIALIZE_ITEM("http_proxy_role", config.HttpProxyRole);
+    DESERIALIZE_ITEM("rpc_proxy_role", config.RpcProxyRole);
+    DESERIALIZE_ITEM("proxy_url_aliasing_rules", config.ProxyUrlAliasingRules);
+    DESERIALIZE_ITEM("log_use_core", config.LogUseCore);
+    DESERIALIZE_ITEM("content_encoding", config.ContentEncoding);
+    DESERIALIZE_ITEM("accept_encoding", config.AcceptEncoding);
+    DESERIALIZE_ITEM("global_tx_id", config.GlobalTxId);
+    DESERIALIZE_ITEM("force_ipv4", config.ForceIpV4);
+    DESERIALIZE_ITEM("force_ipv6", config.ForceIpV6);
+    DESERIALIZE_ITEM("use_hosts", config.UseHosts);
+    DESERIALIZE_ITEM("host_list_update_interval", config.HostListUpdateInterval);
+    DESERIALIZE_ITEM("spec", config.Spec);
+    DESERIALIZE_ITEM("table_writer", config.TableWriter);
+    DESERIALIZE_ITEM("connection_timeout", config.ConnectTimeout);
+    DESERIALIZE_ITEM("socket_timeout", config.SocketTimeout);
+    DESERIALIZE_ITEM("address_cache_expiration_timeout", config.AddressCacheExpirationTimeout);
+    DESERIALIZE_ITEM("tx_timeout", config.TxTimeout);
+    DESERIALIZE_ITEM("ping_timeout", config.PingTimeout);
+    DESERIALIZE_ITEM("ping_interval", config.PingInterval);
+    DESERIALIZE_ITEM("async_http_client_threads", config.AsyncHttpClientThreads);
+    DESERIALIZE_ITEM("async_tx_pinger_pool_threads", config.AsyncTxPingerPoolThreads);
+    DESERIALIZE_ITEM("wait_lock_poll_interval", config.WaitLockPollInterval);
+    DESERIALIZE_ITEM("retry_interval", config.RetryInterval);
+    DESERIALIZE_ITEM("chunk_errors_retry_interval", config.ChunkErrorsRetryInterval);
+    DESERIALIZE_ITEM("rate_limit_exceeded_retry_interval", config.RateLimitExceededRetryInterval);
+    DESERIALIZE_ITEM("start_operation_retry_interval", config.StartOperationRetryInterval);
+    DESERIALIZE_ITEM("retry_count", config.RetryCount);
+    DESERIALIZE_ITEM("read_retry_count", config.ReadRetryCount);
+    DESERIALIZE_ITEM("start_operation_retry_count", config.StartOperationRetryCount);
+    DESERIALIZE_ITEM("operation_tracker_poll_period", config.OperationTrackerPollPeriod);
+    DESERIALIZE_ITEM("remote_temp_files_directory", config.RemoteTempFilesDirectory);
+    DESERIALIZE_ITEM("remote_temp_tables_directory", config.RemoteTempTablesDirectory);
+    DESERIALIZE_ITEM("keep_temp_tables", config.KeepTempTables);
+    DESERIALIZE_ITEM("infer_table_schema", config.InferTableSchema);
+    DESERIALIZE_ITEM("use_client_protobuf", config.UseClientProtobuf);
+    DESERIALIZE_ITEM("node_reader_format", config.NodeReaderFormat);
+    DESERIALIZE_ITEM("protobuf_format_with_descriptors", config.ProtobufFormatWithDescriptors);
+    DESERIALIZE_ITEM("connection_pool_size", config.ConnectionPoolSize);
+    DESERIALIZE_ITEM("file_cache_replication_factor", config.FileCacheReplicationFactor);
+    DESERIALIZE_ITEM("cache_lock_timeout_per_gb", config.CacheLockTimeoutPerGb);
+    DESERIALIZE_ITEM("cache_upload_deduplication_mode", config.CacheUploadDeduplicationMode);
+    DESERIALIZE_ITEM("cache_upload_deduplication_threshold", config.CacheUploadDeduplicationThreshold);
+    DESERIALIZE_ITEM("mount_sandbox_in_tmpfs", config.MountSandboxInTmpfs);
+    DESERIALIZE_ITEM("api_file_path_options", config.ApiFilePathOptions);
+    DESERIALIZE_ITEM("use_abortable_response", config.UseAbortableResponse);
+    DESERIALIZE_ITEM("enable_debug_metrics", config.EnableDebugMetrics);
+    DESERIALIZE_ITEM("enable_local_mode_optimization", config.EnableLocalModeOptimization);
+    DESERIALIZE_ITEM("write_stderr_successful_jobs", config.WriteStderrSuccessfulJobs);
+    DESERIALIZE_ITEM("trace_http_requests_mode", config.TraceHttpRequestsMode);
+    DESERIALIZE_ITEM("skynet_api_host", config.SkynetApiHost);
+    DESERIALIZE_ITEM("socket_priority", config.SocketPriority);
+    DESERIALIZE_ITEM("commands_with_framing", config.CommandsWithFraming);
+    DESERIALIZE_ITEM("table_writer_version", config.TableWriterVersion);
+    DESERIALIZE_ITEM("redirect_stdout_to_stderr", config.RedirectStdoutToStderr);
+    DESERIALIZE_ITEM("enable_debug_command_line_arguments", config.EnableDebugCommandLineArguments);
+}
+
+#undef DESERIALIZE_ITEM
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString ConfigToYsonString(const TConfig& config, NYson::EYsonFormat format)
+{
+    TNode configNode;
+    TNodeBuilder builder(&configNode);
+    Serialize(config, &builder);
+
+    return NodeToYsonString(configNode, format);
+}
+
+TConfig ConfigFromYsonString(TString serializedConfig)
+{
+    TNode configNode = NodeFromYsonString(serializedConfig);
+    TConfig config;
+    Deserialize(config, configNode);
+    return config;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -26,6 +26,7 @@ def do(args):
         'Type',
         'Status',
         'DecommitStatus',
+        'MaintenanceStatus',
         'Kind',
         'BoxId',
         'Guid',
@@ -49,6 +50,7 @@ def do(args):
         'Type',
         'Status',
         'DecommitStatus',
+        'MaintenanceStatus',
     ]
     col_units = {
         'Usage': '%',
@@ -84,6 +86,7 @@ def do(args):
         row['Path'] = pdisk.Path
         row['Status'] = kikimr_bsconfig.EDriveStatus.Name(pdisk.DriveStatus)
         row['DecommitStatus'] = kikimr_bsconfig.EDecommitStatus.Name(pdisk.DecommitStatus)
+        row['MaintenanceStatus'] = kikimr_bsconfig.TMaintenanceStatus.E.Name(pdisk.MaintenanceStatus)
         row['Type'] = common.EPDiskType.Name(pdisk.Type)
         row['BoxId'] = pdisk.BoxId
         row['Kind'] = pdisk.Kind

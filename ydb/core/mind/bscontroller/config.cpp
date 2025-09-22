@@ -216,7 +216,7 @@ namespace NKikimr::NBsController {
             }
 
             void ApplyVSlotDeleted(const TVSlotId& vslotId, const TVSlotInfo& vslotInfo) {
-                if (DeletedPDiskIds.count(vslotId.ComprisingPDiskId()) && vslotInfo.IsBeingDeleted()) {
+                if (DeletedPDiskIds.contains(vslotId.ComprisingPDiskId()) && vslotInfo.IsBeingDeleted()) {
                     // the slot has been deleted along with its PDisk; although it is useless to slay slots over PDisk
                     // that is being stopped, we issue this command to terminate VDisk actors correctly
                     AddVSlotToProtobuf(vslotId, vslotInfo, TMood::Delete);

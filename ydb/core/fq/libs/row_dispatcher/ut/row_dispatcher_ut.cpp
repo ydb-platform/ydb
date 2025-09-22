@@ -9,6 +9,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 namespace {
 
@@ -33,6 +34,7 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         const TString& /*endpoint*/,
         const TString& /*database*/,
         const NKikimrConfig::TSharedReadingConfig& /*config*/,
+        const NKikimr::NMiniKQL::IFunctionRegistry* /*functionRegistry*/,
         NActors::TActorId /*rowDispatcherActorId*/,
         NActors::TActorId /*compileServiceActorId*/,
         ui32 /*partitionId*/,
@@ -55,7 +57,9 @@ class TFixture : public NUnitTest::TBaseFixture {
     const ui64 NodesCount = 2;
 public:
     TFixture()
-    : Runtime(NodesCount) {}
+        : Runtime(NodesCount)
+        , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {}))
+    {}
 
     void SetUp(NUnitTest::TTestContext&) override {
         TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());
@@ -107,6 +111,7 @@ public:
             credentialsFactory,
             "Tenant",
             TestActorFactory,
+            FunctionRegistry.Get(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(pqServices),
@@ -258,6 +263,7 @@ public:
 
     TActorSystemStub actorSystemStub;
     NActors::TTestActorRuntime Runtime;
+    const NKikimr::NMiniKQL::IFunctionRegistry::TPtr FunctionRegistry;
     NActors::TActorId RowDispatcher;
     NActors::TActorId Coordinator1;
     NActors::TActorId Coordinator2;

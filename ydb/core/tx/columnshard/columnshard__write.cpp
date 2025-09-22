@@ -387,9 +387,9 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     const auto inFlightLocksRangesBytes = NOlap::TPKRangeFilter::GetFiltersTotalMemorySize();
     const ui64 inFlightLocksRangesBytesLimit = AppDataVerified().ColumnShardConfig.GetInFlightLocksRangesBytesLimit();
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Comparing size")("inFlightLocksRangesBytesLimit", inFlightLocksRangesBytesLimit)("inFlightLocksRangesBytes", inFlightLocksRangesBytes)(
-        "record.GetTxId()", record.GetTxId())("record.GetLockTxId()", record.GetLockTxId())(
-        "record.GetLocks().GetLocks()[0].GetLockId()", record.HasLocks() ? record.GetLocks().GetLocks()[0].GetLockId() : 0)("record.GetLockNodeId()", record.GetLockNodeId());
+    // AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Comparing size")("inFlightLocksRangesBytesLimit", inFlightLocksRangesBytesLimit)("inFlightLocksRangesBytes", inFlightLocksRangesBytes)(
+    //     "record.GetTxId()", record.GetTxId())("record.GetLockTxId()", record.GetLockTxId())(
+    //     "record.GetLocks().GetLocks()[0].GetLockId()", record.HasLocks() ? record.GetLocks().GetLocks()[0].GetLockId() : 0)("record.GetLockNodeId()", record.GetLockNodeId());
 
     if (behaviour == EOperationBehaviour::WriteWithLock && inFlightLocksRangesBytes > inFlightLocksRangesBytesLimit) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "In flight locks ranges bytes limit exceeded")

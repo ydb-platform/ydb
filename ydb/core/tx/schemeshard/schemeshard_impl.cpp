@@ -4441,7 +4441,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     }
 
     if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
-        PersistDiskSpaceUsage(db, pathId, tableInfo->GetStats().Aggregated);
+        UpdateDiskSpaceUsage(db, pathId, tableInfo->GetStats().Aggregated);
     }
 
     // sanity check: by this time compaction queue and metrics must be updated already

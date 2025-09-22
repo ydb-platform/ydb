@@ -538,7 +538,11 @@ public:
                 }
             }
 
-            Args_.push_back(Y("TablePath", Y("DependsOn", "row")));
+            if (ctx.DirectRowDependsOn.GetOrElse(true)) {
+                Args_.push_back(Y("TablePath", Y("DependsOn", "row")));
+            } else {
+                Args_.push_back(Y("TablePath", "row"));
+            }
         }
 
         if (Args_.size() == 2) {

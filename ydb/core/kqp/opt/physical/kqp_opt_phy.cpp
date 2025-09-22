@@ -89,6 +89,8 @@ public:
         AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems<false>));
         AddHandler(0, &TCoSqlIn::Match, HNDL(BuildSqlIn<false>));
         AddHandler(0, &TCoAsList::Match, HNDL(BuildAggregationResultStage));
+        AddHandler(0, &TCoHead::Match, HNDL(BuildScalarPrecompute<false>));
+        AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<false>));
         AddHandler(0, &TCoAsList::Match, HNDL(PropagatePrecomuteScalarRowset<false>));
         AddHandler(0, &TCoTake::Match, HNDL(PropagatePrecomuteTake<false>));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<false>));

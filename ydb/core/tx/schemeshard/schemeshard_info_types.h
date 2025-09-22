@@ -3007,7 +3007,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         // Backward compatibility.
         // But there can be no paths in settings at all.
         if (i < ui32(Settings.items_size())) {
-            return Settings.items(i).source_prefix() + "/";
+            return Settings.items(i).source_prefix();
         }
 
         return {};

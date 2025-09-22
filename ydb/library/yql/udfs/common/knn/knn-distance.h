@@ -1,21 +1,46 @@
 #pragma once
 
 #include "knn-defines.h"
-#include "knn-serializer.h"
-
-#include <yql/essentials/public/udf/udf_helpers.h>
 
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
 #include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>
+#include <util/generic/strbuf.h>
 #include <util/stream/format.h>
 
 #include <bit>
 
-using namespace NYql;
-using namespace NYql::NUdf;
+namespace {
+
+template <typename TTo>
+inline TArrayRef<const TTo> GetArray(const TStringBuf& str) {
+    const char* buf = str.Data();
+    const size_t len = str.Size() - HeaderLen;
+
+    if (Y_UNLIKELY(len % sizeof(TTo) != 0))
+        return {};
+
+    const ui32 count = len / sizeof(TTo);
+
+    return {reinterpret_cast<const TTo*>(buf), count};
+}
+
+struct TBitArray {
+    const ui64* data = nullptr;
+    ui64 bitLen = 0;
+};
+
+inline TBitArray GetBitArray(const TStringBuf& str) {
+    if (Y_UNLIKELY(str.Size() < 2))
+        return {};
+    const char* buf = str.Data();
+    const ui64 len = 8 * (str.Size() - HeaderLen - 1) - static_cast<ui8>(buf[str.Size() - HeaderLen - 1]);
+    return {reinterpret_cast<const ui64*>(buf), len};
+}
+
+}
 
 inline void BitVectorHandleShort(ui64 byteLen, const ui64* v1, const ui64* v2, auto&& op) {
     Y_ASSERT(0 < byteLen);
@@ -73,20 +98,20 @@ inline TDistanceResult VectorFuncImpl(const auto* v1, const auto* v2, auto len1,
 }
 
 template <typename T, typename Func>
-inline auto VectorFunc(const TStringRef& str1, const TStringRef& str2, Func&& func) {
-    const TArrayRef<const T> v1 = TKnnVectorSerializer<T>::GetArray(str1);
-    const TArrayRef<const T> v2 = TKnnVectorSerializer<T>::GetArray(str2);
+inline auto VectorFunc(const TStringBuf& str1, const TStringBuf& str2, Func&& func) {
+    const TArrayRef<const T> v1 = GetArray<T>(str1);
+    const TArrayRef<const T> v2 = GetArray<T>(str2);
     return VectorFuncImpl(v1.data(), v2.data(), v1.size(), v2.size(), std::forward<Func>(func));
 }
 
 template <typename Func>
-inline auto BitVectorFunc(const TStringRef& str1, const TStringRef& str2, Func&& func) {
-    auto [v1, bitLen1] = TKnnSerializerFacade::GetBitArray(str1);
-    auto [v2, bitLen2] = TKnnSerializerFacade::GetBitArray(str2);
+inline auto BitVectorFunc(const TStringBuf& str1, const TStringBuf& str2, Func&& func) {
+    auto [v1, bitLen1] = GetBitArray(str1);
+    auto [v2, bitLen2] = GetBitArray(str2);
     return VectorFuncImpl(v1, v2, bitLen1, bitLen2, std::forward<Func>(func));
 }
 
-inline TDistanceResult KnnManhattanDistance(const TStringRef& str1, const TStringRef& str2) {
+inline TDistanceResult KnnManhattanDistance(const TStringBuf& str1, const TStringBuf& str2) {
     const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
     const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
     if (Y_UNLIKELY(format1 != format2))
@@ -118,7 +143,7 @@ inline TDistanceResult KnnManhattanDistance(const TStringRef& str1, const TStrin
     }
 }
 
-inline TDistanceResult KnnEuclideanDistance(const TStringRef& str1, const TStringRef& str2) {
+inline TDistanceResult KnnEuclideanDistance(const TStringBuf& str1, const TStringBuf& str2) {
     const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
     const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
     if (Y_UNLIKELY(format1 != format2))
@@ -150,7 +175,7 @@ inline TDistanceResult KnnEuclideanDistance(const TStringRef& str1, const TStrin
     }
 }
 
-inline TDistanceResult KnnDotProduct(const TStringRef& str1, const TStringRef& str2) {
+inline TDistanceResult KnnDotProduct(const TStringBuf& str1, const TStringBuf& str2) {
     const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
     const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
     if (Y_UNLIKELY(format1 != format2))
@@ -182,7 +207,7 @@ inline TDistanceResult KnnDotProduct(const TStringRef& str1, const TStringRef& s
     }
 }
 
-inline TDistanceResult KnnCosineSimilarity(const TStringRef& str1, const TStringRef& str2) {
+inline TDistanceResult KnnCosineSimilarity(const TStringBuf& str1, const TStringBuf& str2) {
     const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
     const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
     if (Y_UNLIKELY(format1 != format2))

@@ -348,6 +348,10 @@
     "kind": "Normal"
   },
   {
+    "name": "DictInsert",
+    "kind": "Normal"
+  },
+  {
     "name": "DictItems",
     "kind": "Normal"
   },
@@ -376,6 +380,10 @@
     "kind": "Normal"
   },
   {
+    "name": "DictRemove",
+    "kind": "Normal"
+  },
+  {
     "name": "DictType",
     "kind": "Normal"
   },
@@ -385,6 +393,14 @@
   },
   {
     "name": "DictTypeHandle",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictUpdate",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictUpsert",
     "kind": "Normal"
   },
   {

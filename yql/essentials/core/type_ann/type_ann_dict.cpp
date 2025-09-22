@@ -384,8 +384,76 @@ IGraphTransformer::TStatus MutDictPayloadsWrapper(const TExprNode::TPtr& input, 
     return IGraphTransformer::TStatus::Ok;
 }
 
+template <bool WithPayload>
+IGraphTransformer::TStatus DictBlindOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+    Y_UNUSED(output);
+    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureArgsCount(*input, 2 + (WithPayload ? 1 : 0), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (IsNull(input->Head())) {
+        output = input->HeadPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    if (!EnsureComputable(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool isOptional = false;
+    auto type = input->Head().GetTypeAnn();
+    if (type->GetKind() == ETypeAnnotationKind::Optional) {
+        type = type->Cast<TOptionalExprType>()->GetItemType();
+        isOptional = true;
+    }
+
+    if (type->GetKind() != ETypeAnnotationKind::Dict) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
+            << "Expected dict or optional of dict, but got: " << *input->Head().GetTypeAnn()));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isOptional) {
+        output = AddChildren(ctx.Expr.Builder(input->Pos())
+            .Callable("Map")
+                .Add(0, input->HeadPtr())
+                .Lambda(1)
+                    .Param("x")
+                    .Callable(input->Content())
+                        .Arg(0, "x"), 1U, input)
+                    .Seal()
+                .Seal()
+            .Seal().Build();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto dictType = type->Cast<TDictExprType>();
+    auto status = TryConvertTo(input->ChildRef(1), *dictType->GetKeyType(), ctx.Expr, ctx.Types);
+    if (status != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if constexpr (WithPayload) {
+        status = TryConvertTo(input->ChildRef(2), *dictType->GetPayloadType(), ctx.Expr, ctx.Types);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+    }
+
+    input->SetTypeAnn(input->Head().GetTypeAnn());
+    return IGraphTransformer::TStatus::Ok;
+}
+
 template IGraphTransformer::TStatus MutDictBlindOpWrapper<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 template IGraphTransformer::TStatus MutDictBlindOpWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+
+template IGraphTransformer::TStatus DictBlindOpWrapper<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+template IGraphTransformer::TStatus DictBlindOpWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+
 
 } // namespace NTypeAnnImpl
 } // namespace NYql

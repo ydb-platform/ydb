@@ -3099,6 +3099,11 @@ struct TBuiltinFuncData {
             {"mutdictkeys", {"MutDictKeys", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictKeys", 1, 1)}},
             {"mutdictpayloads", {"MutDictPayloads", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictPayloads", 1, 1)}},
 
+            {"dictinsert", {"DictInsert", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictInsert", 3, 3)}},
+            {"dictupsert", {"DictUpsert", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictUpsert", 3, 3)}},
+            {"dictupdate", {"DictUpdate", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictUpdate", 3, 3)}},
+            {"dictremove", {"DictRemove", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictRemove", 2, 2)}},
+
             // Atom builtins
             {"asatom", {"AsAtom", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlAsAtom>()}},
             {"secureparam", {"SecureParam", "Normal", BuildNamedBuiltinFactoryCallback<TYqlAtom>("SecureParam")}},

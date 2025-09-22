@@ -24,5 +24,8 @@ IGraphTransformer::TStatus MutDictItemsWrapper(const TExprNode::TPtr& input, TEx
 IGraphTransformer::TStatus MutDictKeysWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 IGraphTransformer::TStatus MutDictPayloadsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
+template <bool WithPayload>
+IGraphTransformer::TStatus DictBlindOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+
 } // namespace NTypeAnnImpl
 } // namespace NYql

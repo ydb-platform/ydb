@@ -3013,7 +3013,7 @@ void THive::ProcessPendingResumeTablet() {
     }
 }
 
-bool THive::IsAllowedPile(TBridgePileId pile) const {
+bool THive::IsPrimaryPile(TBridgePileId pile) const {
     if (BridgeInfo->BeingPromotedPile) {
         return BridgeInfo->BeingPromotedPile->BridgePileId == pile;
     } else {
@@ -3024,6 +3024,14 @@ bool THive::IsAllowedPile(TBridgePileId pile) const {
 TBridgePileInfo& THive::GetPile(TBridgePileId pileId) {
     auto it = BridgePiles.emplace(pileId, pileId).first;
     return it->second;
+}
+
+const TBridgePileInfo* THive::FindPile(TBridgePileId pileId) const {
+    auto it = BridgePiles.find(pileId);
+    if (it == BridgePiles.end()) {
+        return nullptr;
+    }
+    return &it->second;
 }
 
 void THive::UpdatePiles() {

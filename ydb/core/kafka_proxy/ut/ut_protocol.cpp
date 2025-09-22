@@ -1067,7 +1067,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // Check empty topic (no records)
             std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
-где м            auto msg = client.Fetch(topics);
+            auto msg = client.Fetch(topics);
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
@@ -1772,6 +1772,22 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         //         }
         //     }
         // }
+    }
+
+    Y_UNIT_TEST(FetchConsumerAutocreationScenario) {
+        TInsecureTestServer testServer("2", false, true, false, true);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+
+        TString topic1 = "topic-999-test", topic2 = "topic-998-test";
+        TStringBuilder topic1FullPath;
+        topic1FullPath << "/Root/" << topic1;
+
+        CreateTopic(pqClient, topic1FullPath, 1, {"consumer1"});
+        NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = "consumer1"};
+        rSSettings.AppendTopics({topic1FullPath});
+        auto readSession = pqClient.CreateReadSession(rSSettings);
+        
+
     }
     Y_UNIT_TEST(OffsetCommitAndFetchScenario) {
         TInsecureTestServer testServer("2", false, true, false, false);

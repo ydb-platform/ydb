@@ -139,6 +139,11 @@ private:
         return true;
     }
 
+    static void HandleAuthStateFail(IRequestProxyCtx* requestProxyCtx);
+    void HandleAuthStateUnavailable(IRequestProxyCtx* requestProxyCtx);
+    template<typename TEvent>
+    void HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TEvent>>& event);
+
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         LogRequest(event);
@@ -164,135 +169,17 @@ private:
         auto state = requestBaseCtx->GetAuthState();
 
         if (state.State == NYdbGrpc::TAuthState::AS_FAIL) {
-            requestBaseCtx->ReplyUnauthenticated();
-            requestBaseCtx->FinishSpan();
+            HandleAuthStateFail(requestBaseCtx);
             return;
         }
 
         if (state.State == NYdbGrpc::TAuthState::AS_UNAVAILABLE) {
-            Counters->IncDatabaseUnavailableCounter();
-            const TString error = "Unable to resolve token";
-            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
-            requestBaseCtx->RaiseIssue(issue);
-            requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-            requestBaseCtx->FinishSpan();
+            HandleAuthStateUnavailable(requestBaseCtx);
             return;
         }
 
-        TString databaseName;
-        const TDatabaseInfo* database = nullptr;
-        bool skipResourceCheck = false;
-        // do not check connect rights for the deprecated requests without database
-        // remove this along with AllowYdbRequestsWithoutDatabase flag
-        bool skipCheckConnectRigths = false;
-
         if (state.State == NYdbGrpc::TAuthState::AS_NOT_PERFORMED) {
-            const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
-            if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
-                databaseName = CanonizePath(maybeDatabaseName.GetRef());
-            } else {
-                if (!AllowYdbRequestsWithoutDatabase && DynamicNode && !std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
-                    requestBaseCtx->ReplyUnauthenticated("Requests without specified database are not allowed");
-                    requestBaseCtx->FinishSpan();
-                    return;
-                } else {
-                    databaseName = RootDatabase;
-                    skipResourceCheck = true;
-                    skipCheckConnectRigths = true;
-                }
-            }
-            if (databaseName.empty()) {
-                Counters->IncDatabaseUnavailableCounter();
-                requestBaseCtx->ReplyUnauthenticated("Empty database name");
-                requestBaseCtx->FinishSpan();
-                return;
-            }
-            auto it = Databases.find(databaseName);
-            if (it != Databases.end() && it->second.IsDatabaseReady()) {
-                database = &it->second;
-            } else {
-                // No given database found, start update if possible
-                if (!DeferAndStartUpdate(databaseName, event, requestBaseCtx)) {
-                    Counters->IncDatabaseUnavailableCounter();
-                    const TString error = "Grpc proxy is not ready to accept request, database unknown";
-                    LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Limit for deferred events per database %s reached", databaseName.c_str());
-                    const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
-                    requestBaseCtx->RaiseIssue(issue);
-                    requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                    requestBaseCtx->FinishSpan();
-                    return;
-                }
-                return;
-            }
-        }
-
-        if (database) {
-            TVector<std::pair<TString, TString>> rootAttributes;
-            auto rootIt = Databases.find(RootDatabase);
-            if (rootIt == Databases.end() || !rootIt->second.IsDatabaseReady() || !rootIt->second.SchemeBoardResult) {
-                Counters->IncDatabaseUnavailableCounter();
-                const TString error = "Grpc proxy is not ready to accept request, root database unknown";
-                LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, error);
-                const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
-                requestBaseCtx->RaiseIssue(issue);
-                requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                requestBaseCtx->FinishSpan();
-                return;
-            }
-
-            const auto& schemeData = rootIt->second.SchemeBoardResult->DescribeSchemeResult;
-            rootAttributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
-            for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
-                rootAttributes.emplace_back(std::make_pair(attr.GetKey(), attr.GetValue()));
-            }
-
-            if (database->SchemeBoardResult) {
-                const auto& domain = database->SchemeBoardResult->DescribeSchemeResult.GetPathDescription().GetDomainDescription();
-                if (domain.HasResourcesDomainKey() && !skipResourceCheck && DynamicNode) {
-                    const TSubDomainKey resourceDomainKey(domain.GetResourcesDomainKey());
-                    const TSubDomainKey domainKey(domain.GetDomainKey());
-                    if (!SubDomainKeys.contains(resourceDomainKey) && !SubDomainKeys.contains(domainKey)) {
-                        TStringBuilder error;
-                        error << "Unexpected node to perform query on database: " << databaseName
-                              << ", domain: " << domain.GetDomainKey().ShortDebugString()
-                              << ", resource domain: " << domain.GetResourcesDomainKey().ShortDebugString();
-                        LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, error);
-                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
-                        requestBaseCtx->RaiseIssue(issue);
-                        requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
-                        requestBaseCtx->FinishSpan();
-                        return;
-                    }
-                }
-                if (domain.GetDomainState().GetDiskQuotaExceeded()) {
-                    requestBaseCtx->SetDiskQuotaExceeded(true);
-                }
-            } else {
-                Counters->IncDatabaseUnavailableCounter();
-                auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, "database unavailable");
-                requestBaseCtx->RaiseIssue(issue);
-                requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                requestBaseCtx->FinishSpan();
-                return;
-            }
-
-            if (requestBaseCtx->IsClientLost()) {
-                // Any status here
-                LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
-                    "Client was disconnected before processing request (grpc request proxy)");
-                requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                requestBaseCtx->FinishSpan();
-                return;
-            }
-
-            Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
-                database->SchemeBoardResult->DescribeSchemeResult,
-                database->SecurityObject,
-                event.Release(),
-                Counters,
-                skipCheckConnectRigths,
-                rootAttributes,
-                this));
+            HandleAuthStateNotPerformed(event);
             return;
         }
 
@@ -455,6 +342,138 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
         return true;
     }
     return false;
+}
+
+void TGRpcRequestProxyImpl::HandleAuthStateFail(IRequestProxyCtx* requestProxyCtx) {
+    requestProxyCtx->ReplyUnauthenticated();
+    requestProxyCtx->FinishSpan();
+}
+
+void TGRpcRequestProxyImpl::HandleAuthStateUnavailable(IRequestProxyCtx* requestProxyCtx) {
+    Counters->IncDatabaseUnavailableCounter();
+    const TString error = "Unable to resolve token";
+    const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
+    requestProxyCtx->RaiseIssue(issue);
+    requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+    requestProxyCtx->FinishSpan();
+}
+
+template<typename TEvent>
+void TGRpcRequestProxyImpl::HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TEvent>>& event) {
+    IRequestProxyCtx* requestProxyCtx = event->Get();
+    TString databaseName;
+    const TDatabaseInfo* database = nullptr;
+    bool skipResourceCheck = false;
+    // do not check connect rights for the deprecated requests without database
+    // remove this along with AllowYdbRequestsWithoutDatabase flag
+    bool skipCheckConnectRights = false;
+
+    const auto& maybeDatabaseName = requestProxyCtx->GetDatabaseName();
+    if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
+        databaseName = CanonizePath(maybeDatabaseName.GetRef());
+    } else {
+        if (!AllowYdbRequestsWithoutDatabase && DynamicNode && !std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
+            requestProxyCtx->ReplyUnauthenticated("Requests without specified database are not allowed");
+            requestProxyCtx->FinishSpan();
+            return;
+        }
+        databaseName = RootDatabase;
+        skipResourceCheck = true;
+        skipCheckConnectRights = true;
+    }
+    if (databaseName.empty()) {
+        Counters->IncDatabaseUnavailableCounter();
+        requestProxyCtx->ReplyUnauthenticated("Empty database name");
+        requestProxyCtx->FinishSpan();
+        return;
+    }
+    auto it = Databases.find(databaseName);
+    if (it != Databases.end() && it->second.IsDatabaseReady()) {
+        database = &it->second;
+    } else {
+        // No given database found, start update if possible
+        if (!DeferAndStartUpdate(databaseName, event, requestProxyCtx)) {
+            Counters->IncDatabaseUnavailableCounter();
+            const TString error = "Grpc proxy is not ready to accept request, database unknown";
+            LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Limit for deferred events per database %s reached", databaseName.c_str());
+            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
+            requestProxyCtx->RaiseIssue(issue);
+            requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+            requestProxyCtx->FinishSpan();
+            return;
+        }
+        return;
+    }
+
+    if (database) {
+        TVector<std::pair<TString, TString>> rootAttributes;
+        auto rootIt = Databases.find(RootDatabase);
+        if (rootIt == Databases.end() || !rootIt->second.IsDatabaseReady() || !rootIt->second.SchemeBoardResult) {
+            Counters->IncDatabaseUnavailableCounter();
+            const TString error = "Grpc proxy is not ready to accept request, root database unknown";
+            LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER, error);
+            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
+            requestProxyCtx->RaiseIssue(issue);
+            requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+            requestProxyCtx->FinishSpan();
+            return;
+        }
+
+        const auto& schemeData = rootIt->second.SchemeBoardResult->DescribeSchemeResult;
+        rootAttributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
+        for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
+            rootAttributes.emplace_back(std::make_pair(attr.GetKey(), attr.GetValue()));
+        }
+
+        if (database->SchemeBoardResult) {
+            const auto& domain = database->SchemeBoardResult->DescribeSchemeResult.GetPathDescription().GetDomainDescription();
+            if (domain.HasResourcesDomainKey() && !skipResourceCheck && DynamicNode) {
+                const TSubDomainKey resourceDomainKey(domain.GetResourcesDomainKey());
+                const TSubDomainKey domainKey(domain.GetDomainKey());
+                if (!SubDomainKeys.contains(resourceDomainKey) && !SubDomainKeys.contains(domainKey)) {
+                    TStringBuilder error;
+                    error << "Unexpected node to perform query on database: " << databaseName
+                            << ", domain: " << domain.GetDomainKey().ShortDebugString()
+                            << ", resource domain: " << domain.GetResourcesDomainKey().ShortDebugString();
+                    LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER, error);
+                    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
+                    requestProxyCtx->RaiseIssue(issue);
+                    requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
+                    requestProxyCtx->FinishSpan();
+                    return;
+                }
+            }
+            if (domain.GetDomainState().GetDiskQuotaExceeded()) {
+                requestProxyCtx->SetDiskQuotaExceeded(true);
+            }
+        } else {
+            Counters->IncDatabaseUnavailableCounter();
+            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, "database unavailable");
+            requestProxyCtx->RaiseIssue(issue);
+            requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+            requestProxyCtx->FinishSpan();
+            return;
+        }
+
+        if (requestProxyCtx->IsClientLost()) {
+            // Any status here
+            LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+                "Client was disconnected before processing request (grpc request proxy)");
+            requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+            requestProxyCtx->FinishSpan();
+            return;
+        }
+
+        Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
+            database->SchemeBoardResult->DescribeSchemeResult,
+            database->SecurityObject,
+            event.Release(),
+            Counters,
+            skipCheckConnectRights,
+            rootAttributes,
+            this));
+        return;
+    }
 }
 
 template<class TEvent>

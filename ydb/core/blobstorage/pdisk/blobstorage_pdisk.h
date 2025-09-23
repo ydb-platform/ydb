@@ -1422,11 +1422,11 @@ struct TEvCheckSpace : TEventLocal<TEvCheckSpace, TEvBlobStorage::EvCheckSpace> 
 struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::EvCheckSpaceResult> {
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
-    ui32 FreeChunks;
-    ui32 TotalChunks; // contains common limit in shared free space mode, Total != Free + Used
-    ui32 UsedChunks; // number of chunks allocated by requesting owner
-    ui32 NumSlots; // number of VSlots over PDisk
-    ui32 NumActiveSlots; // $ \sum_i{ceil(VSlot[i].SlotSizeInUnits / PDisk.SlotSizeInUnits)} $
+    ui32 FreeChunks; // contains SharedQuota.Free
+    ui32 TotalChunks; // contains OwnerQuota.HardLimit(owner), Total != Free + Used
+    ui32 UsedChunks; // equals OwnerQuota.Used(owner) - a number of chunks allocated by requesting owner
+    ui32 NumSlots; // number of VDisks over PDisk, not their weight
+    ui32 NumActiveSlots; // sum of VDisks weights - $ \sum_i{ceil(VSlot[i].SlotSizeInUnits / PDisk.SlotSizeInUnits)} $
     double Occupancy = 0;
     TString ErrorReason;
     TStatusFlags LogStatusFlags;

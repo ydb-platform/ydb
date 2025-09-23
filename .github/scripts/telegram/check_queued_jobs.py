@@ -119,19 +119,19 @@ def format_time_ago(created_at: datetime) -> str:
     current_time = datetime.now(timezone.utc)
     time_diff = current_time - created_at
     
-    total_seconds = int(time_diff.total_seconds())
+    total_seconds = time_diff.total_seconds()
     
     if total_seconds < 60:
-        return f"{total_seconds} сек"
+        return f"{int(total_seconds)} сек"
     elif total_seconds < 3600:
-        minutes = total_seconds // 60
-        return f"{minutes} мин"
+        minutes = total_seconds / 60
+        return f"{minutes:.1f} мин"
     elif total_seconds < 86400:
-        hours = total_seconds // 3600
-        return f"{hours} ч"
+        hours = total_seconds / 3600
+        return f"{hours:.1f} ч"
     else:
-        days = total_seconds // 86400
-        return f"{days} дн"
+        days = total_seconds / 86400
+        return f"{days:.1f} дн"
 
 def filter_old_jobs(workflow_runs: List[Dict[str, Any]], max_age_days: int = None) -> List[Dict[str, Any]]:
     """

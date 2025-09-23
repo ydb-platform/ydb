@@ -69,7 +69,7 @@ void TKafkaOffsetCommitActor::CreateConsumerGroupIfNecessary(const TString& topi
     };
     NKikimr::NGRpcService::DoAlterTopicRequest(
         std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(
-        topicName, Context->DatabasePath, std::move(request), callback),
+        topicName, Context->DatabasePath, std::move(request), callback, Context->UserToken),
         NKikimr::NReplication::TLocalProxyActor(Context->DatabasePath));
 
 }

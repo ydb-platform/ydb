@@ -665,6 +665,10 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
 #undef ADD_REQUEST
 
+#define GET_LIMITER_BY_PATH(ICB_PATH)\
+    getLimiter(#ICB_PATH, icb.ICB_PATH, DEFAULT_MAX_SESSIONS_INFLIGHT)
+
+    auto& icb = *ActorSystem_->AppData<TAppData>()->Icb;
     for (auto* cq : CQS) {
         TGRpcSessionActor::TGRpcRequest::Start(
             this,
@@ -678,8 +682,10 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             *ActorSystem_,
             "Coordination/Session",
             getCounterBlock("coordination", "Session", true),
-            getLimiter("CoordinationService", "Session", DEFAULT_MAX_SESSIONS_INFLIGHT));
+            GET_LIMITER_BY_PATH(GRpcControls.RequestConfigs.CoordinationService_Session.MaxInFlight));
     }
+#undef GET_LIMITER_BY_PATH
+
 }
 
 } // namespace NKesus

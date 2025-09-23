@@ -448,9 +448,6 @@ std::optional<NKikimrConfig::TYdbVersion> ParseVersionFromTag(TString tag, TStri
     }
 
     // parse Patch number
-    // We don't need to parse versions without Patch component, since this
-    // code only present in newer trunks and stables >=25.1, where Patch is
-    // already introduced, and only used to parse local 
     ui32 patch;
     if (!TryIntFromString<10, ui32>(parts.front(), patch)) {
         // example: stable-25-1-1-prestablle == 25.1.1

@@ -161,7 +161,6 @@ public:
             BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
         }
 
-        EnableReadsMerge = *MergeDatashardReadsControl() == 1;
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
         TasksGraph.GetMeta().RequestIsolationLevel = Request.IsolationLevel;
@@ -1336,7 +1335,6 @@ protected:
     THashSet<ui32> ParticipantNodes;
 
     bool AlreadyReplied = false;
-    bool EnableReadsMerge = false;
 
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const bool VerboseMemoryLimitException;

@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/control.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
@@ -2821,12 +2822,12 @@ void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TSta
     }
 }
 
-size_t TKqpTasksGraph::BuildAllTasks(bool enableReadsMerge, std::optional<TLlvmSettings> llvmSettings,
+size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
     const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats, THashSet<ui64>* shardsWithEffects)
 {
     size_t sourceScanPartitionsCount = 0;
 
-    bool limitTasksPerNode = enableReadsMerge;
+    bool limitTasksPerNode = IsEnabledReadsMerge();
 
     if (!GetMeta().IsScan) {
         limitTasksPerNode |= GetMeta().StreamResult;

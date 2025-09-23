@@ -935,8 +935,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 YQL_ENSURE(1 <= navigate.ResultSet.size() && navigate.ResultSet.size() <= 2);
                 auto& entry = InferEntry(navigate.ResultSet);
 
-                auto locked = ptr.lock();
-                if (entry.Status != EStatus::Ok || !locked) {
+                if (entry.Status != EStatus::Ok) {
                     promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, table));
                     return;
                 }
@@ -1062,9 +1061,10 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     }
                     case EKind::KindExternalTable: {
                         YQL_ENSURE(entry.ExternalTableInfo, "expected external table info");
+                        auto locked = ptr.lock();
                         const auto& dataSourcePath = entry.ExternalTableInfo->Description.GetDataSourcePath();
                         auto externalTableMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, table);
-                        if (!externalTableMetadata.Success()) {
+                        if (!externalTableMetadata.Success() || !locked) {
                             promise.SetValue(externalTableMetadata);
                             return;
                         }
@@ -1080,6 +1080,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     }
                     case EKind::KindIndex: {
                         Y_ENSURE(entry.ListNodeEntry, "expected children list");
+                        auto locked = ptr.lock();
+                        if ( !locked) {
+                            promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, table));
+                            return;
+                        }
                         for (const auto& child : entry.ListNodeEntry->Children) {
                             if (!table.EndsWith(child.Name)) {
                                 continue;

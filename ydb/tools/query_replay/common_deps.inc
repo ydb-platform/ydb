@@ -62,6 +62,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/ydb
+    ydb/library/yql/dq/comp_nodes/llvm16
     ydb/library/yql/udfs/common/clickhouse/client
     ydb/library/yql/udfs/common/datetime
     yql/essentials/udfs/common/datetime2

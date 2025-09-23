@@ -1193,6 +1193,7 @@ namespace NSQLTranslationV1 {
             GlobalAsync,
             GlobalSyncUnique,
             GlobalVectorKmeansTree,
+            GlobalFulltext
         };
 
         struct TIndexSetting {

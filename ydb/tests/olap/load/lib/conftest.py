@@ -222,7 +222,7 @@ class LoadSuiteBase:
         return core_hashes
 
     @classmethod
-    def __get_sanitizer_events(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, list[tuple[str, str]]]:
+    def __get_sanitizer_events(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, str]:
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
@@ -244,7 +244,7 @@ class LoadSuiteBase:
         return host_logs
 
     @classmethod
-    def __get_verify_fails(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, list[tuple[str, str]]]:
+    def __get_verify_fails(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, str]:
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         end = datetime.fromtimestamp(end_time + 10, tz).isoformat()

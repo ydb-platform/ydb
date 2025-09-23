@@ -22,9 +22,9 @@ When creating a table using `CREATE TABLE AS`, it is not possible to specify col
 
 {% note warning %}
 
-Rows are overwritten as when using [`REPLACE INTO`](../replace_into.md ), but there is no guarantee for the order in which rows are written to the table.
+Rows are overwritten, similar to using [`REPLACE INTO`](../replace_into.md ), but the order in which rows are written is unpredictable.
 
-If `SELECT` returns 2 or more rows with the same primary key value, after the `CREATE TABLE AS` is executed, there will only be one row with that primary key value in the created table. Which record from the `SELECT` was written to the table is undetermined.
+If `SELECT` returns two or more rows with the same primary key value, after the `CREATE TABLE AS` is executed, there will only be one row with that primary key value in the created table. Which record from the `SELECT` was written to the table is undetermined.
 
 {% endnote %}
 
@@ -35,11 +35,11 @@ If `SELECT` returns 2 or more rows with the same primary key value, after the `C
 
 * `CREATE TABLE AS` doesn't cause lock conflicts with other transactions. It doesn't use locks. Reads use a consistent snapshot. Moving or splitting [tablets](../../../../concepts/glossary.md#tablet) doesn't cause errors.
 
-* `CREATE TABLE AS` allows to use [column-oriented tables](../../../../concepts/glossary.md#column-oriented-table), and [row-oriented tables](../../../../concepts/glossary.md#row-oriented-table) in the same query.
+* `CREATE TABLE AS` allows using [column-oriented tables](../../../../concepts/glossary.md#column-oriented-table) and [row-oriented tables](../../../../concepts/glossary.md#row-oriented-table) in the same query.
 
 * `CREATE TABLE AS` creates a [temporary table](temporary.md) and moves it to the specified location after filling that table. If there was an error during the `CREATE TABLE AS` execution, it's possible that the temporary table will not be deleted immediately, but it will remain for some short period of time.
 
-## Примеры
+## Examples
 
 {% list tabs %}
 

@@ -245,12 +245,12 @@ When creating row-oriented tables, it is possible to specify:
 * [A vector index](vector_index.md).
 * [Column groups](family.md).
 * [Additional parameters](with.md).
-* [Creating table filled with the query reults](as_select.md).
+* [Creating a table filled with query results](as_select.md).
 
 When creating column-oriented tables, it is possible to specify:
 
 * [Column groups](family.md).
 * [Additional parameters](with.md).
-* [Creating table filled with the query reults](as_select.md).
+* [Creating a table filled with query results](as_select.md).
 
 {% endif %}

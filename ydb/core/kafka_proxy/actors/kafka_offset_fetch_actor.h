@@ -4,6 +4,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/kafka_proxy/actors/kafka_topic_group_path_struct.h>
+#include <ydb/core/kafka_proxy/actors/control_plane_common.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>

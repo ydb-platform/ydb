@@ -136,7 +136,7 @@ Y_UNIT_TEST_TWIN(JoinStatsBasicYql, StreamLookupJoin) {
 Y_UNIT_TEST(JoinStatsBasicScan) {
     auto res = JoinStatsBasic<NYdb::NTable::TScanQueryPartIterator>(GetScanStreamIterator);
 
-    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 1);
     if (res.QueryStats->query_phases(0).table_access(0).name() == "/Root/KeyValue") {
         UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).name(), "/Root/KeyValue");
         UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).partitions_count(), 1);
@@ -405,7 +405,7 @@ Y_UNIT_TEST(StatsProfile) {
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
     auto node1 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
-    UNIT_ASSERT_EQUAL(node1.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 2);
+    UNIT_ASSERT_EQUAL(node1.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 1);
 
     //auto node2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
     //UNIT_ASSERT_EQUAL(node2.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 1);

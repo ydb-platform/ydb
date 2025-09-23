@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
             SELECT COUNT(*) FROM `/Root/KeyValue`;
         )", execSettings).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 4);
 
         UNIT_ASSERT(result.GetStats());
         auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());

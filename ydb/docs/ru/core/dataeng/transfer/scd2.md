@@ -111,7 +111,7 @@
   ```sql
   -- Вставка новой записи
   INSERT INTO source_customers (id, attribute1, attribute2, change_time)
-  VALUES ('CUSTOMER_1002', 'John Doe', 'Los Angeles', CurrentUtcTimestamp());
+  VALUES ('CUSTOMER_1001', 'John Doe', 'Los Angeles', CurrentUtcTimestamp());
   ```
 
   Это действие создаст CDC-событие примерно следующего вида:
@@ -131,7 +131,7 @@
       "after":{
         "attribute1":"John Doe",
         "change_time":"2025-08-22T17:28:03.648313Z",
-        "id":"CUSTOMER_1002",
+        "id":"CUSTOMER_1001",
         "attribute2":"Los Angeles"
       }
     }
@@ -148,7 +148,7 @@
 
   ```sql
   -- Вставка новой записи
-  INSERT INTO source_customers (id, attribute1, attribute2, change_time)
+  UPSERT INTO source_customers (id, attribute1, attribute2, change_time)
   VALUES ('CUSTOMER_1001', 'John Doe 2', 'Los Angeles 2', CurrentUtcTimestamp());
   ```
 
@@ -193,7 +193,7 @@
 
   ```sql
   -- Удаление записи
-  DELETE FROM source_customers WHERE id = 'CUSTOMER_1002';
+  DELETE FROM source_customers WHERE id = 'CUSTOMER_1001';
   ```
 
   Это действие создаст CDC-событие примерно следующего вида:
@@ -213,7 +213,7 @@
       "before":{
         "attribute1":"John Doe",
         "change_time":"2025-08-22T17:38:03.648313Z",
-        "id":"CUSTOMER_1002",
+        "id":"CUSTOMER_1001",
         "attribute2":"Los Angeles"
       }
     }

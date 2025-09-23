@@ -1833,7 +1833,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         {
-            // check that user with no rights can't create consumer automatically
+            // check that user with no rights can't commit offset to the topic
             TKafkaTestClient client(testServer.Port);
             TString userName = "usernorights@/Root";
             TString userPassword = "dummyPass";
@@ -1897,6 +1897,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // authenticating as user with no write rights
             // checking that an error is returned on attempt to add new consumer to the topic
+            // or fetch data from topic with an existing consumer
             TKafkaTestClient client(testServer.Port);
             TString userName = "usernorights@/Root";
             TString userPassword = "dummyPass";
@@ -3333,7 +3334,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             TString userPassword = "dummyPass";
             client.AuthenticateToKafka(userName, userPassword);
             {
-                // checking consumer autocreation for existing topic
+                // checking that consumer autocreation for existing topic for user with no rights
+                // returns authorisation error
                 std::map<TString, std::vector<i32>> topicsToPartions;
                 topicsToPartions[existedTopicName] = std::vector<i32>{0, 1};
                 auto msg = client.OffsetFetch(newConsumer2, topicsToPartions);
@@ -3349,7 +3351,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
 
             {
-                // checking consumer autocreation for existing topic
+                // checking that offset fetch for user with no rights returns error
                 std::map<TString, std::vector<i32>> topicsToPartions;
                 topicsToPartions[existedTopicName] = std::vector<i32>{0, 1};
                 auto msg = client.OffsetFetch(newConsumer1, topicsToPartions);

@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
-#include <ydb/core/kqp/opt/physical/kqp_opt.h>
+#include <ydb/core/kqp/opt/kqp_opt.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>

@@ -1734,9 +1734,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 );
                 Register(CreateSchemeBoardBackuper(filePath, inFlightLimit, SelfId()));
 
-                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                    RenderBackup(true)
-                ));
+                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderBackup(true)));
             }
 
             if (params.Has("backupProgress")) {
@@ -1785,9 +1783,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
                 Register(CreateSchemeBoardRestorer(filePath, schemeShardId, generation, SelfId()));
 
-                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                    RenderRestore(true)
-                ));
+                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderRestore(true)));
             }
 
             if (params.Has("restoreProgress")) {

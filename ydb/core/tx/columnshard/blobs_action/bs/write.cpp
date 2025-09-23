@@ -16,13 +16,13 @@ void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, co
     ui64 bytesWritten = BlobBatch.GetTotalSize();
     if (blobsWroteSuccessfully) {
         if (IsBulk()) {
-            self.Counters.GetTabletCounters()->OnBulkWriteSuccess(blobsWritten, bytesWritten);
+            self.Counters->GetTabletCounters()->OnBulkWriteSuccess(blobsWritten, bytesWritten);
         } else {
-            self.Counters.GetTabletCounters()->OnWriteSuccess(blobsWritten, bytesWritten);
+            self.Counters->GetTabletCounters()->OnWriteSuccess(blobsWritten, bytesWritten);
         }
         Manager->SaveBlobBatchOnComplete(std::move(BlobBatch));
     } else {
-        self.Counters.GetTabletCounters()->OnWriteFailure();
+        self.Counters->GetTabletCounters()->OnWriteFailure();
     }
 }
 

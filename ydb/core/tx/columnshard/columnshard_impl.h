@@ -210,7 +210,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NDataSharing::TSourceSession;
 
     friend class NOlap::TStoragesManager;
-    friend class NOlap::TColumnShardStatisticsReporter;
 
     friend class NOlap::NReader::TTxScan;
     friend class NOlap::NReader::TTxInternalScan;
@@ -359,15 +358,15 @@ public:
 
     // For syslocks
     void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {
-        Counters.GetTabletCounters()->IncCounter(counter, num);
+        Counters->GetTabletCounters()->IncCounter(counter, num);
     }
 
     void IncCounter(NDataShard::EPercentileCounters counter, ui64 num) const {
-        Counters.GetTabletCounters()->IncCounter(counter, num);
+        Counters->GetTabletCounters()->IncCounter(counter, num);
     }
 
     void IncCounter(NDataShard::EPercentileCounters counter, const TDuration& latency) const {
-        Counters.GetTabletCounters()->IncCounter(counter, latency);
+        Counters->GetTabletCounters()->IncCounter(counter, latency);
     }
 
     inline TRowVersion LastCompleteTxVersion() const {
@@ -480,7 +479,7 @@ protected:
 
 private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
-    TCountersManager Counters;
+    std::shared_ptr<NKikimr::NColumnShard::TCountersManager> Counters;
     std::unique_ptr<TWriteTasksQueue> WriteTasksQueue;
 
     std::unique_ptr<TTxController> ProgressTxController;

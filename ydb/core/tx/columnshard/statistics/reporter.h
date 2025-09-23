@@ -21,7 +21,7 @@ private:
     ui64 SSLocalId = 0;
     ui64 TabletId = 0;
     ui32 ReportStatisticsPeriodMs;
-    NKikimr::NColumnShard::TCountersManager& CountersManager;
+    std::shared_ptr<NKikimr::NColumnShard::TCountersManager> CountersManager;
     ui64 StatsReportRound = 0;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> latestCSExecutorStats;
     ui32 JitterIntervalMS = 200;
@@ -40,7 +40,7 @@ private:
         // TLogContextGuard gLogging(
         //     NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", ParentActorId));
         switch (ev->GetTypeRewrite()) {
-            // cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle)
             sFunc(TEvTabletPipe::TEvClientConnected, SendPeriodicStats)
             hFunc(NColumnShard::TEvPrivate::TEvReportStatistics, Handle);
@@ -63,7 +63,7 @@ public:
     TColumnShardStatisticsReporter (
         ui64 tabletId,
         ui32 reportStatisticsPeriodMs,
-        NColumnShard::TCountersManager& countersManager)
+        std::shared_ptr<NKikimr::NColumnShard::TCountersManager> countersManager)
         :
         TabletId(tabletId),
         ReportStatisticsPeriodMs(reportStatisticsPeriodMs),

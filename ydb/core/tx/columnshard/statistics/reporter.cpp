@@ -43,14 +43,14 @@ void TColumnShardStatisticsReporter::FillWhateverCan(std::unique_ptr<TEvDataShar
     auto tableStats = ev->Record.MutableTableStats();
 
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", tableStats->GetRowCount());
-    CountersManager.FillTotalTableStats(*tableStats);
+    CountersManager->FillTotalTableStats(*tableStats);
 
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", tableStats->GetRowCount());
 
     // tableStats.SetInFlightTxCount(Executor.GetStats().TxInFly);
     // tableStats.SetHasLoanedParts(Executor.HasLoanedParts());
 
-    auto activeStats = CountersManager.GetPortionIndexCounters()->GetTotalStats(NColumnShard::TPortionIndexStats::TActivePortions());
+    auto activeStats = CountersManager->GetPortionIndexCounters()->GetTotalStats(NColumnShard::TPortionIndexStats::TActivePortions());
 
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", tableStats->GetRowCount());
 

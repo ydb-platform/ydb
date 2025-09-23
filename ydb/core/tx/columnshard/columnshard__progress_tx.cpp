@@ -34,7 +34,7 @@ public:
             AbortedThroughRemoveExpired = true;
             return true;
         }
-        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TX_COMPLETE_LAG, Self->GetTxCompleteLag().MilliSeconds());
+        Self->Counters->GetTabletCounters()->SetCounter(COUNTER_TX_COMPLETE_LAG, Self->GetTxCompleteLag().MilliSeconds());
 
         const size_t removedCount = Self->ProgressTxController->CleanExpiredTxs(txc);
         if (removedCount > 0) {
@@ -79,7 +79,7 @@ public:
 
             AFL_VERIFY(TxOperator->ProgressOnExecute(*Self, NOlap::TSnapshot(step, txId), txc));
             Self->ProgressTxController->ProgressOnExecute(txId, txc);
-            Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLANNED_TX_COMPLETED);
+            Self->Counters->GetTabletCounters()->IncCounter(COUNTER_PLANNED_TX_COMPLETED);
         }
         Self->ProgressTxInFlight = std::nullopt;
         if (!!Self->ProgressTxController->GetPlannedTx()) {

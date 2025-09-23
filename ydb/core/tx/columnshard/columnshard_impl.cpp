@@ -78,21 +78,21 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , TabletCountersHolder(new TProtobufTabletCounters<ESimpleCounters_descriptor, ECumulativeCounters_descriptor,
           EPercentileCounters_descriptor, ETxTypes_descriptor>())
-    , Counters(*TabletCountersHolder)
+    , Counters(std::make_shared<TCountersManager>(*TabletCountersHolder))
     , WriteTasksQueue(std::make_unique<TWriteTasksQueue>(this))
     , ProgressTxController(std::make_unique<TTxController>(*this))
     , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
     , DataLocksManager(std::make_shared<NOlap::NDataLocks::TManager>())
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
-    , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
-    , TablesManager(StoragesManager, nullptr, Counters.GetPortionIndexCounters(), info->TabletID)
+    , InFlightReadsTracker(StoragesManager, Counters->GetRequestsTracingCounters())
+    , TablesManager(StoragesManager, nullptr, Counters->GetPortionIndexCounters(), info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
-    , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
-    , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
-    , BackgroundController(Counters.GetBackgroundControllerCounters())
-    , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
+    , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters->GetSubscribeCounters())
+    , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters->GetSubscribeCounters())
+    , BackgroundController(Counters->GetBackgroundControllerCounters())
+    , NormalizerController(StoragesManager, Counters->GetSubscribeCounters())
     , SysLocks(this) {
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
     SpaceWatcher = new TSpaceWatcher(this);
@@ -202,11 +202,11 @@ NOlap::TSnapshot TColumnShard::GetMinReadSnapshot() const {
 
     if (auto ssClean = InFlightReadsTracker.GetSnapshotToClean()) {
         if (ssClean->GetPlanStep() < minReadStep) {
-            Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(ssClean->GetPlanStep()));
+            Counters->GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(ssClean->GetPlanStep()));
             return *ssClean;
         }
     }
-    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minReadStep));
+    Counters->GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minReadStep));
     return NOlap::TSnapshot::MaxForPlanStep(minReadStep);
 }
 
@@ -345,9 +345,9 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     TablesManager.AddTableVersion(internalPathId, version, tableVerProto, schema, db);
 
-    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
-    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, TablesManager.GetSchemaPresets().size());
-    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().size());
+    Counters->GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
+    Counters->GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, TablesManager.GetSchemaPresets().size());
+    Counters->GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().size());
 }
 
 void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterProto, const NOlap::TSnapshot& version,
@@ -453,7 +453,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     ACFL_DEBUG("event", "EnqueueBackgroundActivities")("periodic", periodic);
     StoragesManager->GetOperatorVerified(NOlap::IStoragesManager::DefaultStorageId);
     StoragesManager->GetSharedBlobsManager()->GetStorageManagerVerified(NOlap::IStoragesManager::DefaultStorageId);
-    Counters.GetCSCounters().OnStartBackground();
+    Counters->GetCSCounters().OnStartBackground();
 
     if (!TablesManager.HasPrimaryIndex()) {
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("problem", "Background activities cannot be started: no index at tablet");
@@ -624,7 +624,7 @@ public:
 };
 
 void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
-    Counters.GetCSCounters().OnSetupCompaction();
+    Counters->GetCSCounters().OnSetupCompaction();
     BackgroundController.ResetWaitingPriority();
 
     auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
@@ -647,7 +647,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
     NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
         std::make_shared<TCompactionExecutor>(
-            TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl),
+            TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters->GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl),
         env, NConveyorComposite::ESpecialTaskCategory::Compaction);
 }
 
@@ -749,7 +749,7 @@ bool TColumnShard::SetupTtl() {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_ttl")("reason", "disabled");
         return false;
     }
-    Counters.GetCSCounters().OnSetupTtl();
+    Counters->GetCSCounters().OnSetupTtl();
 
     const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : ((ui64)512 * 1024 * 1024);
     std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges =
@@ -772,12 +772,12 @@ bool TColumnShard::SetupTtl() {
         if (i->NeedConstruction()) {
             NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
                 std::make_shared<TCompactionExecutor>(
-                    TabletID(), SelfId(), i, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, true),
+                    TabletID(), SelfId(), i, actualIndexInfo, Counters->GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, true),
                 env, NConveyorComposite::ESpecialTaskCategory::Compaction);
         } else {
             NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(std::move(rInput),
                 std::make_shared<TCompactionExecutor>(
-                    TabletID(), SelfId(), i, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, false),
+                    TabletID(), SelfId(), i, actualIndexInfo, Counters->GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, false),
                 env, NConveyorComposite::ESpecialTaskCategory::Compaction);
         }
     }
@@ -785,7 +785,7 @@ bool TColumnShard::SetupTtl() {
 }
 
 void TColumnShard::SetupCleanupPortions() {
-    Counters.GetCSCounters().OnSetupCleanup();
+    Counters->GetCSCounters().OnSetupCleanup();
     if (!AppDataVerified().ColumnShardConfig.GetCleanupEnabled() ||
         !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::Cleanup)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_cleanup")("reason", "disabled");
@@ -815,12 +815,12 @@ void TColumnShard::SetupCleanupPortions() {
     auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
     NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(std::move(rInput),
         std::make_shared<TCompactionExecutor>(
-            TabletID(), SelfId(), changes, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, false),
+            TabletID(), SelfId(), changes, actualIndexInfo, Counters->GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, false),
         env, NConveyorComposite::ESpecialTaskCategory::Compaction);
 }
 
 void TColumnShard::SetupCleanupTables() {
-    Counters.GetCSCounters().OnSetupCleanup();
+    Counters->GetCSCounters().OnSetupCleanup();
     if (BackgroundController.IsCleanupTablesActive()) {
         ACFL_DEBUG("background", "cleanup_tables")("skip_reason", "in_progress");
         return;
@@ -936,7 +936,7 @@ void TColumnShard::SetupCleanupSchemas() {
     if (!AppDataVerified().FeatureFlags.GetEnableCSSchemasCollapsing()) {
         return;
     }
-    Counters.GetCSCounters().OnSetupCleanup();
+    Counters->GetCSCounters().OnSetupCleanup();
     if (BackgroundController.IsCleanupSchemasActive()) {
         ACFL_DEBUG("background", "cleanup_schemas")("skip_reason", "in_progress");
         return;

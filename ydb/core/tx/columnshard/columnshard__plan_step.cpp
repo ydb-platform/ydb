@@ -106,7 +106,7 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     Result = std::make_unique<TEvTxProcessing::TEvPlanStepAccepted>(Self->TabletID(), step);
 
-    Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLAN_STEP_ACCEPTED);
+    Self->Counters->GetTabletCounters()->IncCounter(COUNTER_PLAN_STEP_ACCEPTED);
 
     if (plannedCount > 0 || Self->ProgressTxController->HaveOutdatedTxs()) {
         Self->EnqueueProgressTx(ctx, std::nullopt);

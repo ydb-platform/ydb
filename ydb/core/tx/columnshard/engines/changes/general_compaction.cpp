@@ -146,7 +146,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
 void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     TBase::DoWriteIndexOnComplete(self, context);
     if (self) {
-        self->Counters.GetTabletCounters()->OnCompactionWriteIndexCompleted(
+        self->Counters->GetTabletCounters()->OnCompactionWriteIndexCompleted(
             context.FinishedSuccessfully, context.BlobsWritten, context.BytesWritten);
     }
 }
@@ -155,7 +155,7 @@ void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& sel
     AFL_VERIFY(PrioritiesAllocationGuard);
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
-    self.Counters.GetCSCounters().OnSplitCompactionInfo(
+    self.Counters->GetCSCounters().OnSplitCompactionInfo(
         g.GetAdditiveSummary().GetCompacted().GetTotalPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
 }
 

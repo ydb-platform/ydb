@@ -197,7 +197,6 @@ void TDescribeSchemaSecretsService::SendSchemeCacheRequest(const TString& secret
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.Path = SplitPath(secretName);
-    entry.SyncVersion = true;
     request->ResultSet.emplace_back(entry);
     // TODO(yurikiselev): Deal with UserToken [issue:25472]
 

@@ -920,11 +920,12 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     const auto schemeCacheId = MakeSchemeCacheID();
 
+    auto ptr = weak_from_base();
     auto future = SendActorRequest<TRequest, TResponse, TResult>(
         ActorSystem,
         schemeCacheId,
         ev.Release(),
-        [userToken, database, cluster, mainCluster = Cluster, table, settings, expectedSchemaVersion, this, queryName, externalPath]
+        [userToken, database, cluster, mainCluster = Cluster, table, settings, expectedSchemaVersion, this, queryName, externalPath, ptr]
             (TPromise<TResult> promise, TResponse&& response) mutable
         {
             try {
@@ -934,7 +935,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 YQL_ENSURE(1 <= navigate.ResultSet.size() && navigate.ResultSet.size() <= 2);
                 auto& entry = InferEntry(navigate.ResultSet);
 
-                if (entry.Status != EStatus::Ok) {
+                auto locked = ptr.lock();
+                if (entry.Status != EStatus::Ok || !locked) {
                     promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, table));
                     return;
                 }

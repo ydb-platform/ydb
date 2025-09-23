@@ -379,7 +379,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             auto client = Kikimr->GetQueryClient();
 
             // classic write skew
-            // there a business rule: sum of values must be <= 3
+            // there is a business rule: sum of values must be <= 3
 
             auto session1 = client.GetSession().GetValueSync().GetSession();
             auto session2 = client.GetSession().GetValueSync().GetSession();

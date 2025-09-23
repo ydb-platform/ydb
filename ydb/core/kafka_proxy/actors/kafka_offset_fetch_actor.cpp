@@ -155,16 +155,16 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
             bool hasRights = response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *UserToken);
             if (!hasRights) {
                 RaiseError(
-                    "user has no rights for this topic",
+                    "unauthenticated access is forbidden",
                     Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                     Ydb::StatusIds::StatusCode::StatusIds_StatusCode_UNAUTHORIZED,
                     ActorContext()
                 );
                 return;
             }
-        } else if (RequireAuthentication && (!UserToken || !UserToken->GetSanitizedToken())) {
+        } else if (RequireAuthentication) {
             RaiseError(
-                    "user has no rights for this topic",
+                    "unauthenticated access is forbidden",
                     Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                     Ydb::StatusIds::StatusCode::StatusIds_StatusCode_UNAUTHORIZED,
                     ActorContext()
@@ -281,8 +281,7 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
             TString topicName = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
             TString topicPath = NormalizePath(DatabasePath, topicName);
             if (topicPartition.ErrorCode == EKafkaErrors::RESOURCE_NOT_FOUND &&
-                    (Context->Config.GetAutoCreateConsumersEnable() ||
-                     Context->Config.GetAutoCreateTopicsEnable())) {
+                Context->Config.GetAutoCreateConsumersEnable()) {
                 // consumer is not assigned to the topic case
                 TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(topicName,
                                                                         topicPath,
@@ -487,14 +486,10 @@ void TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(const TString& topic
     }
     InflyTopics++;
 
-    auto topicSettings = NYdb::NTopic::TAlterTopicSettings();
-    topicSettings.BeginAddConsumer(groupId).EndAddConsumer();
     auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
     request.get()->set_path(topicPath);
-    for (auto& c : topicSettings.AddConsumers_) {
-        auto* consumer = request.get()->add_add_consumers();
-        consumer->set_name(c.ConsumerName_);
-    }
+    auto* consumer = request->add_add_consumers();
+    consumer->set_name(groupId);
     AlterTopicCookie++;
     AlterTopicCookieToName[AlterTopicCookie] = originalTopicName;
     auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = topicName, this]

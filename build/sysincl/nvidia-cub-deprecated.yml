@@ -3,4 +3,4 @@
 # Hence we are using it directly from Arcadia.
 # This sysincl enforces such usage.
 - includes:
-  - cub/cub.cuh: contrib/libs/nvidia/cub/cub/cub.cuh
+  - cub/cub.cuh: contrib/deprecated/nvidia/cub/cub/cub.cuh

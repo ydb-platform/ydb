@@ -398,4 +398,6 @@ message TTableServiceConfig {
     optional bool EnableOlapPushdownAggregate = 98  [ default = false ];
 
     optional bool EnableDataShardCreateTableAs = 102 [default = false];
+
+    optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
 };

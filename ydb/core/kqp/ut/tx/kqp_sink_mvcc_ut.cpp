@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
             // tx2 reads all the KV, it should see (0, 0)
             result = session2.ExecuteQuery(Q1_(R"(
-                SELECT * FROM KV2;
+                select * from KV2;
                 )"), TTxControl::BeginTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([[0u;["0"]]])", FormatResultSetYson(result.GetResultSet(0)));

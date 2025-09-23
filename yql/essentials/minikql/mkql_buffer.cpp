@@ -4,12 +4,12 @@ namespace NKikimr {
 
 namespace NMiniKQL {
 
-const size_t TBufferPage::PageCapacity = TBufferPage::PageAllocSize - sizeof(TBufferPage);
+static_assert(IsValidPageAllocSize(TBufferPage::DefaultPageAllocSize));
 
-TBufferPage* TBufferPage::Allocate() {
-    static_assert(PageAllocSize <= std::numeric_limits<ui32>::max());
-    static_assert(sizeof(TBufferPage) < PageAllocSize, "Page allocation size is too small");
-    void* ptr = malloc(PageAllocSize);
+const size_t TBufferPage::DefaultPageCapacity = TBufferPage::DefaultPageAllocSize - sizeof(TBufferPage);
+
+TBufferPage* TBufferPage::Allocate(size_t pageAllocSize) {
+    void* ptr = malloc(pageAllocSize);
     if (!ptr) {
         throw std::bad_alloc();
     }
@@ -17,7 +17,8 @@ TBufferPage* TBufferPage::Allocate() {
     return result;
 }
 
-void TBufferPage::Free(TBufferPage* page) {
+void TBufferPage::Free(TBufferPage* page, size_t pageAllocSize) {
+    Y_UNUSED(pageAllocSize);
     free(page);
 }
 
@@ -30,14 +31,14 @@ void TPagedBuffer::AppendPage() {
             page = next;
             page->Clear();
         } else {
-            page = TBufferPage::Allocate();
+            page = TBufferPage::Allocate(PageAllocSize);
             tailPage->Next_ = page;
         }
         tailPage->Size_ = TailSize_;
         ClosedPagesSize_ += TailSize_;
     } else {
         Y_DEBUG_ABORT_UNLESS(Head_ == nullptr);
-        page = TBufferPage::Allocate();
+        page = TBufferPage::Allocate(PageAllocSize);
         Head_ = page->Data();
     }
     TailSize_ = 0;

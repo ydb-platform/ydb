@@ -12,6 +12,7 @@ fmt-all () {
         do
                 if [[ "$FILE" == *.cpp || "$FILE" == *.h ]]; then
                         fmt $HOME/ydbwork/ydb/$FILE
+                        git add $HOME/ydbwork/ydb/$FILE
                         echo "Processing text file: $FILE"
                 fi
         done

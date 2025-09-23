@@ -35,7 +35,9 @@ int main(int argc, char** argv) {
     opts.AddHelpOption('h');
 
     NKikimr::NMiniKQL::TBenchmarkSettings params;
-    opts.AddLongOption('s', "benchmark_sizes", "left and right table sizes to choose for joins benchmark")
+    opts.AddLongOption('s', "benchmark_sizes")
+        .Help("left and right table sizes to choose for joins benchmark. visit NBenchmarkSizes namespace in "
+              "benchmark_settings.cpp to see exact values")
         .Choices({"exp", "linear", "small"})
         .DefaultValue("small")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {

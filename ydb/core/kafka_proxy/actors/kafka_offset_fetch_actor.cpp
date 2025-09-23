@@ -151,24 +151,20 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
             return;
         }
         auto path = CanonizePath(NKikimr::JoinPath(response.Path));
+        bool hasRights = true;
         if (UserToken && UserToken->GetSerializedToken()) {
-            bool hasRights = response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *UserToken);
-            if (!hasRights) {
-                RaiseError(
-                    "unauthenticated access is forbidden",
-                    Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
-                    Ydb::StatusIds::StatusCode::StatusIds_StatusCode_UNAUTHORIZED,
-                    ActorContext()
-                );
-                return;
-            }
+            hasRights = response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *UserToken);
         } else if (RequireAuthentication) {
+            hasRights = false;
+        }
+        if (!hasRights) {
             RaiseError(
-                    "unauthenticated access is forbidden",
-                    Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
-                    Ydb::StatusIds::StatusCode::StatusIds_StatusCode_UNAUTHORIZED,
-                    ActorContext()
-                );
+                "unauthenticated access is forbidden",
+                Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
+                Ydb::StatusIds::StatusCode::StatusIds_StatusCode_UNAUTHORIZED,
+                ActorContext()
+            );
+            return;
         }
         const auto& pqDescr = response.PQGroupInfo->Description;
         ProcessTablets(pqDescr, ActorContext());

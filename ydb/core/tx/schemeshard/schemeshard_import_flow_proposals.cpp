@@ -289,27 +289,32 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     }
 
     auto tableDesc = GetTableDescription(ss, dstPath->PathId);
-    const auto& keyIds = tableDesc.GetKeyColumnIds()[0];
+    Y_ABORT_UNLESS(!tableDesc.GetKeyColumnIds().empty());
+    const auto& keyId = tableDesc.GetKeyColumnIds()[0];
     bool isPartitioningAvailable = false;
     
-    // ydb.tech/docs/ru/concepts/cdc#topic-partitions
+    // Explicit specification of the number of partitions when creating CDC
+    // is possible only if the first component of the primary key 
+    // of the source table is Uint32 or Uint64
     for (const auto& column : tableDesc.GetColumns()) {
-        if (column.GetId() == keyIds) {
+        if (column.GetId() == keyId) {
             isPartitioningAvailable = column.GetType() == "Uint32" || column.GetType() == "Uint64";
             break;
         }
     }
 
-    if (topic.has_partitioning_settings() && isPartitioningAvailable) {
-        i64 minActivePartitions =
-            topic.partitioning_settings().min_active_partitions();
-        if (minActivePartitions < 0) {
-            error = "minActivePartitions must be >= 0";
-            return nullptr;
-        } else if (minActivePartitions == 0) {
-            minActivePartitions = 1;
+    if (topic.has_partitioning_settings()) {
+        if (isPartitioningAvailable) {
+            i64 minActivePartitions =
+                topic.partitioning_settings().min_active_partitions();
+            if (minActivePartitions < 0) {
+                error = "minActivePartitions must be >= 0";
+                return nullptr;
+            } else if (minActivePartitions == 0) {
+                minActivePartitions = 1;
+            }
+            cdcStream.SetTopicPartitions(minActivePartitions);
         }
-        cdcStream.SetTopicPartitions(minActivePartitions);
 
         if (topic.partitioning_settings().has_auto_partitioning_settings()) {
             auto& partitioningSettings = topic.partitioning_settings().auto_partitioning_settings();

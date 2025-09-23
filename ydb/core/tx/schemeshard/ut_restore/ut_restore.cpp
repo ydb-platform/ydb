@@ -5307,19 +5307,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath, false, false, true), {
                     NLs::PathExist,
                 });
-                const auto topicDesc = DescribePath(runtime, "/MyRoot/Table" + changefeedPath + "/streamImpl", false, false, true);
-                TestDescribeResult(topicDesc, {
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath + "/streamImpl", false, false, true), {
                     NLs::ConsumerExist("my_consumer"),
+                    NLs::MinTopicPartitionsCountEqual(isPartitioningAvailable ? 2 : 1),
+                    NLs::MaxTopicPartitionsCountEqual(3),
                 });
-                if (isPartitioningAvailable) {
-                    TestDescribeResult(topicDesc, {
-                        NLs::MinTopicPartitionsCountEqual(2),
-                        NLs::MaxTopicPartitionsCountEqual(3),
-                    });
-                } else {
-                    NLs::NoMinTopicPartitionsCount(topicDesc);
-                    NLs::NoMaxTopicPartitionsCount(topicDesc);
-                }
             }
         };
     }
@@ -5443,7 +5435,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImportChangefeeds(1, AddedScheme);
     }
 
-    // ydb.tech/docs/ru/concepts/cdc#topic-partitions
+    // Explicit specification of the number of partitions when creating CDC
+    // is possible only if the first component of the primary key 
+    // of the source table is Uint32 or Uint64 
     Y_UNIT_TEST(ChangefeedWithPartitioning) {
         TestImportChangefeeds(1, AddedScheme, "UINT32");
     }

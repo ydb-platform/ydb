@@ -139,11 +139,7 @@ namespace NLs {
     void HasMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void NoMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc MinTopicPartitionsCountEqual(ui32 count);
-    void HasMinTopicPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
-    void NoMinTopicPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc MaxTopicPartitionsCountEqual(ui32 count);
-    void HasMaxTopicPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
-    void NoMaxTopicPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc PartitioningByLoadStatus(bool status);
     TCheckFunc ColumnFamiliesCount(ui32 size);
     TCheckFunc ColumnFamiliesHas(ui32 familyId);

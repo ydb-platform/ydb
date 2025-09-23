@@ -1151,26 +1151,10 @@ TCheckFunc MinTopicPartitionsCountEqual(ui32 count) {
     };
 }
 
-void HasMinTopicPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT(record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy().HasMinPartitionCount());
-}
-
-void NoMinTopicPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT(!record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy().HasMinPartitionCount());
-}
-
 TCheckFunc MaxTopicPartitionsCountEqual(ui32 count) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy().GetMaxPartitionCount(), count);
     };
-}
-
-void HasMaxTopicPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT(record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy().HasMaxPartitionCount());
-}
-
-void NoMaxTopicPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT(!record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy().HasMaxPartitionCount());
 }
 
 TCheckFunc PartitioningByLoadStatus(bool status) {

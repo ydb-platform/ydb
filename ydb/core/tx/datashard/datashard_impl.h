@@ -1440,7 +1440,7 @@ class TDataShard
     void OnStopGuardStarting(const TActorContext &ctx);
     void OnStopGuardComplete(const TActorContext &ctx);
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
-    void IcbRegister();
+    void InitControls();
     bool ReadOnlyLeaseEnabled() override;
     TDuration ReadOnlyLeaseDuration() override;
     void OnActivateExecutor(const TActorContext &ctx) override;

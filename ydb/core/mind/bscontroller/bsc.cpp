@@ -829,10 +829,12 @@ void TBlobStorageController::SetHostRecords(THostRecordMap hostRecords) {
     }
 
     // there were no host records, this is the first call, so we must initialize SelfHeal now and start booting tablet
-    if (auto *appData = AppData(); appData && appData->Icb) {
-        EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
-        appData->Icb->RegisterSharedControl(*EnableSelfHealWithDegraded,
-            "BlobStorageControllerControls.EnableSelfHealWithDegraded");
+    if (auto *appData = AppData()) {
+        if (appData->Icb) {
+            EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
+            TControlBoard::RegisterSharedControl(*EnableSelfHealWithDegraded,
+                appData->Icb->BlobStorageControllerControls.EnableSelfHealWithDegraded);
+        }
     }
     Y_ABORT_UNLESS(!SelfHealId);
     SelfHealId = Register(CreateSelfHealActor());

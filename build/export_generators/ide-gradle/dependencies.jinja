@@ -1,4 +1,4 @@
-{%- macro AnnotationProcessors(funcName, annotation_processors) -%}
+{%- macro AnnotationProcessors(func, annotation_processors) -%}
 {%-     if annotation_processors|length -%}
 {%-         set annotation_processors = annotation_processors|unique|sort -%}
 {%-         set lomboks = annotation_processors|select('startsWith', 'contrib/java/org/projectlombok/lombok') -%}
@@ -6,23 +6,23 @@
 {%-         set annotation_processors = lomboks + nolomboks -%}
 {%-         for annotation_processor in annotation_processors -%}
 {%-             set parts = rsplit(annotation_processor, "/", 4) %}
-    {{ funcName }}("{{ parts[0]|replace("contrib/java/", "")|replace("/", ".") }}:{{ parts[1] }}:{{ parts[2] }}")
+    {{ func }}("{{ parts[0]|replace("contrib/java/", "")|replace("/", ".") }}:{{ parts[1] }}:{{ parts[2] }}")
 {%-         endfor -%}
 {%-     endif -%}
 {%- endmacro -%}
 
-{%- macro Kapts(kapts, file_jars, test_file_jars) -%}
+{%- macro Kapts(func, kapts, file_jars, test_file_jars) -%}
 {%-     if kapts|length -%}
 {%-         for kapt in kapts|unique|sort -%}
 {%-             if (kapt in file_jars) or (kapt in test_file_jars) -%}
 {#-                 found KAPT jar in depends => use kapt as jar #}
-    kapt(files("$output_root/{{ kapt }}"))
+    {{ func }}(files("$output_root/{{ kapt }}"))
 {%-             else -%}
 {#-                 no in depends jar => use KAPT as project() -#}
 {%-                 set path_and_jar = rsplit(kapt, "/", 2) -%}
 {%-                 set classpath = 'project(":' + path_and_jar[0]|replace("/", ":") + '")' -%}
 {%-                 include "[generator]/patch_classpath.jinja" %}
-    kapt({{ classpath }})
+    {{ func }}({{ classpath }})
 {%-             endif -%}
 {%-         endfor -%}
 {%-     endif -%}
@@ -102,11 +102,11 @@ dependencies {
 {%- set test_annotation_processors = extra_targets|selectattr('use_annotation_processor')|map(attribute='use_annotation_processor')|sum -%}
 {{ AnnotationProcessors("testAnnotationProcessor", test_annotation_processors) }}
 {%- if with_kapt -%}
-{{ Kapts(target.kapt.classpaths, file_jars, test_file_jars) }}
+{{ Kapts("kapt", target.kapt.classpaths, file_jars, test_file_jars) }}
 {%- endif -%}
 {%- if with_test_kapt -%}
 {%-     for extra_target in extra_targets -%}
-{{ Kapts(extra_target.kapt.classpaths, file_jars, test_file_jars) }}
+{{ Kapts("kaptTest", extra_target.kapt.classpaths, file_jars, test_file_jars) }}
 {%-     endfor -%}
 {%- endif -%}
 {#- glue -#}

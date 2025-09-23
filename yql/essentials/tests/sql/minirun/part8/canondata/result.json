@@ -1097,6 +1097,20 @@
             "uri": "https://{canondata_backend}/995452/d62a19412f7a8c91f28f3bd535745c621a6e845a/resource.tar.gz#test.test_join-yql-6297-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[linear-mutdict_empty-default.txt-Debug]": [
+        {
+            "checksum": "150da420b336d2664ecc61938a5559a8",
+            "size": 326,
+            "uri": "https://{canondata_backend}/212715/29904ee3fd0a837860e52fb350761f0b97d609bf/resource.tar.gz#test.test_linear-mutdict_empty-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-mutdict_empty-default.txt-Results]": [
+        {
+            "checksum": "f10f5ddf3886810d583bdfb4d0d2b2aa",
+            "size": 1058,
+            "uri": "https://{canondata_backend}/212715/29904ee3fd0a837860e52fb350761f0b97d609bf/resource.tar.gz#test.test_linear-mutdict_empty-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[match_recognize-permute-default.txt-Debug]": [
         {
             "checksum": "d85f6b9f632284167abb3f3ac686e0f9",

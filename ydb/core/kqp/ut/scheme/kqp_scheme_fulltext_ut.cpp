@@ -8,7 +8,7 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
-    
+
     Y_UNIT_TEST(CreateTableWithIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableFulltextIndex(true);
@@ -297,6 +297,7 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: Fulltext column 'Text' expected type 'String' but got Uint64");
         }
     }
+
 }
 
 }

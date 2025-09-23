@@ -993,8 +993,16 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             } else if (type == "syncGlobalUnique") {
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
             } else if (type == "globalVectorKmeansTree") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableVectorIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Vector index support is disabled"));
+                    return TStatus::Error;
+                }
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
             } else if (type == "globalFulltext") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
+                    return TStatus::Error;
+                }
                 indexType = TIndexDescription::EType::GlobalFulltext;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
@@ -1023,6 +1031,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
             NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             NKikimrKqp::TFulltextIndexDescription fulltextIndexDescription;
+            // fulltext index has per-column analyzers settings, single value for now
             fulltextIndexDescription.mutable_settings()->add_columns()->set_column(
                 indexColums.empty() ? "<none>" : indexColums.back()
             );
@@ -1061,6 +1070,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique:
                     // no specialized index description
+                    // no settings validation
                     break;
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                     TString error;

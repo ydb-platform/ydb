@@ -81,7 +81,8 @@ IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vect
 NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     TIntrusivePtr<TKqpCounters> counters,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory);
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig);
 
 } // namespace NKqp
 } // namespace NKikimr

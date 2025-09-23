@@ -18,6 +18,19 @@
   * *false* (consistent reads) — каждое из чтений по отдельности возвращает консистентные данные, но консистентность данных между разными чтениями не гарантируется. Дважды выполненное чтение одного и того же диапазона таблицы может вернуть разные результаты.
   * *true* (inconsistent reads) — данные даже для отдельно взятого чтения могут содержать неконсистентные результаты.
 
+{% note warning "Ограничение для Online Read-Only и Stale Read-Only" %}
+
+Эти режимы не поддерживают чтение из колоночных таблиц. Попытка чтения вызовет ошибку следующего вида:
+
+`Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. Use Serializable or Snapshot Read-Only mode instead.`
+
+Для транзакций с чтением из колоночных таблиц используйте:
+
+* Serializable — режим по умолчанию;
+* Snapshot Read-Only — режим чтения из консистентного снапшота.
+
+{% endnote %}
+
 Режим выполнения транзакции задается в настройках транзакции при ее создании. Примеры для {{ ydb-short-name }} SDK смотрите в статье [{#T}](../../recipes/ydb-sdk/tx-control.md).
 
 ## Язык YQL {#language-yql}

@@ -269,7 +269,7 @@ message TDomainsConfig {
         repeated string MonitoringAllowedSIDs = 2;
         repeated string AdministrationAllowedSIDs = 3;
         repeated string DefaultUserSIDs = 4;
-        optional string AllAuthenticatedUsers = 5;
+        optional string AllAuthenticatedUsers = 5 [default = "all-users@well-known"];
         repeated string ViewerAllowedSIDs = 6;
         repeated string RegisterDynamicNodeAllowedSIDs = 8;
         repeated string BootstrapAllowedSIDs = 9;
@@ -1183,7 +1183,7 @@ message TSharedReadingConfig {
     optional bool Enabled = 1;
     optional uint64 TimeoutBeforeStartSessionSec = 2;
     optional uint64 SendStatusPeriodSec = 3;
-    optional uint64 MaxSessionUsedMemory = 4; 
+    optional uint64 MaxSessionUsedMemory = 4;
     optional bool WithoutConsumer = 5;
     optional TJsonParserConfig JsonParser = 7;
     optional TCompileServiceConfig CompileService = 8;

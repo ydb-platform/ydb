@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Скрипт для мониторинга workflow runs в очереди GitHub Actions.
-Отправляет уведомления в Telegram при обнаружении застрявших jobs.
+Script for monitoring workflow runs queued in GitHub Actions.
+Sends notifications to Telegram when stuck jobs are detected.
 """
 
 import requests
@@ -22,7 +22,7 @@ TAIL_MESSAGE = "📊 [Подробности на дашборде](https://data
 MAX_AGE_DAYS = 3  # Максимальный возраст jobs в днях (исключаем баги GitHub)
 
 # Настройки отправки сообщений
-SEND_WHEN_ALL_GOOD = False  # Отправлять ли сообщение когда все jobs работают нормально
+SEND_WHEN_ALL_GOOD = False  # Whether to send a message when all jobs are working fine
 
 # Критерии для определения застрявших jobs
 # Каждый элемент: [pattern, threshold_hours, display_name]
@@ -57,7 +57,7 @@ def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int 
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"Ошибка при запросе к API: {e}")
+        print(f"Error when requesting API: {e}")
         return {}
 
 def analyze_queued_workflows(workflow_runs: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:

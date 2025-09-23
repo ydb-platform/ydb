@@ -1,4 +1,4 @@
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
@@ -89,29 +89,6 @@ TExprBase MakeInsertIndexRows(const NYql::NNodes::TExprBase& inputRows, const TK
 }
 
 } // namespace
-
-TVector<TStringBuf> BuildVectorIndexPostingColumns(const TKikimrTableDescription& table,
-    const TIndexDescription* indexDesc) {
-    TVector<TStringBuf> indexTableColumns;
-    THashSet<TStringBuf> indexTableColumnSet;
-
-    indexTableColumns.emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
-    indexTableColumnSet.insert(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
-
-    for (const auto& column : table.Metadata->KeyColumnNames) {
-        if (indexTableColumnSet.insert(column).second) {
-            indexTableColumns.emplace_back(column);
-        }
-    }
-
-    for (const auto& column : indexDesc->DataColumns) {
-        if (indexTableColumnSet.insert(column).second) {
-            indexTableColumns.emplace_back(column);
-        }
-    }
-
-    return indexTableColumns;
-}
 
 TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlInsertRowsIndex>()) {
@@ -222,6 +199,12 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 insert.Pos(), ctx, true);
 
             if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                if (indexDesc->KeyColumns.size() > 1) {
+                    // First resolve prefix IDs using StreamLookup
+                    const auto& prefixTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
+                    upsertIndexRows = BuildVectorIndexPrefixRows(table, prefixTable, true, indexDesc, upsertIndexRows, indexTableColumns, insert.Pos(), ctx);
+                }
                 upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns,
                     upsertIndexRows, true, insert.Pos(), ctx);
                 indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);

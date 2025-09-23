@@ -281,6 +281,10 @@ class PluginLogger(object):
 logger = PluginLogger()
 
 
+def _wrap_file_path(s: str) -> str:
+    return f"'{s}'" if " " in s else s
+
+
 def _parse_list_var(unit: UnitType, var_name: str, sep: str) -> list[str]:
     return [x.strip() for x in unit.get(var_name).removeprefix(f"${var_name}").split(sep) if x.strip()]
 
@@ -580,7 +584,6 @@ def on_setup_build_env(unit: NotsUnitType) -> None:
         options.append(f'"{name}={double_quote_escaped_value}"')
 
     unit.set(["NOTS_TOOL_BUILD_ENV", " ".join(options)])
-    logger.print_vars("NOTS_TOOL_BUILD_ENV")
 
 
 def __set_append(unit: NotsUnitType, var_name: str, value: UnitType.PluginArgs, delimiter: str = " ") -> None:
@@ -609,9 +612,12 @@ def _filter_inputs_by_rules_from_tsconfig(unit: NotsUnitType, tsconfig: 'TsConfi
     target_path = os.path.join("${ARCADIA_ROOT}", mod_dir, "")  # To have "/" in the end
 
     for from_var, to_var in [("TS_GLOB_FILES", "TS_INPUT_FILES"), ("TS_GLOB_TEST_FILES", "TS_INPUT_TEST_FILES")]:
-        all_files = [__strip_prefix(target_path, f) for f in unit.get(from_var).split(" ")]
+        # TS_GLOB_* variables contain space-separated paths.
+        # Spaces in paths cause issues, so we split by target_path instead of space.
+        # https://st.yandex-team.ru/DEVTOOLSSUPPORT-69193
+        all_files = __strip_prefix(target_path, unit.get(from_var)).split(f" {target_path}")
         filtered_files = tsconfig.filter_files(all_files)
-        __set_append(unit, to_var, [os.path.join(target_path, f) for f in filtered_files])
+        __set_append(unit, to_var, [_wrap_file_path(f) for f in filtered_files])
 
 
 def _is_tests_enabled(unit: NotsUnitType) -> bool:
@@ -630,7 +636,7 @@ def _setup_eslint(unit: NotsUnitType) -> None:
         return
 
     unit.on_peerdir_ts_resource("eslint")
-    user_recipes = unit.get("TEST_RECIPES_VALUE")
+    user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
 
     test_type = TsTestType.ESLINT
@@ -641,8 +647,6 @@ def _setup_eslint(unit: NotsUnitType) -> None:
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_type} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_type, "MODDIR")
@@ -702,7 +706,7 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
         raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
 
     unit.on_peerdir_ts_resource("typescript")
-    user_recipes = unit.get("TEST_RECIPES_VALUE")
+    user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
 
     test_type = TsTestType.TSC_TYPECHECK
@@ -713,8 +717,6 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_type} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_type,)
@@ -754,7 +756,7 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     from lib.nots.package_manager import constants
 
-    recipes_value = unit.get("TEST_RECIPES_VALUE")
+    recipes_value = unit.get_subst("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
 
     test_type = TsTestType.TS_STYLELINT
@@ -763,8 +765,6 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_type} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_type,)
@@ -961,7 +961,7 @@ def on_ts_test_for_configure(
     unit.onpeerdir([for_mod_path])
 
     # user-defined recipes should be in the end
-    user_recipes = unit.get("TEST_RECIPES_VALUE").replace("$TEST_RECIPES_VALUE", "").strip()
+    user_recipes = unit.get_subst("TEST_RECIPES_VALUE").strip()
     unit.set(["TEST_RECIPES_VALUE", ""])
     unit.on_setup_extract_node_modules_recipe([for_mod_path])
     unit.on_setup_extract_output_tars_recipe([for_mod_path])
@@ -986,8 +986,6 @@ def on_ts_test_for_configure(
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_runner} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_runner, "TS_TEST_FOR_PATH")
@@ -1077,7 +1075,6 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
     # ${BINDIR} prefix for input is important to resolve to result of LARGE_FILES and not to SOURCEDIR
     new_items = [f'$COPY_CMD {i} {o}' for (i, o) in zip(in_files, out_files)]
     __set_append(unit, "_TS_PROJECT_SETUP_CMD", new_items, " && ")
-    logger.print_vars("_TS_PROJECT_SETUP_CMD")
 
     __on_ts_files(unit, in_files, out_files)
 

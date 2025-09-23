@@ -148,6 +148,13 @@ TExprBase MakeNonexistingRowsFilter(const TDqPhyPrecompute& inputRows, const TDq
         .Done();
 }
 
+// Take input rows and enrich them with data columns missing from the original update
+// - inputRows is the original input
+// - lookupDict is a dictionary with existing versions of rows from the table
+// - If opt is true: lookupDict contains <row, equal> tuples instead of just rows,
+//   and rows with equal flag == true must be filtered out from the result.
+//   This is used for the "don't update index" optimisation, i.e. when the query
+//   only changes rows not in the index.
 TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecompute& inputRows,
     const TDqPhyPrecompute& lookupDict, const THashSet<TStringBuf>& inputColumns,
     const TVector<TStringBuf>& indexColumns, const TKikimrTableDescription& table, TPositionHandle pos,
@@ -171,7 +178,7 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
                 .Done());
     }
 
-    auto lookup = Build<TCoLookup>(ctx, pos)
+    TExprBase lookup = Build<TCoLookup>(ctx, pos)
         .Collection(lookupDictArg)
         .Lookup<TCoAsStruct>()
             .Add(dictLookupKeyTuples)
@@ -180,13 +187,18 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
 
     // rows to be added into the index table in case if the given key hasn't been found in the main table
     TVector<TExprBase> absentKeyRow;
-    absentKeyRow.reserve(indexColumns.size());
+    if (mode != TKqpPhyUpsertIndexMode::UpdateOn) {
+        absentKeyRow.reserve(indexColumns.size());
+    }
 
     // rows to be updated in the index table in case if the given key has been found in the main table
     TVector<TExprBase> presentKeyRow;
     presentKeyRow.reserve(indexColumns.size());
 
-    auto payload = TCoArgument(ctx.NewArgument(pos, "payload"));
+    auto presentDictArg = TCoArgument(ctx.NewArgument(pos, "presentDictItem"));
+    auto presentDictItem = (mode != TKqpPhyUpsertIndexMode::UpdateOn
+        ? (TExprBase)presentDictArg
+        : (TExprBase)Build<TCoUnwrap>(ctx, pos).Optional(lookup).Done());
 
     for (const auto& column : indexColumns) {
         auto columnAtom = ctx.NewAtom(pos, column);
@@ -200,24 +212,28 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
                     .Build()
                 .Done();
 
-            absentKeyRow.emplace_back(tuple);
+            if (mode != TKqpPhyUpsertIndexMode::UpdateOn) {
+                absentKeyRow.emplace_back(tuple);
+            }
             presentKeyRow.emplace_back(tuple);
         } else {
-            auto columnType = table.GetColumnType(TString(column));
-            absentKeyRow.emplace_back(
-                Build<TCoNameValueTuple>(ctx, pos)
-                    .Name(columnAtom)
-                    .Value<TCoNothing>()
-                        .OptionalType(NCommon::BuildTypeExpr(pos, *columnType, ctx))
-                        .Build()
-                    .Done()
-            );
-            TExprNode::TPtr member = payload.Ptr();
+            if (mode != TKqpPhyUpsertIndexMode::UpdateOn) {
+                auto columnType = table.GetColumnType(TString(column));
+                absentKeyRow.emplace_back(
+                    Build<TCoNameValueTuple>(ctx, pos)
+                        .Name(columnAtom)
+                        .Value<TCoNothing>()
+                            .OptionalType(NCommon::BuildTypeExpr(pos, *columnType, ctx))
+                            .Build()
+                        .Done()
+                );
+            }
+            TExprBase member = presentDictItem;
             if (opt) {
                 member = Build<TCoNth>(ctx, pos)
                     .Tuple(member)
                     .Index().Build(0)
-                    .Done().Ptr();
+                    .Done();
             }
             presentKeyRow.emplace_back(
                 Build<TCoNameValueTuple>(ctx, pos)
@@ -235,44 +251,40 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
         .Add(presentKeyRow)
         .Done();
 
-    TExprNode::TPtr b;
-
-    if (opt) {
-        b = Build<TCoFlatOptionalIf>(ctx, pos)
+    TExprBase b = (opt
+        ? (TExprBase)Build<TCoFlatOptionalIf>(ctx, pos)
             .Predicate<TCoNth>()
-                .Tuple(payload)
+                .Tuple(presentDictItem)
                 .Index().Build(1)
                 .Build()
             .Value<TCoJust>()
                 .Input(presentKeyRowStruct)
                 .Build()
-            .Done().Ptr();
-    } else {
-        b = Build<TCoJust>(ctx, pos)
+            .Done()
+        : (TExprBase)Build<TCoJust>(ctx, pos)
             .Input(presentKeyRowStruct)
-            .Done().Ptr();
-    }
+            .Done());
 
-    TExprBase flatmapBody = Build<TCoIfPresent>(ctx, pos)
-        .Optional(lookup)
-        .PresentHandler<TCoLambda>()
-            .Args(payload)
-            .Body(b)
-            .Build()
-        .MissingValue<TCoJust>()
-            .Input<TCoAsStruct>()
-                .Add(absentKeyRow)
+    if (mode != TKqpPhyUpsertIndexMode::UpdateOn) {
+        b = Build<TCoIfPresent>(ctx, pos)
+            .Optional(lookup)
+            .PresentHandler<TCoLambda>()
+                .Args(presentDictArg)
+                .Body(b)
                 .Build()
-            .Build()
-        .Done();
-
-    if (mode == TKqpPhyUpsertIndexMode::UpdateOn) {
+            .MissingValue<TCoJust>()
+                .Input<TCoAsStruct>()
+                    .Add(absentKeyRow)
+                    .Build()
+                .Build()
+            .Done();
+    } else {
         // Filter non-existing rows
-        flatmapBody = Build<TCoFlatOptionalIf>(ctx, pos)
+        b = Build<TCoFlatOptionalIf>(ctx, pos)
             .Predicate<TCoExists>()
                 .Optional(lookup)
                 .Build()
-            .Value(flatmapBody)
+            .Value(b)
             .Done();
     }
 
@@ -288,7 +300,7 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
                     .Input(inputRowsArg)
                     .Lambda()
                         .Args(inputRowArg)
-                        .Body(flatmapBody)
+                        .Body(b)
                         .Build()
                     .Build()
                 .Build()
@@ -576,7 +588,7 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
 
 TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, const TExprBase& inputRows,
     const TCoAtomList& inputColumns, const TCoAtomList& returningColumns, const TCoAtomList& columnsWithDefaults, const TKikimrTableDescription& table,
-    const TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings, TPositionHandle pos, TExprContext& ctx)
+    const TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings, TPositionHandle pos, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
     switch (mode) {
         case TKqpPhyUpsertIndexMode::Upsert:
@@ -790,7 +802,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         auto reComputeDictStage = Build<TDqStage>(ctx, pos)
             .Inputs()
                 .Add(rowsPrecompute.Cast()) // input rows
-                .Add(lookupDict.Cast()) // dict contains loockuped from table rows
+                .Add(lookupDict.Cast()) // dict contains rows looked up from the table
                 .Build()
             .Program()
                 .Args({inputArg, lookupDictArg})
@@ -863,6 +875,12 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 .Build()
             .Done();
 
+        const TKikimrTableDescription *prefixTable = nullptr;
+        if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree && indexDesc->KeyColumns.size() > 1) {
+            prefixTable = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << mainTableNode.Path().Value()
+                << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
+        }
+
         if (indexKeyColumnsUpdated) {
             // Have to delete old index value from index table in case when index key columns were updated
             auto deleteIndexKeys = optUpsert
@@ -870,6 +888,10 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 : MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumnsWithoutData, pos, ctx);
 
             if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                if (indexDesc->KeyColumns.size() > 1) {
+                    deleteIndexKeys = BuildVectorIndexPrefixRows(table, *prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumnsWithoutData, pos, ctx);
+                }
+
                 deleteIndexKeys = BuildVectorIndexPostingRows(table, mainTableNode,
                     indexDesc->Name, indexTableColumnsWithoutData, deleteIndexKeys, false, pos, ctx);
             }
@@ -897,6 +919,10 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                       inputColumnsSet, indexTableColumns, table, pos, ctx, false);
 
             if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                if (indexDesc->KeyColumns.size() > 1) {
+                    upsertIndexRows = BuildVectorIndexPrefixRows(table, *prefixTable, true, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+                }
+
                 upsertIndexRows = BuildVectorIndexPostingRows(table, mainTableNode,
                     indexDesc->Name, indexTableColumns, upsertIndexRows, true, pos, ctx);
                 indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
@@ -934,7 +960,7 @@ TExprBase KqpBuildUpsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, upsert.Table().Path());
 
     auto effects = KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode::Upsert, upsert.Input(), upsert.Columns(),
-        upsert.ReturningColumns(), upsert.GenerateColumnsIfInsert(), table, upsert.Settings(), upsert.Pos(), ctx);
+        upsert.ReturningColumns(), upsert.GenerateColumnsIfInsert(), table, upsert.Settings(), upsert.Pos(), ctx, kqpCtx);
 
     if (!effects) {
         return node;

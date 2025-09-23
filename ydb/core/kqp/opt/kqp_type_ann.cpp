@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include "yql/essentials/core/type_ann/type_ann_impl.h"
@@ -2003,12 +2003,10 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
             return TStatus::Error;
         }
     }
-    for (const auto& keyColumn : indexDesc->KeyColumns) {
-        if (!inputColSet.contains(keyColumn)) {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_InputType)->Pos()),
-                TStringBuilder() << "Input must contain all vector index key columns"));
-            return TStatus::Error;
-        }
+    if (!inputColSet.contains(indexDesc->KeyColumns.back())) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_InputType)->Pos()),
+            TStringBuilder() << "Input must contain the embedding column: " << indexDesc->KeyColumns.back()));
+        return TStatus::Error;
     }
 
     // Generate output type
@@ -2016,7 +2014,7 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
     TSet<TString> outputColSet;
 
     // First cluster ID
-    rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+    rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NKMeans::ParentColumn, ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
 
     // Then primary key columns
     for (const auto& keyColumn : tableDesc->Metadata->KeyColumnNames) {

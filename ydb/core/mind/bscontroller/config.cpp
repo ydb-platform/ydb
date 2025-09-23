@@ -216,7 +216,7 @@ namespace NKikimr::NBsController {
             }
 
             void ApplyVSlotDeleted(const TVSlotId& vslotId, const TVSlotInfo& vslotInfo) {
-                if (DeletedPDiskIds.count(vslotId.ComprisingPDiskId()) && vslotInfo.IsBeingDeleted()) {
+                if (DeletedPDiskIds.contains(vslotId.ComprisingPDiskId()) && vslotInfo.IsBeingDeleted()) {
                     // the slot has been deleted along with its PDisk; although it is useless to slay slots over PDisk
                     // that is being stopped, we issue this command to terminate VDisk actors correctly
                     AddVSlotToProtobuf(vslotId, vslotInfo, TMood::Delete);
@@ -585,7 +585,7 @@ namespace NKikimr::NBsController {
             CommitSysViewUpdates(state);
             CommitVirtualGroupUpdates(state);
             CommitShredUpdates(state);
-            CommitSyncerUpdates(state);
+            CommitSyncerUpdates(state, txc);
 
             // add updated and remove deleted vslots from VSlotReadyTimestampQ
             const TMonotonic now = TActivationContext::Monotonic();
@@ -614,6 +614,13 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            THashSet<TGroupId> groupIds;
+            for (auto&& [base, overlay] : state.Groups.Diff()) {
+                if (base) {
+                    groupIds.emplace(overlay->first);
+                }
+            }
+
             TNodeWardenUpdateNotifier(this, state).Execute();
 
             state.CheckConsistency();
@@ -621,6 +628,7 @@ namespace NKikimr::NBsController {
             ValidateInternalState();
 
             ScheduleVSlotReadyUpdate();
+            UpdateWaitingGroups(groupIds);
 
             return true;
         }
@@ -1051,7 +1059,9 @@ namespace NKikimr::NBsController {
             pb->SetKind(pool.Kind);
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
-            pb->SetDefaultGroupSizeInUnits(pool.DefaultGroupSizeInUnits);
+            if (pool.DefaultGroupSizeInUnits != 0) {
+                pb->SetDefaultGroupSizeInUnits(pool.DefaultGroupSizeInUnits);
+            }
 
             for (const auto &userId : pool.UserIds) {
                 pb->AddUserId(std::get<2>(userId));
@@ -1101,7 +1111,9 @@ namespace NKikimr::NBsController {
             pb->SetLastSeenSerial(pdisk.LastSeenSerial);
             pb->SetReadOnly(pdisk.Mood == TPDiskMood::ReadOnly);
             pb->SetMaintenanceStatus(pdisk.MaintenanceStatus);
-            pb->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
+            if (pdisk.InferPDiskSlotCountFromUnitSize) {
+                pb->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
+            }
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id) {
@@ -1158,7 +1170,9 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(std::get<0>(group.StoragePoolId));
             pb->SetStoragePoolId(std::get<1>(group.StoragePoolId));
             pb->SetSeenOperational(group.SeenOperational);
-            pb->SetGroupSizeInUnits(group.GroupSizeInUnits);
+            if (group.GroupSizeInUnits != 0) {
+                pb->SetGroupSizeInUnits(group.GroupSizeInUnits);
+            }
 
             const auto& status = group.GetStatus(finder, bridgeInfo);
             pb->SetOperatingStatus(status.OperatingStatus);
@@ -1167,7 +1181,7 @@ namespace NKikimr::NBsController {
             if (group.BridgeGroupInfo) {
                 pb->SetIsProxyGroup(true);
             }
-            
+
             if (group.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE || group.VirtualGroupState) {
                 auto *vgi = pb->MutableVirtualGroupInfo();
                 if (group.VirtualGroupState) {
@@ -1291,7 +1305,9 @@ namespace NKikimr::NBsController {
                 group->SetDecommitStatus(groupInfo.DecommitStatus);
             }
 
-            group->SetGroupSizeInUnits(groupInfo.GroupSizeInUnits);
+            if (groupInfo.GroupSizeInUnits != 0) {
+                group->SetGroupSizeInUnits(groupInfo.GroupSizeInUnits);
+            }
 
             if (groupInfo.BridgeGroupInfo) {
                 group->MergeFrom(*groupInfo.BridgeGroupInfo);

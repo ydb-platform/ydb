@@ -1,17 +1,37 @@
 #include "sys.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <util/generic/hash_set.h>
 
 namespace NYdb::NConsoleClient {
 
-bool IsSystemObject(const NScheme::TSchemeEntry& entry) {
-    if (entry.Type != NScheme::ESchemeEntryType::Directory) {
+namespace {
+
+// In future should be syncronized with 'ydb/core/tx/schemeshard/schemeshard_system_names.cpp'
+const THashSet<TStringBuf> SystemReservedNames = {
+    ".sys",
+    ".metadata",
+    ".tmp",
+    ".backups",
+};
+
+}
+
+bool IsSystemName(const TStringBuf name) {
+    return SystemReservedNames.contains(name)
+        || name.StartsWith("~");
+}
+
+bool IsSystemDir(const NScheme::TSchemeEntry& entry) {
+    if (entry.Type == NScheme::ESchemeEntryType::Directory) {
+        return IsSystemName(entry.Name);
+    } else {
         return false;
     }
+}
 
-    return entry.Name.starts_with("~")
-        || entry.Name.starts_with(".sys")
-        || entry.Name.starts_with(".metadata");
+bool IsSystemObject(const NScheme::TSchemeEntry& entry) {
+    return IsSystemDir(entry) || entry.Type == NScheme::ESchemeEntryType::SysView;
 }
 
 }

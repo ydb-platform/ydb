@@ -9,6 +9,7 @@ PEERDIR(
     library/cpp/threading/future
     yt/yql/providers/yt/fmr/coordinator/interface
     yt/yql/providers/yt/fmr/job_factory/interface
+    yt/yql/providers/yt/fmr/worker/interface
     yql/essentials/utils
     yql/essentials/utils/log
 )

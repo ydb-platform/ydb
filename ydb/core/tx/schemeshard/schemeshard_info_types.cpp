@@ -1,7 +1,8 @@
 #include "schemeshard_info_types.h"
 
+#include "schemeshard_impl.h"
 #include "schemeshard_path.h"
-#include "schemeshard_utils.h"  // for IsValidColumnName
+#include "schemeshard_utils.h"  // for IsValidColumnName, ValidateImportDstPath
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/channel_profiles.h>
@@ -2087,23 +2088,34 @@ bool TTableInfo::CheckSplitByLoad(
         const TTableInfo* mainTableForIndex, TString& reason) const
 {
     // Don't split/merge backup tables
-    if (IsBackup)
+    if (IsBackup) {
+        reason = "IsBackup";
         return false;
+    }
 
     // Don't split/merge restore tables
-    if (IsRestore)
+    if (IsRestore) {
+        reason = "IsRestore";
         return false;
+    }
 
-    if (!splitSettings.SplitByLoadEnabled)
+    if (!splitSettings.SplitByLoadEnabled) {
+        reason = "SplitByLoadDisabled";
         return false;
+    }
 
     // Ignore stats from unknown datashard (it could have been split)
-    if (!Stats.PartitionStats.contains(shardIdx))
+    if (!Stats.PartitionStats.contains(shardIdx)) {
+        reason = "UnknownDataShard";
         return false;
-    if (!Shard2PartitionIdx.contains(shardIdx))
+    }
+    if (!Shard2PartitionIdx.contains(shardIdx)) {
+        reason = "ShardNotInIndex";
         return false;
+    }
 
     if (!IsSplitByLoadEnabled(mainTableForIndex)) {
+        reason = "SplitByLoadNotEnabledForTable";
         return false;
     }
 
@@ -2135,6 +2147,11 @@ bool TTableInfo::CheckSplitByLoad(
         Stats.PartitionStats.size() >= maxShards ||
         stats.GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000)
     {
+        reason = TStringBuilder() << "ConditionsNotMet"
+            << " rowCount: " << rowCount << " minRows: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
+            << " dataSize: " << dataSize << " minSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
+            << " shardCount: " << Stats.PartitionStats.size() << " maxShards: " << maxShards
+            << " cpuUsage: " << stats.GetCurrentRawCpuUsage() << " threshold: " << cpuUsageThreshold * 1000000;
         return false;
     }
 
@@ -2228,6 +2245,8 @@ TString TImportInfo::TItem::ToString(ui32 idx) const {
         << " State: " << State
         << " SubState: " << SubState
         << " WaitTxId: " << WaitTxId
+        << " SrcPath: " << SrcPath
+        << " SrcPrefix: " << SrcPrefix
         << " Issue: '" << Issue << "'"
     << " }";
 }
@@ -2350,8 +2369,8 @@ void TIndexBuildInfo::TKMeans::PrefixIndexDone(ui64 shards) {
 }
 
 void TIndexBuildInfo::TKMeans::Set(ui32 level,
-    NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
-    NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
+    NTableIndex::NKMeans::TClusterId parentBegin, NTableIndex::NKMeans::TClusterId parent,
+    NTableIndex::NKMeans::TClusterId childBegin, NTableIndex::NKMeans::TClusterId child,
     ui32 state, ui64 tableSize, ui32 round, bool isEmpty) {
     Level = level;
     Round = round;
@@ -2381,7 +2400,7 @@ NKikimrTxDataShard::EKMeansState TIndexBuildInfo::TKMeans::GetUpload() const {
 }
 
 TString TIndexBuildInfo::TKMeans::WriteTo(bool needsBuildTable) const {
-    using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+    using namespace NTableIndex::NKMeans;
     TString name = PostingTable;
     if (needsBuildTable || NeedsAnotherLevel()) {
         name += Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
@@ -2391,27 +2410,27 @@ TString TIndexBuildInfo::TKMeans::WriteTo(bool needsBuildTable) const {
 
 TString TIndexBuildInfo::TKMeans::ReadFrom() const {
     Y_ENSURE(Level > 1);
-    using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+    using namespace NTableIndex::NKMeans;
     TString name = PostingTable;
     name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
     return name;
 }
 
-std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId> TIndexBuildInfo::TKMeans::RangeToBorders(const TSerializedTableRange& range) const {
-    const NTableIndex::TClusterId minParent = ParentBegin;
-    const NTableIndex::TClusterId maxParent = ParentEnd();
-    const NTableIndex::TClusterId parentFrom = [&, from = range.From.GetCells()] {
+std::pair<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId> TIndexBuildInfo::TKMeans::RangeToBorders(const TSerializedTableRange& range) const {
+    const NTableIndex::NKMeans::TClusterId minParent = ParentBegin;
+    const NTableIndex::NKMeans::TClusterId maxParent = ParentEnd();
+    const NTableIndex::NKMeans::TClusterId parentFrom = [&, from = range.From.GetCells()] {
         if (!from.empty()) {
             if (!from[0].IsNull()) {
-                return from[0].AsValue<NTableIndex::TClusterId>() + static_cast<NTableIndex::TClusterId>(from.size() == 1);
+                return from[0].AsValue<NTableIndex::NKMeans::TClusterId>() + static_cast<NTableIndex::NKMeans::TClusterId>(from.size() == 1);
             }
         }
         return minParent;
     }();
-    const NTableIndex::TClusterId parentTo = [&, to = range.To.GetCells()] {
+    const NTableIndex::NKMeans::TClusterId parentTo = [&, to = range.To.GetCells()] {
         if (!to.empty()) {
             if (!to[0].IsNull()) {
-                return to[0].AsValue<NTableIndex::TClusterId>() - static_cast<NTableIndex::TClusterId>(to.size() != 1 && to[1].IsNull());
+                return to[0].AsValue<NTableIndex::NKMeans::TClusterId>() - static_cast<NTableIndex::NKMeans::TClusterId>(to.size() != 1 && to[1].IsNull());
             }
         }
         return maxParent;
@@ -2433,7 +2452,7 @@ TString TIndexBuildInfo::TKMeans::RangeToDebugStr(const TSerializedTableRange& r
         }
         auto str = TStringBuilder{} << "{ count: " << cells.size();
         if (Level > 1) {
-            str << ", parent: " << cells[0].AsValue<NTableIndex::TClusterId>();
+            str << ", parent: " << cells[0].AsValue<NTableIndex::NKMeans::TClusterId>();
             if (cells.size() != 1 && cells[1].IsNull()) {
                 str << ", pk: null";
             }
@@ -2456,7 +2475,7 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
     // 1. It fits entirely in the single shard => local kmeans for single shard
     // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
     auto [parentFrom, parentTo] = KMeans.Parent == 0
-        ? std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId>{0, 0}
+        ? std::pair<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId>{0, 0}
         : KMeans.RangeToBorders(range);
 
     auto itFrom = Cluster2Shards.lower_bound(parentFrom);
@@ -2799,6 +2818,142 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
     timestamp.set_seconds((i64)(sec));
     timestamp.set_nanos(0);
     return timestamp;
+}
+
+TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaMapping(TSchemeShard* ss) {
+    TFillItemsFromSchemaMappingResult result;
+
+    TString dstRoot;
+    if (Settings.destination_path().empty()) {
+        dstRoot = CanonizePath(ss->RootPathElements);
+    } else {
+        dstRoot = CanonizePath(Settings.destination_path());
+    }
+
+    TString sourcePrefix = NBackup::NormalizeExportPrefix(Settings.source_prefix());
+    if (sourcePrefix) {
+        sourcePrefix.push_back('/');
+    }
+
+    auto combineDstPath = [&](const TString& path, const TString& rootPath) -> TString {
+        TStringBuilder result;
+        result << rootPath;
+        if (TString objectPath = CanonizePath(path)) {
+            result << objectPath;
+        }
+        return std::move(result);
+    };
+
+    auto init = [&](const NBackup::TSchemaMapping::TItem& schemaMappingItem, NSchemeShard::TImportInfo::TItem& item) {
+        item.SrcPrefix = TStringBuilder() << sourcePrefix << NBackup::NormalizeItemPrefix(schemaMappingItem.ExportPrefix);
+        item.SrcPath = schemaMappingItem.ObjectPath;
+        item.ExportItemIV = schemaMappingItem.IV;
+    };
+
+    TVector<TImportInfo::TItem> items;
+    if (Items.empty()) { // Fill the whole list from schema mapping
+        for (const auto& schemaMappingItem : SchemaMapping->Items) {
+            TString dstPath = combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
+            TString explain;
+            if (!ValidateImportDstPath(dstPath, ss, explain)) {
+                result.AddError(explain);
+                continue;
+            }
+
+            auto& item = items.emplace_back(dstPath);
+            init(schemaMappingItem, item);
+        }
+    } else { // Take existing items from items list
+        using TMapping = THashMap<TString, std::vector<std::pair<size_t /* index in schema mapping */, TString /* path suffix */>>>;
+        TMapping schemaMappingPrefixIndex;
+        TMapping schemaMappingObjectPathIndex;
+        for (size_t i = 0; i < SchemaMapping->Items.size(); ++i) {
+            const auto& schemaMappingItem = SchemaMapping->Items[i];
+            schemaMappingPrefixIndex[NBackup::NormalizeItemPrefix(schemaMappingItem.ExportPrefix)].emplace_back(i, TString());
+            // Add path and parent paths to index
+            // It allows to specify filters by directories
+            TVector<TString> pathComponents = SplitPath(schemaMappingItem.ObjectPath);
+            const TString fullObjectPath = JoinPath(pathComponents);
+            TString currentPath = fullObjectPath;
+            while (!pathComponents.empty()) {
+                schemaMappingObjectPathIndex[currentPath].emplace_back(i, fullObjectPath.size() > currentPath.size() ? fullObjectPath.substr(currentPath.size() + 1) : TString());
+                pathComponents.pop_back();
+                currentPath = JoinPath(pathComponents);
+            }
+        }
+
+        for (auto& item : Items) {
+            TMapping::iterator mappingIt;
+            if (item.SrcPrefix) {
+                mappingIt = schemaMappingPrefixIndex.find(NBackup::NormalizeItemPrefix(item.SrcPrefix));
+                if (mappingIt == schemaMappingPrefixIndex.end()) {
+                    result.AddError(TStringBuilder() << "cannot find prefix \"" << item.SrcPrefix << "\" in schema mapping");
+                }
+            } else if (item.SrcPath) {
+                mappingIt = schemaMappingObjectPathIndex.find(NBackup::NormalizeItemPath(item.SrcPath));
+                if (mappingIt == schemaMappingObjectPathIndex.end()) {
+                    result.AddError(TStringBuilder() << "cannot find source path \"" << item.SrcPath << "\" in schema mapping");
+                }
+            }
+
+            if (mappingIt) {
+                const bool isDstPathAbsolute = item.DstPathName && item.DstPathName.front() == '/';
+                for (const auto& [index, suffix] : mappingIt->second) {
+                    const auto& schemaMappingItem = SchemaMapping->Items[index];
+                    TStringBuilder dstPath;
+                    if (item.DstPathName) {
+                        if (isDstPathAbsolute) {
+                            dstPath << item.DstPathName;
+                        } else {
+                            dstPath << combineDstPath(item.DstPathName, dstRoot);
+                        }
+                        if (suffix) { // Exact filter matching
+                            if (dstPath.back() != '/') {
+                                dstPath << '/';
+                            }
+                            dstPath << suffix;
+                        }
+                    } else {
+                        dstPath << combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
+                    }
+
+                    TString explain;
+                    if (!ValidateImportDstPath(dstPath, ss, explain)) {
+                        result.AddError(explain);
+                        continue;
+                    }
+
+                    auto& item = items.emplace_back(dstPath);
+                    init(schemaMappingItem, item);
+                }
+            }
+        }
+    }
+
+    if (items.size() < Items.size()) {
+        // Just in case: we already validate it, but double check
+        result.AddError("error: not all import items were found in schema mapping");
+    }
+
+    if (items.empty()) {
+        // Schema mapping should not be empty
+        result.AddError("no items to import");
+    }
+
+    Items.swap(items);
+
+    return result;
+}
+
+void TImportInfo::TFillItemsFromSchemaMappingResult::AddError(const TString& err) {
+    Success = false;
+    if (++ErrorsCount > 30) {
+        return;
+    }
+    if (ErrorMessage) {
+        ErrorMessage += '\n';
+    }
+    ErrorMessage += err;
 }
 
 } // namespace NSchemeShard

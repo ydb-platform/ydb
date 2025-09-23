@@ -272,6 +272,8 @@ public:
     THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
     THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
     THashMap<TPathId, TSysViewInfo::TPtr> SysViews;
+    THashMap<TPathId, TSecretInfo::TPtr> Secrets;
+    THashMap<TPathId, TStreamingQueryInfo::TPtr> StreamingQueries;
 
     TTempDirsState TempDirsState;
 
@@ -816,6 +818,7 @@ public:
     void PersistRemoveTableIndex(NIceDb::TNiceDb& db, TPathId tableId);
     void PersistRemoveTable(NIceDb::TNiceDb& db, TPathId tableId, const TActorContext& ctx);
     void PersistRevertedMigration(NIceDb::TNiceDb& db, TPathId pathId, TTabletId abandonedSchemeShardId);
+    void UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, const TPartitionStats& newPartitionStats, const TPartitionStats& oldPartitionStats, const TActorContext &ctx);
 
     // BlockStore
     void PersistBlockStorePartition(NIceDb::TNiceDb& db, TPathId pathId, ui32 partitionId, TShardIdx shardIdx, ui64 version);
@@ -840,7 +843,7 @@ public:
 
     // ColumnTable
     void PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo, bool isAlter = false);
-    void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, const TActorContext &ctx);
     void PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo);
     void PersistColumnTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 
@@ -896,7 +899,19 @@ public:
     void PersistSysView(NIceDb::TNiceDb &db, TPathId pathId);
     void PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId);
 
+    // StreamingQuery
+    void PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
+
     void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
+
+    // Secret
+    void PersistSecret(NIceDb::TNiceDb& db, TPathId pathId, const TSecretInfo& secretInfo);
+    void PersistSecret(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistSecretRemove(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistSecretAlter(NIceDb::TNiceDb& db, TPathId pathId, const TSecretInfo& secretInfo);
+    void PersistSecretAlter(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistSecretAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 
     TTabletId GetGlobalHive() const;
 
@@ -1623,10 +1638,10 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TTxId completedTxId, const TActorContext& ctx);
-    
+
     // Notification function for incremental restore operation completion
     void NotifyIncrementalRestoreOperationCompleted(const TOperationId& operationId, const TActorContext& ctx);
-    
+
     NTabletFlatExecutor::ITransaction* CreateTxIncrementalRestoreResponse(TEvDataShard::TEvProposeTransactionResult::TPtr& ev);
 
     void ResumeCdcStreamScans(const TVector<TPathId>& ids, const TActorContext& ctx);

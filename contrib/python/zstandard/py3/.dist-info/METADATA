@@ -1,27 +1,29 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: zstandard
-Version: 0.23.0
+Version: 0.25.0
 Summary: Zstandard bindings for Python
-Home-page: https://github.com/indygreg/python-zstandard
-Author: Gregory Szorc
-Author-email: gregory.szorc@gmail.com
-License: BSD
+Author-email: Gregory Szorc <gregory.szorc@gmail.com>
+License-Expression: BSD-3-Clause
+Project-URL: Homepage, https://github.com/indygreg/python-zstandard
+Project-URL: Documentation, https://python-zstandard.readthedocs.io/en/latest/
 Keywords: zstandard,zstd,compression
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: BSD License
 Classifier: Programming Language :: C
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
-Requires-Python: >=3.8
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Free Threading :: 1 - Unstable
+Requires-Python: >=3.9
+Description-Content-Type: text/x-rst
 License-File: LICENSE
-Requires-Dist: cffi >=1.11 ; platform_python_implementation == "PyPy"
 Provides-Extra: cffi
-Requires-Dist: cffi >=1.11 ; extra == 'cffi'
+Requires-Dist: cffi~=1.17; (platform_python_implementation != "PyPy" and python_version < "3.14") and extra == "cffi"
+Requires-Dist: cffi>=2.0.0b; (platform_python_implementation != "PyPy" and python_version >= "3.14") and extra == "cffi"
+Dynamic: license-file
 
 ================
 python-zstandard

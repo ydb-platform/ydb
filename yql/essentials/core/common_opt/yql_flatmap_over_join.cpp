@@ -1619,8 +1619,13 @@ TExprBase NormalizeEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoi
             .Lambda(1)
                 .Param("row")
                 .Callable(body.CallableName())
-                    .Apply(0, newPredicateLambda)
-                        .With(0, "row")
+                    .Callable(0, "Coalesce")
+                        .Apply(0, newPredicateLambda)
+                            .With(0, "row")
+                        .Seal()
+                        .Callable(1, "Bool")
+                            .Atom(0, "false")
+                        .Seal()
                     .Seal()
                     .Apply(1, valueLambda)
                         .With(0)
@@ -1945,7 +1950,7 @@ TExprBase FlatMapOverEquiJoin(
             .Build());
     }
 
-    if (IsPredicateFlatMap(node.Lambda().Body().Ref())) {
+    if (!node.Raw()->HasSideEffects() && IsPredicateFlatMap(node.Lambda().Body().Ref())) {
         // predicate pushdown
         const auto& row = node.Lambda().Args().Arg(0).Ref();
         auto predicate = node.Lambda().Body().Ref().ChildPtr(0);

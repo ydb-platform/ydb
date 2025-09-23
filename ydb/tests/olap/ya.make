@@ -9,6 +9,8 @@ PY3TEST()
         test_cs_many_updates.py
         test_log_scenario.py
         upgrade_to_internal_path_id.py
+        data_read_correctness.py
+        test_overloads.py
         zip_bomb.py
     )
     FORK_SUBTESTS()

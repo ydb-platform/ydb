@@ -4,6 +4,7 @@
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/util/address_classifier.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <util/generic/is_in.h>
@@ -58,6 +59,29 @@ namespace {
     }
 }
 
+TString ExtractRemoteAddress(const NHttp::THttpIncomingRequest* request) {
+    if (!request) {
+        return {};
+    }
+    NHttp::THeaders headers(request->Headers);
+
+    TString remoteAddress = ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
+    if (remoteAddress.empty()) {
+        remoteAddress = NKikimr::NAddressClassifier::ExtractAddress(request->Address->ToString());
+    }
+    return remoteAddress;
+}
+
+bool TAuditCtx::AuditEnabled(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase, NACLibProto::ESubjectType subjectType)
+{
+    if (NKikimr::HasAppData()) {
+        return NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin,
+                                                             logPhase, subjectType);
+    }
+    return false;
+}
+
+
 void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
     Parts.emplace_back(name, value);
 }
@@ -90,16 +114,15 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
     const TString url(request->URL.Before('?'));
     const auto params = request->URL.After('?');
     const auto cgiParams = TCgiParameters(params);
-    NHttp::THeaders headers(request->Headers);
 
     if (!(Auditable = AuditableRequest(ev->Get()->Request))) {
         return;
     }
 
-    auto remoteAddress = ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
+    TString remoteAddress = ExtractRemoteAddress(request.Get());
 
     AddAuditLogPart("component", MONITORING_COMPONENT_NAME);
-    AddAuditLogPart("remote_address", remoteAddress);
+    AddAuditLogPart("remote_address", remoteAddress ? remoteAddress : EMPTY_VALUE);
     AddAuditLogPart("operation", DEFAULT_OPERATION);
     AddAuditLogPart("method", method);
     AddAuditLogPart("url", url);
@@ -147,9 +170,7 @@ void TAuditCtx::SetSubjectType(NACLibProto::ESubjectType subjectType) {
 }
 
 void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase) {
-    auto auditEnabled = NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, logPhase, SubjectType);
-
-    if (!Auditable || !auditEnabled) {
+    if (!Auditable || !AuditEnabled(logPhase, SubjectType)) {
         return;
     }
 

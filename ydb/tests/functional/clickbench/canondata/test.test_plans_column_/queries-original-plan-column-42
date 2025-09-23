@@ -112,6 +112,7 @@
                                                                                         "Phase": "Intermediate"
                                                                                     },
                                                                                     {
+                                                                                        "Blocks": "True",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 2

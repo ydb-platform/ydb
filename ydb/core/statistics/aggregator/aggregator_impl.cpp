@@ -416,9 +416,10 @@ size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds,
         auto* entry = record->AddEntries();
         entry->SetSchemeShardId(ssId);
         auto itStats = BaseStatistics.find(ssId);
-        if (itStats != BaseStatistics.end()) {
-            entry->SetStats(itStats->second);
-            size += itStats->second.size();
+        if (itStats != BaseStatistics.end() && itStats->second.Committed) {
+            const auto& stats = *itStats->second.Committed;
+            entry->SetStats(stats);
+            size += stats.size();
         } else {
             entry->SetStats(TString()); // stats are not sent from SS yet
         }
@@ -1081,8 +1082,11 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
     ui64 totalRowCount = 0;
     ui64 totalBytesSize = 0;
     for (const auto& [_, serializedStats] : BaseStatistics) {
+        if (!serializedStats.Committed) {
+            continue;
+        }
         NKikimrStat::TSchemeShardStats stats;
-        Y_PROTOBUF_SUPPRESS_NODISCARD stats.ParseFromString(serializedStats);
+        Y_PROTOBUF_SUPPRESS_NODISCARD stats.ParseFromString(*serializedStats.Committed);
         for (const auto& entry: stats.GetEntries()) {
             totalRowCount += entry.GetRowCount();
             totalBytesSize += entry.GetBytesSize();

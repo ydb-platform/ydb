@@ -1288,6 +1288,103 @@ def test_viewer_query_long_multipart():
     return result
 
 
+def normalize_result_event_stream(result):
+    result = replace_values_by_key(result, ['query_id',
+                                            'node_id',
+                                            'session_id',
+                                            ])
+    return result
+
+
+def test_viewer_query_event_stream():
+    """Execute a query requesting an event-stream (text/event-stream) response and parse it.
+
+    The server should return SSE formatted data:
+        event: <name> (optional, default 'message')\n
+        data: <payload line 1>\n
+        data: <payload line 2> (optional, concatenated with newline)\n
+        \n (blank line terminates one event)
+
+    We collect events, try to decode JSON payloads, and normalize dynamic fields.
+    """
+    body = {
+        'database': dedicated_db,
+        'query': 'SELECT * FROM table1;',
+        'action': 'execute-query',
+        'schema': 'multipart',
+    }
+    response = call_viewer_api_post("/viewer/query", body, headers={
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+    })
+    result = {
+        'status_code': response.status_code,
+        'content_type': response.headers.get('Content-Type')
+    }
+
+    # If not OK just return text for canonization
+    if response.status_code != 200:
+        result['text'] = response.text
+        return result
+
+    raw_text = response.text
+
+    def parse_event_stream(text):
+        events = []
+        current_event = {}
+        data_lines = []
+
+        def flush_event():
+            if not data_lines and 'event' not in current_event and 'id' not in current_event:
+                return
+            data_str = '\n'.join(data_lines)
+            data_value = data_str
+            # Try JSON parse
+            try:
+                parsed = json.loads(data_str)
+                if isinstance(parsed, dict):
+                    parsed = normalize_result_query_long(parsed)
+                data_value = parsed
+            except Exception:
+                pass
+            evt = {
+                'event': current_event.get('event', 'message'),
+                'data': normalize_result_event_stream(data_value)
+            }
+            if 'id' in current_event:
+                evt['id'] = current_event['id']
+            if 'retry' in current_event:
+                evt['retry'] = current_event['retry']
+            events.append(evt)
+
+        for line in text.splitlines():
+            if line == '':  # end of event
+                flush_event()
+                current_event = {}
+                data_lines = []
+                continue
+            if line.startswith(':'):
+                # comment line, ignore
+                continue
+            if line.startswith('event:'):
+                current_event['event'] = line[6:].strip()
+            elif line.startswith('data:'):
+                data_lines.append(line[5:].lstrip())
+            elif line.startswith('id:'):
+                current_event['id'] = line[3:].strip()
+            elif line.startswith('retry:'):
+                current_event['retry'] = line[6:].strip()
+            else:
+                # treat as continuation of data
+                data_lines.append(line)
+        # Flush last event if file didn't end with blank line
+        flush_event()
+        return events
+
+    result['events'] = parse_event_stream(raw_text)
+    return result
+
+
 def test_security():
     result = {}
     result['database_nodes_root'] = get_viewer_normalized("/viewer/nodes", params={
@@ -1332,6 +1429,35 @@ def test_security():
     })
     result['cluster_nodes_database'] = get_viewer_normalized("/viewer/nodes", params={
         'fields_required': 'NodeId',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + database_session_id,
+    })
+
+    result['storage_nodes_root'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+        'database': dedicated_db,
+        'type': 'storage',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + root_session_id,
+    })
+    result['storage_nodes_monitoring'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+        'database': dedicated_db,
+        'type': 'storage',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + monitoring_session_id,
+    })
+    result['storage_nodes_viewer'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+        'database': dedicated_db,
+        'type': 'storage',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + viewer_session_id,
+    })
+    result['storage_nodes_database'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+        'database': dedicated_db,
+        'type': 'storage',
     }, headers={
         'Cookie': 'ydb_session_id=' + database_session_id,
     })

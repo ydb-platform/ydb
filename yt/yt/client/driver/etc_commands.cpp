@@ -87,6 +87,7 @@ void TGetVersionCommand::DoExecute(ICommandContextPtr context)
 
 // These features are guaranteed to be deployed before or with this code.
 constexpr auto StaticFeatures = std::to_array<std::pair<TStringBuf, bool>>({
+    {"structured_web_json", true},
     {"user_tokens_metadata", true},
 });
 
@@ -167,22 +168,22 @@ void TCheckPermissionCommand::DoExecute(ICommandContextPtr context)
                             .EndMap();
                     });
             })
-            .DoIf(response.RlAcl.has_value(), [&] (auto fluent) {
+            .DoIf(response.RowLevelAcl.has_value(), [&] (auto fluent) {
                 fluent
-                    .Item("rl_acl")
-                    .DoListFor(*response.RlAcl, [&] (auto fluent, const auto& rlAce) {
+                    .Item("row_level_acl")
+                    .DoListFor(*response.RowLevelAcl, [&] (auto fluent, const auto& rowLevelAce) {
                         fluent
                             .Item().BeginMap()
-                                .Item(TSerializableAccessControlEntry::ExpressionKey).Value(rlAce.Expression)
+                                .Item(TSerializableAccessControlEntry::ExpressionKey).Value(rowLevelAce.Expression)
                                 // NB(coteeq): The DoIf will try to hide the whole inapplicable_expression_mode
                                 // mechanism from too curious users.
                                 // EInapplicableExpressionMode::Ignore is not a good choice in the common case
                                 // from security perspective, but it may be necessary to be able to have
                                 // tables with completely different schemas in one directory.
-                                .DoIf(rlAce.InapplicableExpressionMode != EInapplicableExpressionMode::Deny, [&] (auto fluent) {
+                                .DoIf(rowLevelAce.InapplicableExpressionMode != EInapplicableExpressionMode::Fail, [&] (auto fluent) {
                                     fluent
                                         .Item(TSerializableAccessControlEntry::InapplicableExpressionModeKey)
-                                        .Value(rlAce.InapplicableExpressionMode);
+                                        .Value(rowLevelAce.InapplicableExpressionMode);
                                 })
                             .EndMap();
                     });

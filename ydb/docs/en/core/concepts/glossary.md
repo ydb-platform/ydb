@@ -102,6 +102,10 @@ Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consist
 
 The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#deterministic-transactions).
 
+### Implicit Transactions {#implicit-transactions}
+
+An **implicit transaction** is the query execution mode used when the [transaction mode](transactions.md#modes) is not specified. {{ ydb-short-name }} automatically determines the behavior for each statement — whether to wrap it in a transaction or execute it outside one. This mode is described in more detail in [{#T}](transactions.md#implicit).
+
 ### Interactive transactions {#interactive-transaction}
 
 The term **interactive transactions** refers to transactions that are split into multiple queries and involve data processing by an application between these queries. For example:
@@ -194,7 +198,7 @@ A **system view** is for monitoring the DB status. System views are located in t
 
 A **topic** is a persistent queue that can be used for reliable asynchronous communications between various systems via message passing. {{ ydb-short-name }} provides the infrastructure to ensure "exactly once" semantics in such communications, which ensures that there are both no lost messages and no accidental duplicates.
 
-Several terms related to topics are listed below. How {{ ydb-short-name }} topics work is explained in more detail in a separate article [{#T}](topic.md).
+Several terms related to topics are listed below. How {{ ydb-short-name }} topics work is explained in more detail in a separate article [{#T}](datamodel/topic.md).
 
 #### Partition {#partition}
 

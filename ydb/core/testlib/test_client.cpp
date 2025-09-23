@@ -1,5 +1,6 @@
 #include "test_client.h"
 
+#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
@@ -116,8 +117,6 @@
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
-#include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
@@ -707,7 +706,7 @@ namespace Tests {
         // Setup discovery for typically used services on the node
         {
             TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
-            desc->Address = options.Host;
+            desc->Address = Settings->GrpcHost ? Settings->GrpcHost : options.Host;
             desc->Port = options.Port;
             desc->Ssl = !options.SslData.Empty();
 
@@ -1285,6 +1284,11 @@ namespace Tests {
             Runtime->RegisterService(MakeDatabaseMetadataCacheId(Runtime->GetNodeId(nodeIdx)), metadataCacheId, nodeIdx);
         }
         {
+            IActor* describeSchemaSecretsService = NKqp::CreateDescribeSchemaSecretsService();
+            TActorId describeSchemaSecretsServiceId = Runtime->Register(describeSchemaSecretsService, nodeIdx, userPoolId);
+            Runtime->RegisterService(NKqp::MakeKqpDescribeSchemaSecretServiceId(Runtime->GetNodeId(nodeIdx)), describeSchemaSecretsServiceId, nodeIdx);
+        }
+        {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
             IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
@@ -1299,7 +1303,7 @@ namespace Tests {
             }
 
             NKikimr::NKqp::IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory = Settings->FederatedQuerySetupFactory;
-            if (Settings->InitializeFederatedQuerySetupFactory) {
+            if (Settings->InitializeFederatedQuerySetupFactory && GetRuntime()->GetAppData(nodeIdx).FeatureFlags.GetEnableScriptExecutionOperations()) {
                 const auto& queryServiceConfig = Settings->AppConfig->GetQueryServiceConfig();
 
                 NYql::NConnector::IClient::TPtr connectorClient;
@@ -1507,27 +1511,6 @@ namespace Tests {
             IActor* netClassifier = NNetClassifier::CreateNetClassifier();
             TActorId netClassifierId = Runtime->Register(netClassifier, nodeIdx, userPoolId);
             Runtime->RegisterService(NNetClassifier::MakeNetClassifierID(), netClassifierId, nodeIdx);
-        }
-
-        if (Settings->EnableStorageProxy) {
-            auto config = Settings->AppConfig->GetQueryServiceConfig().GetCheckpointsConfig();
-            NFq::NConfig::TConfig protoConfig;
-            const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            auto yqSharedResources = NFq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
-
-            const auto& externalStorage = config.GetExternalStorage();
-            config.MutableExternalStorage()->SetEndpoint(externalStorage.HasEndpoint() ? externalStorage.GetEndpoint() : GetEnv("YDB_ENDPOINT"));
-            config.MutableExternalStorage()->SetDatabase(externalStorage.HasDatabase() ? externalStorage.GetDatabase() : GetEnv("YDB_DATABASE"));
-
-            auto actor = NFq::NewCheckpointStorageService(
-                config,
-                "ut",
-                ydbCredFactory,
-                NFq::TYqSharedResources::Cast(yqSharedResources),
-                counters);
-            TActorId actorId = Runtime->Register(actor.release(), nodeIdx, userPoolId);
-            Runtime->RegisterService(NYql::NDq::MakeCheckpointStorageID(), actorId, nodeIdx);
         }
 
         {
@@ -1814,6 +1797,10 @@ namespace Tests {
 
         if (YqSharedResources) {
             YqSharedResources->Stop();
+        }
+
+        if (Settings->FederatedQuerySetupFactory) {
+            Settings->FederatedQuerySetupFactory->Cleanup();
         }
 
         if (Runtime) {

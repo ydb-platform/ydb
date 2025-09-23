@@ -6,7 +6,9 @@
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
 
-#include "ydb/core/audit/audit_log_service.h"
+#include <ydb/core/audit/audit_log_service.h>
+#include <ydb/core/audit/audit_config/audit_config.h>
+#include <ydb/core/audit/heartbeat_actor/heartbeat_actor.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/config_units.h>
@@ -80,6 +82,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 
 #include <ydb/core/load_test/service_actor.h>
 
@@ -106,10 +109,7 @@
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
-#include <ydb/core/persqueue/cluster_tracker.h>
-#include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/pq.h>
-#include <ydb/core/persqueue/pq_l2_service.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -148,6 +148,7 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/replication/service/service.h>
@@ -180,7 +181,6 @@
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
@@ -684,6 +684,25 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     }
                     data.ActorSystem->Send(whiteboardId, update.release());
                 };
+                class TNetworkUtilizationUpdater : public TActorBootstrapped<TNetworkUtilizationUpdater> {
+                    TIntrusivePtr<TInterconnectProxyCommon> Common;
+
+                public:
+                    TNetworkUtilizationUpdater(TIntrusivePtr<TInterconnectProxyCommon> common)
+                        : Common(std::move(common))
+                    {}
+
+                    void Bootstrap() {
+                        auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate>();
+                        ev->Record.SetNetworkUtilization(Common->CalculateNetworkUtilization());
+                        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), ev.release());
+                        Become(&TThis::StateFunc, TDuration::Seconds(10), new TEvents::TEvWakeup);
+                    }
+
+                    STRICT_STFUNC(StateFunc, cFunc(TEvents::TSystem::Wakeup, Bootstrap));
+                };
+                setup->LocalServices.emplace_back(TActorId(), TActorSetupCmd(new TNetworkUtilizationUpdater(icCommon),
+                    TMailboxType::ReadAsFilled, systemPoolId));
             }
 
             if (const auto& mon = appData->Mon) {
@@ -2187,12 +2206,10 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
 TKqpServiceInitializer::TKqpServiceInitializer(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories,
-        IGlobalObjectStorage& globalObjects,
-        NFq::IYqSharedResources::TPtr yqSharedResources)
+        IGlobalObjectStorage& globalObjects)
     : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))
     , GlobalObjects(globalObjects)
-    , YqSharedResources(yqSharedResources)
 {}
 
 void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
@@ -2247,18 +2264,11 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
 
-        const auto& checkpointConfig = Config.GetQueryServiceConfig().GetCheckpointsConfig();
-        if (checkpointConfig.GetEnabled()) {
-            auto service = NFq::NewCheckpointStorageService(
-                checkpointConfig,
-                "cs",
-                NKikimr::CreateYdbCredentialsProviderFactory,
-                NFq::TYqSharedResources::Cast(YqSharedResources),
-                appData->Counters);
-
+        if (appData->FeatureFlags.GetEnableSchemaSecrets()) {
+            auto describeSchemaSecretsService = NKqp::CreateDescribeSchemaSecretsService();
             setup->LocalServices.push_back(std::make_pair(
-                NYql::NDq::MakeCheckpointStorageID(),
-                TActorSetupCmd(service.release(), TMailboxType::HTSwap, appData->UserPoolId)));
+                NKqp::MakeKqpDescribeSchemaSecretServiceId(NodeId),
+                TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
         }
     }
 }
@@ -2455,6 +2465,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             protoLink.SetWeight(1);
             protoWorkersPool.SetDefaultFractionOfThreadsCount(0.33);
+            protoWorkersPool.SetMaxBatchSize(1);
         }
 
         if (Config.HasInsertConveyorConfig()) {
@@ -2481,6 +2492,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             protoLink.SetWeight(1);
             protoWorkersPool.SetDefaultFractionOfThreadsCount(0.2);
+            protoWorkersPool.SetMaxBatchSize(1);
         }
         if (Config.HasScanConveyorConfig()) {
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
@@ -2860,9 +2872,16 @@ void TAuditWriterInitializer::InitializeServices(TActorSystemSetup* setup, const
 
     auto actor = NAudit::CreateAuditWriter(std::move(logBackends));
 
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+    setup->LocalServices.emplace_back(
         NAudit::MakeAuditServiceID(),
-        TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->IOPoolId)));
+        TActorSetupCmd(std::move(actor), TMailboxType::HTSwap, appData->IOPoolId));
+
+    if (appData->AuditConfig.GetHeartbeat().GetIntervalSeconds()) {
+        auto heartbeatActor = NAudit::CreateHeartbeatActor(appData->AuditConfig);
+        setup->LocalServices.emplace_back(
+            NActors::TActorId(), // We don't need external communication with this actor
+            TActorSetupCmd(std::move(heartbeatActor), TMailboxType::HTSwap, appData->UserPoolId));
+    }
 }
 
 TSchemeBoardMonitoringInitializer::TSchemeBoardMonitoringInitializer(const TKikimrRunConfig &runConfig)
@@ -3081,6 +3100,18 @@ void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, c
     Y_UNUSED(setup);
     Y_UNUSED(appData);
     GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
+}
+
+TOverloadManagerInitializer::TOverloadManagerInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TOverloadManagerInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "CS_OVERLOAD_MANAGER");
+
+    setup->LocalServices.push_back(std::make_pair(NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+        TActorSetupCmd(NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(countersGroup), TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
 } // namespace NKikimr::NKikimrServicesInitializers

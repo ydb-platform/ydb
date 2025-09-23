@@ -15,7 +15,7 @@
 namespace NKikimr {
 using namespace Tests;
 using Ydb::Table::VectorIndexSettings;
-using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+using namespace NTableIndex::NKMeans;
 
 static std::atomic<ui64> sId = 1;
 static constexpr const char* kMainTable = "/Root/table-main";
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         NKikimr::DoBadRequest<TEvDataShard::TEvReshuffleKMeansResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring);
     }
 
-    static TString DoReshuffleKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::TClusterId parent,
+    static TString DoReshuffleKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parent,
                                      const std::vector<TString>& level,
                                      NKikimrTxDataShard::EKMeansState upload,
                                      VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric)
@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
+            {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"data", "String", false, false},
         });
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
+            {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"embedding", "String", false, false},
             {"data", "String", false, false},
@@ -215,13 +215,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);
-        }, "{ <main>: Error: Wrong vector type }");
+        }, "{ <main>: Error: vector_type should be set }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_BIT);
-        }, "{ <main>: Error: TODO(mbkkt) bit vector type is not supported }");
+        }, "{ <main>: Error: Unsupported vector_type: VECTOR_TYPE_BIT }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.MutableSettings()->set_metric(VectorIndexSettings::METRIC_UNSPECIFIED);
-        }, "{ <main>: Error: Wrong similarity }");
+        }, "{ <main>: Error: either distance or similarity should be set }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.SetUpload(NKikimrTxDataShard::UNSPECIFIED);

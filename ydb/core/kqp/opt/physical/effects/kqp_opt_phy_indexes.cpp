@@ -1,4 +1,4 @@
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include "kqp_opt_phy_effects_impl.h"
 
 namespace NKikimr::NKqp::NOpt {
@@ -113,9 +113,13 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildSecondaryInde
         if (index.KeyColumns && addIndex) {
             auto& implTable = table.Metadata->ImplTables[i];
             if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                YQL_ENSURE(implTable->Next && !implTable->Next->Next);
+                if (index.KeyColumns.size() == 1) {
+                    YQL_ENSURE(implTable->Next && !implTable->Next->Next);
+                } else {
+                    YQL_ENSURE(implTable->Next && implTable->Next->Next && !implTable->Next->Next->Next);
+                }
                 auto postingTable = implTable->Next;
-                YQL_ENSURE(postingTable->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable));
+                YQL_ENSURE(postingTable->Name.EndsWith(NTableIndex::NKMeans::PostingTable));
                 auto indexTable = tableBuilder(*postingTable, pos, ctx).Ptr();
                 secondaryIndexes.emplace_back(indexTable, &index);
             } else {

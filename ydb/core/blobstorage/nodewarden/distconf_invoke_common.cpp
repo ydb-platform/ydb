@@ -162,6 +162,9 @@ namespace NKikimr::NStorage {
                     case TQuery::kUpdateBridgeGroupInfo:
                         return UpdateBridgeGroupInfo(op.Command.GetUpdateBridgeGroupInfo());
 
+                    case TQuery::kNotifyBridgeSuspended:
+                        return NotifyBridgeSuspended(op.Command.GetNotifyBridgeSuspended());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
                 }
@@ -184,7 +187,7 @@ namespace NKikimr::NStorage {
                     } else if (r.ConfigToPropose) {
                         StartProposition(&r.ConfigToPropose.value(), /*acceptLocalQuorum=*/ true,
                             /*requireScepter=*/ false, /*mindPrev=*/ true,
-                            r.PropositionBase ? &r.PropositionBase.value() : nullptr);
+                            r.PropositionBase ? &r.PropositionBase.value() : nullptr, r.AutomaticBootstrap);
                     } else {
                         Finish(TResult::OK, std::nullopt);
                     }
@@ -234,7 +237,8 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum,
-            bool requireScepter, bool mindPrev, const NKikimrBlobStorage::TStorageConfig *propositionBase) {
+            bool requireScepter, bool mindPrev, const NKikimrBlobStorage::TStorageConfig *propositionBase,
+            bool fromBootstrap) {
         if (!Self->HasConnectedNodeQuorum(*config, acceptLocalQuorum)) {
             throw TExError() << "No quorum to start propose/commit configuration";
         } else if (requireScepter && !Self->Scepter) {
@@ -268,13 +272,13 @@ namespace NKikimr::NStorage {
 
                     auto wrapEmpty = [](const TString& value) { return value ? value : TString("{none}"); };
 
-                    AUDIT_PART("component", TString("distconf"))
+                    AUDIT_PART("component", "distconf")
                     AUDIT_PART("remote_address", wrapEmpty(NKikimr::NAddressClassifier::ExtractAddress(replaceConfig.GetPeerName())))
                     AUDIT_PART("subject", wrapEmpty(userToken.GetUserSID()))
                     AUDIT_PART("sanitized_token", wrapEmpty(userToken.GetSanitizedToken()))
-                    AUDIT_PART("status", TString("SUCCESS"))
+                    AUDIT_PART("status", "SUCCESS")
                     AUDIT_PART("reason", TString(), false)
-                    AUDIT_PART("operation", TString("REPLACE CONFIG"))
+                    AUDIT_PART("operation", "REPLACE CONFIG")
                     AUDIT_PART("old_config", oldConfig)
                     AUDIT_PART("new_config", newConfig)
                 );
@@ -283,6 +287,10 @@ namespace NKikimr::NStorage {
 
         if (!propositionBase) {
             propositionBase = Self->StorageConfig.get();
+        }
+
+        if (propositionBase && !propositionBase->GetGeneration() && !fromBootstrap) {
+            throw TExError() << "First distconf config-changing command has to be BootstrapCluster";
         }
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
@@ -360,7 +368,7 @@ namespace NKikimr::NStorage {
             [&](TCollectConfigsAndPropose&) {
                 if (status != TResult::OK && InvokePipelineGeneration == Self->InvokePipelineGeneration) {
                     // reschedule operation
-                    TActivationContext::Schedule(TDuration::MilliSeconds(Self->CollectConfigsBackoffTimer.NextBackoffMs()),
+                    TActivationContext::Schedule(Self->CollectConfigsBackoffTimer.Next(),
                         new IEventHandle(TEvPrivate::EvRetryCollectConfigsAndPropose, 0, Self->SelfId(), {}, nullptr,
                             InvokePipelineGeneration));
                 }

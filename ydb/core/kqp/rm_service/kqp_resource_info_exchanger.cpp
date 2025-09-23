@@ -440,9 +440,7 @@ private:
             return;
         }
 
-        TULIDGenerator ulidGen;
-        auto now = TInstant::Now();
-        Ulid = ulidGen.Next(now);
+        Ulid = UlidGen.Next();
         UlidString = Ulid.ToBinary();
 
         NKikimrKqp::TResourceExchangeBoardData payload;
@@ -735,6 +733,7 @@ private:
 private:
 
     TString SelfInfo;
+    TULIDGenerator UlidGen;
     TULID Ulid;
     TString UlidString;
 

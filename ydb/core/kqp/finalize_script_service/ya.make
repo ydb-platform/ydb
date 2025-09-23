@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/core/kqp/counters
     ydb/core/kqp/proxy_service
+    ydb/core/mind
     ydb/core/tx/scheme_cache
     ydb/library/table_creator
     ydb/library/yql/providers/s3/actors_factory

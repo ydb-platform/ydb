@@ -1,24 +1,28 @@
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/user_info.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
+#include <ydb/core/protos/datashard_backup.pb.h>
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <library/cpp/protobuf/json/proto2json.h>
 #include <ydb/public/lib/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/generic/size_literals.h>
+#include <util/string/escape.h>
+#include <util/string/hex.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
 #include <util/string/strip.h>
@@ -61,6 +65,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
     TShardedTableOptions SimpleTable() {
         return TShardedTableOptions();
+    }
+
+    TShardedTableOptions ThreeColumnTable() {
+        TShardedTableOptions opts;
+        opts.Columns_ = {
+            {"key",   "Uint32", true,  false},
+            {"value", "Uint32", false, false},
+            {"extra", "Uint32", false, false}
+        };
+        return opts;
     }
 
     ui64 ResolvePqTablet(TTestActorRuntime& runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
@@ -159,10 +173,27 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         auto& dcKey = *dc.MutableKey();
         dcKey.AddTags(1);
         dcKey.SetData(TSerializedCellVec::Serialize({keyCell}));
-        auto& newImage = *dc.MutableNewImage();
-        newImage.AddTags(2);
-        newImage.SetData(TSerializedCellVec::Serialize({valueCell}));
-        dc.MutableUpsert();
+        
+        auto& upsert = *dc.MutableUpsert();
+        upsert.AddTags(2);
+        upsert.SetData(TSerializedCellVec::Serialize({valueCell}));
+
+        return proto;
+    }
+
+    NKikimrChangeExchange::TChangeRecord MakeReset(ui32 key, ui32 value) {
+        auto keyCell = TCell::Make<ui32>(key);
+        auto valueCell = TCell::Make<ui32>(value);
+        NKikimrChangeExchange::TChangeRecord proto;
+
+        auto& dc = *proto.MutableCdcDataChange();
+        auto& dcKey = *dc.MutableKey();
+        dcKey.AddTags(1);
+        dcKey.SetData(TSerializedCellVec::Serialize({keyCell}));
+        
+        auto& reset = *dc.MutableReset();
+        reset.AddTags(2);
+        reset.SetData(TSerializedCellVec::Serialize({valueCell}));
 
         return proto;
     }
@@ -178,6 +209,67 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         dc.MutableErase();
 
         return proto;
+    }
+
+    NKikimrChangeExchange::TChangeRecord MakeUpsertPartial(ui32 key, ui32 value, const TVector<ui32>& tags = {2}) {
+        auto keyCell = TCell::Make<ui32>(key);
+        auto valueCell = TCell::Make<ui32>(value);
+        NKikimrChangeExchange::TChangeRecord proto;
+
+        auto& dc = *proto.MutableCdcDataChange();
+        auto& dcKey = *dc.MutableKey();
+        dcKey.AddTags(1);
+        dcKey.SetData(TSerializedCellVec::Serialize({keyCell}));
+        
+        auto& upsert = *dc.MutableUpsert();
+        for (auto tag : tags) {
+            upsert.AddTags(tag);
+        }
+        upsert.SetData(TSerializedCellVec::Serialize({valueCell}));
+
+        return proto;
+    }
+
+    NKikimrChangeExchange::TChangeRecord MakeResetPartial(ui32 key, ui32 value, const TVector<ui32>& tags = {2}) {
+        auto keyCell = TCell::Make<ui32>(key);
+        auto valueCell = TCell::Make<ui32>(value);
+        NKikimrChangeExchange::TChangeRecord proto;
+
+        auto& dc = *proto.MutableCdcDataChange();
+        auto& dcKey = *dc.MutableKey();
+        dcKey.AddTags(1);
+        dcKey.SetData(TSerializedCellVec::Serialize({keyCell}));
+        
+        auto& reset = *dc.MutableReset();
+        for (auto tag : tags) {
+            reset.AddTags(tag);
+        }
+        reset.SetData(TSerializedCellVec::Serialize({valueCell}));
+
+        return proto;
+    }
+
+    // Helper function to create serialized TChangeMetadata
+    TString SerializeChangeMetadata(bool isDeleted = false, const TVector<std::pair<ui32, std::pair<bool, bool>>>& columnStates = {}) {
+        NKikimrBackup::TChangeMetadata metadata;
+        metadata.SetIsDeleted(isDeleted);
+        
+        for (const auto& [tag, state] : columnStates) {
+            auto* columnState = metadata.AddColumnStates();
+            columnState->SetTag(tag);
+            columnState->SetIsNull(state.first);
+            columnState->SetIsChanged(state.second);
+        }
+        
+        TString binaryData;
+        Y_PROTOBUF_SUPPRESS_NODISCARD metadata.SerializeToString(&binaryData);
+        
+        // Convert binary data to hex escape sequences for YDB SQL string literal
+        TString result;
+        for (unsigned char byte : binaryData) {
+            result += TStringBuilder() << "\\x" << Sprintf("%02x", static_cast<int>(byte));
+        }
+        return result;
     }
 
     Y_UNIT_TEST(SimpleBackup) {
@@ -292,14 +384,17 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}));
+                    {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}}));
 
-        ExecSQL(server, edgeActor, R"(
-            UPSERT INTO `/Root/IncrBackupImpl` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-            (1, 10, NULL),
-            (2, NULL, true),
-            (3, 30, NULL),
-            (5, NULL, true);
+        auto normalMetadata = SerializeChangeMetadata(false); // Not deleted
+        auto deletedMetadata = SerializeChangeMetadata(true);  // Deleted
+
+        ExecSQL(server, edgeActor, TStringBuilder() << R"(
+            UPSERT INTO `/Root/IncrBackupImpl` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+            (1, 10, ')" << normalMetadata << R"('),
+            (2, NULL, ')" << deletedMetadata << R"('),
+            (3, 30, ')" << normalMetadata << R"('),
+            (5, NULL, ')" << deletedMetadata << R"(');
         )");
 
         WaitTxNotification(server, edgeActor, AsyncAlterRestoreIncrementalBackup(server, "/Root", "/Root/IncrBackupImpl", "/Root/Table"));
@@ -744,23 +839,26 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}});
+                    {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}});
 
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000002Z_incremental", "Table", opts);
 
-            ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                  (2, 200, NULL)
-                , (1, NULL, true)
+            auto normalMetadata = SerializeChangeMetadata(false); // Not deleted
+            auto deletedMetadata = SerializeChangeMetadata(true);  // Deleted
+
+            ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                  (2, 200, ')" << normalMetadata << R"(')
+                , (1, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
 
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000003Z_incremental", "Table", opts);
 
-            ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                  (2, 2000, NULL)
-                , (5, NULL, true)
+            ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                  (2, 2000, ')" << normalMetadata << R"(')
+                , (5, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
         }
@@ -885,24 +983,27 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}});
+                    {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}});
+
+            auto normalMetadata = SerializeChangeMetadata(false); // Not deleted
+            auto deletedMetadata = SerializeChangeMetadata(true);  // Deleted
 
             {
                 CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000002Z_incremental", "Table", opts);
 
-                ExecSQL(server, edgeActor, R"(
-                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                      (2, 200, NULL)
-                    , (1, NULL, true)
+                ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                      (2, 200, ')" << normalMetadata << R"(')
+                    , (1, NULL, ')" << deletedMetadata << R"(')
                     ;
                 )");
 
                 CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000003Z_incremental", "Table", opts);
 
-                ExecSQL(server, edgeActor, R"(
-                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                      (2, 2000, NULL)
-                    , (5, NULL, true)
+                ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                      (2, 2000, ')" << normalMetadata << R"(')
+                    , (5, NULL, ')" << deletedMetadata << R"(')
                     ;
                 )");
             }
@@ -911,10 +1012,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000002Z_incremental/DirA", "TableA", opts);
                 CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000003Z_incremental/DirA", "TableA", opts);
 
-                ExecSQL(server, edgeActor, R"(
-                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/DirA/TableA` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                      (21, 20001, NULL)
-                    , (51, NULL, true)
+                ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/DirA/TableA` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                      (21, 20001, ')" << normalMetadata << R"(')
+                    , (51, NULL, ')" << deletedMetadata << R"(')
                     ;
                 )");
             }
@@ -922,10 +1023,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             {
                 CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000002Z_incremental/DirA", "TableB", opts);
 
-                ExecSQL(server, edgeActor, R"(
-                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/DirA/TableB` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                      (22, 2002, NULL)
-                    , (12, NULL, true)
+                ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/DirA/TableB` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                      (22, 2002, ')" << normalMetadata << R"(')
+                    , (12, NULL, ')" << deletedMetadata << R"(')
                     ;
                 )");
 
@@ -1271,19 +1372,22 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}});
+                    {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}});
 
             // Create incremental backup tables with same sharding as full backup
             // Table2Shard - 2 shards: delete some keys, update others
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental", "Table2Shard", 
                 opts.Shards(2));
 
-            ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table2Shard` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                  (2, 2000, NULL)
-                , (12, 12000, NULL)
-                , (1, NULL, true)
-                , (21, NULL, true)
+            auto normalMetadata = SerializeChangeMetadata(false); // Not deleted
+            auto deletedMetadata = SerializeChangeMetadata(true);  // Deleted
+
+            ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table2Shard` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                  (2, 2000, ')" << normalMetadata << R"(')
+                , (12, 12000, ')" << normalMetadata << R"(')
+                , (1, NULL, ')" << deletedMetadata << R"(')
+                , (21, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
 
@@ -1291,14 +1395,14 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental", "Table3Shard", 
                 opts.Shards(3));
 
-            ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table3Shard` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                  (1, 1000, NULL)
-                , (11, 11000, NULL)
-                , (21, 21000, NULL)
-                , (3, NULL, true)
-                , (13, NULL, true)
-                , (23, NULL, true)
+            ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table3Shard` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                  (1, 1000, ')" << normalMetadata << R"(')
+                , (11, 11000, ')" << normalMetadata << R"(')
+                , (21, 21000, ')" << normalMetadata << R"(')
+                , (3, NULL, ')" << deletedMetadata << R"(')
+                , (13, NULL, ')" << deletedMetadata << R"(')
+                , (23, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
 
@@ -1306,16 +1410,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental", "Table4Shard", 
                 opts.Shards(4));
 
-            ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table4Shard` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                  (2, 200, NULL)
-                , (12, 1200, NULL)
-                , (22, 2200, NULL)
-                , (32, 3200, NULL)
-                , (1, NULL, true)
-                , (11, NULL, true)
-                , (21, NULL, true)
-                , (31, NULL, true)
+            ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table4Shard` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                  (2, 200, ')" << normalMetadata << R"(')
+                , (12, 1200, ')" << normalMetadata << R"(')
+                , (22, 2200, ')" << normalMetadata << R"(')
+                , (32, 3200, ')" << normalMetadata << R"(')
+                , (1, NULL, ')" << deletedMetadata << R"(')
+                , (11, NULL, ')" << deletedMetadata << R"(')
+                , (21, NULL, ')" << deletedMetadata << R"(')
+                , (31, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
         }
@@ -1801,6 +1905,280 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         ExecSQL(server, edgeActor, R"(DROP BACKUP COLLECTION `NonExistentCollection`;)", 
                 false, Ydb::StatusIds::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(VerifyIncrementalBackupTableAttributes) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        // Insert some initial data
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+                (1, 10), (2, 20), (3, 30);
+        )");
+
+        // Create backup collection with incremental backup enabled
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `TestCollection`
+              ( TABLE `/Root/Table`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = 'true'
+              );
+            )", false);
+
+        // Create full backup first
+        ExecSQL(server, edgeActor, R"(BACKUP `TestCollection`;)", false);
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        // Modify some data
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (2, 200);
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )");
+
+        // Create incremental backup - this should create the incremental backup implementation tables
+        ExecSQL(server, edgeActor, R"(BACKUP `TestCollection` INCREMENTAL;)", false);
+        runtime.SimulateSleep(TDuration::Seconds(10)); // More time for incremental backup to complete
+
+        // Try to find the incremental backup table by iterating through possible timestamps
+        TString foundIncrementalBackupPath;
+        bool foundIncrementalBackupTable = false;
+        
+        // Common incremental backup paths to try (timestamp-based)
+        TVector<TString> possiblePaths = {
+            "/Root/.backups/collections/TestCollection/19700101000002Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000003Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000004Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000005Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000006Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000007Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000008Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000009Z_incremental/Table",
+            "/Root/.backups/collections/TestCollection/19700101000010Z_incremental/Table",
+        };
+
+        for (const auto& path : possiblePaths) {
+            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+            request->Record.MutableDescribePath()->SetPath(path);
+            request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
+            runtime.Send(new IEventHandle(MakeTxProxyID(), edgeActor, request.Release()));
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(edgeActor);
+            
+            if (reply->Get()->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
+                foundIncrementalBackupPath = path;
+                foundIncrementalBackupTable = true;
+                Cerr << "Found incremental backup table at: " << path << Endl;
+                break;
+            }
+        }
+
+        UNIT_ASSERT_C(foundIncrementalBackupTable, TStringBuilder() << "Could not find incremental backup table. Tried paths: " << JoinSeq(", ", possiblePaths));
+
+        // Now check the found incremental backup table attributes
+        auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        request->Record.MutableDescribePath()->SetPath(foundIncrementalBackupPath);
+        request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
+        runtime.Send(new IEventHandle(MakeTxProxyID(), edgeActor, request.Release()));
+        auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(edgeActor);
+
+        UNIT_ASSERT_EQUAL(reply->Get()->GetRecord().GetStatus(), NKikimrScheme::EStatus::StatusSuccess);
+        
+        const auto& pathDescription = reply->Get()->GetRecord().GetPathDescription();
+        UNIT_ASSERT(pathDescription.HasTable());
+        
+        // Verify that incremental backup table has __incremental_backup attribute
+        bool hasIncrementalBackupAttr = false;
+        bool hasAsyncReplicaAttr = false;
+        
+        for (const auto& attr : pathDescription.GetUserAttributes()) {
+            Cerr << "Found attribute: " << attr.GetKey() << " = " << attr.GetValue() << Endl;
+            if (attr.GetKey() == "__incremental_backup") {
+                hasIncrementalBackupAttr = true;
+            }
+            if (attr.GetKey() == "__async_replica") {
+                hasAsyncReplicaAttr = true;
+            }
+        }
+        
+        // Verify that we have __incremental_backup but NOT __async_replica
+        UNIT_ASSERT_C(hasIncrementalBackupAttr, TStringBuilder() << "Incremental backup table at " << foundIncrementalBackupPath << " must have __incremental_backup attribute");
+        UNIT_ASSERT_C(!hasAsyncReplicaAttr, TStringBuilder() << "Incremental backup table at " << foundIncrementalBackupPath << " must NOT have __async_replica attribute");
+    }
+
+    Y_UNIT_TEST(ResetOperationIncrementalBackup) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const TActorId edgeActor = runtime.AllocateEdgeActor();
+
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20);
+        )");
+
+        WaitTxNotification(server, edgeActor, AsyncCreateContinuousBackup(server, "/Root", "Table"));
+
+        // Test kReset operation (REPLACE INTO)
+        ExecSQL(server, edgeActor, R"(
+            REPLACE INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (3, 300);
+        )");
+
+        WaitForContent(server, edgeActor, "/Root/Table/0_continuousBackupImpl", {
+            MakeReset(1, 100),
+            MakeReset(3, 300),
+        });
+    }
+
+    Y_UNIT_TEST(ReplaceIntoIncrementalBackup) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2135), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const TActorId edgeActor = runtime.AllocateEdgeActor();
+
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        // Insert initial data
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        WaitTxNotification(server, edgeActor, AsyncCreateContinuousBackup(server, "/Root", "Table"));
+
+        // Test multiple REPLACE operations  
+        ExecSQL(server, edgeActor, R"(
+            REPLACE INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (4, 400);
+        )");
+
+        WaitForContent(server, edgeActor, "/Root/Table/0_continuousBackupImpl", {
+            MakeReset(1, 100),
+            MakeReset(4, 400),
+        });
+    }
+
+    Y_UNIT_TEST(ResetVsUpsertMissingColumnsTest) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2136), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const TActorId edgeActor = runtime.AllocateEdgeActor();
+
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", ThreeColumnTable());
+
+        // Insert initial data with all three columns
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value, extra) VALUES
+            (1, 10, 100),
+            (2, 20, 200);
+        )");
+
+        WaitTxNotification(server, edgeActor, AsyncCreateContinuousBackup(server, "/Root", "Table"));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (1, 15);
+        )");
+
+        ExecSQL(server, edgeActor, R"(
+            REPLACE INTO `/Root/Table` (key, value) VALUES (2, 25);
+        )");
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        auto records = GetRecords(runtime, edgeActor, "/Root/Table/0_continuousBackupImpl", 0);
+        UNIT_ASSERT_VALUES_EQUAL(records.size(), 2);
+
+        // Parse the first record (Upsert)
+        NKikimrChangeExchange::TChangeRecord firstRecord;
+        UNIT_ASSERT(firstRecord.ParseFromString(records[0].second));
+        UNIT_ASSERT_C(firstRecord.GetCdcDataChange().HasUpsert(), "First record should be an upsert");
+        
+        // Parse the second record (Reset)
+        NKikimrChangeExchange::TChangeRecord secondRecord;
+        UNIT_ASSERT(secondRecord.ParseFromString(records[1].second));
+        UNIT_ASSERT_C(secondRecord.GetCdcDataChange().HasReset(), "Second record should be a reset");
+    }
+
+    Y_UNIT_TEST(ResetVsUpsertColumnStateSerialization) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2137), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const TActorId edgeActor = runtime.AllocateEdgeActor();
+
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", ThreeColumnTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value, extra) VALUES (1, 10, 100);
+        )");
+
+        WaitTxNotification(server, edgeActor, AsyncCreateContinuousBackup(server, "/Root", "Table"));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (1, 15);
+        )");
+
+        ExecSQL(server, edgeActor, R"(
+            REPLACE INTO `/Root/Table` (key, value) VALUES (1, 25);
+        )");
+
+        SimulateSleep(server, TDuration::Seconds(2));
+
+        auto records = GetRecords(runtime, edgeActor, "/Root/Table/0_continuousBackupImpl", 0);
+        UNIT_ASSERT_C(records.size() >= 2, "Should have at least 2 records");
+
+        for (size_t i = 0; i < records.size(); ++i) {
+            NKikimrChangeExchange::TChangeRecord parsedRecord;
+            UNIT_ASSERT(parsedRecord.ParseFromString(records[i].second));
+            const auto& dataChange = parsedRecord.GetCdcDataChange();
+            
+            UNIT_ASSERT_C(dataChange.HasUpsert() || dataChange.HasReset(), 
+                         "Record should be either upsert or reset operation");
+        }
     }
 
 } // Y_UNIT_TEST_SUITE(IncrementalBackup)

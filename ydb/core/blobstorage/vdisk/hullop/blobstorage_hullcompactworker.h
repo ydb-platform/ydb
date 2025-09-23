@@ -77,8 +77,9 @@ namespace NKikimr {
             }
 
         public:
-            TDeferredItemQueue(const TString& prefix, TRopeArena& arena, TBlobStorageGroupType gtype, bool addHeader)
-                : TDeferredItemQueueBase<TDeferredItemQueue>(prefix, arena, gtype, addHeader)
+            TDeferredItemQueue(const TString& prefix, TRopeArena& arena, TBlobStorageGroupType gtype,
+                    EBlobHeaderMode blobHeaderMode)
+                : TDeferredItemQueueBase<TDeferredItemQueue>(prefix, arena, gtype, blobHeaderMode)
             {}
         };
 
@@ -308,13 +309,13 @@ namespace NKikimr {
             , LastLsn(lastLsn)
             , It(it)
             , IsFresh(isFresh)
-            , IndexMerger(GType, HullCtx->AddHeader)
+            , IndexMerger(GType, HullCtx->VCfg->BlobHeaderMode)
             , ReadBatcher(HullCtx->VCtx->VDiskLogPrefix,
                     PDiskCtx->Dsk->ReadBlockSize,
                     PDiskCtx->Dsk->SeekTimeUs * PDiskCtx->Dsk->ReadSpeedBps / 1000000,
                     HullCtx->HullCompReadBatchEfficiencyThreshold)
             , Arena(&TRopeArenaBackend::Allocate)
-            , DeferredItems(HullCtx->VCtx->VDiskLogPrefix, Arena, HullCtx->VCtx->Top->GType, HullCtx->AddHeader)
+            , DeferredItems(HullCtx->VCtx->VDiskLogPrefix, Arena, HullCtx->VCtx->Top->GType, HullCtx->VCfg->BlobHeaderMode)
             , Statistics(HullCtx)
             , RestoreDeadline(restoreDeadline)
             , PartitionKey(partitionKey)
@@ -644,7 +645,7 @@ namespace NKikimr {
                 WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
                     ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, (ui32)PDiskCtx->Dsk->ChunkSize,
                     PDiskCtx->Dsk->AppendBlockSize, (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(),
-                    false, ReservedChunks, Arena, HullCtx->AddHeader);
+                    false, ReservedChunks, Arena, HullCtx->VCfg->BlobHeaderMode);
 
                 WriterHasPendingOperations = false;
             }
@@ -679,7 +680,8 @@ namespace NKikimr {
                         Y_VERIFY_S(writtenLocation == preallocatedLocation, HullCtx->VCtx->VDiskLogPrefix);
                     }
                 } else {
-                    Y_VERIFY_S(collectTask.BlobMerger.Empty(), HullCtx->VCtx->VDiskLogPrefix);
+                    Y_VERIFY_S(collectTask.BlobMerger.ContainsMetadataPartsOnly() || collectTask.BlobMerger.Empty(),
+                        HullCtx->VCtx->VDiskLogPrefix);
                     Y_VERIFY_S(collectTask.Reads.empty(), HullCtx->VCtx->VDiskLogPrefix);
                 }
 

@@ -213,7 +213,7 @@ TStreamingFeedback TAttachmentsInputStream::GetFeedback() const
 std::vector<TErrorAttribute> TAttachmentsInputStream::GetErrorAttributes() const
 {
     return {
-        TErrorAttribute{"request_id", RequestId_},
+        TErrorAttribute("request_id", RequestId_),
     };
 }
 
@@ -417,7 +417,8 @@ void TAttachmentsOutputStream::DoAbort(TGuard<NThreading::TSpinLock>& guard, con
 void TAttachmentsOutputStream::OnTimeout()
 {
     Abort(TError(NYT::EErrorCode::Timeout, "Attachments stream write timed out")
-        << TErrorAttribute("timeout", *Timeout_));
+        << TErrorAttribute("timeout", *Timeout_)
+        << GetErrorAttributes());
 }
 
 void TAttachmentsOutputStream::HandleFeedback(const TStreamingFeedback& feedback)
@@ -524,7 +525,7 @@ bool TAttachmentsOutputStream::CanPullMore(bool first) const
 std::vector<TErrorAttribute> TAttachmentsOutputStream::GetErrorAttributes() const
 {
     return {
-        TErrorAttribute{"request_id", RequestId_},
+        TErrorAttribute("request_id", RequestId_),
     };
 }
 

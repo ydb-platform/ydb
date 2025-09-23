@@ -5,12 +5,11 @@
 # of the BSD license. See the LICENSE file for details.
 
 import os
-
 from typing import (
+    IO,
     BinaryIO,
     ByteString,
     Generator,
-    IO,
     Iterable,
     List,
     Optional,
@@ -451,7 +450,9 @@ class FrameParameters(object):
 def estimate_decompression_context_size() -> int: ...
 def frame_content_size(data: ByteString) -> int: ...
 def frame_header_size(data: ByteString) -> int: ...
-def get_frame_parameters(data: ByteString) -> FrameParameters: ...
+def get_frame_parameters(
+    data: ByteString, format: Optional[int] = None
+) -> FrameParameters: ...
 def train_dictionary(
     dict_size: int,
     samples: list[ByteString],

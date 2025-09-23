@@ -47,6 +47,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/config_metrics.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/nameservice.h>
@@ -58,6 +59,7 @@
 #include <ydb/core/protos/alloc.pb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/protos/config_metrics.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
@@ -78,6 +80,8 @@
 #include <ydb/core/tablet/tablet_list_renderer.h>
 #include <ydb/core/tablet/tablet_monitoring_proxy.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
+
+#include <ydb/core/transfer/transfer_writer.h>
 
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -165,7 +169,107 @@
 
 #include <ydb/core/tracing/tablet_info.h>
 
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+
 namespace NKikimr {
+
+class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
+    TGRpcServersFactory GRpcServersFactory;
+    TGRpcServers GRpcServers;
+    TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
+
+public:
+    enum {
+        EvStop = EventSpaceBegin(TEvents::ES_PRIVATE),
+    };
+
+    struct TEvStop : TEventLocal<TEvStop, EvStop> {
+        TManualEvent *Event;
+
+        TEvStop(TManualEvent *event)
+            : Event(event)
+        {}
+    };
+
+public:
+    TGRpcServersManager(TGRpcServersFactory grpcServersFactory,
+            TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider)
+        : GRpcServersFactory(std::move(grpcServersFactory))
+        , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
+        Start();
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
+        if (const auto& bridgeInfo = ev->Get()->BridgeInfo) {
+            if (NBridge::PileStateTraits(bridgeInfo->SelfNodePile->State).RequiresConfigQuorum) {
+                Start();
+            } else {
+                Stop();
+            }
+        }
+    }
+
+    void Start() {
+        if (GRpcServers) {
+            return;
+        }
+        GRpcServers = GRpcServersFactory();
+        for (auto& [name, server] : GRpcServers) {
+            if (!server) {
+                continue;
+            }
+
+            server->Start();
+
+            TString endpoint;
+            if (server->GetHost() != "[::]") {
+                endpoint = server->GetHost();
+            }
+
+            endpoint += Sprintf(":%d", server->GetPort());
+
+            Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
+                new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(name, endpoint));
+
+            if (ProcessMemoryInfoProvider) {
+                auto memInfo = ProcessMemoryInfoProvider->Get();
+                NKikimrWhiteboard::TSystemStateInfo systemStateInfo;
+                if (memInfo.CGroupLimit) {
+                    systemStateInfo.SetMemoryLimit(*memInfo.CGroupLimit);
+                } else if (memInfo.MemTotal) {
+                    systemStateInfo.SetMemoryLimit(*memInfo.MemTotal);
+                }
+                Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
+                    new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(systemStateInfo));
+            }
+        }
+    }
+
+    void Stop() {
+        for (auto& [name, server] : GRpcServers) {
+            if (server) {
+                server->Stop();
+            }
+        }
+        GRpcServers.clear();
+    }
+
+    void HandleStop(TEvStop::TPtr ev) {
+        Stop();
+        ev->Get()->Event->Signal();
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvNodeWardenStorageConfig, Handle)
+        hFunc(TEvStop, HandleStop)
+    )
+};
 
 class TDomainsInitializer : public IAppDataInitializer {
     const NKikimrConfig::TAppConfig& Config;
@@ -428,15 +532,8 @@ TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
 }
 
 TKikimrRunner::~TKikimrRunner() {
-    if (!!ActorSystem) {
-        // Stop ActorSystem first, so no one actor can call any grpc stuff.
+    if (ActorSystem) {
         ActorSystem->Stop();
-        // After that stop sending any requests to actors
-        // by destroing grpc subsystem.
-        for (auto& serv : GRpcServers) {
-            serv.second.Destroy();
-        }
-
         ActorSystem.Destroy();
     }
 }
@@ -542,13 +639,19 @@ void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
     if (runConfig.ServicesMask.EnableKqp) {
         auto& tableServiceConfig = runConfig.AppConfig.GetTableServiceConfig();
         auto& featureFlags = runConfig.AppConfig.GetFeatureFlags();
-        KqpShutdownController.Reset(new NKqp::TKqpShutdownController(NKqp::MakeKqpProxyID(runConfig.NodeId), tableServiceConfig, featureFlags.GetEnableGracefulShutdown()));
+        KqpShutdownController.Reset(new NKqp::TKqpShutdownController(runConfig.NodeId, tableServiceConfig, featureFlags.GetEnableGracefulShutdown()));
         KqpShutdownController->Initialize(ActorSystem.Get());
     }
 }
 
 void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
+    GRpcServersFactory = [runConfig, this] { return CreateGRpcServers(runConfig); };
+}
+
+TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig) {
     const auto& appConfig = runConfig.AppConfig;
+
+    TGRpcServers grpcServers;
 
     auto fillFn = [&](const NKikimrConfig::TGRpcConfig& grpcConfig, NYdbGrpc::TGRpcServer& server, NYdbGrpc::TServerOptions& opts) {
         const auto& services = grpcConfig.GetServices();
@@ -1042,15 +1145,15 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             sslData.DoRequestClientCertificate = appConfig.GetClientCertificateAuthorization().GetRequestClientCertificate();
             sslOpts.SetSslData(sslData);
 
-            GRpcServers.push_back({ "grpcs", new NYdbGrpc::TGRpcServer(sslOpts, Counters) });
+            grpcServers.push_back({ "grpcs", new NYdbGrpc::TGRpcServer(sslOpts, Counters) });
 
-            fillFn(grpcConfig, *GRpcServers.back().second, sslOpts);
+            fillFn(grpcConfig, *grpcServers.back().second, sslOpts);
         }
 
         if (grpcConfig.GetPort()) {
-            GRpcServers.push_back({ "grpc", new NYdbGrpc::TGRpcServer(opts, Counters) });
+            grpcServers.push_back({ "grpc", new NYdbGrpc::TGRpcServer(opts, Counters) });
 
-            fillFn(grpcConfig, *GRpcServers.back().second, opts);
+            fillFn(grpcConfig, *grpcServers.back().second, opts);
         }
 
         for (auto &ex : grpcConfig.GetExtEndpoints()) {
@@ -1065,8 +1168,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                     xopts.SetEndpointId(ex.GetEndpointId());
                 }
 
-                GRpcServers.push_back({ "grpc", new NYdbGrpc::TGRpcServer(xopts, Counters) });
-                fillFn(ex, *GRpcServers.back().second, xopts);
+                grpcServers.push_back({ "grpc", new NYdbGrpc::TGRpcServer(xopts, Counters) });
+                fillFn(ex, *grpcServers.back().second, xopts);
             }
 
             if (ex.HasSslPort() && ex.GetSslPort()) {
@@ -1104,11 +1207,13 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 Y_ABORT_UNLESS(xopts.SslData->Cert, "Cert not set");
                 Y_ABORT_UNLESS(xopts.SslData->Key, "Key not set");
 
-                GRpcServers.push_back({ "grpcs", new NYdbGrpc::TGRpcServer(xopts, Counters) });
-                fillFn(ex, *GRpcServers.back().second, xopts);
+                grpcServers.push_back({ "grpcs", new NYdbGrpc::TGRpcServer(xopts, Counters) });
+                fillFn(ex, *grpcServers.back().second, xopts);
             }
         }
     }
+
+    return grpcServers;
 }
 
 void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
@@ -1161,9 +1266,9 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
     AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
 
-    AppData->TransferWriterFactory = ModuleFactories
+    AppData->TransferWriterFactory = ModuleFactories && ModuleFactories->TransferWriterFactory
         ? ModuleFactories->TransferWriterFactory
-        : nullptr;
+        : std::make_shared<NKikimr::NReplication::NTransfer::TTransferWriterFactory>();
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
@@ -1198,7 +1303,6 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     if (runConfig.AppConfig.HasKafkaProxyConfig()) {
         AppData->KafkaProxyConfig.CopyFrom(runConfig.AppConfig.GetKafkaProxyConfig());
     }
-
 
     if (runConfig.AppConfig.HasNetClassifierConfig()) {
         AppData->NetClassifierConfig.CopyFrom(runConfig.AppConfig.GetNetClassifierConfig());
@@ -1301,6 +1405,14 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasStatisticsConfig()) {
         AppData->StatisticsConfig = runConfig.AppConfig.GetStatisticsConfig();
+    }
+
+    if (runConfig.AppConfig.HasMetricsConfig()) {
+        AppData->MetricsConfig.InitializeFromProto(runConfig.AppConfig.GetMetricsConfig());
+    }
+
+    if (runConfig.AppConfig.HasSystemTabletBackupConfig()) {
+        AppData->SystemTabletBackupConfig = runConfig.AppConfig.GetSystemTabletBackupConfig();
     }
 
     // setup resource profiles
@@ -1727,7 +1839,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
 
     if (serviceMask.EnableKqp) {
-        sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this, YqSharedResources));
+        sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));
     }
 
     if (serviceMask.EnableMetadataProvider) {
@@ -1853,6 +1965,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TAwsApiInitializer(*this));
     }
 
+    if (serviceMask.EnableOverloadManager) {
+        sil->AddServiceInitializer(new TOverloadManagerInitializer(runConfig));
+    }
+
     return sil;
 }
 
@@ -1874,30 +1990,7 @@ void TKikimrRunner::KikimrStart() {
         Monitoring->Start(ActorSystem.Get());
     }
 
-    for (auto& server : GRpcServers) {
-        if (server.second) {
-            server.second->Start();
-
-            TString endpoint;
-            if (server.second->GetHost() != "[::]") {
-                endpoint = server.second->GetHost();
-            }
-            endpoint += Sprintf(":%d", server.second->GetPort());
-            ActorSystem->Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ActorSystem->NodeId),
-                              new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(server.first, endpoint));
-            if (ProcessMemoryInfoProvider) {
-                auto memInfo = ProcessMemoryInfoProvider->Get();
-                NKikimrWhiteboard::TSystemStateInfo systemStateInfo;
-                if (memInfo.CGroupLimit) {
-                    systemStateInfo.SetMemoryLimit(*memInfo.CGroupLimit);
-                } else if (memInfo.MemTotal) {
-                    systemStateInfo.SetMemoryLimit(*memInfo.MemTotal);
-                }
-                ActorSystem->Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ActorSystem->NodeId),
-                              new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(systemStateInfo));
-            }
-        }
-    }
+    GRpcServersManager = ActorSystem->Register(new TGRpcServersManager(std::move(GRpcServersFactory), ProcessMemoryInfoProvider));
 
     if (SqsHttp) {
         SqsHttp->Start();
@@ -2002,18 +2095,12 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     }
 
     // stop processing grpc requests/response - we must stop feeding ActorSystem
-    for (auto& server : GRpcServers) {
-        if (server.second) {
-            server.second->Stop();
-        }
-    }
+    TManualEvent event;
+    ActorSystem->Send(new IEventHandle(GRpcServersManager, {}, new TGRpcServersManager::TEvStop(&event)));
+    event.WaitI();
 
     if (ActorSystem) {
         ActorSystem->Stop();
-    }
-
-    for (auto& server : GRpcServers) {
-        server.second.Destroy();
     }
 
     if (YqSharedResources) {
@@ -2052,7 +2139,6 @@ TProgramShouldContinue TKikimrRunner::KikimrShouldContinue;
 void TKikimrRunner::OnTerminate(int) {
     KikimrShouldContinue.ShouldStop(0);
 }
-
 
 void TKikimrRunner::SetSignalHandlers() {
 #ifdef _unix_

@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20.1.8)
+VERSION(21.1.0)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-20.1.8.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-21.1.0.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include
@@ -69,13 +69,14 @@ ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32)
     SRCS(
         src/Unwind-wasm.c
     )
-ELSEIF (OS_EMSCRIPTEN AND NOT ARCH_WASM32)
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM64)
     PEERDIR(
         contrib/restricted/emscripten/include
     )
     CFLAGS(
         -D_LIBUNWIND_HIDE_SYMBOLS
         -D__WASM_EXCEPTIONS__
+        -Wno-c23-extensions
     )
     SRCS(
         src/Unwind-wasm.c

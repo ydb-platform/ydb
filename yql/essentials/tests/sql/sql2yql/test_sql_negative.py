@@ -3,7 +3,7 @@ import pytest
 import yatest.common
 from yql_utils import get_supported_providers, get_param
 
-from test_utils import pytest_generate_tests_for_run, get_config, SQLRUN_PATH
+from test_utils import pytest_generate_tests_for_run, get_config, SQLRUN_PATH, SQL_FLAGS
 
 NEGATIVE_TEMPLATE = '.sqlx'
 DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
@@ -27,6 +27,10 @@ def run_sql2yql(program_sql, out_dir, err_file_path):
         '--syntax-version=1',
         '/dev/stdin',
     ]
+
+    if SQL_FLAGS:
+        cmd_sql.append('--flags=%s' % ','.join(SQL_FLAGS))
+
     with open(program_sql) as f:
         sql_res = yatest.common.process.execute(cmd_sql, check_exit_code=False, stdin=f, env={'YQL_DETERMINISTIC_MODE': '1'})
 

@@ -209,6 +209,24 @@ NKikimr::NMiniKQL::TType* BuildTypeImpl(const TTypeAnnotationNode& annotation, c
         return typeBuilder.NewBlockType(itemType, NKikimr::NMiniKQL::TBlockType::EShape::Scalar);
     }
 
+    case ETypeAnnotationKind::Linear: {
+        auto linear = annotation.Cast<TLinearExprType>();
+        auto itemType = BuildType(*linear->GetItemType(), typeBuilder, memoization, err);
+        if (!itemType) {
+            return nullptr;
+        }
+        return typeBuilder.NewLinearType(itemType, false);
+    }
+
+    case ETypeAnnotationKind::DynamicLinear: {
+        auto linear = annotation.Cast<TDynamicLinearExprType>();
+        auto itemType = BuildType(*linear->GetItemType(), typeBuilder, memoization, err);
+        if (!itemType) {
+            return nullptr;
+        }
+        return typeBuilder.NewLinearType(itemType, true);
+    }
+
     case ETypeAnnotationKind::Item:
     case ETypeAnnotationKind::World:
     case ETypeAnnotationKind::Error:
@@ -439,6 +457,17 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
         return res;
     }
 
+    case TType::EKind::Linear:
+    {
+        auto linType = static_cast<TLinearType*>(type);
+        auto itemType = ConvertMiniKQLType(position, linType->GetItemType(), ctx);
+        if (linType->IsDynamic()) {
+            return ctx.MakeType<TDynamicLinearExprType>(itemType);
+        } else {
+            return ctx.MakeType<TLinearExprType>(itemType);
+        }
+    }
+
     }
 
     YQL_ENSURE(false, "Unknown kind");
@@ -498,6 +527,16 @@ ETypeAnnotationKind ConvertMiniKQLTypeKind(NKikimr::NMiniKQL::TType* type) {
         return ETypeAnnotationKind::Pg;
     case TType::EKind::Multi:
         return ETypeAnnotationKind::Multi;
+    case TType::EKind::Linear:
+    {
+        auto linType = static_cast<TLinearType*>(type);
+        if (linType->IsDynamic()) {
+            return ETypeAnnotationKind::DynamicLinear;
+        } else {
+            return ETypeAnnotationKind::Linear;
+        }
+        break;
+    }
     }
 
     YQL_ENSURE(false, "Unknown kind");

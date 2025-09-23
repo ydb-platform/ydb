@@ -60,8 +60,8 @@ namespace {
             auto edge = Runtime.AllocateEdgeActor(queueActorId.NodeId(), __FILE__, __LINE__);
             const TLogoBlobID putId(BlobId, partIdx + 1);
             Runtime.Send(new IEventHandle(queueActorId, edge, new TEvBlobStorage::TEvVPut(putId, Parts[partIdx],
-                VDiskIds[subgroupNodeId], false, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog)),
-                queueActorId.NodeId());
+                VDiskIds[subgroupNodeId], false, nullptr, TInstant::Max(),
+                NKikimrBlobStorage::EPutHandleClass::TabletLog, false)), queueActorId.NodeId());
             auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge);
             auto& record = res->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);

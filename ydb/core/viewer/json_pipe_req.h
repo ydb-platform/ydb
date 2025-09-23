@@ -392,7 +392,7 @@ protected:
     STATEFN(StateResolveDatabase);
     STATEFN(StateResolveResource);
     void RedirectToDatabase(const TString& database);
-    bool NeedToRedirect();
+    bool NeedToRedirect(bool checkDatabaseAuth = true);
     void HandleTimeout();
     void PassAway() override;
 };

@@ -17,6 +17,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
     const TInstant Deadline;
     const bool IsInternal;
     const bool Decommission;
+    const bool DoNotReportIndexRestoreGetMissingBlobs;
     const std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> ForceBlockTabletData;
 
     THashMap<ui64, TGroupQuorumTracker> QuorumTracker;
@@ -210,10 +211,12 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
         for (ui32 i = 0; i < getResult.ResponseSz; ++i) {
             TEvBlobStorage::TEvGetResult::TResponse &response = getResult.Responses[i];
             if (response.Status != NKikimrProto::OK) {
-                DSP_LOG_ERROR_S("DSPI07", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status)
-                    << " Response[" << i << "]# " << NKikimrProto::EReplyStatus_Name(response.Status)
-                    << " for tablet# " << TabletId
-                    << " BlobStatus# " << DumpBlobStatus());
+                if (!DoNotReportIndexRestoreGetMissingBlobs) {
+                    DSP_LOG_ERROR_S("DSPI07", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status)
+                        << " Response[" << i << "]# " << NKikimrProto::EReplyStatus_Name(response.Status)
+                        << " for tablet# " << TabletId
+                        << " BlobStatus# " << DumpBlobStatus());
+                }
                 SetPendingResultResponseStatus(response.Id, response.Status);
             }
         }
@@ -245,6 +248,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
             true /*mustRestoreFirst*/, true /*isIndexOnly*/, std::nullopt /*forceBlockTabletData*/, IsInternal);
         ev->RestartCounter = counter;
         ev->Decommission = Decommission;
+        ev->DoNotReportIndexRestoreGetMissingBlobs = DoNotReportIndexRestoreGetMissingBlobs;
         return ev;
     }
 
@@ -264,6 +268,7 @@ public:
         , Deadline(params.Common.Event->Deadline)
         , IsInternal(params.Common.Event->IsInternal)
         , Decommission(params.Common.Event->Decommission)
+        , DoNotReportIndexRestoreGetMissingBlobs(params.Common.Event->DoNotReportIndexRestoreGetMissingBlobs)
         , ForceBlockTabletData(params.Common.Event->ForceBlockTabletData)
         , VGetsInFlight(0)
         , GetHandleClass(params.Common.Event->GetHandleClass)

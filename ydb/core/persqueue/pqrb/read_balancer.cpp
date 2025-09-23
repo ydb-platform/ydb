@@ -3,7 +3,7 @@
 #include "read_balancer__txpreinit.h"
 #include "read_balancer__txwrite.h"
 #include "read_balancer_log.h"
-#include "mirror_describer.h"
+#include "mirror_describer_factory.h"
 
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
@@ -12,6 +12,8 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/random_provider/random_provider.h>
+
+#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletID())("path", Path)("topic", Topic)
 
 namespace NKikimr {
 namespace NPQ {
@@ -289,7 +291,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         if (MirrorTopicDescriberActorId) {
             ctx.Send(MirrorTopicDescriberActorId, new TEvPQ::TEvChangePartitionConfig(nullptr, TabletConfig));
         } else {
-            MirrorTopicDescriberActorId = ctx.Register(new TMirrorDescriber(SelfId(), Topic, TabletConfig.GetPartitionConfig().GetMirrorFrom()));
+            MirrorTopicDescriberActorId = ctx.Register(CreateMirrorDescriber(TabletID(), SelfId(), Topic, TabletConfig.GetPartitionConfig().GetMirrorFrom()));
         }
     } else {
         if (MirrorTopicDescriberActorId) {
@@ -320,7 +322,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     for (auto& p : record.GetPartitions()) {
         auto it = PartitionsInfo.find(p.GetPartition());
         if (it == PartitionsInfo.end()) {
-            Y_ABORT_UNLESS(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
+            PQ_ENSURE(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
 
             partitionsInfo[p.GetPartition()] = {p.GetTabletId()};
 
@@ -422,7 +424,7 @@ TActorId TPersQueueReadBalancer::GetPipeClient(const ui64 tabletId, const TActor
         pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
         TabletPipes[tabletId].PipeActor = pipeClient;
         auto res = PipesRequested.insert(tabletId);
-        Y_ABORT_UNLESS(res.second);
+        PQ_ENSURE(res.second);
     } else {
         pipeClient = it->second.PipeActor;
     }
@@ -446,8 +448,7 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
             AggregatedStats.Cookies[tabletId] = cookie;
         }
 
-        PQ_LOG_D(
-            TStringBuilder() << "Send TEvPersQueue::TEvStatus TabletId: " << tabletId << " Cookie: " << cookie);
+        PQ_LOG_D("Send TEvPersQueue::TEvStatus TabletId: " << tabletId << " Cookie: " << cookie);
         NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus("", true), cookie);
     }
 }
@@ -475,6 +476,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
                 partitionId,
                 partRes.GetScaleStatus(),
                 partRes.HasScaleParticipatingPartitions() ? MakeMaybe(partRes.GetScaleParticipatingPartitions()) : Nothing(),
+                partRes.HasSplitBoundary() ? MakeMaybe(partRes.GetSplitBoundary()) : Nothing(),
                 ctx
             );
         }
@@ -512,7 +514,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TAc
 }
 
 void TPersQueueReadBalancer::TAggregatedStats::AggrStats(ui32 partition, ui64 dataSize, ui64 usedReserveSize) {
-    Y_ABORT_UNLESS(dataSize >= usedReserveSize);
+    AFL_ENSURE(dataSize >= usedReserveSize);
 
     auto& oldValue = Stats[partition];
 
@@ -523,7 +525,7 @@ void TPersQueueReadBalancer::TAggregatedStats::AggrStats(ui32 partition, ui64 da
     TotalDataSize += (newValue.DataSize - oldValue.DataSize);
     TotalUsedReserveSize += (newValue.UsedReserveSize - oldValue.UsedReserveSize);
 
-    Y_ABORT_UNLESS(TotalDataSize >= TotalUsedReserveSize);
+    AFL_ENSURE(TotalDataSize >= TotalUsedReserveSize);
 
     oldValue = newValue;
 }
@@ -995,6 +997,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
             record.GetPartitionId(),
             record.GetScaleStatus(),
             record.HasParticipatingPartitions() ? MakeMaybe(record.GetParticipatingPartitions()) : Nothing(),
+            record.HasSplitBoundary() ? MakeMaybe(record.GetSplitBoundary()) : Nothing(),
             ctx
         );
     } else {
@@ -1012,6 +1015,7 @@ void TPersQueueReadBalancer::Handle(TPartitionScaleRequest::TEvPartitionScaleReq
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx) {
+    PQ_LOG_D("Received TEvMirrorTopicDescription");
     if (!MirroringEnabled(TabletConfig)) {
         return;
     }
@@ -1033,4 +1037,12 @@ void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, con
 
 
 } // NPQ
+} // NKikimr
+
+namespace NKikimr {
+
+IActor* CreatePersQueueReadBalancer(const TActorId& tablet, TTabletStorageInfo *info) {
+    return new NPQ::TPersQueueReadBalancer(tablet, info);
+}
+
 } // NKikimr

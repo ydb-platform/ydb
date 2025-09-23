@@ -20,6 +20,10 @@ TDqComputeActorMetrics::TDqComputeActorMetrics(
             "watermark_collect_ms",
             NMonitoring::ExplicitHistogram({0, 15, 50, 100, 250, 500, 1000, 10'000, 100'000}));
 
+        WatermarkDiscrepancy = ComputeActorSubgroup->GetHistogram(
+            "watermark_discrepancy_ms",
+            NMonitoring::ExplicitHistogram({0, 15, 50, 100, 250, 500, 1000, 10'000, 100'000}));
+
         InputRows = ComputeActorSubgroup->GetHistogram(
             "input_rows",
             NMonitoring::ExponentialHistogram(12, 2)
@@ -122,12 +126,13 @@ void TDqComputeActorMetrics::ReportInputChannelWatermark(ui32 id, ui64 dataSize,
     ReportInputWatermarkMetrics(counters, *watermark);
 }
 
-void TDqComputeActorMetrics::ReportInjectedToTaskRunnerWatermark(TInstant watermark) {
+void TDqComputeActorMetrics::ReportInjectedToTaskRunnerWatermark(TInstant watermark, TDuration discrepancy) {
     if (!Enable) {
         return;
     }
 
     InjectedToTaskRunnerWatermark->Set(watermark.MilliSeconds());
+    WatermarkDiscrepancy->Collect(discrepancy.MilliSeconds());
 }
 
 void TDqComputeActorMetrics::ReportInjectedToOutputsWatermark(TInstant watermark) {

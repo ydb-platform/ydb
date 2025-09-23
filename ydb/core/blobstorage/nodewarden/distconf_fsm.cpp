@@ -407,6 +407,8 @@ namespace NKikimr::NStorage {
             (ProposedConfig, proposedConfig),
             (CanPropose, canPropose));
 
+        bool automaticBootstrap = false;
+
         if (!canPropose) {
             // we can't propose any configuration here, just ignore
         } else if (proposedConfig) { // we have proposition in progress, resume
@@ -434,6 +436,7 @@ namespace NKikimr::NStorage {
                     return {.ErrorReason = *error};
                 }
                 configToPropose = baseConfig;
+                automaticBootstrap = true;
             }
         }
 
@@ -441,6 +444,7 @@ namespace NKikimr::NStorage {
             return {
                 .PropositionBase = std::move(propositionBase),
                 .ConfigToPropose = *configToPropose,
+                .AutomaticBootstrap = automaticBootstrap,
             };
         }
 

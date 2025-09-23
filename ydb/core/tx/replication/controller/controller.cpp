@@ -66,6 +66,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvAlterDstResult, Handle);
         HFunc(TEvPrivate::TEvDropDstResult, Handle);
         HFunc(TEvPrivate::TEvResolveSecretResult, Handle);
+        HFunc(TEvPrivate::TEvResolveResourceIdResult, Handle);
         HFunc(TEvPrivate::TEvResolveTenantResult, Handle);
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvPrivate::TEvProcessQueues, Handle);
@@ -248,6 +249,11 @@ void TController::Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TAc
     RunTxResolveSecretResult(ev, ctx);
 }
 
+void TController::Handle(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxResolveResourceIdResult(ev, ctx);
+}
+
 void TController::Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
 
@@ -293,7 +299,6 @@ void TController::Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActo
 }
 
 void TController::Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(ev->Get()->CachedMessageData);
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
 
     auto result = NodesManager.ProcessResponse(ev, ctx);

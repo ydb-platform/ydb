@@ -114,13 +114,15 @@ void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageContr
     }
 }
 
-void TBlobStorageController::TGroupInfo::FillInGroupParameters(
+bool TBlobStorageController::TGroupInfo::FillInGroupParameters(
         NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
         TBlobStorageController *self) const {
     if (GroupMetrics) {
         params->MergeFrom(GroupMetrics->GetGroupParameters());
+        return true;
     } else if (BridgeGroupInfo) {
         Y_ABORT_UNLESS(self->BridgeInfo);
+        bool res = true;
         for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
             const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
             if (TGroupInfo *groupInfo = self->FindGroup(groupId)) {
@@ -128,20 +130,23 @@ void TBlobStorageController::TGroupInfo::FillInGroupParameters(
                 if (!NBridge::PileStateTraits(self->BridgeInfo->GetPile(groupInfo->BridgePileId)->State).AllowsConnection) {
                     continue; // ignore groups from disconnected piles
                 }
-                groupInfo->FillInGroupParameters(params, self);
+                res &= groupInfo->FillInGroupParameters(params, self);
             } else {
                 Y_DEBUG_ABORT();
             }
         }
+        return res;
     } else {
-        FillInResources(params->MutableAssuredResources(), true);
-        FillInResources(params->MutableCurrentResources(), false);
-        FillInVDiskResources(params);
+        bool res = true;
+        res &= FillInResources(params->MutableAssuredResources(), true);
+        res &= FillInResources(params->MutableCurrentResources(), false);
+        res &= FillInVDiskResources(params);
         params->SetGroupSizeInUnits(GroupSizeInUnits);
+        return res;
     }
 }
 
-void TBlobStorageController::TGroupInfo::FillInResources(
+bool TBlobStorageController::TGroupInfo::FillInResources(
         NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const {
     // count minimum params for each of slots assuming they are shared fairly between all the slots (expected or currently created)
     std::optional<ui64> size;
@@ -149,6 +154,10 @@ void TBlobStorageController::TGroupInfo::FillInResources(
     std::optional<ui64> readThroughput;
     std::optional<ui64> writeThroughput;
     std::optional<double> occupancy;
+
+    Y_ABORT_UNLESS(Topology);
+    TBlobStorageGroupInfo::TGroupVDisks vdisksWithAllMetrics(Topology.get());
+
     for (const TVSlotInfo *vslot : VDisksInGroup) {
         const TPDiskInfo *pdisk = vslot->PDisk;
         const auto& metrics = pdisk->Metrics;
@@ -182,6 +191,14 @@ void TBlobStorageController::TGroupInfo::FillInResources(
         if (const auto& vm = vslot->Metrics; vm.HasOccupancy()) {
             occupancy = Max(occupancy.value_or(0), vm.GetOccupancy());
         }
+
+        const bool hasAllMetrics = metrics.HasMaxIOPS()
+            && metrics.HasMaxReadThroughput()
+            && metrics.HasMaxWriteThroughput()
+            && vslot->Metrics.HasOccupancy();
+        if (hasAllMetrics) {
+            vdisksWithAllMetrics |= {Topology.get(), vslot->GetShortVDiskId()};
+        }
     }
 
     // and recalculate it to the total size of the group according to the erasure
@@ -202,10 +219,15 @@ void TBlobStorageController::TGroupInfo::FillInResources(
     if (occupancy) {
         pb->SetOccupancy(Max<double>(pb->HasOccupancy() ? pb->GetOccupancy() : Min<double>(), *occupancy));
     }
+
+    return Topology->GetQuorumChecker().CheckQuorumForGroup(vdisksWithAllMetrics);
 }
 
-void TBlobStorageController::TGroupInfo::FillInVDiskResources(
+bool TBlobStorageController::TGroupInfo::FillInVDiskResources(
         NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const {
+    Y_ABORT_UNLESS(Topology);
+    TBlobStorageGroupInfo::TGroupVDisks vdisksWithAllMetrics(Topology.get());
+
     TBlobStorageGroupType type(ErasureSpecies);
     const double f = (double)VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
     for (const TVSlotInfo *vslot : VDisksInGroup) {
@@ -219,7 +241,14 @@ void TBlobStorageController::TGroupInfo::FillInVDiskResources(
         if (m.HasSpaceColor()) {
             pb->SetSpaceColor(pb->HasSpaceColor() ? Max(pb->GetSpaceColor(), m.GetSpaceColor()) : m.GetSpaceColor());
         }
+
+        const bool hasAllMetrics = m.HasAvailableSize() && m.HasAllocatedSize();
+        if (hasAllMetrics) {
+            vdisksWithAllMetrics |= {Topology.get(), vslot->GetShortVDiskId()};
+        }
     }
+
+    return Topology->GetQuorumChecker().CheckQuorumForGroup(vdisksWithAllMetrics);
 }
 
 NKikimrBlobStorage::TGroupStatus::E TBlobStorageController::DeriveStatus(const TBlobStorageGroupInfo::TTopology *topology,
@@ -313,6 +342,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     }
 
     // if bridge info has changed, then add any dynamic groups to sys view changed list
+    THashSet<TGroupId> groupsToCheck;
     if (BridgeInfo) {
         bool changed = false;
         if (!prevBridgeInfo) {
@@ -329,6 +359,9 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         if (changed) {
             for (const auto& [groupId, group] : GroupMap) {
                 SysViewChangedGroups.insert(groupId);
+            }
+            for (const auto& [groupId, iter] : GroupToWaitingSelectGroupsItem) {
+                groupsToCheck.insert(groupId);
             }
         }
     }
@@ -363,6 +396,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     }
 
     ApplyStaticGroupUpdateForSyncers(prevStaticGroups);
+    UpdateWaitingGroups(groupsToCheck);
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
@@ -1292,7 +1326,7 @@ void TBlobStorageController::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::T
     if (retriable) {
         auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         ev->Record.CopyFrom(cmd.Request);
-        TActivationContext::Schedule(TDuration::MilliSeconds(cmd.Timer.NextBackoffMs()), new IEventHandle(
+        TActivationContext::Schedule(cmd.Timer.Next(), new IEventHandle(
             MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), ev.release(), 0, it->first));
     } else {
         cmd.Callback(record);

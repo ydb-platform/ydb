@@ -29,7 +29,6 @@ FAILING_EXAMPLES = [
     'from foo import a,',
     'from __future__ import whatever',
     'from __future__ import braces',
-    'from .__future__ import whatever',
     'def f(x=3, y): pass',
     'lambda x=3, y: x',
     '__debug__ = 1',
@@ -216,7 +215,6 @@ FAILING_EXAMPLES = [
     'f"{\'\\\'}"',
     'f"{#}"',
     "f'{1!b}'",
-    "f'{1:{5:{3}}}'",
     "f'{'",
     "f'{'",
     "f'}'",
@@ -227,8 +225,6 @@ FAILING_EXAMPLES = [
     "f'{1;1}'",
     "f'{a;}'",
     "f'{b\"\" \"\"}'",
-    # f-string expression part cannot include a backslash
-    r'''f"{'\n'}"''',
 
     'async def foo():\n yield x\n return 1',
     'async def foo():\n yield x\n return 1',
@@ -412,4 +408,18 @@ if sys.version_info[:2] >= (3, 8):
     # f-string debugging syntax with invalid conversion character
     FAILING_EXAMPLES += [
         "f'{1=!b}'",
+    ]
+
+if sys.version_info[:2] < (3, 12):
+    FAILING_EXAMPLES += [
+        # f-string expression part cannot include a backslash before 3.12
+        r'''f"{'\n'}"''',
+        # this compiles successfully but fails when evaluated in 3.12
+        "f'{1:{5:{3}}}'",
+    ]
+
+if sys.version_info[:2] < (3, 13):
+    # this compiles successfully but fails when evaluated in 3.13
+    FAILING_EXAMPLES += [
+        'from .__future__ import whatever',
     ]

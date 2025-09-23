@@ -43,7 +43,9 @@ namespace NLongTxService {
             : Parent(parent)
             , Params(std::move(params))
             , LogPrefix("LongTxService.Commit ")
-        { }
+        {
+            AFL_VERIFY(false); //TOD delete this class starting with 25.3
+        }
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::LONG_TX_SERVICE_COMMIT;
@@ -438,7 +440,7 @@ namespace NLongTxService {
         void CancelProposal() {
             for (const auto& pr : Params.ColumnShardWrites) {
                 const ui64 tabletId = pr.first;
-                SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvCancelTransactionProposal>(TxId), false);
+                SendToTablet(tabletId, MakeHolder<TEvDataShard::TEvCancelTransactionProposal>(TxId), false);
             }
         }
 

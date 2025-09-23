@@ -208,7 +208,11 @@ public:
         : Request_(request)
         , FlowControl_(inflightLimitBytes)
         , Span_(TWilsonGrpc::RequestActor, request->GetWilsonTraceId(),
-                "RequestProxy.RpcOperationRequestActor", NWilson::EFlags::AUTO_END) {}
+                "RequestProxy.RpcOperationRequestActor", NWilson::EFlags::AUTO_END) {
+        if (Span_ && AppData()) {
+            Span_.Attribute("database", AppData()->TenantName);
+        }
+    }
 
     void Bootstrap(const TActorContext &ctx) {
         this->Become(&TExecuteQueryRPC::StateWork);
@@ -271,9 +275,9 @@ private:
         Ydb::Query::SchemaInclusionMode schemaInclusionMode = req->schema_inclusion_mode();
         Ydb::ResultSet::Format resultSetFormat = req->result_set_format();
 
-        std::optional<NKqp::TArrowFormatSettings> arrowFormatSettings;
+        std::optional<NKqp::NFormats::TArrowFormatSettings> arrowFormatSettings;
         if (req->has_arrow_format_settings()) {
-            arrowFormatSettings = NKqp::TArrowFormatSettings::ImportFromProto(req->arrow_format_settings());
+            arrowFormatSettings = NKqp::NFormats::TArrowFormatSettings::ImportFromProto(req->arrow_format_settings());
         }
 
         AuditContextAppend(Request_.get(), *req);

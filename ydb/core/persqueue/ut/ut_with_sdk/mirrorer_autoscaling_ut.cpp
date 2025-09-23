@@ -1,4 +1,4 @@
-#include <ydb/core/persqueue/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/persqueue/events/internal.h>
 
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
@@ -321,7 +321,7 @@ namespace NKikimr::NPersQueueTests {
                     Server.CleverServer->GetRuntime()->GetAppData(nodeId).PersQueueMirrorReaderFactory = Fabric.get();
                 }
 
-                Server.EnableLogs({NKikimrServices::PQ_READ_PROXY});
+                Server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::PERSQUEUE_READ_BALANCER, NKikimrServices::FLAT_TX_SCHEMESHARD});
                 Server.EnableLogs({NKikimrServices::PQ_MIRRORER, NKikimrServices::PQ_MIRROR_DESCRIBER}, NActors::NLog::PRI_TRACE);
                 Server.AnnoyingClient->CreateConsumer("user");
             }
@@ -563,17 +563,6 @@ namespace NKikimr::NPersQueueTests {
                 messagesPerPartition[wc.Partiton] += written;
             }
 
-            auto createReader = [&](const TString& topic, ui32 partition) {
-                auto settings =
-                    NYdb::NTopic::TReadSessionSettings()
-                        .AppendTopics(NYdb::NTopic::TTopicReadSettings(topic)
-                                          .AppendPartitionIds(partition))
-                        .WithoutConsumer()
-                        .Decompress(true);
-
-                return topicClient.CreateReadSession(settings);
-            };
-
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Active, 3);
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Active, 2); // not splitted yet
 
@@ -605,6 +594,18 @@ namespace NKikimr::NPersQueueTests {
                 Cerr << "Waiting for partitions to be splitted\n";
                 Sleep(TDuration::Seconds(1));
             }
+
+            auto createReader = [&](const TString& topic, ui32 partition) {
+                auto settings =
+                    NYdb::NTopic::TReadSessionSettings()
+                        .AppendTopics(NYdb::NTopic::TTopicReadSettings(topic)
+                                          .AppendPartitionIds(partition))
+                        .WithoutConsumer()
+                        .Decompress(true);
+
+                return topicClient.CreateReadSession(settings);
+            };
+
             const TInstant deadline = TDuration::Seconds(65).ToDeadLine();
             for (ui32 partition = 0; partition < finalPartitionsCount; ++partition) {
                 ComparePartitions(createReader(srcTopicFullName, partition), createReader(dstTopicFullName, partition), TStringBuilder() << "stage=2 " << LabeledOutput(partition), deadline, messagesPerPartition.Value(partition, 0), false);
@@ -961,6 +962,7 @@ namespace NKikimr::NPersQueueTests {
                 SplitPartition(txId++, srcTopicFullName, partitionId, bound, *ctx.Runtime(), TDuration::Zero());
             }
 
+            TInstant end = TDuration::Minutes(1).ToDeadLine();
             while (true) {
                 const auto srcStat = CountPartitionsByStatus(srcTopicFullName, server);
                 const auto dstStat = CountPartitionsByStatus(dstTopicFullName, server);
@@ -969,8 +971,12 @@ namespace NKikimr::NPersQueueTests {
                     PrintTopicDescription(name, "WAIT", server);
                 }
 
+                Cerr << "Wait partition count equals: " << srcStat.Partitions << " == " << dstStat.Partitions << Endl;
                 if (srcStat.Partitions == dstStat.Partitions) {
                     break;
+                }
+                if (end < TInstant::Now()) {
+                    UNIT_ASSERT_VALUES_EQUAL(srcStat.Partitions, dstStat.Partitions);
                 }
                 Sleep(TDuration::MilliSeconds(1000));
             }

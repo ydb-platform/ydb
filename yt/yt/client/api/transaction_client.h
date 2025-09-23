@@ -31,6 +31,7 @@ struct TTransactionStartOptions
     std::optional<TDuration> PingPeriod;
     bool Ping = true;
     bool PingAncestors = true;
+    std::optional<std::string> PingerAddress;
 
     NYTree::IAttributeDictionaryPtr Attributes;
 

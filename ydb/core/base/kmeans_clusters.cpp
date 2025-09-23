@@ -8,6 +8,84 @@
 
 namespace NKikimr::NKMeans {
 
+namespace {
+    constexpr ui64 MinVectorDimension = 1;
+    constexpr ui64 MaxVectorDimension = 16384;
+    constexpr ui64 MinLevels = 1;
+    constexpr ui64 MaxLevels = 16;
+    constexpr ui64 MinClusters = 2;
+    constexpr ui64 MaxClusters = 2048;
+    constexpr ui64 MaxClustersPowLevels = ui64(1) << 30;
+    constexpr ui64 MaxVectorDimensionMultiplyClusters = ui64(4) << 20; // 4 bytes per dimension for float vector type ~= 16 MB
+
+    bool ValidateSettingInRange(const TString& name, std::optional<ui64> value, ui64 minValue, ui64 maxValue, TString& error) {
+        if (!value.has_value()) {
+            error = TStringBuilder() << name << " should be set";
+            return false;
+        }
+
+        if (minValue <= *value && *value <= maxValue) {
+            return true;
+        }
+
+        error = TStringBuilder() << "Invalid " << name << ": " << *value << " should be between " << minValue << " and " << maxValue;
+        return false;
+    };
+
+    Ydb::Table::VectorIndexSettings_Metric ParseDistance(const TString& distance_, TString& error) {
+        
+        const TString distance = to_lower(distance_);
+        if (distance == "cosine")
+            return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
+        else if (distance == "manhattan")
+            return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
+        else if (distance == "euclidean")
+            return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
+        else {
+            error = TStringBuilder() << "Invalid distance: " << distance_;
+            return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
+        }
+    };
+    
+    Ydb::Table::VectorIndexSettings_Metric ParseSimilarity(const TString& similarity_, TString& error) {
+        const TString similarity = to_lower(similarity_);
+        if (similarity == "cosine")
+            return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
+        else if (similarity == "inner_product")
+            return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
+        else {
+            error = TStringBuilder() << "Invalid similarity: " << similarity_;
+            return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
+        }
+    };
+    
+    Ydb::Table::VectorIndexSettings_VectorType ParseVectorType(const TString& vectorType_, TString& error) {
+        const TString vectorType = to_lower(vectorType_);
+        if (vectorType == "float")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+        else if (vectorType == "uint8")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+        else if (vectorType == "int8")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
+        else if (vectorType == "bit")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
+        else {
+            error = TStringBuilder() << "Invalid vector_type: " << vectorType_;
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
+        }
+    };
+
+    ui32 ParseUInt32(const TString& name, const TString& value, ui64 minValue, ui64 maxValue, TString& error) {
+        ui32 result = 0;
+        if (!TryFromString(value, result)) {
+            error = TStringBuilder() << "Invalid " << name << ": " << value;
+            return result;
+        }
+        ValidateSettingInRange(name, result, minValue, maxValue, error);
+        return result;
+    }
+}
+
 template <typename TRes>
 Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const float* lhs, const float* rhs, size_t length)
 {
@@ -330,8 +408,7 @@ private:
 };
 
 std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error) {
-    if (settings.vector_dimension() < 1) {
-        error = "Dimension of vector should be at least one";
+    if (!ValidateSettings(settings, error)) {
         return nullptr;
     }
 
@@ -352,10 +429,9 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
             case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
                 return std::make_unique<TClusters<TL2Distance<T>>>(dim, maxRounds, typeVal);
             default:
-                error = "Wrong similarity";
-                break;
+                error = TStringBuilder() << "Invalid metric: " << static_cast<int>(settings.metric());
+                return nullptr;
         }
-        return nullptr;
     };
 
     switch (settings.vector_type()) {
@@ -366,14 +442,123 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
             return handleMetric.template operator()<i8>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
-            error = "TODO(mbkkt) bit vector type is not supported";
-            break;
+            error = TStringBuilder() << "Unsupported vector_type: " << Ydb::Table::VectorIndexSettings::VectorType_Name(settings.vector_type());
+            return nullptr;
         default:
-            error = "Wrong vector type";
-            break;
+            error = TStringBuilder() << "Invalid vector_type: " << static_cast<int>(settings.vector_type());
+            return nullptr;
+    }
+}
+
+bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
+    error = "";
+
+    if (!settings.has_settings()) {
+        error = TStringBuilder() << "vector index settings should be set";
+        return false;
     }
 
-    return nullptr;
+    if (!ValidateSettings(settings.settings(), error)) {
+        return false;
+    }
+
+    if (!ValidateSettingInRange("levels", 
+        settings.has_levels() ? std::optional<ui64>(settings.levels()) : std::nullopt, 
+        MinLevels, MaxLevels,
+        error))
+    {
+        return false;
+    }
+
+    if (!ValidateSettingInRange("clusters", 
+        settings.has_clusters() ? std::optional<ui64>(settings.clusters()) : std::nullopt, 
+        MinClusters, MaxClusters,
+        error))
+    {
+        return false;
+    }
+
+    ui64 clustersPowLevels = 1;
+    for (ui64 i = 0; i < settings.levels(); ++i) {
+        clustersPowLevels *= settings.clusters();
+        if (clustersPowLevels > MaxClustersPowLevels) {
+            error = TStringBuilder() << "Invalid clusters^levels: " << settings.clusters() << "^" << settings.levels() << " should be less than " << MaxClustersPowLevels;
+            return false;
+        }
+    }
+
+    if (settings.settings().vector_dimension() * settings.clusters() > MaxVectorDimensionMultiplyClusters) {
+        error = TStringBuilder() << "Invalid vector_dimension*clusters: " << settings.settings().vector_dimension() << "*" << settings.clusters() 
+            << " should be less than " << MaxVectorDimensionMultiplyClusters;
+        return false;
+    }
+
+    return true;
+}
+
+bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
+    error = "";
+
+    if (!settings.has_metric() || settings.metric() == Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED) {
+        error = TStringBuilder() << "either distance or similarity should be set";
+        return false;
+    }
+    if (!Ydb::Table::VectorIndexSettings::Metric_IsValid(settings.metric())) {
+        error = TStringBuilder() << "Invalid metric: " << static_cast<int>(settings.metric());
+        return false;
+    }
+
+    if (!settings.has_vector_type() || settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED) {
+        error = TStringBuilder() << "vector_type should be set";
+        return false;
+    }
+    if (!Ydb::Table::VectorIndexSettings::VectorType_IsValid(settings.vector_type())) {
+        error = TStringBuilder() << "Invalid vector_type: " << static_cast<int>(settings.vector_type());
+        return false;
+    }
+
+    if (!ValidateSettingInRange("vector_dimension", 
+        settings.has_vector_dimension() ? std::optional<ui64>(settings.vector_dimension()) : std::nullopt, 
+        MinVectorDimension, MaxVectorDimension,
+        error))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, const TString& value, TString& error) {
+    error = "";
+
+    const TString nameLower = to_lower(name);
+    if (nameLower == "distance") {
+        if (settings.mutable_settings()->has_metric()) {
+            error = "only one of distance or similarity should be set, not both";
+            return false;
+        }
+        settings.mutable_settings()->set_metric(ParseDistance(value, error));
+    } else if (nameLower == "similarity") {
+        if (settings.mutable_settings()->has_metric()) {
+            error = "only one of distance or similarity should be set, not both";
+            return false;
+        }
+        settings.mutable_settings()->set_metric(ParseSimilarity(value, error));
+    } else if (nameLower =="vector_type") {
+        settings.mutable_settings()->set_vector_type(ParseVectorType(value, error));
+    } else if (nameLower =="vector_dimension") {
+        settings.mutable_settings()->set_vector_dimension(ParseUInt32(name, value, MinVectorDimension, MaxVectorDimension, error));
+
+    } else if (nameLower =="clusters") {
+        settings.set_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
+    } else if (nameLower =="levels") {
+        settings.set_levels(ParseUInt32(name, value, MinLevels, MaxLevels, error));
+    } else {
+        error = TStringBuilder() << "Unknown index setting: " << name;
+        return false;
+    }
+
+    return !error;
 }
 
 }

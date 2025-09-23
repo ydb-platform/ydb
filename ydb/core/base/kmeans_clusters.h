@@ -45,4 +45,8 @@ public:
 
 std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error);
 
+bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error);
+bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
+bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, const TString& value, TString& error);
+
 }

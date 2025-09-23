@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/pqrb/partition_scale_manager.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
@@ -878,11 +878,11 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT(writeSession_2->Write(Msg(msg, 6)));
             Sleep(TDuration::Seconds(15));
             auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
         }
 
-        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TString{TEST_TOPIC}, false);
-        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TString{TEST_TOPIC}, false);
+        auto writeSession2_1 = CreateWriteSession(client, "producer-2", 1, TString{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-3", 1, TString{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
@@ -891,7 +891,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 10)));
             Sleep(TDuration::Seconds(5));
             auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
         }
     }
 
@@ -943,8 +943,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
         }
 
-        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TString{TEST_TOPIC}, false);
-        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TString{TEST_TOPIC}, false);
+        auto writeSession2_1 = CreateWriteSession(client, "producer-2", 1, TString{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-3", 1, TString{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));

@@ -167,8 +167,8 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         tableSchema.Columns[0] = NTable::TColumn("key", 0, {}, "");
         tableSchema.Columns[0].KeyOrder = 0;
 
-        table->Columns.emplace(1, TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Bool), "", "__ydb_incrBackupImpl_deleted", false));
-        tableSchema.Columns[1] = NTable::TColumn("__ydb_incrBackupImpl_deleted", 1, {}, "");
+        table->Columns.emplace(1, TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "__ydb_incrBackupImpl_changeMetadata", false));
+        tableSchema.Columns[1] = NTable::TColumn("__ydb_incrBackupImpl_changeMetadata", 1, {}, "");
         tableSchema.Columns[1].KeyOrder = 1;
 
         auto scheme = NTable::TRowScheme::Make(tableSchema.Columns, NUtil::TSecond());
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}));
+                    {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}}));
 
         TPathId targetPathId = *GetTablePathId(runtime, edgeActor, "/Root/Table");
         TPathId sourcePathId = *GetTablePathId(runtime, edgeActor, "/Root/IncrBackupTable");
@@ -274,7 +274,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}));
+                    {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}}));
 
         TPathId targetPathId = dstTable.PathId;
         TPathId sourcePathId = srcTable.PathId;

@@ -153,6 +153,76 @@ public:
     }
 };
 
+class TBlobStorageController::TTxUpdateBridgeSyncState : public TTransactionBase<TBlobStorageController> {
+public:
+    struct TChangeStage {};
+
+    struct TRegisterError {
+        NKikimrBridge::TGroupState::EStage Stage;
+        TString Error;
+    };
+
+    struct TGroupStateUpdate {
+        TGroupId TargetGroupId;
+        std::variant<TChangeStage, TRegisterError> Operation;
+    };
+
+private:
+    std::vector<TGroupStateUpdate> Updates;
+    TInstant Timestamp;
+
+public:
+    TTxUpdateBridgeSyncState(TBlobStorageController *controller, std::vector<TGroupStateUpdate>&& updates,
+            TInstant timestamp)
+        : TTransactionBase(controller)
+        , Updates(std::move(updates))
+        , Timestamp(timestamp)
+    {}
+
+    TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_UPDATE_BRIDGE_SYNC_STATE; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        NIceDb::TNiceDb db(txc.DB);
+        auto table = db.Table<Schema::BridgeSyncState>();
+        for (auto& update : Updates) {
+            auto row = table.Key(update.TargetGroupId.GetRawId());
+            std::visit(TOverloaded{
+                [&](TChangeStage&) {
+                    // when the sync stage gets changed, we forget about any errors that happened before
+                    row.Delete();
+                    Self->BridgeSyncState.erase(update.TargetGroupId);
+                },
+                [&](TRegisterError& error) {
+                    auto& item = Self->BridgeSyncState[update.TargetGroupId];
+
+                    item.Stage = error.Stage;
+                    item.LastError = std::move(error.Error);
+                    item.LastErrorTimestamp = Timestamp;
+
+                    if (item.FirstErrorTimestamp == TInstant()) {
+                        item.FirstErrorTimestamp = Timestamp;
+                        row.Update<Schema::BridgeSyncState::FirstErrorTimestamp>(Timestamp);
+                    }
+
+                    ++item.ErrorCount;
+
+                    row.Update(
+                        NIceDb::TUpdate<Schema::BridgeSyncState::Stage>(item.Stage),
+                        NIceDb::TUpdate<Schema::BridgeSyncState::LastError>(item.LastError),
+                        NIceDb::TUpdate<Schema::BridgeSyncState::LastErrorTimestamp>(item.LastErrorTimestamp),
+                        NIceDb::TUpdate<Schema::BridgeSyncState::ErrorCount>(item.ErrorCount)
+                    );
+                }
+            }, update.Operation);
+            Self->SysViewChangedGroups.insert(update.TargetGroupId);
+        }
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+    }
+};
+
 void TBlobStorageController::CheckUnsyncedBridgePiles() {
     if (!StorageConfig->HasClusterStateDetails()) {
         return; // no bridge mode cluster state details available
@@ -167,17 +237,21 @@ void TBlobStorageController::CheckUnsyncedBridgePiles() {
 }
 
 void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
-        TSet<ui32>& groupIdsToRead) {
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCBR00, "ApplySyncerState", (NodeId, nodeId), (Update, update));
+        TSet<ui32>& groupIdsToRead, bool comprehensive) {
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCBR00, "ApplySyncerState", (NodeId, nodeId), (Update, update),
+        (Comprehensive, comprehensive));
 
     // make set of existing target-source tuples to drop unused ones
     THashSet<TSyncerState*> unlistedSyncerState;
-    for (auto it = NodeToSyncerState.lower_bound({nodeId, nullptr}); it != NodeToSyncerState.end() &&
-            std::get<0>(*it) == nodeId; ++it) {
-        unlistedSyncerState.insert(std::get<1>(*it));
+    if (comprehensive) {
+        for (auto it = NodeToSyncerState.lower_bound({nodeId, nullptr}); it != NodeToSyncerState.end() &&
+                std::get<0>(*it) == nodeId; ++it) {
+            unlistedSyncerState.insert(std::get<1>(*it));
+        }
     }
 
     bool updateNodeWarden = false; // should we send notification in response
+    std::vector<TTxUpdateBridgeSyncState::TGroupStateUpdate> updates;
 
     // scan update
     for (const auto& syncer : update.GetSyncers()) {
@@ -233,6 +307,27 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             continue;
         }
 
+        // see if we can drop this syncer in favor of already running one
+        if (!syncerState.NodeIds.contains(nodeId)) {
+            bool dropNewSyncer = false;
+            for (auto it = syncerState.NodeIds.begin(); it != syncerState.NodeIds.end(); ) {
+                auto& [existingNodeId, item] = *it;
+                if (TNodeInfo *node = FindNode(existingNodeId); node && node->ConnectedServerId) {
+                    // this node already has a working syncer, delete incoming one
+                    dropNewSyncer = true;
+                    ++it;
+                } else {
+                    // we have to remove existing syncer; don't need to update it, 'cause node is not connected/working
+                    syncerState.NodeIds.erase(it++);
+                    NodeToSyncerState.erase({existingNodeId, &syncerState});
+                }
+            }
+            if (dropNewSyncer) {
+                updateNodeWarden = true;
+                continue;
+            }
+        }
+
         unlistedSyncerState.erase(&syncerState);
         auto& perNodeInfo = syncerState.NodeIds[nodeId];
         perNodeInfo.SourceGroupId = sourceGroupId;
@@ -270,6 +365,17 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             updateNodeWarden = true;
 
             if (syncer.HasErrorReason()) {
+                NKikimrBridge::TGroupState::EStage stage;
+                for (const auto& pile : bridgeGroupInfo.GetBridgeGroupState().GetPile()) {
+                    if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == targetGroupId) {
+                        stage = pile.GetStage();
+                        break;
+                    }
+                }
+                updates.emplace_back(targetGroupId, TTxUpdateBridgeSyncState::TRegisterError{
+                    .Stage = stage,
+                    .Error = syncer.GetErrorReason(),
+                });
                 continue;
             }
             if (syncerState.InCommit) {
@@ -305,6 +411,8 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             syncerState.InCommit = true; // we are committing syncer state right now
             syncerState.Unlink();
 
+            updates.emplace_back(targetGroupId, TTxUpdateBridgeSyncState::TChangeStage{});
+
             if (staticGroup) {
                 NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot request;
                 auto *cmd = request.MutableUpdateBridgeGroupInfo();
@@ -339,6 +447,10 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
         if (!syncerState->NodeIds && !syncerState->InCommit) {
             SyncersRequiringAction.PushBack(syncerState);
         }
+    }
+
+    if (!updates.empty()) {
+        Execute(std::make_unique<TTxUpdateBridgeSyncState>(this, std::move(updates), TActivationContext::Now()));
     }
 
     if (!ProcessSyncers(nodeId) && updateNodeWarden) {
@@ -530,7 +642,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateSyncerSta
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSCBR04, "TEvControllerUpdateSyncerState", (Msg, ev->Get()->Record));
     TSet<ui32> groupIdsToRead;
     const TNodeId nodeId = ev->Sender.NodeId();
-    ApplySyncerState(nodeId, ev->Get()->Record, groupIdsToRead);
+    ApplySyncerState(nodeId, ev->Get()->Record, groupIdsToRead, false);
     if (groupIdsToRead) {
         auto update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
         ReadGroups(groupIdsToRead, false, update.get(), nodeId);
@@ -693,7 +805,7 @@ void TBlobStorageController::ApplyStaticGroupUpdateForSyncers(std::map<TGroupId,
     ProcessSyncers();
 }
 
-void TBlobStorageController::CommitSyncerUpdates(TConfigState& state) {
+void TBlobStorageController::CommitSyncerUpdates(TConfigState& state, TTransactionContext& txc) {
     for (const auto& [base, overlay] : state.Groups.Diff()) {
         if (base && !overlay->second) { // deleted group
             const TGroupId groupId = base->first;
@@ -704,6 +816,9 @@ void TBlobStorageController::CommitSyncerUpdates(TConfigState& state) {
                     Y_ABORT_UNLESS(n == 1);
                 }
                 TargetGroupToSyncerState.erase(it);
+            }
+            if (BridgeSyncState.erase(groupId)) {
+                NIceDb::TNiceDb(txc.DB).Table<Schema::BridgeSyncState>().Key(groupId.GetRawId()).Delete();
             }
         }
     }

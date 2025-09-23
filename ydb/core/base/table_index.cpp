@@ -1,6 +1,5 @@
 #include "table_index.h"
 
-#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
 namespace NKikimr::NTableIndex {
@@ -40,11 +39,11 @@ bool ContainsSystemColumn(const auto& columns) {
 
 const TString ImplTables[] = {
     ImplTable,
-    NTableVectorKmeansTreeIndex::LevelTable,
-    NTableVectorKmeansTreeIndex::PostingTable,
-    NTableVectorKmeansTreeIndex::PrefixTable,
-    TString{NTableVectorKmeansTreeIndex::PostingTable} + NTableVectorKmeansTreeIndex::BuildSuffix0,
-    TString{NTableVectorKmeansTreeIndex::PostingTable} + NTableVectorKmeansTreeIndex::BuildSuffix1,
+    NKMeans::LevelTable,
+    NKMeans::PostingTable,
+    NKMeans::PrefixTable,
+    TString{NKMeans::PostingTable} + NKMeans::BuildSuffix0,
+    TString{NKMeans::PostingTable} + NKMeans::BuildSuffix1,
 };
 
 constexpr std::string_view GlobalSecondaryImplTables[] = {
@@ -53,12 +52,12 @@ constexpr std::string_view GlobalSecondaryImplTables[] = {
 static_assert(std::is_sorted(std::begin(GlobalSecondaryImplTables), std::end(GlobalSecondaryImplTables)));
 
 constexpr std::string_view GlobalKMeansTreeImplTables[] = {
-    NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable,
+    NKMeans::LevelTable, NKMeans::PostingTable,
 };
 static_assert(std::is_sorted(std::begin(GlobalKMeansTreeImplTables), std::end(GlobalKMeansTreeImplTables)));
 
 constexpr std::string_view PrefixedGlobalKMeansTreeImplTables[] = {
-    NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable, NTableVectorKmeansTreeIndex::PrefixTable,
+    NKMeans::LevelTable, NKMeans::PostingTable, NKMeans::PrefixTable,
 };
 static_assert(std::is_sorted(std::begin(PrefixedGlobalKMeansTreeImplTables), std::end(PrefixedGlobalKMeansTreeImplTables)));
 
@@ -186,18 +185,28 @@ bool IsImplTable(std::string_view tableName) {
 
 bool IsBuildImplTable(std::string_view tableName) {
     // all impl tables that ends with "build" should be used only for index creation and dropped when index build is finished
-    return tableName.ends_with(NTableVectorKmeansTreeIndex::BuildSuffix0)
-        || tableName.ends_with(NTableVectorKmeansTreeIndex::BuildSuffix1);
+    return tableName.ends_with(NKMeans::BuildSuffix0)
+        || tableName.ends_with(NKMeans::BuildSuffix1);
+}
+
+namespace NKMeans {
+
+inline constexpr TClusterId PostingParentFlag = (1ull << 63ull);
+
+bool HasPostingParentFlag(TClusterId parent) {
+    return bool(parent & PostingParentFlag);
 }
 
 // Note: if cluster id is too big, something is wrong with cluster enumeration
 void EnsureNoPostingParentFlag(TClusterId parent) {
-    Y_ENSURE((parent & PostingParentFlag) == 0);
+    Y_ENSURE(!HasPostingParentFlag(parent));
 }
 
 TClusterId SetPostingParentFlag(TClusterId parent) {
     EnsureNoPostingParentFlag(parent);
     return (parent | PostingParentFlag);
+}
+
 }
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record) {

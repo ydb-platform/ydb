@@ -1,7 +1,8 @@
 {
     "test.test_async_replication_describe": {
         "create_result": {
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "describe_result": {
             "connection_params": {
@@ -97,6 +98,7 @@
     },
     "test.test_pqrb_tablet": {
         "response_create_topic": {
+            "status": "SUCCESS",
             "version": "not-zero-number"
         },
         "response_tablet_info": {
@@ -567,6 +569,54 @@
         "restart_pdisk_viewer": {
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+        },
+        "storage_nodes_database": {
+            "FieldsAvailable": "10000000110000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "storage_nodes_monitoring": {
+            "FieldsAvailable": "10000000110000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "storage_nodes_root": {
+            "FieldsAvailable": "10000000110000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "storage_nodes_viewer": {
+            "FieldsAvailable": "10000000110000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
         }
     },
     "test.test_storage_groups": {
@@ -1321,10 +1371,12 @@
             "Truncated": false
         },
         "insert": {
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "update": {
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         }
     },
     "test.test_transfer_describe": {
@@ -1403,13 +1455,16 @@
             "transformation_lambda": "$__ydb_transfer_lambda = ($x) -> { return [<| id: $x._offset, message: $x._data |>]; };\n"
         },
         "table_result": {
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "topic_result": {
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "transfer_result": {
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         }
     },
     "test.test_viewer_acl": {
@@ -6195,7 +6250,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/dedicated_db": {
             "result": [
@@ -6213,7 +6269,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/serverless_db": {
             "result": [
@@ -6231,7 +6288,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/shared_db": {
             "result": [
@@ -6249,7 +6307,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "no-database": {
             "result": [
@@ -6267,8 +6326,67 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         }
+    },
+    "test.test_viewer_query_event_stream": {
+        "content_type": "text/event-stream",
+        "events": [
+            {
+                "data": {
+                    "meta": {
+                        "node_id": "not-zero-number",
+                        "query_id": "text",
+                        "session_id": "text"
+                    },
+                    "version": 10
+                },
+                "event": "SessionCreated"
+            },
+            {
+                "data": {
+                    "meta": {
+                        "result_index": 0,
+                        "seq_no": 1
+                    },
+                    "result": {
+                        "columns": [
+                            {
+                                "name": "id",
+                                "type": "Int64?"
+                            },
+                            {
+                                "name": "name",
+                                "type": "Utf8?"
+                            }
+                        ],
+                        "rows": [
+                            [
+                                "1",
+                                "one"
+                            ],
+                            [
+                                "2",
+                                "two"
+                            ],
+                            [
+                                "3",
+                                "three"
+                            ]
+                        ]
+                    }
+                },
+                "event": "StreamData"
+            },
+            {
+                "data": {
+                    "status": "SUCCESS"
+                },
+                "event": "QueryResponse"
+            }
+        ],
+        "status_code": 200
     },
     "test.test_viewer_query_from_table": {
         "/Root/dedicated_db": {
@@ -6300,7 +6418,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/serverless_db": {
             "result": [
@@ -6331,7 +6450,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/shared_db": {
             "result": [
@@ -6362,7 +6482,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         }
     },
     "test.test_viewer_query_from_table_different_schemas": {
@@ -6405,7 +6526,8 @@
                     "three"
                 ]
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "multi": {
             "result": [
@@ -6436,7 +6558,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "ydb": {
             "result": [
@@ -6453,7 +6576,8 @@
                     "name": "three"
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "ydb2": {
             "result": [
@@ -6484,7 +6608,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         }
     },
     "test.test_viewer_query_issue_13757": {
@@ -6507,7 +6632,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/dedicated_db": {
             "result": [
@@ -6528,7 +6654,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/serverless_db": {
             "result": [
@@ -6549,7 +6676,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/shared_db": {
             "result": [
@@ -6570,7 +6698,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "no-database": {
             "result": [
@@ -6591,7 +6720,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         }
     },
     "test.test_viewer_query_issue_13945": {
@@ -6611,7 +6741,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/dedicated_db": {
             "result": [
@@ -6629,7 +6760,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/serverless_db": {
             "result": [
@@ -6647,7 +6779,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/shared_db": {
             "result": [
@@ -6665,7 +6798,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "no-database": {
             "result": [
@@ -6683,7 +6817,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         }
     },
     "test.test_viewer_query_long": {
@@ -6718,7 +6853,7 @@
                     ]
                 }
             ],
-            "version": 9
+            "version": 10
         },
         "fetch_by_execution_id": {
             "execution_id": "text",
@@ -6750,7 +6885,7 @@
                     ]
                 }
             ],
-            "version": 9
+            "version": 10
         },
         "fetch_by_operation_id": {
             "execution_id": "text",
@@ -6783,7 +6918,7 @@
                     ]
                 }
             ],
-            "version": 9
+            "version": 10
         },
         "fetch_error_no_id": {
             "status_code": 400,
@@ -10924,7 +11059,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "CreateTime": "not-zero-number-text",
-                "Id": "72057594046678944-1",
+                "Id": "1",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": {},
@@ -10971,7 +11106,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-6",
+                "Id": "6",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -11038,12 +11173,12 @@
             {
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-8",
+                "Id": "8",
                 "Metrics": "not-empty-object",
                 "Name": "/Root/serverless_db",
                 "Overall": "Green",
                 "Owner": "root",
-                "ResourceId": "72057594046678944-7",
+                "ResourceId": "7",
                 "State": "RUNNING",
                 "StateStats": [
                     {
@@ -11058,7 +11193,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-7",
+                "Id": "7",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -11125,7 +11260,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "CreateTime": "not-zero-number-text",
-                    "Id": "72057594046678944-1",
+                    "Id": "1",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": {},
@@ -11176,7 +11311,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-6",
+                    "Id": "6",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11247,11 +11382,11 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-8",
+                    "Id": "8",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Owner": "root",
-                    "ResourceId": "72057594046678944-7",
+                    "ResourceId": "7",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11270,7 +11405,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-7",
+                    "Id": "7",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11336,7 +11471,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "CreateTime": "not-zero-number-text",
-                    "Id": "72057594046678944-1",
+                    "Id": "1",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": {},
@@ -11383,7 +11518,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-6",
+                    "Id": "6",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11450,12 +11585,12 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-8",
+                    "Id": "8",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Overall": "Green",
                     "Owner": "root",
-                    "ResourceId": "72057594046678944-7",
+                    "ResourceId": "7",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11470,7 +11605,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-7",
+                    "Id": "7",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",

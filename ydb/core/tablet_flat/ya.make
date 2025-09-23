@@ -18,6 +18,8 @@ SRCS(
     flat_exec_seat.cpp
     flat_executor.cpp
     flat_executor.h
+    flat_executor_backup.cpp
+    flat_executor_backup.h
     flat_executor_bootlogic.cpp
     flat_executor_bootlogic.h
     flat_executor_borrowlogic.cpp
@@ -108,6 +110,8 @@ PEERDIR(
     library/cpp/containers/stack_vector
     library/cpp/digest/crc32c
     library/cpp/html/pcdata
+    library/cpp/http/io
+    library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     ydb/core/base

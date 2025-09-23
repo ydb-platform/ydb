@@ -107,7 +107,8 @@ namespace NSQLTranslationV1 {
 
         IOutputStream& Error(NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
         IOutputStream& Error(NYql::TPosition pos, NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
-        IOutputStream& Warning(NYql::TPosition pos, NYql::TIssueCode code);
+        bool Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function<void(IOutputStream&)> message,
+            bool forceError = false);
         IOutputStream& Info(NYql::TPosition pos);
 
         void SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action);
@@ -243,12 +244,17 @@ namespace NSQLTranslationV1 {
         }
 
         TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
-        void WarnUnusedHints();
+        bool WarnUnusedHints();
 
         TScopedStatePtr CreateScopedState() const;
 
     private:
-        IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos);
+        IOutputStream& MakeIssue(
+            NYql::ESeverity severity,
+            NYql::TIssueCode code,
+            NYql::TPosition pos,
+            bool forceError,
+            bool& isError);
 
     public:
         const TLexers Lexers;
@@ -317,6 +323,7 @@ namespace NSQLTranslationV1 {
         bool RotateJoinTree = true;
         bool WarnUnnamedColumns = false;
         bool DiscoveryMode = false;
+        bool ExceptIntersectBefore202503 = true; // TODO(YQL-20367)
         bool EnableSystemColumns = true;
         bool DqEngineEnable = false;
         bool DqEngineForce = false;
@@ -381,7 +388,10 @@ namespace NSQLTranslationV1 {
         bool EmitUnionMerge = false;
         bool OptimizeSimpleIlike = false;
         bool PersistableFlattenAndAggrExprs = false;
+        bool DisableLegacyNotNull = false;
         bool DebugPositions = false;
+        bool StrictWarningAsError = false;
+        TMaybe<bool> DirectRowDependsOn;
         TVector<size_t> ForAllStatementsParts;
 
         TMaybe<TString> Engine;
@@ -460,8 +470,8 @@ namespace NSQLTranslationV1 {
         TString PushNamedNode(TPosition namePos, const TString& name, const TNodeBuilderByName& builder);
         TString PushNamedNode(TPosition namePos, const TString& name, TNodePtr node);
         TString PushNamedAtom(TPosition namePos, const TString& name);
-        void PopNamedNode(const TString& name);
-        void WarnUnusedNodes() const;
+        bool PopNamedNode(const TString& name);
+        bool WarnUnusedNodes() const;
 
         template <typename TNode>
         void AltNotImplemented(const TString& ruleName, const TNode& node) {
@@ -476,6 +486,8 @@ namespace NSQLTranslationV1 {
     protected:
         void AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr);
         TString AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const;
+
+        bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion langVer) const;
 
     protected:
         TContext& Ctx_;

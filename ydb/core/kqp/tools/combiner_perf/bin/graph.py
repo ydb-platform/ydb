@@ -18,14 +18,15 @@ for _, obj in j.iterrows():
             'run_name': run_name,
             'time': obj["resultTime"],
             'join_algorithm': name_parts[0],
-            'input_data_flavour': name_parts[1],
-            'left_table_size': name_parts[2],
-            'key_type': name_parts[3]
+            'input_data_flavour': name_parts[2],
+            'left_table_size': name_parts[3],
+            'right_table_size': name_parts[4],
+            'key_type': name_parts[1]
         }
     )
 df = pd.DataFrame(only_needed)
 df = df.drop('run_name', axis=1)
-images_root_base = str(Path.home())+"/.combiner_perf/images"
+images_root_base = str(Path.home())+"/.join_perf/images"
 next_free = 0
 while os.path.isdir(images_root_base + '/' + str(next_free)): next_free += 1
 images_root = images_root_base + '/' + str(next_free) + '/'
@@ -33,8 +34,10 @@ simple_images = images_root + "simple"
 log_images = images_root + "log"
 Path(simple_images).mkdir(parents=True, exist_ok=True)
 Path(log_images).mkdir(parents=True, exist_ok=True)
-for data_flavour in ['SameSize', 'BigLeft']:
-    for key_type in ['Integer', 'String']:
+data_flovours = df['input_data_flavour'].unique()
+key_types = df['key_type'].unique()
+for data_flavour in data_flovours:
+    for key_type in key_types:
         graph_name = data_flavour + "_" + key_type
         print(graph_name)
         subset = df[(df["input_data_flavour"] == data_flavour) & 

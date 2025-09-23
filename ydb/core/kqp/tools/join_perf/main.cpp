@@ -43,21 +43,18 @@ int main(int argc, char** argv) {
         .DefaultValue("small")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
-            TVector<NKikimr::NMiniKQL::TTableSizes> benchmarkSizes;
-            TString name;
-            if (val == "exp") {
-                benchmarkSizes = NKikimr::NMiniKQL::NBenchmarkSizes::ExponentialSizeIncrease();
-                name = "ExpGrowth";
-            } else if (val == "linear") {
-                benchmarkSizes = NKikimr::NMiniKQL::NBenchmarkSizes::LinearSizeIncrease();
-                name = "LinearGrowth";
-            } else if (val == "small") {
-                benchmarkSizes = NKikimr::NMiniKQL::NBenchmarkSizes::VerySmallSizes();
-                name = "VerySmall";
-            } else {
-                Y_ABORT("unknown option for benchmark_sizes");
-            }
-            params.Presets.push_back(NKikimr::NMiniKQL::TBenchmarkSettings::TPreset{benchmarkSizes, name});
+            auto preset = [&]() -> NKikimr::NMiniKQL::TBenchmarkSettings::TPreset {
+                if (val == "exp") {
+                    return {NKikimr::NMiniKQL::NBenchmarkSizes::ExponentialSizeIncrease(), "ExpGrowth"};
+                } else if (val == "linear") {
+                    return {NKikimr::NMiniKQL::NBenchmarkSizes::LinearSizeIncrease(), "LinearGrowth"};
+                } else if (val == "small") {
+                    return {NKikimr::NMiniKQL::NBenchmarkSizes::VerySmallSizes(), "VerySmall"};
+                } else {
+                    Y_ABORT("unknown option for benchmark_sizes");
+                }
+            }();
+            params.Presets.push_back(preset);
         });
 
     params.Algorithms = {

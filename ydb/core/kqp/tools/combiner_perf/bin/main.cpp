@@ -188,7 +188,6 @@ void DoFullPass(TRunParams runParams, bool withSpilling)
         }
     };
 
-
     Y_UNUSED(doBlockHashed, doSimple, doSimpleLast);
 
     doSimple(runParams);
@@ -203,7 +202,6 @@ enum class ETestType {
     BlockCombiner,
     DqHashCombinerVs,
     SimpleGraceJoin,
-    AllJoins
 };
 
 void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spilling)
@@ -251,8 +249,6 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
             params.NumRuns = 1;
         }
         NKikimr::NMiniKQL::RunTestGraceJoinSimple(params, printout);
-    } else if (testType == ETestType::AllJoins) {
-        // NKikimr::NMiniKQL::RunJoinsBench(params, printout);
     }
 }
 
@@ -356,7 +352,7 @@ int main(int argc, const char* argv[])
         .Help("Hash map type (std::unordered_map or absl::dense_hash_map)");
 
     options.AddLongOption('t', "test")
-        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "grace-join", "all-join"})
+        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "grace-join"})
         .RequiredArgument("TEST_TYPE")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
@@ -370,8 +366,6 @@ int main(int argc, const char* argv[])
                 testType = ETestType::DqHashCombinerVs;
             } else if (val == "grace-join") {
                 testType = ETestType::SimpleGraceJoin;
-            } else if (val == "all-join") {
-                testType = ETestType::AllJoins;
             } else {
                 ythrow yexception() << "Unknown test type: " << val;
             }

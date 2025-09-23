@@ -32,6 +32,7 @@ RECURSE(
     statistics
     suite_tests
     tpc
+    tpcc
     tenants
     ttl
     wardens

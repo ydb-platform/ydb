@@ -4,7 +4,7 @@ on:
   schedule:
     # Запускаем каждые 30 минут
     - cron: '*/30 * * * *'
-  # Также можно запустить вручную
+  # Can also be triggered manually
   workflow_dispatch:
 
 jobs:

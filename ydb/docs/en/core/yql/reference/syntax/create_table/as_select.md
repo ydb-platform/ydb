@@ -18,7 +18,7 @@ When creating a table using `CREATE TABLE AS`, it is not possible to specify col
 
 
 
-## Особенности
+## Considerations
 
 {% note warning %}
 

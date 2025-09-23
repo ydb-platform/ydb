@@ -5,6 +5,7 @@
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_type_helper.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -67,7 +68,6 @@ IComputationNode* WrapBlockJust(TCallable& callable, const TComputationNodeFacto
     auto data = callable.GetInput(0);
 
     auto dataType = AS_TYPE(TBlockType, data.GetStaticType());
-    auto itemType = dataType->GetItemType();
 
     auto dataCompute = LocateNode(ctx.NodeLocator, callable, 0);
 
@@ -75,7 +75,7 @@ IComputationNode* WrapBlockJust(TCallable& callable, const TComputationNodeFacto
     TVector<TType*> argsTypes = { dataType };
 
     std::shared_ptr<arrow::compute::ScalarKernel> kernel;
-    if (itemType->IsOptional() || itemType->IsVariant()) {
+    if (NeedWrapWithExternalOptional(AS_TYPE(TBlockType, callable.GetType()->GetReturnType())->GetItemType())) {
         kernel = MakeBlockJustKernel<false>(argsTypes, callable.GetType()->GetReturnType());
     } else {
         kernel = MakeBlockJustKernel<true>(argsTypes, callable.GetType()->GetReturnType());

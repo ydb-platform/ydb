@@ -41,7 +41,7 @@ TVector<TTableSizes> ExponentialSizeIncrease() {
     TVector<TTableSizes> ret;
     int init = 1 << 18;
     for (int index = 0; index < 8; index++) {
-        int thisNum = init * (1 < index);
+        int thisNum = init * (1 << index);
         ret.emplace_back(thisNum, thisNum);
     }
     return ret;

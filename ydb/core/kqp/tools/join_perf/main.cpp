@@ -36,19 +36,19 @@ int main(int argc, char** argv) {
 
     NKikimr::NMiniKQL::TBenchmarkSettings params;
     opts.AddLongOption('s', "benchmark_sizes", "left and right table sizes to choose for joins benchmark")
-        .Choices({"exp_growth", "linear_growth", "very_small"})
-        .DefaultValue("very_small")
+        .Choices({"exp", "linear", "small"})
+        .DefaultValue("small")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
             TVector<NKikimr::NMiniKQL::TTableSizes> benchmarkSizes;
             TString name;
-            if (val == "exp_growth") {
+            if (val == "exp") {
                 benchmarkSizes = NKikimr::NMiniKQL::NBenchmarkSizes::ExponentialSizeIncrease();
                 name = "ExpGrowth";
-            } else if (val == "linear_growth") {
+            } else if (val == "linear") {
                 benchmarkSizes = NKikimr::NMiniKQL::NBenchmarkSizes::LinearSizeIncrease();
                 name = "LinearGrowth";
-            } else if (val == "very_small") {
+            } else if (val == "small") {
                 benchmarkSizes = NKikimr::NMiniKQL::NBenchmarkSizes::VerySmallSizes();
                 name = "VerySmall";
             } else {

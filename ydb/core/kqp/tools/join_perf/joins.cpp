@@ -61,27 +61,27 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
     NKikimr::NMiniKQL::TDqSetup<false> setup{NKikimr::NMiniKQL::GetPerfTestFactory()};
     const TVector<const ui32> keyColumns{0};
 
-    for (auto algo : params.Algorithms) {
-        for (auto keyType : params.KeyTypes) {
-            for (auto keyPreset : params.Presets) {
-                for (auto sizes : keyPreset.Cases) {
-                    TInnerJoinDescription descr = [&] {
-                        using enum ETestedJoinKeyType;
-                        switch (keyType) {
-                        case kString: {
-                            return PrepareDescription(&setup, GenerateStringKeyColumn(sizes.Left, 123),
-                                                      GenerateStringKeyColumn(sizes.Right, 111));
-                        }
-                        case kInteger: {
-                            return PrepareDescription(&setup, GenerateIntegerKeyColumn(sizes.Left, 123),
-                                                      GenerateIntegerKeyColumn(sizes.Right, 111));
-                        }
-                        default:
-                            Y_ABORT("unreachable");
-                        }
-                    }();
-                    descr.LeftSource.KeyColumnIndexes = keyColumns;
-                    descr.RightSource.KeyColumnIndexes = keyColumns;
+    for (auto keyType : params.KeyTypes) {
+        for (auto keyPreset : params.Presets) {
+            for (auto sizes : keyPreset.Cases) {
+                TInnerJoinDescription descr = [&] {
+                    using enum ETestedJoinKeyType;
+                    switch (keyType) {
+                    case kString: {
+                        return PrepareDescription(&setup, GenerateStringKeyColumn(sizes.Left, 123),
+                                                  GenerateStringKeyColumn(sizes.Right, 111));
+                    }
+                    case kInteger: {
+                        return PrepareDescription(&setup, GenerateIntegerKeyColumn(sizes.Left, 123),
+                                                  GenerateIntegerKeyColumn(sizes.Right, 111));
+                    }
+                    default:
+                        Y_ABORT("unreachable");
+                    }
+                }();
+                descr.LeftSource.KeyColumnIndexes = keyColumns;
+                descr.RightSource.KeyColumnIndexes = keyColumns;
+                for (auto algo : params.Algorithms) {
 
                     TBenchmarkCaseResult result;
                     result.CaseName = CaseName(algo, keyType, keyPreset, sizes);

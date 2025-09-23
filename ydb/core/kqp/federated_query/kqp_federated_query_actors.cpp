@@ -111,7 +111,7 @@ void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr
 void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie);
 
-    const auto respIt = ResolveInFlight.find(ev->Cookie);
+    auto respIt = ResolveInFlight.find(ev->Cookie);
     Y_ENSURE(respIt != ResolveInFlight.end(), "such request cookie is not registered");
     const auto& secretName = respIt->second.Secret.Name;
 
@@ -128,15 +128,18 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCa
     const auto secretIt = VersionedSecrets.find(secretName);
     if (secretIt != VersionedSecrets.end()) { // some secret version is in cache
         if (
-            request->ResultSet.front().Self->Info.GetPathId() < secretIt->second.PathId &&
+            request->ResultSet.front().Self->Info.GetPathId() <= secretIt->second.PathId &&
             secretDescription.GetVersion() <= secretIt->second.SecretVersion
         ) { // cache contains the most recent version
             LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie << ", fill value from secret cache");
             FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(std::vector<TString>{secretIt->second.Value}));
             return;
+        } else {
+            LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie << ", secret cache value is outdated");
         }
         VersionedSecrets.erase(secretIt); // no need to store outdated value
     }
+    respIt->second.Secret.PathId = request->ResultSet.front().Self->Info.GetPathId();
 
     TAutoPtr<TEvTxUserProxy::TEvNavigate> req(new TEvTxUserProxy::TEvNavigate());
     NKikimrSchemeOp::TDescribePath* record = req->Record.MutableDescribePath();
@@ -164,8 +167,8 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvS
     const auto& secretVersion = rec.GetPathDescription().GetSecretDescription().GetVersion();
     VersionedSecrets[secretName] = TVersionedSecret{
         .SecretVersion = secretVersion,
-        .PathId = 0, // TODO fix this
-        .Name = secretName, // TODO do we need this field?
+        .PathId = respIt->second.Secret.PathId,
+        .Name = secretName,
         .Value = secretValue,
     };
     FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(std::vector<TString>{secretValue}));

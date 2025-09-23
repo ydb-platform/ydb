@@ -1,6 +1,6 @@
 # Creating a table filled with query results
 
-`CREATE TABLE AS` creates a new table {% if concept_table %}[table]({{ concept_table }}){% else %}table{% endif %} filled with data from the query results.
+`CREATE TABLE AS` creates a new table {% if concept_table %}[table]({{ concept_table }}){% else %}table{% endif %} filled with data from query results.
 
 ```yql
 CREATE TABLE table_name (

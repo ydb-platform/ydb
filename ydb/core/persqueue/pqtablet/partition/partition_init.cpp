@@ -604,6 +604,28 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
     return {filtered.begin(), filtered.end()};
 }
 
+static void CheckKeysTimestampOrder(const std::deque<TDataKey>& keys) {
+    if (keys.size() < 2) {
+        return;
+    }
+    auto prev = keys.begin();
+    auto curr = std::next(prev);
+    while (curr != keys.end()) {
+        if (curr->Timestamp < prev->Timestamp) {
+            Y_DEBUG_ABORT("Data keys have misarranged timestamps:%s", (
+                TStringBuilder()
+                    << " prev_timestamp=" << prev->Timestamp
+                    << " curr_timestamp=" << curr->Timestamp
+                    << " prev_key=" << prev->Key.ToString()
+                    << " curr_key=" << curr->Key.ToString()
+                    << " index=" << std::distance(keys.begin(), curr)
+                ).c_str()
+            );
+        }
+        prev = curr++;
+    }
+}
+
 void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext&) {
     auto& endOffset = Partition()->BlobEncoder.EndOffset;
     auto& startOffset = Partition()->BlobEncoder.StartOffset;
@@ -659,6 +681,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
                                   dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size,
                                   Partition()->MakeBlobKeyToken(k.ToString()));
     }
+    CheckKeysTimestampOrder(dataKeysBody);
 
     PQ_INIT_ENSURE(endOffset >= startOffset);
 }

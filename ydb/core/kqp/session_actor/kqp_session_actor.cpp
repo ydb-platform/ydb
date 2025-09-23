@@ -802,7 +802,10 @@ public:
                 auto kqpTableResolver = CreateKqpTableResolver(SelfId(), 0, QueryState->UserToken, tasksGraph);
                 RegisterWithSameMailbox(kqpTableResolver);
                 auto resolveEv = co_await ActorWaitForEvent<TEvKqpExecuter::TEvTableResolveStatus>(0);
-                // TODO: check resolveEv status and handle errors.
+                if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                    ReplyResolveError(*resolveEv->Get());
+                    co_return;
+                }
             }
 
             // Resolve shards
@@ -819,6 +822,10 @@ public:
                 auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), 0, false, std::move(shardIds));
                 RegisterWithSameMailbox(kqpShardsResolver);
                 auto resolveEv = co_await ActorWaitForEvent<NShardResolver::TEvShardsResolveStatus>(0);
+                if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                    ReplyResolveError(*resolveEv->Get());
+                    co_return;
+                }
                 tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
             }
 
@@ -2506,6 +2513,52 @@ public:
         );
 
         Send(request->Sender, response.release(), 0, proxyRequestId);
+    }
+
+    void ReplyResolveError(const TEvKqpExecuter::TEvTableResolveStatus& ev) {
+        QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
+        auto& record = QueryResponse->Record;
+
+        record.SetYdbStatus(ev.Status);
+        auto& response = *record.MutableResponse();
+        AddQueryIssues(response, ev.Issues);
+
+        auto txId = TTxId();
+        if (auto ctx = Transactions.ReleaseTransaction(txId)) {
+            ctx->Invalidate();
+            if (!ctx->BufferActorId) {
+                Transactions.AddToBeAborted(std::move(ctx));
+            } else {
+                TerminateBufferActor(ctx);
+            }
+        }
+
+        FillTxInfo(record.MutableResponse());
+
+        Cleanup(false);
+    }
+
+    void ReplyResolveError(const NShardResolver::TEvShardsResolveStatus& ev) {
+        QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
+        auto& record = QueryResponse->Record;
+
+        record.SetYdbStatus(ev.Status);
+        auto& response = *record.MutableResponse();
+        AddQueryIssues(response, ev.Issues);
+
+        auto txId = TTxId();
+        if (auto ctx = Transactions.ReleaseTransaction(txId)) {
+            ctx->Invalidate();
+            if (!ctx->BufferActorId) {
+                Transactions.AddToBeAborted(std::move(ctx));
+            } else {
+                TerminateBufferActor(ctx);
+            }
+        }
+
+        FillTxInfo(record.MutableResponse());
+
+        Cleanup(false);
     }
 
     void ReplyBusy(TEvKqp::TEvQueryRequest::TPtr& ev) {

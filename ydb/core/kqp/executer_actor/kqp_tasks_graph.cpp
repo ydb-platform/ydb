@@ -2982,6 +2982,9 @@ TKqpTasksGraph::TKqpTasksGraph(
     }
 
     switch (*txsType) {
+        case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
+        case NKqpProto::TKqpPhyTx::TYPE_DATA:
+            break;
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
             GetMeta().StreamResult = true;
             break;

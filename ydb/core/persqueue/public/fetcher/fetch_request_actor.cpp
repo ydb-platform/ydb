@@ -307,7 +307,7 @@ public:
                     }
                 }
                 TAppData* appData = AppData(ctx);
-                if (!consumerIsAdded && (appData->KafkaProxyConfig.GetAutoCreateConsumersEnable() || appData->KafkaProxyConfig.GetAutoCreateTopicsEnable())) {
+                if (!consumerIsAdded && appData->KafkaProxyConfig.GetAutoCreateConsumersEnable()) {
                     CreateConsumerGroupIfNecessary(entry.Path.back(), path, groupId);
                 }
             }
@@ -338,14 +338,10 @@ public:
         }
         PendingAlterTopicResponses++;
 
-        auto topicSettings = NYdb::NTopic::TAlterTopicSettings();
-        topicSettings.BeginAddConsumer(groupId).EndAddConsumer();
         auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
         request.get()->set_path(topicPath);
-        for (auto& c : topicSettings.AddConsumers_) {
-            auto* consumer = request.get()->add_add_consumers();
-            consumer->set_name(c.ConsumerName_);
-        }
+        auto* consumer = request->add_add_consumers();
+        consumer->set_name(groupId);
         AlterTopicCookie++;
         AlterTopicCookieToName[AlterTopicCookie] = topicName;
         auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = topicName, this]
@@ -364,13 +360,8 @@ public:
 
     }
 
-    void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
-        NYdb::TStatus& result = ev->Get()->Result;
+    void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr&, const TActorContext& ctx) {
         PendingAlterTopicResponses--;
-        if (result.GetStatus() != NYdb::EStatus::SUCCESS) {
-            Response = CreateErrorReply(Ydb::StatusIds::UNAUTHORIZED, "Consumer is not added to this topic");
-            return SendReplyAndDie(std::move(Response), ctx);
-        }
         if (PendingAlterTopicResponses == 0) {
             if (AnyCdcTopicInRequest) {
                 SendSchemeCacheRequest(ctx);

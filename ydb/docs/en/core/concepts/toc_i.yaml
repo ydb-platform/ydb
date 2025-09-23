@@ -1,7 +1,7 @@
 items:
 - name: Glossary
   href: glossary.md
-- name: Analytics Features
+- name: Analytical Features
   include:
     path: analytics/toc_p.yaml
     mode: link

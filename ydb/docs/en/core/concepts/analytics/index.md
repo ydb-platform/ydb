@@ -11,7 +11,7 @@ Using {{ ydb-short-name }} allows you to consolidate the functionality of severa
 The platform is designed to handle streaming and batch data ingestion at large scale.
 
 - Streaming processing: Built-in topic system with Kafka API support for integration with existing systems. Plugins for [Fluent Bit](../../integrations/ingestion/fluent-bit.md) and [Logstash](../../integrations/ingestion/logstash.md) are available for log collection.
-- Batch loading: API [BulkUpsert](../../recipes/ydb-sdk/bulk-upsert.md) for efficiently loading large data sets and a connector for Apache Spark to integrate with data processing platforms.
+- Batch loading: [BulkUpsert](../../recipes/ydb-sdk/bulk-upsert.md) API for efficiently loading large data sets and a connector for Apache Spark to integrate with data processing platforms.
 - Connection via standard interfaces: [JDBC-driver](../../reference/languages-and-apis/jdbc-driver/index.md) and native [SDK](../../recipes/ydb-sdk/index.md).
 
 ## Data Storage {#store}
@@ -23,7 +23,7 @@ The core of the storage system is — [column-oriented tables](../../concepts/da
 
 ## Query Execution {#execution}
 
-{{ydb-short-name}} is an MPP (Massively Parallel Processing) DBMS with no dedicated master node. All nodes perform the same roles, and the system scales horizontally by dynamically adding or removing compute resources.
+{{ ydb-short-name }} is an Massively Parallel Processing (MPP) DBMS with no dedicated master node. All nodes perform the same roles, and the system scales horizontally by dynamically adding or removing compute resources.
 
 - Cost-Based Optimizer (CBO): Selects the optimal query execution plan by analyzing data statistics.
 - Spilling mechanism: Enables execution of queries whose intermediate results do not fit in RAM by offloading them to disk.
@@ -45,5 +45,5 @@ Data transformation is supported using standard approaches and tools.
 
 You can use industry-standard tools for data analysis:
 
-- BI tools: [Yandex DataLens](../../integrations/visualization/datalens.md), [Apache Superset](../../integrations/visualization/superset.md), [Grafana](../../integrations/visualization/grafana.md), [Polymatica](https://wiki.polymatica.ru/display/PDTNUG1343/YDB+Server).
+- BI tools: [Yandex DataLens](../../integrations/visualization/datalens.md), [Apache Superset](../../integrations/visualization/superset.md), [Grafana](../../integrations/visualization/grafana.md).
 - ML tools: Use [Jupyter Notebook](../../integrations/gui/jupyter.md) and [Apache Spark](../../integrations/ingestion/spark.md) for data preparation and machine learning model training.

@@ -44,7 +44,7 @@ CREATE TOPIC `my_topic` (
 * `read_from`: Sets up the message write time starting from which the consumer will receive data. Data written before this time will not be read. Value type: `Datetime` OR `Timestamp` OR `integer` (unix-timestamp in the numeric format). Default value: `0` (read from the earliest available message).
 
 {% if feature_topic_codecs %}
-* `supported_codecs`: List of [codecs](concepts/topic#message-codec) supported by the consumer.
+* `supported_codecs`: List of [codecs](concepts/datamodel/topic#message-codec) supported by the consumer.
 
 {% endif %}
 
@@ -68,6 +68,6 @@ CREATE TOPIC `my_topic` WITH(
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs`: List of [codecs](concepts/topic#message-codec) supported by the topic. Value type: `String`.
+* `supported_codecs`: List of [codecs](concepts/datamodel/topic#message-codec) supported by the topic. Value type: `String`.
 
 {% endif %}

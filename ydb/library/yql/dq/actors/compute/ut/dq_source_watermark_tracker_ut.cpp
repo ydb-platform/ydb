@@ -12,7 +12,7 @@ namespace {
             TDuration::Seconds(5),
             idlePartitionsEnabled,
             TDuration::Seconds(1),
-            TDuration::Seconds(1),
+            TDuration::Seconds(10),
             TInstant::Now()
         );
     }
@@ -109,38 +109,96 @@ Y_UNIT_TEST_SUITE(TDqSourceWatermarkTrackerTest) {
 
     Y_UNIT_TEST(Idle1) {
         auto tracker = InitTrackerWithIdleness();
-
-#if 0
+        // 1) registering two partitions,
+        TInstant systemTime = TInstant::Seconds(10);
         {
-            auto ok = tracker.RegisterPartition(0, TInstant::Zero());
+            auto ok = tracker.RegisterPartition(0, systemTime);
             UNIT_ASSERT(ok);
         }
         {
-            const auto actual = tracker.NotifyNewPartitionTime(0, TInstant::Seconds(2), TInstant::Seconds(12));
-            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(0), actual);
+            auto ok = tracker.RegisterPartition(1, systemTime);
+            UNIT_ASSERT(ok);
         }
-        for (auto i = 12; i < 15; ++i) {
-            const auto actual = tracker.HandleIdleness(TInstant::Seconds(i));
-            UNIT_ASSERT_VALUES_EQUAL_C(Nothing(), actual, i);
+        // 2) produce some events with both, receive regular watermarks
+        systemTime += TDuration::Seconds(1);
+        {
+            const auto actual = tracker.NotifyNewPartitionTime(0, TInstant::Seconds(7), systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(Nothing(), actual);
+        }
+        systemTime += TDuration::Seconds(1);
+        {
+            const auto actual = tracker.NotifyNewPartitionTime(1, TInstant::Seconds(11), systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(5), actual);
+        }
+        systemTime += TDuration::Seconds(1);
+        {
+            const auto actual = tracker.HandleIdleness(systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(Nothing(), actual);
+        }
+        systemTime += TDuration::Seconds(11);
+        // 3) then simulate idleness in one partition, receive idleness watermark, 
+        {
+            const auto actual = tracker.NotifyNewPartitionTime(1, TInstant::Seconds(16), systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(Nothing(), actual);
         }
         {
-            const auto actual = tracker.HandleIdleness(TInstant::Seconds(15));
-            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(10), actual);
-        }
-        {
-            const auto actual = tracker.HandleIdleness(TInstant::Seconds(20));
+            const auto actual = tracker.HandleIdleness(systemTime);
             UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(15), actual);
         }
-#else
-        // TODO compose a new test; semantic changed: partition idleness no longer produces fake events
-        // so, new test scenario should be:
-        // 1) registering two partitions,
-        // 2) produce some events with both, receive regular watermarks
-        // 3) then simulate idleness in one partition, receive idleness watermark, then regular watermarks
+        // 3a) then regular watermarks
+        systemTime += TDuration::Seconds(1);
+        {
+            const auto actual = tracker.NotifyNewPartitionTime(1, TInstant::Seconds(22), systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(20), actual);
+        }
+        systemTime += TDuration::Seconds(1);
+        {
+            const auto actual = tracker.HandleIdleness(systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(Nothing(), actual);
+        }
         // 4) then simulate no activity on both, receive no watermark (regular or idle)
+        systemTime += TDuration::Seconds(11);
+        {
+            const auto actual = tracker.HandleIdleness(systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(Nothing(), actual);
+        }
         // 5) then similate resume activity on one partition, receive regular watermarks
+        systemTime += TDuration::Seconds(11);
+        {
+            const auto actual = tracker.NotifyNewPartitionTime(0, TInstant::Seconds(22), systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(Nothing(), actual);
+        }
+        systemTime += TDuration::Seconds(1);
+        {
+            const auto actual = tracker.HandleIdleness(systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(Nothing(), actual);
+        }
+        systemTime += TDuration::Seconds(1);
+        {
+            const auto actual = tracker.NotifyNewPartitionTime(0, TInstant::Seconds(27), systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(25), actual);
+        }
+        systemTime += TDuration::Seconds(1);
+        {
+            const auto actual = tracker.HandleIdleness(systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(Nothing(), actual);
+        }
         // 6) then simulate resume activity on second partition, receive regular watermarks
-#endif
+        systemTime += TDuration::Seconds(1);
+        {
+            const auto actual = tracker.NotifyNewPartitionTime(1, TInstant::Seconds(32), systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(Nothing(), actual);
+        }
+        systemTime += TDuration::Seconds(1);
+        {
+            const auto actual = tracker.HandleIdleness(systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(Nothing(), actual);
+        }
+        systemTime += TDuration::Seconds(1);
+        {
+            const auto actual = tracker.NotifyNewPartitionTime(0, TInstant::Seconds(34), systemTime);
+            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(30), actual);
+        }
     }
 
     Y_UNIT_TEST(IdleNextCheckAt) {

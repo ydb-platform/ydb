@@ -62,14 +62,20 @@ public:
 
 private:
     struct TVersionedSecret {
-        ui64 Version;
+        ui64 SecretVersion = 0;
+        ui64 PathId = 0;
+        TString Name;
         TString Value;
     };
 
+    struct TResponseContext {
+        TVersionedSecret Secret;
+        NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Result;
+    };
+
     ui64 LastCookie = 0;
-    THashMap<ui64, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription>> ResolveInFlight;
-    THashMap<ui64, TString> SecretNameInFlight;
-    THashMap<TString, TVersionedSecret> SecretNameToValue;
+    THashMap<ui64, TResponseContext> ResolveInFlight;
+    THashMap<TString, TVersionedSecret> VersionedSecrets;
 };
 
 IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise);

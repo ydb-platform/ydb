@@ -111,8 +111,9 @@ void TDescribeSchemaSecretsService::Handle(TEvResolveSecret::TPtr& ev) {
 void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie);
 
-    Y_ENSURE(SecretNameInFlight.contains(ev->Cookie), "such request cookie is not registered");
-    const auto& secretName = SecretNameInFlight[ev->Cookie];
+    const auto respIt = ResolveInFlight.find(ev->Cookie);
+    Y_ENSURE(respIt != ResolveInFlight.end(), "such request cookie is not registered");
+    const auto& secretName = respIt->second.Secret.Name;
 
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request = ev->Get()->Request;
     if (request->ResultSet.empty() || request->ResultSet.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
@@ -124,15 +125,15 @@ void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKey
     const auto& secretDescription = request->ResultSet.front().SecretInfo->Description;
     Y_ENSURE(!secretDescription.HasValue(), "SchemeCache must never contain secret values");
 
-    const auto secretIt = SecretNameToValue.find(secretName);
-    if (secretIt != SecretNameToValue.end()) { // some secret version is in cache
+    const auto secretIt = VersionedSecrets.find(secretName);
+    if (secretIt != VersionedSecrets.end()) { // some secret version is in cache
         const auto secretDescription = request->ResultSet.front().SecretInfo->Description;
-        if (secretDescription.GetVersion() <= secretIt->second.Version) { // cache contains the most recent version
+        if (secretDescription.GetVersion() <= secretIt->second.SecretVersion) { // cache contains the most recent version
             LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie << ", fill value from secret cache");
             FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(std::vector<TString>{secretIt->second.Value}));
             return;
         }
-        SecretNameToValue.erase(secretIt); // no need to store outdated value
+        VersionedSecrets.erase(secretIt); // no need to store outdated value
     }
 
     TAutoPtr<TEvTxUserProxy::TEvNavigate> req(new TEvTxUserProxy::TEvNavigate());
@@ -146,9 +147,11 @@ void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKey
 void TDescribeSchemaSecretsService::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
     LOG_D("TEvDescribeSchemeResult: request cookie=" << ev->Cookie);
 
-    Y_ENSURE(SecretNameInFlight.contains(ev->Cookie), "such request cookie is not registered");
-    const auto& secretName = SecretNameInFlight[ev->Cookie];
-    const auto &rec = ev->Get()->GetRecord();
+    const auto respIt = ResolveInFlight.find(ev->Cookie);
+    Y_ENSURE(respIt != ResolveInFlight.end(), "such request cookie is not registered");
+    const auto& secretName = respIt->second.Secret.Name;
+
+    const auto& rec = ev->Get()->GetRecord();
     if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
         LOG_D("TEvDescribeSchemeResult: request cookie=" << ev->Cookie << ", SchemeShard error");
         FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret `" + secretName + "` not found") }));
@@ -157,14 +160,19 @@ void TDescribeSchemaSecretsService::Handle(NSchemeShard::TEvSchemeShard::TEvDesc
 
     const auto& secretValue = rec.GetPathDescription().GetSecretDescription().GetValue();
     const auto& secretVersion = rec.GetPathDescription().GetSecretDescription().GetVersion();
-    SecretNameToValue[secretName] = TVersionedSecret{.Version = secretVersion, .Value = secretValue};
+    VersionedSecrets[secretName] = TVersionedSecret{
+        .SecretVersion = secretVersion,
+        .PathId = 0, // TODO fix this
+        .Name = secretName, // TODO do we need this field?
+        .Value = secretValue,
+    };
     FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(std::vector<TString>{secretValue}));
 }
 
 void TDescribeSchemaSecretsService::FillResponse(const ui64 requestId, const TEvDescribeSecretsResponse::TDescription& response) {
-    SecretNameInFlight.erase(requestId);
-    ResolveInFlight[requestId].SetValue(response);
-    ResolveInFlight.erase(requestId);
+    auto respIt = ResolveInFlight.find(requestId);
+    respIt->second.Result.SetValue(response);
+    ResolveInFlight.erase(respIt);
 }
 
 void TDescribeSchemaSecretsService::Bootstrap() {
@@ -173,8 +181,10 @@ void TDescribeSchemaSecretsService::Bootstrap() {
 }
 
 void TDescribeSchemaSecretsService::SaveIncomingRequestInfo(const TEvResolveSecret& req) {
-    ResolveInFlight[LastCookie] = req.Promise;
-    SecretNameInFlight[LastCookie] = req.SecretName;
+    TResponseContext ctx;
+    ctx.Secret.Name = req.SecretName;
+    ctx.Result = req.Promise;
+    ResolveInFlight[LastCookie] = std::move(ctx);
 }
 
 void TDescribeSchemaSecretsService::SendSchemeCacheRequest(const TString& secretName) {

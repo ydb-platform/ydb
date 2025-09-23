@@ -245,7 +245,7 @@ public:
             }
             if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
                 AnyCdcTopicInRequest = true;
-                Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
+                AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1);
                 auto privateTopicPath = CanonizePath(JoinPath(ChildPath(NKikimr::SplitPath(path), entry.ListNodeEntry->Children.at(0).Name)));
                 PrivateTopicPathToCdcPath[privateTopicPath] = path;
                 CdcPathToPrivateTopicPath[path] = privateTopicPath;

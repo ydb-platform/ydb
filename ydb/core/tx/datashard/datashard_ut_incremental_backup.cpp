@@ -637,13 +637,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
     Y_UNIT_TEST_TWIN(SimpleBackupBackupCollection, WithIncremental) {
         TPortManager portManager;
-        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+        auto settings = TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
-        );
+            .SetEnableResourcePools(true);
+
+        settings.AppConfig->MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TServer::TPtr server = new TServer(settings);
 
         auto& runtime = *server->GetRuntime();
         const auto edgeActor = runtime.AllocateEdgeActor();
@@ -709,13 +712,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
     Y_UNIT_TEST(ComplexBackupBackupCollection) {
         TPortManager portManager;
-        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+        auto settings = TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
-        );
+            .SetEnableResourcePools(true);
+
+        settings.AppConfig->MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TServer::TPtr server = new TServer(settings);
 
         auto& runtime = *server->GetRuntime();
         const auto edgeActor = runtime.AllocateEdgeActor();
@@ -1142,12 +1148,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
     Y_UNIT_TEST(E2EBackupCollection) {
         TPortManager portManager;
-        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+        auto settings = TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-        );
+            .SetEnableResourcePools(true);
+
+        settings.AppConfig->MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TServer::TPtr server = new TServer(settings);
 
         auto& runtime = *server->GetRuntime();
         const auto edgeActor = runtime.AllocateEdgeActor();
@@ -2049,8 +2059,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         )");
 
         WaitForContent(server, edgeActor, "/Root/Table/0_continuousBackupImpl", {
-            MakeReset(1, 100),
-            MakeReset(3, 300),
+            MakeUpsert(1, 100),
+            MakeUpsert(3, 300),
         });
     }
 
@@ -2086,8 +2096,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         )");
 
         WaitForContent(server, edgeActor, "/Root/Table/0_continuousBackupImpl", {
-            MakeReset(1, 100),
-            MakeReset(4, 400),
+            MakeUpsert(1, 100),
+            MakeUpsert(4, 400),
         });
     }
 
@@ -2132,10 +2142,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT(firstRecord.ParseFromString(records[0].second));
         UNIT_ASSERT_C(firstRecord.GetCdcDataChange().HasUpsert(), "First record should be an upsert");
         
-        // Parse the second record (Reset)
+        // Parse the second record (Reset if EvWrite, Upsert is ProposeTx)
         NKikimrChangeExchange::TChangeRecord secondRecord;
         UNIT_ASSERT(secondRecord.ParseFromString(records[1].second));
-        UNIT_ASSERT_C(secondRecord.GetCdcDataChange().HasReset(), "Second record should be a reset");
+        UNIT_ASSERT_C(secondRecord.GetCdcDataChange().HasUpsert(), "Second record should be a reset");
     }
 
     Y_UNIT_TEST(ResetVsUpsertColumnStateSerialization) {

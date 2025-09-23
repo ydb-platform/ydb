@@ -21,13 +21,21 @@
         },
         {
             "name": "/local/base_json_insert_from_table_sql_plan/ResultTableJD",
+            "reads": [
+                {
+                    "lookup_by": [
+                        "Key"
+                    ],
+                    "type": "Lookup"
+                }
+            ],
             "writes": [
                 {
                     "columns": [
                         "Key",
                         "Value"
                     ],
-                    "type": "MultiInsert"
+                    "type": "MultiUpsert"
                 }
             ]
         }

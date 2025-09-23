@@ -290,6 +290,11 @@ namespace Tests {
             return *this;
         }
 
+        TServerSettings& SetEnableDataShardCreateTableAs(bool enable) {
+            AppConfig->MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(enable);
+            return *this;
+        }
+
         TServerSettings& SetProxyDSMocks(const TVector<TIntrusivePtr<NFake::TProxyDS>>& proxyDSMocks) {
             ProxyDSMocks = proxyDSMocks;
             return *this;

@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col9 Uint32
         ------
         ONE_SCHEMAS_CLEANUP:
-        EXPECTED: true
+        EXPECTED: false
         ------
         RESTART_TABLETS
         ------
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         EXPECTED: [[1u;#;#;#;#];[2u;#;#;#;#];[3u;#;#;#;#];[4u;[4u];#;#;#];[5u;[5u];[5u];#;#];[6u;[6u];[6u];#;#];[7u;[7u];[7u];[7u];#];[8u;[8u];[8u];[8u];[8u]];[9u;[9u];[9u];[9u];[9u]]]
         ------
         READ: SELECT SchemaVersion FROM `/Root/ColumnTable/.sys/primary_index_schema_stats` WHERE PresetId = 0 ORDER BY SchemaVersion;
-        EXPECTED: [[[6u]];[[9u]];[[11u]]]
+        EXPECTED: [[[1u]];[[2u]];[[3u]];[[4u]];[[5u]];[[6u]];[[7u]];[[8u]];[[9u]];[[10u]];[[11u]]]
         ------
         DATA:
         DELETE FROM `/Root/ColumnTable`
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         ONE_COMPACTION:
         ------
         ONE_SCHEMAS_CLEANUP:
-        EXPECTED: true
+        EXPECTED: false
         ------
         RESTART_TABLETS
         ------
@@ -246,7 +246,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col9 Uint32
         ------
         ONE_SCHEMAS_CLEANUP:
-        EXPECTED: true
+        EXPECTED: false
         ------
         RESTART_TABLETS
         ------

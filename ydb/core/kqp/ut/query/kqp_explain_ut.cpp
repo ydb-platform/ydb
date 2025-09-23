@@ -929,6 +929,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
     Y_UNIT_TEST_TWIN(CreateTableAs, Stats) {
         auto kikimrSettings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
         kikimrSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        kikimrSettings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         TKikimrRunner kikimr(kikimrSettings);
         auto client = kikimr.GetQueryClient();
 

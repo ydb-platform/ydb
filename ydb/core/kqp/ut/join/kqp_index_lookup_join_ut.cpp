@@ -619,6 +619,7 @@ Y_UNIT_TEST_TWIN(LeftOnlyJoinValueColumn, StreamLookup) {
 Y_UNIT_TEST_TWIN(LeftJoinRightNullFilter, StreamLookup) {
     Test(
         R"(
+            PRAGMA FilterPushdownOverJoinOptionalSide = "true";
             SELECT l.Value, r.Value
             FROM `/Root/Left` AS l
             LEFT JOIN `/Root/Right` AS r

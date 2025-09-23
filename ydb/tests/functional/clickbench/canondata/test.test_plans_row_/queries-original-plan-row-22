@@ -60,7 +60,7 @@
                                                 "PlanNodeId": 8,
                                                 "Plans": [
                                                     {
-                                                        "HashFunc": "HashV2",
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "SearchPhrase"
                                                         ],
@@ -87,7 +87,6 @@
                                                                 "Plans": [
                                                                     {
                                                                         "Node Type": "UnionAll",
-                                                                        "Parallel": "True",
                                                                         "PlanNodeId": 5,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
@@ -132,7 +131,6 @@
                                                                     },
                                                                     {
                                                                         "Node Type": "UnionAll",
-                                                                        "Parallel": "True",
                                                                         "PlanNodeId": 3,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
@@ -164,7 +162,7 @@
                                                                                 "Plans": [
                                                                                     {
                                                                                         "CTE Name": "Filter-TableFullScan_9",
-                                                                                        "HashFunc": "HashV2",
+                                                                                        "HashFunc": "HashV1",
                                                                                         "KeyColumns": [
                                                                                             "SearchPhrase",
                                                                                             "UserID"

@@ -35,11 +35,18 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
+ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata+UseSchemaSecrets
+ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadServiceAccountSecretValueFromExternalDataSourceMetadata+UseSchemaSecrets
+ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadTokenSecretValueFromExternalDataSourceMetadata+UseSchemaSecrets
 ydb/core/kqp/proxy_service/ut TestScriptExecutionsUtils.TestRetryLimiter
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.RestoreScriptPhysicalGraphOnRetry
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateStreamingQueryMatchRecognize
 ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.TestReadLargeParquetFile
 ydb/core/kqp/ut/federated_query/s3 unittest.sole chunk
+ydb/core/kqp/federated_query/ut_service DescribeSchemaSecretsService.GetDroppedValue
+ydb/core/kqp/federated_query/ut_service DescribeSchemaSecretsService.GetInParallel
+ydb/core/kqp/federated_query/ut_service DescribeSchemaSecretsService.GetNewValue
+ydb/core/kqp/federated_query/ut_service DescribeSchemaSecretsService.GetUpdatedValue
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
 ydb/core/kqp/ut/olap KqpOlapJson.BrokenJsonWriting[2,false,1024,0,0,0]
@@ -73,6 +80,7 @@ ydb/core/mind/hive/ut THiveTest.TestCreateSubHiveCreateManyTabletsWithReboots
 ydb/core/mind/hive/ut THiveTest.TestDeleteTabletWithRestartAndRetry
 ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/persqueue/ut TPQTest.TestCompactifiedWithRetention
+ydb/core/persqueue/ut/slow SlowTopicAutopartitioning.CDC_Write
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.OrderOfChildrenPartitions_Topic
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_1MB_LB_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_1MB_LegacyTopic_offset+middle
@@ -241,6 +249,7 @@ ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
+ydb/tests/functional/audit test_canonical_records.py.test_create_drop_and_alter_database
 ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_failover
 ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_takedown
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop

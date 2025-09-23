@@ -6,7 +6,7 @@
 
 Для сценариев, требующих минимальной задержки — логи, метрики, потоки CDC.
 
-- [Топики](../../../concepts/topic.md) с [Kafka API](../../../reference/kafka-api/index.md): основной и рекомендуемый способ потоковой загрузки. Топики — это встроенный в {{ydb-short-name}} аналог Apache Kafka. Благодаря поддержке Kafka API вы можете использовать существующие клиенты и системы (Apache Flink, Spark Streaming, Kafka Connect) без изменений. Ключевое преимущество — возможность [транзакционной записи из топика в таблицу](../../../concepts/topic.md#topic-transactions), которая гарантирует семантику `exactly-once` на уровне базы данных;
+- [Топики](../../../concepts/datamodel/topic.md) с [Kafka API](../../../reference/kafka-api/index.md): основной и рекомендуемый способ потоковой загрузки. Топики — это встроенный в {{ydb-short-name}} аналог Apache Kafka. Благодаря поддержке Kafka API вы можете использовать существующие клиенты и системы (Apache Flink, Spark Streaming, Kafka Connect) без изменений. Ключевое преимущество — возможность [транзакционной записи из топика в таблицу](../../../concepts/datamodel/topic.md#topic-transactions), которая гарантирует семантику `exactly-once` на уровне базы данных;
 - Плагины для Fluent Bit / Logstash: если вы используете [Fluent Bit](../../../integrations/ingestion/fluent-bit.md) или [Logstash](../../../integrations/ingestion/logstash.md) для сбора логов, специализированные плагины позволяют писать данные напрямую в {{ydb-short-name}}, минуя промежуточные брокеры сообщений;
 - Встроенный перенос данных (Transfer): сервис [Transfer](../../transfer.md) позволяет в потоковом режиме трансформировать и переносить данные из топиков в таблицы.
 

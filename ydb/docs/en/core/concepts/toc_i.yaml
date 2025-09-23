@@ -5,7 +5,7 @@ items:
   href: architecture.md
 - name: Connecting to a database
   href: connect.md
-- name: Data model and schema
+- name: Schema objects
   href: datamodel/index.md
   include:
     path: datamodel/toc_p.yaml

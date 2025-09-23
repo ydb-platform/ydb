@@ -68,7 +68,7 @@ Replicas are created under the user account that was used to create the asynchro
 
 ### Initial table scan {#initial-scan}
 
-During the [initial table scan](cdc.md#initial-scan) the source data is exported to changefeeds. The target runs [consumers](topic.md#consumer) that read the source data from the changefeeds and write it to replicas.
+During the [initial table scan](cdc.md#initial-scan) the source data is exported to changefeeds. The target runs [consumers](datamodel/topic.md#consumer) that read the source data from the changefeeds and write it to replicas.
 
 You can get the progress of the initial table scan from the [description](../reference/ydb-cli/commands/scheme-describe.md) of the asynchronous replication instance.
 

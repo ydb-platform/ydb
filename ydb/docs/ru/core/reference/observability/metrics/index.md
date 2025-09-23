@@ -162,7 +162,7 @@
 
 Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
 ----- | -----
-`topic.producers_count`<br/>`GAUGE`, штуки | Количество уникальных [источников](../../../concepts/topic#producer-id) топика.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.producers_count`<br/>`GAUGE`, штуки | Количество уникальных [источников](../../../concepts/datamodel/topic#producer-id) топика.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.storage_bytes`<br/>`GAUGE`, байты | Размер топика в байтах.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.read.bytes`<br/>`RATE`, байты | Количество байт, прочитанных из топика.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `topic.read.messages`<br/>`RATE`, штуки | Количество сообщений, прочитанных из топика.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.

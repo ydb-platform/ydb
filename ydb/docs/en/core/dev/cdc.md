@@ -20,7 +20,7 @@ For example, if a table named `table` contains a changefeed named `updates_feed`
 my/table/updates_feed
 ```
 
-Before reading data, add a [consumer](../concepts/topic.md#consumer). Below is a sample command that adds a consumer named `my_consumer` to the `updates_feed` changefeed of the `table` table in the `my` directory:
+Before reading data, add a [consumer](../concepts/datamodel/topic.md#consumer). Below is a sample command that adds a consumer named `my_consumer` to the `updates_feed` changefeed of the `table` table in the `my` directory:
 
 ```bash
 {{ ydb-cli }} topic consumer add \

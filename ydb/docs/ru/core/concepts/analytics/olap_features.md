@@ -27,7 +27,7 @@
 
 ### Потоковая загрузка (Streaming Ingestion)
 
-  - [Topics (Kafka API)](../topic.md): нативная работа с потоками данных через протокол Kafka.
+  - [Topics (Kafka API)](../datamodel/topic.md): нативная работа с потоками данных через протокол Kafka.
   - [Transfer](../transfer.md): управляемый сервис для переноса данных между топиками и таблицами.
   - [Коннектор Fluent Bit](../../integrations/ingestion/fluent-bit.md): прямая загрузка логов.
 

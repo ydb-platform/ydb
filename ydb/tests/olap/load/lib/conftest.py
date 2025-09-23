@@ -701,7 +701,7 @@ class LoadSuiteBase:
 
         # --- FAIL TEST IF CORES OR OOM FOUND ---
         if node_issues > 0:
-            error_msg = f"Test failed: found {node_issues} node(s) with coredump(s) or OOM(s)"
+            error_msg = f"Test failed: found {node_issues} node(s) with coredump(s), OOM(s), VERIFY fail(s) or SAN errors"
             pytest.fail(error_msg)
         # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
         if workload_errors:

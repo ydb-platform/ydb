@@ -6,55 +6,43 @@
 
 Для изменения конфигурации State Storage в кластере {{ ydb-short-name }} необходимо выполнить следующие шаги.
 
-1. Получить текущую конфигурацию кластера с помощью команды [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md):
+1. Внести требуемые изменения в секции `domains_config` конфигурационного файла `config.yaml` на каждом узле кластера {{ ydb-short-name }}:
 
-  ```bash
-  ydb [global options...] admin cluster config fetch > config.yaml
-  ```
-
-  В результате выполнения данной команды текущая конфигурация будет сохранена в файле `config.yaml`
-
-2. Внести требуемые изменения в секции `domains_config` конфигурационного файла `config.yaml`:
-
-  Единая конфигурацию для компонент StateStorage, Board, SchemeBoard задается следующим образом:
+  Единая конфигурация для компонент StateStorage, Board, SchemeBoard задается следующим образом:
 
   ```yaml
   config:
-      domains_config:
-          state_storage:
-          - ring:
-              nto_select: 5
-              node: [1,2,3,4,5,6,7,8]
-          ssid: 1
+    domains_config:
+      state_storage:
+      - ring:
+        nto_select: 5
+        node: [1,2,3,4,5,6,7,8]
+      ssid: 1
   ```
 
   Конфигурация для каждого типа отдельно задается следующим образом:
 
   ```yaml
   config:
-      domains_config:
-          explicit_state_storage_config:
-              ring_groups:
-              - ring:
-                  nto_select: 5
-                  node: [1,2,3,4,5,6,7,8]
-          explicit_state_storage_board_config:
-              ring_groups:
-              - ring:
-                  nto_select: 5
-                  node: [10,20,30,40,50,60,70,80]
-          explicit_scheme_board_config:
-              ring_groups:
-              - ring:
-                  nto_select: 5
-                  node: [11,12,13,14,15,16,17,18]
+    domains_config:
+      explicit_state_storage_config:
+        ring_groups:
+        - ring:
+          nto_select: 5
+          node: [1,2,3,4,5,6,7,8]
+      explicit_state_storage_board_config:
+        ring_groups:
+        - ring:
+          nto_select: 5
+          node: [10,20,30,40,50,60,70,80]
+      explicit_scheme_board_config:
+        ring_groups:
+        - ring:
+          nto_select: 5
+          node: [11,12,13,14,15,16,17,18]
   ```
 
-3. Применить новую конфигурацию кластера с помощью [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
-
-  ```bash
-  ydb [global options...] admin cluster config replace -f config.yaml
-  ```
+2. С помощью процедуры [rolling-restart](../../../maintenance/manual/node_restarting.md) перезапустите все узлы кластера, включая динамические. Обратите внимание, что между рестартом хостов необходима задержка как минимум в 15 секунд.
 
 ## Правила конфигурирования StateStorage
 

@@ -6,7 +6,7 @@ Using {{ ydb-short-name }} allows you to consolidate the functionality of severa
 
 ![](_includes/olap_whole.png)
 
-## Data ingestion {#ingest}
+## Data Ingestion {#ingest}
 
 The platform is designed to handle streaming and batch data ingestion at large scale.
 

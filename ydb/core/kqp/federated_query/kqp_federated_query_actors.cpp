@@ -121,7 +121,8 @@ void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKey
         return;
     }
 
-    // TODO (yurikiselev): Assert that request->ResultSet.front().SecretInfo->Description.GetValue() is empty [issue:23462]
+    const auto& secretDescription = request->ResultSet.front().SecretInfo->Description;
+    Y_ENSURE(!secretDescription.HasValue(), "SchemeCache must never contain secret values");
 
     const auto secretIt = SecretNameToValue.find(secretName);
     if (secretIt != SecretNameToValue.end()) { // some secret version is in cache
@@ -137,6 +138,7 @@ void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKey
     TAutoPtr<TEvTxUserProxy::TEvNavigate> req(new TEvTxUserProxy::TEvNavigate());
     NKikimrSchemeOp::TDescribePath* record = req->Record.MutableDescribePath();
     record->SetPath(secretName);
+    record->MutableOptions()->SetReturnSecretValue(true);
     // TODO(yurikiselev): Deal with UserToken [issue:25472]
     Send(MakeTxProxyID(), req.Release(), 0, ev->Cookie);
 }

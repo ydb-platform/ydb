@@ -14,6 +14,7 @@ std::filesystem::path MakeJoinPerfPath() {
     auto p = std::filesystem::path{std::getenv("HOME")} / ".join_perf" / "json";
     std::filesystem::create_directories(p);
     p = p / Sprintf("%i.jsonl", NKikimr::NMiniKQL::FilesIn(p)).ConstRef();
+    Cout << p.string() << Endl;
     return p;
 }
 

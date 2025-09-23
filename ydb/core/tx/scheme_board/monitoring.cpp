@@ -1124,11 +1124,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         return str.Str();
     }
 
-    static TString RenderBackup(
-        const TBackupProgress& backupProgress,
-        bool backupStarted = false,
-        const TString& errorMessage = ""
-    ) {
+    TString RenderBackup(bool backupStarted, const TString& error = "") {
         TStringStream str;
 
         HTML(str) {
@@ -1138,11 +1134,21 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             if (backupStarted) {
                 Info(str, "Backup started successfully!");
             }
-            if (!errorMessage.empty()) {
-                Danger(str, errorMessage);
+            if (!error.empty()) {
+                Danger(str, error);
             }
 
-            SimplePanel(str, "Backup Configuration", [&backupProgress](IOutputStream& str) {
+            DIV_CLASS_ID("alert alert-warning", "backupWarning") {
+                if (!BackupProgress.Warning.empty()) {
+                    STRONG() { str << "Warning:"; }
+                    str << " failed to backup paths:";
+                    PRE() { str << BackupProgress.Warning; }
+                } else {
+                    str << "<script>$('#backupWarning').hide();</script>";
+                }
+            }
+
+            SimplePanel(str, "Backup Configuration", [&backupProgress = BackupProgress](IOutputStream& str) {
                 HTML(str) {
                     FORM_CLASS("form-horizontal") {
                         DIV_CLASS("form-group") {
@@ -1239,12 +1245,20 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                     var progress = data.progress;
                                     var processed = data.processed;
                                     var total = data.total;
+                                    var warning = data.warning;
 
                                     if (status === 'running' || status === 'starting') {
                                         $('#backupProgress .progress-bar').css('width', progress + '%')
                                             .text(progress.toFixed(1) + '%');
                                         $('#backupStatus').text('Status: ' + status);
                                         $('#backupDetails').text('Processed: ' + processed + ' / Total: ' + total);
+                                        if (warning && warning.length > 0) {
+                                            $('#backupWarning')
+                                                .show()
+                                                .html('<strong>Warning:</strong><pre>' + warning + '</pre>');
+                                        } else {
+                                            $('#backupWarning').hide().empty();
+                                        }
                                         setTimeout(updateBackupProgress, 1000);
                                     } else if (status === 'completed') {
                                         $('#backupProgress .progress-bar').css('width', '100%')
@@ -1253,6 +1267,13 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                             .removeClass('alert-info alert-danger').addClass('alert-success');
                                         $('#backupDetails').text('Processed: ' + processed + ' / Total: ' + total);
                                         $('button[name="startBackup"]').prop('disabled', false);
+                                        if (warning && warning.length > 0) {
+                                            $('#backupWarning')
+                                                .show()
+                                                .html('<strong>Warning:</strong><pre>' + warning + '</pre>');
+                                        } else {
+                                            $('#backupWarning').hide().empty();
+                                        }
                                     } else if (status.startsWith('error:')) {
                                         $('#backupStatus').text('Status: ' + status)
                                             .removeClass('alert-info alert-success').addClass('alert-danger');
@@ -1278,11 +1299,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         return str.Str();
     }
 
-    static TString RenderRestore(
-        const TRestoreProgress& restoreProgress,
-        bool restoreStarted = false,
-        const TString& errorMessage = ""
-    ) {
+    TString RenderRestore(bool restoreStarted, const TString& error = "") {
         TStringStream str;
 
         HTML(str) {
@@ -1297,11 +1314,11 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             if (restoreStarted) {
                 Info(str, "Restore started successfully!");
             }
-            if (!errorMessage.empty()) {
-                Danger(str, errorMessage);
+            if (!error.empty()) {
+                Danger(str, error);
             }
 
-            SimplePanel(str, "Restore Configuration", [&restoreProgress](IOutputStream& str) {
+            SimplePanel(str, "Restore Configuration", [&restoreProgress = RestoreProgress](IOutputStream& str) {
                 HTML(str) {
                     FORM_CLASS("form-horizontal") {
                         DIV_CLASS("form-group") {
@@ -1689,14 +1706,14 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             if (params.Has("startBackup")) {
                 if (BackupProgress.IsRunning()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                        RenderBackup(BackupProgress, false, "Backup is already running")
+                        RenderBackup(false, "Backup is already running")
                     ));
                 }
 
                 const TString filePath = params.Get("backupPath");
                 if (filePath.empty()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                        RenderBackup(BackupProgress, false, "Backup file path is required")
+                        RenderBackup(false, "Backup file path is required")
                     ));
                 }
 
@@ -1704,7 +1721,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 if (params.Has("inFlightLimit")) {
                     if (!TryFromString(params.Get("inFlightLimit"), inFlightLimit)) {
                         return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                            RenderBackup(BackupProgress, false, "Invalid in-flight limit value")
+                            RenderBackup(false, "Invalid in-flight limit value")
                         ));
                     }
                 }
@@ -1717,9 +1734,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 );
                 Register(CreateSchemeBoardBackuper(filePath, inFlightLimit, SelfId()));
 
-                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                    RenderBackup(BackupProgress, true)
-                ));
+                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderBackup(true)));
             }
 
             if (params.Has("backupProgress")) {
@@ -1729,27 +1744,27 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 ));
             }
 
-            return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderBackup(BackupProgress)));
+            return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderBackup(false)));
 
         case ERequestType::Restore:
             if (params.Has("startRestore")) {
                 if (RestoreProgress.IsRunning()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                        RenderRestore(RestoreProgress, false, "Restore is already running")
+                        RenderRestore(false, "Restore is already running")
                     ));
                 }
 
                 const TString filePath = params.Get("restorePath");
                 if (filePath.empty()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                        RenderRestore(RestoreProgress, false, "Restore file path is required")
+                        RenderRestore(false, "Restore file path is required")
                     ));
                 }
 
                 ui64 schemeShardId = 0;
                 if (!TryFromString(params.Get("schemeShardId"), schemeShardId)) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                        RenderRestore(RestoreProgress, false, "Invalid Scheme Shard ID")
+                        RenderRestore(false, "Invalid Scheme Shard ID")
                     ));
                 }
 
@@ -1768,9 +1783,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
                 Register(CreateSchemeBoardRestorer(filePath, schemeShardId, generation, SelfId()));
 
-                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                    RenderRestore(RestoreProgress, true)
-                ));
+                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderRestore(true)));
             }
 
             if (params.Has("restoreProgress")) {
@@ -1780,7 +1793,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 ));
             }
 
-            return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderRestore(RestoreProgress)));
+            return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderRestore(false)));
 
         case ERequestType::Unknown:
             break;

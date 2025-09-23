@@ -16,39 +16,8 @@
 
 2. Внести требуемые изменения в секции `domains_config` конфигурационного файла `config.yaml`:
 
-  Единая конфигурацию для компонент StateStorage, Board, SchemeBoard задается следующим образом:
-
-  ```yaml
-  config:
-      domains_config:
-          state_storage:
-          - ring:
-              nto_select: 5
-              node: [1,2,3,4,5,6,7,8]
-          ssid: 1
-  ```
-
-  Конфигурация для каждого типа отдельно задается следующим образом:
-
-  ```yaml
-  config:
-      domains_config:
-          explicit_state_storage_config:
-              ring_groups:
-              - ring:
-                  nto_select: 5
-                  node: [1,2,3,4,5,6,7,8]
-          explicit_state_storage_board_config:
-              ring_groups:
-              - ring:
-                  nto_select: 5
-                  node: [10,20,30,40,50,60,70,80]
-          explicit_scheme_board_config:
-              ring_groups:
-              - ring:
-                  nto_select: 5
-                  node: [11,12,13,14,15,16,17,18]
-  ```
+  Неправильная [конфигурация State Storage](../../../reference/configuration/domains_config.md#domains-state) может привести к отказу кластера.
+  Правила конфигурирования перечислены в следующем разделе.
 
 3. Применить новую конфигурацию кластера с помощью [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
 
@@ -56,7 +25,7 @@
   ydb [global options...] admin cluster config replace -f config.yaml
   ```
 
-## Правила конфигурирования StateStorage
+## Правила конфигурирования State Storage
 
   Неправильная [конфигурация State Storage](../../../reference/configuration/domains_config.md#domains-state) может привести к отказу кластера.
   Перечисленные ниже правила применяются как для параметра `state_storage` так и для раздельной конфигурации `explicit_state_storage_config`, `explicit_state_storage_board_config`, `explicit_scheme_board_config`

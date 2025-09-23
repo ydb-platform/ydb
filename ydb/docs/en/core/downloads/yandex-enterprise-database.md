@@ -51,7 +51,7 @@ Yandex Enterprise Database distributions are available for download via the link
 - [For distribution](https://binaries.ясубд.рф/release/24.4.4.13/checksums.txt)
 - [For debug symbols](https://binaries.ясубд.рф/release/24.4.4.13/checksums.debug.txt)
 
-| [See list](../changelog-server.md#24-4) ||
+| [See list](../changelog-enterprise.md#24-4-4-13) ||
 || **v24.3** |  |  |  |  ||
 || v.24.3.13.11 | 06.03.2024 |
 

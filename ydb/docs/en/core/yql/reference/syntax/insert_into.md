@@ -71,7 +71,7 @@ SELECT key FROM my_table_source;
 
 ## INSERT INTO ... RETURNING {insert-into-returning}
 
-Return values based on rows inserted. It allows to get the results immediately without a separate SELECT query.
+Inserts rows and returns their values in a single operation. It allows to retrieve data from the rows being inserted without needing to perform a separate SELECT query afterwards.
 
 ### Examples
 

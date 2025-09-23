@@ -35,7 +35,7 @@ VALUES ( 1, 10, 'Some text', Date('2021-10-07')),
 
 ## UPSERT INTO ... RETURNING {upsert-into-returning}
 
-Return values based on rows updated or inserted. It allows to get the results immediately without a separate SELECT query. For new rows the `RETURNING` clause outputs the values that were inserted, and for updated rows - the new values after the update.
+Inserts or updates a row and returns their values in a single operation. It allows to retrieve information about the affected row in one query, eliminating the need for an additional SELECT statement.
 
 ### Examples
 

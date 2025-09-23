@@ -34,7 +34,7 @@ SELECT * FROM $to_update;
 
 ## UPDATE ... RETURNING {update-returning}
 
-Return values based on rows updated. It allows to get the results immediately without a separate SELECT query.
+Updates rows and returns their new values in a single operation. It allows to retrieve information about the updated rows in one query, eliminating the need for an additional SELECT statement.
 
 ### Examples
 

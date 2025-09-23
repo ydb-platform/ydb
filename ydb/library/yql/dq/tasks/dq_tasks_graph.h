@@ -93,6 +93,7 @@ struct TChannel {
     bool InMemory = true;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
     NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+    TMaybe<ui64> WatermarksIdleDelayMs = Nothing();
 
     TChannel() = default;
 };
@@ -199,6 +200,7 @@ public:
     TTaskMeta Meta;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
     NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+    TMaybe<ui64> WatermarksIdleDelayMs = Nothing();
 };
 
 template <class TGraphMeta, class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
@@ -337,9 +339,10 @@ public:
         return sourceType == "PqSource"; // Now it is the only infinite source type. Others are finite.
     }
 
-    void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks) {
+    void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks, TMaybe<ui64> watermarksIdleDelayMs = Nothing()) {
         std::stack<TTaskType*> tasksStack;
         std::vector<bool> processedTasks(GetTasks().size());
+        // TODO use toposort instead of Dreadful O(n^2)
         for (TTaskType& task : GetTasks()) {
             if (IsEgressTask(task)) {
                 tasksStack.push(&task);
@@ -400,15 +403,16 @@ public:
                     if (input.SourceType) {
                         if (IsInfiniteSourceType(input.SourceType)) {
                             watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                            task.WatermarksIdleDelayMs = Max(task.WatermarksIdleDelayMs, watermarksIdleDelayMs); // TODO extract from source settings
                             input.WatermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
-                            break;
+                            input.WatermarksIdleDelayMs = task.WatermarksIdleDelayMs;
                         }
                     } else {
                         for (ui64 channelId : input.Channels) {
                             const NDq::TChannel& channel = GetChannel(channelId);
                             if (channel.WatermarksMode != NDqProto::WATERMARKS_MODE_DEFAULT) {
                                 watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
-                                break;
+                                task.WatermarksIdleDelayMs = Max(task.WatermarksIdleDelayMs, channel.WatermarksIdleDelayMs);
                             }
                         }
                         if (watermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
@@ -426,6 +430,7 @@ public:
                     auto& channel = GetChannel(channelId);
                     channel.CheckpointingMode = checkpointingMode;
                     channel.WatermarksMode = watermarksMode;
+                    channel.WatermarksIdleDelayMs = task.WatermarksIdleDelayMs;
                 }
             }
 

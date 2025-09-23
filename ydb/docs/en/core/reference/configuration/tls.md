@@ -124,3 +124,5 @@ tracing_config:
 ## Asynchronous replication
 
 [Asynchronous replication](../../concepts/async-replication.md) synchronizes data between two {{ ydb-short-name }} databases, where one serves as a client to the other. Whether this communication uses TLS-encrypted connections is controlled by the `CONNECTION_STRING` setting of [CREATE ASYNC REPLICATION](../../yql/reference/syntax/create-async-replication.md) queries. Use the `grpcs://` protocol for TLS connections. No changes to the server-side configuration are required.
+
+When using a custom Certificate Authority (CA), pass its certificate in the `CA_CERT` parameter when creating an instance of asynchronous replication.

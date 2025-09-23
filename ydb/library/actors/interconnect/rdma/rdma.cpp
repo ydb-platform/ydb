@@ -9,7 +9,7 @@
 #include <util/datetime/base.h>
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 
-#include <thread>
+#include <util/system/thread.h>
 
 namespace NInterconnect::NRdma {
 
@@ -119,6 +119,7 @@ protected:
 public:
     TSimpleCqBase(NActors::TActorSystem* as, size_t sz) noexcept
         : TCqCommon(as)
+        , Thread(ThreadFunc, this)
         , Err(false)
     {
         Returned.store(0);
@@ -138,8 +139,8 @@ public:
 
     ~TSimpleCqBase() {
         Cont.store(false, std::memory_order_relaxed);
-        if (Thread)
-             Thread->join();
+        if (Thread.Running())
+            Thread.Join();
     }
 
     void ReturnWr(IWr* wr) noexcept override {
@@ -187,6 +188,12 @@ public:
         return false;
     }
 
+    static void* ThreadFunc(void* p) {
+        TThread::SetCurrentThreadName("RdmaCqThread");
+        reinterpret_cast<TSimpleCqBase*>(p)->Loop();
+        return nullptr;
+    }
+
     void Loop() noexcept {
         std::unique_ptr<TWaiterCtx> curCtx;
         while (Cont.load(std::memory_order_relaxed)) {
@@ -232,16 +239,16 @@ public:
     int Start() noexcept {
         Cont.store(true, std::memory_order_relaxed);
         try {
-            Thread.emplace(&TSimpleCqBase::Loop, this);
+            Thread.Start();
         } catch (std::exception& ex) {
-            Cerr << "Unable to launch cq poller thread" << Endl;
+            Cerr << "Unable to launch cq poller thread: " << ex.what() << Endl;
             return 1;
         }
         return 0;
     }
 
 protected:
-    std::optional<std::thread> Thread;
+    TThread Thread;
     std::atomic<bool> Cont;
 
     std::vector<TWr> WrBuf;

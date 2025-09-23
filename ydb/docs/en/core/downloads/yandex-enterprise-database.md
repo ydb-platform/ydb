@@ -113,7 +113,7 @@ Yandex Enterprise Database distributions are available for download via the link
 || v.24.4.4.15 | 19.09.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:24.4.4.ent.15` | [See list](../changelog-enterprise.md#24-4-4-15) ||
 || v.24.4.4.13 | 29.07.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:2025-08-08-73940688fea2aeb2e109f01a7827f2d7` | [See list](../changelog-enterprise.md#24-4-4-13) ||
 || **v24.3** |  |  |  |  ||
-|| v.24.3.13 | 05.12.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.3.11.13` | [See list](../changelog-enterprise.md#24-3) ||
+|| v.24.3.13 | 05.12.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.3.11.13` | [See list](../changelog-enterprise.md#24-3-13-10) ||
 || **v24.2** |  |  |  |  ||
 || v.24.2.7 | 20.08.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.2.7` | [See list](../changelog-enterprise.md#24-2) ||
 || **v24.1** |  |  |  |  ||

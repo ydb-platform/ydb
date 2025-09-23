@@ -105,7 +105,7 @@ void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr
     LOG_D("TEvResolveSecret: name=" << ev->Get()->SecretName << ", request cookie=" << LastCookie);
 
     SaveIncomingRequestInfo(*ev->Get());
-    SendSchemeCacheRequest(ev->Get()->SecretName);
+    SendSchemeCacheRequest(ev->Get()->SecretName, ev->Get()->UserToken);
 }
 
 void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -145,7 +145,6 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCa
     NKikimrSchemeOp::TDescribePath* record = req->Record.MutableDescribePath();
     record->SetPath(secretName);
     record->MutableOptions()->SetReturnSecretValue(true);
-    // TODO(yurikiselev): Deal with UserToken [issue:25472]
     Send(MakeTxProxyID(), req.Release(), 0, ev->Cookie);
 }
 
@@ -192,13 +191,16 @@ void TDescribeSchemaSecretsService::SaveIncomingRequestInfo(const TEvResolveSecr
     ResolveInFlight[LastCookie] = std::move(ctx);
 }
 
-void TDescribeSchemaSecretsService::SendSchemeCacheRequest(const TString& secretName) {
+void TDescribeSchemaSecretsService::SendSchemeCacheRequest(const TString& secretName, const NACLib::TUserToken& userToken) {
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.Path = SplitPath(secretName);
+    if (userToken.GetUserSID()) {
+        entry.Access = NACLib::SelectRow;
+        request->UserToken = new NACLib::TUserToken(userToken);
+    }
     request->ResultSet.emplace_back(entry);
-    // TODO(yurikiselev): Deal with UserToken [issue:25472]
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, LastCookie++);
 }

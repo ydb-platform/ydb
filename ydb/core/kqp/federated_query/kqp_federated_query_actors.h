@@ -61,7 +61,7 @@ private:
     void HandleSchemeShardResponse(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
     void FillResponse(const ui64 requestId, const TEvDescribeSecretsResponse::TDescription& response);
     void SaveIncomingRequestInfo(const TEvResolveSecret& req);
-    void SendSchemeCacheRequest(const TString& secretName);
+    void SendSchemeCacheRequest(const TString& secretName, const NACLib::TUserToken& userToken);
     bool LocalCacheHasActualVersion(const TVersionedSecret& secret, const ui64& cacheSecretVersion);
     bool LocalCacheHasActualObject(const TVersionedSecret& secret, const ui64& cacheSecretPathId);
 

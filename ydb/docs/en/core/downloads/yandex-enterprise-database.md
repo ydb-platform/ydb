@@ -29,6 +29,29 @@ Yandex Enterprise Database distributions are available for download via the link
 
 #|
 || **Version** | **Release date** | **Download** | **Checksums** | **Changelog** ||
+|| **v24.4** |  |  |  |  ||
+|| v.24.4.4.15 | 19.09.2025 |
+
+- [Distribution]()
+- [Debug symbols]()
+
+|
+
+- [For distribution]()
+- [For debug symbols]()
+
+| [See list](../changelog-server.md#24-4) ||
+|| v.24.4.4.13 | 29.07.2025 |
+
+- [Distribution](https://binaries.ясубд.рф/release/24.4.4.13/yasubd-24.4.4.13-linux-amd64.tar.xz)
+- [Debug symbols](https://binaries.ясубд.рф/release/24.4.4.13/yasubd-24.4.4.13-linux-amd64-debug.tar.xz)
+
+|
+
+- [For distribution](https://binaries.ясубд.рф/release/24.4.4.13/checksums.txt)
+- [For debug symbols](https://binaries.ясубд.рф/release/24.4.4.13/checksums.debug.txt)
+
+| [See list](../changelog-server.md#24-4) ||
 || **v24.3** |  |  |  |  ||
 || v.24.3.13.11 | 06.03.2024 |
 

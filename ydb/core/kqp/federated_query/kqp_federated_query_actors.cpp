@@ -128,8 +128,8 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCa
     const auto secretIt = VersionedSecrets.find(secretName);
     if (secretIt != VersionedSecrets.end()) { // some secret version is in cache
         if (
-            request->ResultSet.front().Self->Info.GetPathId() <= secretIt->second.PathId &&
-            secretDescription.GetVersion() <= secretIt->second.SecretVersion
+            LocalCacheHasActualVersion(secretIt->second, secretDescription.GetVersion()) &&
+            LocalCacheHasActualObject(secretIt->second, request->ResultSet.front().Self->Info.GetPathId())
         ) { // cache contains the most recent version
             LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie << ", fill value from secret cache");
             FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(std::vector<TString>{secretIt->second.Value}));
@@ -202,6 +202,16 @@ void TDescribeSchemaSecretsService::SendSchemeCacheRequest(const TString& secret
     // TODO(yurikiselev): Deal with UserToken [issue:25472]
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, LastCookie++);
+}
+
+bool TDescribeSchemaSecretsService::LocalCacheHasActualVersion(const TVersionedSecret& secret, const ui64& cacheSecretVersion) {
+    // altering secret value does not change secret path id, so have to check secret version
+    return secret.SecretVersion == cacheSecretVersion;
+}
+
+bool TDescribeSchemaSecretsService::LocalCacheHasActualObject(const TVersionedSecret& secret, const ui64& cacheSecretPathId) {
+    // altering secret object, i.e. changing acl, should leed to secret cache update
+    return secret.PathId == cacheSecretPathId;
 }
 
 NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(const TString& secretName, const TString& ownerUserId, TActorSystem* actorSystem) {

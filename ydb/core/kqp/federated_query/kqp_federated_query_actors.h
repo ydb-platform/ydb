@@ -41,6 +41,14 @@ public:
     };
 
 private:
+    struct TVersionedSecret {
+        ui64 SecretVersion = 0;
+        ui64 PathId = 0;
+        TString Name;
+        TString Value;
+    };
+
+private:
     STRICT_STFUNC(StateWait,
         hFunc(TEvResolveSecret, HandleIncomingRequest);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
@@ -54,6 +62,8 @@ private:
     void FillResponse(const ui64 requestId, const TEvDescribeSecretsResponse::TDescription& response);
     void SaveIncomingRequestInfo(const TEvResolveSecret& req);
     void SendSchemeCacheRequest(const TString& secretName);
+    bool LocalCacheHasActualVersion(const TVersionedSecret& secret, const ui64& cacheSecretVersion);
+    bool LocalCacheHasActualObject(const TVersionedSecret& secret, const ui64& cacheSecretPathId);
 
 public:
     TDescribeSchemaSecretsService() = default;
@@ -61,13 +71,6 @@ public:
     void Bootstrap();
 
 private:
-    struct TVersionedSecret {
-        ui64 SecretVersion = 0;
-        ui64 PathId = 0;
-        TString Name;
-        TString Value;
-    };
-
     struct TResponseContext {
         TVersionedSecret Secret;
         NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Result;

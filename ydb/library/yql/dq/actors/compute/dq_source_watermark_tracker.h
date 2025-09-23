@@ -169,14 +169,6 @@ private:
         return TInstant::MicroSeconds(time.MicroSeconds() - time.MicroSeconds() % Granularity_.MicroSeconds());
     }
 
-    TInstant ToDiscreteTimeUp(TInstant time) const {
-        auto rem = time.MicroSeconds() % Granularity_.MicroSeconds();
-        if (rem) {
-            return TInstant::MicroSeconds(time.MicroSeconds() + Granularity_.MicroSeconds() - rem );
-        }
-        return time;
-    }
-
     bool ShouldCheckIdlenessNow(TInstant systemTime) {
         const auto discreteSystemTime = ToDiscreteTime(systemTime);
         if (discreteSystemTime < NextIdlenessCheckAt_) {

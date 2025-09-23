@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/core/quoter/public/quoter.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/internal.h>
-
+#include <ydb/core/quoter/public/quoter.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 
@@ -59,8 +59,7 @@ namespace NAccountQuoterEvents {
     };
 }
 
-class TBasicAccountQuoter : public TActorBootstrapped<TBasicAccountQuoter>
-                          , public IActorExceptionHandler {
+class TBasicAccountQuoter : public TBaseActor<TBasicAccountQuoter> {
 private:
     struct TQueueEvent {
         TQueueEvent(NAccountQuoterEvents::TEvRequest::TPtr request, TInstant startWait)
@@ -97,10 +96,7 @@ public:
 
     void HandleUpdateCounters(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
 
-    bool OnUnhandledException(const std::exception&) override;
-
 protected:
-    virtual TString LimiterDescription() const = 0;
     virtual void InitCountersImpl(const TActorContext& ctx) = 0;
     virtual THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() = 0;
 
@@ -126,9 +122,7 @@ protected:
     const TPartitionId Partition;
 
 private:
-    const TActorId TabletActor;
     const TActorId Recepient;
-    const ui64 TabletId;
 
     const ui64 CreditBytes = 0;
 
@@ -146,7 +140,7 @@ private:
     TDuration DoNotQuoteAfterErrorPeriod;
 };
 
-class TAccountReadQuoter : public TBasicAccountQuoter {
+class TAccountReadQuoter : public TBasicAccountQuoter, private TConstantLogPrefix {
 private:
     static const TString READ_QUOTA_ROOT_PATH;
 
@@ -166,7 +160,7 @@ public:
 
 protected:
     void InitCountersImpl(const TActorContext& ctx) override;
-    TString LimiterDescription() const override;
+    TString BuildLogPrefix() const override;
     THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() override;
 
 private:
@@ -176,7 +170,7 @@ private:
 };
 
 
-class TAccountWriteQuoter : public TBasicAccountQuoter {
+class TAccountWriteQuoter : public TBasicAccountQuoter, private TConstantLogPrefix {
 private:
 static const TString WRITE_QUOTA_ROOT_PATH;
 
@@ -193,7 +187,7 @@ public:
 
 protected:
     void InitCountersImpl(const TActorContext& ctx) override;
-    TString LimiterDescription() const override;
+    TString BuildLogPrefix() const override;
     THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() override;
 };
 

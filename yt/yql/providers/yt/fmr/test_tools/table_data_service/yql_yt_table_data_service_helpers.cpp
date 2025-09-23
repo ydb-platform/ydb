@@ -12,7 +12,7 @@ TString WriteHostsToFile(TTempFileHandle& file, ui64 WorkersNum, const std::vect
 }
 
 IFmrServer::TPtr MakeTableDataServiceServer(ui16 port) {
-    TTableDataServiceServerSettings tableDataServiceWorkerSettings{.WorkerId = 0, .WorkersNum = 1, .Port = port};
+    TTableDataServiceServerSettings tableDataServiceWorkerSettings{.Port = port};
     auto tableDataServiceServer = MakeTableDataServiceServer(MakeLocalTableDataService(), tableDataServiceWorkerSettings);
     tableDataServiceServer->Start();
     return tableDataServiceServer;

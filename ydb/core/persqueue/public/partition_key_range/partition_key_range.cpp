@@ -1,12 +1,17 @@
 #include "partition_key_range.h"
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/services/lib/sharding/sharding.h>
+
+#include <library/cpp/digest/md5/md5.h>
+
 
 namespace NKikimr {
 namespace NPQ {
 
 TString MiddleOf(const TString& from, const TString& to) {
-    Y_ABORT_UNLESS(to.empty() || from < to);
+    AFL_ENSURE(to.empty() || from < to);
 
     auto GetChar = [](const TString& str, size_t i, unsigned char defaultValue) {
         if (i >= str.size()) {
@@ -111,6 +116,10 @@ TString MiddleOf(const TString& from, const TString& to) {
     return result;
 }
 
+NYql::NDecimal::TUint128 Hash(const TString& sourceId) {
+    return NKikimr::NDataStreams::V1::HexBytesToDecimal(MD5::Calc(sourceId));
+}
+
 TPartitionKeyRange TPartitionKeyRange::Parse(const NKikimrPQ::TPartitionKeyRange& proto) {
     TPartitionKeyRange result;
 
@@ -137,7 +146,7 @@ void TPartitionKeyRange::Serialize(NKikimrPQ::TPartitionKeyRange& proto) const {
 
 void TPartitionKeyRange::ParseBound(const TString& data, TMaybe<TSerializedCellVec>& bound) {
     TSerializedCellVec cells;
-    Y_ABORT_UNLESS(TSerializedCellVec::TryParse(data, cells));
+    AFL_ENSURE(TSerializedCellVec::TryParse(data, cells));
     bound.ConstructInPlace(std::move(cells));
 }
 

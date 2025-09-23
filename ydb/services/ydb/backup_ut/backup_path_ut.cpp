@@ -53,13 +53,32 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/metadata.json",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/scheme.pb",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/permissions.pb",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/data_00.csv",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/metadata.json",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/scheme.pb",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/permissions.pb",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/data_00.csv",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/metadata.json.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/scheme.pb.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/permissions.pb.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/data_00.csv.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/metadata.json.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/scheme.pb.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/permissions.pb.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/data_00.csv.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
             });
         }
 
@@ -90,13 +109,32 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
                 "/test_bucket/Prefix/001/metadata.json.enc",
                 "/test_bucket/Prefix/001/scheme.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
                 "/test_bucket/Prefix/001/data_00.csv.enc",
                 "/test_bucket/Prefix/002/metadata.json.enc",
                 "/test_bucket/Prefix/002/scheme.pb.enc",
+                "/test_bucket/Prefix/002/permissions.pb.enc",
                 "/test_bucket/Prefix/002/data_00.csv.enc",
                 "/test_bucket/Prefix/003/metadata.json.enc",
                 "/test_bucket/Prefix/003/scheme.pb.enc",
+                "/test_bucket/Prefix/003/permissions.pb.enc",
                 "/test_bucket/Prefix/003/data_00.csv.enc",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/001/metadata.json.sha256",
+                "/test_bucket/Prefix/001/scheme.pb.sha256",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
+                "/test_bucket/Prefix/001/data_00.csv.sha256",
+                "/test_bucket/Prefix/002/metadata.json.sha256",
+                "/test_bucket/Prefix/002/scheme.pb.sha256",
+                "/test_bucket/Prefix/002/permissions.pb.sha256",
+                "/test_bucket/Prefix/002/data_00.csv.sha256",
+                "/test_bucket/Prefix/003/metadata.json.sha256",
+                "/test_bucket/Prefix/003/scheme.pb.sha256",
+                "/test_bucket/Prefix/003/permissions.pb.sha256",
+                "/test_bucket/Prefix/003/data_00.csv.sha256",
             });
         }
 
@@ -128,10 +166,24 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json",
                 "/test_bucket/Prefix/Table1/metadata.json",
                 "/test_bucket/Prefix/Table1/scheme.pb",
+                "/test_bucket/Prefix/Table1/permissions.pb",
                 "/test_bucket/Prefix/Table1/data_00.csv",
                 "/test_bucket/Prefix/dir2/Table2/metadata.json",
                 "/test_bucket/Prefix/dir2/Table2/scheme.pb",
+                "/test_bucket/Prefix/dir2/Table2/permissions.pb",
                 "/test_bucket/Prefix/dir2/Table2/data_00.csv",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/Table1/metadata.json.sha256",
+                "/test_bucket/Prefix/Table1/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table1/permissions.pb.sha256",
+                "/test_bucket/Prefix/Table1/data_00.csv.sha256",
+                "/test_bucket/Prefix/dir2/Table2/metadata.json.sha256",
+                "/test_bucket/Prefix/dir2/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/dir2/Table2/permissions.pb.sha256",
+                "/test_bucket/Prefix/dir2/Table2/data_00.csv.sha256",
             });
         }
 
@@ -163,10 +215,24 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json",
                 "/test_bucket/Prefix/ExplicitTable1Prefix/metadata.json",
                 "/test_bucket/Prefix/ExplicitTable1Prefix/scheme.pb",
+                "/test_bucket/Prefix/ExplicitTable1Prefix/permissions.pb",
                 "/test_bucket/Prefix/ExplicitTable1Prefix/data_00.csv",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/ExplicitTable1Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/ExplicitTable1Prefix/scheme.pb.sha256",
+                "/test_bucket/Prefix/ExplicitTable1Prefix/permissions.pb.sha256",
+                "/test_bucket/Prefix/ExplicitTable1Prefix/data_00.csv.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
             });
         }
 
@@ -198,10 +264,24 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/metadata.json",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/scheme.pb",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/permissions.pb",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/data_00.csv",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb",
                 "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/metadata.json.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/scheme.pb.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/permissions.pb.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/data_00.csv.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
+                "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
             });
         }
 
@@ -233,7 +313,16 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json",
                 "/test_bucket/Prefix/Table2/metadata.json",
                 "/test_bucket/Prefix/Table2/scheme.pb",
+                "/test_bucket/Prefix/Table2/permissions.pb",
                 "/test_bucket/Prefix/Table2/data_00.csv",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/Table2/metadata.json.sha256",
+                "/test_bucket/Prefix/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table2/permissions.pb.sha256",
+                "/test_bucket/Prefix/Table2/data_00.csv.sha256",
             });
         }
 
@@ -261,10 +350,24 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json",
                 "/test_bucket/Prefix/Table1/metadata.json",
                 "/test_bucket/Prefix/Table1/scheme.pb",
+                "/test_bucket/Prefix/Table1/permissions.pb",
                 "/test_bucket/Prefix/Table1/data_00.csv",
                 "/test_bucket/Prefix/dir2/Table2/metadata.json",
                 "/test_bucket/Prefix/dir2/Table2/scheme.pb",
+                "/test_bucket/Prefix/dir2/Table2/permissions.pb",
                 "/test_bucket/Prefix/dir2/Table2/data_00.csv",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/Table1/metadata.json.sha256",
+                "/test_bucket/Prefix/Table1/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table1/permissions.pb.sha256",
+                "/test_bucket/Prefix/Table1/data_00.csv.sha256",
+                "/test_bucket/Prefix/dir2/Table2/metadata.json.sha256",
+                "/test_bucket/Prefix/dir2/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/dir2/Table2/permissions.pb.sha256",
+                "/test_bucket/Prefix/dir2/Table2/data_00.csv.sha256",
             });
         }
 
@@ -298,10 +401,24 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
                 "/test_bucket/Prefix/001/metadata.json.enc",
                 "/test_bucket/Prefix/001/scheme.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
                 "/test_bucket/Prefix/001/data_00.csv.enc",
                 "/test_bucket/Prefix/002/metadata.json.enc",
                 "/test_bucket/Prefix/002/scheme.pb.enc",
+                "/test_bucket/Prefix/002/permissions.pb.enc",
                 "/test_bucket/Prefix/002/data_00.csv.enc",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/001/metadata.json.sha256",
+                "/test_bucket/Prefix/001/scheme.pb.sha256",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
+                "/test_bucket/Prefix/001/data_00.csv.sha256",
+                "/test_bucket/Prefix/002/metadata.json.sha256",
+                "/test_bucket/Prefix/002/scheme.pb.sha256",
+                "/test_bucket/Prefix/002/permissions.pb.sha256",
+                "/test_bucket/Prefix/002/data_00.csv.sha256",
             });
         }
 
@@ -336,13 +453,32 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
                 "/test_bucket/Prefix/UnsafeTableNameShownInEncryptedBackup/metadata.json.enc",
                 "/test_bucket/Prefix/UnsafeTableNameShownInEncryptedBackup/scheme.pb.enc",
+                "/test_bucket/Prefix/UnsafeTableNameShownInEncryptedBackup/permissions.pb.enc",
                 "/test_bucket/Prefix/UnsafeTableNameShownInEncryptedBackup/data_00.csv.enc",
                 "/test_bucket/Prefix/Dir1Prefix/Table1/metadata.json.enc",
                 "/test_bucket/Prefix/Dir1Prefix/Table1/scheme.pb.enc",
+                "/test_bucket/Prefix/Dir1Prefix/Table1/permissions.pb.enc",
                 "/test_bucket/Prefix/Dir1Prefix/Table1/data_00.csv.enc",
                 "/test_bucket/Prefix/Dir1Prefix/dir2/Table2/metadata.json.enc",
                 "/test_bucket/Prefix/Dir1Prefix/dir2/Table2/scheme.pb.enc",
+                "/test_bucket/Prefix/Dir1Prefix/dir2/Table2/permissions.pb.enc",
                 "/test_bucket/Prefix/Dir1Prefix/dir2/Table2/data_00.csv.enc",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/UnsafeTableNameShownInEncryptedBackup/metadata.json.sha256",
+                "/test_bucket/Prefix/UnsafeTableNameShownInEncryptedBackup/scheme.pb.sha256",
+                "/test_bucket/Prefix/UnsafeTableNameShownInEncryptedBackup/permissions.pb.sha256",
+                "/test_bucket/Prefix/UnsafeTableNameShownInEncryptedBackup/data_00.csv.sha256",
+                "/test_bucket/Prefix/Dir1Prefix/Table1/metadata.json.sha256",
+                "/test_bucket/Prefix/Dir1Prefix/Table1/scheme.pb.sha256",
+                "/test_bucket/Prefix/Dir1Prefix/Table1/permissions.pb.sha256",
+                "/test_bucket/Prefix/Dir1Prefix/Table1/data_00.csv.sha256",
+                "/test_bucket/Prefix/Dir1Prefix/dir2/Table2/metadata.json.sha256",
+                "/test_bucket/Prefix/Dir1Prefix/dir2/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/Dir1Prefix/dir2/Table2/permissions.pb.sha256",
+                "/test_bucket/Prefix/Dir1Prefix/dir2/Table2/data_00.csv.sha256",
             });
         }
 
@@ -389,13 +525,32 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
                 "/test_bucket/Prefix/001/metadata.json.enc",
                 "/test_bucket/Prefix/001/scheme.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
                 "/test_bucket/Prefix/001/data_00.csv.enc",
                 "/test_bucket/Prefix/002/metadata.json.enc",
                 "/test_bucket/Prefix/002/scheme.pb.enc",
+                "/test_bucket/Prefix/002/permissions.pb.enc",
                 "/test_bucket/Prefix/002/data_00.csv.enc",
                 "/test_bucket/Prefix/003/metadata.json.enc",
                 "/test_bucket/Prefix/003/scheme.pb.enc",
+                "/test_bucket/Prefix/003/permissions.pb.enc",
                 "/test_bucket/Prefix/003/data_00.csv.enc",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/001/metadata.json.sha256",
+                "/test_bucket/Prefix/001/scheme.pb.sha256",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
+                "/test_bucket/Prefix/001/data_00.csv.sha256",
+                "/test_bucket/Prefix/002/metadata.json.sha256",
+                "/test_bucket/Prefix/002/scheme.pb.sha256",
+                "/test_bucket/Prefix/002/permissions.pb.sha256",
+                "/test_bucket/Prefix/002/data_00.csv.sha256",
+                "/test_bucket/Prefix/003/metadata.json.sha256",
+                "/test_bucket/Prefix/003/scheme.pb.sha256",
+                "/test_bucket/Prefix/003/permissions.pb.sha256",
+                "/test_bucket/Prefix/003/data_00.csv.sha256",
             });
         }
 
@@ -427,13 +582,32 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json",
                 "/test_bucket/Prefix/Table0/metadata.json",
                 "/test_bucket/Prefix/Table0/scheme.pb",
+                "/test_bucket/Prefix/Table0/permissions.pb",
                 "/test_bucket/Prefix/Table0/data_00.csv",
                 "/test_bucket/Prefix/dir1/Table1/metadata.json",
                 "/test_bucket/Prefix/dir1/Table1/scheme.pb",
+                "/test_bucket/Prefix/dir1/Table1/permissions.pb",
                 "/test_bucket/Prefix/dir1/Table1/data_00.csv",
                 "/test_bucket/Prefix/dir1/dir2/Table2/metadata.json",
                 "/test_bucket/Prefix/dir1/dir2/Table2/scheme.pb",
+                "/test_bucket/Prefix/dir1/dir2/Table2/permissions.pb",
                 "/test_bucket/Prefix/dir1/dir2/Table2/data_00.csv",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/Table0/metadata.json.sha256",
+                "/test_bucket/Prefix/Table0/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table0/permissions.pb.sha256",
+                "/test_bucket/Prefix/Table0/data_00.csv.sha256",
+                "/test_bucket/Prefix/dir1/Table1/metadata.json.sha256",
+                "/test_bucket/Prefix/dir1/Table1/scheme.pb.sha256",
+                "/test_bucket/Prefix/dir1/Table1/permissions.pb.sha256",
+                "/test_bucket/Prefix/dir1/Table1/data_00.csv.sha256",
+                "/test_bucket/Prefix/dir1/dir2/Table2/metadata.json.sha256",
+                "/test_bucket/Prefix/dir1/dir2/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/dir1/dir2/Table2/permissions.pb.sha256",
+                "/test_bucket/Prefix/dir1/dir2/Table2/data_00.csv.sha256",
             });
         }
 
@@ -471,13 +645,32 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json",
                 "/test_bucket/Prefix/Table0_Prefix/metadata.json",
                 "/test_bucket/Prefix/Table0_Prefix/scheme.pb",
+                "/test_bucket/Prefix/Table0_Prefix/permissions.pb",
                 "/test_bucket/Prefix/Table0_Prefix/data_00.csv",
                 "/test_bucket/Prefix/Table1_Prefix/metadata.json",
                 "/test_bucket/Prefix/Table1_Prefix/scheme.pb",
+                "/test_bucket/Prefix/Table1_Prefix/permissions.pb",
                 "/test_bucket/Prefix/Table1_Prefix/data_00.csv",
                 "/test_bucket/Prefix/Table2_Prefix/metadata.json",
                 "/test_bucket/Prefix/Table2_Prefix/scheme.pb",
+                "/test_bucket/Prefix/Table2_Prefix/permissions.pb",
                 "/test_bucket/Prefix/Table2_Prefix/data_00.csv",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/Table0_Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/Table0_Prefix/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table0_Prefix/permissions.pb.sha256",
+                "/test_bucket/Prefix/Table0_Prefix/data_00.csv.sha256",
+                "/test_bucket/Prefix/Table1_Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/Table1_Prefix/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table1_Prefix/permissions.pb.sha256",
+                "/test_bucket/Prefix/Table1_Prefix/data_00.csv.sha256",
+                "/test_bucket/Prefix/Table2_Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/Table2_Prefix/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table2_Prefix/permissions.pb.sha256",
+                "/test_bucket/Prefix/Table2_Prefix/data_00.csv.sha256",
             });
         }
 
@@ -515,13 +708,32 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json",
                 "/test_bucket/Prefix/Table0_Prefix/metadata.json",
                 "/test_bucket/Prefix/Table0_Prefix/scheme.pb",
+                "/test_bucket/Prefix/Table0_Prefix/permissions.pb",
                 "/test_bucket/Prefix/Table0_Prefix/data_00.csv",
                 "/test_bucket/Prefix/Table1_Prefix/metadata.json",
                 "/test_bucket/Prefix/Table1_Prefix/scheme.pb",
+                "/test_bucket/Prefix/Table1_Prefix/permissions.pb",
                 "/test_bucket/Prefix/Table1_Prefix/data_00.csv",
                 "/test_bucket/Prefix/Table2_Prefix/metadata.json",
                 "/test_bucket/Prefix/Table2_Prefix/scheme.pb",
+                "/test_bucket/Prefix/Table2_Prefix/permissions.pb",
                 "/test_bucket/Prefix/Table2_Prefix/data_00.csv",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/Table0_Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/Table0_Prefix/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table0_Prefix/permissions.pb.sha256",
+                "/test_bucket/Prefix/Table0_Prefix/data_00.csv.sha256",
+                "/test_bucket/Prefix/Table1_Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/Table1_Prefix/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table1_Prefix/permissions.pb.sha256",
+                "/test_bucket/Prefix/Table1_Prefix/data_00.csv.sha256",
+                "/test_bucket/Prefix/Table2_Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/Table2_Prefix/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table2_Prefix/permissions.pb.sha256",
+                "/test_bucket/Prefix/Table2_Prefix/data_00.csv.sha256",
             });
         }
 
@@ -541,6 +753,23 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/Root/RestorePrefix/Table0",
                 "/Root/RestorePrefix/dir1/Table1",
                 "/Root/RestorePrefix/dir1/dir2/Table2",
+            });
+        }
+
+        // Recursive filter by directory
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix2");
+            importSettings
+                .AppendItem(NImport::TImportFromS3Settings::TItem{.SrcPath = "dir1"});
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateHasYdbTables({
+                "/Root/RestorePrefix2/dir1/Table1",
+                "/Root/RestorePrefix2/dir1/dir2/Table2",
+            });
+            ValidateDoesNotHaveYdbTables({
+                "/Root/RestorePrefix2/Table0",
             });
         }
 
@@ -568,13 +797,32 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
                 "/test_bucket/Prefix/001/metadata.json.enc",
                 "/test_bucket/Prefix/001/scheme.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
                 "/test_bucket/Prefix/001/data_00.csv.enc",
                 "/test_bucket/Prefix/002/metadata.json.enc",
                 "/test_bucket/Prefix/002/scheme.pb.enc",
+                "/test_bucket/Prefix/002/permissions.pb.enc",
                 "/test_bucket/Prefix/002/data_00.csv.enc",
                 "/test_bucket/Prefix/003/metadata.json.enc",
                 "/test_bucket/Prefix/003/scheme.pb.enc",
+                "/test_bucket/Prefix/003/permissions.pb.enc",
                 "/test_bucket/Prefix/003/data_00.csv.enc",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/001/metadata.json.sha256",
+                "/test_bucket/Prefix/001/scheme.pb.sha256",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
+                "/test_bucket/Prefix/001/data_00.csv.sha256",
+                "/test_bucket/Prefix/002/metadata.json.sha256",
+                "/test_bucket/Prefix/002/scheme.pb.sha256",
+                "/test_bucket/Prefix/002/permissions.pb.sha256",
+                "/test_bucket/Prefix/002/data_00.csv.sha256",
+                "/test_bucket/Prefix/003/metadata.json.sha256",
+                "/test_bucket/Prefix/003/scheme.pb.sha256",
+                "/test_bucket/Prefix/003/permissions.pb.sha256",
+                "/test_bucket/Prefix/003/data_00.csv.sha256",
             });
         }
 
@@ -627,7 +875,13 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             ValidateS3FileList({
                 "/test_bucket/Prefix/t1/metadata.json",
                 "/test_bucket/Prefix/t1/scheme.pb",
+                "/test_bucket/Prefix/t1/permissions.pb",
                 "/test_bucket/Prefix/t1/data_00.csv",
+
+                "/test_bucket/Prefix/t1/metadata.json.sha256",
+                "/test_bucket/Prefix/t1/scheme.pb.sha256",
+                "/test_bucket/Prefix/t1/permissions.pb.sha256",
+                "/test_bucket/Prefix/t1/data_00.csv.sha256",
             });
         }
 
@@ -675,10 +929,21 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             ValidateS3FileList({
                 "/test_bucket/Prefix/Table1/metadata.json",
                 "/test_bucket/Prefix/Table1/scheme.pb",
+                "/test_bucket/Prefix/Table1/permissions.pb",
                 "/test_bucket/Prefix/Table1/data_00.csv",
                 "/test_bucket/Prefix/dir2/Table2/metadata.json",
                 "/test_bucket/Prefix/dir2/Table2/scheme.pb",
+                "/test_bucket/Prefix/dir2/Table2/permissions.pb",
                 "/test_bucket/Prefix/dir2/Table2/data_00.csv",
+
+                "/test_bucket/Prefix/Table1/metadata.json.sha256",
+                "/test_bucket/Prefix/Table1/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table1/permissions.pb.sha256",
+                "/test_bucket/Prefix/Table1/data_00.csv.sha256",
+                "/test_bucket/Prefix/dir2/Table2/metadata.json.sha256",
+                "/test_bucket/Prefix/dir2/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/dir2/Table2/permissions.pb.sha256",
+                "/test_bucket/Prefix/dir2/Table2/data_00.csv.sha256",
             });
         }
 
@@ -853,6 +1118,8 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 "/test_bucket/Prefix/Table2/metadata.json.sha256",
                 "/test_bucket/Prefix/Table2/scheme.pb",
                 "/test_bucket/Prefix/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table2/permissions.pb",
+                "/test_bucket/Prefix/Table2/permissions.pb.sha256",
                 "/test_bucket/Prefix/Table2/data_00.csv.zst",
                 "/test_bucket/Prefix/Table2/data_00.csv.sha256",
             });

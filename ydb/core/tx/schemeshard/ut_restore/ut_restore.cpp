@@ -2094,7 +2094,7 @@ value {
         // Check export
         TestGetExport(runtime, exportId, "/MyRoot");
 
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
 
         // Restore table
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(

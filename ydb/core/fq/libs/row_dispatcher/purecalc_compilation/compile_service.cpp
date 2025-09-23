@@ -9,6 +9,8 @@
 
 #include <yql/essentials/public/purecalc/common/interface.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NFq::NRowDispatcher {
 
 namespace {
@@ -110,7 +112,7 @@ class TPurecalcCompileService : public NActors::TActor<TPurecalcCompileService> 
     };
 
 public:
-    TPurecalcCompileService(const NConfig::TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters)
+    TPurecalcCompileService(const NKikimrConfig::TSharedReadingConfig::TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters)
         : TBase(&TPurecalcCompileService::StateFunc)
         , Config(config)
         , InFlightLimit(Config.GetParallelCompilationLimit() ? Config.GetParallelCompilationLimit() : 1)
@@ -193,7 +195,7 @@ private:
     }
 
 private:
-    const NConfig::TCompileServiceConfig Config;
+    const NKikimrConfig::TSharedReadingConfig::TCompileServiceConfig Config;
     const ui64 InFlightLimit;
     const TString LogPrefix;
 
@@ -208,7 +210,7 @@ private:
 
 }  // anonymous namespace
 
-NActors::IActor* CreatePurecalcCompileService(const NConfig::TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters) {
+NActors::IActor* CreatePurecalcCompileService(const NKikimrConfig::TSharedReadingConfig::TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters) {
     return new TPurecalcCompileService(config, counters);
 }
 

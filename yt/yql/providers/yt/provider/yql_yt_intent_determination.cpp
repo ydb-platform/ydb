@@ -110,6 +110,9 @@ public:
                 case EYtWriteMode::Flush:
                     tableDesc.Intents |= TYtTableIntent::Flush;
                     break;
+                case EYtWriteMode::Create:
+                    ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), "CREATE TABLE is not supported yet."));
+                    return TStatus::Error;
                 default:
                     ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), TStringBuilder() << "Unsupported "
                         << TYtWrite::CallableName() << " mode: " << mode->Child(1)->Content()));

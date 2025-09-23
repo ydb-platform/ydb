@@ -1,6 +1,7 @@
 #pragma once
 
 #include "node.h"
+#include "yson_schema_options.h"
 #include "yson_struct_public.h"
 
 #include <yt/yt/core/misc/error.h>
@@ -122,7 +123,7 @@ public:
 
     std::vector<std::string> GetAllParameterAliases(const std::string& key) const;
 
-    void WriteSchema(NYson::IYsonConsumer* consumer) const;
+    void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options = {}) const;
 
     // Always returns |true| for itself
     // else always returns |false| if one of the fields
@@ -287,7 +288,7 @@ public:
     static bool InitializationInProgress();
 
     template <class TStruct>
-    void InitializeStruct(TStruct* target);
+    void InitializeStruct(TStruct* target, const NYT::TSourceLocation& sourceLocation = {});
 
     void OnBaseCtorCalled();
 

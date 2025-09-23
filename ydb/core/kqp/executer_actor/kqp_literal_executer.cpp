@@ -5,7 +5,6 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
-#include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
@@ -76,6 +75,7 @@ public:
         : Request(std::move(request))
         , Counters(counters)
         , OwnerActor(owner)
+        , TasksGraph(Request.TxAlloc, {}, {}, Counters, {})
         , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
         , UserRequestContext(userRequestContext)
     {
@@ -124,7 +124,7 @@ public:
 
         LOG_D("Begin literal execution, txs: " << Request.Transactions.size());
         auto& transactions = Request.Transactions;
-        FillKqpTasksGraphStages(TasksGraph, transactions);
+        TasksGraph.FillKqpTasksGraphStages(transactions);
 
         for (ui32 txIdx = 0; txIdx < transactions.size(); ++txIdx) {
             auto& tx = transactions[txIdx];
@@ -141,7 +141,7 @@ public:
             }
 
             ResponseEv->InitTxResult(tx.Body);
-            BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, txIdx);
+            TasksGraph.BuildKqpTaskGraphResultChannels(tx.Body, txIdx);
         }
 
         if (TerminateIfTimeout()) {

@@ -185,6 +185,14 @@ static NTi::TTypePtr OldTypeToTypeV3(EValueType type)
             return NTi::Datetime();
         case VT_TIMESTAMP:
             return NTi::Timestamp();
+
+        case VT_TZ_DATE:
+            return NTi::TzDate();
+        case VT_TZ_DATETIME:
+            return NTi::TzDatetime();
+        case VT_TZ_TIMESTAMP:
+            return NTi::TzTimestamp();
+
         case VT_INTERVAL:
             return NTi::Interval();
 
@@ -199,6 +207,14 @@ static NTi::TTypePtr OldTypeToTypeV3(EValueType type)
             return NTi::Datetime64();
         case VT_TIMESTAMP64:
             return NTi::Timestamp64();
+
+        case VT_TZ_DATE32:
+            return NTi::TzDate32();
+        case VT_TZ_DATETIME64:
+            return NTi::TzDatetime64();
+        case VT_TZ_TIMESTAMP64:
+            return NTi::TzTimestamp64();
+
         case VT_INTERVAL64:
             return NTi::Interval64();
 
@@ -253,9 +269,11 @@ static std::pair<EValueType, bool> Simplify(const NTi::TTypePtr& type)
             return {VT_INTERVAL, true};
 
         case ETypeName::TzDate:
+            return {VT_TZ_DATE, true};
         case ETypeName::TzDatetime:
+            return {VT_TZ_DATETIME, true};
         case ETypeName::TzTimestamp:
-            break;
+            return {VT_TZ_TIMESTAMP, true};
 
         case ETypeName::Json:
             return {VT_JSON, true};
@@ -272,6 +290,14 @@ static std::pair<EValueType, bool> Simplify(const NTi::TTypePtr& type)
             return {VT_DATETIME64, true};
         case ETypeName::Timestamp64:
             return {VT_TIMESTAMP64, true};
+
+        case ETypeName::TzDate32:
+            return {VT_TZ_DATE32, true};
+        case ETypeName::TzDatetime64:
+            return {VT_TZ_DATETIME64, true};
+        case ETypeName::TzTimestamp64:
+            return {VT_TZ_TIMESTAMP64, true};
+
         case ETypeName::Interval64:
             return {VT_INTERVAL64, true};
 
@@ -689,6 +715,14 @@ TString ToString(EValueType type)
             return "datetime";
         case VT_TIMESTAMP:
             return "timestamp";
+
+        case VT_TZ_DATE:
+            return "tz_date";
+        case VT_TZ_DATETIME:
+            return "tz_datetime";
+        case VT_TZ_TIMESTAMP:
+            return "tz_timestamp";
+
         case VT_INTERVAL:
             return "interval";
 
@@ -704,6 +738,14 @@ TString ToString(EValueType type)
             return "datetime64";
         case VT_TIMESTAMP64:
             return "timestamp64";
+
+        case VT_TZ_DATE32:
+            return "tz_date32";
+        case VT_TZ_DATETIME64:
+            return "tz_datetime64";
+        case VT_TZ_TIMESTAMP64:
+            return "tz_timestamp64";
+
         case VT_INTERVAL64:
             return "interval64";
 

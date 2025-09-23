@@ -11,10 +11,10 @@ namespace NYdb::NTPCC {
 constexpr int DEFAULT_WAREHOUSE_COUNT = 10;
 constexpr TDuration DEFAULT_RUN_DURATION = TDuration::Minutes(120);
 
-constexpr int DEFAULT_MAX_SESSIONS = 100; // TODO
+constexpr int DEFAULT_MAX_SESSIONS = 0; // autodetect based on number of database compute CPUs
 
 constexpr int DEFAULT_THREAD_COUNT = 0; // autodetect based on WAREHOUSES_PER_CPU_CORE
-constexpr int DEFAULT_LOAD_THREAD_COUNT = 10; // TODO: autodetect
+constexpr int DEFAULT_LOAD_THREAD_COUNT = 0; // autodetect based on number of database compute CPUs
 
 constexpr ELogPriority DEFAULT_LOG_LEVEL = TLOG_INFO;
 

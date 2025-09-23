@@ -1,3 +1,4 @@
+#include "autopartitioning_manager.h"
 #include "offload_actor.h"
 #include "partition.h"
 #include "partition_compactification.h"
@@ -6,7 +7,7 @@
 
 #include <memory>
 
-#define PQ_INIT_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", Partition()->TabletID)("partition_id", Partition()->Partition)
+#define PQ_INIT_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", Partition()->TabletId)("partition_id", Partition()->Partition)
 
 namespace NKikimr::NPQ {
 
@@ -34,6 +35,7 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataStep>(this));
     Steps.push_back(MakeHolder<TInitEndWriteTimestampStep>(this));
+    Steps.push_back(MakeHolder<TInitFieldsStep>(this));
 
     CurrentStep = Steps.begin();
 }
@@ -113,7 +115,7 @@ const TPartitionId& TInitializerStep::PartitionId() const {
 }
 
 void TInitializerStep::PoisonPill(const TActorContext& ctx) {
-    ctx.Send(Partition()->Tablet, new TEvents::TEvPoisonPill());
+    ctx.Send(Partition()->TabletActorId, new TEvents::TEvPoisonPill());
 }
 
 const TString& TInitializerStep::TopicName() const {
@@ -162,7 +164,7 @@ void TInitConfigStep::Execute(const TActorContext& ctx) {
     auto read = event->Record.AddCmdRead();
     read->SetKey(Partition()->GetKeyConfig());
 
-    ctx.Send(Partition()->Tablet, event.Release());
+    ctx.Send(Partition()->TabletActorId, event.Release());
 }
 
 void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -242,7 +244,7 @@ void TInitDiskStatusStep::Execute(const TActorContext& ctx) {
 
     AddCheckDiskRequest(request.Get(), Partition()->NumChannels);
 
-    ctx.Send(Partition()->Tablet, request.Release());
+    ctx.Send(Partition()->TabletActorId, request.Release());
 }
 
 void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -283,7 +285,7 @@ void TInitMetaStep::Execute(const TActorContext& ctx) {
     addKey(request->Record, TKeyPrefix::TypeMeta, PartitionId());
     addKey(request->Record, TKeyPrefix::TypeTxMeta, PartitionId());
 
-    ctx.Send(Partition()->Tablet, request.Release());
+    ctx.Send(Partition()->TabletActorId, request.Release());
 }
 
 void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
@@ -382,7 +384,7 @@ TInitInfoRangeStep::TInitInfoRangeStep(TInitializer* initializer)
 }
 
 void TInitInfoRangeStep::Execute(const TActorContext &ctx) {
-    RequestInfoRange(ctx, Partition()->Tablet, PartitionId(), "");
+    RequestInfoRange(ctx, Partition()->TabletActorId, PartitionId(), "");
 }
 
 void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
@@ -437,7 +439,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             //make next step
             if (range.GetStatus() == NKikimrProto::OVERRUN) {
                 PQ_INIT_ENSURE(key);
-                RequestInfoRange(ctx, Partition()->Tablet, PartitionId(), *key);
+                RequestInfoRange(ctx, Partition()->TabletActorId, PartitionId(), *key);
             } else {
                 PostProcessing(ctx);
             }
@@ -475,7 +477,7 @@ TInitDataRangeStep::TInitDataRangeStep(TInitializer* initializer)
 }
 
 void TInitDataRangeStep::Execute(const TActorContext &ctx) {
-    RequestDataRange(ctx, Partition()->Tablet, PartitionId(), "");
+    RequestDataRange(ctx, Partition()->TabletActorId, PartitionId(), "");
 }
 
 void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
@@ -498,18 +500,18 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 
             if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
                 PQ_INIT_ENSURE(range.PairSize());
-                RequestDataRange(ctx, Partition()->Tablet, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
+                RequestDataRange(ctx, Partition()->TabletActorId, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
                 return;
             }
             FormHeadAndProceed();
 
-            if (GetContext().StartOffset && *GetContext().StartOffset != Partition()->CompactionBlobEncoder.StartOffset) {
-                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->CompactionBlobEncoder.StartOffset);
+            if (GetContext().StartOffset && *GetContext().StartOffset != Partition()->GetStartOffset()) {
+                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->GetStartOffset());
                 Y_ABORT("meta is broken");
                 return PoisonPill(ctx);
             }
-            if (GetContext().EndOffset && *GetContext().EndOffset != Partition()->BlobEncoder.EndOffset) {
-                PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->BlobEncoder.EndOffset);
+            if (GetContext().EndOffset && *GetContext().EndOffset != Partition()->GetEndOffset()) {
+                PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->GetEndOffset());
                 Y_ABORT("meta is broken");
                 return PoisonPill(ctx);
             }
@@ -830,7 +832,7 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
         auto read = request->Record.AddCmdRead();
         read->SetKey(key);
     }
-    ctx.Send(Partition()->Tablet, request.Release());
+    ctx.Send(Partition()->TabletActorId, request.Release());
 }
 
 void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
@@ -892,7 +894,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 Y_ABORT("NODATA can't be here");
                 return;
             case NKikimrProto::ERROR:
-                PQ_LOG_ERROR("tablet " << Partition()->TabletID << " HandleOnInit ReadResult "
+                PQ_LOG_ERROR("tablet " << Partition()->TabletId << " HandleOnInit ReadResult "
                         << i << " status NKikimrProto::ERROR result message: \"" << read.GetMessage()
                         << " \" errorReason: \"" << response.GetErrorReason() << "\""
                 );
@@ -942,6 +944,22 @@ void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
 }
 
 //
+// TInitFieldsStep
+//
+
+TInitFieldsStep::TInitFieldsStep(TInitializer* initializer)
+    : TInitializerStep(initializer, "TInitFieldsStep", false) {
+}
+
+void TInitFieldsStep::Execute(const TActorContext &ctx) {
+    auto& config = Partition()->Config;
+
+    Partition()->AutopartitioningManager.reset(CreateAutopartitioningManager(config, Partition()->Partition));
+
+    return Done(ctx);
+}
+
+//
 // TPartition
 //
 
@@ -965,9 +983,9 @@ void TPartition::Initialize(const TActorContext& ctx) {
         TopicConverter,
         Config,
         Partition,
-        Tablet,
+        TabletActorId,
         SelfId(),
-        TabletID,
+        TabletId,
         Counters
     ));
 
@@ -976,12 +994,11 @@ void TPartition::Initialize(const TActorContext& ctx) {
     LastUsedStorageMeterTimestamp = ctx.Now();
     WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
 
-    InitSplitMergeSlidingWindow();
-
     CloudId = Config.GetYcCloudId();
     DbId = Config.GetYdbDatabaseId();
     DbPath = Config.GetYdbDatabasePath();
     FolderId = Config.GetYcFolderId();
+    MonitoringProjectId = Config.GetMonitoringProjectId();
 
     UsersInfoStorage.ConstructInPlace(DCId,
                                       TopicConverter,
@@ -991,21 +1008,21 @@ void TPartition::Initialize(const TActorContext& ctx) {
                                       DbId,
                                       Config.GetYdbDatabasePath(),
                                       IsServerless,
-                                      FolderId);
+                                      FolderId,
+                                      MonitoringProjectId);
     TotalChannelWritesByHead.resize(NumChannels);
 
     if (!IsSupportive()) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
-                                                                        Partition.InternalPartitionId,
-                                                                        Config.GetYdbDatabasePath()));
+                                                                         Partition.InternalPartitionId,
+                                                                         Config.GetYdbDatabasePath()));
         } else {
-            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(),
-                                                                        Partition.InternalPartitionId));
+            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(), Partition.InternalPartitionId));
         }
     }
 
-    UsersInfoStorage->Init(Tablet, SelfId(), ctx);
+    UsersInfoStorage->Init(TabletActorId, SelfId(), ctx);
 
     PQ_ENSURE(AppData(ctx)->PQConfig.GetMaxBlobsPerLevel() > 0);
     ui32 border = LEVEL0;
@@ -1029,10 +1046,10 @@ void TPartition::Initialize(const TActorContext& ctx) {
     }
 
     if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {
-        OffloadActor = Register(CreateOffloadActor(Tablet, TabletID, Partition, Config.GetOffloadConfig()));
+        OffloadActor = Register(CreateOffloadActor(TabletActorId, TabletId, Partition, Config.GetOffloadConfig()));
     }
 
-    PQ_LOG_I("bootstrapping " << Partition << " " << ctx.SelfID);
+    LOG_I("bootstrapping " << Partition << " " << ctx.SelfID);
 
     if (AppData(ctx)->Counters) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
@@ -1040,7 +1057,14 @@ void TPartition::Initialize(const TActorContext& ctx) {
         } else {
             SetupTopicCounters(ctx);
         }
+        if (DetailedMetricsAreEnabled()) {
+            SetupDetailedMetrics();
+        }
     }
+}
+
+bool TPartition::DetailedMetricsAreEnabled() const {
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {
@@ -1273,11 +1297,6 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
                             {1000, "1000"}, {2500, "2500"}, {5000, "5000"},
                             {10'000, "10000"}, {9'999'999, "999999"}}, true)
     );
-}
-
-void TPartition::InitSplitMergeSlidingWindow() {
-    using Tui64SumSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;
-    SplitMergeAvgWriteBytes = std::make_unique<Tui64SumSlidingWindow>(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), 1000);
 }
 
 void TPartition::CreateCompacter() {

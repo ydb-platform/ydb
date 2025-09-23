@@ -539,9 +539,8 @@ class TDescribeStreamingQuerySchemeActor final : public TSchemeActorBase<TDescri
 public:
     using TBase::LogPrefix;
 
-    TDescribeStreamingQuerySchemeActor(const TString& database, const TString& queryPath, const std::optional<NACLib::TUserToken>& userToken, ui32 access)
+    TDescribeStreamingQuerySchemeActor(const TString& database, const TString& queryPath, const std::optional<NACLib::TUserToken>& userToken)
         : TBase(__func__, database, queryPath, userToken)
-        , Access(access)
     {}
 
     STFUNC(StateFunc) {
@@ -608,7 +607,7 @@ public:
 
 protected:
     void StartRequest() final {
-        LOG_D("Describe streaming query in database: " << Database << ", with access: " << Access);
+        LOG_D("Describe streaming query in database: " << Database);
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = CanonizePath(Database);
@@ -619,7 +618,7 @@ protected:
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
         entry.ShowPrivatePath = true;
         entry.Path = SplitPath(QueryPath);
-        entry.Access = Access;
+        entry.SyncVersion = true;
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()), IEventHandle::FlagTrackDelivery);
     }
@@ -629,7 +628,6 @@ protected:
     }
 
 private:
-    const ui32 Access = 0;
     std::optional<TSchemeInfo> Info;
 };
 
@@ -2333,7 +2331,7 @@ protected:
 
     void DescribeQuery(const TString& info) {
         // Access by user token will be checked during scheme transaction execution
-        const auto& describerId = TBase::Register(new TDescribeStreamingQuerySchemeActor(Context.GetDatabase(), TBase::QueryPath, NACLib::TUserToken(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}), 0));
+        const auto& describerId = TBase::Register(new TDescribeStreamingQuerySchemeActor(Context.GetDatabase(), TBase::QueryPath, NACLib::TUserToken(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})));
         LOG_D("Start TDescribeStreamingQuerySchemeActor " << describerId << " (" << info << ")");
     }
 

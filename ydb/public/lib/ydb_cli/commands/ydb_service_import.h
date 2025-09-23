@@ -75,7 +75,12 @@ public:
     void ExtractParams(TConfig& config) override;
     void Parse(TConfig& config) override;
 
+private:
+    // Returns file extension (without dot) for current InputFormat
+    TString GetFileExtension() const;
+
 protected:
+
     TVector<TString> FilePaths;
     TString BytesPerRequest;
     ui64 MaxInFlightRequests = 1;

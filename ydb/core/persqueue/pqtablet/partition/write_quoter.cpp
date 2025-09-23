@@ -20,6 +20,10 @@ TWriteQuoter::TWriteQuoter(
 {
 }
 
+TString TWriteQuoter::BuildLogPrefix() const {
+    return TStringBuilder() << "[WriteQuoter][" << Partition << "] ";
+}
+
 void TWriteQuoter::Bootstrap(const TActorContext& ctx) {
     UpdateQuotaConfigImpl(true, ctx);
     TBase::Bootstrap(ctx);
@@ -112,4 +116,3 @@ TAccountQuoterHolder* TWriteQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::
 }
 
 } //namespace
-

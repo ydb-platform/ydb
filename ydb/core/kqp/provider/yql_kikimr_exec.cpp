@@ -2053,6 +2053,7 @@ public:
                             }
                         } else if (name == "indexSettings") {
                             if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalFulltextIndex) {
+                                // fulltext index has per-column analyzers settings, single value for now
                                 add_index->mutable_global_fulltext_index()->mutable_fulltext_settings()->add_columns()->set_column(
                                     add_index->index_columns().empty() ? "<none>" : *add_index->index_columns().rbegin()
                                 );
@@ -2096,11 +2097,11 @@ public:
                     }
 
                     if (!add_index->name()) {
-                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Missing index name"));
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index name should be set"));
                         return SyncError();
                     }
                     if (add_index->index_columns().empty()) {
-                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Missing index columns"));
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index columns should be set"));
                         return SyncError();
                     }
 
@@ -2108,7 +2109,7 @@ public:
                         case Ydb::Table::TableIndex::kGlobalIndex:
                         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
                         case Ydb::Table::TableIndex::kGlobalUniqueIndex:
-                            // no settings validation are needed
+                            // no settings validation
                             break;
                         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
                             TString error;
@@ -2127,10 +2128,9 @@ public:
                             break;
                         }
                         case Ydb::Table::TableIndex::TYPE_NOT_SET: {
-                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Missing index type"));
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index type should be set"));
                             return SyncError();
                         }
-                            
                     }
                 } else if (name == "alterIndex") {
                     if (maybeAlter.Cast().Actions().Size() > 1) {

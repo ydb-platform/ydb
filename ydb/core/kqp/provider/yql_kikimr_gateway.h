@@ -129,13 +129,13 @@ struct TIndexDescription {
             case EType::GlobalSyncVectorKMeansTree: {
                 NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
                 *vectorIndexDescription.MutableSettings() = index.GetVectorIndexKmeansTreeDescription().GetSettings();
-                SpecializedIndexDescription = vectorIndexDescription;
+                SpecializedIndexDescription = std::move(vectorIndexDescription);
                 break;
             }
             case EType::GlobalFulltext: {
                 NKikimrKqp::TFulltextIndexDescription fulltextIndexDescription;
                 *fulltextIndexDescription.MutableSettings() = index.GetFulltextIndexDescription().GetSettings();
-                SpecializedIndexDescription = fulltextIndexDescription;
+                SpecializedIndexDescription = std::move(fulltextIndexDescription);
                 break;
             }
             default:

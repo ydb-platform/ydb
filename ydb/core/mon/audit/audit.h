@@ -29,10 +29,10 @@ public:
     void LogOnCompleted(const NHttp::THttpOutgoingResponsePtr& response);
     void SetSubjectType(NACLibProto::ESubjectType subjectType);
     static bool AuditEnabled(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase, NACLibProto::ESubjectType subjectType);
+    bool AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) const;
 
 private:
     void AddAuditLogPart(TStringBuf name, const TString& value);
-    bool AuditableRequest(const NHttp::THttpIncomingRequestPtr& request);
 
     TAuditParts Parts;
     bool Auditable = false;

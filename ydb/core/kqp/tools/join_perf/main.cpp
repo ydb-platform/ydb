@@ -1,0 +1,83 @@
+#include "benchmark_settings.h"
+
+#include "ydb/core/kqp/tools/combiner_perf/fs_utils.h"
+#include <library/cpp/getopt/small/last_getopt.h>
+#include <library/cpp/getopt/small/last_getopt_opts.h>
+#include <library/cpp/getopt/small/last_getopt_parse_result.h>
+#include <library/cpp/getopt/small/last_getopt_parser.h>
+
+#include "joins.h"
+#include <filesystem>
+#include <util/string/printf.h>
+
+std::filesystem::path MakeJoinPerfPath() {
+    auto p = std::filesystem::path{std::getenv("HOME")} / ".join_perf" / "json";
+    std::filesystem::create_directories(p);
+    p = p / Sprintf("%i.jsonl", NKikimr::NMiniKQL::FilesIn(p)).ConstRef();
+    return p;
+}
+
+void AddLittleLeftTablePreset(NKikimr::NMiniKQL::TBenchmarkSettings& settings) {
+    Y_ABORT_UNLESS(settings.Presets.size() == 1, "should be only 1 preset with same sizes");
+    settings.Presets.push_back(settings.Presets[0]);
+    settings.Presets[0].PresetName += "SameSizeTables";
+    settings.Presets[1].PresetName += "LittleRightTable";
+    for (auto& tableSizes : settings.Presets[1].Cases) {
+        tableSizes.Right /= 128;
+        if (tableSizes.Right == 0) {
+            tableSizes.Right = 1;
+        }
+    }
+}
+
+int main(int argc, char** argv) {
+    NLastGetopt::TOpts opts;
+    opts.AddHelpOption('h');
+
+    NKikimr::NMiniKQL::TBenchmarkSettings params;
+    opts.AddLongOption('s', "benchmark_sizes", "left and right table sizes to choose for joins benchmark")
+        .Choices({"exp_growth", "linear_growth", "very_small"})
+        .DefaultValue("very_small")
+        .Handler1([&](const NLastGetopt::TOptsParser* option) {
+            auto val = TStringBuf(option->CurVal());
+            TVector<NKikimr::NMiniKQL::TTableSizes> benchmarkSizes;
+            TString name;
+            if (val == "exp_growth") {
+                benchmarkSizes = NKikimr::NMiniKQL::NBenchmarkSizes::ExponentialSizeIncrease();
+                name = "ExpGrowth";
+            } else if (val == "linear_growth") {
+                benchmarkSizes = NKikimr::NMiniKQL::NBenchmarkSizes::LinearSizeIncrease();
+                name = "LinearGrowth";
+            } else if (val == "very_small") {
+                benchmarkSizes = NKikimr::NMiniKQL::NBenchmarkSizes::VerySmallSizes();
+                name = "VerySmall";
+            } else {
+                Y_ABORT("unknown option for benchmark_sizes");
+            }
+            params.Presets.push_back(NKikimr::NMiniKQL::TBenchmarkSettings::TPreset{benchmarkSizes, name});
+        });
+
+    params.Algorithms = {
+        NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockMap,
+        // NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockHash,
+        NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap,
+        // NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarHash,
+        NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarGrace,
+    };
+    params.KeyTypes = {
+        NKikimr::NMiniKQL::ETestedJoinKeyType::kString,
+        NKikimr::NMiniKQL::ETestedJoinKeyType::kInteger,
+    };
+
+    NLastGetopt::TOptsParseResult parsedOptions(&opts, argc, argv);
+    AddLittleLeftTablePreset(params);
+
+    auto benchmarkResults = NKikimr::NMiniKQL::RunJoinsBench(params);
+    TFixedBufferFileOutput file{MakeJoinPerfPath()};
+    for (auto result : benchmarkResults) {
+        NJson::TJsonValue out;
+        out["testName"] = result.CaseName;
+        out["resultTime"] = result.RunDuration.MilliSeconds();
+        NKikimr::NMiniKQL::SaveJsonAt(out, &file);
+    }
+}

@@ -1,0 +1,14 @@
+fmt () {
+        file=${1}
+        echo $file
+        ya tool clang-format --style=file:./.clang-format -i $file
+}
+fmt-all () {
+        for FILE in $(git diff --cached --name-only);
+        do
+                if [[ "$FILE" == *.cpp || "$FILE" == *.h ]]; then
+                        fmt $HOME/ydbwork/ydb/$FILE
+                        echo "Processing text file: $FILE"
+                fi
+        done
+}

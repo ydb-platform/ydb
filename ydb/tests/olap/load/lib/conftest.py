@@ -230,8 +230,7 @@ class LoadSuiteBase:
         sanitizer_regex_params = r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)'
 
         core_processes = {
-            h: cls.execute_ssh(h, f"\
-ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -i -A 150 '{sanitizer_regex_params}'")
+            h: cls.execute_ssh(h, f"ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -P -A 150 '{sanitizer_regex_params}'")
             for h in hosts
         }
 
@@ -239,7 +238,7 @@ ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | 
         for h, exec in core_processes.items():
             exec.wait(check_exit_code=False)
             if exec.returncode != 0:
-                logging.error(f'Error while process VERIFY failed and sanitizers on host {h}: {exec.stderr}')
+                logging.error(f'Error while process sanitizers on host {h}: {exec.stderr}')
             else:
                 host_logs[h] = exec.stdout
         return host_logs
@@ -261,7 +260,7 @@ ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | 
         for h, exec in core_processes.items():
             exec.wait(check_exit_code=False)
             if exec.returncode != 0:
-                logging.error(f'Error while process VERIFY failed and sanitizers on host {h}: {exec.stderr}')
+                logging.error(f'Error while process VERIFY fails on host {h}: {exec.stderr}')
             else:
                 host_logs[h] = exec.stdout
         return host_logs
@@ -557,7 +556,7 @@ ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | 
             has_cores = bool(core_hashes.get(node.slot, []))
             has_oom = node.host in ooms
 
-            if has_cores or has_oom or node.host in verifies:
+            if has_cores or has_oom or node.host in verifies or node.host in sanitizer_messages:
                 node_error = NodeErrors(node, 'diagnostic info collected')
                 node_error.core_hashes = core_hashes.get(node.slot, [])
                 node_error.was_oom = has_oom

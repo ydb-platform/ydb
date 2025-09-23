@@ -790,6 +790,7 @@ public:
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
             QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
         {
+            // TODO: properly initialize transaction(s)
             TVector<IKqpGateway::TPhysicalTxData> txs;
             txs.emplace_back(QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx), QueryState->QueryData);
 
@@ -829,7 +830,39 @@ public:
                 tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
             }
 
-            tasksGraph.BuildAllTasks({}, {}, nullptr, nullptr);
+            bool needResourcesSnapshot = tasksGraph.GetMeta().IsScan;
+            if (!tasksGraph.GetMeta().IsScan) {
+                for (const auto& transaction : txs) {
+                    for (const auto& stage : transaction.Body->GetStages()) {
+                        if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
+                            needResourcesSnapshot = true;
+                        }
+                    }
+                }
+                // TODO: better set `needResourcesSnapshot`
+            }
+
+            // Get resources snapshot
+            TVector<NKikimrKqp::TKqpNodeResources> resourcesSnapshot;
+            if (needResourcesSnapshot) {
+                struct TEvResourcesSnapshot : public TEventLocal<TEvResourcesSnapshot, EventSpaceBegin(TEvents::ES_PRIVATE)> {
+                    TVector<NKikimrKqp::TKqpNodeResources> Snapshot;
+
+                    TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
+                        : Snapshot(std::move(snapshot)) {}
+                };
+
+                GetKqpResourceManager()->RequestClusterResourcesInfo(
+                    [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+                        TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvResourcesSnapshot(std::move(resources)));
+                        as->Send(eh);
+                    }
+                );
+
+                resourcesSnapshot = std::move((co_await ActorWaitForEvent<TEvResourcesSnapshot>(0))->Get()->Snapshot);
+            }
+
+            tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr, nullptr);
 
             Cerr << tasksGraph.DumpToString();
 

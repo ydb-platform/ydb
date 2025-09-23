@@ -109,7 +109,7 @@ consumer_proc_retry:
                 popped_elements = popped_elements + 1;
                 goto consumer_proc_retry;
             :: else ->
-                printf("Consumer %d: internal channel empty, push to second queue\n", id);
+                printf("Consumer %d: internal channel empty, try second queue\n", id);
             fi
         }
 
@@ -117,8 +117,8 @@ consumer_proc_retry:
             if
             :: len(second_queue) > 0 ->
                 second_queue?tmp_value;
-                popped_elements = popped_elements + 1;
                 printf("Consumer %d: success pop from second queue, increment popped_elements from %d to %d\n", id, popped_elements, popped_elements + 1);
+                popped_elements = popped_elements + 1;
             :: else ->
                 planned_popped_elements = planned_popped_elements + 1;
                 goto consumer_proc_retry;

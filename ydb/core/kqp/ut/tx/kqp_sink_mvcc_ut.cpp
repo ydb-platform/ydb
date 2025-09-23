@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 //         tester.Execute();
 //     }
 
-    class DirtyReads : public TTableDataModificationTester {
+    class TDirtyReads : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
             auto client = Kikimr->GetQueryClient();
@@ -155,19 +155,13 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         }
     };
 
-    Y_UNIT_TEST(DirtyReadsOltp) {
-        DirtyReads tester;
-        tester.SetIsOlap(false);
+    Y_UNIT_TEST_TWIN(DirtyReads, IsOlap) {
+        TDirtyReads tester;
+        tester.SetIsOlap(IsOlap);
         tester.Execute();
     }
 
-    Y_UNIT_TEST(DirtyReadsOlap) {
-        DirtyReads tester;
-        tester.SetIsOlap(true);
-        tester.Execute();
-    }
-
-    class ChangeFromTheFuture : public TTableDataModificationTester {
+    class TChangeFromTheFuture : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
             auto client = Kikimr->GetQueryClient();
@@ -213,19 +207,13 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         }
     };
 
-    Y_UNIT_TEST(ChangeFromTheFuture_olap) {
-        ChangeFromTheFuture tester;
-        tester.SetIsOlap(true);
+    Y_UNIT_TEST_TWIN(ChangeFromTheFuture, IsOlap) {
+        TChangeFromTheFuture tester;
+        tester.SetIsOlap(IsOlap);
         tester.Execute();
     }
 
-    Y_UNIT_TEST(ChangeFromTheFuture_oltp) {
-        ChangeFromTheFuture tester;
-        tester.SetIsOlap(false);
-        tester.Execute();
-    }
-
-    class LostUpdate : public TTableDataModificationTester {
+    class TLostUpdate : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
             if (GetIsOlap()) {
@@ -296,19 +284,13 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         }
     };
 
-    Y_UNIT_TEST(LostUpdate_olap) {
-        LostUpdate tester;
-        tester.SetIsOlap(true);
+    Y_UNIT_TEST_TWIN(LostUpdate, IsOlap) {
+        TLostUpdate tester;
+        tester.SetIsOlap(IsOlap);
         tester.Execute();
     }
 
-    Y_UNIT_TEST(LostUpdate_oltp) {
-        LostUpdate tester;
-        tester.SetIsOlap(false);
-        tester.Execute();
-    }
-
-    class TransactionFailsAsSoonAsItIsClearItCannotCommit : public TTableDataModificationTester {
+    class TTransactionFailsAsSoonAsItIsClearItCannotCommit : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
             if (GetIsOlap()) {
@@ -355,19 +337,13 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         }
     };
 
-    Y_UNIT_TEST(TransactionFailsAsSoonAsItIsClearItCannotCommit_olap) {
-        TransactionFailsAsSoonAsItIsClearItCannotCommit tester;
-        tester.SetIsOlap(true);
+    Y_UNIT_TEST_TWIN(TransactionFailsAsSoonAsItIsClearItCannotCommit, IsOlap) {
+        TTransactionFailsAsSoonAsItIsClearItCannotCommit tester;
+        tester.SetIsOlap(IsOlap);
         tester.Execute();
     }
 
-    Y_UNIT_TEST(TransactionFailsAsSoonAsItIsClearItCannotCommit_oltp) {
-        TransactionFailsAsSoonAsItIsClearItCannotCommit tester;
-        tester.SetIsOlap(false);
-        tester.Execute();
-    }
-
-    class WriteSkew : public TTableDataModificationTester {
+    class TWriteSkew : public TTableDataModificationTester {
         YDB_ACCESSOR(TString, WriteOp, "replace");
     protected:
         void DoExecute() override {
@@ -444,48 +420,27 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         }
     };
 
-    Y_UNIT_TEST(WriteSkew_olap_insert) {
-        WriteSkew tester;
-        tester.SetIsOlap(true);
+    Y_UNIT_TEST_TWIN(WriteSkewInsert, IsOlap) {
+        TWriteSkew tester;
+        tester.SetIsOlap(IsOlap);
         tester.SetWriteOp("insert");
         tester.Execute();
     }
 
-    Y_UNIT_TEST(WriteSkew_olap_upsert) {
-        WriteSkew tester;
-        tester.SetIsOlap(true);
+    Y_UNIT_TEST_TWIN(WriteSkewUpsert, IsOlap) {
+        TWriteSkew tester;
+        tester.SetIsOlap(IsOlap);
         tester.SetWriteOp("upsert");
         tester.Execute();
     }
 
-    Y_UNIT_TEST(WriteSkew_olap_replace) {
-        WriteSkew tester;
-        tester.SetIsOlap(true);
+    Y_UNIT_TEST_TWIN(WriteSkewReplace, IsOlap) {
+        TWriteSkew tester;
+        tester.SetIsOlap(IsOlap);
         tester.SetWriteOp("replace");
         tester.Execute();
     }
     
-    Y_UNIT_TEST(WriteSkew_oltp_replace) {
-        WriteSkew tester;
-        tester.SetIsOlap(false);
-        tester.SetWriteOp("replace");
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(WriteSkew_oltp_upsert) {
-        WriteSkew tester;
-        tester.SetIsOlap(false);
-        tester.SetWriteOp("upsert");
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(WriteSkew_oltp_insert) {
-        WriteSkew tester;
-        tester.SetIsOlap(false);
-        tester.SetWriteOp("insert");
-        tester.Execute();
-    }
-
     class TReadOnlyTxCommitsOnConcurrentWrite : public TTableDataModificationTester {
     protected:
         void DoExecute() override {

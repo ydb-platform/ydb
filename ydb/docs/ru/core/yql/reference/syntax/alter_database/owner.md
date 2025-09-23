@@ -15,6 +15,8 @@ ALTER DATABASE path OWNER TO user_name;
 
 ## Примеры
 
+Владельцем базы данных `/Root/test` становится пользователь `user1`:
+
 ```yql
 ALTER DATABASE `/Root/test` OWNER TO user1;
 ```

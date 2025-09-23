@@ -4,6 +4,7 @@
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
 #include <ydb/library/yql/udfs/common/knn/knn-defines.h>
+#include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
 #include <span>
 
@@ -371,8 +372,17 @@ public:
         auto& aggregate = NextClusters.at(pos);
         auto* coords = aggregate.data();
         Y_ENSURE(IsExpectedFormat(embedding));
-        for (auto coord : this->GetCoords(embedding.data())) {
-            *coords++ += (TSum)coord * weight;
+
+        if (IsBitQuantized()) {
+            const ui8* data = reinterpret_cast<const ui8*>(embedding.data());
+            for (size_t i = 0; i < Dimensions; ++i) {
+                const bool coord = data[i / 8] & (1 << (i % 8));
+                *coords++ += (TSum)coord * weight;
+            }
+        } else {
+            for (const auto coord : this->GetCoords(embedding.data())) {
+                *coords++ += (TSum)coord * weight;
+            }
         }
         NextClusterSizes.at(pos) += weight;
     }
@@ -391,14 +401,18 @@ public:
 
     TString GetEmptyRow() const override {
         TString str;
-        str.resize(1 + sizeof(TCoord) * Dimensions);
-        str[sizeof(TCoord) * Dimensions] = TypeByte;
+        const size_t bufferSize = NKnnVectorSerialization::GetBufferSize<TCoord>(Dimensions);
+        str.resize(bufferSize);
+        str[bufferSize - HeaderLen] = TypeByte;
+        if (IsBitQuantized()) {
+            str[bufferSize - HeaderLen - 1] = 8 - Dimensions % 8;
+        }
         return str;
     }
 
 private:
-    inline bool IsBitQuantized() const {
-        return TypeByte == Format<bool>;
+    static constexpr bool IsBitQuantized() {
+        return std::is_same_v<TCoord, bool>;
     }
 
     auto GetCoords(const char* coords) {
@@ -412,10 +426,21 @@ private:
     void Fill(TString& d, TSum* embedding, ui64& c) {
         Y_ENSURE(c > 0);
         const auto count = static_cast<TSum>(c);
-        auto data = GetData(d.MutRef().data());
-        for (auto& coord : data) {
-            coord = *embedding / count;
-            embedding++;
+
+        if (IsBitQuantized()) {
+            ui8* const data = reinterpret_cast<ui8*>(d.MutRef().data());
+            for (size_t i = 0; i < Dimensions; ++i) {
+                if (i % 8 == 0) {
+                    data[i / 8] = 0;
+                }
+                data[i / 8] |= (1 << (i % 8)) & (bool)(embedding[i] / count);
+            }
+        } else {
+            auto data = GetData(d.MutRef().data());
+            for (auto& coord : data) {
+                coord = *embedding / count;
+                embedding++;
+            }
         }
     }
 };

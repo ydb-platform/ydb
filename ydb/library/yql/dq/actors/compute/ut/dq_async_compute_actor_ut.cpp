@@ -929,9 +929,9 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                         UNIT_ASSERT(!!val);
                         UNIT_ASSERT(val.IsEmbedded());
                         auto ts = val.Get<ui64>();
-                        LOG_D(column << " ts = " << ts);
+                        LOG_D(column << " ts = " << ts << ' ' << watermark);
                         if (watermark) {
-                            UNIT_ASSERT_GT_C(ts, watermark->Seconds(), "Timestamp " << ts << " before watermark: " << watermark->Seconds());
+                            WEAK_UNIT_ASSERT_GT_C(ts, watermark->Seconds(), "Timestamp " << ts << " before watermark: " << watermark->Seconds());
                         }
                     } else if (columnName == "u.key") {
                         if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {

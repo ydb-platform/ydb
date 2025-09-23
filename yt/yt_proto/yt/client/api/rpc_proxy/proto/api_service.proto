@@ -2857,6 +2857,7 @@ message TReqReadTable
     optional ERowsetFormat desired_rowset_format = 8 [default = RF_YT_WIRE];
     optional ERowsetFormat arrow_fallback_rowset_format = 10 [default = RF_YT_WIRE];
     optional bytes format = 9; // YSON-serialized TFormat
+    optional bool enable_any_unpacking = 11 [default = true];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 101;

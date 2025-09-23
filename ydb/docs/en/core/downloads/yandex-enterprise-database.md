@@ -32,15 +32,15 @@ Yandex Enterprise Database distributions are available for download via the link
 || **v24.4** |  |  |  |  ||
 || v.24.4.4.15 | 19.09.2025 |
 
-- [Distribution]()
-- [Debug symbols]()
+- [Distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/ydbd-enterpise-24.4.4.ent.15-stable-linux-amd64.tar.xz)
+- [Debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/ydbd-enterpise-24.4.4.ent.15-stable-linux-amd64-debug.tar.xz)
 
 |
 
-- [For distribution]()
-- [For debug symbols]()
+- [For distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/checksums.txt)
+- [For debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/checksums.debug.txt)
 
-| [See list](../changelog-server.md#24-4) ||
+| [See list]() ||
 || v.24.4.4.13 | 29.07.2025 |
 
 - [Distribution](https://binaries.ясубд.рф/release/24.4.4.13/yasubd-24.4.4.13-linux-amd64.tar.xz)

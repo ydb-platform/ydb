@@ -23,7 +23,7 @@ void TKafkaOffsetCommitActor::Die(const TActorContext& ctx) {
 void TKafkaOffsetCommitActor::Handle(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx) {
     KAFKA_LOG_CRIT("Auth failed. reason# " << ev->Get()->Reason);
     Error = ConvertErrorCode(ev->Get()->ErrorCode);
-    if (Error == GROUP_ID_NOT_FOUND && (Context->Config.GetAutoCreateConsumersEnable() || Context->Config.GetAutoCreateTopicsEnable())) {
+    if (Error == GROUP_ID_NOT_FOUND && Context->Config.GetAutoCreateConsumersEnable()) {
         for (auto topicReq: Message->Topics) {
             TString topicPath = NormalizePath(Context->DatabasePath, *topicReq.Name);
             CreateConsumerGroupIfNecessary(*topicReq.Name, topicPath, *Message->GroupId);
@@ -48,14 +48,10 @@ void TKafkaOffsetCommitActor::CreateConsumerGroupIfNecessary(const TString& topi
     }
     PendingResponses++;
 
-    auto topicSettings = NYdb::NTopic::TAlterTopicSettings();
-    topicSettings.BeginAddConsumer(groupId).EndAddConsumer();
     auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
     request.get()->set_path(topicPath);
-    for (auto& c : topicSettings.AddConsumers_) {
-        auto* consumer = request.get()->add_add_consumers();
-        consumer->set_name(c.ConsumerName_);
-    }
+    auto* consumer = request->add_add_consumers();
+    consumer->set_name(groupId);
     AlterTopicCookie++;
     AlterTopicCookieToName[AlterTopicCookie] = topicName;
     auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = topicName, this]

@@ -28,7 +28,7 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvClo
             TString topicPath = NormalizePath(Context->DatabasePath, *topicReq.Name);
             CreateConsumerGroupIfNecessary(*topicReq.Name, topicPath, *Message->GroupId);
         }
-        if (PendingResponses == 0) { // case when AlterTopic requests have already sent an returned and unsuccessful response
+        if (PendingResponses == 0) { // case when AlterTopic requests have already sent and returned an unsuccessful response
             SendFailedForAllPartitions(Error, ctx);
         }
     } else {

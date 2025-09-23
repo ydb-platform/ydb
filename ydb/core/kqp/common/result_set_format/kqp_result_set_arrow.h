@@ -1,0 +1,91 @@
+#pragma once
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node.h>
+
+namespace NKikimr::NKqp::NFormats {
+
+/**
+ * @brief Convert TType to the arrow::DataType object
+ *
+ * The logic of this conversion is from YQL-15332:
+ *
+ * Void, Null => NullType
+ * Bool => Uint8
+ * Integral => Uint8..Uint64, Int8..Int64
+ * Floats => Float, Double
+ * Date => Uint16
+ * Datetime => Uint32
+ * Timestamp => Uint64
+ * Interval => Int64
+ * Date32 => Int32
+ * Interval64, Timestamp64, Datetime64 => Int64
+ * Utf8, Json => String
+ * String, Yson, JsonDocument => Binary
+ * Decimal, UUID => FixedSizeBinary(16)
+ * Timezone datetime type => StructArray<type, Uint16>
+ * DyNumber => BinaryArray
+ *
+ * Struct, Tuple, EmptyList, EmptyDict => StructArray
+ * Names of fields constructed from tuple are just empty strings.
+ *
+ * List => ListArray
+ *
+ * Variant => DenseUnionArray
+ * If variant contains more than 127 items then we map
+ * Variant => DenseUnionArray<DenseUnionArray>
+ * TODO Implement convertion of data to DenseUnionArray<DenseUnionArray> and
+ * back
+ *
+ * Optional<T> => StructArray<T> if T is Variant
+ * Because DenseUnionArray does not have validity bitmap
+ * Optional<T> => T for other types
+ * By default, other types have a validity bitmap
+ *
+ * Optional<Optional<...<T>...>> =>
+ * StructArray<StructArray<...StructArray<T>...>> For example:
+ * - Optional<Optional<Int32>> => StructArray<Int32>
+ *   Int32 has validity bitmap, so we wrap it in StructArray N - 1 times, where
+ * N is the number of Optional levels
+ * - Optional<Optional<Variant<Int32, Int64>>> =>
+ * StructArray<StructArray<DenseUnionArray<Int32, Int64>>> DenseUnionArray does
+ * not have validity bitmap, so we wrap it in StructArray N times, where N is
+ * the number of Optional levels
+ *
+ * Dict<KeyType, ValueType> => StructArray<MapArray<KeyArray, ValueArray>,
+ * Uint64Array (on demand, default: 0)> We do not use arrow::DictArray because
+ * it must be used for encoding not for mapping keys to values.
+ * (https://arrow.apache.org/docs/cpp/api/array.html#classarrow_1_1_dictionary_array)
+ * If the type of dict key is optional then we map
+ * Dict<Optional<KeyType>, ValueType> =>
+ * StructArray<ListArray<StructArray<KeyArray, ValueArray>, Uint64Array (on
+ * demand, default: 0)> because keys of MapArray can not be nullable
+ *
+ *
+ * @param type Yql type to parse
+ * @return std::shared_ptr<arrow::DataType> arrow type of the same structure as
+ * type
+ */
+std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType *type);
+
+void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder *builder, const NMiniKQL::TType *type);
+
+namespace NTestUtils {
+
+bool IsArrowCompatible(const NMiniKQL::TType *type);
+
+std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NMiniKQL::TType *type);
+
+std::shared_ptr<arrow::Array> MakeArray(NMiniKQL::TUnboxedValueVector &values, const NMiniKQL::TType *itemType);
+
+NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array> &array, ui64 row,
+    const NMiniKQL::TType *itemType, const NMiniKQL::THolderFactory &holderFactory);
+
+NMiniKQL::TUnboxedValueVector ExtractUnboxedValues(const std::shared_ptr<arrow::Array> &array,
+    const NMiniKQL::TType *itemType, const NMiniKQL::THolderFactory &holderFactory);
+
+} // namespace NTestUtils
+
+} // namespace NKikimr::NKqp::NFormats

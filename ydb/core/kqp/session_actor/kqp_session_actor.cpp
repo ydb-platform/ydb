@@ -1502,7 +1502,7 @@ public:
             }
         }
 
-        if (QueryState->GetResultSetFormatSettings().IsArrowFormat() && !AppData()->FeatureFlags.GetEnableArrowResultSetFormat()) {
+        if (QueryState->GetFormatsSettings().IsArrowFormat() && !AppData()->FeatureFlags.GetEnableArrowResultSetFormat()) {
             ReplyQueryError(Ydb::StatusIds::BAD_REQUEST, "Arrow result set format is not enabled. Please set EnableArrowResultSetFormat feature flag to true.");
             return true;
         }
@@ -1736,7 +1736,7 @@ public:
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
-            QueryState ? QueryState->GetResultSetFormatSettings() : TResultSetFormatSettings{},
+            QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
             RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
@@ -2356,7 +2356,7 @@ public:
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
                         auto ydbResult = QueryState->QueryData->GetYdbTxResult(
                             phyQuery.GetResultBindings(i), response->GetArena(),
-                            QueryState->GetResultSetFormatSettings(), {});
+                            QueryState->GetFormatsSettings(), {});
 
                         YQL_ENSURE(ydbResult);
                         ++trailingResultsCount;
@@ -2374,7 +2374,7 @@ public:
 
                 auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
                     phyQuery.GetResultBindings(i), response->GetArena(),
-                    QueryState->GetResultSetFormatSettings(), effectiveRowsLimit);
+                    QueryState->GetFormatsSettings(), effectiveRowsLimit);
                 response->AddYdbResults()->Swap(ydbResult);
             }
         }

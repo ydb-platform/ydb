@@ -11,7 +11,6 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
-#include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
@@ -43,14 +42,15 @@ public:
 
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters,
+        NFormats::TFormatsSettings formatsSettings,
+        TKqpRequestCounters::TPtr counters,
         const TExecuterConfig& executerConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
         const std::optional<TLlvmSettings>& llvmSettings)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, {}, database,
-            userToken, std::move(resultSetFormatSettings), counters, executerConfig,
+            userToken, std::move(formatsSettings), counters, executerConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter", false)
         , LlvmSettings(llvmSettings)
     {
@@ -283,13 +283,13 @@ private:
 } // namespace
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings, TKqpRequestCounters::TPtr counters,
     const TExecuterConfig& executerConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const std::optional<TLlvmSettings>& llvmSettings)
 {
-    return new TKqpScanExecuter(std::move(request), database, userToken, std::move(resultSetFormatSettings),
+    return new TKqpScanExecuter(std::move(request), database, userToken, std::move(formatsSettings),
         counters, executerConfig, std::move(asyncIoFactory), userRequestContext, statementResultIndex,
         federatedQuerySetup, GUCSettings, llvmSettings);
 }

@@ -69,4 +69,5 @@ RECURSE(
     compilation
     events
     simple
+    result_set_format
 )

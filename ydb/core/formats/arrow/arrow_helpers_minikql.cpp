@@ -1,6 +1,6 @@
 #include "arrow_helpers_minikql.h"
 
-#include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_result_set_arrow.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow {
@@ -15,7 +15,7 @@ arrow::Result<arrow::FieldVector> MakeArrowFields(
         std::shared_ptr<arrow::DataType> arrowType;
 
         try {
-            arrowType = NYql::NArrow::GetArrowType(mkqlType);
+            arrowType = NKqp::NFormats::GetArrowType(mkqlType);
         } catch (const yexception& e) {
             errors.emplace_back(colName + " error: " + e.what());
         }

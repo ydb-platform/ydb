@@ -4,6 +4,8 @@
 
 namespace NYql::NDq {
 
+#define SRC_WM_LOG_T(X) /* TODO */
+#define SRC_WM_LOG_D(X) /* TODO */
 template <typename TPartitionKey>
 struct TDqSourceWatermarkTracker {
 public:
@@ -34,10 +36,10 @@ public:
         if (IdlePartitionsEnabled_ && systemTime > data.TimeNotifiedAt) {
             auto rec = ArrivalQueue_.extract(TArrivalQueueItem { data.TimeNotifiedAt, it });
             if (rec.empty()) {
-                Cerr << "Added arrival time for " << it->first << " to " << systemTime << Endl;
+                SRC_WM_LOG_T("Added arrival time for " << it->first << " to " << systemTime);
                 ArrivalQueue_.emplace(systemTime, it);
             } else {
-                Cerr << "Update arrival time for " << it->first << " from " << rec.value().Time << " to " << systemTime << Endl;
+                SRC_WM_LOG_T("Update arrival time for " << it->first << " from " << rec.value().Time << " to " << systemTime);
                 rec.value().Time = systemTime;
                 auto inserted = ArrivalQueue_.insert(std::move(rec)).inserted;
                 Y_DEBUG_ABORT_UNLESS(inserted);
@@ -49,10 +51,10 @@ public:
         if (data.Watermark < watermark) {
             auto rec = WatermarksQueue_.extract(TWatermarksQueueItem { data.Watermark, it });
             if (rec.empty()) {
-                Cerr << "Unidle partition " << it->first << " got " << watermark << " > " << data.Watermark << Endl;
+                SRC_WM_LOG_T("Unidle partition " << it->first << " got " << watermark << " > " << data.Watermark);
                 WatermarksQueue_.emplace(watermark, it);
             } else {
-                Cerr << "Update partition " << it->first << " watermark from " << rec.value().Time << " to " << watermark << Endl;
+                SRC_WM_LOG_T("Update partition " << it->first << " watermark from " << rec.value().Time << " to " << watermark);
                 rec.value().Time = watermark;
                 auto inserted = WatermarksQueue_.insert(std::move(rec)).inserted;
                 Y_DEBUG_ABORT_UNLESS(inserted);
@@ -61,7 +63,7 @@ public:
         } else if (IdlePartitionsEnabled_) {
             auto [_, inserted] = WatermarksQueue_.emplace(data.Watermark, it);
             if (inserted) {
-                Cerr << "Unidle partition " << it->first << " got " << watermark << " <= " << data.Watermark << Endl;
+                SRC_WM_LOG_T("Unidle partition " << it->first << " got " << watermark << " <= " << data.Watermark);
             }
         } else {
             Y_DEBUG_ABORT_UNLESS(WatermarksQueue_.contains(TWatermarksQueueItem { data.Watermark, it }));
@@ -74,7 +76,7 @@ public:
         if (auto nextWatermark = WatermarksQueue_.begin()->Time; Watermark_ < nextWatermark) {
             return Watermark_ = nextWatermark;
         } else if (nextWatermark < Watermark_) {
-            Cerr << "Watermark goes backward (some events may be dropped) " << nextWatermark << '<' << Watermark_ << Endl;
+            SRC_WM_LOG_D("Watermark goes backward (some events may be dropped) " << nextWatermark << '<' << Watermark_);
         }
 
         return Nothing();
@@ -113,7 +115,7 @@ public:
            if (it->Time + IdleDelay_ >= systemTime) {
                break;
            }
-           Cerr << "Mark partition " << it->Iterator->first << " idle " << it->Time << '+' << IdleDelay_ << ">=" << systemTime << Endl;
+           SRC_WM_LOG_T("Mark partition " << it->Iterator->first << " idle " << it->Time << '+' << IdleDelay_ << ">=" << systemTime);
            auto removed = WatermarksQueue_.erase(TWatermarksQueueItem {
                    it->Iterator->second.Watermark,
                    it->Iterator
@@ -128,7 +130,7 @@ public:
         if (auto nextWatermark = WatermarksQueue_.begin()->Time; Watermark_ < nextWatermark) {
             return Watermark_ = nextWatermark;
         } else if (nextWatermark < Watermark_) {
-            Cerr << "Watermark goes backward (partition was added or idle partition unidled) " << nextWatermark << '<' << Watermark_ << Endl;
+            SRC_WM_LOG_T("Watermark goes backward (partition was added or idle partition unidled) " << nextWatermark << '<' << Watermark_);
         }
         return Nothing();
     }
@@ -196,5 +198,7 @@ private:
     TInstant LastTimeNotifiedAt_; // last system time when tracker received notification for any partition
     TMaybe<TInstant> NextIdlenessCheckAt_;
 };
+#undef SRC_WM_LOG_T
+#undef SRC_WM_LOG_D
 
 }

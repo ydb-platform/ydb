@@ -1537,10 +1537,10 @@ NMonitoring::IMonPage* TMon::RegisterCountersPage(const TString& path, const TSt
 }
 
 void TMon::RegisterActorHandler(const TRegisterHandlerFields& fields) {
+    TGuard<TMutex> g(Mutex);
     if (ActorSystem) {
         ActorSystem->Send(HttpMonServiceActorId, new TEvMon::TEvRegisterHandler(fields));
     } else {
-        TGuard<TMutex> g(Mutex);
         ActorMonPages.emplace_back(TActorMonPageInfo{
             .Handler = fields,
         });

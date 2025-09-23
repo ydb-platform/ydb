@@ -454,6 +454,9 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     }
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
+    auto stage = dqUnion.Output().Stage();
+    auto program = stage.Program();
+    auto input = program.Body();
 
     if (sinkEffect) {
         auto sink = Build<TDqSink>(ctx, node.Pos())
@@ -589,6 +592,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
+            const auto keyColumns = BuildKeyColumnsList(table, node.Pos(), ctx);
             stageInput = RebuildPureStageWithSink(
                 node.Input(), node.Table(),
                 false, useStreamWrite, node.IsBatch() == "true",
@@ -616,6 +620,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
 
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
+    auto input = dqUnion.Output().Stage().Program().Body();
 
     if (sinkEffect) {
         auto sink = Build<TDqSink>(ctx, node.Pos())

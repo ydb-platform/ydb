@@ -59,15 +59,9 @@ for data_flavour in data_flovours:
         fig.suptitle(graph_name, fontsize=16)
         plt.tight_layout()
         plt.subplots_adjust(top=0.92)
-        
-
-        
         plt.savefig(simple_images + "/" + graph_name + ".jpeg")
-
+        
         axes.set_yscale('log')
-
-        
-        
         plt.savefig(log_images + "/" + graph_name + ".jpeg")
 
 print(f"images without y-axis log scaling are written to {simple_images}") 

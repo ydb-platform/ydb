@@ -568,9 +568,9 @@ TInstant TPartition::GetFirstUncompactedBlobTimestamp() const
 
 void TPartition::CheckTimestampsOrderInZones(TStringBuf validateReason) const {
     TInstant prev = TInstant::Zero();
-    size_t global_index = 0;
+    size_t pos = 0;
     auto check = [&](const auto& seq, TStringBuf zoneName) {
-        size_t zone_index = 0;
+        size_t in_zone_pos = 0;
         for (const TDataKey& k : seq) {
             const auto curr = k.Timestamp;
             const bool disorder = (curr < prev);
@@ -580,12 +580,12 @@ void TPartition::CheckTimestampsOrderInZones(TStringBuf validateReason) const {
                 ("zone", zoneName)
                 ("offset", k.Key.GetOffset())
                 ("part_no", k.Key.GetPartNo())
-                ("global_index", global_index)
-                ("zone_index", zone_index)
+                ("pos", pos)
+                ("in_zone_pos", in_zone_pos)
                 ("validate_reason", validateReason);
            prev = curr;
-            ++global_index;
-            ++zone_index;
+            ++pos;
+            ++in_zone_pos;
         }
     };
     check(CompactionBlobEncoder.DataKeysBody, "compacted_body");

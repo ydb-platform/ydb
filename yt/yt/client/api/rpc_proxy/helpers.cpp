@@ -1966,9 +1966,8 @@ void ParseRequest(
 void FillRequest(
     TReqPingDistributedWriteSession* req,
     const TSignedDistributedWriteSessionPtr session,
-    const TDistributedWriteSessionPingOptions& options)
+    const TDistributedWriteSessionPingOptions& /*options*/)
 {
-    Y_UNUSED(options);
     req->set_signed_session(ToProto(ConvertToYsonString(session)));
 }
 

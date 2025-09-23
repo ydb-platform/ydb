@@ -329,16 +329,32 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
         const std::vector<TOutputGroup> expected = {
             TOutputGroup({}),
             TOutputGroup({}),
-            TOutputGroup({}),
-            TOutputGroup({}),
-            TOutputGroup({}),
-            TOutputGroup({}),
-            TOutputGroup({}),
-            TOutputGroup({}),
             TOutputGroup({
                 {1, 2, 110},
+            }),
+            TOutputGroup({}),
+            TOutputGroup({
                 {1, 2, 120},
                 {1, 2, 130},
+                {1, 3, 140},
+                {1, 3, 150},
+                {1, 3, 160},
+            }),
+            TOutputGroup({}),
+            TOutputGroup({
+                {1, 4, 210},
+                {1, 4, 220},
+                {1, 4, 230},
+            }),
+            TOutputGroup({
+                {1, 5, 310},
+                {1, 5, 320},
+                {1, 5, 330},
+            }),
+            TOutputGroup({
+                {1, 6, 410},
+                {1, 6, 420},
+                {1, 6, 430},
             })
         };
         const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -346,8 +362,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
             {3, TInstant::MicroSeconds(40)}
         };
         auto expectedStatsMap = DefaultStatsMap;
-        expectedStatsMap["MultiHop_NewHopsCount"] = 3;
-        expectedStatsMap["MultiHop_EarlyThrownEventsCount"] = 4;
+        expectedStatsMap["MultiHop_NewHopsCount"] = 15;
 
         TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
     }
@@ -364,11 +379,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
         const std::vector<TOutputGroup> expected = {
             TOutputGroup({}),
             TOutputGroup({}),
-            TOutputGroup({}),
             TOutputGroup({
                 {1, 2, 110},
+            }),
+            TOutputGroup({
                 {1, 2, 120},
                 {1, 2, 130},
+                {1, 3, 140},
+                {1, 3, 150},
+                {1, 3, 160},
             }),
             TOutputGroup({}),
             TOutputGroup({}),
@@ -381,9 +400,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
             {3, TInstant::MicroSeconds(2000)}
         };
         auto expectedStatsMap = DefaultStatsMap;
-        expectedStatsMap["MultiHop_NewHopsCount"] = 3;
+        expectedStatsMap["MultiHop_NewHopsCount"] = 6;
         expectedStatsMap["MultiHop_LateThrownEventsCount"] = 3;
-        expectedStatsMap["MultiHop_EarlyThrownEventsCount"] = 1;
 
         TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
     }
@@ -401,20 +419,39 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
             TOutputGroup({}),
             TOutputGroup({}),
             TOutputGroup({}),
+            TOutputGroup({
+                {1, 2, 110},
+            }),
+            TOutputGroup({
+                {1, 2, 120},
+                {1, 2, 130},
+                {1, 3, 140},
+                {1, 3, 150},
+                {1, 3, 160},
+            }),
             TOutputGroup({}),
-            TOutputGroup({}),
-            TOutputGroup({{1, 2, 110},{1, 2, 120},{1, 2, 130}}),
-            TOutputGroup({}),
-            TOutputGroup({}),
-            TOutputGroup({})
+            TOutputGroup({
+                {1, 4, 210},
+                {1, 4, 220},
+                {1, 4, 230},
+            }),
+            TOutputGroup({
+                {1, 5, 310},
+                {1, 5, 320},
+                {1, 5, 330},
+            }),
+            TOutputGroup({
+                {1, 6, 410},
+                {1, 6, 420},
+                {1, 6, 430},
+            })
         };
         const std::vector<std::pair<ui64, TInstant>> watermarks = {
             {0, TInstant::MicroSeconds(100)},
             {3, TInstant::MicroSeconds(200)}
         };
         auto expectedStatsMap = DefaultStatsMap;
-        expectedStatsMap["MultiHop_NewHopsCount"] = 3;
-        expectedStatsMap["MultiHop_EarlyThrownEventsCount"] = 4;
+        expectedStatsMap["MultiHop_NewHopsCount"] = 15;
 
         TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
     }
@@ -439,15 +476,16 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
             TOutputGroup({
                 {1, 4, 90},
                 {1, 4, 100},
-                {1, 4, 110},
+                {1, 20, 110},
+                {1, 16, 120},
+                {1, 16, 130},
             })
         };
         const std::vector<std::pair<ui64, TInstant>> watermarks = {
             {0, TInstant::MicroSeconds(76)},
         };
         auto expectedStatsMap = DefaultStatsMap;
-        expectedStatsMap["MultiHop_NewHopsCount"] = 3;
-        expectedStatsMap["MultiHop_EarlyThrownEventsCount"] = 4;
+        expectedStatsMap["MultiHop_NewHopsCount"] = 5;
 
         TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
     }
@@ -472,16 +510,16 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
             TOutputGroup({
                 {1, 4, 90},
                 {1, 9, 100},
-                {1, 9, 110},
-                {1, 5, 120},
+                {1, 20, 110},
+                {1, 16, 120},
+                {1, 11, 130},
             })
         };
         const std::vector<std::pair<ui64, TInstant>> watermarks = {
             {0, TInstant::MicroSeconds(76)},
         };
         auto expectedStatsMap = DefaultStatsMap;
-        expectedStatsMap["MultiHop_NewHopsCount"] = 4;
-        expectedStatsMap["MultiHop_EarlyThrownEventsCount"] = 2;
+        expectedStatsMap["MultiHop_NewHopsCount"] = 5;
 
         TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
     }
@@ -527,11 +565,28 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
             TOutputGroup({}),
             TOutputGroup({}),
             TOutputGroup({}),
+            TOutputGroup({
+                {1, 90, 100},
+            }),
+            TOutputGroup({
+                {1, 69, 110},
+            }),
             TOutputGroup({}),
-            TOutputGroup({{1, 69, 110},{1, 90, 100}}),
-            TOutputGroup({}),
-            TOutputGroup({{1, 65, 120}}),
-            TOutputGroup({{1, 17, 220}, {1, 32, 210}, {1, 46, 130}, {1, 46, 140}, {1, 46, 150}, {1, 46, 160}, {1, 46, 170}, {1, 46, 180}, {1, 46, 190}, {1, 46, 200}}),
+            TOutputGroup({
+                {1, 65, 120},
+            }),
+            TOutputGroup({
+                {1, 62, 130},
+                {1, 62, 140},
+                {1, 62, 150},
+                {1, 62, 160},
+                {1, 62, 170},
+                {1, 62, 180},
+                {1, 62, 190},
+                {1, 62, 200},
+                {1, 48, 210},
+                {1, 33, 220},
+            }),
         };
         const std::vector<std::pair<ui64, TInstant>> watermarks = {
             {9, TInstant::MicroSeconds(1)},
@@ -542,7 +597,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
         };
         auto expectedStatsMap = DefaultStatsMap;
         expectedStatsMap["MultiHop_NewHopsCount"] = 13;
-        expectedStatsMap["MultiHop_EarlyThrownEventsCount"] = 1;
 
         TestWatermarksImpl(input, expected, watermarks, expectedStatsMap, 10, 100, 20);
     }

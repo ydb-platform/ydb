@@ -3466,6 +3466,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     PAIRED_TABLE_ELEM("JsonQueryReturnsJsonDocument", JsonQueryReturnsJsonDocument),
     PAIRED_TABLE_ELEM("EmitAggApply", EmitAggApply),
     PAIRED_TABLE_ELEM("CompactGroupBy", CompactGroupBy),
+    PAIRED_TABLE_ELEM("DirectRowDependsOn", DirectRowDependsOn),
 
     // bool fields.
     TABLE_ELEM("RefSelect", PragmaRefSelect, true),

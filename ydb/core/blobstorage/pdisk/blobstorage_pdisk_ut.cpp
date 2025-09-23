@@ -1054,7 +1054,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             void Bootstrap() {
                 Become(&TThis::StateDefault);
             }
-            
+
             STATEFN(StateDefault) {
                 switch (ev->GetTypeRewrite()) {
                     case TEvBlobStorage::TEvControllerUpdateDiskStatus::EventType: {
@@ -1069,7 +1069,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         testCtx.Send(new TEvents::TEvWakeup());
 
-        testCtx.GetRuntime()->RegisterService(MakeBlobStorageNodeWardenID(1), nodeWardenFake);
+        const ui32 firstNodeId = testCtx.GetRuntime()->GetFirstNodeId();
+        testCtx.GetRuntime()->RegisterService(MakeBlobStorageNodeWardenID(firstNodeId), nodeWardenFake);
 
         testCtx.GetRuntime()->WaitFor("TEvControllerUpdateDiskStatus", [&received]() {
             return received;
@@ -1119,7 +1120,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         for (int num_inspect=10; num_inspect>0; --num_inspect) {
             const auto evPDiskStateUpdate = testCtx.Recv<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
             NKikimrWhiteboard::TPDiskStateInfo pdiskInfo = evPDiskStateUpdate.Get()->Record;
-            Cerr << (TStringBuilder() << "- Got EvPDiskStateUpdate# " << evPDiskStateUpdate->ToString() << Endl);
+            Cerr << (TStringBuilder() << "Got EvPDiskStateUpdate# " << evPDiskStateUpdate->ToString() << Endl);
             if (!pdiskInfo.HasSlotSizeInUnits()) {
                 continue;
             }
@@ -1132,15 +1133,12 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     };
 
     Y_UNIT_TEST(PDiskSlotSizeInUnits) {
-        TActorTestContext testCtx({
-            .IsBad=false,
-            .DiskSize = 1_GB,
-            .ChunkSize = 1_MB,
-        });
+        TActorTestContext testCtx({});
+        const ui32 firstNodeId = testCtx.GetRuntime()->GetFirstNodeId();
 
         // Setup receiving whiteboard state updates
         testCtx.GetRuntime()->SetDispatchTimeout(10 * TDuration::MilliSeconds(testCtx.GetPDiskConfig()->StatisticsUpdateIntervalMs));
-        testCtx.GetRuntime()->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(1), testCtx.Sender);
+        testCtx.GetRuntime()->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(firstNodeId), testCtx.Sender);
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 0);
 
         // Setup 2 vdisks
@@ -1156,9 +1154,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         vdisk1.CommitReservedChunks();
         vdisk2.CommitReservedChunks();
 
-        // State:
+        // State 1:
         // PDisk.SlotSizeUnits: 0
         // Owners.GroupSizeInUnits: [0, 4]
+        Cerr << (TStringBuilder() << "- State 1" << Endl);
 
         // Assert NumActiveSlots == 5
         const auto evCheckSpaceResponse1 = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
@@ -1198,9 +1197,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             new NPDisk::TEvYardResize(vdisk1.PDiskParams->Owner, vdisk1.PDiskParams->OwnerRound, 2u),
             NKikimrProto::OK);
 
-        // State:
+        // State 2:
         // PDisk.SlotSizeUnits: 0
         // Owners.GroupSizeInUnits: [2, 4]
+        Cerr << (TStringBuilder() << "- State 2" << Endl);
 
         // Assert NumActiveSlots == 6
         const auto evCheckSpaceResponse3 = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
@@ -1216,9 +1216,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         TVDiskMock vdisk3(&testCtx);
         vdisk3.InitFull(2u);
 
-        // State:
+        // State 3:
         // PDisk.SlotSizeUnits: 2
         // Owners.GroupSizeInUnits: [2, 4, 2]
+        Cerr << (TStringBuilder() << "- State 3" << Endl);
 
         // Assert NumActiveSlots == 4
         const auto evCheckSpaceResponse4 = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
@@ -1644,7 +1645,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         using namespace NPriRead;
         std::vector<ui8> PriRead = {SyncLog, HullComp, HullOnlineRt, HullOnlineOther, HullLoad, HullLow};
         auto shares = GetChunkOperationPriorities(true, PriRead);
-        
+
         // compare with 10% tolerance
         UNIT_ASSERT(shares[SyncLog] * 0.90 > shares[HullLoad]);
         UNIT_ASSERT(shares[HullLoad] * 0.90 > shares[HullOnlineRt]);
@@ -1659,7 +1660,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         using namespace NPriWrite;
         std::vector<ui8> PriWrite = {SyncLog, HullFresh, HullHugeAsyncBlob, HullHugeUserData, HullComp};
         auto shares = GetChunkOperationPriorities(false, PriWrite);
-        
+
         // compare with 10% tolerance
         UNIT_ASSERT(shares[SyncLog] * 0.90 > shares[HullHugeUserData]);
         UNIT_ASSERT(shares[HullHugeUserData] * 0.90 > shares[HullComp]);

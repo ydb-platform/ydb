@@ -5,6 +5,8 @@
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/library/actors/util/datetime.h>
 
+#include <variant>
+
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
@@ -784,18 +786,28 @@ namespace NActors {
                 }
 
                 case NActors::EXdcCommand::RDMA_READ: {
+                    using namespace NInterconnect::NRdma;
                     if (!RdmaQp || !RdmaCq) {
                         LOG_CRIT_IC_SESSION("ICIS22", "unexpected XDC RDMA_READ command without RDMA QP");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
-                    NInterconnect::NRdma::TQueuePair& qp = *RdmaQp.get();
-                    enum ibv_qp_state qpState = static_cast<enum ibv_qp_state>(qp.GetState(false));
+                    TQueuePair& qp = *RdmaQp.get();
+                    // Qp can be moved in to err (or init) state by output session actor (which is works on the same mailbox)
+                    // some verbs implementations lost notifications in case of post WR on the QP with unexpected state so check state here
+                    // allows to prevent such situations
+                    TQueuePair::TQpState res = qp.GetState(false);
+                    if (std::holds_alternative<TQueuePair::TQpErr>(res)) {
+                        LOG_ERROR_IC_SESSION("ICRDMA", "unable to get qp state, %d err is: %s",
+                            qp.GetQpNum(), std::get<TQueuePair::TQpErr>(res).Err);
+                        throw TExDestroySession{TDisconnectReason::RdmaError()};
+                    }
+                    enum ibv_qp_state qpState = static_cast<enum ibv_qp_state>(std::get<TQueuePair::TQpS>(res).State);
                     if (qpState != IBV_QPS_RTS) {
                         TStringStream ss;
                         ss << qpState;
                         LOG_ERROR_IC_SESSION("ICRDMA", "qp is not ready, unable to submit rdma READ, %d state is: %s",
                             qp.GetQpNum(), ss.Data());
-                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                        throw TExDestroySession{TDisconnectReason::RdmaError()};
                     }
                     const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
                     ptr += sizeof(ui16);
@@ -809,10 +821,10 @@ namespace NActors {
                     context.PendingEvents.back().RdmaCheckSum = ReadUnaligned<ui32>(ptr);
                     ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
-                    if (std::holds_alternative<NInterconnect::NRdma::ICq::TBusy>(err)) {
+                    if (std::holds_alternative<ICq::TBusy>(err)) {
                         LOG_CRIT_IC_SESSION("ICIS20", "RDMA_READ error: can not allocate cq work request: busy");
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
-                    } else if (std::holds_alternative<NInterconnect::NRdma::ICq::TErr>(err)) {
+                    } else if (std::holds_alternative<ICq::TErr>(err)) {
                         LOG_CRIT_IC_SESSION("ICIS21", "RDMA_READ error: can not allocate cq work request: error");
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     }

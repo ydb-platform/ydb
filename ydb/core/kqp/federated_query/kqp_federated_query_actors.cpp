@@ -127,8 +127,10 @@ void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKey
 
     const auto secretIt = VersionedSecrets.find(secretName);
     if (secretIt != VersionedSecrets.end()) { // some secret version is in cache
-        const auto secretDescription = request->ResultSet.front().SecretInfo->Description;
-        if (secretDescription.GetVersion() <= secretIt->second.SecretVersion) { // cache contains the most recent version
+        if (
+            request->ResultSet.front().Self->Info.GetPathId() < secretIt->second.PathId &&
+            secretDescription.GetVersion() <= secretIt->second.SecretVersion
+        ) { // cache contains the most recent version
             LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie << ", fill value from secret cache");
             FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(std::vector<TString>{secretIt->second.Value}));
             return;
@@ -192,6 +194,7 @@ void TDescribeSchemaSecretsService::SendSchemeCacheRequest(const TString& secret
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.Path = SplitPath(secretName);
+    entry.SyncVersion = true;
     request->ResultSet.emplace_back(entry);
     // TODO(yurikiselev): Deal with UserToken [issue:25472]
 

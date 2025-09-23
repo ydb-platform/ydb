@@ -101,14 +101,14 @@ private:
 
 }  // anonymous namespace
 
-void TDescribeSchemaSecretsService::Handle(TEvResolveSecret::TPtr& ev) {
+void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr& ev) {
     LOG_D("TEvResolveSecret: name=" << ev->Get()->SecretName << ", request cookie=" << LastCookie);
 
     SaveIncomingRequestInfo(*ev->Get());
     SendSchemeCacheRequest(ev->Get()->SecretName);
 }
 
-void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie);
 
     const auto respIt = ResolveInFlight.find(ev->Cookie);
@@ -146,7 +146,7 @@ void TDescribeSchemaSecretsService::Handle(TEvTxProxySchemeCache::TEvNavigateKey
     Send(MakeTxProxyID(), req.Release(), 0, ev->Cookie);
 }
 
-void TDescribeSchemaSecretsService::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
     LOG_D("TEvDescribeSchemeResult: request cookie=" << ev->Cookie);
 
     const auto respIt = ResolveInFlight.find(ev->Cookie);

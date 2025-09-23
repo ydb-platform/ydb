@@ -42,15 +42,15 @@ public:
 
 private:
     STRICT_STFUNC(StateWait,
-        hFunc(TEvResolveSecret, Handle);
-        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-        hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+        hFunc(TEvResolveSecret, HandleIncomingRequest);
+        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
+        hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleSchemeShardResponse);
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
     )
 
-    void Handle(TEvResolveSecret::TPtr& ev);
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
+    void HandleIncomingRequest(TEvResolveSecret::TPtr& ev);
+    void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    void HandleSchemeShardResponse(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
     void FillResponse(const ui64 requestId, const TEvDescribeSecretsResponse::TDescription& response);
     void SaveIncomingRequestInfo(const TEvResolveSecret& req);
     void SendSchemeCacheRequest(const TString& secretName);

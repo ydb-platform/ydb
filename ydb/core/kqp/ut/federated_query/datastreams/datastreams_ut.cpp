@@ -359,7 +359,7 @@ public:
             }
 
             const auto& status = operation->Status();
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, TStringBuilder() << "Status: " << execStatus << ", Issues: " << status.GetIssues().ToOneLineString());
             UNIT_ASSERT_C(!operation->Ready(), "Operation unexpectedly ready in status " << execStatus << " (expected status " << finalStatus << ")");
 
             error = TStringBuilder() << "operation status: " << execStatus << ", ready: " << operation->Ready();
@@ -378,7 +378,7 @@ public:
     }
 
     void ExecAndWaitScript(const TString& query, EExecStatus finalStatus = EExecStatus::Completed, std::optional<TExecuteScriptSettings> settings = std::nullopt) {
-        WaitScriptExecution(ExecScript(query, settings), finalStatus, false);
+        WaitScriptExecution(ExecScript(query, settings, /* waitRunning */ false), finalStatus, false);
     }
 
     TResultSet FetchScriptResult(const TOperation::TOperationId& operationId, ui64 resultSetId = 0) {

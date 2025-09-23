@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 import time
 
 # Константы
-TAIL_MESSAGE = "📊 [Подробности на дашборде](https://datalens.yandex/wkptiaeyxz7qj?tab=ka)"
+TAIL_MESSAGE = "📊 [Подробности на дашборде](https://datalens.yandex/wkptiaeyxz7qj?tab=ka)\n\nFYI: @KirLynx"
 
 # Настройки фильтрации
 MAX_AGE_DAYS = 3  # Максимальный возраст jobs в днях (исключаем баги GitHub)

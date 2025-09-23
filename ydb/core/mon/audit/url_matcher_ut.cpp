@@ -36,6 +36,7 @@ Y_UNIT_TEST_SUITE(TUrlMatcherTest) {
         UNIT_ASSERT(matcher.Match("/actors/blobstorageproxies/blobstorageproxy2181038080?PutSamplingRate=1"));
         UNIT_ASSERT(matcher.Match("/actors/blobstorageproxies/somethingelse?PutSamplingRate=123"));
 
+        UNIT_ASSERT(!matcher.Match("/actors/blobstorageproxies123"));
         UNIT_ASSERT(!matcher.Match("/actors/otherproxy/blobstorageproxy2181038080?PutSamplingRate=1"));
     }
 }

@@ -7,21 +7,19 @@ using namespace NMonitoring::NAudit;
 
 namespace {
 
-struct TRequestHolder {
-    NHttp::THttpIncomingRequestPtr Request;
-    TVector<TString> Storage;
-
+struct TRequestHolder : public NHttp::THttpIncomingRequest {
     TStringBuf Store(TString value) {
-        Storage.push_back(std::move(value));
-        return Storage.back();
+        return Storage.emplace_back(std::move(value));
     }
+private:
+    TVector<TString> Storage;
 };
 
 NHttp::THttpIncomingRequestPtr MakeRequest(TString method, TString url) {
-    NHttp::THttpIncomingRequestPtr Request = new NHttp::THttpIncomingRequest();
-    Request->Method = std::move(method);
-    Request->URL = std::move(url);
-    return Request;
+    auto request = MakeIntrusive<TRequestHolder>();
+    request->Method = request->Store(std::move(method));
+    request->URL = request->Store(std::move(url));
+    return std::move(request);
 }
 
 } // namespace

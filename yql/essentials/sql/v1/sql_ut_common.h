@@ -1244,6 +1244,264 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
 
+    Y_UNIT_TEST(CreateTableDublicateOptions) {
+        {
+            NYql::TAstParseResult req = SqlToYql(R"sql(
+                USE plato;
+                CREATE TABLE tbl (
+                    k Uint64,
+                    v Utf8 NOT NULL NOT NULL,
+                    PRIMARY KEY (k)
+                );
+            )sql");
+
+            UNIT_ASSERT(!req.IsOk());
+            UNIT_ASSERT_STRING_CONTAINS(req.Issues.ToString(), R"('NOT NULL' option can be specified only once)");
+        }
+
+        {
+            NYql::TAstParseResult req = SqlToYql(R"sql(
+                USE plato;
+                CREATE TABLE tbl (
+                    k Uint64,
+                    v Utf8 (NOT NULL, NOT NULL),
+                    PRIMARY KEY (k)
+                );
+            )sql");
+
+            UNIT_ASSERT(!req.IsOk());
+            UNIT_ASSERT_STRING_CONTAINS(req.Issues.ToString(), R"('NOT NULL' option can be specified only once)");
+        }
+
+        {
+            NYql::TAstParseResult req = SqlToYql(R"sql(
+                USE plato;
+                CREATE TABLE tbl (
+                    k Uint64,
+                    v Uint64 DEFAULT 0 DEFAULT 1,
+                    PRIMARY KEY (k)
+                );
+            )sql");
+
+            UNIT_ASSERT(!req.IsOk());
+            UNIT_ASSERT_STRING_CONTAINS(req.Issues.ToString(), R"('DEFAULT' option can be specified only once)");
+        }
+
+        {
+            NYql::TAstParseResult req = SqlToYql(R"sql(
+                USE plato;
+                CREATE TABLE tbl (
+                    k Uint64,
+                    v Uint64 (DEFAULT 1, DEFAULT 0),
+                    PRIMARY KEY (k)
+                );
+            )sql");
+
+            UNIT_ASSERT(!req.IsOk());
+            UNIT_ASSERT_STRING_CONTAINS(req.Issues.ToString(), R"('DEFAULT' option can be specified only once)");
+        }
+
+        {
+            NYql::TAstParseResult req = SqlToYql(R"sql(
+                USE plato;
+                CREATE TABLE tbl (
+                    k Uint64,
+                    v Utf8 FAMILY family_large FAMILY family_large,
+                    PRIMARY KEY (k),
+                    FAMILY default (
+                        DATA = "ssd",
+                        COMPRESSION = "off"
+                    ),
+                    FAMILY family_large (
+                        DATA = "rot",
+                        COMPRESSION = "lz4"
+                    )
+                );
+            )sql");
+
+            UNIT_ASSERT(!req.IsOk());
+            UNIT_ASSERT_STRING_CONTAINS(req.Issues.ToString(), R"('FAMILY' option can be specified only once)");
+        }
+
+        {
+            NYql::TAstParseResult req = SqlToYql(R"sql(
+                USE plato;
+                CREATE TABLE tbl (
+                    k Uint64,
+                    v Utf8 (FAMILY family_large, FAMILY family_large),
+                    PRIMARY KEY (k),
+                    FAMILY default (
+                        DATA = "ssd",
+                        COMPRESSION = "off"
+                    ),
+                    FAMILY family_large (
+                        DATA = "rot",
+                        COMPRESSION = "lz4"
+                    )
+                );
+            )sql");
+
+            UNIT_ASSERT(!req.IsOk());
+            UNIT_ASSERT_STRING_CONTAINS(req.Issues.ToString(), R"('FAMILY' option can be specified only once)");
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableFamilyAndNotNullInOrder) {
+        NYql::TAstParseResult familyBeforeConstraint = SqlToYql(R"sql(
+            USE plato;
+            CREATE TABLE tbl (
+                k Uint64,
+                v Utf8 FAMILY family_large NOT NULL,
+                PRIMARY KEY (k),
+                FAMILY default (
+                    DATA = "ssd",
+                    COMPRESSION = "off"
+                ),
+                FAMILY family_large (
+                    DATA = "rot",
+                    COMPRESSION = "lz4"
+                )
+            );
+        )sql");
+
+        UNIT_ASSERT_C(familyBeforeConstraint.IsOk(), familyBeforeConstraint.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__('('columnConstrains '('('not_null))) '('"family_large")))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(familyBeforeConstraint, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
+    Y_UNIT_TEST(CreateTableFamilyAndNotNullReversed) {
+        NYql::TAstParseResult familyAfterConstraint = SqlToYql(R"sql(
+            USE plato;
+            CREATE TABLE tbl (
+                k Uint64,
+                v Utf8 NOT NULL FAMILY family_large,
+                PRIMARY KEY (k),
+                FAMILY default (
+                    DATA = "ssd",
+                    COMPRESSION = "off"
+                ),
+                FAMILY family_large (
+                    DATA = "rot",
+                    COMPRESSION = "lz4"
+                )
+            );
+        )sql");
+
+        UNIT_ASSERT_C(familyAfterConstraint.IsOk(), familyAfterConstraint.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__('('columnConstrains '('('not_null))) '('"family_large")))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(familyAfterConstraint, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
+    Y_UNIT_TEST(CreateTableNotNullInsideDefault) {
+        {
+            NYql::TAstParseResult req = SqlToYql(R"sql(
+                USE plato;
+                CREATE TABLE tbl (
+                    k Uint64,
+                    v Bool DEFAULT false NOT NULL,
+                    PRIMARY KEY (k)
+                );
+            )sql");
+
+            UNIT_ASSERT(!req.IsOk());
+            UNIT_ASSERT_STRING_CONTAINS(req.Issues.ToString(), R"('DEFAULT' option can not use expr which contains literall 'NOT NULL')");
+        }
+
+        {
+            NYql::TAstParseResult req = SqlToYql(R"sql(
+                USE plato;
+                CREATE TABLE tbl (
+                    k Uint64,
+                    v Bool DEFAULT (false + true NOT NULL),
+                    PRIMARY KEY (k)
+                );
+            )sql");
+
+            UNIT_ASSERT(!req.IsOk());
+            UNIT_ASSERT_STRING_CONTAINS(req.Issues.ToString(), R"('DEFAULT' option can not use expr which contains literall 'NOT NULL')");
+        }
+
+        {
+            NYql::TAstParseResult req = SqlToYql(R"sql(
+                USE plato;
+                CREATE TABLE tbl (
+                    k Uint64,
+                    v Bool DEFAULT (NULL NOT NULL),
+                    PRIMARY KEY (k)
+                );
+            )sql");
+
+            UNIT_ASSERT(!req.IsOk());
+            UNIT_ASSERT_STRING_CONTAINS(req.Issues.ToString(), R"('DEFAULT' option can not use expr which contains literall 'NOT NULL')");
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableDefaultAndNotNullInOrderWithComma) {
+        NYql::TAstParseResult defaultBeforeConstraint = SqlToYql(R"sql(
+            USE plato;
+            CREATE TABLE tbl (
+                k Uint64,
+                v Bool (DEFAULT false, NOT NULL),
+                PRIMARY KEY (k)
+            );
+        )sql");
+
+        UNIT_ASSERT_C(defaultBeforeConstraint.IsOk(), defaultBeforeConstraint.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__(('columnConstrains '('('not_null) '('default (Bool '"false")))) '()))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(defaultBeforeConstraint, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
+    Y_UNIT_TEST(CreateTableDefaultAndNotNullReversed) {
+        NYql::TAstParseResult defaultAfterConstraint = SqlToYql(R"sql(
+            USE plato;
+            CREATE TABLE tbl (
+                k Uint64,
+                v Uint64 NOT NULL DEFAULT 0,
+                PRIMARY KEY (k)
+            );
+        )sql");
+
+        UNIT_ASSERT_C(defaultAfterConstraint.IsOk(), defaultAfterConstraint.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__('('columnConstrains '('('not_null) '('default (Int32 '"0")))) '()))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(defaultAfterConstraint, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
     Y_UNIT_TEST(CreateTableNonNullableYqlTypeAstCorrect) {
         NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32 not null);");
         UNIT_ASSERT(res.Root);

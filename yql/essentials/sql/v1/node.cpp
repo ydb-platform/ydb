@@ -1014,7 +1014,7 @@ bool TCallNodeDepArgs::DoInit(TContext& ctx, ISource* src) {
     return true;
 }
 
-TCallDirectRow::TPtr TCallDirectRow::DoClone() const {
+INode::TPtr TCallDirectRow::DoClone() const {
     return new TCallDirectRow(Pos_, OpName_, CloneContainer(Args_));
 }
 
@@ -1038,7 +1038,13 @@ bool TCallDirectRow::DoInit(TContext& ctx, ISource* src) {
     if (!TCallNode::DoInit(ctx, src)) {
         return false;
     }
-    Nodes_.push_back(Y("DependsOn", "row"));
+
+    if (ctx.DirectRowDependsOn.GetOrElse(true)) {
+        Nodes_.push_back(Y("DependsOn", "row"));
+    } else {
+        Nodes_.push_back(AstNode("row"));
+    }
+
     return true;
 }
 

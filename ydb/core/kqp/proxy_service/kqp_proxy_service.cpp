@@ -1765,6 +1765,7 @@ private:
             QueryServiceConfig.GetSharedReading(),
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
+            AppData()->FunctionRegistry,
             AppData()->TenantName,
             Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
             FederatedQuerySetup->PqGateway,
@@ -1776,7 +1777,7 @@ private:
         TActivationContext::ActorSystem()->RegisterLocalService(
             NFq::RowDispatcherServiceActorId(), RowDispatcherService);
     }
-    
+
     void InitCheckpointStorage() {
         const auto& checkpointConfig = QueryServiceConfig.GetCheckpointsConfig();
         if (!checkpointConfig.GetEnabled() || !FederatedQuerySetup) {

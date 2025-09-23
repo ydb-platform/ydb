@@ -3583,6 +3583,8 @@ message TReqListQueries
     optional string substr_filter = 9;
     optional uint64 limit = 10 [default = 100];
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 11;
+    optional bool search_by_token_prefix = 12 [default = false];
+    optional bool use_full_text_search = 13 [default = true];
 }
 
 message TRspListQueries
@@ -3665,6 +3667,7 @@ message TReqFinishDistributedWriteSession
     required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteSessionPtr
     repeated bytes signed_write_results = 2; // vector of YSON-serialized TSignedWriteFragmentResultPtr
 
+    // TODO(achains): Remove after YT-26131
     required int32 max_children_per_attach_request = 3;
 }
 

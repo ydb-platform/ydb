@@ -111,7 +111,7 @@ namespace NKikimr {
     THullCtx::THullCtx(TVDiskContextPtr vctx, const TIntrusivePtr<TVDiskConfig> vcfg, ui32 chunkSize, ui32 compWorthReadSize,
             bool freshCompaction, bool gcOnlySynced, bool allowKeepFlags, bool barrierValidation, ui32 hullSstSizeInChunksFresh,
             ui32 hullSstSizeInChunksLevel, double hullCompFreeSpaceThreshold, double hullCompReadBatchEfficiencyThreshold,
-            TDuration hullCompStorageRatioCalcPeriod, TDuration hullCompStorageRatioMaxCalcDuration, bool addHeader,
+            TDuration hullCompStorageRatioCalcPeriod, TDuration hullCompStorageRatioMaxCalcDuration,
             ui32 hullCompLevel0MaxSstsAtOnce, ui32 hullCompSortedPartsNum)
         : VCtx(std::move(vctx))
         , VCfg(vcfg)
@@ -128,7 +128,6 @@ namespace NKikimr {
         , HullCompReadBatchEfficiencyThreshold(hullCompReadBatchEfficiencyThreshold)
         , HullCompStorageRatioCalcPeriod(hullCompStorageRatioCalcPeriod)
         , HullCompStorageRatioMaxCalcDuration(hullCompStorageRatioMaxCalcDuration)
-        , AddHeader(addHeader)
         , HullCompLevel0MaxSstsAtOnce(hullCompLevel0MaxSstsAtOnce)
         , HullCompSortedPartsNum(hullCompSortedPartsNum)
         , CompactionStrategyGroup(VCtx->VDiskCounters, "subsystem", "compstrategy")

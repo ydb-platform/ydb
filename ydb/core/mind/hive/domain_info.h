@@ -52,9 +52,15 @@ struct TDomainInfo {
     TMaybeFail<TScaleRecommendation> LastScaleRecommendation;
     TVector<std::shared_ptr<TScaleRecommenderPolicy>> ScaleRecommenderPolicies;
 
+    TActorId HivePipeClient;
+
     void SetScaleRecommenderPolicies(const NKikimrHive::TScaleRecommenderPolicies& policies);
 
     ENodeSelectionPolicy GetNodeSelectionPolicy() const;
+
+    TActorId GetPipeToHive(THive* self);
+
+    void ClosePipeToHive(const TActorId& actorId);
 };
 
 } // NHive

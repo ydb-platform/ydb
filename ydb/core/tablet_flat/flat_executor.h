@@ -639,6 +639,9 @@ class TExecutor
             const NTable::TCompactionChanges& changes,
             NKikimrCompaction::ECompactionStrategy strategy);
 
+    void RenderHtmlCounters(TStringStream& str) const;
+    void RenderJsonCounters(TStringStream& str) const;
+
 public:
     void Describe(IOutputStream &out) const override
     {

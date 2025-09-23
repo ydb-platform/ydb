@@ -1,8 +1,9 @@
 #include "util.h"
 
-#include <library/cpp/string_utils/quote/quote.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/dom/node.h>
+
+#include <library/cpp/string_utils/quote/quote.h>
 
 namespace NYql::NS3Util {
 
@@ -14,7 +15,7 @@ inline char d2x(unsigned x) {
 
 char* UrlEscape(char* to, const char* from) {
     while (*from) {
-        if (*from == '%' || *from == '#' || *from == '?' || (unsigned char)*from <= ' ' || (unsigned char)*from > '~') {
+        if (IsIn({'%', '#', '?', ';'}, *from) || (unsigned char)*from <= ' ' || (unsigned char)*from > '~') {
             *to++ = '%';
             *to++ = d2x((unsigned char)*from >> 4);
             *to++ = d2x((unsigned char)*from & 0xF);
@@ -188,7 +189,7 @@ bool ValidateIoSchema(TPositionHandle pos, const TStructExprType* schemaStructRo
     return !hasErrors;
 }
 
-}
+} // anonymous namespace
 
 TIssues AddParentIssue(const TString& prefix, TIssues&& issues) {
     if (!issues) {
@@ -281,4 +282,4 @@ TString TUrlBuilder::Build() const {
     return std::move(result);
 }
 
-}
+} // namespace NYql::NS3Util

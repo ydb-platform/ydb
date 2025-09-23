@@ -122,6 +122,9 @@ namespace {
         return allTypes.contains(type);
     }
 
+    void IKqpFederatedQuerySetupFactory::Cleanup() {
+    }
+
     // TKqpFederatedQuerySetupFactoryDefault contains network clients and service actors necessary
     // for federated queries. HTTP Gateway (required by S3 provider) is run by default even without
     // explicit configuration. Token Accessor and Connector Client are run only if config is provided.
@@ -232,6 +235,11 @@ namespace {
         }
 
         return result;
+    }
+
+    void TKqpFederatedQuerySetupFactoryDefault::Cleanup() {
+        HttpGateway.reset();
+        PqGateway.Reset();
     }
 
     IKqpFederatedQuerySetupFactory::TPtr MakeKqpFederatedQuerySetupFactory(

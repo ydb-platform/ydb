@@ -5,7 +5,10 @@
 
 #include <library/cpp/yt/misc/enum.h>
 
+#include <library/cpp/yt/yson_string/public.h>
+
 #include <library/cpp/yson/node/node.h>
+#include <library/cpp/yson/node/serialize.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
@@ -58,18 +61,19 @@ enum class ETraceHttpRequestsMode
     Always /* "always" */,
 };
 
-DEFINE_ENUM(EUploadDeduplicationMode,
+enum class EUploadDeduplicationMode : int
+{
     // For each file only one process' thread from all possible hosts can upload it to the file cache at the same time.
     // The others will wait for the uploading to finish and use already cached file.
-    ((Global)   (0))
+    Global,
 
     // For each file and each particular host only one process' thread can upload it to the file cache at the same time.
     // The others will wait for the uploading to finish and use already cached file.
-    ((Host)     (1))
+    Host,
 
     // All processes' threads will upload a file to the cache concurrently.
-    ((Disabled) (2))
-);
+    Disabled,
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -282,6 +286,18 @@ struct TConfig
 
     static TConfigPtr Get();
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer);
+
+void Deserialize(TConfig& config, const TNode& node);
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString ConfigToYsonString(const TConfig& config, NYson::EYsonFormat format = NYson::EYsonFormat::Pretty);
+
+TConfig ConfigFromYsonString(TString serializedConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

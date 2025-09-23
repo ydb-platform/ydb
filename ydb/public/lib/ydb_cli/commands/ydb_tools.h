@@ -72,6 +72,7 @@ private:
     ui32 InFlight;
     bool UseBulkUpsert = false;
     bool UseImportData = false;
+    ui32 Retries;
 };
 
 class TCommandCopy : public TTableCommand {

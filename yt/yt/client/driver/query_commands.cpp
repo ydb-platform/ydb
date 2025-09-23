@@ -311,6 +311,19 @@ void TListQueriesCommand::Register(TRegistrar registrar)
             return command->Options.Attributes;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "search_by_token_prefix",
+        [] (TThis* command) -> auto& {
+            return command->Options.SearchByTokenPrefix;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "use_full_text_search",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseFullTextSearch;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TListQueriesCommand::DoExecute(ICommandContextPtr context)

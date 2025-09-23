@@ -3344,6 +3344,11 @@ public:
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos_, "DebugPositions"))));
                 }
+
+                if (ctx.DirectRowDependsOn.Defined()) {
+                    const TString pragmaName = *ctx.DirectRowDependsOn ? "DirectRowDependsOn" : "DisableDirectRowDependsOn";
+                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, BuildQuotedAtom(Pos_, pragmaName))));
+                }
             }
         }
 

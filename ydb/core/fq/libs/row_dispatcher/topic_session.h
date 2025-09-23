@@ -24,6 +24,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     const TString& endpoint,
     const TString& database,
     const NKikimrConfig::TSharedReadingConfig& config,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     NActors::TActorId rowDispatcherActorId,
     NActors::TActorId compileServiceActorId,
     ui32 partitionId,

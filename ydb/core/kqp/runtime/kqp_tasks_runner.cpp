@@ -35,7 +35,7 @@ IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outp
             GetColumnsInfo(type, outputDesc.GetRangePartition().GetKeyColumns(), keyColumns);
             YQL_ENSURE(!keyColumns.empty());
             for (auto& info : keyColumns) {
-                NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(info.Type);
+                NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(info.DataType);
                 keyColumnTypeInfos.emplace_back(typeInfo);
                 keyColumnIndices.emplace_back(info.Index);
             }

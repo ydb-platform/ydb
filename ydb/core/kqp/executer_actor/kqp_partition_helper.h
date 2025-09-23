@@ -9,6 +9,18 @@
 
 namespace NKikimr::NKqp {
 
+struct TShardInfo {
+    struct TColumnWriteInfo {
+        ui32 MaxValueSizeBytes = 0;
+    };
+
+    TMaybe<TShardKeyRanges> KeyReadRanges;  // empty -> no reads
+    TMaybe<TShardKeyRanges> KeyWriteRanges; // empty -> no writes
+    THashMap<TString, TColumnWriteInfo> ColumnWrites;
+
+    TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
+};
+
 class TShardInfoWithId: public TShardInfo {
 public:
     ui64 ShardId;
@@ -34,7 +46,7 @@ public:
 
     THashMap<ui64, TShardInfo> Prune(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo, bool& isFullScan);
 
-    THashMap<ui64, TShardInfo> Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan) const;
+    const THashMap<ui64, TShardInfo>& Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan);
 
     THashMap<ui64, TShardInfo> PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo);
 
@@ -44,6 +56,8 @@ private:
     const NMiniKQL::THolderFactory* HolderFactory;
     const NMiniKQL::TTypeEnvironment* TypeEnv;
     const TPartitionPrunerConfig Config;
+
+    THashMap<NYql::NDq::TStageId, std::pair<THashMap<ui64, TShardInfo>, bool /* isFullScan*/ >> SourceScanStageIdToParititions;
 };
 
 TSerializedTableRange MakeKeyRange(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
@@ -102,9 +116,5 @@ THashMap<ui64, TShardInfo> PruneEffectPartitions(const NKqpProto::TKqpPhyTableOp
 TPhysicalShardReadSettings ExtractReadSettings(
     const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
-
-// Returns true if parallel point read is possible for the given partitions
-// for EnableParallelPointReadConsolidation settings
-bool IsParallelPointReadPossible(const THashMap<ui64, TShardInfo>& partitions);
 
 } // namespace NKikimr::NKqp

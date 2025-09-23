@@ -1136,6 +1136,8 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                         TABLEH() { out << "Total Size"; }
                         TABLEH() { out << "Status"; }
                         TABLEH() { out << "State"; }
+                        TABLEH() { out << "Decommit status"; }
+                        TABLEH() { out << "Maintenance status"; }
                         TABLEH() { out << "ExpectedSerial"; }
                         TABLEH() { out << "LastSeenSerial"; }
                         TABLEH() { out << "LastSeenPath"; }
@@ -1159,6 +1161,8 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                                     out << NKikimrBlobStorage::TPDiskState::E_Name(m.GetState());
                                 }
                             }
+                            TABLED() { out << NKikimrBlobStorage::EDecommitStatus_Name(pdisk->DecommitStatus); }
+                            TABLED() { out << NKikimrBlobStorage::TMaintenanceStatus::E_Name(pdisk->MaintenanceStatus); }
                             TABLED() { out << pdisk->ExpectedSerial.Quote(); }
                             TABLED() {
                                 TString color = pdisk->ExpectedSerial == pdisk->LastSeenSerial ? "green" : "red";

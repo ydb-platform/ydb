@@ -14,7 +14,30 @@ namespace NUdf {
 // opaque type info
 using TType = void;
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+
+#define UDF_TYPE_KIND_MAP(XX) \
+    XX(Unknown)               \
+    XX(Data)                  \
+    XX(Struct)                \
+    XX(List)                  \
+    XX(Optional)              \
+    XX(Tuple)                 \
+    XX(Dict)                  \
+    XX(Callable)              \
+    XX(Resource)              \
+    XX(Void)                  \
+    XX(Variant)               \
+    XX(Stream)                \
+    XX(Null)                  \
+    XX(EmptyList)             \
+    XX(EmptyDict)             \
+    XX(Tagged)                \
+    XX(Pg)                    \
+    XX(Block)                 \
+    XX(Linear)
+
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 
 #define UDF_TYPE_KIND_MAP(XX) \
     XX(Unknown)               \
@@ -217,7 +240,19 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+class ITypeVisitor7: public ITypeVisitor6 {
+public:
+    virtual void OnLinear(const TType* itemType, bool isDynamic) = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+class ITypeVisitor : public ITypeVisitor7 {
+protected:
+    ITypeVisitor();
+};
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 class ITypeVisitor : public ITypeVisitor6 {
 protected:
     ITypeVisitor();

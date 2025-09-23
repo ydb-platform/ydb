@@ -24,6 +24,11 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+struct TShardRangesWithShardId {
+    TMaybe<ui64> ShardId;
+    const TShardKeyRanges* Ranges;
+};
+
 void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo) {
     LOG_DEBUG_S(ctx, NKikimrServices::KQP_EXECUTER, stageInfo.DebugString());
 }
@@ -710,21 +715,6 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
     }
 }
 
-bool TKqpTasksGraph::IsCrossShardChannel(const TChannel& channel) const {
-    YQL_ENSURE(channel.SrcTask);
-
-    if (!channel.DstTask) {
-        return false;
-    }
-
-    ui64 targetShard = GetTask(channel.DstTask).Meta.ShardId;
-    if (!targetShard) {
-        return false;
-    }
-
-    ui64 srcShard = GetTask(channel.SrcTask).Meta.ShardId;
-    return srcShard && targetShard != srcShard;
-}
 
 void TShardKeyRanges::AddPoint(TSerializedCellVec&& point) {
     if (!IsFullRange()) {
@@ -966,8 +956,6 @@ std::pair<const TSerializedCellVec*, bool> TShardKeyRanges::GetRightBorder() con
 void FillEndpointDesc(NDqProto::TEndpoint& endpoint, const TTask& task) {
     if (task.ComputeActorId) {
         ActorIdToProto(task.ComputeActorId, endpoint.MutableActorId());
-    } else if (task.Meta.ShardId) {
-        endpoint.SetTabletId(task.Meta.ShardId);
     }
 }
 
@@ -998,7 +986,7 @@ void TKqpTasksGraph::FillChannelDesc(NDqProto::TChannel& channelDesc, const TCha
         ActorIdToProto(srcTask.Meta.ExecuterId, channelDesc.MutableDstEndpoint()->MutableActorId());
     }
 
-    channelDesc.SetIsPersistent(IsCrossShardChannel(channel));
+    channelDesc.SetIsPersistent(false);
     channelDesc.SetInMemory(channel.InMemory);
     if (chanTransportVersion == NKikimrConfig::TTableServiceConfig::CTV_OOB_PICKLE_1_0) {
         channelDesc.SetTransportVersion(NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0);
@@ -1017,29 +1005,11 @@ void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransact
 }
 
 void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto::TDqTask& taskDesc) {
-    if (task.Meta.ShardId && (task.Meta.Reads || task.Meta.Writes)) {
+    if (task.Meta.ShardId && task.Meta.Writes) {
         NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta protoTaskMeta;
 
         FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
 
-        if (task.Meta.Reads) {
-            for (auto& read : *task.Meta.Reads) {
-                auto* protoReadMeta = protoTaskMeta.AddReads();
-                read.Ranges.SerializeTo(protoReadMeta->MutableRange());
-                for (auto& column : read.Columns) {
-                    auto* protoColumn = protoReadMeta->AddColumns();
-                    protoColumn->SetId(column.Id);
-                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                    protoColumn->SetType(columnType.TypeId);
-                    if (columnType.TypeInfo) {
-                        *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
-                    }
-                    protoColumn->SetName(column.Name);
-                }
-                protoReadMeta->SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
-                protoReadMeta->SetReverse(task.Meta.ReadInfo.IsReverse());
-            }
-        }
         if (task.Meta.Writes) {
             auto* protoWrites = protoTaskMeta.MutableWrites();
             task.Meta.Writes->Ranges.SerializeTo(protoWrites->MutableRange());
@@ -1918,14 +1888,14 @@ void MergeReadInfoToTaskMeta(TTaskMeta& meta, ui64 shardId, TMaybe<TShardKeyRang
     meta.Reads->emplace_back(std::move(readInfo));
 }
 
-THashSet<ui64> TKqpTasksGraph::BuildDatashardTasks(TStageInfo& stageInfo, const IKqpTransactionManagerPtr& txManager) {
-    THashSet<ui64> shardsWithEffects;
+void TKqpTasksGraph::BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects) {
+    Y_ENSURE(shardsWithEffects);
 
     THashMap<ui64, ui64> shardTasks; // shardId -> taskId
     auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
     auto getShardTask = [&](ui64 shardId) -> TTask& {
-        YQL_ENSURE(!txManager);
+        // TODO: YQL_ENSURE(!txManager);
         auto it  = shardTasks.find(shardId);
         if (it != shardTasks.end()) {
             return GetTask(it->second);
@@ -1978,7 +1948,7 @@ THashSet<ui64> TKqpTasksGraph::BuildDatashardTasks(TStageInfo& stageInfo, const 
                         taskColumnWrite.MaxValueSizeBytes = std::max(taskColumnWrite.MaxValueSizeBytes,
                             info.MaxValueSizeBytes);
                     }
-                    shardsWithEffects.insert(shardId);
+                    shardsWithEffects->insert(shardId);
                 }
 
                 break;
@@ -2006,8 +1976,6 @@ THashSet<ui64> TKqpTasksGraph::BuildDatashardTasks(TStageInfo& stageInfo, const 
     //         << ", shard: " << shardTask.first
     //         << ", meta: " << task.Meta.ToString(keyTypes, *AppData()->TypeRegistry));
     // }
-
-    return shardsWithEffects;
 }
 
 void PrepareScanMetaForUsage(TTaskMeta& meta, const TVector<NScheme::TTypeInfo>& keyTypes) {
@@ -2306,9 +2274,7 @@ void FillReadTaskFromSource(TTask& task, const TString& sourceName, const TStrin
     }
 }
 
-void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot,
-    ui32 scheduledTaskCount, const std::map<TString, TString>& secureParams)
-{
+void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount) {
     auto& intros = stageInfo.Introspections;
     const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
@@ -2347,7 +2313,7 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
     auto sourceName = externalSource.GetSourceName();
     TString structuredToken;
     if (sourceName) {
-        structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(secureParams).ToJson();
+        structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson();
     }
 
     ui64 nodeOffset = 0;
@@ -2360,8 +2326,7 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
 
     if (GetMeta().IsRestored) {
         for (const auto taskId : stageInfo.Tasks) {
-            auto& task = GetTask(taskId);
-            FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
+            FillReadTaskFromSource(GetTask(taskId), sourceName, structuredToken, resourceSnapshot, nodeOffset++);
         }
         return;
     }
@@ -2656,18 +2621,15 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
     };
 
     bool isFullScan = false;
-    const THashMap<ui64, TShardInfo> partitions = GetMeta().SourceScanStageIdToParititions.empty()
-        ? PartitionPruner->Prune(source, stageInfo, isFullScan)
-        : GetMeta().SourceScanStageIdToParititions.at(stageInfo.Id);
+    const THashMap<ui64, TShardInfo>& partitions = PartitionPruner->Prune(source, stageInfo, isFullScan);
 
     if (isFullScan && !source.HasItemsLimit()) {
         Counters->Counters->FullScansExecuted->Inc();
     }
 
     bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
-    bool isParallelPointRead = GetMeta().EnableParallelPointReadConsolidation && !isSequentialInFlight && !source.GetSorted() && IsParallelPointReadPossible(partitions);
 
-    if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead || singlePartitionedStage)) {
+    if (partitions.size() > 0 && (isSequentialInFlight || singlePartitionedStage)) {
         auto [startShard, shardInfo] = PartitionPruner->MakeVirtualTablePartition(source, stageInfo);
 
         YQL_ENSURE(stats);
@@ -2681,10 +2643,10 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         }
 
         if (shardInfo.KeyReadRanges) {
-            const TMaybe<ui64> nodeId = (isParallelPointRead || singlePartitionedStage) ? TMaybe<ui64>{GetMeta().ExecuterId.NodeId()} : Nothing();
+            const TMaybe<ui64> nodeId = singlePartitionedStage ? TMaybe<ui64>{GetMeta().ExecuterId.NodeId()} : Nothing();
             addPartition(startShard, nodeId, {}, shardInfo, inFlightShards);
             fillRangesForTasks();
-            return (isParallelPointRead || singlePartitionedStage) ? TMaybe<size_t>(partitions.size()) : Nothing();
+            return singlePartitionedStage ? TMaybe<size_t>(partitions.size()) : Nothing();
         } else {
             return 0;
         }
@@ -2697,14 +2659,263 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
     }
 }
 
+struct TStageScheduleInfo {
+    double StageCost = 0.0;
+    ui32 TaskCount = 0;
+};
+
+static std::map<ui32, TStageScheduleInfo> ScheduleByCost(const IKqpGateway::TPhysicalTxData& tx, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+    std::map<ui32, TStageScheduleInfo> result;
+    if (!resourceSnapshot.empty()) // can't schedule w/o node count
+    {
+        // collect costs and schedule stages with external sources only
+        double totalCost = 0.0;
+        for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
+            auto& stage = tx.Body->GetStages(stageIdx);
+            if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
+                if (stage.GetStageCost() > 0.0 && stage.GetTaskCount() == 0) {
+                    totalCost += stage.GetStageCost();
+                    result.emplace(stageIdx, TStageScheduleInfo{.StageCost = stage.GetStageCost()});
+                }
+            }
+        }
+        // assign task counts
+        if (!result.empty()) {
+            // allow use 2/3 of threads in single stage
+            ui32 maxStageTaskCount = (TStagePredictor::GetUsableThreads() * 2 + 2) / 3;
+            // total limit per mode is x2
+            ui32 maxTotalTaskCount = maxStageTaskCount * 2;
+            for (auto& [_, stageInfo] : result) {
+                // schedule tasks evenly between nodes
+                stageInfo.TaskCount =
+                    std::max<ui32>(
+                        std::min(static_cast<ui32>(maxTotalTaskCount * stageInfo.StageCost / totalCost), maxStageTaskCount)
+                        , 1
+                    ) * resourceSnapshot.size();
+            }
+        }
+    }
+    return result;
+}
+
+void TKqpTasksGraph::FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const {
+    for (const auto& [secretName, authInfo] : stage.GetSecureParams()) {
+        const auto& structuredToken = NYql::CreateStructuredTokenParser(authInfo).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson();
+        const auto& structuredTokenParser = NYql::CreateStructuredTokenParser(structuredToken);
+        YQL_ENSURE(structuredTokenParser.HasIAMToken(), "only token authentication supported for compute tasks");
+        secureParams.emplace(secretName, structuredTokenParser.GetIAMToken());
+    }
+}
+
+void TKqpTasksGraph::BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) const {
+    const auto& extSink = sink.GetExternalSink();
+    auto sinkName = extSink.GetSinkName();
+    if (sinkName) {
+        auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson();
+        task.Meta.SecureParams.emplace(sinkName, structuredToken);
+        if (GetMeta().UserRequestContext->TraceId) {
+            task.Meta.TaskParams.emplace("fq.job_id", GetMeta().UserRequestContext->CustomerSuppliedId);
+            // "fq.restart_count"
+        }
+    }
+
+    auto& output = task.Outputs[sink.GetOutputIndex()];
+    output.Type = TTaskOutputType::Sink;
+    output.SinkType = extSink.GetType();
+    output.SinkSettings = extSink.GetSettings();
+}
+
+void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const TStageInfo& stageInfo, TKqpTasksGraph::TTaskType& task) const {
+    const auto& intSink = sink.GetInternalSink();
+    auto& output = task.Outputs[sink.GetOutputIndex()];
+    output.Type = TTaskOutputType::Sink;
+    output.SinkType = intSink.GetType();
+
+    if (intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+        NKikimrKqp::TKqpTableSinkSettings settings;
+        if (!stageInfo.Meta.ResolvedSinkSettings) {
+            YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+        } else {
+            settings = *stageInfo.Meta.ResolvedSinkSettings;
+        }
+
+        auto& lockTxId = GetMeta().LockTxId;
+        if (lockTxId) {
+            settings.SetLockTxId(*lockTxId);
+            settings.SetLockNodeId(GetMeta().ExecuterId.NodeId());
+        }
+        if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
+            ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
+        }
+        if (!settings.GetInconsistentTx() && GetMeta().Snapshot.IsValid()) {
+            settings.MutableMvccSnapshot()->SetStep(GetMeta().Snapshot.Step);
+            settings.MutableMvccSnapshot()->SetTxId(GetMeta().Snapshot.TxId);
+        }
+        if (!settings.GetInconsistentTx() && GetMeta().LockMode) {
+            settings.SetLockMode(*GetMeta().LockMode);
+        }
+
+        settings.SetPriority((task.StageId.TxId << PriorityTxShift) + settings.GetPriority());
+
+        output.SinkSettings.ConstructInPlace();
+        output.SinkSettings->PackFrom(settings);
+    } else {
+        output.SinkSettings = intSink.GetSettings();
+    }
+}
+
+void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, TKqpTasksGraph::TTaskType& task) const {
+    if (stage.SinksSize() > 0) {
+        YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
+        const auto& sink = stage.GetSinks(0);
+        YQL_ENSURE(sink.GetOutputIndex() < task.Outputs.size());
+
+        if (sink.HasInternalSink()) {
+            BuildInternalSinks(sink, stageInfo, task);
+        } else if (sink.HasExternalSink()) {
+            BuildExternalSinks(sink, task);
+        } else {
+            YQL_ENSURE(false, "unknown sink type");
+        }
+    }
+}
+
+size_t TKqpTasksGraph::BuildAllTasks(bool isScan, bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings,
+    const TVector<IKqpGateway::TPhysicalTxData>& transactions,
+    const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
+    bool collectProfileStats, TQueryExecutionStats* stats,
+    size_t nodesCount, THashSet<ui64>* shardsWithEffects)
+{
+    size_t sourceScanPartitionsCount = 0;
+
+    Y_ENSURE(stats);
+
+    for (ui32 txIdx = 0; txIdx < transactions.size(); ++txIdx) {
+        const auto& tx = transactions[txIdx];
+        auto scheduledTaskCount = ScheduleByCost(tx, resourcesSnapshot);
+        for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
+            const auto& stage = tx.Body->GetStages(stageIdx);
+            auto& stageInfo = GetStageInfo(NYql::NDq::TStageId(txIdx, stageIdx));
+
+            // TODO:
+            // if (EnableReadsMerge) {
+            //     stageInfo.Introspections.push_back("Using tasks count limit because of enabled reads merge");
+            // }
+
+            // build task conditions
+            const bool buildFromSourceTasks = stage.SourcesSize() > 0;
+            const bool buildSysViewTasks = stageInfo.Meta.IsSysView();
+            const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!isScan && stage.SinksSize() > 0);
+            const bool buildScanTasks = isScan
+                ? stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()
+                : (GetMeta().AllowOlapDataQuery || GetMeta().StreamResult) && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0
+                ;
+
+            // TODO: doesn't work right now - multiple conditions are possible in tests
+            // YQL_ENSURE(buildFromSourceTasks + buildSysViewTasks + buildComputeTasks + buildScanTasks <= 1,
+            //     "Multiple task conditions: " <<
+            //     "isScan = " << (isScan) << ", "
+            //     "stage.SourcesSize() > 0 = " << (stage.SourcesSize() > 0) << ", "
+            //     "stageInfo.Meta.IsSysView() = " << (stageInfo.Meta.IsSysView()) << ", "
+            //     "stageInfo.Meta.ShardOperations.empty() = " << (stageInfo.Meta.ShardOperations.empty()) << ", "
+            //     "stage.SinksSize() = " << (stage.SinksSize()) << ", "
+            //     "stageInfo.Meta.IsOlap() = " << (stageInfo.Meta.IsOlap()) << ", "
+            //     "stageInfo.Meta.IsDatashard() = " << (stageInfo.Meta.IsDatashard()) << ", "
+            //     "AllowOlapDataQuery = " << (AllowOlapDataQuery) << ", "
+            //     "StreamResult = " << (StreamResult)
+            // );
+
+            // TODO: LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
+
+            if (buildFromSourceTasks) {
+                switch (stage.GetSources(0).GetTypeCase()) {
+                    case NKqpProto::TKqpSource::kReadRangesSource: {
+                        if (auto partitionsCount = BuildScanTasksFromSource(stageInfo, limitTasksPerNode, GetMeta().ShardIdToNodeId, stats)) {
+                            sourceScanPartitionsCount += *partitionsCount;
+                        } else {
+                            GetMeta().UnknownAffectedShardCount = true;
+                        }
+                    } break;
+                    case NKqpProto::TKqpSource::kExternalSource: {
+                        YQL_ENSURE(!isScan);
+                        auto it = scheduledTaskCount.find(stageIdx);
+                        BuildReadTasksFromSource(stageInfo, resourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
+                    } break;
+                    default:
+                        YQL_ENSURE(false, "unknown source type");
+                }
+            } else if (buildSysViewTasks) {
+                BuildSysViewScanTasks(stageInfo);
+            } else if (buildComputeTasks) {
+                GetMeta().UnknownAffectedShardCount |= BuildComputeTasks(stageInfo, nodesCount);
+            } else if (buildScanTasks) {
+                BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination(), GetMeta().ShardIdToNodeId,
+                    collectProfileStats ? stats : nullptr);
+            } else {
+                if (!isScan) {
+                    BuildDatashardTasks(stageInfo, shardsWithEffects);
+                } else {
+                    YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);
+                }
+            }
+
+            if (llvmSettings) {
+                const bool useLlvm = llvmSettings->GetUseLlvm(stage.GetProgram().GetSettings());
+                for (auto& taskId : stageInfo.Tasks) {
+                    GetTask(taskId).SetUseLlvm(useLlvm);
+                }
+                if (collectProfileStats) {
+                    stats->SetUseLlvm(stageInfo.Id.StageId, useLlvm);
+                }
+            }
+
+            if (stage.GetIsSinglePartition()) {
+                YQL_ENSURE(stageInfo.Tasks.size() <= 1, "Unexpected multiple tasks in single-partition stage");
+            }
+
+            for (const auto& taskId : stageInfo.Tasks) {
+                auto& task = GetTask(taskId);
+
+                task.Meta.ExecuterId = GetMeta().ExecuterId;
+                FillSecureParamsFromStage(task.Meta.SecureParams, stage);
+                BuildSinks(stage, stageInfo, task);
+            }
+
+            // Not task-related
+            GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
+            if (!GetMeta().IsRestored) {
+                BuildKqpStageChannels(stageInfo, GetMeta().TxId, GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
+            }
+        }
+
+        // Not task-related
+        BuildKqpTaskGraphResultChannels(tx.Body, txIdx);
+    }
+
+    return sourceScanPartitionsCount;
+}
+
+void TKqpTasksGraph::UpdateRemoteTasksNodeId(const THashMap<ui64, TVector<ui64>>& remoteComputeTasks) {
+    for (auto& [shardId, tasks] : remoteComputeTasks) {
+        auto it = GetMeta().ShardIdToNodeId.find(shardId);
+        YQL_ENSURE(it != GetMeta().ShardIdToNodeId.end());
+        for (ui64 taskId : tasks) {
+            auto& task = GetTask(taskId);
+            task.Meta.NodeId = it->second;
+        }
+    }
+}
+
 TKqpTasksGraph::TKqpTasksGraph(const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
     const TPartitionPrunerConfig& partitionPrunerConfig,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
-    const TKqpRequestCounters::TPtr& counters)
+    const TKqpRequestCounters::TPtr& counters,
+    TActorId bufferActorId)
     : PartitionPruner(MakeHolder<TPartitionPruner>(txAlloc->HolderFactory, txAlloc->TypeEnv, std::move(partitionPrunerConfig)))
     , TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
     , Counters(counters)
+    , BufferActorId(bufferActorId)
 {}
 
 TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const

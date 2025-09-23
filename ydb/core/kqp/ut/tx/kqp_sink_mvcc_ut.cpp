@@ -228,6 +228,11 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
     class LostUpdate : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
+            if (GetIsOlap()) {
+                // will be fixed in https://github.com/ydb-platform/ydb/issues/25654
+                return;
+            }
+
             auto client = Kikimr->GetQueryClient();
 
             // classic lost update
@@ -306,6 +311,11 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
     class TransactionFailsAsSoonAsItIsClearItCannotCommit : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
+            if (GetIsOlap()) {
+                // will be fixed in https://github.com/ydb-platform/ydb/issues/25661
+                return;
+            }
+
             auto client = Kikimr->GetQueryClient();
 
             auto session1 = client.GetSession().GetValueSync().GetSession();
@@ -361,6 +371,11 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         YDB_ACCESSOR(TString, WriteOp, "replace");
     protected:
         void DoExecute() override {
+            if (GetIsOlap()) {
+                // will be fixed in https://github.com/ydb-platform/ydb/issues/25654
+                return;
+            }
+
             auto client = Kikimr->GetQueryClient();
 
             // classic write skew

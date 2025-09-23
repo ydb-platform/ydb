@@ -185,6 +185,11 @@ public:
         , FullReadSchema(fullReadSchema) {
         AFL_VERIFY(!!FullReadSchema);
         Schema = FullReadSchema->GetIndexInfo().GetColumnsSchema(ColumnIds);
+        if (!Schema) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "failed_to_get_columns_schema")("column_ids", DebugString());
+            Schema = std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>{});
+        }
+
         Rebuild();
     }
 
@@ -193,6 +198,11 @@ public:
         , FullReadSchema(fullReadSchema) {
         AFL_VERIFY(!!FullReadSchema);
         Schema = FullReadSchema->GetIndexInfo().GetColumnsSchema(ColumnIds);
+        if (!Schema) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "failed_to_get_columns_schema")("column_ids", DebugString());
+            Schema = std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>{});
+        }
+
         Rebuild();
     }
 

@@ -1,13 +1,17 @@
 #pragma once
 
-#include "run_params.h"
-#include "printout.h"
+#include "benchmark_settings.h"
+#include "util/datetime/base.h"
 
 namespace NKikimr {
 namespace NMiniKQL {
 
+struct TBenchmarkCaseResult {
+    TString CaseName;
+    TDuration RunDuration;
+};
 
-void RunJoinsBench(const TRunParams& params, TTestResultCollector& printout);
+TVector<TBenchmarkCaseResult> RunJoinsBench(const TBenchmarkSettings& params);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

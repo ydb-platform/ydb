@@ -1,5 +1,7 @@
 # Creating a table filled with query results
 
+{% include [not_allow_for_oltp](../../../../_includes/not_allow_for_oltp_note.md) %}
+
 `CREATE TABLE AS` creates a new table {% if concept_table %}[table]({{ concept_table }}){% else %}table{% endif %} filled with data from query results.
 
 ```yql

@@ -369,6 +369,10 @@ private:
     mutable TUnboxedValue WaitingValue;
     mutable TUnboxedValueVector WideWaitingValues;
     mutable IDqOutput::TPtr OutputWaiting;
+protected:
+    virtual bool DoTryFinish() override {
+        return true;
+    }
 public:
     TDqOutputHashPartitionConsumer(
         TVector<IDqOutput::TPtr>&& outputs,
@@ -535,6 +539,10 @@ private:
         for (auto& output : Outputs_) {
             output->Finish();
         }
+    }
+
+    bool DoTryFinish() final {
+        return true;
     }
 
     size_t GetHashPartitionIndex(const TUnboxedValue* values) {
@@ -712,6 +720,10 @@ private:
         for (auto& output : Outputs_) {
             output->Finish();
         }
+    }
+
+    bool DoTryFinish() final {
+        return true;
     }
 
     size_t GetHashPartitionIndex(const arrow::Datum* values[], ui64 blockIndex) {

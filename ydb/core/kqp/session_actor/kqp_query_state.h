@@ -70,7 +70,7 @@ public:
         , UserToken(ev->Get()->GetUserToken())
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
-        , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
+        , ResultSetFormatSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
     {
         RequestEv.reset(ev->Release().Release());
         bool enableImplicitQueryParameterTypes = tableServiceConfig.GetEnableImplicitQueryParameterTypes() ||
@@ -189,7 +189,7 @@ public:
     TMaybe<TString> CommandTagName;
     THashSet<ui32> ParticipantNodes;
 
-    NFormats::TFormatsSettings FormatsSettings;
+    TResultSetFormatSettings ResultSetFormatSettings;
 
     bool IsLocalExecution(ui32 nodeId) const {
         if (RequestEv->GetRequestCtx() == nullptr) {
@@ -289,8 +289,8 @@ public:
         return IsSplitted();
     }
 
-    const NFormats::TFormatsSettings& GetFormatsSettings() const {
-        return FormatsSettings;
+    const TResultSetFormatSettings& GetResultSetFormatSettings() const {
+        return ResultSetFormatSettings;
     }
 
     // todo: gvit

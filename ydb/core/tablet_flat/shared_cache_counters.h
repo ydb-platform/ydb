@@ -27,8 +27,7 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr CacheMissBytes;
     const TCounterPtr LoadInFlyPages;
     const TCounterPtr LoadInFlyBytes;
-    const TCounterPtr TargetInMemoryBytes;
-    const TCounterPtr ActiveInMemoryBytes;
+    const TCounterPtr TryKeepInMemoryBytes;
 
     // page collection counters:
     const TCounterPtr PageCollections;

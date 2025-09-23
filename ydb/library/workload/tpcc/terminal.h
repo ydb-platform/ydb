@@ -178,8 +178,6 @@ private:
 
     bool Started = false;
     bool WarmupWasStopped = false;
-
-    std::atomic<bool> Stopped = false;
 };
 
 } // namespace NYdb::NTPCC

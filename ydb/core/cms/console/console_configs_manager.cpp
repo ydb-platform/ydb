@@ -811,11 +811,10 @@ void TConfigsManager::Handle(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev, 
                 TxProcessor->ProcessTx(CreateTxReplaceDatabaseYamlConfig(ev), ctx);
             },
             [&](const NYamlConfig::TError& error) {
-                NACLib::TUserToken token(ev->Get()->Record.GetUserToken());
                 AuditLogReplaceConfigTransaction(
                     /* peer = */ ev->Get()->Record.GetPeerName(),
-                    /* userSID = */ token.GetUserSID(),
-                    /* sanitizedToken = */ token.GetSanitizedToken(),
+                    /* userSID = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID(),
+                    /* sanitizedToken = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetSanitizedToken(),
                     /* oldConfig = */ MainYamlConfig,
                     /* newConfig = */ ev->Get()->Record.GetRequest().config(),
                     /* reason = */ error.Error,
@@ -841,11 +840,10 @@ void TConfigsManager::Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev, cons
                 TxProcessor->ProcessTx(CreateTxSetDatabaseYamlConfig(ev), ctx);
             },
             [&](const NYamlConfig::TError& error) {
-                NACLib::TUserToken token(ev->Get()->Record.GetUserToken());
                 AuditLogReplaceConfigTransaction(
                     /* peer = */ ev->Get()->Record.GetPeerName(),
-                    /* userSID = */ token.GetUserSID(),
-                    /* sanitizedToken = */ token.GetSanitizedToken(),
+                    /* userSID = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID(),
+                    /* sanitizedToken = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetSanitizedToken(),
                     /* oldConfig = */ MainYamlConfig,
                     /* newConfig = */ ev->Get()->Record.GetRequest().config(),
                     /* reason = */ error.Error,
@@ -1221,11 +1219,10 @@ void TConfigsManager::ScheduleLogCleanup(const TActorContext &ctx)
 }
 
 void TConfigsManager::HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev, const TActorContext &) {
-    NACLib::TUserToken token(ev->Get()->Record.GetUserToken());
     AuditLogReplaceConfigTransaction(
         /* peer = */ ev->Get()->Record.GetPeerName(),
-        /* userSID = */ token.GetUserSID(),
-        /* sanitizedToken = */ token.GetSanitizedToken(),
+        /* userSID = */ ev->Get()->Record.GetUserToken(),
+        /* sanitizedToken = */ TString(),
         /* oldConfig = */ MainYamlConfig,
         /* newConfig = */ ev->Get()->Record.GetRequest().config(),
         /* reason = */ "Unauthorized.",
@@ -1233,11 +1230,10 @@ void TConfigsManager::HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest
 }
 
 void TConfigsManager::HandleUnauthorized(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev, const TActorContext &) {
-    NACLib::TUserToken token(ev->Get()->Record.GetUserToken());
     AuditLogReplaceConfigTransaction(
         /* peer = */ ev->Get()->Record.GetPeerName(),
-        /* userSID = */ token.GetUserSID(),
-        /* sanitizedToken = */ token.GetSanitizedToken(),
+        /* userSID = */ ev->Get()->Record.GetUserToken(),
+        /* sanitizedToken = */ TString(),
         /* oldConfig = */ MainYamlConfig,
         /* newConfig = */ ev->Get()->Record.GetRequest().config(),
         /* reason = */ "Unauthorized.",

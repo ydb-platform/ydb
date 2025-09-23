@@ -85,7 +85,7 @@
     Example:
         @code
         Y_THREAD(TScoreCalcer*) ScoreCalcerPtr;
-        static TScoreCalcer* GetScoreCalcer(size_t maxElemCount) {
+        static TScoreCalcer* GetScoreCalcer(yint maxElemCount) {
             if (ScoreCalcerPtr == 0) {
                 ScoreCalcerPtr = new TScoreCalcer();
                 ScoreCalcerPtr->Alloc(maxElemCount);

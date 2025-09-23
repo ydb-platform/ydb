@@ -86,7 +86,6 @@ public:
     NKikimrConfig::TImmediateControlsConfig Controls;
     TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
     bool EnableStorageProxy = false;
-    TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
 
     TKikimrSettings() {
         InitDefaultConfig();
@@ -125,7 +124,6 @@ public:
     }
     TKikimrSettings& SetGrpcServerOptions(const NYdbGrpc::TServerOptions& grpcServerOptions) { GrpcServerOptions = grpcServerOptions; return *this; };
     TKikimrSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; };
-    TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
 };
 
 class TKikimrRunner {

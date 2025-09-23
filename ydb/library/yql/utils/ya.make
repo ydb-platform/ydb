@@ -4,5 +4,6 @@ RECURSE(
     actor_system
     bindings
     plan
+    simd
 )
 

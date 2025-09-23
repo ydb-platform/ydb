@@ -1698,12 +1698,6 @@ public:
                                    </div>
                                </div>
                                <div class='row'>
-                                 <div class='col-md-12'>
-                                   <input id='reassign_async' type='checkbox' name='Async'>
-                                   <label for='reassign_async'>Async</label>
-                                 </div>
-                               </div>
-                               <div class='row'>
                                    <div class='col-md-12'>
                                        <hr>
                                    </div>
@@ -1943,9 +1937,8 @@ function continueReassign() {
         $.ajax({
             url: 'app?TabletID=' + hiveId
                 + '&page=ReassignTablet&tablet=' + tablet.tabletId
-                + '&channel=' + tablet.channels
-                + '&wait=1'
-                + '&async=' + ($('#reassign_async')[0].checked ? '1' : '0'),
+                + '&channels=' + tablet.channels
+                + '&wait=1',
             success: function() {
 
             },
@@ -2935,7 +2928,6 @@ public:
     int TabletPercent = 100;
     TString Error;
     bool Wait = true;
-    bool Async = false;
 
     TTxMonEvent_ReassignTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
@@ -2950,7 +2942,6 @@ public:
         ForcedGroupIds = Scan<ui32>(SplitString(Event->Cgi().Get("forcedGroup"), ","));
         TabletPercent = std::min(std::abs(TabletPercent), 100);
         Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
-        Async = FromStringWithDefault(Event->Cgi().Get("async"), Async);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
@@ -2963,9 +2954,6 @@ public:
                         TabletChannels.begin(),
                         TabletChannels.end(),
                         channel.Channel) != TabletChannels.end()) {
-                if (tablet->ChannelProfileNewGroup.test(channel.Channel)) {
-                    return TInstant::Max();
-                }
                 const auto* latest = channel.LatestEntry();
                 if (latest != nullptr && latest->Timestamp > max) {
                     max = latest->Timestamp;
@@ -2978,10 +2966,6 @@ public:
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (!ForcedGroupIds.empty() && ForcedGroupIds.size() != TabletChannels.size()) {
             Error = "forcedGroup size should be equal to channel size";
-            return true;
-        }
-        if (!ForcedGroupIds.empty() && Async) {
-            Error = "cannot provide force groups in async mode";
             return true;
         }
         TVector<TLeaderTabletInfo*> tablets;
@@ -3044,7 +3028,7 @@ public:
             if (Wait) {
                 tablet->ActorsToNotifyOnRestart.emplace_back(waitActorId); // volatile settings, will not persist upon restart
             }
-            operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds, Async));
+            operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds));
         }
         if (Wait) {
             waitActor->TabletsTotal = operations.size();

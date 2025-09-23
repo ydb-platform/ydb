@@ -844,10 +844,10 @@ public:
             }
         }
 
-        bool FillInGroupParameters(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
+        void FillInGroupParameters(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
             TBlobStorageController *self) const;
-        bool FillInResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const;
-        bool FillInVDiskResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const;
+        void FillInResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const;
+        void FillInVDiskResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const;
 
         void UpdateSeenOperational() {
             TBlobStorageGroupInfo::TGroupFailDomains failed(Topology.get());
@@ -1915,33 +1915,40 @@ private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Metric collection
 
-    struct TWaitingSelectGroupsItem {
-        TEvBlobStorage::TEvControllerSelectGroups::TPtr Request; // original request
-        THashSet<TGroupId> MissingGroups;
+    struct TSelectGroupsQueueItem {
+        TActorId RespondTo;
+        ui64 Cookie;
+        THolder<TEvBlobStorage::TEvControllerSelectGroupsResult> Event;
+        TSet<TPDiskId> BlockedPDisks;
+
+        TSelectGroupsQueueItem(TActorId respondTo, ui64 cookie, THolder<TEvBlobStorage::TEvControllerSelectGroupsResult> event)
+            : RespondTo(respondTo)
+            , Cookie(cookie)
+            , Event(std::move(event))
+        {}
     };
 
-    using TWaitingSelectGroupsSetItem = std::tuple<TGroupId, std::list<TWaitingSelectGroupsItem>::iterator>;
+    struct TPDiskToQueueComp {
+        using TIterator = TList<TSelectGroupsQueueItem>::iterator;
+        using T = std::pair<TPDiskId, TIterator>;
 
-    struct TWaitingSelectGroupsLess {
-        bool operator ()(const TWaitingSelectGroupsSetItem& x, const TWaitingSelectGroupsSetItem& y) const {
-            const auto& [xGroupId, xIter] = x;
-            const auto& [yGroupId, yIter] = y;
-            if (xGroupId < yGroupId) {
-                return true;
-            } else if (yGroupId < xGroupId) {
-                return false;
-            } else {
-                const TWaitingSelectGroupsItem *xPtr = xIter == std::list<TWaitingSelectGroupsItem>::iterator() ? nullptr : &*xIter;
-                const TWaitingSelectGroupsItem *yPtr = yIter == std::list<TWaitingSelectGroupsItem>::iterator() ? nullptr : &*yIter;
-                return xPtr < yPtr;
-            }
+        static void *IteratorToPtr(const TIterator& x) {
+            return x == TIterator() ? nullptr : &*x;
+        }
+
+        bool operator ()(const TIterator& x, const TIterator& y) const {
+            return IteratorToPtr(x) < IteratorToPtr(y);
+        }
+
+        bool operator ()(const T& x, const T& y) const {
+            return x.first < y.first || (x.first == y.first && (*this)(x.second, y.second));
         }
     };
 
-    std::list<TWaitingSelectGroupsItem> WaitingSelectGroups;
-    std::set<TWaitingSelectGroupsSetItem, TWaitingSelectGroupsLess> GroupToWaitingSelectGroupsItem;
+    TList<TSelectGroupsQueueItem> SelectGroupsQueue;
+    TSet<std::pair<TPDiskId, TList<TSelectGroupsQueueItem>::iterator>, TPDiskToQueueComp> PDiskToQueue;
 
-    void UpdateWaitingGroups(const THashSet<TGroupId>& groupIds);
+    void ProcessSelectGroupsQueueItem(TList<TSelectGroupsQueueItem>::iterator it);
 
     void NotifyNodesAwaitingKeysForGroups(ui32 groupId);
     ITransaction* CreateTxInitScheme();

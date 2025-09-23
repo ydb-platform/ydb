@@ -1,5 +1,7 @@
 #pragma once
 
+// THIS FILE A COMPAT STUB HEADER
+
 #include <cstring>
 #include <cstdarg>
 #include <algorithm>

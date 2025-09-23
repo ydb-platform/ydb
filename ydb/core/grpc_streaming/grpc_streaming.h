@@ -17,14 +17,27 @@
 namespace NKikimr {
 namespace NGRpcServer {
 
-class IGRpcStreamingContextBase : public TThrRefBase {
+/**
+ * Context for performing operations on a bidirectional stream
+ *
+ * Only one thread is allowed to call methods on this class at any time
+ */
+template<class TIn, class TOut>
+class IGRpcStreamingContext : public TThrRefBase {
 public:
+    using ISelf = IGRpcStreamingContext<TIn, TOut>;
+
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_GRPC_STREAMING),
 
         EvReadFinished,
         EvWriteFinished,
         EvNotifiedWhenDone,
+    };
+
+    struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {
+        TIn Record;
+        bool Success;
     };
 
     struct TEvWriteFinished : public TEventLocal<TEvWriteFinished, EvWriteFinished> {
@@ -40,8 +53,9 @@ public:
     };
 
 public:
-    virtual ~IGRpcStreamingContextBase() = default;
+    virtual ~IGRpcStreamingContext() = default;
 
+public:
     /**
      * Asynchronously cancels the request
      *
@@ -66,38 +80,6 @@ public:
     virtual bool Read() = 0;
 
     /**
-     * Schedules stream termination with the specified status
-     *
-     * Only the first call is accepted, after which new Read or Write calls
-     * are no longer permitted and ignored.
-     */
-    virtual bool Finish(const grpc::Status& status) = 0;
-
-    virtual NYdbGrpc::TAuthState& GetAuthState() const = 0;
-    virtual TString GetPeerName() const = 0;
-    virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0;
-    virtual grpc_compression_level GetCompressionLevel() const = 0;
-    virtual void UseDatabase(const TString& database) = 0;
-    virtual TString GetRpcMethodName() const = 0;
-};
-
-/**
- * Context for performing operations on a bidirectional stream
- *
- * Only one thread is allowed to call methods on this class at any time
- */
-template<class TIn, class TOut>
-class IGRpcStreamingContext : public IGRpcStreamingContextBase {
-public:
-    using ISelf = IGRpcStreamingContext<TIn, TOut>;
-
-    struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {
-        TIn Record;
-        bool Success;
-    };
-
-public:
-    /**
      * Schedules the next message write
      *
      * May be called multiple times, in which case multiple writes will be
@@ -105,6 +87,14 @@ public:
      * corresponding TEvWriteFinished event.
      */
     virtual bool Write(TOut&& message, const grpc::WriteOptions& options = { }) = 0;
+
+    /**
+     * Schedules stream termination with the specified status
+     *
+     * Only the first call is accepted, after which new Read or Write calls
+     * are no longer permitted and ignored.
+     */
+    virtual bool Finish(const grpc::Status& status) = 0;
 
     /**
      * Schedules the next message write combined with the status
@@ -119,6 +109,13 @@ public:
      * This is similar to Write and Finish combined into a more efficient call.
      */
     virtual bool WriteAndFinish(TOut&& message, const grpc::WriteOptions& options, const grpc::Status& status) = 0;
+
+public:
+    virtual NYdbGrpc::TAuthState& GetAuthState() const = 0;
+    virtual TString GetPeerName() const = 0;
+    virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0;
+    virtual grpc_compression_level GetCompressionLevel() const = 0;
+    virtual void UseDatabase(const TString& database) = 0;
 };
 
 template<class TIn, class TOut, class TServer, int LoggerServiceId>
@@ -605,10 +602,6 @@ private:
         }
     }
 
-    TString GetRpcMethodName() const {
-        return TStringBuilder() << TServer::TCurrentGRpcService::service_full_name() << '/' << Name;
-    }
-
 private:
     class TFacade : public IContext {
     public:
@@ -666,10 +659,6 @@ private:
 
         void UseDatabase(const TString& database) override {
             Self->UseDatabase(database);
-        }
-
-        TString GetRpcMethodName() const override {
-            return Self->GetRpcMethodName();
         }
 
     private:

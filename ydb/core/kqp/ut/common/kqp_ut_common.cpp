@@ -165,13 +165,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
     if (settings.EnableStorageProxy) {
-        auto& checkpoints = *appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig();
-        checkpoints.SetEnabled(true);
-        checkpoints.SetCheckpointingPeriodMillis(settings.CheckpointPeriod.MilliSeconds());
-        checkpoints.SetMaxInflight(1);
-        checkpoints.MutableExternalStorage()->SetEndpoint(GetEnv("YDB_ENDPOINT"));
-        checkpoints.MutableExternalStorage()->SetDatabase(GetEnv("YDB_DATABASE"));
-        checkpoints.MutableCheckpointGarbageConfig()->SetEnabled(true);
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetEnabled(true);
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetCheckpointingPeriodMillis(200);
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetMaxInflight(1);
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->MutableExternalStorage()->SetEndpoint(GetEnv("YDB_ENDPOINT"));
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->MutableExternalStorage()->SetDatabase(GetEnv("YDB_DATABASE"));
     }
     if (!appConfig.GetQueryServiceConfig().HasAllExternalDataSourcesAreAvailable()) {
         appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);

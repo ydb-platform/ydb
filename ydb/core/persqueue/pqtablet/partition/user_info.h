@@ -76,87 +76,6 @@ struct TUserInfoBase {
 };
 
 struct TUserInfo: public TUserInfoBase {
-    TUserInfo(
-        const TActorContext& ctx,
-        NMonitoring::TDynamicCounterPtr streamCountersSubgroup,
-        NMonitoring::TDynamicCounterPtr partitionCountersSubgroup,
-        const TString& user,
-        const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
-        const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
-        const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
-        const TString& dbPath, bool meterRead, const TActorId& pipeClient, bool anyCommits,
-        const std::optional<TString>& committedMetadata = std::nullopt
-    )
-        : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important,
-                        readFromTimestamp, partitionSession, pipeClient, committedMetadata}
-        , ActualTimestamps(false)
-        , WriteTimestamp(TInstant::Zero())
-        , CreateTimestamp(TInstant::Zero())
-        , ReadTimestamp(TAppData::TimeProvider->Now())
-        , ReadOffset(-1)
-        , ReadWriteTimestamp(TInstant::Zero())
-        , ReadCreateTimestamp(TInstant::Zero())
-        , ReadOffsetRewindSum(readOffsetRewindSum)
-        , ReadScheduled(false)
-        , HasReadRule(false)
-        , TopicConverter(topicConverter)
-        , Counter(nullptr)
-        , ActiveReads(0)
-        , ReadsInQuotaQueue(0)
-        , Subscriptions(0)
-        , Partition(partition)
-        , AvgReadBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000},
-                       {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
-        , WriteLagMs(TDuration::Minutes(1), 100)
-        , NoConsumer(user == CLIENTID_WITHOUT_CONSUMER)
-        , MeterRead(meterRead)
-    {
-        if (AppData(ctx)->Counters) {
-            if (partitionCountersSubgroup) {
-                SetupDetailedMetrics(ctx, partitionCountersSubgroup);
-            }
-
-            if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-                LabeledCounters.Reset(new TUserLabeledCounters(
-                    EscapeBadChars(user) + "||" + EscapeBadChars(topicConverter->GetClientsideName()), partition, dbPath));
-
-                SetupStreamCounters(streamCountersSubgroup);
-            } else {
-                LabeledCounters.Reset(new TUserLabeledCounters(
-                    user + "/" + (important ? "1" : "0") + "/" + topicConverter->GetClientsideName(),
-                    partition));
-
-                SetupTopicCounters(ctx, dcId, ToString<ui32>(partition));
-            }
-        }
-    }
-
-    void ForgetSubscription(i64 endOffset, const TInstant& now);
-    void UpdateReadingState();
-    void UpdateReadingTimeAndState(i64 endOffset, TInstant now);
-    void ReadDone(const TActorContext& ctx, const TInstant& now, ui64 readSize, ui32 readCount,
-                  const TString& clientDC, const TActorId& tablet, bool isExternalRead, i64 endOffset);
-
-    void SetupDetailedMetrics(const TActorContext& ctx, NMonitoring::TDynamicCounterPtr subgroup);
-    void ResetDetailedMetrics();
-    void SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup);
-    void SetupTopicCounters(const TActorContext& ctx, const TString& dcId, const TString& partition);
-
-    void UpdateReadOffset(const i64 offset, TInstant writeTimestamp, TInstant createTimestamp, TInstant now, bool force = false);
-    void AddTimestampToCache(const ui64 offset, TInstant writeTimestamp, TInstant createTimestamp, bool isUserRead, TInstant now);
-    bool UpdateTimestampFromCache();
-    void SetImportant(bool important);
-
-    i64 GetReadOffset() const {
-        return ReadOffset == -1 ? Offset : (ReadOffset + 1); //+1 because we want to track first not readed offset
-    }
-    TInstant GetReadTimestamp() const {
-        return ReadTimestamp;
-    }
-    ui64 GetWriteLagMs() const {
-        return WriteLagMs.GetValue();
-    }
-
     bool ActualTimestamps = false;
     // WriteTimestamp of the last committed message
     TInstant WriteTimestamp;
@@ -219,6 +138,301 @@ struct TUserInfo: public TUserInfoBase {
 
 
     bool Parsed = false;
+
+    void ForgetSubscription(i64 endOffset, const TInstant& now) {
+        if (Subscriptions > 0)
+            --Subscriptions;
+        UpdateReadingTimeAndState(endOffset, now);
+    }
+
+    void UpdateReadingState() {
+        Counter.UpdateState(Subscriptions > 0 || ActiveReads > 0 || ReadsInQuotaQueue > 0); //no data for read or got read requests from client
+    }
+
+    void UpdateReadingTimeAndState(i64 endOffset, TInstant now) {
+        Counter.UpdateWorkingTime(now);
+        UpdateReadingState();
+
+        if (endOffset == GetReadOffset()) { //no data to read, so emulate client empty reads
+            WriteLagMs.Update(0, now);
+        }
+        if (Subscriptions > 0) {
+            ReadTimestamp = now;
+        }
+    }
+
+    void ReadDone(const TActorContext& ctx, const TInstant& now, ui64 readSize, ui32 readCount,
+                  const TString& clientDC, const TActorId& tablet, bool isExternalRead, i64 endOffset) {
+        Y_UNUSED(tablet);
+        if (BytesReadPerPartition) {
+            BytesReadPerPartition->Add(readSize);
+        }
+        if (MessagesReadPerPartition) {
+            MessagesReadPerPartition->Add(readCount);
+        }
+        if (BytesRead && !clientDC.empty()) {
+            BytesRead.Inc(readSize);
+            if (!isExternalRead && BytesReadGrpc) {
+                BytesReadGrpc.Inc(readSize);
+            }
+
+            if (MsgsRead) {
+                MsgsRead.Inc(readCount);
+                if (!isExternalRead && MsgsReadGrpc) {
+                    MsgsReadGrpc.Inc(readCount);
+                }
+            }
+
+            auto it = BytesReadFromDC.find(clientDC);
+            if (it == BytesReadFromDC.end()) {
+                auto pos = TopicConverter->GetFederationPath().find("/");
+                if (pos != TString::npos) {
+                    auto labels = NPersQueue::GetLabelsForCustomCluster(TopicConverter, clientDC);
+                    if (!labels.empty()) {
+                        labels.pop_back();
+                    }
+                    it = BytesReadFromDC.emplace(clientDC,
+                        TMultiCounter(GetServiceCounters(AppData(ctx)->Counters, "pqproxy|readSession"),
+                                      labels, {{"ClientDC", clientDC},
+                                               {"Client", User},
+                                               {"ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx)}},
+                                      {"BytesReadFromDC"}, true)).first;
+                }
+            }
+            if (it != BytesReadFromDC.end())
+                it->second.Inc(readSize);
+        }
+        for (auto& avg : AvgReadBytes) {
+            avg.Update(readSize, now);
+        }
+        AFL_ENSURE(ActiveReads > 0);
+        --ActiveReads;
+        UpdateReadingTimeAndState(endOffset, now);
+        ReadTimestamp = now;
+    }
+
+    TUserInfo(
+        const TActorContext& ctx,
+        NMonitoring::TDynamicCounterPtr streamCountersSubgroup,
+        NMonitoring::TDynamicCounterPtr partitionCountersSubgroup,
+        const TString& user,
+        const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
+        const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
+        const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
+        const TString& dbPath, bool meterRead, const TActorId& pipeClient, bool anyCommits,
+        const std::optional<TString>& committedMetadata = std::nullopt
+    )
+        : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important,
+                        readFromTimestamp, partitionSession, pipeClient, committedMetadata}
+        , ActualTimestamps(false)
+        , WriteTimestamp(TInstant::Zero())
+        , CreateTimestamp(TInstant::Zero())
+        , ReadTimestamp(TAppData::TimeProvider->Now())
+        , ReadOffset(-1)
+        , ReadWriteTimestamp(TInstant::Zero())
+        , ReadCreateTimestamp(TInstant::Zero())
+        , ReadOffsetRewindSum(readOffsetRewindSum)
+        , ReadScheduled(false)
+        , HasReadRule(false)
+        , TopicConverter(topicConverter)
+        , Counter(nullptr)
+        , ActiveReads(0)
+        , ReadsInQuotaQueue(0)
+        , Subscriptions(0)
+        , Partition(partition)
+        , AvgReadBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000},
+                       {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
+        , WriteLagMs(TDuration::Minutes(1), 100)
+        , NoConsumer(user == CLIENTID_WITHOUT_CONSUMER)
+        , MeterRead(meterRead)
+    {
+        if (AppData(ctx)->Counters) {
+            if (partitionCountersSubgroup) {
+                SetupDetailedMetrics(ctx, partitionCountersSubgroup);
+            }
+
+            if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                LabeledCounters.Reset(new TUserLabeledCounters(
+                    EscapeBadChars(user) + "||" + EscapeBadChars(topicConverter->GetClientsideName()), partition, dbPath));
+
+                SetupStreamCounters(streamCountersSubgroup);
+            } else {
+                LabeledCounters.Reset(new TUserLabeledCounters(
+                    user + "/" + (important ? "1" : "0") + "/" + topicConverter->GetClientsideName(),
+                    partition));
+
+                SetupTopicCounters(ctx, dcId, ToString<ui32>(partition));
+            }
+        }
+    }
+
+    void SetupDetailedMetrics(const TActorContext& ctx, NMonitoring::TDynamicCounterPtr subgroup) {
+        Y_ABORT_UNLESS(subgroup);
+
+        if (BytesReadPerPartition) {
+            // Don't recreate the counters if they already exist.
+            return;
+        }
+
+        bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
+
+        auto consumerSubgroup = fcc
+            ? subgroup->GetSubgroup("consumer", User)
+            : subgroup->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx));
+
+        auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
+            return consumerSubgroup->GetExpiringNamedCounter(
+                fcc ? "name" : "sensor",
+                fcc ? "topic.partition." + forFCC : forFederation + "PerPartition",
+                deriv);
+        };
+
+        BytesReadPerPartition = getCounter("read.bytes", "BytesRead", true);
+        MessagesReadPerPartition = getCounter("read.messages", "MessagesRead", true);
+        MessageLagByLastReadPerPartition = getCounter("read.lag_messages", "MessageLagByLastRead", false);
+        MessageLagByCommittedPerPartition = getCounter("committed_lag_messages", "MessageLagByCommitted", false);
+        WriteTimeLagMsByLastReadPerPartition = getCounter("write.lag_milliseconds", "WriteTimeLagMsByLastRead", false);
+        WriteTimeLagMsByCommittedPerPartition = getCounter("committed_read_lag_milliseconds", "WriteTimeLagMsByCommitted", false);
+        TimeSinceLastReadMsPerPartition = getCounter("read.idle_milliseconds", "TimeSinceLastReadMs", false);
+        ReadTimeLagMsPerPartition = getCounter("read.lag_milliseconds", "ReadTimeLagMs", false);
+    }
+
+    void ResetDetailedMetrics() {
+        BytesReadPerPartition.Reset();
+        MessagesReadPerPartition.Reset();
+        MessageLagByLastReadPerPartition.Reset();
+        MessageLagByCommittedPerPartition.Reset();
+        WriteTimeLagMsByLastReadPerPartition.Reset();
+        WriteTimeLagMsByCommittedPerPartition.Reset();
+        TimeSinceLastReadMsPerPartition.Reset();
+        ReadTimeLagMsPerPartition.Reset();
+    }
+
+    void SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {
+        AFL_ENSURE(subgroup);
+        TVector<std::pair<TString, TString>> subgroups;
+        if (!NoConsumer) {
+            subgroups.push_back({"consumer", User});
+        }
+
+        BytesRead = TMultiCounter(subgroup, {}, subgroups, {"topic.read.bytes"}, true, "name");
+        MsgsRead = TMultiCounter(subgroup, {}, subgroups,{"topic.read.messages"}, true, "name");
+        BytesReadGrpc = TMultiCounter(subgroup, {}, subgroups, {"api.grpc.topic.stream_read.bytes"}, true, "name");
+        MsgsReadGrpc = TMultiCounter(subgroup, {}, subgroups, {"api.grpc.topic.stream_read.messages"}, true, "name");
+
+        subgroups.emplace_back("name", "topic.read.lag_milliseconds");
+        ReadTimeLag.reset(new TPercentileCounter(
+                        subgroup, {}, subgroups, "bin",
+                        TVector<std::pair<ui64, TString>>{{100, "100"}, {200, "200"}, {500, "500"},
+                                                        {1000, "1000"}, {2000, "2000"},
+                                                        {5000, "5000"}, {10'000, "10000"},
+                                                        {30'000, "30000"}, {60'000, "60000"},
+                                                        {180'000,"180000"}, {9'999'999, "999999"}},
+                        true));
+    }
+
+    void SetupTopicCounters(const TActorContext& ctx, const TString& dcId, const TString& partition) {
+        auto subgroup = [&](const TString& subsystem) {
+            return GetServiceCounters(AppData(ctx)->Counters, subsystem);
+        };
+        auto aggr = NPersQueue::GetLabels(TopicConverter);
+        TVector<std::pair<TString, TString>> additional_labels = {{"Client", User},
+                                 {"ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx)}
+                                };
+
+        Counter.SetCounter(subgroup("readingTime"),
+                           {{"Client", User},
+                            {"ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx)},
+                            {"host", dcId},
+                            {"Partition", partition}},
+                           {"sensor", "ReadTime", true});
+
+        BytesRead = TMultiCounter(subgroup("pqproxy|readSession"), aggr, additional_labels,
+                                  {"BytesRead"}, true);
+        MsgsRead = TMultiCounter(subgroup("pqproxy|readSession"), aggr, additional_labels,
+                                 {"MessagesRead"}, true);
+
+        additional_labels.push_back({"sensor", "TimeLags"});
+        ReadTimeLag.reset(new TPercentileCounter(subgroup("pqproxy|readTimeLag"), aggr,
+                      additional_labels, "Interval",
+                      TVector<std::pair<ui64, TString>>{{100, "100ms"}, {200, "200ms"}, {500, "500ms"},
+                                                        {1000, "1000ms"}, {2000, "2000ms"},
+                                                        {5000, "5000ms"}, {10'000, "10000ms"},
+                                                        {30'000, "30000ms"}, {60'000, "60000ms"},
+                                                        {180'000,"180000ms"}, {9'999'999, "999999ms"}},
+                        true));
+
+    }
+
+    void UpdateReadOffset(const i64 offset, TInstant writeTimestamp, TInstant createTimestamp, TInstant now, bool force = false) {
+        ReadOffset = offset;
+        ReadWriteTimestamp = writeTimestamp;
+        ReadCreateTimestamp = createTimestamp;
+        WriteLagMs.Update((ReadWriteTimestamp - ReadCreateTimestamp).MilliSeconds(), ReadWriteTimestamp);
+        if (Subscriptions > 0 || force) {
+            ReadTimestamp = now;
+        }
+    }
+
+    void AddTimestampToCache(const ui64 offset, TInstant writeTimestamp, TInstant createTimestamp, bool isUserRead, TInstant now)
+    {
+        if ((ui64)Max<i64>(Offset, 0) == offset) {
+            WriteTimestamp = writeTimestamp;
+            CreateTimestamp = createTimestamp;
+            ActualTimestamps = true;
+            if (ReadOffset == -1) {
+                UpdateReadOffset(offset, writeTimestamp, createTimestamp, now);
+            }
+        }
+        if (isUserRead) {
+            UpdateReadOffset(offset, writeTimestamp, createTimestamp, now);
+            if (ReadTimeLag) {
+                ReadTimeLag->IncFor((now - createTimestamp).MilliSeconds(), 1);
+            }
+        }
+        if (!Cache.empty() && Cache.back().first >= offset) //already got data in cache
+            return;
+        Cache.push_back(std::make_pair(offset, std::make_pair(writeTimestamp, createTimestamp)));
+        if (Cache.size() > MAX_USER_TS_CACHE_SIZE)
+            Cache.pop_front();
+    }
+
+    bool UpdateTimestampFromCache()
+    {
+        while (!Cache.empty() && (i64)Cache.front().first < Offset) {
+            Cache.pop_front();
+        }
+        if (!Cache.empty() && Cache.front().first == (ui64)Max<i64>(Offset, 0)) {
+            WriteTimestamp = Cache.front().second.first;
+            CreateTimestamp = Cache.front().second.second;
+            ActualTimestamps = true;
+            if (ReadOffset == -1) {
+                UpdateReadOffset(Offset - 1, Cache.front().second.first, Cache.front().second.second, TAppData::TimeProvider->Now());
+            }
+            return true;
+        }
+        return false;
+    }
+
+    void SetImportant(bool important)
+    {
+        Important = important;
+        if (LabeledCounters && !AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            LabeledCounters->SetGroup(User + "/" + (important ? "1" : "0") + "/" + TopicConverter->GetClientsideName());
+        }
+    }
+
+    i64 GetReadOffset() const {
+        return ReadOffset == -1 ? Offset : (ReadOffset + 1); //+1 because we want to track first not readed offset
+    }
+
+    TInstant GetReadTimestamp() const {
+        return ReadTimestamp;
+    }
+
+    ui64 GetWriteLagMs() const {
+        return WriteLagMs.GetValue();
+    }
 };
 
 class TUsersInfoStorage {

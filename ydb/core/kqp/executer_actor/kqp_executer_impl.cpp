@@ -1,7 +1,12 @@
 #include "kqp_executer_impl.h"
 
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/kqp/runtime/kqp_transport.h>
+
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
+
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
@@ -73,7 +78,7 @@ TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings, TKqpRequestCounters::TPtr counters,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters,
     const TExecuterConfig& executerConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
@@ -85,7 +90,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
         return CreateKqpDataExecuter(
-            std::move(request), database, userToken, std::move(formatsSettings), counters,
+            std::move(request), database, userToken, std::move(resultSetFormatSettings), counters,
             false, executerConfig, std::move(asyncIoFactory), creator,
             userRequestContext, statementResultIndex,
             federatedQuerySetup, /*GUCSettings*/nullptr, std::move(partitionPrunerConfig),
@@ -109,7 +114,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
         case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
         case NKqpProto::TKqpPhyTx::TYPE_DATA:
             return CreateKqpDataExecuter(
-                std::move(request), database, userToken, std::move(formatsSettings), counters,
+                std::move(request), database, userToken, std::move(resultSetFormatSettings), counters,
                 false, executerConfig, std::move(asyncIoFactory), creator,
                 userRequestContext, statementResultIndex,
                 federatedQuerySetup, /*GUCSettings*/nullptr, std::move(partitionPrunerConfig),
@@ -118,14 +123,14 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
             return CreateKqpScanExecuter(
-                std::move(request), database, userToken, std::move(formatsSettings), counters,
+                std::move(request), database, userToken, std::move(resultSetFormatSettings), counters,
                 executerConfig, std::move(asyncIoFactory), userRequestContext,
                 statementResultIndex, federatedQuerySetup, nullptr, llvmSettings
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
             return CreateKqpDataExecuter(
-                std::move(request), database, userToken, std::move(formatsSettings),
+                std::move(request), database, userToken, std::move(resultSetFormatSettings),
                 counters, true, executerConfig, std::move(asyncIoFactory), creator,
                 userRequestContext, statementResultIndex,
                 federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),

@@ -822,7 +822,6 @@ message TStatusResponse {
 
         optional EScaleStatus ScaleStatus = 35;
         optional TPartitionScaleParticipants ScaleParticipatingPartitions = 36;
-        optional string SplitBoundary = 37;
     }
 
     message TConsumerResult {
@@ -1104,7 +1103,6 @@ message TEvPartitionScaleStatusChanged {
     required uint32 PartitionId = 1;
     required EScaleStatus ScaleStatus = 2;
     optional TPartitionScaleParticipants ParticipatingPartitions = 3;
-    optional string SplitBoundary = 4;
 };
 
 message TPartitions {

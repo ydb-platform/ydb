@@ -256,14 +256,10 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
             }
         }
     } else if (testType == ETestType::DqHashCombinerVs) {
-        if (spilling) {
+        if (llvm || spilling) {
             ythrow yexception() << "LLVM/spilling are not supported for DqHashCombiner perf test";
         }
-        if (llvm) {
-            NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<true>(params, printout);
-        } else {
-            NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<false>(params, printout);
-        }
+        NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<false>(params, printout);
     } else if (testType == ETestType::SimpleGraceJoin) {
         if (params.NumRuns != 1) {
             Cerr << "Join tests only support run-count == 1. Force-setting run-count to 1" << Endl;

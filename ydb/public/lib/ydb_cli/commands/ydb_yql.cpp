@@ -108,11 +108,7 @@ int TCommandYql::RunCommand(TConfig& config, const TString& script) {
                     FillSettings(settings)
             );
 
-            if (!WaitInterruptible(asyncResult)) {
-                return EXIT_FAILURE;
-            }
-
-            auto result = asyncResult.GetValue();
+            auto result = asyncResult.GetValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
             if (!PrintResponse(result)) {
                 return EXIT_FAILURE;
@@ -124,11 +120,7 @@ int TCommandYql::RunCommand(TConfig& config, const TString& script) {
             FillSettings(settings)
         );
 
-        if (!WaitInterruptible(asyncResult)) {
-            return EXIT_FAILURE;
-        }
-
-        auto result = asyncResult.GetValue();
+        auto result = asyncResult.GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         if (!PrintResponse(result)) {
             return EXIT_FAILURE;
@@ -145,12 +137,7 @@ bool TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
         while (!IsInterrupted()) {
-            auto asyncStreamPart = result.ReadNext();
-
-            if (!WaitInterruptible(asyncStreamPart)) {
-                return EXIT_FAILURE;
-            }
-            auto streamPart = asyncStreamPart.GetValue();
+            auto streamPart = result.ReadNext().GetValueSync();
             if (ThrowOnErrorAndCheckEOS(streamPart)) {
                 break;
             }

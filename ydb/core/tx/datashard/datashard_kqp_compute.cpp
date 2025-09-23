@@ -2,6 +2,7 @@
 #include "range_ops.h"
 #include "datashard_user_db.h"
 
+#include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 

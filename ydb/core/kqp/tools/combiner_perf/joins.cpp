@@ -64,13 +64,11 @@ void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams& params, TTestResultColle
     const TVector<const ui32> keyColumns{0};
 
     TVector<std::pair<NYKQL::ETestedJoinAlgo, std::string_view>> algos = {
-        {NYKQL::ETestedJoinAlgo::kScalarGrace, "ScalarGrace"}, {NYKQL::ETestedJoinAlgo::kScalarMap, "ScalarMap"},
+        {NYKQL::ETestedJoinAlgo::kScalarGrace, "ScalarGrace"},
+        {NYKQL::ETestedJoinAlgo::kScalarMap, "ScalarMap"},
         {NYKQL::ETestedJoinAlgo::kBlockMap, "BlockMap"},
-        //         {NYKQL::ETestedJoinAlgo::kScalarHash, "ScalarHash"}, // hash joins are not ready yet - they require
-        //         {NYKQL::ETestedJoinAlgo::kBlockHash, "BlockHash"}, // same schema for left and right tables as they
-        //         just spit left then right
     };
-    const int bigSize = 1 << 9;
+    const int bigSize = 1 << 17;
     const int smallSize = bigSize >> 7;
     auto addStringAndIntInputs = [&](TVector<std::pair<NYKQL::TInnerJoinDescription, std::string>>& all, int leftSize,
                                      int rightSize, std::string name) {
@@ -82,7 +80,7 @@ void NKikimr::NMiniKQL::RunJoinsBench(const TRunParams& params, TTestResultColle
     };
 
     TVector<std::pair<NYKQL::TInnerJoinDescription, std::string>> scaled_inputs;
-    for (int scale_log : std::views::iota(1) | std::views::take(2)) {
+    for (int scale_log : std::views::iota(1) | std::views::take(8)) {
         int scale = 1 << scale_log;
         int leftSize = bigSize * scale;
         // todo(becalm): there is a lot of input generation which can be optimised like: generate only the biggest list

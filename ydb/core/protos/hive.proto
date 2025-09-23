@@ -271,9 +271,8 @@ message TEvReassignTablet {
 
     optional fixed64 TabletID = 1;
     repeated uint32 Channels = 2;
-    repeated uint32 ForcedGroupIDs = 3; // should not be used with async
+    repeated uint32 ForcedGroupIDs = 3;
     optional EHiveReassignReason ReassignReason = 4;
-    optional bool Async = 5;
 }
 
 message TForwardRequest {

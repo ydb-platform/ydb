@@ -62,7 +62,6 @@ namespace NKikimr::NKqp {
 
     struct IKqpFederatedQuerySetupFactory {
         using TPtr = std::shared_ptr<IKqpFederatedQuerySetupFactory>;
-        virtual void Cleanup();
         virtual std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem* actorSystem) = 0;
         virtual ~IKqpFederatedQuerySetupFactory() = default;
     };
@@ -82,8 +81,6 @@ namespace NKikimr::NKqp {
             const NKikimrConfig::TAppConfig& appConfig);
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem* actorSystem) override;
-
-        void Cleanup() override;
 
     private:
         NYql::THttpGatewayConfig HttpGatewayConfig;
@@ -154,11 +151,6 @@ namespace NKikimr::NKqp {
                 YtGatewayConfig, YtGateway, SolomonGatewayConfig,
                 SolomonGateway, ComputationFactory, S3ReadActorFactoryConfig,
                 DqTaskTransformFactory, PqGatewayConfig, PqGateway, ActorSystemPtr, Driver};
-        }
-
-        void Cleanup() override {
-            HttpGateway.reset();
-            PqGateway.Reset();
         }
 
     private:

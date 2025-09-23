@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/decimal/yql_wide_int.h>
 
 #include <util/generic/maybe.h>
@@ -121,8 +120,6 @@ inline NYql::TWide<ui16> AsInt<NYql::TWide<ui16>>(const TString& bound) {
 }
 
 TString MiddleOf(const TString& fromBound, const TString& toBound);
-
-NYql::NDecimal::TUint128 Hash(const TString& sourceId);
 
 
 struct TPartitionKeyRange {

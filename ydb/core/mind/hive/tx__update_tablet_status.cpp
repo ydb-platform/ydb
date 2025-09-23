@@ -97,7 +97,10 @@ public:
                 if (tablet->IsLeader() && Generation < tablet->GetLeader().KnownGeneration) {
                     return true;
                 }
-                tablet->NotifyOnRestart("OK", SideEffects);
+                for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
+                    SideEffects.Send(actor, new TEvPrivate::TEvRestartComplete({TabletId, FollowerId}, "OK"));
+                }
+                tablet->ActorsToNotifyOnRestart.clear();
                 for (const TActorId& actor : Self->ActorsWaitingToMoveTablets) {
                     SideEffects.Send(actor, new TEvPrivate::TEvCanMoveTablets());
                 }

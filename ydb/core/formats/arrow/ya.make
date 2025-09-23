@@ -24,7 +24,7 @@ PEERDIR(
     ydb/library/services
     yql/essentials/core/arrow_kernels/request
     yql/essentials/minikql
-    ydb/core/kqp/common/result_set_format
+    ydb/library/yql/dq/runtime
 )
 
 YQL_LAST_ABI_VERSION()

@@ -14,14 +14,13 @@ TDqProgramBuilder::TDqProgramBuilder(const TTypeEnvironment& env, const IFunctio
 TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
     const TStringBuf operatorName,
     const TRuntimeNode operatorParams,
-    const TRuntimeNode flowOrStream,
+    const TRuntimeNode flow,
     const TProgramBuilder::TWideLambda& keyExtractor,
     const TProgramBuilder::TBinaryWideLambda& init,
     const TProgramBuilder::TTernaryWideLambda& update,
     const TProgramBuilder::TBinaryWideLambda& finish)
 {
-    const auto wideComponents = GetWideComponents(flowOrStream.GetStaticType());
-    const bool isFlow = flowOrStream.GetStaticType()->IsFlow();
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, flow.GetStaticType()));
 
     std::vector<TType*> unblockedWideComponents;
     bool hasBlocks = UnwrapBlockTypes(wideComponents, unblockedWideComponents);
@@ -70,11 +69,9 @@ TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
         outputWideComponents.push_back(blockSizeBlockType);
     }
 
-    TType* const returnWideType = NewMultiType(outputWideComponents);
-    TType* const returnType = isFlow ? NewFlowType(returnWideType) : NewStreamType(returnWideType);
-    TCallableBuilder callableBuilder(GetTypeEnvironment(), operatorName, returnType);
+    TCallableBuilder callableBuilder(GetTypeEnvironment(), operatorName, NewStreamType(NewMultiType(outputWideComponents)));
 
-    callableBuilder.Add(flowOrStream);
+    callableBuilder.Add(flow);
     callableBuilder.Add(operatorParams);
     callableBuilder.Add(NewTuple(keyArgs));
     callableBuilder.Add(NewTuple(stateArgs));

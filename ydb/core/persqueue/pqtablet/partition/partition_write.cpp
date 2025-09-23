@@ -1,4 +1,3 @@
-#include "autopartitioning_manager.h"
 #include "partition_util.h"
 #include "partition.h"
 
@@ -300,6 +299,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             bool already = false;
 
+            SourceIdCounter.Use(s, now);
             auto it = SourceIdStorage.GetInMemorySourceIds().find(s);
 
             ui64 maxSeqNo = 0;
@@ -434,7 +434,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         return;
     }
 
-    PQ_ENSURE(BlobEncoder.EndOffset == BlobEncoder.Head.GetNextOffset())("EndOffset", GetEndOffset())("NextOffset", BlobEncoder.Head.GetNextOffset());
+    PQ_ENSURE(BlobEncoder.EndOffset == BlobEncoder.Head.GetNextOffset());
 
     // a) !CompactedKeys.empty() && NewHead.PackedSize == 0
     // b) !CompactedKeys.empty() && NewHead.PackedSize != 0
@@ -531,6 +531,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
             ui64 seqNo = std::max(info.SeqNo, it->second.SeqNo);
             SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, now, info.KafkaProducerEpoch));
         }
+        SourceIdCounter.Use(sourceId, now);
     }
     TxSourceIdForPostPersist.clear();
     TxInflightMaxSeqNoPerSourceId.clear();
@@ -577,6 +578,8 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
         SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
     }
 
+    auto writeNewSizeFull = WriteNewSizeFull + WriteNewSizeFromSupportivePartitions;
+
     WriteCycleSize = 0;
     WriteNewSize = 0;
     WriteNewSizeFull = 0;
@@ -591,7 +594,11 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
 
-    ChangeScaleStatusIfNeeded(AutopartitioningManager->GetScaleStatus(ScaleStatus));
+    if (SplitMergeEnabled(Config) && !IsSupportive() && !MirroringEnabled(Config)) {
+        SplitMergeAvgWriteBytes->Update(writeNewSizeFull, now);
+        auto needScaling = CheckScaleStatus(ctx);
+        ChangeScaleStatusIfNeeded(needScaling);
+    }
 
     //if EndOffset changed there could be subscriptions witch could be completed
     TVector<std::pair<TReadInfo, ui64>> reads = Subscriber.GetReads(BlobEncoder.EndOffset);
@@ -612,25 +619,50 @@ void TPartition::UpdateAvgWriteBytes(ui64 size, const TInstant& now)
     }
 }
 
+NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
+    const auto writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed;
+    const auto sourceIdWindow = TDuration::Seconds(std::min<ui32>(5, Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
+    const auto sourceIdCount = SourceIdCounter.Count(ctx.Now() - sourceIdWindow);
+    const auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
+
+    LOG_D("TPartition::CheckScaleStatus"
+            << " splitMergeAvgWriteBytes# " << SplitMergeAvgWriteBytes->GetValue()
+            << " writeSpeedUsagePercent# " << writeSpeedUsagePercent
+            << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
+            << " totalPartitionWriteSpeed# " << TotalPartitionWriteSpeed
+            << " sourceIdCount=" << sourceIdCount
+            << " canSplit=" << canSplit
+            << " Topic: \"" << TopicName() << "\"." <<
+        " Partition: " << Partition
+    );
+
+    auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
+        || Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
+
+    auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
+
+    if (splitEnabled && canSplit && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
+        LOG_D("TPartition::CheckScaleStatus NEED_SPLIT" << " Topic: \"" << TopicName() << "\"."
+                << " Partition: " << Partition);
+        return NKikimrPQ::EScaleStatus::NEED_SPLIT;
+    } else if (mergeEnabled && writeSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
+        LOG_D("TPartition::CheckScaleStatus NEED_MERGE" << " Topic: \"" << TopicName() << "\"."
+                << " Partition: " << Partition << " writeSpeedUsagePercent: " << writeSpeedUsagePercent
+                << " Threshold: " << Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()
+        );
+        return NKikimrPQ::EScaleStatus::NEED_MERGE;
+    }
+    return NKikimrPQ::EScaleStatus::NORMAL;
+}
+
 void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) {
     auto now = TInstant::Now();
-    if (scaleStatus == ScaleStatus || LastScaleRequestTime + TDuration::Seconds(SCALE_REQUEST_REPEAT_MIN_SECONDS) > now) {
+    if (scaleStatus == ScaleStatus || MirroringEnabled(Config) || LastScaleRequestTime + TDuration::Seconds(SCALE_REQUEST_REPEAT_MIN_SECONDS) > now) {
         return;
     }
-
-    ScaleStatus = scaleStatus;
-    SplitBoundary.Clear();
+    Send(TabletActorId, new TEvPQ::TEvPartitionScaleStatusChanged(Partition.OriginalPartitionId, scaleStatus));
     LastScaleRequestTime = now;
-
-    auto ev = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>(Partition.OriginalPartitionId, ScaleStatus);
-    if (ScaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
-        auto splitBoundary = AutopartitioningManager->SplitBoundary();
-        if (splitBoundary) {
-            ev->Record.SetSplitBoundary(*splitBoundary);
-            SplitBoundary = *splitBoundary;
-        }
-    }
-    Send(TabletActorId, std::move(ev));
+    ScaleStatus = scaleStatus;
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
@@ -1133,8 +1165,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     ui64& curOffset = parameters.CurOffset;
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
-
-    AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size());
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written

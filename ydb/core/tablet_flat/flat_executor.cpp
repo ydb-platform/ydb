@@ -5068,13 +5068,14 @@ void TExecutor::StartBackup() {
     const auto& backupConfig = AppData()->SystemTabletBackupConfig;
     TTabletTypes::EType tabletType = Owner->TabletType();
     ui64 tabletId = Owner->TabletID();
-    const auto& tables = Database->GetScheme().Tables;
+    const auto& scheme = Database->GetScheme();
+    const auto& tables = scheme.Tables;
 
-    if (auto* writer = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType, tabletId, Generation0)) {
+    if (auto* writer = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType, tabletId, Generation0, scheme.GetSnapshot())) {
         auto writerActor = Register(writer, TMailboxType::HTSwap, AppData()->IOPoolId);
 
         for (const auto& [tableId, table] : tables) {
-           auto opts = TScanOptions().DisableResourceBroker();
+           auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
            QueueScan(tableId, NBackup::CreateSnapshotScan(writerActor, tableId, table.Columns), 0, opts);
         }
     }

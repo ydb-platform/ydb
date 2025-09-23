@@ -9,15 +9,38 @@
 #include <yql/essentials/types/binary_json/read.h>
 
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/protobuf/json/util.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/buffer.h>
+#include <util/stream/file.h>
 
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, stream)
 
 namespace NKikimr::NTabletFlatExecutor::NBackup {
 
 using namespace NTable;
+
+namespace {
+
+EScanStatus ToScanStatus(EStatus status) {
+    switch (status) {
+        case EStatus::Done:
+            return EScanStatus::Done;
+        case EStatus::Lost:
+            return EScanStatus::Lost;
+        case EStatus::Term:
+            return EScanStatus::Term;
+        case EStatus::StorageError:
+            return EScanStatus::StorageError;
+        case EStatus::Exception:
+            return EScanStatus::Exception;
+    }
+    return EScanStatus::InProgress;
+}
+
+}
 
 class TSnapshotWriter : public TActorBootstrapped<TSnapshotWriter> {
 public:
@@ -28,9 +51,12 @@ public:
         TFile File;
     };
 
-    TSnapshotWriter(const TFsPath& path, TActorId owner, const THashMap<ui32, TScheme::TTableInfo>& tables)
+    TSnapshotWriter(const TFsPath& path, TActorId owner,
+                    const THashMap<ui32, TScheme::TTableInfo>& tables,
+                    TAutoPtr<NTable::TSchemeChanges> schema)
         : SnapshotPath(path.Child("snapshot"))
         , Owner(owner)
+        , Schema(schema)
     {
         for (const auto& [tableId, table] : tables) {
             Tables.emplace(tableId, TTableFile(table.Name, {}));
@@ -44,6 +70,19 @@ public:
             SnapshotPath.MkDirs();
         } catch (const TIoException& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot dir " << SnapshotPath << ": " << e.what());
+        }
+
+        auto schemaPath = SnapshotPath.Child("schema.json");
+        try {
+            SchemaFile = TFile(schemaPath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
+            TUnbufferedFileOutput schemaOut(SchemaFile);
+            NProtobufJson::Proto2Json(*Schema, schemaOut, {
+                .EnumMode = NProtobufJson::TProto2JsonConfig::EnumName,
+                .FieldNameMode = NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense,
+                .MapAsObject = true,
+            });
+        } catch (const TIoException& e) {
+            return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot schema file " << schemaPath << ": " << e.what());
         }
 
         if (Tables.empty()) {
@@ -70,7 +109,6 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWriteSnapshot, Handle);
-            hFunc(TEvCompleteSnapshot, Handle);
         }
     }
 
@@ -83,31 +121,57 @@ public:
             return ReplyAndDie(false, TStringBuilder() << "Got write snapshot for unknown table " << msg->TableId);
         }
 
-        try {
-            it->second.File.Write(msg->SnapshotData.Data(), msg->SnapshotData.Size());
-            it->second.File.Flush();
-        } catch (const TIoException& e) {
-            return ReplyAndDie(false, TStringBuilder() << "Failed to write snapshot table data " << it->second.File.GetName() << ": " << e.what());
+        if (!msg->SnapshotData.Empty()) {
+            try {
+                it->second.File.Write(msg->SnapshotData.Data(), msg->SnapshotData.Size());
+            } catch (const TIoException& e) {
+                return ReplyAndDie(false, TStringBuilder() << "Failed to write snapshot table data " << it->second.File.GetName() << ": " << e.what());
+            }
+        }
+
+        switch (msg->ScanStatus) {
+            case EScanStatus::InProgress:
+                return ContinueScan(ev->Sender);
+            case EScanStatus::Done:
+                return ScanDone(msg->TableId);
+            case EScanStatus::Lost:
+                return ScanFailed(it->second.Name, "Owner entity is lost");
+            case EScanStatus::Term:
+                return ScanFailed(it->second.Name, "Explicit process termination by owner");
+            case EScanStatus::StorageError:
+                return ScanFailed(it->second.Name, "Some blob has been failed to load");
+            case EScanStatus::Exception:
+                return ScanFailed(it->second.Name, "Unhandled exception has happened");
         }
     }
 
-    void Handle(TEvCompleteSnapshot::TPtr& ev) {
-        LOG_D("Handle " << ev->ToString());
+    void ContinueScan(TActorId scan) const {
+        Send(scan, new TEvWriteSnapshotAck());
+    }
 
-        const auto* msg = ev->Get();
-        auto it = Tables.find(msg->TableId);
-        if (it == Tables.end()) {
-            return ReplyAndDie(false, TStringBuilder() << "Got complete snapshot for unknown table " << msg->TableId);
-        }
-
-        if (msg->Success) {
-            DoneTables.insert(msg->TableId);
-            if (DoneTables.size() == Tables.size()) {
-                return ReplyAndDie();
+    void ScanDone(ui32 tableId) {
+        DoneTables.insert(tableId);
+        if (DoneTables.size() == Tables.size()) {
+            try {
+                SchemaFile.Flush();
+            } catch (const TIoException& e) {
+                return ReplyAndDie(false, TStringBuilder() << "Failed to flush snapshot schema " << SchemaFile.GetName() << ": " << e.what());
             }
-        } else {
-            return ReplyAndDie(false, TStringBuilder() << "Snapshot scan for " << it->second.File.GetName() << " failed: " << msg->Error);
+
+            for (auto& [_, table] : Tables) {
+                try {
+                    table.File.Flush();
+                } catch (const TIoException& e) {
+                    return ReplyAndDie(false, TStringBuilder() << "Failed to flush snapshot table data " << table.File.GetName() << ": " << e.what());
+                }
+            }
+
+            return ReplyAndDie();
         }
+    }
+
+    void ScanFailed(const TString& tableName, const TString& error) {
+        return ReplyAndDie(false, TStringBuilder() << "Snapshot scan for " << tableName << " failed: " << error);
     }
 
 private:
@@ -116,12 +180,16 @@ private:
 
     THashMap<ui32, TTableFile> Tables;
     THashSet<ui32> DoneTables;
+
+    TFile SchemaFile;
+    TAutoPtr<NTable::TSchemeChanges> Schema;
 };
 
-class TBackupSnapshotScan : public IScan {
+class TBackupSnapshotScan : public IScan, public TActor<TBackupSnapshotScan> {
 public:
     TBackupSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, TColumn>& columns)
-        : SnapshotWriter(snapshotWriter)
+        : TActor(&TThis::StateWork)
+        , SnapshotWriter(snapshotWriter)
         , TableId(tableId)
         , Columns(columns)
     {}
@@ -131,6 +199,8 @@ public:
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
+        TlsActivationContext->AsActorContext().RegisterWithSameMailbox(this);
+
         Driver = driver;
         Scheme = scheme;
 
@@ -145,7 +215,7 @@ public:
     EScan Feed(TArrayRef<const TCell>, const TRow& row) override {
         TBufferOutput out(Buffer);
 
-        NJsonWriter::TBuf b;
+        NJsonWriter::TBuf b(NJsonWriter::HEM_RELAXED, &out);
         b.BeginObject();
 
         for (const auto& info : Scheme->Cols) {
@@ -210,12 +280,6 @@ public:
             case NScheme::NTypeIds::Interval64:
                 b.WriteKey(Columns.at(info.Tag).Name).WriteLongLong(cell.AsValue<i64>());
                 break;
-            case NScheme::NTypeIds::String:
-            case NScheme::NTypeIds::String4k:
-            case NScheme::NTypeIds::String2m:
-            case NScheme::NTypeIds::Yson:
-                b.WriteKey(Columns.at(info.Tag).Name).WriteString(Base64Encode(cell.AsBuf()));
-                break;
             case NScheme::NTypeIds::Utf8:
             case NScheme::NTypeIds::Json:
                 b.WriteKey(Columns.at(info.Tag).Name).WriteString(cell.AsBuf());
@@ -238,59 +302,53 @@ public:
                 break;
             }
             default:
-                Y_ENSURE(false, "Unsupported type");
+                b.WriteKey(Columns.at(info.Tag).Name).WriteString(Base64Encode(cell.AsBuf()));
+                break;
             }
         }
 
         b.EndObject();
+        out << '\n';
 
-        out << b.Str() << '\n';
-
-        if (Buffer.Size() >= 4_KB) {
+        if (Buffer.Size() >= 1_MB) {
             SendBuffer();
         }
 
-        return EScan::Feed;
+        return MaybeContinue();
+    }
+
+    void Handle(TEvWriteSnapshotAck::TPtr&) {
+        InFlight = false;
+        Driver->Touch(MaybeContinue());
+    }
+
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        SendBuffer(ToScanStatus(status));
+        PassAway();
+        return nullptr;
     }
 
     EScan Exhausted() override {
         return EScan::Final;
     }
 
-    TAutoPtr<IDestructable> Finish(EStatus status) override {
-        if (!Buffer.Empty()) {
-            SendBuffer();
-        }
-
-        TEvCompleteSnapshot* result;
-        switch (status) {
-            case EStatus::Done:
-                result = new TEvCompleteSnapshot(TableId, true);
-                break;
-            case EStatus::Lost:
-                result = new TEvCompleteSnapshot(TableId, false, "Owner entity is lost");
-                break;
-            case EStatus::Term:
-                result = new TEvCompleteSnapshot(TableId, false, "Explicit process termination by owner");
-                break;
-            case EStatus::StorageError:
-                result = new TEvCompleteSnapshot(TableId, false, "Some blob has been failed to load");
-                break;
-            case EStatus::Exception:
-                result = new TEvCompleteSnapshot(TableId, false, "Unhandled exception has happened");
-                break;
-        }
-
-        auto* handle = new IEventHandle(SnapshotWriter, TActorId(), result);
-        TlsActivationContext->Send(handle);
-
-        delete this;
-        return nullptr;
+    void SendBuffer(EScanStatus status = EScanStatus::InProgress) {
+        InFlight = true;
+        Send(SnapshotWriter, new TEvWriteSnapshot(TableId, std::move(Buffer), status));
     }
 
-    void SendBuffer() {
-        auto* handle = new IEventHandle(SnapshotWriter, TActorId(), new TEvWriteSnapshot(TableId, std::move(Buffer)));
-        TlsActivationContext->Send(handle);
+    EScan MaybeContinue() const {
+        if (!InFlight) {
+            return EScan::Feed;
+        }  else {
+            return EScan::Sleep;
+        }
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvWriteSnapshotAck, Handle);
+        }
     }
 
 private:
@@ -302,18 +360,23 @@ private:
     THashMap<ui32, TColumn> Columns;
 
     TBuffer Buffer;
+    bool InFlight = false;
 };
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                              const THashMap<ui32, TScheme::TTableInfo>& tables,
-                             TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation)
+                             TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
+                             TAutoPtr<NTable::TSchemeChanges> schema)
 {
     if (config.HasFilesystem()) {
+        TString tabletTypeName = TTabletTypes::EType_Name(tabletType);
+        NProtobufJson::ToSnakeCaseDense(&tabletTypeName);
+
         auto path = TFsPath(config.GetFilesystem().GetPath())
-            .Child(TTabletTypes::EType_Name(tabletType))
+            .Child(tabletTypeName)
             .Child(ToString(tabletId))
-            .Child(ToString(generation));
-        return new TSnapshotWriter(path, owner, tables);
+            .Child("gen_" + ToString(generation));
+        return new TSnapshotWriter(path, owner, tables, schema);
     } else {
         return nullptr;
     }

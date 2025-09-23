@@ -1,6 +1,7 @@
 #include "flat_executor_ut_common.h"
+#include "flat_cxx_database.h"
 
-#include <flat_cxx_database.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -76,6 +77,35 @@ struct TTxWriteDataRow : public ITransaction {
     }
 }; // TTxWriteDataRow
 
+struct TTxWriteDataRange : public ITransaction {
+    const TActorId Owner;
+    const ui64 KeyStart;
+    const ui64 KeyEnd;
+    const ui32 Value;
+
+    TTxWriteDataRange(TActorId owner, ui64 keyStart, ui64 keyEnd, ui32 value)
+        : Owner(owner)
+        , KeyStart(keyStart)
+        , KeyEnd(keyEnd)
+        , Value(value)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        for (ui64 key = KeyStart; key < KeyEnd; ++key) {
+            db.Table<TSchema::Data>().Key(key)
+                .Update<TSchema::Data::Value>(Value);
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TTxWriteDataRange
+
 struct TTxWriteBinaryDataRow : public ITransaction {
     const TActorId Owner;
     const ui64 Key;
@@ -145,6 +175,11 @@ struct TEnv : public TMyEnvBase {
         WaitFor<NFake::TEvResult>();
     }
 
+    void WriteRange(ui64 keyStart, ui64 keyEnd, ui32 value) {
+        SendAsync(new NFake::TEvExecute{ new TTxWriteDataRange(Edge, keyStart, keyEnd, value) });
+        WaitFor<NFake::TEvResult>();
+    }
+
     void WriteBinaryRow(ui64 key, const TString& value) {
         SendAsync(new NFake::TEvExecute{ new TTxWriteBinaryDataRow(Edge, key, value) });
         WaitFor<NFake::TEvResult>();
@@ -168,8 +203,8 @@ Y_UNIT_TEST_SUITE(Backup) {
         env.FireDummyTablet(TestTabletFlags);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
 
-        auto dummyDir = TFsPath(env->GetTempDir()).Child("Dummy");
-        UNIT_ASSERT_C(dummyDir, "Tablet type dir isn't created");
+        auto dummyDir = TFsPath(env->GetTempDir()).Child("dummy");
+        UNIT_ASSERT_C(dummyDir.Exists(), "Tablet type dir isn't created");
 
         auto tabletIdDir = dummyDir.Child(ToString(env.Tablet));
         UNIT_ASSERT_C(tabletIdDir.Exists(), "Tablet ID dir isn't created");
@@ -189,8 +224,8 @@ Y_UNIT_TEST_SUITE(Backup) {
         env.RestartTablet(TestTabletFlags);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
 
-        auto dummyDir = TFsPath(env->GetTempDir()).Child("Dummy");
-        UNIT_ASSERT_C(dummyDir, "Tablet type dir isn't created");
+        auto dummyDir = TFsPath(env->GetTempDir()).Child("dummy");
+        UNIT_ASSERT_C(dummyDir.Exists(), "Tablet type dir isn't created");
 
         auto tabletIdDir = dummyDir.Child(ToString(env.Tablet));
         UNIT_ASSERT_C(tabletIdDir.Exists(), "Tablet ID dir isn't created");
@@ -223,7 +258,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
 
         auto tabletIdDir = TFsPath(env->GetTempDir())
-            .Child("Dummy")
+            .Child("dummy")
             .Child(ToString(env.Tablet));
 
         TVector<TFsPath> genDirs;
@@ -238,6 +273,11 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         TVector<TFsPath> tables;
         snapshotDir.List(tables);
+
+        std::erase_if(tables, [](const TFsPath& path) {
+            return path.Basename() == "schema.json";
+        });
+
         UNIT_ASSERT(tables.size() == 3);
 
         for (const auto& table : tables) {
@@ -262,7 +302,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
 
         auto tabletIdDir = TFsPath(env->GetTempDir())
-            .Child("Dummy")
+            .Child("dummy")
             .Child(ToString(env.Tablet));
 
         TVector<TFsPath> genDirs;
@@ -277,33 +317,113 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         TVector<TFsPath> tables;
         snapshotDir.List(tables);
-        UNIT_ASSERT(tables.size() == 3);
 
-        std::sort(tables.begin(), tables.end(), [](const TFsPath& a, const TFsPath& b) {
-            return a.Basename() < b.Basename();
+        std::erase_if(tables, [](const TFsPath& path) {
+            return path.Basename() == "schema.json";
         });
 
-        {
-            UNIT_ASSERT_VALUES_EQUAL(tables[0].Basename(), "BinaryData.json");
-            TString content = TFileInput(tables[0]).ReadAll();
-            UNIT_ASSERT_VALUES_EQUAL(content, "{\"Key\":3,\"Value\":\"YWJjZGVm\"}\n");
-        }
+        UNIT_ASSERT(tables.size() == 3);
 
         {
-            UNIT_ASSERT_VALUES_EQUAL(tables[1].Basename(), "CompositePKData.json");
-            TString content = TFileInput(tables[1]).ReadAll();
-            UNIT_ASSERT_VALUES_EQUAL(content, "{\"Key\":4,\"SubKey\":5,\"Value\":100}\n");
-        }
-
-        {
-            UNIT_ASSERT_VALUES_EQUAL(tables[2].Basename(), "Data.json");
-            TString content = TFileInput(tables[2]).ReadAll();
+            auto table = snapshotDir.Child("Data.json");
+            UNIT_ASSERT_C(table.Exists(), "Data table isn't created");
+            TString content = TFileInput(table).ReadAll();
             UNIT_ASSERT_VALUES_EQUAL(
                 content,
                 "{\"Key\":1,\"Value\":10}\n"
                 "{\"Key\":2,\"Value\":11}\n"
             );
         }
+
+        {
+            auto table = snapshotDir.Child("BinaryData.json");
+            UNIT_ASSERT_C(table.Exists(), "BinaryData table isn't created");
+            TString content = TFileInput(table).ReadAll();
+            UNIT_ASSERT_VALUES_EQUAL(content, "{\"Key\":3,\"Value\":\"YWJjZGVm\"}\n");
+        }
+
+        {
+            auto table = snapshotDir.Child("CompositePKData.json");
+            UNIT_ASSERT_C(table.Exists(), "CompositePKData table isn't created");
+            TString content = TFileInput(table).ReadAll();
+            UNIT_ASSERT_VALUES_EQUAL(content, "{\"Key\":4,\"SubKey\":5,\"Value\":100}\n");
+        }
+    }
+
+    Y_UNIT_TEST(SnapshotLargeData) {
+        TEnv env;
+
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        env.InitSchema();
+
+        env.WriteRange(0, 1'000'000, 42); // 1 million rows
+
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto snapshotDir = genDirs.rbegin()->Child("snapshot");
+        UNIT_ASSERT_C(snapshotDir.Exists(), "Snapshot dir isn't created");
+
+        auto table = snapshotDir.Child("Data.json");
+        UNIT_ASSERT_C(table.Exists(), "Data table isn't created");
+
+        TString content = TFileInput(table).ReadAll();
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty();
+        UNIT_ASSERT_VALUES_EQUAL(lines.Count(), 1'000'000);
+    }
+
+    Y_UNIT_TEST(SnapshotSchema) {
+        TEnv env;
+
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        env.InitSchema();
+
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto snapshotDir = genDirs.rbegin()->Child("snapshot");
+        UNIT_ASSERT_C(snapshotDir.Exists(), "Snapshot dir isn't created");
+
+        TVector<TFsPath> schemaFiles;
+        snapshotDir.List(schemaFiles);
+
+        std::erase_if(schemaFiles, [](const TFsPath& path) {
+            return path.Basename() != "schema.json";
+        });
+
+        UNIT_ASSERT(schemaFiles.size() == 1);
+
+        auto schema = snapshotDir.Child("schema.json");
+        UNIT_ASSERT_C(schema.Exists(), "Schema file isn't created");
+
+        TString content = TFileInput(schema).ReadAll();
+        UNIT_ASSERT_C(content.Contains("\"table_name\":\"Data\""), "Data table isn't in schema");
+        UNIT_ASSERT_C(content.Contains("\"table_name\":\"BinaryData\""), "BinaryData table isn't in schema");
+        UNIT_ASSERT_C(content.Contains("\"table_name\":\"CompositePKData\""), "CompositePKData table isn't in schema");
     }
 }
 

@@ -13,7 +13,7 @@ enum EEv {
     EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR),
 
     EvWriteSnapshot = EvBegin + 1536,
-    EvCompleteSnapshot,
+    EvWriteSnapshotAck,
     EvSnapshotCompleted,
 
     EvEnd
@@ -31,31 +31,33 @@ struct TEvSnapshotCompleted : public TEventLocal<TEvSnapshotCompleted, EvSnapsho
     TString Error;
 };
 
-struct TEvCompleteSnapshot : public TEventLocal<TEvCompleteSnapshot, EvCompleteSnapshot> {
-    TEvCompleteSnapshot(ui32 tableId, bool success, const TString& error = "")
-        : TableId(tableId)
-        , Success(success)
-        , Error(error)
-    {}
-
-    ui32 TableId;
-    bool Success;
-    TString Error;
+enum class EScanStatus {
+    InProgress = 0,
+    Done = 1,
+    Lost = 2,
+    Term = 3,
+    StorageError = 4,
+    Exception = 5,
 };
 
 struct TEvWriteSnapshot : public TEventLocal<TEvWriteSnapshot, EvWriteSnapshot> {
-    TEvWriteSnapshot(ui32 tableId, TBuffer&& snapshotData)
+    TEvWriteSnapshot(ui32 tableId, TBuffer&& snapshotData, EScanStatus scanStatus)
         : TableId(tableId)
         , SnapshotData(std::move(snapshotData))
+        , ScanStatus(scanStatus)
     {}
 
     ui32 TableId;
     TBuffer SnapshotData;
+    EScanStatus ScanStatus;
 };
+
+struct TEvWriteSnapshotAck : public TEventLocal<TEvWriteSnapshotAck, EvWriteSnapshotAck> {};
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                              const THashMap<ui32, NTable::TScheme::TTableInfo>& tables,
-                             TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation);
+                             TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
+                             TAutoPtr<NTable::TSchemeChanges> schema);
 NTable::IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, NTable::TColumn>& columns);
 
 } // NKikimr::NTabletFlatExecutor::NBackup

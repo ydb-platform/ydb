@@ -856,10 +856,11 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         Y_FAIL("Timeout waiting for from partition_stats");
     }
 
-    Y_UNIT_TEST(CompileCacheBasic) {
+    Y_UNIT_TEST_TWIN(CompileCacheBasic, EnableCompileCacheView) {
         auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(EnableCompileCacheView);
         auto tableClient = kikimr.GetTableClient();
         ui64 initial = SelectCompileCacheCount(tableClient);
         UNIT_ASSERT_EQUAL_C(initial, 0, "Compile cache is not empty at the beginning");
@@ -903,8 +904,9 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         }
     }
 
-    Y_UNIT_TEST(CompileCacheCheckWarnings) {
+    Y_UNIT_TEST_TWIN(CompileCacheCheckWarnings, EnableCompileCacheView) {
         TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(EnableCompileCacheView);
         auto client = kikimr.GetQueryClient();
         auto db = kikimr.GetTableClient();
         {

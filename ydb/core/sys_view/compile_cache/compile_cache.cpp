@@ -163,13 +163,18 @@ private:
             ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "User is not a database administrator.");
             return;
         }
+        // if feature flag is not set -- return only for self node
+        if (!AppData()->FeatureFlags.GetEnableCompileCacheView()) {
+            PendingNodesInitialized = true;
+            PendingNodes.emplace_back(SelfId().NodeId());
+        }
 
         if (!PendingNodesInitialized) {
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKikimr::NKqp::TEvKqp::TEvListProxyNodesRequest());
             return;
         }
 
-        if (!PendingNodes.empty() && !PendingRequest && AppData()->FeatureFlags.GetEnableCompileCacheView())  {
+        if (!PendingNodes.empty() && !PendingRequest)  {
             const auto& nodeId = PendingNodes.front();
             auto kqpProxyId = NKqp::MakeKqpCompileServiceID(nodeId);
             auto req = std::make_unique<NKikimr::NKqp::TEvKqp::TEvListQueryCacheQueriesRequest>();
@@ -200,10 +205,12 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvListProxyNodesResponse::TPtr& ev) {
-        auto& proxies = ev->Get()->ProxyNodes;
-        std::sort(proxies.begin(), proxies.end());
-        PendingNodes = std::deque<ui32>(proxies.begin(), proxies.end());
-        PendingNodesInitialized = true;
+        if (AppData()->FeatureFlags.GetEnableCompileCacheView()) {
+            auto& proxies = ev->Get()->ProxyNodes;
+            std::sort(proxies.begin(), proxies.end());
+            PendingNodes = std::deque<ui32>(proxies.begin(), proxies.end());
+            PendingNodesInitialized = true;
+        }
         StartScan();
     }
 
@@ -263,7 +270,9 @@ private:
 
         PendingRequest = false;
         SendBatch(std::move(batch));
-        StartScan();
+        if (AppData()->FeatureFlags.GetEnableCompileCacheView()) {
+            StartScan();
+        }
     }
 
     void PassAway() override {

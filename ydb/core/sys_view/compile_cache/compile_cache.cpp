@@ -169,7 +169,7 @@ private:
             return;
         }
 
-        if (!PendingNodes.empty() && !PendingRequest)  {
+        if (!PendingNodes.empty() && !PendingRequest && AppData()->FeatureFlags.GetEnableCompileCacheView())  {
             const auto& nodeId = PendingNodes.front();
             auto kqpProxyId = NKqp::MakeKqpCompileServiceID(nodeId);
             auto req = std::make_unique<NKikimr::NKqp::TEvKqp::TEvListQueryCacheQueriesRequest>();

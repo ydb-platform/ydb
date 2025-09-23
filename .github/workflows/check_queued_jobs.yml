@@ -2,7 +2,7 @@ name: Alert Queued Jobs
 
 on:
   schedule:
-    # Запускаем каждые 30 минут
+    # Run every 30 minutes
     - cron: '*/30 * * * *'
   # Can also be triggered manually
   workflow_dispatch:

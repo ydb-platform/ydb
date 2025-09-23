@@ -33,6 +33,10 @@ struct TInfoUnit {
     TString Alias;
     TString ColumnName;
 
+    bool operator==(const TInfoUnit& other) const {
+        return Alias == other.Alias && ColumnName == other.ColumnName;
+    }
+
     struct THashFunction
     {
         size_t operator()(const TInfoUnit& c) const
@@ -43,8 +47,6 @@ struct TInfoUnit {
 };
 
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs);
-
-bool operator == (const TInfoUnit& lhs, const TInfoUnit& rhs);
 
 struct TFilterInfo {
     TExprNode::TPtr FilterBody;
@@ -177,6 +179,8 @@ class IOperator {
 
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) = 0;
 
+    virtual TString ToString() = 0;
+
     bool IsSingleConsumer() { return Parents.size() <= 1; }
 
     const EOperator Kind;
@@ -207,12 +211,18 @@ class IUnaryOperator : public IOperator {
     public:
     IUnaryOperator(EOperator kind) : IOperator(kind, {}) {}
     IUnaryOperator(EOperator kind, TExprNode::TPtr node) : IOperator(kind, node) {}
+    IUnaryOperator(EOperator kind, std::shared_ptr<IOperator> input) : IOperator(kind, {}) { Children.push_back(input); }
     std::shared_ptr<IOperator>& GetInput() { return Children[0]; }
 };
 
 class IBinaryOperator : public IOperator {
     public:
     IBinaryOperator(EOperator kind, TExprNode::TPtr node) : IOperator(kind, node) {}
+    IBinaryOperator(EOperator kind, std::shared_ptr<IOperator> leftInput, std::shared_ptr<IOperator> rightInput) : IOperator(kind, {}) {
+        Children.push_back(leftInput);
+        Children.push_back(rightInput);
+    }
+
     std::shared_ptr<IOperator>& GetLeftInput() { return Children[0]; }
     std::shared_ptr<IOperator>& GetRightInput() { return Children[1]; }
 };
@@ -224,15 +234,20 @@ class TOpEmptySource : public IOperator {
         Y_UNUSED(ctx);
         return std::make_shared<TOpEmptySource>(Node); 
     }
+    virtual TString ToString() override { return "EmptySource"; }
 
 };
 
 class TOpRead : public IOperator {
     public:
     TOpRead(TExprNode::TPtr node);
+    TOpRead(TString tableName, TString alias, TString columns);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    virtual TString ToString() override;
 
     TString TableName;
+    TString Alias;
+    TVector<TString> Columns;
 };
 
 class TOpMap : public IUnaryOperator {
@@ -240,7 +255,10 @@ class TOpMap : public IUnaryOperator {
     TOpMap(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
     bool HasRenames() const;
+    bool HasLambdas() const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
+    TVector<std::pair<TInfoUnit, TExprNode::TPtr>> GetLambdas() const;
+    virtual TString ToString() override;
 
     TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> MapElements;
     bool Project = true;
@@ -250,6 +268,7 @@ class TOpProject : public IUnaryOperator {
     public:
     TOpProject(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    virtual TString ToString() override;
 
     TVector<TInfoUnit> GetProjectList() const;
     TVector<TInfoUnit> ProjectList;
@@ -260,15 +279,18 @@ class TOpFilter : public IUnaryOperator {
     TOpFilter(TExprNode::TPtr node);
     TOpFilter(std::shared_ptr<IOperator> input, TExprNode::TPtr filterLambda, TExprContext& ctx, TPositionHandle pos);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    virtual TString ToString() override;
 
     TVector<TInfoUnit> GetFilterIUs() const;
-    TConjunctInfo GetConjuctInfo() const;
+    TConjunctInfo GetConjunctInfo() const;
 };
 
 class TOpJoin : public IBinaryOperator {
     public:
     TOpJoin(TExprNode::TPtr node);
+    TOpJoin(std::shared_ptr<IOperator> leftArg, std::shared_ptr<IOperator> rightArg, TString joinKind, TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    virtual TString ToString() override;
 
     TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
     TString JoinKind;
@@ -277,13 +299,19 @@ class TOpJoin : public IBinaryOperator {
 class TOpLimit : public IUnaryOperator {
     public:
     TOpLimit(TExprNode::TPtr node);
+    TOpLimit(std::shared_ptr<IOperator> input, TExprNode::TPtr limitCond);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    virtual TString ToString() override;
+
+    TExprNode::TPtr LimitCond;
 };
 
 class TOpRoot : public IUnaryOperator {
     public:
     TOpRoot(TExprNode::TPtr node);
+    TOpRoot(std::shared_ptr<IOperator> input);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    virtual TString ToString() override;
     void ComputeParents();
 
     TPlanProps PlanProps;
@@ -311,7 +339,8 @@ class TOpRoot : public IUnaryOperator {
             }
 
             auto child = ptr->Children[0];
-            BuildDfsList(child, {}, size_t(0));
+            std::unordered_set<std::shared_ptr<IOperator>> visited;
+            BuildDfsList(child, {}, size_t(0), visited);
             CurrElement = 0;
         }
 
@@ -338,11 +367,15 @@ class TOpRoot : public IUnaryOperator {
         friend bool operator!= (const Iterator& a, const Iterator& b) { return a.CurrElement != b.CurrElement; }; 
 
         private:
-            void BuildDfsList(std::shared_ptr<IOperator> current, std::shared_ptr<IOperator> parent, size_t childIdx) {
+            void BuildDfsList(std::shared_ptr<IOperator> current, std::shared_ptr<IOperator> parent, size_t childIdx, 
+                std::unordered_set<std::shared_ptr<IOperator>>& visited) {
                 for (size_t idx = 0; idx < current->Children.size(); idx++) {
-                    BuildDfsList(current->Children[idx], current, idx);
+                    BuildDfsList(current->Children[idx], current, idx, visited);
                 }
-                DfsList.push_back(IteratorItem(current,parent,childIdx));
+                if (!visited.contains(current)) {
+                    DfsList.push_back(IteratorItem(current,parent,childIdx));
+                }
+                visited.insert(current);
             }
             TVector<IteratorItem> DfsList;
             size_t CurrElement;

@@ -167,11 +167,6 @@ namespace NKikimr
             }
         }
 
-        bool operator==(const TInfoUnit &lhs, const TInfoUnit &rhs)
-        {
-            return lhs.Alias == rhs.Alias && lhs.ColumnName == rhs.ColumnName;
-        }
-
         TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr &node, TExprNode::TPtr &newStage, TExprContext &ctx)
         {
             if (FromSourceStage)
@@ -319,6 +314,10 @@ namespace NKikimr
             return std::make_shared<TOpRead>(Node);
         }
 
+        TString TOpRead::ToString() {
+            return "Read (" + TableName + ")";
+        }
+
         TOpMap::TOpMap(TExprNode::TPtr node) : IUnaryOperator(EOperator::Map, node)
         {
             auto opMap = TKqpOpMap(node);
@@ -432,6 +431,15 @@ namespace NKikimr
             return result;
         }
 
+        TString TOpMap::ToString() {
+            auto res = TStringBuilder() << "Map [";
+            for (auto & [k,v] : MapElements) {
+                res << k.GetFullName() << ",";
+            }
+            res << "]";
+            return res;
+        }
+
         TOpProject::TOpProject(TExprNode::TPtr node) : IUnaryOperator(EOperator::Project, node)
         {
             auto opProject = TKqpOpProject(node);
@@ -456,6 +464,15 @@ namespace NKikimr
             .Done().Ptr();
             // clang-format on
             return std::make_shared<TOpProject>(node);
+        }
+
+        TString TOpProject::ToString() {
+            auto res = TStringBuilder() << "Project [";
+            for (auto iu : ProjectList) {
+                res << iu.GetFullName() << ",";
+            }
+            res << "]";
+            return res;
         }
 
         TOpFilter::TOpFilter(TExprNode::TPtr node) : IUnaryOperator(EOperator::Filter, node)
@@ -501,7 +518,7 @@ namespace NKikimr
             return res;
         }
 
-        TConjunctInfo TOpFilter::GetConjuctInfo() const
+        TConjunctInfo TOpFilter::GetConjunctInfo() const
         {
             TConjunctInfo res;
 
@@ -528,15 +545,6 @@ namespace NKikimr
                     {
                         auto leftArg = conjObj->Child(2);
                         auto rightArg = conjObj->Child(3);
-
-                        if (leftArg->IsCallable("ToPg"))
-                        {
-                            leftArg = leftArg->Child(0);
-                        }
-                        if (rightArg->IsCallable("ToPg"))
-                        {
-                            rightArg = rightArg->Child(0);
-                        }
 
                         if (!leftArg->IsCallable("Member") || !rightArg->IsCallable("Member"))
                         {
@@ -569,6 +577,10 @@ namespace NKikimr
             }
 
             return res;
+        }
+
+        TString TOpFilter::ToString() {
+            return "Filter";
         }
 
         TOpJoin::TOpJoin(TExprNode::TPtr node) : IBinaryOperator(EOperator::Join, node)
@@ -632,6 +644,10 @@ namespace NKikimr
             return std::make_shared<TOpJoin>(node);
         }
 
+        TString TOpJoin::ToString() {
+            return "Join";
+        }
+
         TOpLimit::TOpLimit(TExprNode::TPtr node) : IUnaryOperator(EOperator::Limit, node)
         {
             auto opLimit = TKqpOpLimit(node);
@@ -653,6 +669,10 @@ namespace NKikimr
             return std::make_shared<TOpLimit>(node);
         }
 
+        TString TOpLimit::ToString() {
+            return "Limit";
+        }
+
         TOpRoot::TOpRoot(TExprNode::TPtr node) : IUnaryOperator(EOperator::Root, node)
         {
             auto opRoot = TKqpOpRoot(node);
@@ -672,22 +692,31 @@ namespace NKikimr
             return std::make_shared<TOpRoot>(node);
         }
 
+        void ComputeParentsRec(std::shared_ptr<IOperator> op, std::shared_ptr<IOperator> parent) {
+            if (parent) {
+                auto f = std::find_if(op->Parents.begin(), op->Parents.end(), [&parent](const std::weak_ptr<IOperator>& p) {
+                    return p.lock() == parent;
+                });
+                if (f == op->Parents.end())
+                {
+                    op->Parents.push_back(parent);
+                }
+            }
+            for (auto & c : op->Children) {
+                ComputeParentsRec(c, op);
+            }
+        }
+
         void TOpRoot::ComputeParents() {
             for ( auto it : *this ) {
                 it.Current->Parents.clear();
             }
+            std::shared_ptr<TOpRoot> noParent;
+            ComputeParentsRec(GetInput(), noParent);
+        }
 
-            for ( auto it : *this ) {
-                if (it.Parent) {
-                    auto f = std::find_if(it.Current->Parents.begin(), it.Current->Parents.end(), [&it](const std::weak_ptr<IOperator>& p) {
-                        return p.lock() == it.Parent;
-                    });
-                    if (f == it.Current->Parents.end())
-                    {
-                        it.Current->Parents.push_back(it.Parent);
-                    }
-                }
-            }
+        TString TOpRoot::ToString() {
+            return "Root";
         }
 
         TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right)

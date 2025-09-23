@@ -45,15 +45,33 @@ class TSimplifiedRule : public IRule {
         TPlanProps& props) override;
 };
 
-struct TRuleBasedStage {
+class TRuleBasedOptimizer;
+
+class IRBOStage {
+    public:
+    virtual void RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExprContext& ctx) = 0;
+    virtual ~IRBOStage() = default;
+};
+
+class TRuleBasedStage : public IRBOStage {
+    public:
     TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules, bool requiresRebuild) : Rules(rules), RequiresRebuild(requiresRebuild) {}
+    virtual void RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExprContext& ctx) override;
+
     TVector<std::shared_ptr<IRule>> Rules;
     bool RequiresRebuild;
 };
 
-class TRuleBasedOptimizer {
+class ISinglePassStage : public IRBOStage {
     public:
-    TRuleBasedOptimizer(TVector<TRuleBasedStage> stages, 
+    virtual void RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExprContext& ctx) override = 0;
+};
+
+class TRuleBasedOptimizer {
+    friend class IRBOStage;
+    
+    public:
+    TRuleBasedOptimizer(TVector<std::shared_ptr<IRBOStage>> stages, 
         const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
         TTypeAnnotationContext& typeCtx, 
         const TKikimrConfiguration::TPtr& config,
@@ -67,7 +85,7 @@ class TRuleBasedOptimizer {
     
     TExprNode::TPtr Optimize(TOpRoot & root,  TExprContext& ctx);
 
-    TVector<TRuleBasedStage> Stages;
+    TVector<std::shared_ptr<IRBOStage>> Stages;
     const TIntrusivePtr<TKqpOptimizeContext>& KqpCtx;
     TTypeAnnotationContext& TypeCtx;
     const TKikimrConfiguration::TPtr& Config;

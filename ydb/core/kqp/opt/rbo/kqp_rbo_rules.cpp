@@ -1,6 +1,7 @@
 #include "kqp_rbo_rules.h"
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/utils/log/log.h>
+#include <typeinfo>
 
 
 
@@ -110,6 +111,52 @@ bool IsNullRejectingPredicate(const TFilterInfo& filter, TExprContext& ctx) {
 namespace NKikimr {
 namespace NKqp {
 
+std::shared_ptr<IOperator> TExtractJoinExpressionsRule::SimpleTestAndApply(const std::shared_ptr<IOperator> & input, TExprContext& ctx, 
+    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
+    TTypeAnnotationContext& typeCtx, 
+    const TKikimrConfiguration::TPtr& config,
+    TPlanProps& props) {
+
+    Y_UNUSED(ctx);
+    Y_UNUSED(kqpCtx);
+    Y_UNUSED(typeCtx);
+    Y_UNUSED(config);
+    Y_UNUSED(props);
+
+    if (input->Kind != EOperator::Filter) {
+        return input;
+    }
+
+    auto filter = CastOperator<TOpFilter>(input);
+    auto conjInfo = filter->GetConjunctInfo();
+
+    TExprNode::TPtr matchedConjunct;
+
+    size_t idx = 0;
+    for ( ; idx < conjInfo.Filters.size(); idx++) {
+        auto f = conjInfo.Filters[idx];
+
+        if (f.FilterIUs.size() == 2) {
+            auto predicate = f.FilterBody;
+            if (predicate->IsCallable("PgResolvedOp") && predicate->Child(0)->Content() == "=") {
+                auto leftSide = predicate->Child(2);
+                auto rightSide = predicate->Child(3);
+                TVector<TInfoUnit> leftIUs;
+                TVector<TInfoUnit> rightIUs;
+                GetAllMembers(leftSide, leftIUs);
+                GetAllMembers(rightSide, rightIUs);
+
+                if (leftIUs.size()==1 && rightIUs.size()==1) {
+                    matchedConjunct = predicate;
+                    break;
+                }
+            }
+        }
+    }
+
+    return input;
+}
+
 std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared_ptr<IOperator> & input, TExprContext& ctx, 
     const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
     TTypeAnnotationContext& typeCtx, 
@@ -144,7 +191,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     // Join conditions can be pushed into the join operator and conjucts can either be pushed
     // or left on top of the join
     
-    auto conjunctInfo = filter->GetConjuctInfo();
+    auto conjunctInfo = filter->GetConjunctInfo();
 
     // Check if we need a top level filter
     TVector<TFilterInfo> topLevelPreds;
@@ -339,6 +386,198 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
     }
 
     return true;
+}
+
+struct Scope {
+    Scope(){}
+    Scope(int scopeId) : ScopeId(scopeId) {}
+
+    int ScopeId;
+    TVector<int> ParentScopes;
+    bool IdentityMap = true;
+    THashMap<TInfoUnit, TVector<TInfoUnit>, TInfoUnit::THashFunction> RenameMap;
+    TVector<std::shared_ptr<IOperator>> Operators;
+    std::shared_ptr<IOperator> TopOperator;
+
+    TString ToString() {
+        auto res = TStringBuilder() <<  "{id: " << ScopeId << ", parents: [";
+        for (int p : ParentScopes) {
+            res << p << ",";
+        }
+        res << "], Identity: " << IdentityMap << ", Rename Map: {";
+        for (auto & [k,vs] : RenameMap) {
+            res << k.GetFullName() << "-> [";
+            for (auto & v : vs) {
+                res << v.GetFullName() << ",";
+            }
+            res << "], ";
+        }
+        res << "}, Operators: [";
+        for (auto & op : Operators) {
+            res << op->ToString() << ",";
+        }
+        res << "]}";
+        return res;
+    }
+};
+
+void ComputeScopesRec(std::shared_ptr<IOperator> & op, THashMap<int, Scope> & scopes, int & currScope, int parentScope) {
+    bool makeNewScope = (op->Kind == EOperator::Map && CastOperator<TOpMap>(op)->Project) || (op->Kind == EOperator::Project) || (op->Parents.size() >= 2);
+    YQL_CLOG(TRACE, CoreDq) << "Op: " << op->ToString() << ", nparents = " << op->Parents.size();
+
+    if (op->Parents.size() >= 2) {
+        YQL_CLOG(TRACE, CoreDq) << "Op with 2 parents: " << op->ToString();
+
+        for (auto & [id, scope] : scopes ) {
+            if (scope.TopOperator == op) {
+                scope.ParentScopes.push_back(parentScope);
+                return;
+            }
+        }
+    }
+    if (makeNewScope) {
+        auto newScope = Scope(currScope+1);
+        newScope.TopOperator = op;
+        newScope.ParentScopes.push_back(parentScope);
+        parentScope = currScope;
+        currScope++;
+
+        if (op->Kind == EOperator::Map && CastOperator<TOpMap>(op)->Project) {
+            auto map = CastOperator<TOpMap>(op);
+            for (auto r : map->GetRenames()) {
+                if (!newScope.RenameMap.contains(r.second)) {
+                    newScope.RenameMap[r.second] = TVector<TInfoUnit>();
+                }
+                newScope.RenameMap.at(r.second).push_back(r.first);
+            }
+            newScope.IdentityMap = false;
+        } 
+        else if (op->Kind == EOperator::Project) {
+            auto project = CastOperator<TOpProject>(op);
+            for (auto p : project->ProjectList) {
+                newScope.RenameMap[p] = {p};
+            }
+            newScope.IdentityMap = false;
+        }
+        scopes[currScope] = newScope;
+    }
+    scopes.at(currScope).Operators.push_back(op);
+    for (auto c : op->Children) {
+        ComputeScopesRec(c, scopes, currScope, parentScope);
+    }
+}
+
+THashMap<int, Scope> ComputeScopes(std::shared_ptr<IOperator> & op) {
+    int currScope = 0;
+    int parentScope = 0;
+    THashMap<int, Scope> result;
+    result[0] = Scope(0);
+    ComputeScopesRec(op, result, currScope, parentScope);
+    return result;
+}
+
+struct TIOperatorSharedPtrHash
+{
+    size_t operator()(const std::shared_ptr<IOperator>& p) const
+    {
+        return p ? THash<int64_t>{}((int64_t)p.get()) : 0; 
+    }
+};
+
+struct TIntTUnitPairHash
+{
+    size_t operator()(const std::pair<int, TInfoUnit>& p) const
+    {
+        return THash<int>{}(p.first) ^ TInfoUnit::THashFunction{}(p.second);  
+    }
+};
+
+THashMap<std::shared_ptr<IOperator>, int, TIOperatorSharedPtrHash> ComputeScopeMap(const THashMap<int, Scope> & scopes) {
+    THashMap<std::shared_ptr<IOperator>, int, TIOperatorSharedPtrHash> scopeMap;
+
+    for (auto & [key, value] : scopes) {
+        for (auto op : value.Operators ) {
+            scopeMap[op] = key;
+        }
+    }
+    return scopeMap;
+}
+
+void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExprContext& ctx) {
+    Y_UNUSED(optimizer);
+    Y_UNUSED(ctx);
+
+    YQL_CLOG(TRACE, CoreDq) << "Before compute parents";
+
+    root.ComputeParents();
+
+    // We need to build scopes for the plan, because same aliases and variable names may be
+    // used multiple times in different scopes
+    auto scopes = ComputeScopes(root.GetInput());
+
+    for (auto & [id, sc] : scopes) {
+        YQL_CLOG(TRACE, CoreDq) << "Scope: " << id << ": " << sc.ToString();
+    }
+
+    // Compute scope info for variables in the plan
+    // Scope info maps each <TInfoUnit, scopeNum> to a list of scopes where this variable is defined and alive
+    auto scopeMap = ComputeScopeMap(scopes);
+
+    for (auto & [key, value] : scopeMap) {
+        YQL_CLOG(TRACE, CoreDq) << "Scope map: " << (int64_t)key.get() << "(" << (int64_t)key->Kind << ")" << "," << value;
+    }
+
+    // Build a rename map by startingg at maps that rename variables and project
+    // Follow the parent scopes as far as possible and pick the top-most mapping
+    // If at any point there are multiple parent scopes - stop
+
+    THashMap<std::pair<int, TInfoUnit>, TVector<std::pair<int, TInfoUnit>>, TIntTUnitPairHash> renameMap;
+
+    for (auto iter : root ) {
+        if (iter.Current->Kind == EOperator::Map && CastOperator<TOpMap>(iter.Current)->Project) {
+            auto map = CastOperator<TOpMap>(iter.Current);
+
+            for (auto & [to, from] : map->GetRenames()) {
+
+                if (!scopeMap.contains(map)) {
+                    YQL_CLOG(TRACE, CoreDq) << "Map not found: " << (int64_t)map.get();
+                }
+                auto scopeId = scopeMap.at(map);
+                auto scope = scopes.at(scopeId);
+
+                auto source = std::make_pair(scopeId,from);
+                auto target = std::make_pair(scopeId,to);
+
+                auto parentScopes = scope.ParentScopes;
+
+                while( parentScopes.size() == 1) {
+                    auto parentScope = scopes.at(parentScopes[0]);
+                    if (!parentScope.RenameMap.contains(target.second)) {
+                        break;
+                    }
+                    auto renameTo = parentScope.RenameMap.at(target.second);
+                    if (renameTo.size()!=1){
+                        break;
+                    }
+                    target = std::make_pair(parentScope.ScopeId, renameTo[0]);
+                    parentScopes = parentScope.ParentScopes;
+                }
+
+                if (renameMap.find(source) == renameMap.end()) {
+                    renameMap[source] = TVector<std::pair<int, TInfoUnit>>();
+                }
+
+                renameMap.at(source).push_back(target);
+            }
+        }
+    }
+
+    for (auto & [key, value] : renameMap) {
+        if (value.size()==1) {
+            YQL_CLOG(TRACE, CoreDq) << "Rename map: " << key.second.GetFullName() << "," << key.first << " -> " << value[0].second.GetFullName() << "," << value[0].first;
+        }
+    }
+
 }
 
 TRuleBasedStage RuleStage1 = TRuleBasedStage({std::make_shared<TPushFilterRule>()}, true);

@@ -42,6 +42,8 @@ namespace NKikimr {
         FreshCompMaxInFlightReads = 10; // when moving huge blobs
         HullCompMaxInFlightWrites = 10;
         HullCompMaxInFlightReads = 20;
+        HullCompFullCompPeriodSec = 0;
+        HullCompThrottlerBytesRate = 0;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;
         BlobHeaderMode = EBlobHeaderMode::OLD_HEADER;

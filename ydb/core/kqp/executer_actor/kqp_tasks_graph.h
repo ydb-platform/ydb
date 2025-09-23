@@ -379,8 +379,8 @@ public:
         TActorId bufferActorId
     );
 
-    size_t BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings,
-        const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats, THashSet<ui64>* ShardsWithEffects
+    size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
+        TQueryExecutionStats* stats, THashSet<ui64>* ShardsWithEffects
     );
 
     // TODO: public used by TKqpLiteralExecuter

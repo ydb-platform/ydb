@@ -2,7 +2,6 @@
 #include "kqp_executer_impl.h"
 #include "kqp_locks_helper.h"
 #include "kqp_planner.h"
-#include "kqp_table_resolver.h"
 #include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
@@ -1965,7 +1964,7 @@ private:
             }
         }
 
-        size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks(EnableReadsMerge, {}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
+        size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
         OnEmptyResult();
 
         Cerr << TasksGraph.DumpToString();
@@ -2140,7 +2139,7 @@ private:
             }
         }
 
-        if (TasksGraph.GetMeta().StreamResult || EnableReadsMerge || TasksGraph.GetMeta().AllowOlapDataQuery) {
+        if (TasksGraph.GetMeta().StreamResult || IsEnabledReadsMerge() || TasksGraph.GetMeta().AllowOlapDataQuery) {
             TSet<ui64> shardIds;
             for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
                 if (stageInfo.Meta.IsOlap()) {

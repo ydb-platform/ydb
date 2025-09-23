@@ -209,7 +209,7 @@ bool TDescribeSchemaSecretsService::LocalCacheHasActualVersion(const TVersionedS
 }
 
 bool TDescribeSchemaSecretsService::LocalCacheHasActualObject(const TVersionedSecret& secret, const ui64& cacheSecretPathId) {
-    // altering secret object, i.e. changing acl, should leed to secret cache update
+    // altering secret object, i.e. changing acl, should lead to secret cache update
     return secret.PathId == cacheSecretPathId;
 }
 

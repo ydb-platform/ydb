@@ -5,6 +5,7 @@
 namespace Ydb {
 namespace Monitoring {
     class SelfCheckResult;
+    class ClusterStateResult;
 }
 }
 
@@ -34,6 +35,9 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
     FLUENT_SETTING_OPTIONAL(uint32_t, MaximumLevel);
 };
 
+struct TClusterStateSettings : public TOperationRequestSettings<TClusterStateSettings> {};
+
+
 class TSelfCheckResult : public TStatus {
     friend class NYdb::TProtoAccessor;
 public:
@@ -45,6 +49,17 @@ private:
 
 using TAsyncSelfCheckResult = NThreading::TFuture<TSelfCheckResult>;
 
+class TClusterStateResult : public TStatus {
+    friend class NYdb::TProtoAccessor;
+public:
+    TClusterStateResult(TStatus&& status, Ydb::Monitoring::ClusterStateResult&& result);
+private:
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+};
+
+using TAsyncClusterStateResult = NThreading::TFuture<TClusterStateResult>;
+
 class TMonitoringClient {
     class TImpl;
 
@@ -52,6 +67,8 @@ public:
     TMonitoringClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
     TAsyncSelfCheckResult SelfCheck(const TSelfCheckSettings& settings = TSelfCheckSettings());
+
+    TAsyncClusterStateResult ClusterState(const TClusterStateSettings& settings = TClusterStateSettings());
 private:
     std::shared_ptr<TImpl> Impl_;
 };

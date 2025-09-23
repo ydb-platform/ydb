@@ -9,6 +9,7 @@ class IRequestOpCtx;
 class IFacilityProvider;
 
 void DoSelfCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoClusterStateRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 //void DoNodeCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 
 }

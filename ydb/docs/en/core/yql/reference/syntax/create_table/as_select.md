@@ -37,7 +37,7 @@ If `SELECT` returns two or more rows with the same primary key value, after the 
 
 * `CREATE TABLE AS` allows using [column-oriented tables](../../../../concepts/glossary.md#column-oriented-table) and [row-oriented tables](../../../../concepts/glossary.md#row-oriented-table) in the same query.
 
-* `CREATE TABLE AS` creates a [temporary table](temporary.md) and moves it to the specified location after filling that table. If there was an error during the `CREATE TABLE AS` execution, it's possible that the temporary table will not be deleted immediately, but it will remain for some short period of time.
+* `CREATE TABLE AS` creates a temporary table and moves it to the specified location after filling that table. If there was an error during the `CREATE TABLE AS` execution, it's possible that the temporary table will not be deleted immediately, but it will remain for some short period of time.
 
 ## Examples
 

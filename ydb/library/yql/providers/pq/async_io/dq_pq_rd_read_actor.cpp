@@ -782,7 +782,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     }
 
     i64 usedSpace = 0;
-    while (!ReadyBuffer.empty()) {
+    while (freeSpace > 0 && !ReadyBuffer.empty() && watermark.Empty()) {
         auto readyBatch = std::move(ReadyBuffer.front());
         ReadyBuffer.pop();
 
@@ -795,9 +795,6 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         freeSpace -= readyBatch.UsedSpace;
         PartitionToOffset[readyBatch.PartitionKey] = readyBatch.NextOffset;
         SRC_LOG_T("NextOffset " << readyBatch.NextOffset);
-        if (freeSpace <= 0 || !watermark.Empty()) {
-            break;
-        }
     }
 
     ReadyBufferSizeBytes -= usedSpace;

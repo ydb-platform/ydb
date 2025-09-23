@@ -1,5 +1,12 @@
 # Заполнение таблицы данными из запроса
 
+{% note warning %}
+
+В данный момент доступно только для [колоночных таблиц](../../../../concepts/glossary.md#column-oriented-table).
+Для [строковых таблиц](../../../../concepts/glossary.md#row-oriented-table) поддержка будет включена позднее.
+
+{% endnote %}
+
 Вызов `CREATE TABLE AS` создает новую {% if concept_table %}[таблицу]({{ concept_table }}){% else %}таблицу{% endif %}, которая заполнена данными из результатов запроса.
 
 ```yql

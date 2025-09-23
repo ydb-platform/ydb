@@ -2,7 +2,12 @@
 
 {% if oss == true and backend_name == "YDB" %}
 
-{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
+{% note warning %}
+
+Not available at current time.
+Can only be used for [`CREATE TABLE AS`](../as_select.md) execution.
+
+{% endnote %}
 
 {% endif %}
 

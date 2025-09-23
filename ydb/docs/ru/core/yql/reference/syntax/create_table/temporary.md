@@ -2,7 +2,12 @@
 
 {% if backend_name == "YDB" and oss == true %}
 
-{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
+{% note warning %}
+
+В данный момент недоступны.
+Используются только для выполнения [`CREATE TABLE AS`](../as_select.md).
+
+{% endnote %}
 
 {% include [temp-table-description.md](../../../../_includes/temp-table-description.md) %}
 

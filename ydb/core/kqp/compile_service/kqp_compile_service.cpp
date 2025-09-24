@@ -347,7 +347,6 @@ private:
         Send(ev->Sender, response.release());
     }
 
-
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 

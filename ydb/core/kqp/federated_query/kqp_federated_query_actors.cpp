@@ -271,15 +271,25 @@ void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId
     FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(secretValues));
 }
 
-NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(const TString& secretName, const TString& ownerUserId, TActorSystem* actorSystem) {
+NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(const TVector<TString>& secretNames, const TString& ownerUserId, TActorSystem* actorSystem) {
     auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-    if (actorSystem->AppData<TAppData>()->FeatureFlags.GetEnableSchemaSecrets() && TStringBuf(secretName).StartsWith("/")) {
-        actorSystem->Send(
-            MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId),
-            new TDescribeSchemaSecretsService::TEvResolveSecret(ownerUserId, {secretName}, promise));
-    } else {
-        actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {secretName}, promise));
+    if (actorSystem->AppData<TAppData>()->FeatureFlags.GetEnableSchemaSecrets()) {
+        bool schemaSecrets = false;
+        for (const auto& secretName : secretNames) {
+            if (secretName.StartsWith('/')) {
+                schemaSecrets = true;
+                break;
+            }
+        }
+        if (schemaSecrets) {
+            actorSystem->Send(
+                MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId),
+                new TDescribeSchemaSecretsService::TEvResolveSecret(ownerUserId, secretNames, promise));
+            return promise.GetFuture();
+        }
     }
+
+    actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, secretNames, promise));
     return promise.GetFuture();
 }
 
@@ -300,7 +310,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
     switch (authDescription.identity_case()) {
         case NKikimrSchemeOp::TAuth::kServiceAccount: {
             const TString& saSecretId = authDescription.GetServiceAccount().GetSecretName();
-            return DescribeSecret(saSecretId, ownerUserId, actorSystem);
+            return DescribeSecret({saSecretId}, ownerUserId, actorSystem);
         }
 
         case NKikimrSchemeOp::TAuth::kNone:
@@ -308,28 +318,24 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
 
         case NKikimrSchemeOp::TAuth::kBasic: {
             const TString& passwordSecretId = authDescription.GetBasic().GetPasswordSecretName();
-            return DescribeSecret(passwordSecretId, ownerUserId, actorSystem);
+            return DescribeSecret({passwordSecretId}, ownerUserId, actorSystem);
         }
 
         case NKikimrSchemeOp::TAuth::kMdbBasic: {
             const TString& saSecretId = authDescription.GetMdbBasic().GetServiceAccountSecretName();
             const TString& passwordSecreId = authDescription.GetMdbBasic().GetPasswordSecretName();
-            auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {saSecretId, passwordSecreId}, promise));
-            return promise.GetFuture();
+            return DescribeSecret({saSecretId, passwordSecreId}, ownerUserId, actorSystem);
         }
 
         case NKikimrSchemeOp::TAuth::kAws: {
             const TString& awsAccessKeyIdSecretId = authDescription.GetAws().GetAwsAccessKeyIdSecretName();
             const TString& awsAccessKeyKeySecretId = authDescription.GetAws().GetAwsSecretAccessKeySecretName();
-            auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, promise));
-            return promise.GetFuture();
+            return DescribeSecret({awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, ownerUserId, actorSystem);
         }
 
         case NKikimrSchemeOp::TAuth::kToken: {
             const TString& tokenSecretId = authDescription.GetToken().GetTokenSecretName();
-            return DescribeSecret(tokenSecretId, ownerUserId, actorSystem);
+            return DescribeSecret({tokenSecretId}, ownerUserId, actorSystem);
         }
 
         case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:

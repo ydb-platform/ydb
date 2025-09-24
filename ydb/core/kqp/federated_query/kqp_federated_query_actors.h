@@ -41,16 +41,24 @@ public:
     };
 
 private:
+    struct TVersionedSecret {
+        ui64 SecretVersion = 0;
+        ui64 PathId = 0;
+        TString Name;
+        TString Value;
+    };
+
+private:
     STRICT_STFUNC(StateWait,
-        hFunc(TEvResolveSecret, Handle);
-        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-        hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+        hFunc(TEvResolveSecret, HandleIncomingRequest);
+        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
+        hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleSchemeShardResponse);
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
     )
 
-    void Handle(TEvResolveSecret::TPtr& ev);
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
+    void HandleIncomingRequest(TEvResolveSecret::TPtr& ev);
+    void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    void HandleSchemeShardResponse(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
     void FillResponse(const ui64 requestId, const TEvDescribeSecretsResponse::TDescription& response);
     void SaveIncomingRequestInfo(const TEvResolveSecret& req);
     void SendSchemeCacheRequest(const TString& secretName);
@@ -61,15 +69,14 @@ public:
     void Bootstrap();
 
 private:
-    struct TVersionedSecret {
-        ui64 Version;
-        TString Value;
+    struct TResponseContext {
+        TVersionedSecret Secret;
+        NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Result;
     };
 
     ui64 LastCookie = 0;
-    THashMap<ui64, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription>> ResolveInFlight;
-    THashMap<ui64, TString> SecretNameInFlight;
-    THashMap<TString, TVersionedSecret> SecretNameToValue;
+    THashMap<ui64, TResponseContext> ResolveInFlight;
+    THashMap<TString, TVersionedSecret> VersionedSecrets;
 };
 
 IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise);

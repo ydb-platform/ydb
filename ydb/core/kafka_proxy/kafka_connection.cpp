@@ -82,7 +82,6 @@ public:
     size_t InflightSize;
 
     TActorId ProduceActorId;
-    TActorId ReadSessionActorId;
 
     TContext::TPtr Context;
 
@@ -242,32 +241,30 @@ protected:
         Send(ProduceActorId, new TEvKafka::TEvProduceRequest(header->CorrelationId, message));
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TJoinGroupRequestData>& message, const TActorContext& /*ctx*/) {
-        if (!ReadSessionActorId) {
-            ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionProxyActor(Context, 0));
+    void EnsureReadSessionActor() {
+        if (!Context->ReadSession.ProxyActorId) {
+            Context->ReadSession.ProxyActorId = RegisterWithSameMailbox(CreateKafkaReadSessionProxyActor(Context, 0));
         }
-        Send(ReadSessionActorId, new TEvKafka::TEvJoinGroupRequest(header->CorrelationId, message));
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TJoinGroupRequestData>& message, const TActorContext& /*ctx*/) {
+        EnsureReadSessionActor();
+        Send(Context->ReadSession.ProxyActorId, new TEvKafka::TEvJoinGroupRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSyncGroupRequestData>& message, const TActorContext& /*ctx*/) {
-        if (!ReadSessionActorId) {
-            ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionProxyActor(Context, 0));
-        }
-        Send(ReadSessionActorId, new TEvKafka::TEvSyncGroupRequest(header->CorrelationId, message));
+        EnsureReadSessionActor();
+        Send(Context->ReadSession.ProxyActorId, new TEvKafka::TEvSyncGroupRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<THeartbeatRequestData>& message, const TActorContext& /*ctx*/) {
-        if (!ReadSessionActorId) {
-            ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionProxyActor(Context, 0));
-        }
-        Send(ReadSessionActorId, new TEvKafka::TEvHeartbeatRequest(header->CorrelationId, message));
+        EnsureReadSessionActor();
+        Send(Context->ReadSession.ProxyActorId, new TEvKafka::TEvHeartbeatRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TLeaveGroupRequestData>& message, const TActorContext& /*ctx*/) {
-        if (!ReadSessionActorId) {
-            ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionProxyActor(Context, 0));
-        }
-        Send(ReadSessionActorId, new TEvKafka::TEvLeaveGroupRequest(header->CorrelationId, message));
+        EnsureReadSessionActor();
+        Send(Context->ReadSession.ProxyActorId, new TEvKafka::TEvLeaveGroupRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TInitProducerIdRequestData>& message) {
@@ -303,7 +300,8 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TFetchRequestData>& message) {
-        Register(CreateKafkaFetchActor(Context, header->CorrelationId, message));
+        EnsureReadSessionActor();
+        Send(Context->ReadSession.ProxyActorId, new TEvKafka::TEvFetchRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TFindCoordinatorRequestData>& message) {
@@ -570,10 +568,10 @@ protected:
     }
 
     void HandleKillReadSession() {
-        if (ReadSessionActorId) {
-            Send(ReadSessionActorId, new TEvents::TEvPoison());
+        if (Context->ReadSession.ProxyActorId) {
+            Send(Context->ReadSession.ProxyActorId, new TEvents::TEvPoison());
 
-            ReadSessionActorId = {};
+            Context->ReadSession.ProxyActorId = {};
         }
     }
 

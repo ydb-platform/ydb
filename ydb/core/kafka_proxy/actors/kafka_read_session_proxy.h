@@ -14,45 +14,34 @@ using namespace NKikimr;
 class KafkaReadSessionProxyActor : public TActorBootstrapped<KafkaReadSessionProxyActor> {
     using TBase = TActorBootstrapped<KafkaReadSessionProxyActor>;
 
-    enum class EMode {
-        NativeBalancing,
-        ServerBalancing
-    };
-
 public:
     KafkaReadSessionProxyActor(const TContext::TPtr context, ui64 cookie);
 
     void Bootstrap();
 
     template<typename TRequest>
-    void HandleOnInit(TRequest&);
-
-    void Handle(TEvKafka::TEvJoinGroupRequest::TPtr&);
-    template<typename TRequest>
     void HandleOnWork(TRequest&);
 
-    STFUNC(StateInit);
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&);
+
     STFUNC(StateWork);
 
-    void OnInitComplete();
     void PassAway();
+    TActorId CreatePipe(ui64 tabletId);
 
 private:
     const TContext::TPtr Context;
     const ui64 Cookie;
 
-    EMode Mode;
-
     TActorId ReadSessionActorId;
 
-    using TMessage = std::variant<
-        TEvKafka::TEvJoinGroupRequest::TPtr,
-        TEvKafka::TEvSyncGroupRequest::TPtr,
-        TEvKafka::TEvHeartbeatRequest::TPtr,
-        TEvKafka::TEvLeaveGroupRequest::TPtr
-    >;
+    struct TTopicInfo {
+        ui64 ReadBalancerTabletId;
+        TActorId PipeClient;
+    };
+    std::unordered_map<TString, TTopicInfo> Topics;
+    std::vector<TString> NewTopics;
 
-    std::optional<TMessage> PendingRequest;
 };
 
 }

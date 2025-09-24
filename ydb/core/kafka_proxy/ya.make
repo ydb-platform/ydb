@@ -15,6 +15,8 @@ SRCS(
     actors/kafka_fetch_actor.cpp
     actors/kafka_find_coordinator_actor.cpp
     actors/kafka_read_session_actor.cpp
+    actors/kafka_read_session_proxy.cpp
+    actors/kafka_read_session_utils.cpp
     actors/kafka_offset_fetch_actor.cpp
     actors/kafka_offset_commit_actor.cpp
     actors/kafka_create_topics_actor.cpp

@@ -23,6 +23,17 @@ enum EAuthSteps {
     FAILED
 };
 
+enum class EBalancingMode {
+    Server,
+    Native,
+};
+
+struct TReadSession {
+    EBalancingMode BalancingMode = EBalancingMode::Server;
+    std::optional<EBalancingMode> PendingBalancingMode;
+    TActorId ProxyActorId;
+};
+
 struct TContext {
     using TPtr = std::shared_ptr<TContext>;
 
@@ -49,6 +60,7 @@ struct TContext {
     TString ClientDC;
     bool IsServerless = false;
     bool RequireAuthentication = false;
+    TReadSession ReadSession;
 
     NKikimr::NPQ::TRlContext RlContext;
 
@@ -76,6 +88,10 @@ public:
     T* operator->() const {
         return Ptr;
     }
+
+    T& operator*() const {
+        return *Ptr;
+    } 
 
     operator bool() const {
         return nullptr != Ptr;

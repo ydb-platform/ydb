@@ -144,6 +144,8 @@ private:
     template<typename TEvent>
     void HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TEvent>>& event);
 
+    void PreHandleRuntimeEvent(TEvProxyRuntimeEvent::TPtr& event, const TActorContext& ctx);
+
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         LogRequest(event);
@@ -476,6 +478,18 @@ void TGRpcRequestProxyImpl::HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TE
     }
 }
 
+void TGRpcRequestProxyImpl::PreHandleRuntimeEvent(TEvProxyRuntimeEvent::TPtr& event, const TActorContext& ctx) {
+    switch (event->Get()->GetRuntimeEventType()) {
+    case NKikimr::NGRpcService::NRuntimeEvents::EType::COMMON: {
+        PreHandle(event, ctx);
+        break;
+    }
+    case NKikimr::NGRpcService::NRuntimeEvents::EType::BOOTSTRAP_CLUSTER: {
+        break;
+    }
+    }
+}
+
 template<class TEvent>
 void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& event) {
     IRequestProxyCtx& ctx = *event->Get();
@@ -651,7 +665,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvDiscoverPQClustersRequest, PreHandle);
         HFunc(TEvCoordinationSessionRequest, PreHandle);
         HFunc(TEvNodeCheckRequest, PreHandle);
-        HFunc(TEvProxyRuntimeEvent, PreHandle);
+        HFunc(TEvProxyRuntimeEvent, PreHandleRuntimeEvent);
         HFunc(TEvRequestAuthAndCheck, PreHandle);
 
         default:

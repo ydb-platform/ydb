@@ -150,6 +150,8 @@ class ResultsProcessor:
             ci_launch_url = os.getenv('CI_LAUNCH_URL', None)
             ci_launch_start_time = os.getenv('CI_LAUNCH_START_TIME', None)
             ci_job_title = os.getenv('CI_JOB_TITLE', None)
+            ci_cluster_name = os.getenv('CI_CLUSTER_NAME', None)
+            ci_nemesis = os.getenv('CI_NEMESIS', None)
 
             if ci_launch_id:
                 info['ci_launch_id'] = ci_launch_id
@@ -159,6 +161,10 @@ class ResultsProcessor:
                 info['ci_launch_start_time'] = ci_launch_start_time
             if ci_job_title:
                 info['ci_job_title'] = ci_job_title
+            if ci_cluster_name:
+                info['ci_cluster_name'] = ci_cluster_name
+            if ci_nemesis:
+                info['ci_nemesis'] = ci_nemesis
             if get_ci_version():
                 info['ci_version'] = get_ci_version()
             info['test_tools_version'] = get_self_version()

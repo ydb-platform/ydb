@@ -1202,6 +1202,13 @@ void TLookupRowsCommand::Register(TRegistrar registrar)
             return command->Options.VersionedReadOptions;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "execution_pool",
+        [] (TThis* command) -> auto& {
+            return command->Options.ExecutionPool;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TLookupRowsCommand::DoExecute(ICommandContextPtr context)

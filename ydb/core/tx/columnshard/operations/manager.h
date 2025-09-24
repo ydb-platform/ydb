@@ -203,7 +203,8 @@ public:
     void LinkTransactionOnComplete(const ui64 lockId, const ui64 txId);
     void AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId);
-    void AbortLock(TColumnShard& owner, const ui64 lockId);
+    void AbortLockOnExecute(TColumnShard& owner, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
+    void AbortLockOnComplete(TColumnShard& owner, const ui64 lockId);
 
     std::optional<ui64> GetLockForTx(const ui64 txId) const;
     std::optional<ui64> GetLockForTxOptional(const ui64 txId) const {

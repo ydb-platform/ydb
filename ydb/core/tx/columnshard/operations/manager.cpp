@@ -128,10 +128,6 @@ void TOperationsManager::AbortTransactionOnExecute(TColumnShard& owner, const ui
     OnTransactionFinishOnExecute(aborted, *lock, txId, txc);
 }
 
-void TOperationsManager::AbortLock(TColumnShard& /*owner*/, const ui64 lockId) {
-    LockFeatures.erase(lockId);
-}
-
 void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId) {
     auto* lock = GetLockFeaturesForTxOptional(txId);
     if (!lock) {
@@ -148,6 +144,33 @@ void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const u
     }
 
     OnTransactionFinishOnComplete(aborted, *lock, txId);
+}
+
+void TOperationsManager::AbortLockOnExecute(TColumnShard& owner, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto* lock = GetLockOptional(lockId);
+    if (!lock) {
+        return;
+    }
+
+    for (auto&& opPtr : lock->GetWriteOperations()) {
+        opPtr->AbortOnExecute(owner, txc);
+        RemoveOperationOnExecute(opPtr, txc);
+    }
+}
+
+void TOperationsManager::AbortLockOnComplete(TColumnShard& owner, const ui64 lockId) {
+    auto* lock = GetLockOptional(lockId);
+    if (!lock) {
+        return;
+    }
+
+    for (auto&& opPtr : lock->GetWriteOperations()) {
+        opPtr->AbortOnComplete(owner);
+        RemoveOperationOnComplete(opPtr);
+    }
+
+    lock->RemoveInteractions(InteractionsContext);
+    LockFeatures.erase(lockId);
 }
 
 void TOperationsManager::OnTransactionFinishOnExecute(

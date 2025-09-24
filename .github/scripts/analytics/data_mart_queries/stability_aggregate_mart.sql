@@ -37,7 +37,7 @@ $aggregate_data = SELECT
     v.Db AS Db,
     v.Suite AS Suite,
     COALESCE(s.Test, String::ReplaceAll(v.Suite, 'Workload', '') || 'Workload') AS Test,
-    CASE WHEN s.Test IS NULL THEN 1U ELSE 0U END AS IsCrashed,
+    CASE WHEN s.Suite IS NULL THEN 1U ELSE 0U END AS IsCrashed,
     v.RunId AS RunId,
     COALESCE(s.Timestamp, v.VerificationTimestamp) AS Timestamp,
     COALESCE(s.Success, 0U) AS Success,
@@ -119,8 +119,8 @@ $aggregate_data = SELECT
 FROM $verification_suites AS v
 LEFT JOIN $stability_suites AS s 
     ON v.Db = s.Db 
-    AND v.Suite = s.Suite 
-    AND v.RunId = s.RunId;
+    AND v.RunId = s.RunId
+    AND v.Suite = s.Suite;
 
 SELECT
     agg.Db,
@@ -213,7 +213,8 @@ SELECT
     
     -- Общий статус выполнения
     CASE
-        WHEN agg.IsCrashed = 1U THEN 'crashed_during_execution'  -- Нет Stability записи
+        WHEN agg.IsCrashed = 1U AND agg.HadVerification = 0U THEN 'cluster_down_on_start'  -- _Verification есть, но Success != 1
+        WHEN agg.IsCrashed = 1U AND agg.HadVerification = 1U THEN 'crashed_during_execution'  -- Нет Stability записи, но _Verification успешна
         WHEN agg.Success = 1U AND (agg.NodeErrors IS NULL OR agg.NodeErrors = 0U) AND (agg.WorkloadErrors IS NULL OR agg.WorkloadErrors = 0U) THEN 'success'
         WHEN agg.Success = 1U AND (agg.NodeErrors = 1U OR agg.WorkloadErrors = 1U) THEN 'success_with_errors'
         WHEN agg.Success = 0U AND agg.NodeErrors = 1U THEN 'node_failure'

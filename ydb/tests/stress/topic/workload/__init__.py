@@ -13,13 +13,14 @@ logger = logging.getLogger("YdbTopicWorkload")
 
 
 class YdbTopicWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, consumers, producers, tables_prefix):
+    def __init__(self, endpoint, database, duration, consumers, producers, tables_prefix, *, limit_memory_usage=False):
         super().__init__(None, tables_prefix, 'topic', None)
         self.endpoint = endpoint
         self.database = database
         self.duration = str(duration)
         self.consumers = str(consumers)
         self.producers = str(producers)
+        self.limit_memory_usage = limit_memory_usage
         self.tempdir = None
         self._unpack_resource('ydb_cli')
 
@@ -60,8 +61,14 @@ class YdbTopicWorkload(WorkloadBase):
             self.get_command_prefix(subcmds=['init', '-c', self.consumers, '-p', self.producers])
         )
         # run
+        run_cmd_args = ['run', 'full', '-s', self.duration, '--byte-rate', '100M', '--use-tx', '--tx-commit-interval', '2000', '-p', self.producers, '-c', self.consumers]
+        if self.limit_memory_usage:
+            run_cmd_args.extend([
+                '--max-memory-usage-per-consumer=2M',
+                '--max-memory-usage-per-producer=2M',
+            ])
         self.cmd_run(
-            self.get_command_prefix(subcmds=['run', 'full', '-s', self.duration, '--byte-rate', '100M', '--use-tx', '--tx-commit-interval', '2000', '-p', self.producers, '-c', self.consumers])
+            self.get_command_prefix(subcmds=run_cmd_args)
         )
         # clean
         self.cmd_run(

@@ -26,6 +26,24 @@ public:
         TInstant LastTouched;
     };
 
+    struct TUidComparator {
+        bool operator()(const TEntry& a, const TEntry& b) const {
+            return a.CompileResult->Uid < b.CompileResult->Uid;
+        }
+    };
+
+    struct TUidLowerBoundComparator {
+        bool operator()(const TEntry& entry, const TString& uid) const {
+            return entry.CompileResult->Uid < uid;
+        }
+    };
+
+    struct TUidUpperBoundComparator {
+        bool operator()(const TString& uid, const TEntry& entry) const {
+            return uid < entry.CompileResult->Uid;
+        }
+    };
+
 public:
     TKqpQueryCacheSnapshot() = default;
     void Clear();

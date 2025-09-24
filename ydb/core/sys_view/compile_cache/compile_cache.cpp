@@ -79,14 +79,9 @@ public:
 
     TCompileCacheQueriesScan(const NActors::TActorId& ownerId, ui32 scanId,
         const NKikimrSysView::TSysViewDescription& sysViewInfo,
-        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
         : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
-        , UserToken(std::move(userToken))
     {
-        bool isClusterAdmin = IsAdministrator(AppData(), UserToken.Get());
-        bool isDatabaseAdmin = (AppData()->FeatureFlags.GetEnableDatabaseAdmin() && IsDatabaseAdministrator(UserToken.Get(), TBase::DatabaseOwner));
-        IsAdmin = isClusterAdmin || isDatabaseAdmin;
-
         const auto& cellsFrom = TableRange.From.GetCells();
         if (cellsFrom.size() > 1 && !cellsFrom[1].IsNull()) {
             QueryIdFrom = cellsFrom[1].AsBuf();
@@ -157,10 +152,6 @@ private:
     void StartScan() {
         if (IsEmptyRange) {
             ReplyEmptyAndDie();
-            return;
-        }
-        if (!IsAdmin) {
-            ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "User is not a database administrator.");
             return;
         }
         // if feature flag is not set -- return only for self node
@@ -296,15 +287,12 @@ private:
     std::vector<TExtractor> ColumnsExtractors;
     std::vector<ui32> ColumnsToRead;
     NKikimrKqp::TEvListCompileCacheQueriesResponse LastResponse;
-    
-    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    bool IsAdmin = false;
-};
+    };
 THolder<NActors::IActor> CreateCompileCacheQueriesScan(const NActors::TActorId& ownerId, ui32 scanId,
     const NKikimrSysView::TSysViewDescription& sysViewInfo,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TCompileCacheQueriesScan>(ownerId, scanId, sysViewInfo, tableRange, columns, std::move(userToken));
+    return MakeHolder<TCompileCacheQueriesScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

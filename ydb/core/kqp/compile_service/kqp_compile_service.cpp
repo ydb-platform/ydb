@@ -285,41 +285,66 @@ private:
 
     void Handle(TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
         auto snapshot = QueryCache->GetSnapshot();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Got query compile cache request, snapshot has " << snapshot.size() << " entries");
-        if (snapshot.empty()) {
-            auto resp = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
-            resp->Record.SetFinished(true);
-            Send(ev->Sender, resp.release());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
+            "Got query compile cache request, snapshot has " << snapshot.size() << " entries");
+        const auto& tenant = ev->Get()->Record.GetTenantName();
+        auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
+        if (AppData()->TenantName != tenant or snapshot.empty()) {
+            response->Record.SetFinished(true);
+            Send(ev->Sender, response.release());
             return;
         }
-        constexpr ui64 batchLimit = 16 * 1024 * 1024; // 16 MB
-        const ui64 freeSpace = ev->Get()->Record.GetFreeSpace() == 0 ? (ui64) - 1 : ev->Get()->Record.GetFreeSpace();
+        auto request = ev->Get()->Record;
 
-        ui64 totalSentBytes = 0;
-        size_t pos = 0;
-        while (pos < snapshot.size()) {
-            auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
-            auto& record = response->Record;
-            while (pos < snapshot.size()) {
-                snapshot[pos].CompileResult->SerializeTo(
-                    record.AddCacheCacheQueries(),
-                    { snapshot[pos].LastTouched.MicroSeconds() }
-                );
-                const ui64 msgSize = record.ByteSizeLong();
-                if (msgSize > batchLimit or totalSentBytes + msgSize > freeSpace) {
-                    record.MutableCacheCacheQueries()->RemoveLast();
-                    break;
-                }
-                ++pos;
-            }
-            const bool finished = (pos >= snapshot.size());
-            record.SetFinished(finished);
-            totalSentBytes += record.ByteSizeLong();
-            Send(ev->Sender, response.release());
-            if (finished) {
-                break;
+        std::sort(snapshot.begin(), snapshot.end(), TKqpQueryCacheSnapshot::TUidComparator{});
+
+        auto startIt = snapshot.begin();
+        auto endIt = snapshot.end();
+
+        if (request.HasQueryIdStart() and not request.GetQueryIdStart().empty()) {
+            auto QueryIdStart = ev->Get()->Record.GetQueryIdStart();
+            if (request.GetQueryIdStartInclusive()) {
+                startIt = std::lower_bound(snapshot.begin(), snapshot.end(), QueryIdStart, TKqpQueryCacheSnapshot::TUidLowerBoundComparator{});
+            } else {
+                startIt = std::upper_bound(snapshot.begin(), snapshot.end(), QueryIdStart, TKqpQueryCacheSnapshot::TUidUpperBoundComparator{});
             }
         }
+
+        if (request.HasQueryIdEnd() and not request.GetQueryIdEnd().empty()) {
+            auto QueryIdEnd = ev->Get()->Record.GetQueryIdEnd();
+            if (request.GetQueryIdEndInclusive()) {
+                endIt = std::upper_bound(snapshot.begin(), snapshot.end(), QueryIdEnd, TKqpQueryCacheSnapshot::TUidUpperBoundComparator{});
+            } else {
+                endIt = std::lower_bound(snapshot.begin(), snapshot.end(), QueryIdEnd, TKqpQueryCacheSnapshot::TUidLowerBoundComparator{});
+            }
+        }
+
+        const ui64 batchLimit = std::min(16_MB, static_cast<ui64>(ev->Get()->Record.GetFreeSpace()));
+
+        bool firstRecordSent = false;
+        bool finished = true;
+        auto& record = response->Record;
+
+        auto currentIt = startIt;
+        for (; currentIt != endIt; ++currentIt) {
+                        currentIt->CompileResult->SerializeTo(record.AddCacheCacheQueries(),
+                {currentIt->LastTouched.MicroSeconds()}
+            );
+            const ui64 msgSize = record.ByteSizeLong();
+
+            if (firstRecordSent && msgSize > batchLimit) {
+                record.MutableCacheCacheQueries()->RemoveLast();
+                finished = false;
+                break;
+            }
+            firstRecordSent = true;
+        }
+
+        record.SetFinished(finished);
+        if (!finished) {
+            record.SetContinuationToken(currentIt->CompileResult->Uid);
+        }
+        Send(ev->Sender, response.release());
     }
 
 

@@ -50,6 +50,52 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
 } // NPDisk
 
+namespace {
+constexpr ui32 kNodeIdForMetadata = 1;
+constexpr ui32 kPDiskIdForMetadata = 1;
+constexpr ui32 kMetaTimeoutSeconds = 10;
+
+static NPDisk::TMainKey GetEffectiveMainKey(const NPDisk::TMainKey& mainKey) {
+    NPDisk::TMainKey result = mainKey;
+    if (!result.IsInitialized || result.Keys.empty()) {
+        result.Initialize();
+    }
+    return result;
+}
+
+static TIntrusivePtr<TPDiskConfig> MakeMetadataPDiskConfig(const TString& path, ui32 pdiskId, bool readOnly, TStringStream& details) {
+    std::optional<NPDisk::TDriveData> driveData = NPDisk::GetDriveData(path, &details);
+    const NPDisk::EDeviceType deviceType = driveData ? driveData->DeviceType : NPDisk::DEVICE_TYPE_ROT;
+    const ui64 category = static_cast<ui64>(TPDiskCategory(deviceType, 0).GetRaw());
+
+    auto cfg = MakeIntrusive<TPDiskConfig>(path, static_cast<ui64>(0), static_cast<ui32>(pdiskId), category);
+    cfg->ReadOnly = readOnly;
+    cfg->MetadataOnly = true;
+    return cfg;
+}
+
+static NActors::TActorId RegisterPDiskActor(NActors::TActorSystem* sys,
+                                           const TIntrusivePtr<TPDiskConfig>& cfg,
+                                           const NPDisk::TMainKey& mainKey,
+                                           const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
+    IActor* pdiskActorImpl = CreatePDisk(cfg, mainKey, counters);
+    const NActors::TActorId pdiskActor = sys->Register(pdiskActorImpl);
+    const NActors::TActorId pdiskActorId = MakeBlobStoragePDiskID(/*nodeId*/kNodeIdForMetadata, /*pdiskId*/kPDiskIdForMetadata);
+    sys->RegisterLocalService(pdiskActorId, pdiskActor);
+    return pdiskActorId;
+}
+
+template <typename TFut>
+static inline void WaitOrThrow(TFut& fut, int timeoutSeconds, const TString& details, const char* action) {
+    if (fut.wait_for(std::chrono::seconds(timeoutSeconds)) != std::future_status::ready) {
+        ythrow yexception()
+            << "PDisk metadata " << action << " timeout after " << timeoutSeconds << "s\n"
+            << "Details: " << details;
+    }
+}
+
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PDisk Formatting
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -263,26 +309,13 @@ NKikimrBlobStorage::TPDiskMetadataRecord ReadPDiskMetadata(const TString& path, 
     auto* sys = creator.GetActorSystem();
     auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
 
-    const ui32 pdiskId = 1;
-
     TStringStream details;
-    std::optional<NPDisk::TDriveData> dd = NPDisk::GetDriveData(path, &details);
-    const NPDisk::EDeviceType devType = dd ? dd->DeviceType : NPDisk::DEVICE_TYPE_ROT;
-    const ui64 category = static_cast<ui64>(TPDiskCategory(devType, 0).GetRaw());
 
-    auto pdiskCfg = MakeIntrusive<TPDiskConfig>(path, static_cast<ui64>(0), static_cast<ui32>(pdiskId), category);
-    pdiskCfg->ReadOnly = true;
-    pdiskCfg->MetadataOnly = true;
+    auto pdiskCfg = MakeMetadataPDiskConfig(path, kPDiskIdForMetadata, /*readOnly*/true, details);
 
-    NPDisk::TMainKey effectiveMainKey = mainKey;
-    if (!effectiveMainKey.IsInitialized || effectiveMainKey.Keys.empty()) {
-        effectiveMainKey.Initialize();
-    }
+    const NPDisk::TMainKey effectiveMainKey = GetEffectiveMainKey(mainKey);
 
-    const NActors::TActorId pdiskActorId = MakeBlobStoragePDiskID(/*nodeId*/1, /*pdiskId*/pdiskId);
-    IActor* pdiskActorImpl = CreatePDisk(pdiskCfg, effectiveMainKey, counters);
-    const NActors::TActorId pdiskActor = sys->Register(pdiskActorImpl);
-    sys->RegisterLocalService(pdiskActorId, pdiskActor);
+    const NActors::TActorId pdiskActorId = RegisterPDiskActor(sys, pdiskCfg, effectiveMainKey, counters);
 
     NKikimrBlobStorage::TPDiskMetadataRecord out;
 
@@ -313,21 +346,32 @@ NKikimrBlobStorage::TPDiskMetadataRecord ReadPDiskMetadata(const TString& path, 
 
         void Bootstrap() {
             Send(PDiskActorId, new NPDisk::TEvReadMetadata());
-            Become(&TThis::StateFunc, TDuration::Seconds(10), new TEvents::TEvWakeup);
+            Become(&TThis::StateFunc, TDuration::Seconds(kMetaTimeoutSeconds), new TEvents::TEvWakeup);
         }
 
         void Handle(NPDisk::TEvReadMetadataResult::TPtr ev) {
             auto* msg = ev->Get();
             bool ok = false;
-            if (msg->Outcome == NPDisk::EPDiskMetadataOutcome::OK) {
-                TRope rope(std::move(msg->Metadata));
-                TRopeStream stream(rope.begin(), rope.size());
-                ok = Out.ParseFromZeroCopyStream(&stream);
-                if (!ok) {
-                    Error = "PARSE_FAILED";
+            switch (msg->Outcome) {
+                case NPDisk::EPDiskMetadataOutcome::OK: {
+                    TRope rope(std::move(msg->Metadata));
+                    TRopeStream stream(rope.begin(), rope.size());
+                    ok = Out.ParseFromZeroCopyStream(&stream);
+                    if (!ok) {
+                        Error = "PARSE_FAILED";
+                    }
+                    break;
                 }
-            } else {
-                Error = OutcomeToStr(msg->Outcome);
+                case NPDisk::EPDiskMetadataOutcome::NO_METADATA: {
+                    Error = OutcomeToStr(msg->Outcome);
+                    ok = false;
+                    break;
+                }
+                case NPDisk::EPDiskMetadataOutcome::ERROR: {
+                    Error = OutcomeToStr(msg->Outcome);
+                    ok = false;
+                    break;
+                }
             }
             Done.set_value(ok);
             PassAway();
@@ -350,15 +394,11 @@ NKikimrBlobStorage::TPDiskMetadataRecord ReadPDiskMetadata(const TString& path, 
     TString error;
     sys->Register(new TMetadataReader(pdiskActorId, out, done, error));
 
-    if (fut.wait_for(std::chrono::seconds(10)) != std::future_status::ready) {
-        ythrow yexception()
-            << "PDisk metadata read timeout after 10s\n"
-            << "Details: " << details.Str();
-    }
+    WaitOrThrow(fut, 10, details.Str(), "read");
     bool ok = fut.get();
     if (!ok) {
         ythrow yexception()
-            << "PDisk metadata read failed: " << (error ? error : TString("ERROR")) << "\n"
+            << "PDisk metadata read failed: " << (!error.empty() ? error : TString("ERROR")) << "\n"
             << "Details: " << details.Str();
     }
     return out;
@@ -379,10 +419,7 @@ static void UpdateStorageConfigFingerprint(NKikimrBlobStorage::TStorageConfig* c
 void WritePDiskMetadata(const TString& path, const NKikimrBlobStorage::TPDiskMetadataRecord& record, const NPDisk::TMainKey& mainKey) {
     NKikimrBlobStorage::TPDiskMetadataRecord adjustedRecord(record);
 
-    NPDisk::TMainKey effectiveMainKey = mainKey;
-    if (!effectiveMainKey.IsInitialized || effectiveMainKey.Keys.empty()) {
-        effectiveMainKey.Initialize();
-    }
+    const NPDisk::TMainKey effectiveMainKey = GetEffectiveMainKey(mainKey);
 
     NKikimrBlobStorage::TPDiskMetadataRecord previous;
     bool havePrevious = false;
@@ -419,21 +456,11 @@ void WritePDiskMetadata(const TString& path, const NKikimrBlobStorage::TPDiskMet
     auto* sys = creator.GetActorSystem();
     auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
 
-    const ui32 pdiskId = 1;
-
     TStringStream details;
-    std::optional<NPDisk::TDriveData> dd = NPDisk::GetDriveData(path, &details);
-    const NPDisk::EDeviceType devType = dd ? dd->DeviceType : NPDisk::DEVICE_TYPE_ROT;
-    const ui64 category = static_cast<ui64>(TPDiskCategory(devType, 0).GetRaw());
 
-    auto pdiskCfg = MakeIntrusive<TPDiskConfig>(path, static_cast<ui64>(0), static_cast<ui32>(pdiskId), category);
-    pdiskCfg->ReadOnly = false;
-    pdiskCfg->MetadataOnly = true;
+    auto pdiskCfg = MakeMetadataPDiskConfig(path, kPDiskIdForMetadata, /*readOnly*/false, details);
 
-    const NActors::TActorId pdiskActorId = MakeBlobStoragePDiskID(/*nodeId*/1, /*pdiskId*/pdiskId);
-    IActor* pdiskActorImpl = CreatePDisk(pdiskCfg, effectiveMainKey, counters);
-    const NActors::TActorId pdiskActor = sys->Register(pdiskActorImpl);
-    sys->RegisterLocalService(pdiskActorId, pdiskActor);
+    const NActors::TActorId pdiskActorId = RegisterPDiskActor(sys, pdiskCfg, effectiveMainKey, counters);
 
     class TWriter : public NActors::TActorBootstrapped<TWriter> {
         const NActors::TActorId PDiskActorId;
@@ -456,7 +483,7 @@ void WritePDiskMetadata(const TString& path, const NKikimrBlobStorage::TPDiskMet
                 return;
             }
             Send(PDiskActorId, new NPDisk::TEvWriteMetadata(TRcBuf(std::move(data))));
-            Become(&TThis::StateFunc, TDuration::Seconds(10), new TEvents::TEvWakeup);
+            Become(&TThis::StateFunc, TDuration::Seconds(kMetaTimeoutSeconds), new TEvents::TEvWakeup);
         }
 
         void Handle(NPDisk::TEvWriteMetadataResult::TPtr ev) {
@@ -480,11 +507,7 @@ void WritePDiskMetadata(const TString& path, const NKikimrBlobStorage::TPDiskMet
     auto fut = done.get_future();
     sys->Register(new TWriter(pdiskActorId, adjustedRecord, done));
 
-    if (fut.wait_for(std::chrono::seconds(10)) != std::future_status::ready) {
-        ythrow yexception()
-            << "PDisk metadata write timeout after 10s\n"
-            << "Details: " << details.Str();
-    }
+    WaitOrThrow(fut, 10, details.Str(), "write");
     if (!fut.get()) {
         ythrow yexception()
             << "PDisk metadata write failed\n"

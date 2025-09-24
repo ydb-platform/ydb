@@ -20,6 +20,7 @@ PEERDIR(
     library/cpp/containers/stack_vector
     library/cpp/deprecated/atomic
     library/cpp/lwtrace
+    library/cpp/openssl/crypto
     library/cpp/monlib/dynamic_counters/percentile
     library/cpp/monlib/service/pages
     util

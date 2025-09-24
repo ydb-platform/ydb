@@ -50,6 +50,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/library/aclib
     ydb/library/folder_service/proto
+    ydb/library/keys
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/yaml_config
     ydb/public/api/grpc

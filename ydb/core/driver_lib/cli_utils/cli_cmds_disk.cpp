@@ -200,7 +200,7 @@ public:
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
         config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<PATH>", "Disk path");
+        SetFreeArgTitle(0, "<PATH>", "PDisk device path");
     }
 
     virtual void Parse(TConfig& config) override {
@@ -222,7 +222,7 @@ public:
 class TClientCommandDiskMetadataRead : public TClientCommand {
 public:
     TClientCommandDiskMetadataRead()
-        : TClientCommand("read", {}, "Read metadata from disk")
+        : TClientCommand("read", {}, "Read PDisk metadata")
     {}
 
     TString Path;
@@ -231,6 +231,7 @@ public:
     TString CommittedYamlPath;
     TString ProposedYamlPath;
     TString PrevYamlPath;
+    bool JsonOut = false;
 
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
@@ -240,7 +241,7 @@ public:
 class TClientCommandDiskMetadataWrite : public TClientCommand {
 public:
     TClientCommandDiskMetadataWrite()
-        : TClientCommand("write", {}, "Write metadata to disk from proto or JSON")
+        : TClientCommand("write", {}, "Write PDisk metadata from proto or JSON")
     {}
 
     TString Path;
@@ -257,22 +258,22 @@ public:
     void Config(TConfig& config) override {
         TClientCommand::Config(config);
         config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<PATH>", "Disk path");
-        config.Opts->AddLongOption("from-proto", "read TPDiskMetadataRecord from text-proto file")
+        SetFreeArgTitle(0, "<PATH>", "PDisk device path");
+        config.Opts->AddLongOption("from-proto", "Read TPDiskMetadataRecord from text-proto file")
             .Optional().RequiredArgument("PATH").StoreResult(&ProtoFile);
-        config.Opts->AddLongOption("from-json", "read TPDiskMetadataRecord from JSON file")
+        config.Opts->AddLongOption("from-json", "Read TPDiskMetadataRecord from JSON file")
             .Optional().RequiredArgument("PATH").StoreResult(&JsonFile);
-        config.Opts->AddLongOption("commited-yaml", "YAML file for CommittedStorageConfig.ConfigComposite")
+        config.Opts->AddLongOption("committed-yaml", "YAML file for CommittedStorageConfig.ConfigComposite")
             .Optional().RequiredArgument("PATH").StoreResult(&CommittedYamlPath);
         config.Opts->AddLongOption("proposed-yaml", "YAML file for ProposedStorageConfig.ConfigComposite")
             .Optional().RequiredArgument("PATH").StoreResult(&ProposedYamlPath);
         config.Opts->AddLongOption("prev-yaml", "YAML file for CommittedStorageConfig.PrevConfig.ConfigComposite")
             .Optional().RequiredArgument("PATH").StoreResult(&PrevYamlPath);
-        config.Opts->AddLongOption("clear-proposed", "clear ProposedStorageConfig before writing")
+        config.Opts->AddLongOption("clear-proposed", "Clear ProposedStorageConfig before writing")
             .Optional().StoreTrue(&ClearProposed);
-        config.Opts->AddLongOption("validate-config", "validate storage configs before writing")
+        config.Opts->AddLongOption("validate-config", "Validate storage configs before writing")
             .Optional().StoreTrue(&ValidateCfg);
-        config.Opts->AddLongOption('k', "main-key", "encryption main-key to use for metadata operations").RequiredArgument("NUM")
+        config.Opts->AddLongOption('k', "main-key", "Encryption main-key to use for metadata operations").RequiredArgument("NUM")
             .Optional().AppendTo(&MainKeyTmp);
         config.Opts->AddLongOption("master-key", "obsolete: use main-key").RequiredArgument("NUM")
             .Optional().AppendTo(&MainKeyTmp);
@@ -293,20 +294,24 @@ public:
     }
 
     int Run(TConfig& /*config*/) override {
-        if (!ProtoFile && !JsonFile) {
+        const bool hasProto = !ProtoFile.empty();
+        const bool hasJson  = !JsonFile.empty();
+        if (hasProto == hasJson) {
             Cerr << "Specify exactly one of --from-proto or --from-json" << Endl;
             return EXIT_FAILURE;
         }
+        const TString& inputPath = hasProto ? ProtoFile : JsonFile;
+
         TString data;
         try {
-            data = TUnbufferedFileInput(ProtoFile ? ProtoFile : JsonFile).ReadAll();
+            data = TUnbufferedFileInput(inputPath).ReadAll();
         } catch (const yexception& ex) {
-            Cerr << "Failed to read input file: " << ex.what() << Endl;
+            Cerr << "Failed to read input file '" << inputPath << "': " << ex.what() << Endl;
             return EXIT_FAILURE;
         }
         NKikimrBlobStorage::TPDiskMetadataRecord rec;
         bool parsed = false;
-        if (ProtoFile) {
+        if (hasProto) {
             parsed = google::protobuf::TextFormat::ParseFromString(data, &rec);
         } else {
             auto st = google::protobuf::util::JsonStringToMessage(std::string(data.data(), data.size()), &rec);
@@ -316,51 +321,36 @@ public:
             }
         }
         if (!parsed) {
-            Cerr << "Failed to parse TPDiskMetadataRecord from input" << Endl;
+            Cerr << "Failed to parse TPDiskMetadataRecord from '" << inputPath << "'" << Endl;
             return EXIT_FAILURE;
         }
 
-        if (!CommittedYamlPath.empty()) {
+        auto applyYaml = [&](const TString& path, const char* label, auto* cfg) -> bool {
+            if (path.empty()) {
+                return true;
+            }
             TString yaml;
             try {
-                yaml = TUnbufferedFileInput(CommittedYamlPath).ReadAll();
+                yaml = TUnbufferedFileInput(path).ReadAll();
             } catch (const yexception& ex) {
-                Cerr << "Failed to read committed YAML file: " << ex.what() << Endl;
-                return EXIT_FAILURE;
+                Cerr << "Failed to read " << label << " YAML file '" << path << "': " << ex.what() << Endl;
+                return false;
             }
-            auto* cfg = rec.MutableCommittedStorageConfig();
-            if (auto err = NStorage::TDistributedConfigKeeper::UpdateConfigComposite(*cfg, yaml, std::nullopt)) {
-                Cerr << "Failed to pack committed YAML: " << *err << Endl;
-                return EXIT_FAILURE;
+            if (auto err = NStorage::TDistributedConfigKeeper::UpdateConfigComposite(*cfg, yaml, TString(""))) {
+                Cerr << "Failed to pack " << label << " YAML: " << *err << Endl;
+                return false;
             }
+            return true;
+        };
+
+        if (!applyYaml(CommittedYamlPath, "committed", rec.MutableCommittedStorageConfig())) {
+            return EXIT_FAILURE;
         }
-        if (!ProposedYamlPath.empty()) {
-            TString yaml;
-            try {
-                yaml = TUnbufferedFileInput(ProposedYamlPath).ReadAll();
-            } catch (const yexception& ex) {
-                Cerr << "Failed to read proposed YAML file: " << ex.what() << Endl;
-                return EXIT_FAILURE;
-            }
-            auto* cfg = rec.MutableProposedStorageConfig();
-            if (auto err = NStorage::TDistributedConfigKeeper::UpdateConfigComposite(*cfg, yaml, std::nullopt)) {
-                Cerr << "Failed to pack proposed YAML: " << *err << Endl;
-                return EXIT_FAILURE;
-            }
+        if (!applyYaml(ProposedYamlPath, "proposed", rec.MutableProposedStorageConfig())) {
+            return EXIT_FAILURE;
         }
-        if (!PrevYamlPath.empty()) {
-            TString yaml;
-            try {
-                yaml = TUnbufferedFileInput(PrevYamlPath).ReadAll();
-            } catch (const yexception& ex) {
-                Cerr << "Failed to read prev YAML file: " << ex.what() << Endl;
-                return EXIT_FAILURE;
-            }
-            auto* cfg = rec.MutableCommittedStorageConfig()->MutablePrevConfig();
-            if (auto err = NStorage::TDistributedConfigKeeper::UpdateConfigComposite(*cfg, yaml, std::nullopt)) {
-                Cerr << "Failed to pack prev YAML: " << *err << Endl;
-                return EXIT_FAILURE;
-            }
+        if (!applyYaml(PrevYamlPath, "prev", rec.MutableCommittedStorageConfig()->MutablePrevConfig())) {
+            return EXIT_FAILURE;
         }
 
         if (rec.HasCommittedStorageConfig() && rec.GetCommittedStorageConfig().HasPrevConfig()) {
@@ -400,17 +390,19 @@ public:
 void TClientCommandDiskMetadataRead::Config(TConfig& config) {
     TClientCommand::Config(config);
     config.SetFreeArgsNum(1);
-    SetFreeArgTitle(0, "<PATH>", "Disk path");
-    config.Opts->AddLongOption('k', "main-key", "encryption main-key to use while reading metadata").RequiredArgument("NUM")
+    SetFreeArgTitle(0, "<PATH>", "PDisk device path");
+    config.Opts->AddLongOption('k', "main-key", "Encryption main-key to use while reading metadata").RequiredArgument("NUM")
         .Optional().AppendTo(&MainKeyTmp);
     config.Opts->AddLongOption("master-key", "obsolete: use main-key").RequiredArgument("NUM")
         .Optional().AppendTo(&MainKeyTmp);
-    config.Opts->AddLongOption("commited-yaml", "Extract CommittedStorageConfig.ConfigComposite to file")
+    config.Opts->AddLongOption("committed-yaml", "Extract CommittedStorageConfig.ConfigComposite to file")
         .Optional().RequiredArgument("PATH").StoreResult(&CommittedYamlPath);
     config.Opts->AddLongOption("proposed-yaml", "Extract ProposedStorageConfig.ConfigComposite to file")
         .Optional().RequiredArgument("PATH").StoreResult(&ProposedYamlPath);
     config.Opts->AddLongOption("prev-yaml", "Extract CommittedStorageConfig.PrevConfig.ConfigComposite to file")
         .Optional().RequiredArgument("PATH").StoreResult(&PrevYamlPath);
+    config.Opts->AddLongOption("json", "Print metadata as JSON to stdout")
+        .Optional().StoreTrue(&JsonOut);
 }
 
 
@@ -436,87 +428,77 @@ int TClientCommandDiskMetadataRead::Run(TConfig& /*config*/) {
         return EXIT_FAILURE;
     }
 
-    bool anyYaml = false;
+    const bool requestedYaml = !CommittedYamlPath.empty() || !ProposedYamlPath.empty() || !PrevYamlPath.empty();
 
-    if (!CommittedYamlPath.empty()) {
-        anyYaml = true;
-        if (!rec.HasCommittedStorageConfig() || !rec.GetCommittedStorageConfig().HasConfigComposite()) {
-            Cerr << "CommittedStorageConfig.ConfigComposite not found" << Endl;
-            return EXIT_FAILURE;
+    auto decomposeToFile = [&](const TString& outPath, const char* label, auto getComposite, bool hasComposite) -> bool {
+        if (outPath.empty()) {
+            return true;
+        }
+        if (!hasComposite) {
+            Cerr << label << " not found" << Endl;
+            return false;
         }
         TString yaml;
-        if (auto err = NStorage::DecomposeConfig(rec.GetCommittedStorageConfig().GetConfigComposite(), &yaml, nullptr, nullptr)) {
-            Cerr << "Failed to extract committed YAML: " << *err << Endl;
-            return EXIT_FAILURE;
+        if (auto err = NStorage::DecomposeConfig(getComposite(), &yaml, nullptr, nullptr)) {
+            Cerr << "Failed to extract " << label << " YAML: " << *err << Endl;
+            return false;
         }
         try {
-            TUnbufferedFileOutput out(CommittedYamlPath);
+            TUnbufferedFileOutput out(outPath);
             out.Write(yaml.data(), yaml.size());
         } catch (const yexception& ex) {
-            Cerr << "Failed to write committed YAML file: " << ex.what() << Endl;
-            return EXIT_FAILURE;
+            Cerr << "Failed to write YAML file '" << outPath << "': " << ex.what() << Endl;
+            return false;
         }
+        return true;
+    };
+
+    if (!decomposeToFile(CommittedYamlPath, "CommittedStorageConfig.ConfigComposite",
+            [&]{ return rec.GetCommittedStorageConfig().GetConfigComposite(); },
+            rec.HasCommittedStorageConfig() && rec.GetCommittedStorageConfig().HasConfigComposite())) {
+        return EXIT_FAILURE;
+    }
+    if (!decomposeToFile(ProposedYamlPath, "ProposedStorageConfig.ConfigComposite",
+            [&]{ return rec.GetProposedStorageConfig().GetConfigComposite(); },
+            rec.HasProposedStorageConfig() && rec.GetProposedStorageConfig().HasConfigComposite())) {
+        return EXIT_FAILURE;
+    }
+    if (!decomposeToFile(PrevYamlPath, "CommittedStorageConfig.PrevConfig.ConfigComposite",
+            [&]{ return rec.GetCommittedStorageConfig().GetPrevConfig().GetConfigComposite(); },
+            rec.HasCommittedStorageConfig() && rec.GetCommittedStorageConfig().HasPrevConfig() && rec.GetCommittedStorageConfig().GetPrevConfig().HasConfigComposite())) {
+        return EXIT_FAILURE;
     }
 
-    if (!ProposedYamlPath.empty()) {
-        anyYaml = true;
-        if (!rec.HasProposedStorageConfig() || !rec.GetProposedStorageConfig().HasConfigComposite()) {
-            Cerr << "ProposedStorageConfig.ConfigComposite not found" << Endl;
+    if (JsonOut) {
+        using namespace google::protobuf::util;
+        TString json;
+        JsonPrintOptions opts;
+        opts.preserve_proto_field_names = true;
+        auto st = MessageToJsonString(rec, &json, opts);
+        if (!st.ok()) {
+            Cerr << "Could not serialize metadata to JSON: " << st.ToString() << Endl;
             return EXIT_FAILURE;
         }
-        TString yaml;
-        if (auto err = NStorage::DecomposeConfig(rec.GetProposedStorageConfig().GetConfigComposite(), &yaml, nullptr, nullptr)) {
-            Cerr << "Failed to extract proposed YAML: " << *err << Endl;
-            return EXIT_FAILURE;
-        }
-        try {
-            TUnbufferedFileOutput out(ProposedYamlPath);
-            out.Write(yaml.data(), yaml.size());
-        } catch (const yexception& ex) {
-            Cerr << "Failed to write proposed YAML file: " << ex.what() << Endl;
-            return EXIT_FAILURE;
-        }
-    }
-
-    if (!PrevYamlPath.empty()) {
-        anyYaml = true;
-        if (!rec.HasCommittedStorageConfig() || !rec.GetCommittedStorageConfig().HasPrevConfig() ||
-            !rec.GetCommittedStorageConfig().GetPrevConfig().HasConfigComposite()) {
-            Cerr << "CommittedStorageConfig.PrevConfig.ConfigComposite not found" << Endl;
-            return EXIT_FAILURE;
-        }
-        TString yaml;
-        if (auto err = NStorage::DecomposeConfig(rec.GetCommittedStorageConfig().GetPrevConfig().GetConfigComposite(), &yaml, nullptr, nullptr)) {
-            Cerr << "Failed to extract prev YAML: " << *err << Endl;
-            return EXIT_FAILURE;
-        }
-        try {
-            TUnbufferedFileOutput out(PrevYamlPath);
-            out.Write(yaml.data(), yaml.size());
-        } catch (const yexception& ex) {
-            Cerr << "Failed to write prev YAML file: " << ex.what() << Endl;
-            return EXIT_FAILURE;
-        }
-    }
-
-    if (anyYaml) {
+        Cout << json << Endl;
         return EXIT_SUCCESS;
     }
 
-    TString text;
-    if (!google::protobuf::TextFormat::PrintToString(rec, &text)) {
-        Cerr << "Could not serialize metadata to text" << Endl;
-        return EXIT_FAILURE;
+    if (!requestedYaml) {
+        TString text;
+        if (!google::protobuf::TextFormat::PrintToString(rec, &text)) {
+            Cerr << "Could not serialize metadata to text" << Endl;
+            return EXIT_FAILURE;
+        }
+        Cout << text;
     }
-    Cout << text;
+
     return EXIT_SUCCESS;
 }
-
 
 class TClientCommandDiskMetadata : public TClientCommandTree {
 public:
     TClientCommandDiskMetadata()
-        : TClientCommandTree("metadata", {}, "Disk metadata management")
+        : TClientCommandTree("metadata", {}, "PDisk metadata management")
     {
         AddCommand(std::make_unique<TClientCommandDiskMetadataRead>());
         AddCommand(std::make_unique<TClientCommandDiskMetadataWrite>());
@@ -531,7 +513,7 @@ public:
         AddCommand(std::make_unique<TClientCommandDiskInfo>());
         AddCommand(std::make_unique<TClientCommandDiskFormat>());
         AddCommand(std::make_unique<TClientCommandDiskObliterate>());
-        AddCommand(std::make_unique<TClientCommandDiskMetadata>());
+        AddHiddenCommand(std::make_unique<TClientCommandDiskMetadata>());
     }
 };
 

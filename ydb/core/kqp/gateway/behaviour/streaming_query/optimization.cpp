@@ -39,7 +39,7 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
     const auto providerArg = node->ChildPtr(1);
     if (const auto maybeDataSource = TMaybeNode<TCoDataSource>(providerArg)) {
         const auto dataSourceCategory = maybeDataSource.Cast().Category().Value();
-        if (IsIn({NYql::PqProviderName, NYql::S3ProviderName}, dataSourceCategory)) {
+        if (IsIn({NYql::PqProviderName, NYql::S3ProviderName, NYql::GenericProviderName}, dataSourceCategory)) {
             res.StreamingReads += dataSourceCategory == NYql::PqProviderName;
             return true;
         }

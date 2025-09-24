@@ -539,7 +539,7 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
     Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
     const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
 
-    LOG_INFO("Backup view " << dbPath.Quote() << " to " << fsBackupDir.GetPath().Quote());
+    LOG_DEBUG("Backup view " << dbPath.Quote() << " to " << fsBackupDir.GetPath().Quote());
 
     NView::TViewClient client(driver);
     const auto viewDescription = DescribeView(client, dbPath);

@@ -127,6 +127,6 @@ Thanks to using the index, searching for the nearest vectors happens significant
 
 This article provides a simple example of working with vector indexes: creating a table with vectors, populating the table with vectors, building a vector index for such a table, and searching for vectors in the table using a vector index or without it.
 
-In the case of a small table, as in this model example, it's impossible to see the difference in query performance. These examples are intended to illustrate the syntax when working with vector indexes. For a more realistic example with a larger data volume, see [{#T}](vector-index-with-prepared-dataset.md).
+In the case of a small table, as in this model example, it's impossible to see the difference in query performance. These examples are intended to illustrate the syntax when working with vector indexes.<!-- For a more realistic example with a larger data volume, see [{#T}](vector-index-with-prepared-dataset.md).-->
 
 For more information about vector indexes, see [{#T}](../../dev/vector-indexes.md).

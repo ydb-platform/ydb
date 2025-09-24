@@ -16,6 +16,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/mon
+    ydb/core/mon/ut/ut_utils
     library/cpp/http/misc
     library/cpp/http/simple
     ydb/core/testlib/default

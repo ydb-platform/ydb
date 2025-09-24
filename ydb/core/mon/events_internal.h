@@ -2,20 +2,24 @@
 
 #include <ydb/core/protos/mon.pb.h>
 
-namespace NActors {
+namespace NMonitoring::NPrivate {
+
+using namespace NActors;
 
 struct TEvMon {
     enum {
-        EvMonitoringRequest = NActors::NMon::HttpInfo + 10,
+        EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+
+        EvMonitoringRequest = EvBegin,
         EvMonitoringResponse,
         EvRegisterHandler,
         EvMonitoringCancelRequest,
         EvCleanupProxy,
+
         End
     };
 
-    static_assert(EvMonitoringRequest > NMon::End, "expect EvMonitoringRequest > NMon::End");
-    static_assert(End < EventSpaceEnd(NActors::TEvents::ES_MON), "expect End < EventSpaceEnd(NActors::TEvents::ES_MON)");
+    static_assert(End < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect End < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
     struct TEvMonitoringRequest : TEventPB<TEvMonitoringRequest, NKikimrMonProto::TEvMonitoringRequest, EvMonitoringRequest> {
         TEvMonitoringRequest() = default;
@@ -46,4 +50,4 @@ struct TEvMon {
     };
 };
 
-} // namespace NActors
+} // namespace NMonImpl

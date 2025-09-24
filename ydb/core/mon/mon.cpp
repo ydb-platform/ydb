@@ -1,6 +1,6 @@
 #include "mon.h"
 #include "mon_impl.h"
-#include "events.h"
+#include "events_internal.h"
 #include "counters_adapter_impl.h"
 
 #include <ydb/core/base/appdata.h>
@@ -36,6 +36,7 @@ namespace NActors {
 namespace {
 
 using namespace NKikimr;
+using namespace NMonitoring::NPrivate;
 
 bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
     if (request->Method == "POST") {

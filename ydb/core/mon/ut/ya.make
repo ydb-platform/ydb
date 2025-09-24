@@ -5,11 +5,8 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 PEERDIR(
-    library/cpp/http/misc
-    library/cpp/http/simple
-    ydb/core/base
     ydb/core/mon
-    ydb/core/protos
+    ydb/core/mon/ut/ut_utils
     ydb/core/testlib/default
     ydb/library/aclib
     ydb/library/actors/core

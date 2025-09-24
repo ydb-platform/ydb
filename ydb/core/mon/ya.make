@@ -1,11 +1,7 @@
-RECURSE_FOR_TESTS(
-    ut
-)
-
 LIBRARY()
 
 SRCS(
-    events.h
+    events_internal.h
     mon.cpp
     mon.h
     crossref.cpp
@@ -30,3 +26,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

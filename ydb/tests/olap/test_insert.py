@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 import yatest.common
 import ydb
 
@@ -10,7 +11,8 @@ from ydb.tests.olap.common.ydb_client import YdbClient
 logger = logging.getLogger(__name__)
 
 
-class TestInsert(object):
+# "Statement" is added to differ it from scenario/test_insert.py
+class TestInsertStatement(object):
     test_name = "insert"
 
     @classmethod
@@ -30,10 +32,11 @@ class TestInsert(object):
         cls.ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
         cls.ydb_client.wait_connection()
 
-        test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
-        cls.table_path = f"{test_dir}/table"
+        cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
 
     def create_table(self):
+        # avoid using same table in parallel tests
+        self.table_path = f"{self.test_dir}/table{random.randrange(9999)}"
         self.ydb_client.query(
             f"""
             CREATE TABLE `{self.table_path}` (
@@ -77,13 +80,12 @@ class TestInsert(object):
         # just id
         self.ydb_client.query(f"INSERT INTO `{self.table_path}` (id) VALUES (2);")
 
-        result_sets = self.ydb_client.query(f"SELECT * FROM `{self.table_path}`")
+        result_sets = self.ydb_client.query(f"SELECT * FROM `{self.table_path}` ORDER BY id")
 
         # then
         rows = []
         for result_set in result_sets:
             rows.extend(result_set.rows)
-        rows.sort(key=lambda x: x.id)
 
         assert len(rows) == 3
         assert rows[0]['id'] == 0
@@ -95,6 +97,26 @@ class TestInsert(object):
         assert rows[2]['id'] == 2
         assert rows[2]['vn'] is None
         assert rows[2]['vs'] is None
+
+    def test_bulk(self):
+        # given
+        self.create_table()
+
+        # when
+        # full
+        self.ydb_client.query(f"INSERT INTO `{self.table_path}` (id, vn, vs) VALUES (0, 10, 'Zero'), (1, 11, 'One'), (2, 12, 'Two');")
+
+        result_sets = self.ydb_client.query(f"SELECT * FROM `{self.table_path}` ORDER BY id")
+
+        # then
+        rows = []
+        for result_set in result_sets:
+            rows.extend(result_set.rows)
+
+        assert len(rows) == 3
+        assert rows[0] == {'id': 0, 'vn': 10, 'vs': 'Zero'}
+        assert rows[1] == {'id': 1, 'vn': 11, 'vs': 'One'}
+        assert rows[2] == {'id': 2, 'vn': 12, 'vs': 'Two'}
 
     def test_copy_full(self):
         # given
@@ -146,11 +168,10 @@ class TestInsert(object):
         self.ydb_client.query(f"INSERT INTO `{t2}` SELECT id, vs FROM `{self.table_path}`;")
 
         # then
-        result_sets = self.ydb_client.query(f"SELECT * FROM `{t2}`")
+        result_sets = self.ydb_client.query(f"SELECT * FROM `{t2}` ORDER BY id")
         rows = []
         for result_set in result_sets:
             rows.extend(result_set.rows)
-        rows.sort(key=lambda x: x.id)
 
         assert len(rows) == 100
         for i in range(100):
@@ -177,9 +198,25 @@ class TestInsert(object):
 
         rows = result_sets[0].rows
         assert len(rows) == 1
-        assert rows[0]['id'] == 0
-        assert rows[0]['vn'] == 0
-        assert rows[0]['vs'] == 'Zero'
+        assert rows[0] == {'id': 0, 'vn': 0, 'vs': 'Zero'}
+
+    def test_insert_rollback(self):
+        # given
+        self.create_table()
+        session = self.ydb_client.session_acquire()
+
+        # when
+        for i in range(5):
+            tx = session.transaction().begin()
+            tx.execute(f"INSERT INTO `{self.table_path}` (id, vn, vs) VALUES ({i}, {i}, '{i}');")
+            tx.rollback()
+
+        # then
+        result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`;")
+        assert len(result_sets[0].rows) == 1
+        assert result_sets[0].rows[0]['cnt'] == 0
+        
+        self.ydb_client.session_release(session)
 
     def test_incorrect(self):
         # given

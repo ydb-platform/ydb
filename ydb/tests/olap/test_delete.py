@@ -1,5 +1,7 @@
 import logging
 import os
+import pytest
+import random
 import yatest.common
 import ydb
 
@@ -29,11 +31,11 @@ class TestDelete(object):
         node = cls.cluster.nodes[1]
         cls.ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
         cls.ydb_client.wait_connection()
-
-        test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
-        cls.table_path = f"{test_dir}/table"
+        cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
 
     def create_table(self):
+        # avoid using same table in parallel tests
+        self.table_path = f"{self.test_dir}/table{random.randrange(9999)}"
         self.ydb_client.query(
             f"""
             CREATE TABLE `{self.table_path}` (
@@ -65,63 +67,40 @@ class TestDelete(object):
             data,
         )
 
-    def test_delete_by_key(self):
+    @pytest.mark.parametrize(
+        "expr, left",
+        [
+            # none-existent
+            ("id = 101", 100),
+            ("vf > 300", 100),
+            ("vs LIKE 'nope'", 100),
+            ("False", 100),
+            # one row
+            ("id = 42", 99),
+            ("vf < 0.9", 99),
+            ("vs LIKE '3'", 99),
+            # multiple rows
+            ("id > 50", 51),
+            ("vf > 50.5", 51),
+            # complex expression
+            ("id >= 30 AND vf < 70", 60),
+            ("id < 10 OR vf >= 90", 80),
+            # all
+            ("True", 0)
+        ]
+    )
+    def test_delete_where(self, expr, left):
         # given
         self.create_table()
         self.write_data()
 
-        # when 0 (non-existent)
-        self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE id = 300;")
+        # when
+        self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE {expr};")
 
-        # then 0
+        # then
         result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`")
         assert len(result_sets[0].rows) == 1
-        assert result_sets[0].rows[0]['cnt'] == 100
-
-        # when 1 (equal)
-        self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE id = 42;")
-
-        # then 1
-        result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`")
-        assert len(result_sets[0].rows) == 1
-        assert result_sets[0].rows[0]['cnt'] == 99
-
-        # when 2 (condition)
-        self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE id > 50;")
-
-        # then 2
-        result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`")
-        assert len(result_sets[0].rows) == 1
-        assert result_sets[0].rows[0]['cnt'] == 50
-
-    def test_delete_by_column(self):
-        # given
-        self.create_table()
-        self.write_data()
-
-        # when 0 (non-existent)
-        self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE vf > 300;")
-
-        # then 0
-        result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`")
-        assert len(result_sets[0].rows) == 1
-        assert result_sets[0].rows[0]['cnt'] == 100
-
-        # when 1 (equal)
-        self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE vf > 41.5 AND vf < 42.5;")
-
-        # then 1
-        result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`")
-        assert len(result_sets[0].rows) == 1
-        assert result_sets[0].rows[0]['cnt'] == 99
-
-        # when 2 (condition)
-        self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE vf > 50.5;")
-
-        # then 2
-        result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`")
-        assert len(result_sets[0].rows) == 1
-        assert result_sets[0].rows[0]['cnt'] == 50
+        assert result_sets[0].rows[0]['cnt'] == left
 
     def test_delete_rollback(self):
         # given
@@ -151,3 +130,31 @@ class TestDelete(object):
         result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`;")
         assert len(result_sets[0].rows) == 1
         assert result_sets[0].rows[0]['cnt'] == 100
+
+    def test_incorrect(self):
+        # given
+        self.create_table()
+
+        try:
+        # when wrong table name
+            self.ydb_client.query("DELETE FROM `wrongTable`;")
+        # then
+            assert False, 'Should Fail'
+        except ydb.issues.SchemeError:
+            pass
+
+        try:
+        # when wrong column name
+            self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE wrongColumn = 0;")
+        # then
+            assert False, 'Should Fail'
+        except ydb.issues.GenericError:
+            pass
+
+        try:
+        # when wrong data type
+            self.ydb_client.query(f"DELETE FROM `{self.table_path}` vn = 'A';")
+        # then
+            assert False, 'Should Fail'
+        except ydb.issues.GenericError:
+            pass

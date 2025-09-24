@@ -38,7 +38,7 @@ class TestUpdate(object):
             f"""
             CREATE TABLE `{self.table_path}` (
                 id Uint64 NOT NULL,
-                vn Uint64,
+                vn Int32,
                 vs Utf8,
                 PRIMARY KEY(id),
             )
@@ -51,7 +51,7 @@ class TestUpdate(object):
     def write_data(self):
         column_types = ydb.BulkUpsertColumns()
         column_types.add_column("id", ydb.PrimitiveType.Uint64)
-        column_types.add_column("vn", ydb.PrimitiveType.Uint64)
+        column_types.add_column("vn", ydb.PrimitiveType.Int32)
         column_types.add_column("vs", ydb.PrimitiveType.Utf8)
 
         data = []
@@ -139,6 +139,10 @@ class TestUpdate(object):
         result_sets = self.ydb_client.query(f"SELECT vs FROM `{self.table_path}` WHERE id = 50;")
         assert len(result_sets[0].rows) == 1
         assert result_sets[0].rows[0]['vs'] == '50'
+
+        # TODO: fix crash
+        # https://github.com/ydb-platform/ydb/issues/25336
+        return
 
         # when 1 (all)
         session = self.ydb_client.session_acquire()

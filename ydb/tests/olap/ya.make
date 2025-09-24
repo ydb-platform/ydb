@@ -14,6 +14,7 @@ PY3TEST()
         zip_bomb.py
         test_delete.py
         test_insert.py
+        test_replace.py
         test_update.py
         test_upsert.py
     )

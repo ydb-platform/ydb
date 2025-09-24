@@ -753,6 +753,7 @@ def allure_test_description(
     workload_result=None,
     workload_params: dict = None,
     use_node_subcols: bool = False,
+    addition_blocks: list[str] = [],
 ):
     if addition_table_strings is None:
         addition_table_strings = {}
@@ -799,6 +800,8 @@ def allure_test_description(
         {table_strings}
         </tbody></table>
     '''
+
+    html += '\n'.join([f'<div>\n{b}\n</div>\n\n' for b in addition_blocks])
 
     iterations_table = __create_iterations_table(workload_result, node_errors, workload_params, use_node_subcols)
     logging.info(f"iterations_table created, length: {len(iterations_table) if iterations_table else 0}")

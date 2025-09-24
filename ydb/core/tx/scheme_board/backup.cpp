@@ -73,18 +73,19 @@ public:
 
     struct TPathDescriptionAggregate {
         struct TDescriptionCounts {
+            const ui32 Required;
             ui32 Received = 0;
-            ui32 Required = 0;
 
-            explicit TDescriptionCounts(ui32 required) : Required(required) {}
+            explicit TDescriptionCounts(ui32 required)
+                : Required(required)
+            {}
         };
 
         TVector<TDescriptionCounts> DescriptionsByReplicaGroup;
         ui64 MostRecentVersion = 0;
         TString MostRecentDescription;
 
-        explicit TPathDescriptionAggregate(const TVector<ui32>& requiredDescriptions)
-        {
+        explicit TPathDescriptionAggregate(const TVector<ui32>& requiredDescriptions) {
             DescriptionsByReplicaGroup.reserve(requiredDescriptions.size());
             for (const auto& required : requiredDescriptions) {
                 DescriptionsByReplicaGroup.emplace_back(required);
@@ -207,7 +208,7 @@ private:
             for (size_t i = 0; i < ev->Get()->ReplicaGroups.size(); ++i) {
                 const auto& replicaGroup = ev->Get()->ReplicaGroups[i];
                 // require descriptions from majority of replicas
-                requiredDescriptions.emplace_back((replicaGroup.Replicas.size() + 1) / 2);
+                requiredDescriptions.emplace_back(replicaGroup.Replicas.size() / 2 + 1);
 
                 for (const auto& replica : replicaGroup.Replicas) {
                     const ui64 cookieWithReplicaGroupIndex = AddReplicaGroupIndex(cookie, i);
@@ -395,7 +396,7 @@ private:
 
     const TString FilePath;
     const ui32 InFlightLimit;
-    bool RequireMajority;
+    const bool RequireMajority;
     const TActorId Parent;
     TQueue<TString> PendingPaths;
     THashMap<ui64, TString> PathByCookie;

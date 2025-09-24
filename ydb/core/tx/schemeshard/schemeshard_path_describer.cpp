@@ -30,7 +30,9 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetByKeyFilterSize(tableStats.ByKeyFilterSize);
     stats->SetLastAccessTime(tableStats.LastAccessTime.MilliSeconds());
     stats->SetLastUpdateTime(tableStats.LastUpdateTime.MilliSeconds());
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("XXXXX", tableStats.ImmediateTxCompleted);
     stats->SetImmediateTxCompleted(tableStats.ImmediateTxCompleted);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("XXXXX", stats->GetImmediateTxCompleted());
     stats->SetPlannedTxCompleted(tableStats.PlannedTxCompleted);
     stats->SetTxRejectedByOverload(tableStats.TxRejectedByOverload);
     stats->SetTxRejectedBySpace(tableStats.TxRejectedBySpace);

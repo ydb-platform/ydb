@@ -955,6 +955,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Cerr << description.DebugString() << Endl;
             auto& tabletStats = description.GetPathDescription().GetTableStats();
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("GetRowCount",tabletStats.GetRowCount());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("tabletStats.GetImmediateTxCompleted()", tabletStats.GetImmediateTxCompleted());
             UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
             UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
             UNIT_ASSERT_GT(tabletStats.GetPartCount(), 0);

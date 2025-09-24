@@ -219,9 +219,9 @@ private:
     TCqFactory CqFactory;
 };
 
-NActors::IActor* CreateCqActor(int maxCqe, int maxWr) {
-    return new TCqActor([maxCqe, maxWr](const TRdmaCtx* ctx) {
-        return CreateSimpleCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), maxCqe, maxWr);
+NActors::IActor* CreateCqActor(int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counters) {
+    return new TCqActor([maxCqe, maxWr, counters](const TRdmaCtx* ctx) {
+        return CreateSimpleCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), maxCqe, maxWr, counters);
     });
 }
 

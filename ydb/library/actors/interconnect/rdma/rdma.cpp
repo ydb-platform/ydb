@@ -9,6 +9,10 @@
 #include <util/datetime/base.h>
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 
+#include <library/cpp/monlib/metrics/metric_registry.h>
+#include <library/cpp/monlib/metrics/metric_sub_registry.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <util/system/thread.h>
 
 namespace NInterconnect::NRdma {
@@ -99,29 +103,49 @@ public:
         Cb = std::move(cb);
     }
 
+    void ResetTimer() noexcept {
+        Timer.Reset();
+    }
+
+    double GetTimePassed() const noexcept {
+        return Timer.Passed();
+    }
+
 private:
     const ui64 Id;
     TCqCommon* const CqCommon;
     using TCb = std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)>;
     TCb Cb;
+    THPTimer Timer;
 };
+
+static NMonitoring::TDynamicCounterPtr MakeCounters(NMonitoring::TDynamicCounters* counters) {
+    if (!counters) {
+            static NMonitoring::TDynamicCounterPtr dummy(new NMonitoring::TDynamicCounters());
+            return dummy;
+    }
+    return counters;
+}
 
 class TSimpleCqBase : public TCqCommon {
 protected:
     struct TWaiterCtx {
-        TWaiterCtx(std::function<void(NActors::TActorSystem*, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
+        TWaiterCtx(std::function<int(NActors::TActorSystem*, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
             : WrCb(std::move(wrCb))
             , IoCb(std::move(ioCb))
         {}
-        std::function<void(NActors::TActorSystem* as, ICq::IWr*)> WrCb;
+        std::function<int(NActors::TActorSystem* as, ICq::IWr*)> WrCb;
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> IoCb;
     };
 public:
-    TSimpleCqBase(NActors::TActorSystem* as, size_t sz) noexcept
+    TSimpleCqBase(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c) noexcept
         : TCqCommon(as)
         , Thread(ThreadFunc, this)
         , Err(false)
     {
+        auto counter = MakeCounters(c);
+        RdmaDeviceVerbTimeUs = counter->GetHistogram(
+                    "RdmaDeviceVerbTimeUs", NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
         Returned.store(0);
         Allocated.store(0);
         WrBuf.reserve(sz);
@@ -172,7 +196,10 @@ public:
                     wr->ReplyErr(As);
                 } else {
                     Allocated.fetch_add(1);
-                    ctx->WrCb(As, wr);
+                    int err = ctx->WrCb(As, wr);
+                    if (!err) {
+                        wr->ResetTimer();
+                    }
                 }
                 ctx.reset();
                 return true;
@@ -231,6 +258,8 @@ public:
     void HandleWc(ibv_wc* wc, size_t sz) noexcept {
         for (size_t i = 0; i < sz; i++, wc++) {
             TWr* wr = &WrBuf[wc->wr_id];
+            double passed = wr->GetTimePassed();
+            RdmaDeviceVerbTimeUs->Collect(passed * 1000000.0);
             wr->Reply(As, wc);
             ReturnWr(wr); 
         }
@@ -262,6 +291,7 @@ protected:
     std::atomic<bool> Err;
     std::atomic<ui64> Allocated;
     alignas(64) std::atomic<ui64> Returned; 
+    NMonitoring::THistogramPtr RdmaDeviceVerbTimeUs;
 };
 
 class TSimpleCq: public TSimpleCqBase {
@@ -286,7 +316,7 @@ public:
         }
     }
 
-    std::optional<TErr> AllocWrAsync(std::function<void(NActors::TActorSystem* as, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept override {
+    std::optional<TErr> AllocWrAsync(std::function<int(NActors::TActorSystem* as, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept override {
         if (Err.load(std::memory_order_relaxed)) {
             return TErr();
         }
@@ -320,7 +350,7 @@ public:
         }
     }
 
-    std::optional<TErr> AllocWrAsync(std::function<void(NActors::TActorSystem* as, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept override {
+    std::optional<TErr> AllocWrAsync(std::function<int(NActors::TActorSystem* as, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept override {
         if (Err.load(std::memory_order_relaxed)) {
             return TErr();
         }
@@ -348,7 +378,7 @@ ICqMockControl* TryGetCqMockControl(ICq* cq) {
 }
 
 template<class TCq>
-static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr) noexcept {
+static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept {
     if (maxCqe <= 0) {
         const ibv_device_attr& attr = ctx->GetDevAttr();
         maxCqe = attr.max_cqe;
@@ -356,7 +386,7 @@ static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int ma
     if (maxWr <= 0) {
         maxWr = maxCqe;
     }
-    auto p = std::make_shared<TCq>(as, maxWr);
+    auto p = std::make_shared<TCq>(as, maxWr, counter);
     int err = p->Init(ctx, maxCqe);
     if (err) {
         return nullptr;
@@ -369,12 +399,12 @@ static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int ma
     return p;
 }
 
-ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr) noexcept {
-    return CreateCq<TSimpleCq>(ctx, as, maxCqe, maxWr);
+ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept {
+    return CreateCq<TSimpleCq>(ctx, as, maxCqe, maxWr, counter);
 }
 
 ICq::TPtr CreateSimpleCqMock(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr) noexcept {
-    return CreateCq<TSimpleCqMock>(ctx, as, maxCqe, maxWr);
+    return CreateCq<TSimpleCqMock>(ctx, as, maxCqe, maxWr, nullptr);
 }
 
 const int TQueuePair::UnknownQpState = IBV_QPS_UNKNOWN;

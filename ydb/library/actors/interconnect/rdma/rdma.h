@@ -15,6 +15,10 @@ namespace NActors {
     class TActorSystem;
 }
 
+namespace NMonitoring {
+    struct TDynamicCounters;
+}
+
 class IOutputStream;
 
 namespace NInterconnect::NRdma {
@@ -53,7 +57,7 @@ public:
     // returns TBusy in case of no prepare requests
     // returns TErr in case of fatal CQ error. NOTE!!! The callback might be called in this case with TCqErr 
     virtual TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept = 0;
-    virtual std::optional<TErr> AllocWrAsync(std::function<void(NActors::TActorSystem*, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept  = 0;
+    virtual std::optional<TErr> AllocWrAsync(std::function<int(NActors::TActorSystem*, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept  = 0;
     virtual TWrStats GetWrStats() const noexcept = 0;
 
     static bool IsWrSuccess(const TAllocResult& ar) {
@@ -78,7 +82,7 @@ public:
 
 ICqMockControl* TryGetCqMockControl(ICq* cq);
 
-ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr) noexcept;
+ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept;
 ICq::TPtr CreateSimpleCqMock(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr) noexcept;
 
 class TQueuePair: public NNonCopyable::TMoveOnly {

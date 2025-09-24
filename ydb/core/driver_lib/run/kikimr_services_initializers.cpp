@@ -612,8 +612,11 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             // create poller actor (whether platform supports it)
             setup->LocalServices.emplace_back(MakePollerActorId(),
                 TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, systemPoolId));
+
+            auto interconectCounters = GetServiceCounters(counters, "interconnect");
+
             setup->LocalServices.emplace_back(MakeCqActorId(),
-                TActorSetupCmd(CreateCqActor(-1, icConfig.GetRdmaMaxWr()), TMailboxType::ReadAsFilled, interconnectPoolId));
+                TActorSetupCmd(CreateCqActor(-1, icConfig.GetRdmaMaxWr(), interconectCounters.Get()), TMailboxType::ReadAsFilled, interconnectPoolId));
 
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 
@@ -627,7 +630,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(icCommon->RdmaMemPool);
             }
             icCommon->NameserviceId = nameserviceId;
-            icCommon->MonCounters = GetServiceCounters(counters, "interconnect");
+            icCommon->MonCounters = interconectCounters;
             icCommon->ChannelsConfig = channels;
             icCommon->Settings = settings;
             icCommon->DestructorId = GetDestructActorID();

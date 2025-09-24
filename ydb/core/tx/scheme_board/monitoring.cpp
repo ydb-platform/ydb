@@ -1754,7 +1754,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
                 SBB_LOG_I("Starting backup to file: " << filePath
                     << " , in-flight limit: " << inFlightLimit
-                    << " , requireMajority: " << requireMajority
+                    << " , require majority: " << requireMajority
                 );
 
                 Register(CreateSchemeBoardBackuper(filePath, inFlightLimit, requireMajority, SelfId()));

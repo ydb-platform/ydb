@@ -1753,8 +1753,8 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 BackupProgress.Status = TBackupProgress::EStatus::Starting;
 
                 SBB_LOG_I("Starting backup to file: " << filePath
-                    << " , in-flight limit: " << inFlightLimit
-                    << " , require majority: " << requireMajority
+                    << ", in-flight limit: " << inFlightLimit
+                    << ", require majority: " << requireMajority
                 );
 
                 Register(CreateSchemeBoardBackuper(filePath, inFlightLimit, requireMajority, SelfId()));

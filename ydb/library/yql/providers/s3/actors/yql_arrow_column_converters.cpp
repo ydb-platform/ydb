@@ -740,11 +740,9 @@ TColumnConverter DecimalToArrowBaseConverter(const std::shared_ptr<arrow::DataTy
         for (i64 i = 0; i < value->length(); ++i) {
             NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
 
-            if (true) {
-                if (!item) {
-                    THROW_ARROW_NOT_OK(builder.AppendNull());
-                    continue;
-                }
+            if (!item) {
+                THROW_ARROW_NOT_OK(builder.AppendNull());
+                continue;
             }
 
             NYql::NDecimal::TInt128 val = item.GetInt128();

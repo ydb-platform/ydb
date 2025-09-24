@@ -1225,7 +1225,7 @@ Y_UNIT_TEST_TWIN(LeftJoinPointPredicateAndJoinAfterThat, StreamLookupJoin) {
 
     tester.ParamsBuilder
         .AddParam("$idx_a").BeginList().AddListItem().String("root_1").EndList().Build()
-        .AddParam("$user_id").OptionalString(std::nullopt).Build()
+        .AddParam("$user_id").OptionalString(TMaybe<TString>()).Build()
         .AddParam("$idx_b").BeginList().AddListItem().Int64(3).AddListItem().Int64(2).EndList().Build();
     tester.Run();
 }

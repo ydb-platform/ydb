@@ -2,6 +2,7 @@ import logging
 import os
 import yatest.common
 import ydb
+import random
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -12,9 +13,11 @@ logger = logging.getLogger(__name__)
 
 class TestOrderBy(object):
     test_name = "order_by"
+    n = 200
 
     @classmethod
     def setup_class(cls):
+        random.seed(0xBEDA)
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
@@ -33,20 +36,21 @@ class TestOrderBy(object):
     def write_data(self, table: str):
         column_types = ydb.BulkUpsertColumns()
         column_types.add_column("id", ydb.PrimitiveType.Uint64)
+        column_types.add_column("value", ydb.PrimitiveType.Uint64)
 
-        for i in range(100):
-            data = [
-                {
-                    "id": i,
-                }
-            ]
+        # [2,  4,  6,  8, 10, ...]
+        # [3,  6,  9, 12, 15, ...]
+        # [4,  8, 12, 16, 20, ...]
+        # [5, 10, 15, 20, 25, ...]
+        # ...
+        data = [[{"id": j, "value": j} for j in range(1, self.n) if j % i == 0] for i in range(2, self.n)]
+        random.shuffle(data)
 
-            data.extend({"id": i * 100000 + j} for j in range(100))
-
+        for row in data:
             self.ydb_client.bulk_upsert(
                 table,
                 column_types,
-                data,
+                row,
             )
 
     def test(self):
@@ -57,6 +61,7 @@ class TestOrderBy(object):
             f"""
             CREATE TABLE `{table_path}` (
                 id Uint64 NOT NULL,
+                value Uint64 NOT NULL,
                 PRIMARY KEY(id),
             )
             WITH (
@@ -68,12 +73,30 @@ class TestOrderBy(object):
 
         self.write_data(table_path)
 
-        result_sets = self.ydb_client.query(
-            f"""
-            select id from `{table_path}` order by id limit 10
-            """
-        )
+        for i in range(100):
+            limit = random.randint(1, self.n)
+            offset = random.randint(1, self.n)
+            is_desc = random.randint(0, 1)
+            is_le = random.randint(0, 1)
+            order = ["asc", "desc"]
+            condition = [">", "<"]
+            data = list(range(2, self.n))
+            if is_le:
+                answer = [i for i in data if i < offset]
+            else:
+                answer = [i for i in data if i > offset]
+            if is_desc:
+                answer = answer[::-1]
+            answer = answer[:limit]
 
-        keys = [row['id'] for result_set in result_sets for row in result_set.rows]
+            result_sets = self.ydb_client.query(
+                f"""
+                select id from `{table_path}`
+                where value {condition[is_le]} {offset}
+                order by id {order[is_desc]} limit {limit}
+                """
+            )
 
-        assert keys == [i for i in range(10)], keys
+            keys = [row['id'] for result_set in result_sets for row in result_set.rows]
+
+            assert keys == answer, keys

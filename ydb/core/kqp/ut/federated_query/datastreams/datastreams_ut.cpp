@@ -1487,6 +1487,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithS3Join, TStreamingTestFixture) {
+        // Test that defaults are overridden for streaming queries
+        auto& setting = *SetupAppConfig().MutableKQPConfig()->AddSettings();
+        setting.SetName("HashJoinMode");
+        setting.SetValue("grace");
+
         const auto pqGateway = SetupMockPqGateway();
 
         constexpr char sourceBucket[] = "test_streaming_query_with_s3_join";

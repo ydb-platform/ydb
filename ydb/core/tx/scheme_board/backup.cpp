@@ -191,7 +191,7 @@ private:
             return;
         }
 
-        const TString path = std::move(it->second);
+        const TString& path = it->second;
         SBB_LOG_D("Handle " << ev->Get()->ToString() << ", path: " << path);
 
         const auto replicas = ev->Get()->GetPlainReplicas();
@@ -306,7 +306,9 @@ private:
     void AddChildrenToPending(const TJsonValue& pathDescription, const TString& path) {
         if (pathDescription.Has("Children")) {
             const auto& children = pathDescription["Children"];
-            SBB_LOG_T("Queue children: " << WriteJson(&children, false));
+            SBB_LOG_D("Queue children: " << JoinSeq(", ", children.GetArraySafe() | std::views::transform([](const TJsonValue& child) {
+                return child["Name"].GetStringSafe().Quote();
+            })));
             for (const auto& child : children.GetArraySafe()) {
                 if (child.Has("Name")) {
                     TString childPath = TStringBuilder() << path << "/" << child["Name"].GetStringSafe();

@@ -1746,7 +1746,11 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
                 bool requireMajority = true;
                 if (params.Has("requireMajority")) {
-                    requireMajority = FromString<bool>(params.Get("requireMajority"));
+                    if (!TryFromString(params.Get("requireMajority"), requireMajority)) {
+                        return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                            RenderBackup(false, "Invalid require majority toggle value")
+                        ));
+                    }
                 }
 
                 BackupProgress = TBackupProgress();

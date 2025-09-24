@@ -71,9 +71,9 @@ CREATE TRANSFER `transfer_recipe/example_transfer`
 {% include [x](../../_includes/ydb-cli-profile.md) %}
 
 ```bash
-echo "Message 1" | ydb --profile quickstart topic write source_topic
-echo "Message 2" | ydb --profile quickstart topic write source_topic
-echo "Message 3" | ydb --profile quickstart topic write source_topic
+echo "Message 1" | ydb --profile quickstart topic write 'transfer_recipe/source_topic'
+echo "Message 2" | ydb --profile quickstart topic write 'transfer_recipe/source_topic'
+echo "Message 3" | ydb --profile quickstart topic write 'transfer_recipe/source_topic'
 ```
 
 ## Шаг 5. Проверка содержимого таблицы {#step5}

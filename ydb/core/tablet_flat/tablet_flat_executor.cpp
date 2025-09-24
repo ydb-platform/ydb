@@ -30,6 +30,10 @@ namespace NFlatExecutorSetup {
         Y_UNUSED(ctx);
     }
 
+    void ITablet::BackupSnapshotComplete(const TActorContext &ctx) {
+        Y_UNUSED(ctx);
+    }
+
     void ITablet::ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx)
     {
         Y_UNUSED(status);

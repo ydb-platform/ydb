@@ -1,7 +1,7 @@
 #pragma once
 
 #include "benchmark_settings.h"
-#include "util/datetime/base.h"
+#include <util/datetime/base.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

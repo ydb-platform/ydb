@@ -539,6 +539,7 @@ public:
     std::unordered_map<TPDiskId, TScrubbedEntityInfo<TPredLockedByPDisk>, THash<TPDiskId>> CurrentlyScrubbedDisks;
     std::unordered_map<TGroupId, TScrubbedEntityInfo<TPredLockedByGroup>> CurrentlyScrubbedGroups;
     std::unordered_map<TGroupId, TProhibitInfo> ScrubProhibitedGroups;
+    std::unordered_map<TGroupId, TActorId> Scrubbed;
     std::map<TInstant, TIntrusiveList<TVDiskItem, TPredLockedByTime>> LockedByTime;
     ui64 LastQueueIndex = 0;
     TIntrusiveList<TVDiskItem, TCandidates> Candidates;

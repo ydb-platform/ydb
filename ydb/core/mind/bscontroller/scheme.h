@@ -459,6 +459,14 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp, ErrorCount>;
     };
 
+    struct BlobCheckerState : Table<133> {
+        struct GroupId : Column<1, Group::ID::ColumnType> {};
+        struct SerializedState : Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<GroupId>;
+        using TColumns = TableColumns<GroupId, State>;
+    };
+
     using TTables = SchemaTables<
         Node,
         PDisk,
@@ -483,7 +491,8 @@ struct Schema : NIceDb::Schema {
         ScrubState,
         DriveSerial,
         BlobDepotDeleteQueue,
-        BridgeSyncState
+        BridgeSyncState,
+        BlobCheckerState
     >;
 
     using TSettings = SchemaSettings<

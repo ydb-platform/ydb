@@ -1,7 +1,7 @@
 #include "joins.h"
 #include "construct_join_graph.h"
-#include "util/system/datetime.h"
-#include "ydb/core/kqp/tools/combiner_perf/factories.h"
+#include <util/system/datetime.h>
+#include <ydb/core/kqp/tools/combiner_perf/factories.h>
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 using namespace NKikimr::NMiniKQL;

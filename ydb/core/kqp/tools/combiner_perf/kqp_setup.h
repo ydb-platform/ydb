@@ -1,3 +1,4 @@
+#pragma once
 #include "factories.h"
 
 #include <ydb/core/kqp/runtime/kqp_program_builder.h>

@@ -524,21 +524,21 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
                 return TStatus::Error;
             }
 
-            if (!EnsureOptionalType(node->Pos(), *tupleType->GetItems()[0], ctx)) {
+            if (!EnsureOptionalType(node->Pos(), *tupleType->GetItems()[1], ctx)) {
                 return TStatus::Error;
             }
 
-            auto joinKeyType = tupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
+            auto joinKeyType = tupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
             if (!EnsureStructType(node->Pos(), *joinKeyType, ctx)) {
                 return TStatus::Error;
             }
 
-            if (!EnsureStructType(node->Pos(), *tupleType->GetItems()[1], ctx)) {
+            if (!EnsureStructType(node->Pos(), *tupleType->GetItems()[0], ctx)) {
                 return TStatus::Error;
             }
 
             structType = joinKeyType->Cast<TStructExprType>();
-            auto leftRowType = tupleType->GetItems()[1]->Cast<TStructExprType>();
+            auto leftRowType = tupleType->GetItems()[0]->Cast<TStructExprType>();
 
             TVector<const TTypeAnnotationNode*> outputTypes;
             outputTypes.push_back(leftRowType);
@@ -1804,21 +1804,21 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
             return TStatus::Error;
         }
 
-        if (!EnsureOptionalType(node->Pos(), *inputTupleType->GetItems()[0], ctx)) {
+        if (!EnsureOptionalType(node->Pos(), *inputTupleType->GetItems()[1], ctx)) {
             return TStatus::Error;
         }
 
-        auto joinKeyType = inputTupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
+        auto joinKeyType = inputTupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
         if (!EnsureStructType(node->Pos(), *joinKeyType, ctx)) {
             return TStatus::Error;
         }
 
-        if (!EnsureStructType(node->Pos(), *inputTupleType->GetItems()[1], ctx)) {
+        if (!EnsureStructType(node->Pos(), *inputTupleType->GetItems()[0], ctx)) {
             return TStatus::Error;
         }
 
         const TStructExprType* joinKeys = joinKeyType->Cast<TStructExprType>();
-        const TStructExprType* leftRowType = inputTupleType->GetItems()[1]->Cast<TStructExprType>();
+        const TStructExprType* leftRowType = inputTupleType->GetItems()[0]->Cast<TStructExprType>();
 
         for (const auto& inputKey : joinKeys->GetItems()) {
             if (!table.second->GetKeyColumnIndex(TString(inputKey->GetName()))) {

@@ -814,13 +814,13 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         YQL_ENSURE(joinKeyPredicate.IsValid());
 
         auto leftRowTuple = Build<TExprList>(ctx, join.Pos())
+            .Add(leftRowArg)
             .Add<TCoOptionalIf>()
                 .Predicate(joinKeyPredicate.Cast())
                 .Value<TCoAsStruct>()
                     .Add(lookupMembers)
                     .Build() 
                 .Build()     
-            .Add(leftRowArg)
             .Done();
 
         TMaybeNode<TExprBase> leftInput;
@@ -846,10 +846,10 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                             .Build()
                         .ThenValue<TCoAsList>()
                             .Add<TExprList>()
+                                .Add(leftRowArg)
                                 .Add<TCoNothing>()
                                     .OptionalType(NCommon::BuildTypeExpr(join.Pos(), *nullLookupMembers, ctx))
                                     .Build()
-                                .Add(leftRowArg)
                                 .Build()
                             .Build()
                         .ElseValue<TCoMap>()

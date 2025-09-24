@@ -903,41 +903,12 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
         .Settings(streamLookupIndex.Settings())
         .Done();
 
-    TMaybeNode<TExprBase> lookupKeys;
-    if (settings.Strategy == EStreamLookupStrategyType::LookupJoinRows || settings.Strategy == EStreamLookupStrategyType::LookupSemiJoinRows) {
-        // Result type of lookupIndexTable: list<tuple<left_row, optional<main_table_pk>, rowMeta>>,
-        // expected input type for main table stream join: list<tuple<optional<main_table_pk>, left_row, rowMeta>>,
-        // so we should transform list<tuple<left_row, optional<main_table_pk>>> to list<tuple<optional<main_table_pk>, left_row, rowMeta>>
-        lookupKeys = Build<TCoMap>(ctx, node.Pos())
-            .Input(lookupIndexTable)
-            .Lambda()
-                .Args({"tuple"})
-                .Body<TExprList>()
-                    .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("1").Build()
-                        .Build()
-                    .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("0").Build()
-                        .Build()
-                    .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("2").Build()
-                        .Build()
-                    .Build()
-                .Build()
-            .Done();
-    } else {
-        lookupKeys = lookupIndexTable;
-    }
-
     // We should allow lookup by null keys here,
     // because main table pk can contain nulls and we don't want to lose these rows
     settings.AllowNullKeysPrefixSize = keyColumnsList.Size();
     return Build<TKqlStreamLookupTable>(ctx, node.Pos())
         .Table(streamLookupIndex.Table())
-        .LookupKeys(lookupKeys.Cast())
+        .LookupKeys(lookupIndexTable)
         .Columns(streamLookupIndex.Columns())
         .Settings(settings.BuildNode(ctx, node.Pos()))
         .Done();

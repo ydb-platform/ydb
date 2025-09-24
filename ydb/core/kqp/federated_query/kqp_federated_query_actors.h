@@ -25,18 +25,18 @@ public:
     public:
         TEvResolveSecret(
             const TString& ownerUserId,
-            const TString& secretName,
+            const TVector<TString>& secretNames,
             NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise
         )
             : UserToken(NACLib::TUserToken{ownerUserId, TVector<NACLib::TSID>{}})
-            , SecretName(secretName)
+            , SecretNames(secretNames)
             , Promise(promise)
         {
         }
 
     public:
         const NACLib::TUserToken UserToken;
-        const TString SecretName;
+        const TVector<TString> SecretNames;
         NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Promise;
     };
 
@@ -46,6 +46,13 @@ private:
         ui64 PathId = 0;
         TString Name;
         TString Value;
+    };
+
+    struct TResponseContext {
+        using TIncomingOrderId = ui64;
+        THashMap<TString, TIncomingOrderId> Secrets;
+        NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Result;
+        size_t FilledSecretsCnt = 0;
     };
 
 private:
@@ -59,11 +66,13 @@ private:
     void HandleIncomingRequest(TEvResolveSecret::TPtr& ev);
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void HandleSchemeShardResponse(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
-    void FillResponse(const ui64 requestId, const TEvDescribeSecretsResponse::TDescription& response);
+    void FillResponse(const ui64& requestId, const TEvDescribeSecretsResponse::TDescription& response);
     void SaveIncomingRequestInfo(const TEvResolveSecret& req);
-    void SendSchemeCacheRequest(const TString& secretName, const NACLib::TUserToken& userToken);
+    void SendSchemeCacheRequests(const TVector<TString>& secretNames, const NACLib::TUserToken& userToken);
     bool LocalCacheHasActualVersion(const TVersionedSecret& secret, const ui64& cacheSecretVersion);
     bool LocalCacheHasActualObject(const TVersionedSecret& secret, const ui64& cacheSecretPathId);
+    bool HandleSchemeCacheErrorsIfAny(const ui64& requestId, NSchemeCache::TSchemeCacheNavigate& result);
+    void FillResponseIfFinished(const ui64& requestId, const TResponseContext& responseCtx);
 
 public:
     TDescribeSchemaSecretsService() = default;
@@ -71,11 +80,6 @@ public:
     void Bootstrap();
 
 private:
-    struct TResponseContext {
-        TVersionedSecret Secret;
-        NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Result;
-    };
-
     ui64 LastCookie = 0;
     THashMap<ui64, TResponseContext> ResolveInFlight;
     THashMap<TString, TVersionedSecret> VersionedSecrets;

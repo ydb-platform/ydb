@@ -1631,8 +1631,10 @@ public:
         const TString requestType = QueryState->GetRequestType();
         const bool temporary = GetTemporaryTableInfo(tx).has_value();
 
-        auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
-            temporary, QueryState->IsCreateTableAs(), TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
+        auto executerActor = CreateKqpSchemeExecuter(
+            tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
+            temporary, /* createTmpDir */ temporary && TempTablesState.TempTables.empty() && !TempTablesState.HasCreateTableAs,
+            QueryState->IsCreateTableAs(), TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
 

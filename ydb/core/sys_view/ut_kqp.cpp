@@ -4145,32 +4145,29 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
         }, "script");
     }
 
-    // TODO: make a test when tenant support is provided
-    void QueryMetricsSimple() {
-        TTestEnv env(1, 2);
+    Y_UNIT_TEST(QueryMetricsSimple) {
+        TTestEnv env(1, 2, {.EnableSVP = true});
         CreateTenant(env, "Tenant1", true);
-        {
-            TTableClient client(env.GetDriver());
-            auto session = client.CreateSession().GetValueSync().GetSession();
-
-            NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
-                CREATE TABLE `Root/Tenant1/Table1` (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )").GetValueSync());
-        }
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
             .SetDatabase("/Root/Tenant1");
         auto driver = TDriver(driverConfig);
 
         TTableClient client(driver);
         auto session = client.CreateSession().GetValueSync().GetSession();
+
+        NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Tenant1/Table1` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync());
+
         NKqp::AssertSuccessResult(session.ExecuteDataQuery(
-            "SELECT * FROM `Root/Tenant1/Table1`", TTxControl::BeginTx().CommitTx()
+            "SELECT * FROM `/Root/Tenant1/Table1`", TTxControl::BeginTx().CommitTx()
         ).GetValueSync());
 
         size_t rowCount = 0;
@@ -4178,7 +4175,9 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
 
         for (size_t iter = 0; iter < 30 && !rowCount; ++iter) {
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT SumReadBytes FROM `Root/Tenant1/.sys/query_metrics`;
+                SELECT SumReadBytes
+                FROM `/Root/Tenant1/.sys/query_metrics_one_minute`
+                WHERE QueryText = 'SELECT * FROM `/Root/Tenant1/Table1`';
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -4189,10 +4188,11 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
             rowCount = node.AsList().size();
 
             if (!rowCount) {
-                Sleep(TDuration::Seconds(1));
+                Sleep(TDuration::Seconds(5));
             }
         }
 
+        UNIT_ASSERT_GE(rowCount, 0);
         NKqp::CompareYson(R"([
             [[0u]];
         ])", ysonString);

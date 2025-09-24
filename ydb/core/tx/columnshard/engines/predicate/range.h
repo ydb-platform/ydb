@@ -47,7 +47,7 @@ public:
         FullUsage
     };
 
-    EUsageClass GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const;
+    EUsageClass GetUsageClass(const NArrow::TSimpleRowView& start, const NArrow::TSimpleRowView& end) const;
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
     TString DebugString() const;

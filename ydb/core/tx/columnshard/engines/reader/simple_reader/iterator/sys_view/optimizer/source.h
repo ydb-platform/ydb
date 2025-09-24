@@ -23,9 +23,9 @@ private:
 
 public:
     TSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule,
-        std::vector<NStorageOptimizer::TTaskDescription>&& tasks,
-        const NColumnShard::TSchemeShardLocalPathId& externalPathId, NArrow::TSimpleRow&& start,
-        NArrow::TSimpleRow&& finish, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
+        std::vector<NStorageOptimizer::TTaskDescription>&& tasks, const NColumnShard::TSchemeShardLocalPathId& externalPathId,
+        NArrow::TSimpleRowContent&& start, NArrow::TSimpleRowContent&& finish,
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(sourceId, sourceIdx, tabletId, std::move(start), std::move(finish), tasks.size(), TSnapshot::Zero(), TSnapshot::Zero(), context)
         , Granule(granule)
         , OptimizerTasks(std::move(tasks))

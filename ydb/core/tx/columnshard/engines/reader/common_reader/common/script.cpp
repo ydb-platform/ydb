@@ -21,7 +21,7 @@ TString TFetchingScript::ProfileDebugString() const {
     TStringBuilder sb;
     TStringBuilder sbBranch;
     for (auto&& i : Steps) {
-        if (i->GetSumDuration() > TDuration::MilliSeconds(10)) {
+        if (i->GetCPUDuration() > TDuration::MilliSeconds(10)) {
             sbBranch << "{" << i->DebugString(true) << "};";
         }
     }
@@ -70,7 +70,7 @@ TString IFetchingStep::DebugString(const bool stats) const {
     TStringBuilder sb;
     sb << "name=" << Name;
     if (stats) {
-        sb << ";duration=" << GetSumDuration() << ";"
+        sb << ";duration=" << GetCPUDuration() << ";"
            << "size=" << 1e-9 * GetSumSize();
     }
     sb << ";details={" << DoDebugString() << "};";

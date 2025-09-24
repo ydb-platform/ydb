@@ -32,8 +32,8 @@ protected:
     const std::shared_ptr<ISourcesCollection> Collection;
     std::shared_ptr<ISyncPoint> Next;
     std::deque<std::shared_ptr<NCommon::IDataSource>> SourcesSequentially;
-    virtual std::shared_ptr<NCommon::IDataSource> DoOnSourceFinishedOnPreviouse() {
-        return nullptr;
+    virtual const std::shared_ptr<NCommon::IDataSource>& DoOnSourceFinishedOnPreviouse() {
+        return Default<std::shared_ptr<NCommon::IDataSource>>();
     }
 
     void OnSourceFinished();
@@ -44,12 +44,12 @@ protected:
 public:
     virtual ~ISyncPoint() = default;
 
-    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) {
-        SourcesSequentially.emplace_back(source);
+    virtual const std::shared_ptr<NCommon::IDataSource>& OnAddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
         if (!source->GetAs<IDataSource>()->HasFetchingPlan()) {
             source->MutableAs<IDataSource>()->InitFetchingPlan(Context->GetColumnsFetchingPlan(source, !Next));
         }
-        return source;
+        SourcesSequentially.emplace_back(std::move(source));
+        return SourcesSequentially.back();
     }
     void Continue(const TPartialSourceAddress& continueAddress, TPlainReadData& reader);
 

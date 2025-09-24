@@ -43,7 +43,7 @@ class TProgramStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
-    THashMap<ui32, std::shared_ptr<TFetchingStepSignals>> Signals;
+    std::vector<std::shared_ptr<TFetchingStepSignals>> Signals;
     const std::shared_ptr<TFetchingStepSignals>& GetSignals(const ui32 nodeId) const;
 
 public:
@@ -52,8 +52,10 @@ public:
     TProgramStep(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program)
         : TBase("PROGRAM_EXECUTION")
         , Program(program) {
+        Signals.resize(Program->GetNodesCountReserve());
         for (auto&& i : Program->GetNodes()) {
-            Signals.emplace(i.first, TFetchingStepsSignalsCollection::GetSignals(i.second->GetSignalCategoryName()));
+            AFL_VERIFY(i.first < Signals.size());
+            Signals[i.first] = TFetchingStepsSignalsCollection::GetSignals(i.second->GetSignalCategoryName());
         }
     }
 };

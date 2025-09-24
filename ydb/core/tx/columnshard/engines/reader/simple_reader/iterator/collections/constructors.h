@@ -58,7 +58,7 @@ public:
         const ERequestSorting Sorting;
 
     public:
-        TComparator(const ERequestSorting sorting)
+        TComparator(const ERequestSorting sorting, const arrow::Schema* /*schema*/)
             : Sorting(sorting) {
             AFL_VERIFY(Sorting != ERequestSorting::NONE);
         }
@@ -109,7 +109,7 @@ private:
 
 public:
     TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting, std::vector<TInsertWriteId>&& uncommitted)
-        : TBase(sorting)
+        : TBase(sorting, nullptr)
         , Uncommitted(std::move(uncommitted))
     {
         InitializeConstructors(std::move(sources));

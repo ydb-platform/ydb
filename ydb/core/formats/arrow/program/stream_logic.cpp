@@ -79,8 +79,9 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
             }
             auto datum = result.DetachResult();
             context.MutableResources().Remove(GetOutputColumnIdOnce());
-            context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), datum);
-            if (IsFinishDatum(datum)) {
+            const bool isFinish = IsFinishDatum(datum);
+            context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), std::move(datum));
+            if (isFinish) {
                 return true;
             }
         }

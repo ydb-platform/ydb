@@ -40,18 +40,18 @@ NArrow::TColumnFilter TPKRangeFilter::BuildFilter(const std::shared_ptr<NArrow::
 }
 
 bool TPKRangeFilter::IsUsed(const TPortionInfo& info) const {
-    return GetUsageClass(info.IndexKeyStart(), info.IndexKeyEnd()) != TPKRangeFilter::EUsageClass::NoUsage;
+    return GetUsageClass(info.IndexKeyStart().GetView(), info.IndexKeyEnd().GetView()) != TPKRangeFilter::EUsageClass::NoUsage;
 }
 
-TPKRangeFilter::EUsageClass TPKRangeFilter::GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const {
+TPKRangeFilter::EUsageClass TPKRangeFilter::GetUsageClass(const NArrow::TSimpleRowView& start, const NArrow::TSimpleRowView& end) const {
     {
         std::partial_ordering equalityStartWithFrom = std::partial_ordering::greater;
         if (const auto& from = PredicateFrom.GetReplaceKey()) {
-            equalityStartWithFrom = start.ComparePartNotNull(*from, from->GetColumnsCount());
+            equalityStartWithFrom = start.ComparePartNotNull(from->GetView(), from->GetColumnsCount());
         }
         std::partial_ordering equalityEndWithTo = std::partial_ordering::less;
         if (const auto& to = PredicateTo.GetReplaceKey()) {
-            equalityEndWithTo = end.ComparePartNotNull(*to, to->GetColumnsCount());
+            equalityEndWithTo = end.ComparePartNotNull(to->GetView(), to->GetColumnsCount());
         }
         const bool startInternal = (equalityStartWithFrom == std::partial_ordering::equivalent && PredicateFrom.IsInclude()) ||
                                    (equalityStartWithFrom == std::partial_ordering::greater);
@@ -64,7 +64,7 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::GetUsageClass(const NArrow::TSimpleR
     
 
     if (const auto& from = PredicateFrom.GetReplaceKey()) {
-        const std::partial_ordering equalityEndWithFrom = end.ComparePartNotNull(*from, from->GetColumnsCount());
+        const std::partial_ordering equalityEndWithFrom = end.ComparePartNotNull(from->GetView(), from->GetColumnsCount());
         if (equalityEndWithFrom == std::partial_ordering::less) {
             return EUsageClass::NoUsage;
         } else if (equalityEndWithFrom == std::partial_ordering::equivalent) {
@@ -77,7 +77,7 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::GetUsageClass(const NArrow::TSimpleR
     }
 
     if (const auto& to = PredicateTo.GetReplaceKey()) {
-        const std::partial_ordering equalityStartWithTo = start.ComparePartNotNull(*to, to->GetColumnsCount());
+        const std::partial_ordering equalityStartWithTo = start.ComparePartNotNull(to->GetView(), to->GetColumnsCount());
         if (equalityStartWithTo == std::partial_ordering::greater) {
             return EUsageClass::NoUsage;
         } else if (equalityStartWithTo == std::partial_ordering::equivalent) {

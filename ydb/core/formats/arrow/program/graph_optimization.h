@@ -216,6 +216,10 @@ public:
         return Nodes;
     }
 
+    ui32 GetNextNodeId() const {
+        return NodeId;
+    }
+
     class TBuilder {
     private:
         std::vector<std::shared_ptr<IResourceProcessor>> Processors;

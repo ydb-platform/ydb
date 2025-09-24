@@ -64,6 +64,10 @@ public:
 };
 
 TConclusion<TString> TSimpleRowViewV0::DebugString(const std::shared_ptr<arrow::Schema>& schema) const {
+    return DebugString(*schema);
+}
+
+TConclusion<TString> TSimpleRowViewV0::DebugString(const arrow::Schema& schema) const {
     TDebugStringActor custom;
     TGeneralActor<TDebugStringActor> resultActor(std::move(custom));
     auto conclusion = Scan(schema, resultActor);
@@ -107,7 +111,7 @@ TConclusionStatus TSimpleRowViewV0::AddToBuilders(
     AFL_VERIFY((ui32)schema->num_fields() == builders.size());
     TBuildersActor custom(builders);
     TGeneralActor<TBuildersActor> resultActor(std::move(custom));
-    return Scan(schema, resultActor);
+    return Scan(*schema, resultActor);
 }
 
 class TCompareActor {
@@ -162,8 +166,8 @@ public:
 };
 
 TConclusion<std::partial_ordering> TSimpleRowViewV0::Compare(
-    const TSimpleRowViewV0& item, const std::shared_ptr<arrow::Schema>& schema, const std::optional<ui32> columnsCount) const {
-    AFL_VERIFY(!columnsCount || *columnsCount <= (ui32)schema->num_fields());
+    const TSimpleRowViewV0& item, const arrow::Schema& schema, const std::optional<ui32> columnsCount) const {
+    AFL_VERIFY(!columnsCount || *columnsCount <= (ui32)schema.num_fields());
     TIterator itSelf(Values, schema);
     TIterator itItem(item.Values, schema);
     {
@@ -179,7 +183,7 @@ TConclusion<std::partial_ordering> TSimpleRowViewV0::Compare(
         }
     }
 
-    ui32 idx = columnsCount.value_or((ui32)schema->num_fields());
+    ui32 idx = columnsCount.value_or((ui32)schema.num_fields());
     while (!itSelf.IsFinished()) {
         AFL_VERIFY(!itItem.IsFinished());
 
@@ -291,7 +295,7 @@ public:
 TConclusion<std::shared_ptr<arrow::Scalar>> TSimpleRowViewV0::GetScalar(
     const ui32 columnIndex, const std::shared_ptr<arrow::Schema>& schema) const {
     TGetScalarActor resultActor(columnIndex, schema);
-    auto conclusion = Scan(schema, resultActor);
+    auto conclusion = Scan(*schema, resultActor);
     if (conclusion.IsFail()) {
         return conclusion;
     }

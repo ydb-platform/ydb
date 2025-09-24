@@ -1178,6 +1178,8 @@ public:
     THashMap<TString, TExportInfo::TPtr> ExportsByUid;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToExport;
     THashMap<TTxId, THashSet<ui64>> TxIdToDependentExport;
+    // This set is needed to kill all the running scheme uploaders on SchemeShard death.
+    THashSet<TActorId> RunningExportSchemeUploaders;
 
     void FromXxportInfo(NKikimrExport::TExport& exprt, const TExportInfo::TPtr exportInfo);
 
@@ -1209,6 +1211,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TTxId completedTxId);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev);
 
     void Handle(TEvExport::TEvCreateExportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvExport::TEvGetExportRequest::TPtr& ev, const TActorContext& ctx);
@@ -1216,6 +1219,7 @@ public:
     void Handle(TEvExport::TEvForgetExportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvExport::TEvListExportsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TAutoPtr<TEventHandle<NSchemeShard::NBackground::TEvListRequest>>& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev, const TActorContext& ctx);
 
     void ResumeExports(const TVector<ui64>& exportIds, const TActorContext& ctx);
     // } // NExport
@@ -1224,6 +1228,8 @@ public:
     THashMap<ui64, TImportInfo::TPtr> Imports;
     THashMap<TString, TImportInfo::TPtr> ImportsByUid;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToImport;
+    THashSet<TActorId> RunningImportSchemeGetters;
+    THashSet<TActorId> RunningImportSchemeQueryExecutors;
 
     void FromXxportInfo(NKikimrImport::TImport& exprt, const TImportInfo::TPtr importInfo);
 
@@ -1232,6 +1238,7 @@ public:
     static void PersistImportState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo);
     static void PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx);
     static void PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx);
+    static void PersistImportItemPreparedCreationQuery(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx);
     static void PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx);
 
     struct TImport {
@@ -1255,6 +1262,7 @@ public:
 
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(ui64 id, const TMaybe<ui32>& itemIdx = Nothing());
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemeReady::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvIndexBuilder::TEvCreateResponse::TPtr& ev);
@@ -1266,6 +1274,7 @@ public:
     void Handle(TEvImport::TEvForgetImportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev, const TActorContext& ctx);
 
     void ResumeImports(const TVector<ui64>& ids, const TActorContext& ctx);
     // } // NImport

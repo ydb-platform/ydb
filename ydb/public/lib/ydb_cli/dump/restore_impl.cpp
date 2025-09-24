@@ -7,6 +7,7 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
+#include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -15,6 +16,8 @@
 #include <util/stream/file.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
+
+#include <format>
 
 namespace NYdb {
 namespace NDump {
@@ -99,17 +102,24 @@ bool HasRunningIndexBuilds(TOperationClient& client, const TString& dbPath) {
     return false;
 }
 
+bool IsDatabase(TSchemeClient& client, const TString& path) {
+    auto result = DescribePath(client, path);
+    return result.GetStatus() == EStatus::SUCCESS && result.GetEntry().Type == ESchemeEntryType::SubDomain;
+}
+
 } // anonymous
 
 TRestoreClient::TRestoreClient(
         TImportClient& importClient,
         TOperationClient& operationClient,
         TSchemeClient& schemeClient,
-        TTableClient& tableClient)
+        TTableClient& tableClient,
+        NQuery::TQueryClient& queryClient)
     : ImportClient(importClient)
     , OperationClient(operationClient)
     , SchemeClient(schemeClient)
     , TableClient(tableClient)
+    , QueryClient(queryClient)
 {
 }
 
@@ -142,7 +152,32 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
     }
 
     // restore
-    auto restoreResult = RestoreFolder(fsPath, dbPath, settings);
+    auto restoreResult = RestoreFolder(fsPath, dbPath, "", settings);
+
+    if (!ViewRestorationCalls.empty()) {
+        TVector<TRestoreViewCall> calls;
+        TMaybe<TRestoreResult> lastFail;
+        size_t size;
+        do {
+            calls.clear();
+            lastFail.Clear();
+            size = ViewRestorationCalls.size();
+            std::swap(calls, ViewRestorationCalls);
+
+            for (auto& [fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, isAlreadyExisting] : calls) {
+                auto result = RestoreView(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+                if (!result.IsSuccess()) {
+                    lastFail = std::move(result);
+                }
+            }
+        } while (!ViewRestorationCalls.empty() && ViewRestorationCalls.size() < size);
+
+        // retries could not fix the errors
+        if (!ViewRestorationCalls.empty() || lastFail) {
+            restoreResult = *lastFail;
+        }
+    }
+
     if (restoreResult.IsSuccess() || settings.SavePartialResult_) {
         return restoreResult;
     }
@@ -162,7 +197,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
         switch (entry.Type) {
             case ESchemeEntryType::Directory: {
-                auto result = NConsoleClient::RemoveDirectoryRecursive(SchemeClient, TableClient, fullPath, {}, true, false);
+                auto result = RemoveDirectoryRecursive(SchemeClient, TableClient, nullptr, &QueryClient, fullPath, NConsoleClient::ERecursiveRemovePrompt::Never, {}, true, false);
                 if (!result.IsSuccess()) {
                     return restoreResult;
                 }
@@ -177,6 +212,17 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
                 }
                 break;
             }
+            case ESchemeEntryType::View: {
+                auto result = NConsoleClient::RetryFunction([&client = QueryClient, &fullPath]() {
+                    return client.ExecuteQuery(std::format(R"(
+                        DROP VIEW IF EXISTS `{}`;
+                    )", fullPath.c_str()), NQuery::TTxControl::NoTx()).ExtractValueSync();
+                });
+                if (!result.IsSuccess()) {
+                    return restoreResult;
+                }
+                break;
+            }
             default:
                 return restoreResult;
         }
@@ -185,7 +231,9 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
     return restoreResult;
 }
 
-TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
+TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings) {
+    const TString dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
+
     if (!fsPath) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST, "Folder is not specified");
     }
@@ -205,8 +253,16 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
     }
 
+    const TString objectDbPath = Join('/', dbPath, fsPath.GetName());
+
     if (IsFileExists(fsPath.Child(SCHEME_FILE_NAME))) {
-        return RestoreTable(fsPath, Join('/', dbPath, fsPath.GetName()), settings);
+        return RestoreTable(fsPath, objectDbPath, settings);
+    }
+
+    if (IsFileExists(fsPath.Child(CREATE_VIEW_FILE_NAME))) {
+        // delay view restoration
+        ViewRestorationCalls.emplace_back(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot);
+        return Result<TRestoreResult>();
     }
 
     if (IsFileExists(fsPath.Child(EMPTY_FILE_NAME))) {
@@ -218,15 +274,19 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     TVector<TFsPath> children;
     fsPath.List(children);
     for (const auto& child : children) {
+        const TString childDbPath = Join('/', dbPath, child.GetName());
         if (IsFileExists(child.Child(SCHEME_FILE_NAME))) {
-            result = RestoreTable(child, Join('/', dbPath, child.GetName()), settings);
+            result = RestoreTable(child, childDbPath, settings);
         } else if (IsFileExists(child.Child(EMPTY_FILE_NAME))) {
-            result = MakeDirectory(SchemeClient, Join('/', dbPath, child.GetName()));
+            result = MakeDirectory(SchemeClient, childDbPath);
+        } else if (IsFileExists(child.Child(CREATE_VIEW_FILE_NAME))) {
+            // delay view restoration
+            ViewRestorationCalls.emplace_back(child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings);
         } else {
-            result = RestoreFolder(child, Join('/', dbPath, child.GetName()), settings);
+            result = RestoreFolder(child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings);
         }
 
-        if (!result->IsSuccess()) {
+        if (result && !result->IsSuccess()) {
             return *result;
         }
     }
@@ -236,6 +296,63 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     }
 
     return *result;
+}
+
+TRestoreResult TRestoreClient::RestoreView(
+    const TFsPath& fsPath,
+    const TString& dbRestoreRoot,
+    const TString& dbPathRelativeToRestoreRoot,
+    const TRestoreSettings& settings
+) {
+    if (fsPath.Child(INCOMPLETE_FILE_NAME).Exists()) {
+        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
+            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath().Quote()
+        );
+    }
+
+    const TString dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
+
+    const auto createViewFile = fsPath.Child(CREATE_VIEW_FILE_NAME);
+    TString query = TFileInput(createViewFile).ReadAll();
+
+    NYql::TIssues issues;
+    if (!RewriteCreateViewQuery(query, dbRestoreRoot, IsDatabase(SchemeClient, dbRestoreRoot), dbPath,
+        createViewFile.GetPath().Quote(), issues
+    )) {
+        return Result<TRestoreResult>(dbPath, EStatus::BAD_REQUEST, issues.ToString());
+    }
+
+    if (settings.DryRun_) {
+        auto pathDescription = DescribePath(SchemeClient, dbPath);
+        if (!pathDescription.IsSuccess()) {
+            return Result<TRestoreResult>(dbPath, std::move(pathDescription));
+        }
+        if (pathDescription.GetEntry().Type != NScheme::ESchemeEntryType::View) {
+            return Result<TRestoreResult>(dbPath, EStatus::SCHEME_ERROR,
+                TStringBuilder() << "expected a view, got: " << pathDescription.GetEntry().Type
+            );
+        }
+
+        return Result<TRestoreResult>();
+    }
+
+    auto creationResult = NConsoleClient::RetryFunction([&client = QueryClient, &query]() {
+        return client.ExecuteQuery(
+            query,
+            NQuery::TTxControl::NoTx()
+        ).ExtractValueSync();
+    });
+
+    if (creationResult.IsSuccess()) {
+        return Result<TRestoreResult>();
+    }
+
+    if (creationResult.GetStatus() == EStatus::SCHEME_ERROR) {
+        // Scheme error happens when the view depends on a table (or a view) that is not yet restored.
+        // Instead of tracking view dependencies, we simply retry the creation of the view later.
+        ViewRestorationCalls.emplace_back(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+    }
+    return Result<TRestoreResult>(dbPath, std::move(creationResult));
 }
 
 TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings) {

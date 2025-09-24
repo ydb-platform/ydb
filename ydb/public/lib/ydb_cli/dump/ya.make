@@ -9,13 +9,17 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/re2
     library/cpp/bucket_quoter
     library/cpp/string_utils/quote
     ydb/library/backup
     ydb/public/api/protos
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump/util
+    ydb/public/sdk/cpp/client/ydb_import
+    ydb/public/sdk/cpp/client/ydb_operation
     ydb/public/sdk/cpp/client/ydb_proto
+    ydb/public/sdk/cpp/client/ydb_query
 )
 
 END()

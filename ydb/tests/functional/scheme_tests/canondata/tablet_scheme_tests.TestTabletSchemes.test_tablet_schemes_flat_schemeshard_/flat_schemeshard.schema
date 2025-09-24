@@ -3055,6 +3055,11 @@
                 "ColumnId": 8,
                 "ColumnName": "SourceOwnerPathId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "SourcePathType",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -3068,7 +3073,8 @@
                     5,
                     6,
                     7,
-                    8
+                    8,
+                    9
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5845,6 +5851,16 @@
                 "ColumnId": 10,
                 "ColumnName": "Issue",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "CreationQuery",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "PreparedCreationQuery",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -5860,7 +5876,9 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,

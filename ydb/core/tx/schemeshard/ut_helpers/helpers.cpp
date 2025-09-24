@@ -1061,7 +1061,8 @@ namespace NSchemeShardUT_Private {
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvExport::TEvCreateExportResponse>(handle);
-        UNIT_ASSERT_EQUAL(ev->Record.GetResponse().GetEntry().GetStatus(), expectedStatus);
+        const auto& entry = ev->Record.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL_C(entry.GetStatus(), expectedStatus, entry.GetIssues());
     }
 
     void TestExport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName,
@@ -1075,18 +1076,11 @@ namespace NSchemeShardUT_Private {
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvExport::TEvGetExportResponse>(handle);
-        const auto result = ev->Record.GetResponse().GetEntry().GetStatus();
+        const auto& entry = ev->Record.GetResponse().GetEntry();
+        const auto status = entry.GetStatus();
 
-        bool found = false;
-        for (const auto status : expectedStatuses) {
-            if (result == status) {
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            UNIT_ASSERT_C(found, "Unexpected status: " << Ydb::StatusIds::StatusCode_Name(result));
+        if (!IsIn(expectedStatuses, status)) {
+            UNIT_FAIL("Unexpected status: " << Ydb::StatusIds::StatusCode_Name(status) << ", issues: " << entry.GetIssues());
         }
 
         return ev->Record;
@@ -1180,7 +1174,8 @@ namespace NSchemeShardUT_Private {
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvImport::TEvCreateImportResponse>(handle);
-        UNIT_ASSERT_EQUAL(ev->Record.GetResponse().GetEntry().GetStatus(), expectedStatus);
+        const auto& entry = ev->Record.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL_C(entry.GetStatus(), expectedStatus, entry.GetIssues());
     }
 
     void TestImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName,
@@ -1194,18 +1189,11 @@ namespace NSchemeShardUT_Private {
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvImport::TEvGetImportResponse>(handle);
-        const auto result = ev->Record.GetResponse().GetEntry().GetStatus();
+        const auto& entry = ev->Record.GetResponse().GetEntry();
+        const auto status = entry.GetStatus();
 
-        bool found = false;
-        for (const auto status : expectedStatuses) {
-            if (result == status) {
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            UNIT_ASSERT_C(found, "Unexpected status: " << Ydb::StatusIds::StatusCode_Name(result) << " issues: " << ev->Record.GetResponse().GetEntry().GetIssues());
+        if (!IsIn(expectedStatuses, status)) {
+            UNIT_FAIL("Unexpected status: " << Ydb::StatusIds::StatusCode_Name(status) << ", issues: " << entry.GetIssues());
         }
 
         return ev->Record;

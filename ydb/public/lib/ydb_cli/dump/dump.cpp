@@ -15,6 +15,7 @@ namespace NDump {
 extern const char SCHEME_FILE_NAME[] = "scheme.pb";
 extern const char INCOMPLETE_FILE_NAME[] = "incomplete";
 extern const char EMPTY_FILE_NAME[] = "empty_dir";
+extern const char CREATE_VIEW_FILE_NAME[] = "create_view.sql";
 
 TString DataFileName(ui32 id) {
     return Sprintf("data_%02d.csv", id);
@@ -27,6 +28,7 @@ public:
         , OperationClient(driver)
         , SchemeClient(driver)
         , TableClient(driver)
+        , QueryClient(driver)
     {
     }
 
@@ -36,7 +38,7 @@ public:
     }
 
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
-        auto client = TRestoreClient(ImportClient, OperationClient, SchemeClient, TableClient);
+        auto client = TRestoreClient(ImportClient, OperationClient, SchemeClient, TableClient, QueryClient);
         return client.Restore(fsPath, dbPath, settings);
     }
 
@@ -45,6 +47,7 @@ private:
     NOperation::TOperationClient OperationClient;
     NScheme::TSchemeClient SchemeClient;
     NTable::TTableClient TableClient;
+    NQuery::TQueryClient QueryClient;
 
 }; // TImpl
 

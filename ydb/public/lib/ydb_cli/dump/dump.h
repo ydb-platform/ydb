@@ -12,6 +12,7 @@ namespace NDump {
 extern const char SCHEME_FILE_NAME[10];
 extern const char INCOMPLETE_FILE_NAME[11];
 extern const char EMPTY_FILE_NAME[10];
+extern const char CREATE_VIEW_FILE_NAME[16];
 
 TString DataFileName(ui32 id);
 

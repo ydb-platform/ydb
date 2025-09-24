@@ -2651,17 +2651,20 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
 
         TString SourcePathName;
         TPathId SourcePathId;
+        NKikimrSchemeOp::EPathType SourcePathType;
 
         EState State = EState::Waiting;
         ESubState SubState = ESubState::AllocateTxId;
         TTxId WaitTxId = InvalidTxId;
+        TActorId SchemeUploader;
         TString Issue;
 
         TItem() = default;
 
-        explicit TItem(const TString& sourcePathName, const TPathId sourcePathId)
+        explicit TItem(const TString& sourcePathName, const TPathId sourcePathId, NKikimrSchemeOp::EPathType sourcePathType)
             : SourcePathName(sourcePathName)
             , SourcePathId(sourcePathId)
+            , SourcePathType(sourcePathType)
         {
         }
 
@@ -2785,7 +2788,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         Invalid = 0,
         Waiting,
         GetScheme,
-        CreateTable,
+        CreateSchemeObject,
         Transferring,
         BuildIndexes,
         Done = 240,
@@ -2807,10 +2810,14 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString DstPathName;
         TPathId DstPathId;
         Ydb::Table::CreateTableRequest Scheme;
+        TString CreationQuery;
+        TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
         TTxId WaitTxId = InvalidTxId;
+        TActorId SchemeGetter;
+        TActorId SchemeQueryExecutor;
         int NextIndexIdx = 0;
         TString Issue;
 
@@ -2843,6 +2850,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     EState State = EState::Invalid;
     TString Issue;
     TVector<TItem> Items;
+    int WaitingViews = 0;
 
     TSet<TActorId> Subscribers;
 

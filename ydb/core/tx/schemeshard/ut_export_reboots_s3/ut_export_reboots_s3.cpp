@@ -7,9 +7,12 @@
 
 #include <library/cpp/testing/hook/hook.h>
 
+#include <aws/core/Aws.h>
+
+using namespace NKikimrSchemeOp;
+using namespace NKikimr::NWrappers::NTestHelpers;
 using namespace NSchemeShardUT_Private;
 using namespace NSchemeShardUT_Private::NExportReboots;
-using namespace NKikimr::NWrappers::NTestHelpers;
 
 namespace {
 
@@ -24,9 +27,9 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 }
 
 Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
-    using TUnderlying = std::function<void(const TVector<TString>&, const TString&, TTestWithReboots&)>;
+    using TUnderlying = std::function<void(const TVector<TTypedScheme>&, const TString&, TTestWithReboots&)>;
 
-    void Decorate(const TVector<TString>& tables, const TString& request, TUnderlying func) {
+    void Decorate(const TVector<TTypedScheme>& schemeObjects, const TString& request, TUnderlying func) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -34,19 +37,19 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        func(tables, Sprintf(request.c_str(), port), t);
+        func(schemeObjects, Sprintf(request.c_str(), port), t);
     }
 
-    void RunS3(const TVector<TString>& tables, const TString& request) {
-        Decorate(tables, request, &Run);
+    void RunS3(const TVector<TTypedScheme>& schemeObjects, const TString& request) {
+        Decorate(schemeObjects, request, &Run);
     }
 
-    void CancelS3(const TVector<TString>& tables, const TString& request) {
-        Decorate(tables, request, &Cancel);
+    void CancelS3(const TVector<TTypedScheme>& schemeObjects, const TString& request) {
+        Decorate(schemeObjects, request, &Cancel);
     }
 
-    void ForgetS3(const TVector<TString>& tables, const TString& request) {
-        Decorate(tables, request, &Forget);
+    void ForgetS3(const TVector<TTypedScheme>& schemeObjects, const TString& request) {
+        Decorate(schemeObjects, request, &Forget);
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
@@ -119,6 +122,60 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
               items {
                 source_path: "/MyRoot/Table2"
                 destination_prefix: "table2"
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleView) {
+        RunS3({
+            {
+                EPathTypeView,
+                R"(
+                    Name: "View"
+                    QueryText: "some query"
+                )"
+            }
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/View"
+                destination_prefix: ""
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnViewsAndTables) {
+        RunS3({
+            {
+                EPathTypeView,
+                R"(
+                    Name: "View"
+                    QueryText: "some query"
+                )"
+            }, {
+                EPathTypeTable,
+                R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Utf8" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )"
+            }
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/View"
+                destination_prefix: "view"
+              }
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "table"
               }
             }
         )");
@@ -199,6 +256,60 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleView) {
+        CancelS3({
+            {
+                EPathTypeView,
+                R"(
+                    Name: "View"
+                    QueryText: "some query"
+                )"
+            }
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/View"
+                destination_prefix: ""
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnViewsAndTables) {
+        CancelS3({
+            {
+                EPathTypeView,
+                R"(
+                    Name: "View"
+                    QueryText: "some query"
+                )"
+            }, {
+                EPathTypeTable,
+                R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Utf8" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )"
+            }
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/View"
+                destination_prefix: "view"
+              }
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "table"
+              }
+            }
+        )");
+    }
+
     Y_UNIT_TEST(ForgetShouldSucceedOnSingleShardTable) {
         ForgetS3({
             R"(
@@ -269,6 +380,60 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
               items {
                 source_path: "/MyRoot/Table2"
                 destination_prefix: "table2"
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleView) {
+        ForgetS3({
+            {
+                EPathTypeView,
+                R"(
+                    Name: "View"
+                    QueryText: "some query"
+                )"
+            }
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/View"
+                destination_prefix: ""
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(ForgetShouldSucceedOnViewsAndTables) {
+        ForgetS3({
+            {
+                EPathTypeView,
+                R"(
+                    Name: "View"
+                    QueryText: "some query"
+                )"
+            }, {
+                EPathTypeTable,
+                R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Utf8" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )"
+            }
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/View"
+                destination_prefix: "view"
+              }
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "table"
               }
             }
         )");

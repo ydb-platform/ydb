@@ -4283,6 +4283,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     item.SourcePathId.OwnerId = rowset.GetValueOrDefault<Schema::ExportItems::SourceOwnerPathId>(selfId);
                     item.SourcePathId.LocalPathId = rowset.GetValue<Schema::ExportItems::SourcePathId>();
+                    item.SourcePathType = rowset.GetValue<Schema::ExportItems::SourcePathType>();
 
                     item.State = static_cast<TExportInfo::EState>(rowset.GetValue<Schema::ExportItems::State>());
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ExportItems::BackupTxId>(InvalidTxId);
@@ -4384,6 +4385,19 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Ydb::Table::CreateTableRequest scheme;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(scheme, rowset.GetValue<Schema::ImportItems::Scheme>()));
                         item.Scheme = scheme;
+                    }
+
+                    if (rowset.HaveValue<Schema::ImportItems::CreationQuery>()) {
+                        item.CreationQuery = rowset.GetValue<Schema::ImportItems::CreationQuery>();
+                    }
+
+                    if (rowset.HaveValue<Schema::ImportItems::PreparedCreationQuery>()) {
+                        NKikimrSchemeOp::TModifyScheme preparedQuery;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(
+                            preparedQuery,
+                            rowset.GetValue<Schema::ImportItems::PreparedCreationQuery>()
+                        ));
+                        item.PreparedCreationQuery = std::move(preparedQuery);
                     }
 
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());

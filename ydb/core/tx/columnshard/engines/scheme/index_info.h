@@ -150,10 +150,14 @@ private:
     std::shared_ptr<TColumnFeatures> BuildDefaultColumnFeatures(
         const NTable::TColumn& column, const std::shared_ptr<IStoragesManager>& operators) const;
 
-    const TString& GetIndexStorageId(const ui32 indexId) const {
-        auto it = Indexes.find(indexId);
-        AFL_VERIFY(it != Indexes.end());
-        return it->second->GetStorageId();
+    const TString& GetIndexStorageId(const ui32 indexId, const TString& specialTier) const {
+        if (specialTier && specialTier != IStoragesManager::DefaultStorageId) {
+            return specialTier;
+        } else {
+            const auto* findIndex = Indexes.FindPtr(indexId);
+            AFL_VERIFY(findIndex)("id", indexId);
+            return (*findIndex)->GetStorageId();
+        }
     }
 
     const TString& GetColumnStorageId(const ui32 columnId, const TString& specialTier) const {
@@ -174,9 +178,8 @@ private:
 
 public:
     const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
-        auto it = Indexes.find(entityId);
-        if (it != Indexes.end()) {
-            return it->second->GetStorageId();
+        if (Indexes.contains(entityId)) {
+            return GetIndexStorageId(entityId, specialTier);
         }
         return GetColumnStorageId(entityId, specialTier);
     }

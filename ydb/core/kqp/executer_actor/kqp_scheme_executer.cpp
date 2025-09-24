@@ -153,6 +153,7 @@ public:
         modifyScheme->SetWorkingDir(GetSessionDirsBasePath(Database));
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
         modifyScheme->SetAllowCreateInTempDir(false);
+        modifyScheme->SetFailOnExist(true);
 
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(SessionId);

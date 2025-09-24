@@ -2484,7 +2484,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         }
 
         const auto& stageSource = stage.GetSources(0);
-        auto& input = task.Inputs[stageSource.GetInputIndex()];
+        auto& input = task.Inputs.at(stageSource.GetInputIndex());
         input.SourceType = NYql::KqpReadRangesSourceName;
         input.ConnectionInfo = NYql::NDq::TSourceInput{};
 
@@ -2953,6 +2953,7 @@ void TKqpTasksGraph::UpdateRemoteTasksNodeId(const THashMap<ui64, TVector<ui64>>
 }
 
 TKqpTasksGraph::TKqpTasksGraph(
+    const TString& database,
     const TVector<IKqpGateway::TPhysicalTxData>& transactions,
     const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
     const TPartitionPrunerConfig& partitionPrunerConfig,
@@ -2966,6 +2967,9 @@ TKqpTasksGraph::TKqpTasksGraph(
     , Counters(counters)
     , BufferActorId(bufferActorId)
 {
+    GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
+    GetMeta().Database = database;
+
     if (Transactions.empty()) {
         return;
     }

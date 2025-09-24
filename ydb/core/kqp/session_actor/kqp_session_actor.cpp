@@ -795,7 +795,7 @@ public:
             txs.emplace_back(QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx), QueryState->QueryData);
 
             auto txAlloc = std::make_shared<TTxAllocatorState>(AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
-            auto tasksGraph = TKqpTasksGraph(txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {});
+            auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {});
             tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
 
             // Resolve tables

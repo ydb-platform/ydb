@@ -259,6 +259,15 @@ struct TRpcServices {
     struct TEvForgetOperation : public TEventLocal<TEvForgetOperation, TRpcServices::EvForgetOperation> {};
 };
 
+namespace NRuntimeEvents {
+
+enum class EType {
+    COMMON,
+    BOOTSTRAP_CLUSTER,
+};
+
+} // NRuntimeEvents
+
 // Should be specialized for real responses
 template <class T>
 void FillYdbStatus(T& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status);
@@ -1118,6 +1127,16 @@ public:
     const TMaybe<TString> GetGrpcUserAgent() const {
         return GetPeerMetaValues(NYdbGrpc::GRPC_USER_AGENT_HEADER);
     }
+
+    virtual NRuntimeEvents::EType GetRuntimeEventType() = 0;
+};
+
+template <typename NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
+class TEvProxyRuntimeEventWithType : public TEvProxyRuntimeEvent {
+public:
+    NRuntimeEvents::EType GetRuntimeEventType() override {
+        return RuntimeEventType;
+    }
 };
 
 template <ui32 TRpcId, typename TDerived>
@@ -1135,13 +1154,19 @@ public:
     }
 };
 
-template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
+template <ui32 TRpcId,
+    typename TReq,
+    typename TResp,
+    bool IsOperation,
+    typename TDerived,
+    class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>,
+    typename NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
 class TGRpcRequestWrapperImpl
     : public std::conditional_t<IsOperation,
         TGrpcResponseSenderImpl<TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>,
         IRequestNoOpCtx>
     , public std::conditional_t<TRpcId == TRpcServices::EvGrpcRuntimeRequest,
-        TEvProxyRuntimeEvent,
+        TEvProxyRuntimeEventWithType<RuntimeEventType>,
         TEvProxyLegacyEvent<TRpcId, TDerived>>
 {
     friend class TProtoResponseHelper;
@@ -1499,8 +1524,14 @@ private:
     TMaybe<TString> TraceId;
 };
 
-template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
-class TGRpcRequestValidationWrapperImpl : public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived, TMethodAccessorTraits> {
+template <ui32 TRpcId,
+    typename TReq,
+    typename TResp,
+    bool IsOperation,
+    typename TDerived,
+    class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>,
+    typename NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
+class TGRpcRequestValidationWrapperImpl : public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived, TMethodAccessorTraits, RuntimeEventType> {
 public:
 
     TGRpcRequestValidationWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
@@ -1529,13 +1560,17 @@ public:
 
 class IFacilityProvider;
 
-template <typename TReq, typename TResp, bool IsOperation, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
+template <typename TReq,
+    typename TResp,
+    bool IsOperation,
+    class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>,
+    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
 class TGrpcRequestCall
     : public std::conditional_t<TProtoHasValidate<TReq>::Value,
         TGRpcRequestValidationWrapperImpl<
             TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits>, TMethodAccessorTraits>,
         TGRpcRequestWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits>, TMethodAccessorTraits>>
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>, TMethodAccessorTraits>>
 {
     using TRequestIface = typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type;
 
@@ -1606,11 +1641,17 @@ private:
     const TRequestAuxSettings AuxSettings;
 };
 
-template <typename TReq, typename TResp, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, true>>
-using TGrpcRequestOperationCall = TGrpcRequestCall<TReq, TResp, true, TMethodAccessorTraits>;
+template <typename TReq,
+    typename TResp,
+    class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, true>,
+    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
+using TGrpcRequestOperationCall = TGrpcRequestCall<TReq, TResp, true, TMethodAccessorTraits, RuntimeEventType>;
 
-template <typename TReq, typename TResp, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, false>>
-using TGrpcRequestNoOperationCall = TGrpcRequestCall<TReq, TResp, false, TMethodAccessorTraits>;
+template <typename TReq,
+    typename TResp,
+    class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, false>,
+    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
+using TGrpcRequestNoOperationCall = TGrpcRequestCall<TReq, TResp, false, TMethodAccessorTraits, RuntimeEventType>;
 
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, TRateLimiterMode RlMode = TRateLimiterMode::Off>
 class TGRpcRequestWrapper

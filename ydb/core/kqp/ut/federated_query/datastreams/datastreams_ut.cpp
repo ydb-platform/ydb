@@ -346,7 +346,7 @@ public:
         return operation;
     }
 
-    void WaitScriptExecution(const TOperation::TOperationId& operationId, EExecStatus finalStatus = EExecStatus::Completed, bool waitRetry = false) {
+    TScriptExecutionOperation WaitScriptExecution(const TOperation::TOperationId& operationId, EExecStatus finalStatus = EExecStatus::Completed, bool waitRetry = false) {
         const bool waitForFinalStatus = !waitRetry && IsIn({EExecStatus::Completed, EExecStatus::Failed}, finalStatus);
 
         std::optional<TScriptExecutionOperation> operation;
@@ -375,10 +375,11 @@ public:
         }
 
         UNIT_ASSERT_VALUES_EQUAL(operation->Ready(), waitForFinalStatus);
+        return *operation;
     }
 
-    void ExecAndWaitScript(const TString& query, EExecStatus finalStatus = EExecStatus::Completed, std::optional<TExecuteScriptSettings> settings = std::nullopt) {
-        WaitScriptExecution(ExecScript(query, settings, /* waitRunning */ false), finalStatus, false);
+    TScriptExecutionOperation ExecAndWaitScript(const TString& query, EExecStatus finalStatus = EExecStatus::Completed, std::optional<TExecuteScriptSettings> settings = std::nullopt) {
+        return WaitScriptExecution(ExecScript(query, settings, /* waitRunning */ false), finalStatus, false);
     }
 
     TResultSet FetchScriptResult(const TOperation::TOperationId& operationId, ui64 resultSetId = 0) {
@@ -557,18 +558,23 @@ public:
         return session;
     }
 
-    static void ReadMockPqMessage(IMockPqWriteSession::TPtr session, const TString& message) {
+    static void ReadMockPqMessages(IMockPqWriteSession::TPtr session, const std::vector<TString>& messages) {
+        ui64 receivedMessages = 0;
         WaitFor(TEST_OPERATION_TIMEOUT, "read message from mock pq gateway", [&](TString& errorString) {
             const auto data = session->ExtractData();
-            if (!data.empty()) {
-                UNIT_ASSERT_VALUES_EQUAL(data.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(data[0], message);
-                return true;
+            UNIT_ASSERT_GE(messages.size(), receivedMessages + data.size());
+
+            for (const auto& message : data) {
+                UNIT_ASSERT_VALUES_EQUAL(message, messages[receivedMessages++]);
             }
 
             errorString = "no messages found";
-            return false;
+            return receivedMessages == messages.size();
         });
+    }
+
+    static void ReadMockPqMessage(IMockPqWriteSession::TPtr session, const TString& message) {
+        ReadMockPqMessages(session, {message});
     }
 
     static void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString&)> callback) {
@@ -1170,6 +1176,34 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             WaitCheckpointUpdate(executionId);
         }
     }
+
+    Y_UNIT_TEST_F(S3RuntimeListingDisabledForStreamingQueries, TStreamingTestFixture) {
+        constexpr char sourceBucket[] = "test_bucket_disable_runtime_listing";
+        constexpr char objectPath[] = "test_bucket_object.json";
+        constexpr char objectContent[] = R"({"data": "x"})";
+        CreateBucketWithObject(sourceBucket, objectPath, objectContent);
+
+        constexpr char s3SourceName[] = "s3Source";
+        CreateS3Source(sourceBucket, s3SourceName);
+
+        const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
+            PRAGMA s3.UseRuntimeListing = "true";
+            INSERT INTO `{s3_source}`.`path/` WITH (
+                FORMAT = "json_each_row"
+            ) SELECT * FROM `{s3_source}`.`{object_path}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    data String NOT NULL
+                )
+            )
+        )", "s3_source"_a = s3SourceName, "object_path"_a = objectPath), {
+            .SaveState = true
+        }, /* waitRunning */ false);
+
+        const auto& readyOp = WaitScriptExecution(operationId);
+        UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Runtime listing is not supported for streaming queries, pragma value was ignored");
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "{\"data\":\"x\"}\n{\"data\": \"x\"}");
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
@@ -1450,6 +1484,81 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"key": 4, "value": "value4"})",
         });
         ReadTopicMessages(outputTopicName, {"1-4"});
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryWithS3Join, TStreamingTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char sourceBucket[] = "test_streaming_query_with_s3_join";
+        constexpr char objectContent[] = R"(
+{"fqdn": "host1.example.com", "payload": "P1"}
+{"fqdn": "host2.example.com", "payload": "P2"}
+{"fqdn": "host3.example.com", "payload": "P3"})";
+        CreateBucketWithObject(sourceBucket, "path/test_object.json", objectContent);
+
+        constexpr char inputTopicName[] = "inputTopicName";
+        constexpr char outputTopicName[] = "outputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        constexpr char s3SourceName[] = "s3Source";
+        CreatePqSource(pqSourceName);
+        CreateS3Source(sourceBucket, s3SourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $s3_lookup = SELECT * FROM `{s3_source}`.`path/` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        fqdn String,
+                        payload String
+                    )
+                );
+
+                $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        time Int32 NOT NULL,
+                        event String,
+                        host String
+                    )
+                );
+
+                $joined = SELECT l.payload AS payload, p.* FROM $pq_source AS p
+                LEFT JOIN $s3_lookup AS l
+                ON (l.fqdn = p.host);
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Unwrap(event || "-" || payload) FROM $joined
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "s3_source"_a = s3SourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+
+        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
+            {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
+            {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
+            {2, R"({"time": 2, "event": "A", "host": "host1.example.com"})"},
+        };
+        readSession->AddDataReceivedEvent(sampleMessages);
+
+        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
+        const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1"};
+        ReadMockPqMessages(writeSession, sampleResult);
+
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+
+        WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(sampleMessages);
+        ReadMockPqMessages(WaitMockPqWriteSession(pqGateway, outputTopicName), sampleResult);
     }
 }
 

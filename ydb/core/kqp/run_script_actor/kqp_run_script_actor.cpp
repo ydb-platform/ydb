@@ -152,6 +152,7 @@ public:
             /* CustomerSuppliedId */ traceId,
             SelfId()
         );
+        UserRequestContext->IsStreamingQuery = SaveQueryPhysicalGraph;
 
         LOG_I("Bootstrap");
 

@@ -1317,11 +1317,6 @@ public:
             return false;
         }
 
-        if (!CanCacheQuery(QueryState->PreparedQuery->GetPhysicalQuery())) {
-            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Can not cache query, save state of query is not allowed");
-            return false;
-        }
-
         if (!tx) {
             if (txCtx.DeferredEffects.Empty()) {
                 // All transactions already finished

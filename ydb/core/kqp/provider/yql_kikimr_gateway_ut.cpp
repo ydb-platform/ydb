@@ -438,7 +438,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TestLoadServiceAccountSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
+    Y_UNIT_TEST_QUAD(TestLoadServiceAccountSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets, UseAuthToken) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         if (UseSchemaSecrets) {
             kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
         }
-        auto db = kikimr.GetTableClient();
+        auto db = UseAuthToken ? kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")) : kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         TString secretId = "mySaSecretId";
@@ -473,7 +473,11 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalTableName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        if (UseAuthToken) {
+            gateway->SetToken(TestCluster, new NACLib::TUserToken("root@builtin", {}));
+        }
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalTableName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();

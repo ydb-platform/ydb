@@ -1985,7 +1985,9 @@ void TKikimrRunner::KikimrStart() {
         Monitoring->Start(ActorSystem.Get());
     }
 
-    GRpcServersManager = ActorSystem->Register(new TGRpcServersManager(std::move(GRpcServersFactory), ProcessMemoryInfoProvider));
+    if (GRpcServersFactory) {
+        GRpcServersManager = ActorSystem->Register(new TGRpcServersManager(std::move(GRpcServersFactory), ProcessMemoryInfoProvider));
+    }
 
     if (SqsHttp) {
         SqsHttp->Start();
@@ -2090,9 +2092,11 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     }
 
     // stop processing grpc requests/response - we must stop feeding ActorSystem
-    TManualEvent event;
-    ActorSystem->Send(new IEventHandle(GRpcServersManager, {}, new TGRpcServersManager::TEvStop(&event)));
-    event.WaitI();
+    if (GRpcServersManager) {
+        TManualEvent event;
+        ActorSystem->Send(new IEventHandle(GRpcServersManager, {}, new TGRpcServersManager::TEvStop(&event)));
+        event.WaitI();
+    }
 
     if (ActorSystem) {
         ActorSystem->Stop();

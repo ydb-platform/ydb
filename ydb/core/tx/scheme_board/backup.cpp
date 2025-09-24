@@ -92,14 +92,14 @@ public:
             }
         }
 
-        bool AddDescription(const TString& description, ui64 version, size_t replicaGroupIndex) {
+        bool AddDescription(TString&& description, ui64 version, size_t replicaGroupIndex) {
             if (DescriptionsByReplicaGroup.size() <= replicaGroupIndex) {
                 return false;
             }
             ++DescriptionsByReplicaGroup[replicaGroupIndex].Received;
             if (version > MostRecentVersion) {
                 MostRecentVersion = version;
-                MostRecentDescription = description;
+                MostRecentDescription = std::move(description);
             }
             return true;
         }
@@ -239,25 +239,13 @@ private:
         const TString path = it->second;
         SBB_LOG_D("Handle " << ev->Get()->ToString() << ", path: " << path);
 
-        const TString& jsonDescription = ev->Get()->Record.GetJson();
+        TString jsonDescription = std::move(*ev->Get()->Record.MutableJson());
         if (!jsonDescription.empty()) {
             try {
                 TJsonValue parsedJson;
                 if (NJson::ReadJsonFastTree(jsonDescription, &parsedJson)) {
                     if (parsedJson.Has("PathDescription")) {
                         const auto& pathDescription = parsedJson["PathDescription"];
-                        // parse children and add to pending queue
-                        if (pathDescription.Has("Children")) {
-                            const auto& children = parsedJson["PathDescription"]["Children"];
-                            SBB_LOG_T("Queue children: " << WriteJson(&children, false));
-                            for (const auto& child : children.GetArraySafe()) {
-                                if (child.Has("Name")) {
-                                    TString childPath = TStringBuilder() << path << "/" << child["Name"].GetStringSafe();
-                                    PendingPaths.emplace(std::move(childPath));
-                                    ++TotalPaths;
-                                }
-                            }
-                        }
                         if (RequireMajority) {
                             if (pathDescription.Has("Self") && pathDescription["Self"].Has("PathVersion")) {
                                 const auto version = std::stoull(pathDescription["Self"]["PathVersion"].GetStringSafe());
@@ -266,14 +254,16 @@ private:
                                     SBB_LOG_N("No description aggregate for cookie: " << cookie);
                                     return;
                                 }
-                                if (!aggregate->second.AddDescription(jsonDescription, version, GetReplicaGroupIndex(ev->Cookie))) {
+                                if (!aggregate->second.AddDescription(std::move(jsonDescription), version, GetReplicaGroupIndex(ev->Cookie))) {
                                     SBB_LOG_N("Invalid replica group: " << GetReplicaGroupIndex(ev->Cookie)
                                         << ", cookie: " << ev->Cookie
                                     );
                                     return;
                                 }
                                 if (aggregate->second.IsMajorityReached()) {
-                                    (*OutputFile) << aggregate->second.MostRecentDescription << "\n";
+                                    const TString& chosenDescription = aggregate->second.MostRecentDescription;
+                                    ParseAndAddChildrenToPending(chosenDescription, path);
+                                    (*OutputFile) << chosenDescription << "\n";
                                     ++ProcessedPaths;
                                     DescriptionsByCookie.erase(aggregate);
                                     MarkPathCompleted(it);
@@ -282,6 +272,7 @@ private:
                                 SBB_LOG_I("No version in path description");
                             }
                         } else {
+                            AddChildrenToPending(pathDescription, path);
                             (*OutputFile) << jsonDescription << "\n";
                             ++ProcessedPaths;
                             MarkPathCompleted(it);
@@ -299,6 +290,30 @@ private:
 
         if (PathByCookie.empty() && PendingPaths.empty()) {
             ReplySuccess();
+        }
+    }
+
+    void ParseAndAddChildrenToPending(const TString& jsonDescription, const TString& path) {
+        TJsonValue parsedJson;
+        if (NJson::ReadJsonFastTree(jsonDescription, &parsedJson)) {
+            if (parsedJson.Has("PathDescription")) {
+                const auto& pathDescription = parsedJson["PathDescription"];
+                AddChildrenToPending(pathDescription, path);
+            }
+        }
+    }
+
+    void AddChildrenToPending(const TJsonValue& pathDescription, const TString& path) {
+        if (pathDescription.Has("Children")) {
+            const auto& children = pathDescription["Children"];
+            SBB_LOG_T("Queue children: " << WriteJson(&children, false));
+            for (const auto& child : children.GetArraySafe()) {
+                if (child.Has("Name")) {
+                    TString childPath = TStringBuilder() << path << "/" << child["Name"].GetStringSafe();
+                    PendingPaths.emplace(std::move(childPath));
+                    ++TotalPaths;
+                }
+            }
         }
     }
 

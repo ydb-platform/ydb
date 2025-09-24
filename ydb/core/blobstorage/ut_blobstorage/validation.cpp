@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(RequestValidation) {
         TLogoBlobID partId(100, 1, 1, 0, /*blobSize=*/0, 0, /*partId=*/1);
         TString data;
         auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(partId, TRope(data), ctx.VDiskId, false, nullptr, TInstant::Max(),
-                    NKikimrBlobStorage::EPutHandleClass::TabletLog);
+            NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
         ctx.Env->Runtime->Send(new IEventHandle(ctx.VDiskActorId, ctx.Edge, ev.release()), ctx.VDiskActorId.NodeId());
 
         auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(ctx.Edge, false, TInstant::Max());
@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(RequestValidation) {
         for (ui32 i = 0; i < vputsCount; ++i) {
             TLogoBlobID partId(100, 1, 1, 0, /*blobSize=*/0, i, /*partId=*/1);
             TString data;
-            ev->AddVPut(partId, TRcBuf(data), nullptr, false, false, nullptr, {});
+            ev->AddVPut(partId, TRcBuf(data), nullptr, false, false, nullptr, {}, false);
         }
         ctx.Env->Runtime->Send(new IEventHandle(ctx.VDiskActorId, ctx.Edge, ev.release()), ctx.VDiskActorId.NodeId());
 

@@ -7,7 +7,7 @@
 - [Глоссарий](glossary.md)
 - [Архитектура](architecture.md)
 - [Подключение к базе данных](connect.md)
-- [Модель данных](datamodel/index.md)
+- [Схемные объекты](datamodel/index.md)
 - [Топология кластера](topology.md)
 - [Транзакции](transactions.md)
 - [Вторичные индексы](secondary_indexes.md)

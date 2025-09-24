@@ -1,7 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Union
-
-import grpc
+from typing import Optional
 
 from . import issues
 
@@ -15,6 +13,7 @@ _errors_retriable_slow_backoff_types = [
     issues.Overloaded,
     issues.SessionPoolEmpty,
     issues.ConnectionError,
+    issues.ConnectionLost,
 ]
 _errors_retriable_slow_backoff_idempotent_types = [
     issues.Undetermined,
@@ -22,6 +21,10 @@ _errors_retriable_slow_backoff_idempotent_types = [
 
 
 def check_retriable_error(err, retry_settings, attempt):
+    if isinstance(err, issues.Cancelled):
+        if retry_settings.retry_cancelled:
+            return ErrorRetryInfo(True, retry_settings.fast_backoff.calc_timeout(attempt))
+
     if isinstance(err, issues.NotFound):
         if retry_settings.retry_not_found:
             return ErrorRetryInfo(True, retry_settings.fast_backoff.calc_timeout(attempt))
@@ -54,26 +57,3 @@ def check_retriable_error(err, retry_settings, attempt):
 class ErrorRetryInfo:
     is_retriable: bool
     sleep_timeout_seconds: Optional[float]
-
-
-def stream_error_converter(exc: BaseException) -> Union[issues.Error, BaseException]:
-    """Converts gRPC stream errors to appropriate YDB exception types.
-
-    This function takes a base exception and converts specific gRPC aio stream errors
-    to their corresponding YDB exception types for better error handling and semantic
-    clarity.
-
-    Args:
-        exc (BaseException): The original exception to potentially convert.
-
-    Returns:
-        BaseException: Either a converted YDB exception or the original exception
-                      if no specific conversion rule applies.
-    """
-    if isinstance(exc, (grpc.RpcError, grpc.aio.AioRpcError)):
-        if exc.code() == grpc.StatusCode.UNAVAILABLE:
-            return issues.Unavailable(exc.details() or "")
-        if exc.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
-            return issues.DeadlineExceed("Deadline exceeded on request")
-        return issues.Error("Stream has been terminated. Original exception: {}".format(str(exc.details())))
-    return exc

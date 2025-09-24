@@ -16,6 +16,15 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(secretDescription.GetValue(), value);
         UNIT_ASSERT_VALUES_EQUAL(secretDescription.GetVersion(), version);
     }
+
+    NKikimrScheme::TEvDescribeSchemeResult DescribePathWithSecretValue(
+        TTestActorRuntime& runtime,
+        const TString& path
+    ) {
+        NKikimrSchemeOp::TDescribeOptions opts;
+        opts.SetReturnSecretValue(true);
+        return DescribePath(runtime, path, opts);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardSecretTestReboots) {
@@ -38,7 +47,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                const auto describeResult = DescribePath(runtime, "/MyRoot/dir/test-secret");
+                const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
                 TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
             }
         });
@@ -71,7 +80,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                const auto describeResult = DescribePath(runtime, "/MyRoot/dir/test-secret");
+                const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
                 TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
                 ExpectEqualSecretDescription(describeResult, "test-secret", "test-value-1", 1);
             }

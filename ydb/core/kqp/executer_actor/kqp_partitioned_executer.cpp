@@ -495,8 +495,8 @@ private:
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
         auto bufferActorId = RegisterWithSameMailbox(bufferActor);
 
-        TPartitionPruner::TConfig prunerConfig{
-            .BatchOperationRange=NBatchOperations::MakePartitionRange(partInfo->BeginRange, partInfo->EndRange, KeyIds.size())
+        TPartitionPrunerConfig prunerConfig{
+            .BatchOperationRange = NBatchOperations::MakePartitionRange(partInfo->BeginRange, partInfo->EndRange, KeyIds.size())
         };
 
         std::optional<TLlvmSettings> llvmSettings;
@@ -506,7 +506,7 @@ private:
 
         auto batchSettings = NBatchOperations::TSettings(partInfo->LimitSize, Settings.MinBatchSize);
         const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig);
-        auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, TResultSetFormatSettings{}, RequestCounters,
+        auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
             executerConfig, AsyncIoFactory, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
             llvmSettings, {}, 0);

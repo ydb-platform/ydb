@@ -16,6 +16,7 @@
 #include "flat_executor_compaction_logic.h"
 #include "flat_executor_gclogic.h"
 #include "flat_executor_vacuum_logic.h"
+#include "flat_executor_backup.h"
 #include "flat_bio_events.h"
 #include "flat_bio_stats.h"
 #include "flat_fwd_sieve.h"
@@ -500,8 +501,6 @@ class TExecutor
     TControlWrapper LogFlushDelayOverrideUsec;
     TControlWrapper MaxCommitRedoMB;
 
-    TActorId BackupWriter;
-
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
     void PassAway() override;
@@ -602,9 +601,11 @@ class TExecutor
     void Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled);
     void Handle(TEvBlobStorage::TEvGetResult::TPtr&, const TActorContext&);
     void Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev);
+    void Handle(NBackup::TEvSnapshotCompleted::TPtr &ev);
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);
+    void ForceSendCounters();
     void UpdateYellow();
     void UpdateCompactions();
     void Handle(TEvTablet::TEvCheckBlobstorageStatusResult::TPtr &ev);
@@ -637,6 +638,9 @@ class TExecutor
             TCompactionChangesCtx& ctx,
             const NTable::TCompactionChanges& changes,
             NKikimrCompaction::ECompactionStrategy strategy);
+
+    void RenderHtmlCounters(TStringStream& str) const;
+    void RenderJsonCounters(TStringStream& str) const;
 
 public:
     void Describe(IOutputStream &out) const override

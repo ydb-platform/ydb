@@ -1,15 +1,14 @@
 #include "yql_s3_provider_impl.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
-#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
-
-#include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
 
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -27,10 +26,6 @@ TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
 
     return {};
 }
-
-}
-
-namespace {
 
 class TS3DataSinkTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
@@ -54,6 +49,8 @@ private:
     }
 
     TStatus HandleWrite(const TExprNode::TPtr& input, TExprContext& ctx) {
+        State_->Configuration->CheckDisabledPragmas(ctx);
+
         if (!EnsureArgsCount(*input, 4U, ctx)) {
             return TStatus::Error;
         }
@@ -92,7 +89,7 @@ private:
                 }
 
                 TExprNode::TPtr node = value.Ptr();
-                if (targetType && TryConvertTo(node, *targetType, ctx) == TStatus::Error) {
+                if (targetType && TryConvertTo(node, *targetType, ctx, *State_->Types) == TStatus::Error) {
                     ctx.AddError(TIssue(ctx.GetPosition(source->Pos()), "Failed to convert input columns types to scheme types"));
                     return TStatus::Error;
                 }
@@ -122,7 +119,7 @@ private:
         }
 
         if (targetType) {
-            const auto status = TryConvertTo(input->ChildRef(TS3WriteObject::idx_Input), *ctx.MakeType<TListExprType>(targetType), ctx);
+            const auto status = TryConvertTo(input->ChildRef(TS3WriteObject::idx_Input), *ctx.MakeType<TListExprType>(targetType), ctx, *State_->Types);
             if (status == TStatus::Error) {
                 ctx.AddError(TIssue(ctx.GetPosition(source->Pos()), "Row type mismatch for S3 external table"));
                 return TStatus::Error;
@@ -476,7 +473,7 @@ private:
     const TS3State::TPtr State_;
 };
 
-}
+} // anonymous namespace
 
 THolder<TVisitorTransformerBase> CreateS3DataSinkTypeAnnotationTransformer(TS3State::TPtr state) {
     return MakeHolder<TS3DataSinkTypeAnnotationTransformer>(state);

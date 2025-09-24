@@ -1096,6 +1096,19 @@ namespace {
                     return false;
                 }
                 Types_.UseUrlListerForFolder = ("UseUrlListerForFolder" == name);
+            } else if (name == "EarlyExpandSeq" || name == "DisableEarlyExpandSeq") {
+                if (args.size() != 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                    return false;
+                }
+
+                Types_.EarlyExpandSeq = (name == "EarlyExpandSeq");
+            } else if (name == "DirectRowDependsOn" || name == "DisableDirectRowDependsOn") {
+                if (args.size() != 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                    return false;
+                }
+                Types_.DirectRowDependsOn = ("DirectRowDependsOn" == name);
             } else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;

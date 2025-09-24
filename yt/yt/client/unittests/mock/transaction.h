@@ -230,6 +230,25 @@ public:
         TSharedRange<TRowModification> modifications,
         const TModifyRowsOptions& options), (override));
 
+    MOCK_METHOD(void, WriteRows, (
+        const NYPath::TYPath& path,
+        NTableClient::TNameTablePtr nameTable,
+        TSharedRange<NTableClient::TUnversionedRow> rows,
+        const TModifyRowsOptions& options,
+        NTableClient::ELockType lockType), (override));
+
+    MOCK_METHOD(void, WriteRows, (
+        const NYPath::TYPath& path,
+        NTableClient::TNameTablePtr nameTable,
+        TSharedRange<NTableClient::TVersionedRow> rows,
+        const TModifyRowsOptions& options), (override));
+
+    MOCK_METHOD(void, DeleteRows, (
+        const NYPath::TYPath& path,
+        NTableClient::TNameTablePtr nameTable,
+        TSharedRange<NTableClient::TLegacyKey> keys,
+        const TModifyRowsOptions& options), (override));
+
     MOCK_METHOD(TFuture<TPushQueueProducerResult>, PushQueueProducer, (
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,

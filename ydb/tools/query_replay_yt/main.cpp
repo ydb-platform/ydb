@@ -57,7 +57,6 @@ class TQueryReplayMapper
     TVector<TString> UdfFiles;
     ui32 ActorSystemThreadsCount = 5;
     NActors::NLog::EPriority YqlLogPriority = NActors::NLog::EPriority::PRI_ERROR;
-    bool EnableAntlr4Parser;
     bool EnableOltpSinkSideBySinkCompare;
 
 public:
@@ -97,14 +96,13 @@ public:
 public:
     TQueryReplayMapper() = default;
 
-    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount, EnableAntlr4Parser, EnableOltpSinkSideBySinkCompare, YqlLogPriority);
+    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount, EnableOltpSinkSideBySinkCompare, YqlLogPriority);
 
-    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount, bool enableAntlr4Parser, bool enableOltpSinkSideBySinkCompare,
+    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount, bool enableOltpSinkSideBySinkCompare,
         NActors::NLog::EPriority yqlLogPriority = NActors::NLog::EPriority::PRI_ERROR)
         : UdfFiles(udfFiles)
         , ActorSystemThreadsCount(actorSystemThreadsCount)
         , YqlLogPriority(yqlLogPriority)
-        , EnableAntlr4Parser(enableAntlr4Parser)
         , EnableOltpSinkSideBySinkCompare(enableOltpSinkSideBySinkCompare)
     {}
 
@@ -158,7 +156,7 @@ public:
         THolder<TQueryReplayEvents::TEvCompileResponse> replayResult;
         {
             NJson::TJsonValue firstCompileReplayJson = replayJson;
-            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, EnableAntlr4Parser, true));
+            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, true));
 
             auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
                 compileActorId,
@@ -177,7 +175,7 @@ public:
 
         {
             NJson::TJsonValue secondCompileReplayJson = replayJson;
-            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, EnableAntlr4Parser, false));
+            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, false));
 
             auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
                 compileActorId,
@@ -312,7 +310,7 @@ int main(int argc, const char** argv) {
     TQueryReplayConfig config;
     config.ParseConfig(argc, argv);
     if (config.QueryFile) {
-        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.EnableOltpSinkSideBySinkCompare, config.YqlLogLevel);
+        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.YqlLogLevel);
         fakeMapper.Start(nullptr);
         Y_DEFER {
             fakeMapper.Finish(nullptr);
@@ -372,7 +370,7 @@ int main(int argc, const char** argv) {
     }
     spec.MaxFailedJobCount(10000);
 
-    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.EnableOltpSinkSideBySinkCompare, config.YqlLogLevel));
+    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableOltpSinkSideBySinkCompare, config.YqlLogLevel));
 
     auto mergeSpec = NYT::TMergeOperationSpec();
     mergeSpec.AddInput(NYT::TRichYPath(config.DstPath));

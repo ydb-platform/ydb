@@ -188,7 +188,11 @@ public:
         if (Self->CurrentConfig.HasWarmUpEnabled()) {
             Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled();
         } else {
-            Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled() && !Self->AreWeRootHive();
+            if (IsBridgeMode(TActivationContext::AsActorContext())) {
+                Self->WarmUp = false;
+            } else {
+                Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled() && !Self->AreWeRootHive();
+            }
         }
 
         Self->DefaultResourceMetricsAggregates.MaximumCPU.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));

@@ -258,7 +258,7 @@ void TSqsService::TLocalLeaderManager::IncLocalLeaderRef(TQueueInfoPtr queue, co
 void TSqsService::TLocalLeaderManager::TryStartLocalLeader(TQueueInfoPtr queue, const TString& reason, TInstant waitSince, TInstant now) {
     if (queue->NeedStartLocalLeader()) {
         if (MaxInflight != 0 && Inflight >= MaxInflight) {
-            if (!AlreadyAwaiting.count(queue)) {
+            if (!AlreadyAwaiting.contains(queue)) {
                 LOG_SQS_DEBUG("Queue [" << queue->UserName_ << "/" << queue->QueueName_ << "] is waiting for the leader to start, inflight=" << Inflight);
                 Awaiting.emplace_back(queue, waitSince, reason);
                 AlreadyAwaiting.insert(queue);

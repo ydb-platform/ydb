@@ -9,7 +9,11 @@ PEERDIR(
     library/cpp/digest/crc32c
 )
 
-IF (ARCH_X86_64)
+IF (ARCH_X86_64 AND OS_LINUX)
+
+PEERDIR(
+    ydb/library/yql/dq/comp_nodes/hash_join_utils/simd
+)
 
 SRCS(
     tuple.cpp

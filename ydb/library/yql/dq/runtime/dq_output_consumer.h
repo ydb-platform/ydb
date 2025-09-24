@@ -16,32 +16,19 @@ namespace NYql::NDq {
 
 class IDqOutputConsumer : public TSimpleRefCount<IDqOutputConsumer>,
     public NKikimr::NMiniKQL::TWithDefaultMiniKQLAlloc {
-private:
-    bool IsFinishingFlag = false;
 public:
     using TPtr = TIntrusivePtr<IDqOutputConsumer>;
 
 public:
     virtual ~IDqOutputConsumer() = default;
 
-    bool TryFinish() {
-        IsFinishingFlag = true;
-        return DoTryFinish();
-    }
     virtual EDqFillLevel GetFillLevel() const = 0;
     virtual void Consume(NKikimr::NUdf::TUnboxedValue&& value) = 0;
     virtual void WideConsume(NKikimr::NUdf::TUnboxedValue values[], ui32 count) = 0;
     virtual void Consume(NDqProto::TCheckpoint&& checkpoint) = 0;
     virtual void Finish() = 0;
-    bool IsFinishing() const {
-        return IsFinishingFlag;
-    }
     virtual TString DebugString() {
         return "";
-    }
-protected:
-    virtual bool DoTryFinish() {
-        return true;
     }
 };
 

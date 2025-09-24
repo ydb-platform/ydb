@@ -171,4 +171,11 @@ public:
     void Execute(const TActorContext& ctx) override;
 };
 
+class TInitFieldsStep: public TInitializerStep {
+public:
+    TInitFieldsStep(TInitializer* initializer);
+
+    void Execute(const TActorContext& ctx) override;
+};
+
 } // NKikimr::NPQ

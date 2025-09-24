@@ -5,6 +5,14 @@ subprojects {
     layout.buildDirectory = file(baseBuildDir + "{%- if common_dir %}/{{ common_dir }}{% endif -%}/" + project.path.replace(":", "/"))
 }
 
+{%- if proto_template %}
+
+val mainProtosDir = File(buildDir, "main_protos")
+{%-     if extractLibrariesProtosTask %}
+val mainExtractedIncludeProtosDir = File(buildDir, "extracted-include-protos/main")
+{%-     endif %}
+{%- endif %}
+
 var mkBuildDir = tasks.register("mkBuildDir") {
     doFirst {
         mkdir(layout.buildDirectory.asFile.get())

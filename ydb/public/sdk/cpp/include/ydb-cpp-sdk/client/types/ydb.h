@@ -60,6 +60,13 @@ public:
     //! Use pile with preferable state
     static TBalancingPolicy UsePreferablePileState(EPileState pileState = EPileState::PRIMARY);
 
+    TBalancingPolicy(const TBalancingPolicy&) = delete;
+    TBalancingPolicy(TBalancingPolicy&&) = default;
+    TBalancingPolicy& operator=(const TBalancingPolicy&) = delete;
+    TBalancingPolicy& operator=(TBalancingPolicy&&) = default;
+
+    ~TBalancingPolicy();
+
     class TImpl;
 private:
     TBalancingPolicy(std::unique_ptr<TImpl>&& impl);

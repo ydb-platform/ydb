@@ -2,6 +2,7 @@ from weakref import ref
 import re
 import sys
 from hamcrest.core.base_matcher import BaseMatcher
+from hamcrest.core.helpers.wrap_matcher import wrap_matcher
 from hamcrest.core.compat import is_callable
 
 __author__ = "Per Fagrell"
@@ -29,7 +30,7 @@ class Raises(BaseMatcher):
         self.actual = None
         try:
             self.actual_return_value = function()
-        except Exception:
+        except BaseException:
             self.actual = sys.exc_info()[1]
 
             if isinstance(self.actual, self.expected):
@@ -69,7 +70,7 @@ class Raises(BaseMatcher):
                 description.append_text("\nAdditional exception matcher: ")
                 self.matcher.describe_mismatch(self.actual, description)
         else:
-            description.append_text('%s was raised instead' % type(self.actual))
+            description.append_text('%r of type %s was raised instead' % (self.actual, type(self.actual)))
 
 
 def raises(exception, pattern=None, matcher=None):
@@ -98,7 +99,7 @@ class DeferredCallable(object):
         self.kwargs = {}
 
     def __call__(self):
-        return self.func(*self.args, **self.kwargs)
+        self.func(*self.args, **self.kwargs)
 
     def with_args(self, *args, **kwargs):
         self.args = args

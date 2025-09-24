@@ -89,7 +89,7 @@ class CherryPickCreator:
         summary_path = os.getenv('GITHUB_STEP_SUMMARY')
         if summary_path:
             with open(summary_path, 'a') as summary:
-                summary.write(f'{msg}\n')
+                summary.write(f'{msg}\n\n')
 
     def git_run(self, *args):
         args = ["git"] + list(args)
@@ -115,6 +115,16 @@ class CherryPickCreator:
         pr = self.repo.create_pull(
             target_branch, dev_branch_name, title=self.pr_title(target_branch), body=self.pr_body(True), maintainer_can_modify=True
         )
+
+        try:
+            pr.enable_automerge(merge_method='MERGE')
+        except BaseException as e:
+            logging.warning(f'Error while enable automerge with method MERGE: {e}')
+            try:
+                pr.enable_automerge(merge_method='SQUASH')
+            except BaseException as f:
+                logging.warning(f'Error while enable automerge with method SQUASH: {f}')
+
         self.add_summary(f'{target_branch}: PR {pr.html_url} created')
 
     def process(self):
@@ -132,7 +142,14 @@ class CherryPickCreator:
             try:
                 self.create_pr_for_branch(target)
             except GithubException as e:
-                self.add_summary(f'{target} error {type(e)}\n```\n{e}\n```')
+                self.add_summary(f'{target} error GithubException:\n```\n{e}\n```\n')
+            except subprocess.CalledProcessError as e:
+                msg = f'`{target}` error `subprocess.CalledProcessError`: `{e}`'
+                if e.output:
+                    msg += f'\nOutput:\n```\n{e.output.decode()}\n```'
+                if e.stderr:
+                    msg += f'\nErrors:\n```\n{e.stderr.decode()}\n```'
+                self.add_summary(msg)
             except BaseException as e:
                 self.add_summary(f'{target} error {type(e)}\n```\n{e}\n```')
 

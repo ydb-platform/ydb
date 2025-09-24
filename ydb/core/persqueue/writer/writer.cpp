@@ -81,7 +81,7 @@ TString TEvPartitionWriter::TEvWriteAccepted::ToString() const {
 }
 
 TString TEvPartitionWriter::TEvWriteResponse::DumpError() const {
-    Y_ABORT_UNLESS(!IsSuccess());
+    Y_ENSURE(!IsSuccess());
 
     return TStringBuilder() << "Error {"
         << " SessionId: " << SessionId
@@ -416,8 +416,8 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
     }
 
     void SavePartitionIdToKqpTxn(const TActorContext& ctx) {
-        Y_ABORT_UNLESS(HasWriteId());
-        Y_ABORT_UNLESS(HasSupportivePartitionId());
+        Y_ENSURE(HasWriteId());
+        Y_ENSURE(HasSupportivePartitionId());
 
         DEBUG("Start of a request to KQP to save PartitionId. " <<
               "SessionId: " << Opts.SessionId <<

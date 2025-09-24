@@ -367,11 +367,19 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
 
             ValidateS3FileList({
                 "/test_bucket/EncryptedExport/001/data_00.csv.enc",
+                "/test_bucket/EncryptedExport/001/data_00.csv.sha256",
                 "/test_bucket/EncryptedExport/001/metadata.json.enc",
+                "/test_bucket/EncryptedExport/001/metadata.json.sha256",
                 "/test_bucket/EncryptedExport/001/scheme.pb.enc",
+                "/test_bucket/EncryptedExport/001/scheme.pb.sha256",
+                "/test_bucket/EncryptedExport/001/permissions.pb.enc",
+                "/test_bucket/EncryptedExport/001/permissions.pb.sha256",
                 "/test_bucket/EncryptedExport/SchemaMapping/mapping.json.enc",
+                "/test_bucket/EncryptedExport/SchemaMapping/mapping.json.sha256",
                 "/test_bucket/EncryptedExport/SchemaMapping/metadata.json.enc",
+                "/test_bucket/EncryptedExport/SchemaMapping/metadata.json.sha256",
                 "/test_bucket/EncryptedExport/metadata.json",
+                "/test_bucket/EncryptedExport/metadata.json.sha256",
             });
         }
 
@@ -399,11 +407,19 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
 
             ValidateS3FileList({
                 "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
                 "/test_bucket/Prefix/001/metadata.json.enc",
+                "/test_bucket/Prefix/001/metadata.json.sha256",
                 "/test_bucket/Prefix/001/scheme.pb.enc",
+                "/test_bucket/Prefix/001/scheme.pb.sha256",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.zst.enc",
+                "/test_bucket/Prefix/001/data_00.csv.sha256",
             });
         }
 
@@ -443,6 +459,8 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/scheme.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.enc",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
             });
         }
 
@@ -492,6 +510,8 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/scheme.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.zst.enc",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
             });
         }
 
@@ -553,6 +573,8 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/metadata.json.sha256",
                 "/test_bucket/Prefix/001/scheme.pb.enc",
                 "/test_bucket/Prefix/001/scheme.pb.sha256",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.enc",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
                 "/test_bucket/Prefix/001/001/changefeed_description.pb.enc",
@@ -598,12 +620,17 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
             WaitOpSuccess(res);
 
+            // Checksums are not supported for topics
             ValidateS3FileList({
                 "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
                 "/test_bucket/Prefix/001/create_topic.pb.enc",
                 "/test_bucket/Prefix/001/metadata.json.enc",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
             });
         }
 
@@ -1087,7 +1114,8 @@ Y_UNIT_TEST_SUITE_F(ImportBigEncryptedFileTest, TS3BackupTestFixture) {
 
             NImport::TImportFromS3Settings importSettings = MakeImportSettings(sourcePath, destinationPath);
             importSettings
-                .SymmetricKey(key);
+                .SymmetricKey(key)
+                .SkipChecksumValidation(true);
 
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res, TStringBuilder() << "Import from S3 " << destinationPath, TDuration::Minutes(3));

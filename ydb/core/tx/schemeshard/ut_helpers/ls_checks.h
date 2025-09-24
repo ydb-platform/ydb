@@ -138,6 +138,8 @@ namespace NLs {
     TCheckFunc MaxPartitionsCountEqual(ui32 count);
     void HasMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void NoMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    TCheckFunc MinTopicPartitionsCountEqual(ui32 count);
+    TCheckFunc MaxTopicPartitionsCountEqual(ui32 count);
     TCheckFunc PartitioningByLoadStatus(bool status);
     TCheckFunc ColumnFamiliesCount(ui32 size);
     TCheckFunc ColumnFamiliesHas(ui32 familyId);
@@ -174,6 +176,8 @@ namespace NLs {
                                      ui32 clusters,
                                      ui32 levels
                                   );
+
+    TCheckFunc SpecializedIndexDescription(const TString& proto);
 
     TCheckFunc SequenceName(const TString& name);
     TCheckFunc SequenceIncrement(i64 increment);

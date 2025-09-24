@@ -475,6 +475,9 @@ message StreamReadMessage {
 
         // Write timestamp of next message written to this partition will be no less than write_time_high_watermark.
         google.protobuf.Timestamp write_time_high_watermark = 4;
+
+        // Messages with offsets up to and including (read_offset - 1) was read.
+        int64 read_offset = 5;
     }
 
     // Command from server to create and start a partition session.

@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+#include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/public/api/client/yc_private/oauth/session_service.grpc.pb.h>
 #include <ydb/public/api/client/nc_private/iam/v1/profile_service.grpc.pb.h>
@@ -92,9 +93,8 @@ std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcService
     NYdbGrpc::TGRpcClientConfig config;
     config.Locator = host;
     config.EnableSsl = (scheme == "grpcs");
-    static NYdbGrpc::TGRpcClientLow client;
     SetGrpcKeepAlive(config);
-    return client.CreateGRpcServiceConnection<TSessionService>(config);
+    return MVPAppData()->GRpcClientLow->CreateGRpcServiceConnection<TSessionService>(config);
 }
 
 struct TEvPrivate {

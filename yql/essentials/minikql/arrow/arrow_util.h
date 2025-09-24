@@ -19,11 +19,13 @@ using NYql::NUdf::Chop;
 
 /// \brief Remove optional from `data` as new ArrayData object
 std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* itemType);
+std::shared_ptr<arrow::Scalar> UnwrapScalar(std::shared_ptr<arrow::Scalar> scalar, TType* itemType);
 
 using NYql::NUdf::AllocateBitmapWithReserve;
 using NYql::NUdf::MakeDenseBitmap;
 using NYql::NUdf::MakeDenseBitmapCopy;
 using NYql::NUdf::MakeDenseFalseBitmap;
+using NYql::NUdf::MakeDenseBitmapCopyIfOffsetDiffers;
 
 inline arrow::internal::Bitmap GetBitmap(const arrow::ArrayData& arr, int index) {
     return arrow::internal::Bitmap{ arr.buffers[index], arr.offset, arr.length };

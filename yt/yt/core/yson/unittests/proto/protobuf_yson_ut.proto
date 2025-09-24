@@ -226,3 +226,15 @@ message TAnotherMessageWithEnumsV2
         (NYT.NYson.NProto.enum_yson_storage_type) = EYST_STRING
     ];
 }
+
+message TMessageWithUsedUnknownFieldNumber
+{
+    optional int32 field = 3005;
+}
+
+message TMessageWith3005FieldAndUnknownFieldNumberOverride
+{
+    option (NYT.NYson.NProto.unknown_yson_field_number) = 3006;
+
+    optional int32 field = 3005;
+}

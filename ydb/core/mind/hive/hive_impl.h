@@ -245,6 +245,7 @@ protected:
     friend class TTxProcessUpdateFollowers;
     friend class TTxMonEvent_StopDomain;
     friend class TTxUpdatePiles;
+    friend class TTxSetDown;
 
     friend class TDeleteTabletActor;
 
@@ -253,7 +254,7 @@ protected:
     bool IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool IsItPossibleToStartBalancer(EBalancerType balancerType);
     void StartHiveBalancer(TBalancerSettings&& settings);
-    void StartHiveDrain(TDrainTarget target, TDrainSettings settings);
+    THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
@@ -288,7 +289,7 @@ protected:
     ITransaction* CreateResumeTabletByTenant(TTabletId tabletId);
     ITransaction* CreateStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external = false);
     ITransaction* CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev);
-    ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup);
+    ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup, bool async);
     ITransaction* CreateReassignGroupsOnDecommit(ui32 groupId, std::unique_ptr<IEventHandle> reply);
     ITransaction* CreateLockTabletExecution(const NKikimrHive::TEvLockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
     ITransaction* CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
@@ -303,7 +304,7 @@ protected:
     ITransaction* CreateReleaseTablets(TEvHive::TEvReleaseTablets::TPtr event);
     ITransaction* CreateReleaseTabletsReply(TEvHive::TEvReleaseTabletsReply::TPtr event);
     ITransaction* CreateConfigureSubdomain(TEvHive::TEvConfigureHive::TPtr event);
-    ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo = 0);
+    ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo = 0, ui64 cookie = 0);
     ITransaction* CreateSwitchDrainOff(TDrainTarget target, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements);
     ITransaction* CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event);
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
@@ -314,6 +315,7 @@ protected:
     ITransaction* CreateDeleteNode(TNodeId nodeId);
     ITransaction* CreateConfigureScaleRecommender(TEvHive::TEvConfigureScaleRecommender::TPtr event);
     ITransaction* CreateUpdatePiles();
+    ITransaction* CreateSetDown(TEvHive::TEvSetDown::TPtr& event);
 
 public:
     TDomainsView DomainsView;
@@ -349,6 +351,7 @@ protected:
 
     bool AreWeRootHive() const { return RootHiveId == HiveId; }
     bool AreWeSubDomainHive() const { return RootHiveId != HiveId; }
+    std::optional<TActorId> GetPipeToTenantHive(const TNodeInfo* node);
 
     struct TAggregateMetrics {
         NKikimrTabletBase::TMetrics Metrics;
@@ -608,6 +611,8 @@ protected:
     void Handle(TEvNodeWardenStorageConfig::TPtr& ev);
     void HandleInit(TEvNodeWardenStorageConfig::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr& ev);
+    void Handle(TEvHive::TEvRequestDrainInfo::TPtr& ev);
+    void Handle(TEvHive::TEvSetDown::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);

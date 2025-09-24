@@ -1,8 +1,9 @@
 #include "pq_impl.h"
 #include "pq_impl_types.h"
 
-#include <ydb/core/persqueue/pqtablet/common/logging.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/common/common_app.h>
+#include <ydb/core/persqueue/pqtablet/common/logging.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
 
@@ -35,21 +36,22 @@ namespace {
 }
 
 
-class TMonitoringProxy : public TActorBootstrapped<TMonitoringProxy> {
+class TMonitoringProxy : public TBaseActor<TMonitoringProxy> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_MON_ACTOR;
     }
 
-    TMonitoringProxy(const TActorId& sender, const TString& query, const TMap<ui32, TActorId>&& partitions, const TActorId& cache,
-                     const TString& topicName, ui64 tabletId, ui32 inflight, TString&& config, std::vector<TTransactionSnapshot>&& transactions)
-    : Sender(sender)
+    TMonitoringProxy(ui64 tabletId, const TActorId& tabletActorId, const TActorId& sender, const TString& query,
+        const TMap<ui32, TActorId>&& partitions, const TActorId& cache, const TString& topicName, ui32 inflight,
+        TString&& config, std::vector<TTransactionSnapshot>&& transactions)
+    : TBaseActor(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
+    , Sender(sender)
     , Query(query)
     , Partitions(std::move(partitions))
     , Cache(cache)
     , TotalRequests(partitions.size() + 1)
     , TopicName(topicName)
-    , TabletID(tabletId)
     , Inflight(inflight)
     , Config(std::move(config))
     , Transactions(std::move(transactions))
@@ -71,11 +73,16 @@ public:
         ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 
+    const TString& GetLogPrefix() const {
+        static const TString LogPrefix = "[MonitoringProxy]";
+        return LogPrefix;
+    }
+
 private:
 
     void Reply(const TActorContext& ctx) {
         TStringStream str;
-        HTML_APP_PAGE(str, "PersQueue Tablet " << TabletID << " (" << TopicName << ")") {
+        HTML_APP_PAGE(str, "PersQueue Tablet " << TabletId << " (" << TopicName << ")") {
             NAVIGATION_BAR() {
                 NAVIGATION_TAB("generic", "Generic Info");
                 NAVIGATION_TAB("cache", "Cache");
@@ -88,7 +95,7 @@ private:
                         LAYOUT_COLUMN() {
                             PROPERTIES("Tablet info") {
                                 PROPERTY("Topic", TopicName);
-                                PROPERTY("TabletID", TabletID);
+                                PROPERTY("TabletID", TabletId);
                                 PROPERTY("Inflight", Inflight);
                             }
                         }
@@ -102,7 +109,7 @@ private:
 
                     LAYOUT_ROW() {
                         LAYOUT_COLUMN() {
-                            str << "<a href=\"app?TabletID=" << TabletID << "&kv=1\">KV-tablet internals</a>";
+                            str << "<a href=\"app?TabletID=" << TabletId << "&kv=1\">KV-tablet internals</a>";
                         }
                     }
 
@@ -123,7 +130,7 @@ private:
                                     for (auto& tx : Transactions) {
                                         TABLER() {
                                             TABLED() {
-                                                HREF(TStringBuilder() << "?TabletID=" << TabletID << "&TxId=" << tx.TxId) {
+                                                HREF(TStringBuilder() << "?TabletID=" << TabletId << "&TxId=" << tx.TxId) {
                                                     str << tx.TxId;
                                                 }
                                             }
@@ -146,7 +153,7 @@ private:
             }
         }
 
-        PQ_LOG_D("Answer TEvRemoteHttpInfoRes: to " << Sender << " self " << ctx.SelfID);
+        LOG_D("Answer TEvRemoteHttpInfoRes: to " << Sender << " self " << ctx.SelfID);
         ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         Die(ctx);
     }
@@ -190,7 +197,6 @@ private:
     const TActorId Cache;
     const ui32 TotalRequests;
     const TString TopicName;
-    const ui64 TabletID;
     const ui32 Inflight;
     const TString Config;
     const std::vector<TTransactionSnapshot> Transactions;
@@ -329,8 +335,8 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     };
     std::sort(transactions.begin(), transactions.end(), isLess);
 
-    ctx.Register(new TMonitoringProxy(ev->Sender, ev->Get()->Query, std::move(res), CacheActor, TopicName,
-        TabletID(), ResponseProxy.size(), std::move(config), std::move(transactions)));
+    ctx.Register(new TMonitoringProxy(TabletID(), SelfId(), ev->Sender, ev->Get()->Query, std::move(res), CacheActor, TopicName,
+        ResponseProxy.size(), std::move(config), std::move(transactions)));
 
     return true;
 }

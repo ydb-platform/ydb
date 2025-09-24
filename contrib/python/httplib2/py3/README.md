@@ -63,6 +63,14 @@ Installation
     $ pip install httplib2
 
 
+Strings vs bytes
+================
+
+To successfully use http2lib, you absolutely must understand the following sentence:
+
+**The headers are strings, but the content body is bytes.**
+
+
 Usage
 =====
 

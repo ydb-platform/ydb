@@ -1,10 +1,7 @@
 #pragma once
 
-#include "command.h"
-#include "formats.h"
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <library/cpp/threading/future/future.h>
+#include <util/datetime/base.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -14,6 +11,17 @@ protected:
     static void OnTerminate(int);
     static void SetInterruptHandlers();
     static bool IsInterrupted();
+
+    template <typename T>
+    static bool WaitInterruptible(NThreading::TFuture<T>& future, TDuration interval = TDuration::MilliSeconds(50)) {
+        while (!future.Wait(interval)) {
+            if (IsInterrupted()) {
+                Cerr << "<INTERRUPTED>" << Endl;
+                return false;
+            }
+        }
+        return true;
+    }
 
 private:
     static TAtomic Interrupted;

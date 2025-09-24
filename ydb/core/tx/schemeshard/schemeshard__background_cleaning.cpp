@@ -203,10 +203,13 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
         const auto nextDirPathId = state.DirsToRemove.back();
         state.DirsToRemove.pop_back();
 
+        auto dirPath = TPath::Init(nextDirPathId, this);
+        if (!dirPath) {
+            return false;
+        }
+
         auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), TabletID());
         auto& record = propose->Record;
-
-        auto dirPath = TPath::Init(nextDirPathId, this);
 
         auto& modifyScheme = *record.AddTransaction();
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir);

@@ -55,6 +55,7 @@ PEERDIR(
     yql/essentials/minikql/computation/llvm16
     yql/essentials/minikql/comp_nodes
     yql/essentials/utils
+    ydb/core/kqp/common/result_set_format
 )
 
 YQL_LAST_ABI_VERSION()

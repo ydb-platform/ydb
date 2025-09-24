@@ -69,7 +69,7 @@ public:
             TCP_KEEPALIVE_INTERVAL
         };
     bool DrainOnDtors = true;
-    TBalancingPolicy::TImpl BalancingSettings = TBalancingPolicy::TImpl("");
+    TBalancingPolicy::TImpl BalancingSettings = TBalancingPolicy::TImpl::UsePreferableLocation("");
     TDuration GRpcKeepAliveTimeout = TDuration::Seconds(10);
     bool GRpcKeepAlivePermitWithoutCalls = true;
     TDuration SocketIdleTimeout = TDuration::Minutes(6);

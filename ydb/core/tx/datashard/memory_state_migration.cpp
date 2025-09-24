@@ -51,20 +51,20 @@ private:
         auto* owner = Owner;
         Y_ENSURE(owner);
 
-        if (Locks) {
-            owner->SysLocks.RestoreInMemoryLocks(std::move(Locks));
-        }
-
         if (Vars) {
             owner->SnapshotManager.RestoreImmediateWriteEdge(Vars->ImmediateWriteEdge, Vars->ImmediateWriteEdgeReplied);
             owner->SnapshotManager.RestoreUnprotectedReadEdge(Vars->UnprotectedReadEdge);
             owner->InMemoryVarsRestored = true;
         }
 
+        if (Locks) {
+            owner->SysLocks.RestoreInMemoryLocks(std::move(Locks));
+        }
+
         Detach();
         PassAway();
 
-        owner->OnInMemoryStateRestored();
+        owner->OnInMemoryStateRestored(std::move(Transactions));
     }
 
     void Failed() {
@@ -90,6 +90,9 @@ private:
             TRope payload = msg->GetPayload(msg->Record.GetSerializedStatePayloadIndex());
             Buffer.Insert(Buffer.End(), std::move(payload));
         }
+
+        // We must not have any checkpoints in the buffer yet
+        Y_ENSURE(Checkpoints.empty());
 
         size_t lastOffset = 0;
         for (size_t offset : msg->Record.GetSerializedStateCheckpoints()) {
@@ -205,8 +208,43 @@ private:
                 row->VolatileDependencies.push_back(protoVolatileDep.GetTxId());
             }
 
+            for (const auto& protoTx : state->GetPreparedVolatileTxs()) {
+                ui64 txId = protoTx.GetTxId();
+                EOperationKind kind = EOperationKind(protoTx.GetKind());
+                ui64 flags = protoTx.GetFlags();
+                if (flags & TTxFlags::Immediate) {
+                    // Cannot restore immediate transactions
+                    continue;
+                }
+                if (!(flags & TTxFlags::VolatilePrepare)) {
+                    // Cannot restore non-volatile transactions
+                    continue;
+                }
+                flags |= TTxFlags::Stored; // Volatile transactions also have a Stored flag (stored in memory, not on disk)
+                ui64 maxStep = protoTx.GetMaxStep();
+                ui64 receivedAt = protoTx.GetReceivedAt();
+                TBasicOpInfo info(txId, kind, flags, maxStep, TInstant::MicroSeconds(receivedAt), Owner->NextTieBreakerIndex++);
+                TOperation::TPtr op = NEvWrite::TConvertor::MakeOperation(kind, info, Owner->TabletID());
+                op->SetMinStep(protoTx.GetMinStep());
+                if (protoTx.HasStep()) {
+                    op->SetStep(protoTx.GetStep());
+                }
+                if (protoTx.HasPredictedStep()) {
+                    op->SetPredictedStep(protoTx.GetPredictedStep());
+                }
+                op->SetTarget(ActorIdFromProto(protoTx.GetSource()));
+                op->SetCookie(protoTx.GetCookie());
+                if (!op->OnRestoreMigrated(*Owner, protoTx.GetBody())) {
+                    // This transaction cannot be restored
+                    continue;
+                }
+                Transactions[txId] = std::move(op);
+            }
+
             Arena.Reset();
         }
+
+        Checkpoints.clear();
 
         if (msg->Record.HasContinuationToken()) {
             // Request the next data chunk
@@ -256,8 +294,9 @@ private:
     TVector<size_t> Checkpoints;
 
     google::protobuf::Arena Arena;
-    THashMap<ui64, ILocksDb::TLockRow> Locks;
     std::optional<TVars> Vars;
+    THashMap<ui64, ILocksDb::TLockRow> Locks;
+    THashMap<ui64, TOperation::TPtr> Transactions;
 };
 
 void TDataShard::StartInMemoryRestoreActor() {
@@ -274,7 +313,7 @@ void TDataShard::StartInMemoryRestoreActor() {
         return;
     }
 
-    OnInMemoryStateRestored();
+    OnInMemoryStateRestored({});
 }
 
 class TDataShardInMemoryStateActor
@@ -519,6 +558,8 @@ private:
 };
 
 TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
+    TActorContext ctx = TActivationContext::ActorContextFor(SelfId());
+
     TDataShardPreservedInMemoryStateOutputStream stream;
     TVector<size_t> checkpoints;
 
@@ -540,6 +581,9 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
     };
 
     auto addedMessage = [&](size_t messageSize) {
+        // Note: assumes field tag is always 1 byte, which is exact as long as
+        // all field numbers are less than 15 in TInMemoryState. Checkpoints
+        // don't rely on this being exact however.
         currentStateSize += 1 + google::protobuf::io::CodedOutputStream::VarintSize32(messageSize) + messageSize;
         if (currentStateSize >= MAX_DATASHARD_STATE_CHUNK_SIZE) {
             flushState();
@@ -630,6 +674,36 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
                 protoDep->SetTxId(txId);
                 addedMessage(protoDep->ByteSizeLong());
             });
+        maybeCheckpoint();
+    }
+
+    for (const auto& [txId, op] : TransQueue.GetTxsInFly()) {
+        if (op->IsImmediate() || !op->HasVolatilePrepareFlag()) {
+            // Non-volatile transactions don't need to be migrated
+            continue;
+        }
+        auto txBody = op->OnMigration(*this, ctx);
+        if (!txBody) {
+            // This transaction cannot be migrated
+            continue;
+        }
+        auto* protoTx = state->AddPreparedVolatileTxs();
+        protoTx->SetTxId(txId);
+        ActorIdToProto(op->GetTarget(), protoTx->MutableSource());
+        protoTx->SetCookie(op->GetCookie());
+        protoTx->SetKind(static_cast<ui64>(op->GetKind()));
+        protoTx->SetBody(std::move(*txBody));
+        protoTx->SetFlags(op->GetFlags() & (TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask));
+        protoTx->SetMinStep(op->GetMinStep());
+        protoTx->SetMaxStep(op->GetMaxStep());
+        if (auto step = op->GetPredictedStep()) {
+            protoTx->SetPredictedStep(step);
+        }
+        if (auto step = op->GetStep()) {
+            protoTx->SetStep(step);
+        }
+        protoTx->SetReceivedAt(op->GetReceivedAt().MicroSeconds());
+        addedMessage(protoTx->ByteSizeLong());
         maybeCheckpoint();
     }
 

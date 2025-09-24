@@ -324,6 +324,7 @@ message TKqpPhyCnVectorResolve {
     bytes InputType = 7;
     bytes OutputType = 8;
     uint32 ClusterColumnOutPos = 9;
+    optional uint32 RootClusterColumnIndex = 10;
 }
 
 message TKqpPhyCnSequencer {

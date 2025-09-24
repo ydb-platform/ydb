@@ -144,7 +144,7 @@ PyType_Slot ZstdCompressionChunkerIteratorSlots[] = {
 };
 
 PyType_Spec ZstdCompressionChunkerIteratorSpec = {
-    "zstd.ZstdCompressionChunkerIterator",
+    "zstandard.backend_c.ZstdCompressionChunkerIterator",
     sizeof(ZstdCompressionChunkerIterator),
     0,
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
@@ -286,7 +286,7 @@ PyType_Slot ZstdCompressionChunkerSlots[] = {
 };
 
 PyType_Spec ZstdCompressionChunkerSpec = {
-    "zstd.ZstdCompressionChunkerType",
+    "zstandard.backend_c.ZstdCompressionChunkerType",
     sizeof(ZstdCompressionChunker),
     0,
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,

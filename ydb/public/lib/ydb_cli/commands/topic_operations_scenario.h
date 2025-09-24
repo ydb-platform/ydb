@@ -86,6 +86,8 @@ public:
     TMaybe<TString> KeyPrefix;
     ui32 KeyCount = 0;
     bool CleanupPolicyCompact = false;
+    std::optional<size_t> ConsumerMaxMemoryUsageBytes;
+    std::optional<size_t> ProducerMaxMemoryUsageBytes;
 
 protected:
     void CreateTopic(const TString& database,

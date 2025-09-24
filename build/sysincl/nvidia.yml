@@ -35,7 +35,10 @@
   - cudaTypedefs.h
   - cuda_bf16.h
   - cuda_fp16.h
+  - cuda_fp4.h
+  - cuda_fp6.h
   - cuda_fp8.h
+  - __pstl_algorithm
   - cuda_gl_interop.h
   - cuda_occupancy.h
   - cuda_profiler_api.h

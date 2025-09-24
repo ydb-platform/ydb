@@ -428,7 +428,7 @@ std::optional<NKikimrConfig::TYdbVersion> ParseVersionFromTag(TString tag, TStri
 
     if (parts.empty()) {
         // example: stable-22-1 == 22.1
-        // major version, from which minor tags are formed
+        // major version, from which minor branches are made
         return version;
     }
 
@@ -441,10 +441,13 @@ std::optional<NKikimrConfig::TYdbVersion> ParseVersionFromTag(TString tag, TStri
     parts.pop_front();
     version.SetMinor(minor);
 
+    if (parts.empty()) {
+        // example: stable-25-1-14 == 25.1.14
+        // minor version, from which release tags are made
+        return version;
+    }
+
     // parse Patch number
-    // We don't need to parse versions without Patch component, since this
-    // code only present in newer trunks and stables >=25.1, where Patch is
-    // already introduced, and only used to parse local 
     ui32 patch;
     if (!TryIntFromString<10, ui32>(parts.front(), patch)) {
         // example: stable-25-1-1-prestablle == 25.1.1

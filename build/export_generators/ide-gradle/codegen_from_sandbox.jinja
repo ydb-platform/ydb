@@ -1,0 +1,30 @@
+{%- if current_target.from_sandboxes|length -%}
+{%-     set current_target_object_indexes = current_target_object_indexes + current_target.from_sandboxes|map(attribute='_object_index') -%}
+{%-     for from_sandbox in current_target.from_sandboxes %}
+
+val {{ varprefix }}{{ from_sandbox['_object_index'] }} = tasks.register<Exec>("{{ varprefix }}{{ from_sandbox['_object_index'] }}") {
+    workingDir = file("$buildDir{%- if from_sandbox.reldir != "." -%}/{{ from_sandbox.reldir }}{%- endif -%}")
+    commandLine("bash", "-c", listOf(
+        "{{ arcadia_root }}/ya",
+        "download",
+{%-        if from_sandbox.mode == "--copy-to-dir" %}
+        "--original-name",
+{%-        elif from_sandbox.mode == "--untar-to" %}
+        "--untar",
+{%-        endif %}
+        "sbr:{{ from_sandbox.resource_id }}"
+    ).joinToString(" "))
+
+{%-       if from_sandbox.renames|length and from_sandbox.renames|length == from_sandbox.outs|length -%}
+{%-           for rename in from_sandbox.renames %}
+    doLast {
+        file("$workingDir/{{ rename }}").renameTo(file("$workingDir/{{ from_sandbox.outs[loop.index0] }}"))
+    }
+{%-           endfor -%}
+{%-       endif -%}
+{%-       for out in from_sandbox.outs %}
+    outputs.files(file("$workingDir/{{ out }}"))
+{%-       endfor %}
+}
+{%      endfor -%}
+{%- endif -%}

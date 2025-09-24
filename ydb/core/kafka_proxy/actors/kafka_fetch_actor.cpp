@@ -53,7 +53,10 @@ void TKafkaFetchActor::PrepareFetchRequestData(const size_t topicIndex, TVector<
     topicKafkaResponse.Partitions.resize(topicKafkaRequest.Partitions.size());
     for (size_t partIndex = 0; partIndex < topicKafkaRequest.Partitions.size(); partIndex++) {
         auto& partKafkaRequest = topicKafkaRequest.Partitions[partIndex];
-        KAFKA_LOG_D(TStringBuilder() << "Fetch actor: New request. Topic: " << topicKafkaRequest.Topic.value() << " Partition: " << partKafkaRequest.Partition << " FetchOffset: " << partKafkaRequest.FetchOffset << " PartitionMaxBytes: " << partKafkaRequest.PartitionMaxBytes);
+        KAFKA_LOG_D(TStringBuilder() << "Fetch actor: New request. Topic: " << topicKafkaRequest.Topic.value()
+            << " Partition: " << partKafkaRequest.Partition
+            << " FetchOffset: " << partKafkaRequest.FetchOffset
+            << " PartitionMaxBytes: " << partKafkaRequest.PartitionMaxBytes);
         auto& partPQRequest = partPQRequests[partIndex];
         partPQRequest.Topic = NormalizePath(Context->DatabasePath, topicKafkaRequest.Topic.value()); // FIXME(savnik): handle empty topic
         partPQRequest.Partition = partKafkaRequest.Partition;

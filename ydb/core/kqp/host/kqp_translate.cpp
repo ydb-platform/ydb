@@ -4,10 +4,6 @@
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v0/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
-#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr3/proto_parser.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr3_ansi/proto_parser.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
@@ -191,24 +187,19 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
     // only options that should be specified for all types of queries
     // including views and etc..
     SetLangVer(config.LangVer);
-    SetIsEnableAntlr4Parser(config.EnableAntlr4Parser || config.FeatureFlags.GetEnableAntlr4Parser());
     return *this;
 }
 
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
     settings.PgParser = UsePgParser && *UsePgParser;
-    settings.Antlr4Parser = false;
+    settings.Antlr4Parser = true;
     settings.EmitReadsForExists = true;
     settings.LangVer = LangVer;
     settings.BackportMode = BackportMode;
     if (settings.PgParser) {
         settings.AutoParametrizeEnabled = IsEnablePgConstsToParams ;
         settings.AutoParametrizeValuesStmt = IsEnablePgConstsToParams;
-    }
-
-    if (!settings.PgParser) {
-        settings.Antlr4Parser = IsEnableAntlr4Parser;
     }
 
     if (QueryType == NYql::EKikimrQueryType::Scan || QueryType == NYql::EKikimrQueryType::Query) {
@@ -312,13 +303,9 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         NYql::TStmtParseInfo stmtParseInfo;
 
         NSQLTranslationV1::TLexers lexers;
-        lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
-        lexers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiLexerFactory();
         lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
         lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
         NSQLTranslationV1::TParsers parsers;
-        parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
-        parsers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiParserFactory();
         parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
         parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
@@ -363,13 +350,9 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
     TVector<TQueryAst> result;
     settingsBuilder.SetSqlVersion(sqlVersion);
     NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
-    lexers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiLexerFactory();
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
-    parsers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiParserFactory();
     parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 

@@ -1699,6 +1699,7 @@ public:
 
     void SetStatUploader(IStatUploader::TPtr statUploader) final {
         YQL_ENSURE(!StatUploader_, "StatUploader already set");
+        YQL_CLOG(DEBUG, ProviderYt) << "Setting StatUploader";
         StatUploader_ = statUploader;
     }
 
@@ -5115,6 +5116,7 @@ private:
             NNative::GetPool(*execCtx, execCtx->Options_.Config())
         };
         execCtx->SetNodeExecProgress("Running");
+        YQL_ENSURE(StatUploader_);
         return StatUploader_->Upload(std::move(statUploadOptions));
     }
 

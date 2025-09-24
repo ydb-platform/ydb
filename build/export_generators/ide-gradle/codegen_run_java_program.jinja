@@ -2,7 +2,7 @@
 {%-     set current_target_object_indexes = current_target_object_indexes + current_target.runs|map(attribute='_object_index') -%}
 {%-     for run in current_target.runs %}
 
-val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{{ run['_object_index'] }}") {
+val {{ varprefix }}{{ run['_object_index'] }} = tasks.register<JavaExec>("{{ varprefix }}{{ run['_object_index'] }}") {
     group = "build"
     description = "Code generation by run java program"
 
@@ -34,7 +34,7 @@ val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{
         {{ PatchGeneratedProto(arg) }},
 {%-                        else %}
         {{ PatchRoots(arg, false, true) }},
-{%-                        endif %}
+{%-                        endif -%}
 {%-                    elif run.tool|select("in", arg)|length %}
         {{ PatchRoots(arg, true) }},
 {%-                    else %}
@@ -48,20 +48,20 @@ val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{
 {%-        if run.in_dir|length -%}
 {%-            for in_dir in run.in_dir|unique %}
     inputs.files(fileTree({{ PatchRoots(in_dir) }}))
-{%             endfor -%}
-{%-        endif -%}
+{%-            endfor %}
+{%         endif -%}
 
 {%-        if run.in|length -%}
 {%-            for in_file in run.in|unique %}
     inputs.files({{ PatchRoots(in_file) }})
-{%             endfor -%}
-{%-        endif -%}
+{%-            endfor %}
+{%         endif -%}
 
 {%-        if run.in_noparse|length -%}
 {%-            for in_file in run.in_noparse|unique %}
     inputs.files({{ PatchRoots(in_file) }})
-{%             endfor -%}
-{%-        endif -%}
+{%-            endfor %}
+{%         endif -%}
 
 {%-        if run.out_dir|length -%}
 {%-            for out_dir in run.out_dir|unique %}
@@ -70,8 +70,8 @@ val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{
 {%-                else %}
     outputs.dir({{ PatchRoots(out_dir, false, true) }})
 {%-                endif -%}
-{%-            endfor -%}
-{%-        endif -%}
+{%-            endfor %}
+{%         endif -%}
 
 {%-        if run.out|length -%}
 {%-            for out in run.out|unique %}
@@ -80,8 +80,8 @@ val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{
 {%-                else %}
     outputs.files({{ PatchRoots(out, false, true) }})
 {%-                endif -%}
-{%-            endfor -%}
-{%-        endif -%}
+{%-            endfor %}
+{%         endif -%}
 
 {#-
     Не использованы атрибуты

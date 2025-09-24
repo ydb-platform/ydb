@@ -637,7 +637,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         client.modify_query(
             query_id,
-            "continue",
+            "simple",
             sql1,
             type=fq.QueryContent.QueryType.STREAMING,
             state_load_mode=fq.StateLoadMode.EMPTY,
@@ -669,7 +669,7 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.wait_completed_checkpoints(query_id1, kikimr.compute_plane.get_completed_checkpoints(query_id1) + 2)
         stop_yds_query(client, query_id1)
 
-        client.modify_query(query_id1, "continue", sql1, type=fq.QueryContent.QueryType.STREAMING,
+        client.modify_query(query_id1, "simple", sql1, type=fq.QueryContent.QueryType.STREAMING,
                             state_load_mode=fq.StateLoadMode.EMPTY, streaming_disposition=StreamingDisposition.from_last_checkpoint())
         client.wait_query_status(query_id1, fq.QueryMeta.RUNNING)
         query_id2 = start_yds_query(kikimr, client, sql1)
@@ -680,9 +680,9 @@ class TestPqRowDispatcher(TestYdsBase):
         stop_yds_query(client, query_id1)
         stop_yds_query(client, query_id2)
 
-        client.modify_query(query_id1, "continue", sql1, type=fq.QueryContent.QueryType.STREAMING,
+        client.modify_query(query_id1, "simple", sql1, type=fq.QueryContent.QueryType.STREAMING,
                             state_load_mode=fq.StateLoadMode.EMPTY, streaming_disposition=StreamingDisposition.from_last_checkpoint())
-        client.modify_query(query_id2, "continue", sql1, type=fq.QueryContent.QueryType.STREAMING,
+        client.modify_query(query_id2, "simple", sql1, type=fq.QueryContent.QueryType.STREAMING,
                             state_load_mode=fq.StateLoadMode.EMPTY, streaming_disposition=StreamingDisposition.from_last_checkpoint())
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 
@@ -723,7 +723,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         client.modify_query(
             query_id,
-            "continue",
+            "simple",
             sql,
             type=fq.QueryContent.QueryType.STREAMING,
             state_load_mode=fq.StateLoadMode.EMPTY,
@@ -874,7 +874,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         client.modify_query(
             query_id1,
-            "continue",
+            "simple",
             sql1,
             type=fq.QueryContent.QueryType.STREAMING,
             state_load_mode=fq.StateLoadMode.EMPTY,
@@ -1048,7 +1048,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         client.modify_query(
             query_id,
-            "continue",
+            "simple",
             sql1,
             type=fq.QueryContent.QueryType.STREAMING,
             state_load_mode=fq.StateLoadMode.FROM_LAST_CHECKPOINT,

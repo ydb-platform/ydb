@@ -32,7 +32,7 @@ TCredentialsProviderFactoryPtr CreateIamServiceCredentialsProviderFactory(const 
                     CreateIamTokenForServiceRequest,
                     CreateIamTokenResponse,
                     IamTokenService
-                >>(std::move(params));
+                >>(params);
 }
 
 }

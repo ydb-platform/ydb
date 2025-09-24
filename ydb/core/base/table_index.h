@@ -38,8 +38,13 @@ struct TIndexColumns {
 
 inline constexpr const char* ImplTable = "indexImplTable";
 
-bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType type, const TTableColumns& table, const TIndexColumns& index, TString& explain);
-TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const TTableColumns& table, const TIndexColumns& index);
+bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain);
+TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index);
+
+bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType);
+
+NKikimrSchemeOp::EIndexType GetIndexType(NKikimrSchemeOp::TIndexCreationConfig indexCreation);
+TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType);
 
 std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys);
 bool IsImplTable(std::string_view tableName);
@@ -74,6 +79,14 @@ bool HasPostingParentFlag(TClusterId parent);
 void EnsureNoPostingParentFlag(TClusterId parent);
 TClusterId SetPostingParentFlag(TClusterId parent);
 
+}
+
+namespace NFulltext {
+    // TODO: support utf-8 in fulltext index
+    inline constexpr auto TokenType = Ydb::Type::STRING;
+    inline constexpr const char* TokenTypeName = "String";
+
+    inline constexpr const char* TokenColumn = "__ydb_token";
 }
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);

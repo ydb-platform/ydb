@@ -211,7 +211,7 @@ UnifInt(DSS_HUGE nLow, DSS_HUGE nHigh, long nStream)
 	
 	if ((nHigh == MAX_LONG) && (nLow == 0))
 	{
-		dRange = DOUBLE_CAST (nHigh32 - nLow32 + 1);
+		dRange = -MAX_LONG;
 		nRange = nHigh32 - nLow32 + 1;
 	}
 	else

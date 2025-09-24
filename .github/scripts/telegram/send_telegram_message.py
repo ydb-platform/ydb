@@ -32,44 +32,49 @@ def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="Markd
         bool: True if successful, False otherwise
     """
     # Check if message_or_file is a file path
-    file_path = Path(message_or_file)
-    if file_path.exists() and file_path.is_file():
-        # It's a file, read its content
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except Exception as e:
-            print(f"❌ Error reading file {file_path}: {e}")
-            return False
-        
-        if not content.strip():
-            print(f"⚠️ File {file_path} is empty")
-            return True
-        
-        # Split message into chunks if needed
-        chunks = split_message(content)
-        print(f"📤 Sending {len(chunks)} message(s) from file {file_path}...")
-        
-        success_count = 0
-        for i, chunk in enumerate(chunks, 1):
-            print(f"📨 Sending chunk {i}/{len(chunks)}...")
-            
-            if _send_single_message(bot_token, chat_id, chunk, parse_mode, message_thread_id, disable_web_page_preview, max_retries, retry_delay):
-                success_count += 1
-            
-            # Add delay between messages (except for the last one)
-            if i < len(chunks):
-                time.sleep(delay)
-        
-        if success_count == len(chunks):
-            print(f"✅ All {success_count} message(s) sent successfully!")
-            return True
-        else:
-            print(f"⚠️ Only {success_count}/{len(chunks)} message(s) sent successfully")
-            return False
+    # If the string is too long, it's definitely not a file path
+    if len(message_or_file) > 255:
+        # It's definitely a text message, not a file path
+        content = message_or_file
     else:
-        # It's a text message, send directly
-        return _send_single_message(bot_token, chat_id, message_or_file, parse_mode, message_thread_id, disable_web_page_preview, max_retries, retry_delay)
+        file_path = Path(message_or_file)
+        if file_path.exists() and file_path.is_file():
+            # It's a file, read its content
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except Exception as e:
+                print(f"❌ Error reading file {file_path}: {e}")
+                return False
+        else:
+            # It's a text message
+            content = message_or_file
+    
+    if not content.strip():
+        print(f"⚠️ Content is empty")
+        return True
+    
+    # Split message into chunks if needed
+    chunks = split_message(content)
+    print(f"📤 Sending {len(chunks)} message(s)...")
+    
+    success_count = 0
+    for i, chunk in enumerate(chunks, 1):
+        print(f"📨 Sending chunk {i}/{len(chunks)}...")
+        
+        if _send_single_message(bot_token, chat_id, chunk, parse_mode, message_thread_id, disable_web_page_preview, max_retries, retry_delay):
+            success_count += 1
+        
+        # Add delay between messages (except for the last one)
+        if i < len(chunks):
+            time.sleep(delay)
+    
+    if success_count == len(chunks):
+        print(f"✅ All {success_count} message(s) sent successfully!")
+        return True
+    else:
+        print(f"⚠️ Only {success_count}/{len(chunks)} message(s) sent successfully")
+        return False
 
 
 def _send_single_message(bot_token, chat_id, message, parse_mode, message_thread_id, disable_web_page_preview, max_retries, retry_delay):

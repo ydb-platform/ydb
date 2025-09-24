@@ -10,7 +10,12 @@ logger = logging.getLogger(__name__)
 
 
 def execute_cli_command(
-        path_to_cli: str, cmd: List[str], endpoints: List[str], strict_order: bool = False)-> Optional[subprocess.CompletedProcess]:
+        path_to_cli: str,
+        cmd: List[str],
+        endpoints: List[str],
+        strict_order: bool = False,
+        ydb_auth_opts: Optional[List[str]] = None,
+) -> Optional[subprocess.CompletedProcess]:
 
     random_order_endpoints = list(endpoints)
 
@@ -19,7 +24,8 @@ def execute_cli_command(
 
     for endpoint in random_order_endpoints:
         try:
-            full_cmd = [path_to_cli, "-e", f"grpc://{endpoint}:2135"] + cmd
+            auth = list(ydb_auth_opts or [])
+            full_cmd = [path_to_cli] + auth + ["-e", f"grpc://{endpoint}:2135"] + cmd
             result = subprocess.run(full_cmd, capture_output=True)
             if result.returncode == 0:
                 return result
@@ -31,7 +37,12 @@ def execute_cli_command(
     return None
 
 
-def execute_cli_command_parallel(path_to_cli: str, cmd: List[str], endpoints: List[str]) -> Optional[subprocess.CompletedProcess]:
+def execute_cli_command_parallel(
+        path_to_cli: str,
+        cmd: List[str],
+        endpoints: List[str],
+        ydb_auth_opts: Optional[List[str]] = None,
+) -> Optional[subprocess.CompletedProcess]:
     """Run the CLI command against majority of provided endpoints concurrently and return the first completed result.
 
     Other in-flight calls are ignored once the first completes.
@@ -46,10 +57,10 @@ def execute_cli_command_parallel(path_to_cli: str, cmd: List[str], endpoints: Li
     targets = shuffled[:majority_size]
 
     if len(targets) <= 1:
-        return execute_cli_command(path_to_cli, cmd, targets)
+        return execute_cli_command(path_to_cli, cmd, targets, ydb_auth_opts=ydb_auth_opts)
 
     with ThreadPoolExecutor(max_workers=min(len(targets), 8)) as executor:
-        future_map = {executor.submit(execute_cli_command, path_to_cli, cmd, [ep]): ep for ep in targets}
+        future_map = {executor.submit(execute_cli_command, path_to_cli, cmd, [ep], False, ydb_auth_opts): ep for ep in targets}
         for future in as_completed(future_map.keys()):
             try:
                 res = future.result()

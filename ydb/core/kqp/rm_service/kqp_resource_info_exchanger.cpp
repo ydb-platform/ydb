@@ -316,19 +316,18 @@ private:
             Schedule(at - now, new TEvPrivate::TEvUpdateSnapshotState);
             return;
         }
-        TVector<NKikimrKqp::TKqpNodeResources> resources;
-        resources.reserve(NodesState.size());
+        std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> resources = std::make_shared<TVector<NKikimrKqp::TKqpNodeResources>>();
+        resources->reserve(NodesState.size());
 
         for (const auto& [nodeId, state] : NodesState) {
             const auto& currentResources = state.NodeData.GetResources();
             if (currentResources.HasNodeId()) {
-                resources.push_back(std::move(currentResources));
+                resources->push_back(std::move(currentResources));
             }
         }
 
         with_lock (ResourceSnapshotState->Lock) {
-            ResourceSnapshotState->Snapshot =
-                std::make_shared<TVector<NKikimrKqp::TKqpNodeResources>>(std::move(resources));
+            ResourceSnapshotState->Snapshot = std::move(resources);
         }
 
         ResourceSnapshotRetryState.LastRetryAt = now;
@@ -440,9 +439,7 @@ private:
             return;
         }
 
-        TULIDGenerator ulidGen;
-        auto now = TInstant::Now();
-        Ulid = ulidGen.Next(now);
+        Ulid = UlidGen.Next();
         UlidString = Ulid.ToBinary();
 
         NKikimrKqp::TResourceExchangeBoardData payload;
@@ -735,6 +732,7 @@ private:
 private:
 
     TString SelfInfo;
+    TULIDGenerator UlidGen;
     TULID Ulid;
     TString UlidString;
 

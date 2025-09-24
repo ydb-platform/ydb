@@ -1,14 +1,17 @@
 #include "schemeshard_info_types.h"
 
+#include "schemeshard_impl.h"
 #include "schemeshard_path.h"
-#include "schemeshard_utils.h"  // for IsValidColumnName
+#include "schemeshard_utils.h"  // for IsValidColumnName, ValidateImportDstPath
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -617,8 +620,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
     if (op.HasTTLSettings()) {
         for (const auto& indexDescription : op.GetTableIndexes()) {
-            if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-                errStr = "Table with vector indexes doesn't support TTL";
+            if (!DoesIndexSupportTTL(indexDescription.GetType())) {
+                errStr = TStringBuilder() << "Table with " << indexDescription.GetType() << " index doesn't support TTL";
                 return nullptr;
             }
         }
@@ -2244,6 +2247,8 @@ TString TImportInfo::TItem::ToString(ui32 idx) const {
         << " State: " << State
         << " SubState: " << SubState
         << " WaitTxId: " << WaitTxId
+        << " SrcPath: " << SrcPath
+        << " SrcPrefix: " << SrcPrefix
         << " Issue: '" << Issue << "'"
     << " }";
 }
@@ -2289,8 +2294,22 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
         ImplTableDescriptions.end()
     };
 
-    if (IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+    switch (IndexType) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            // no specialized index description
+            Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            *index.MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription);
+            break;
+        default:
+            Y_DEBUG_ABORT_S(InvalidIndexType(IndexType));
+            break;
     }
 }
 
@@ -2815,6 +2834,142 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
     timestamp.set_seconds((i64)(sec));
     timestamp.set_nanos(0);
     return timestamp;
+}
+
+TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaMapping(TSchemeShard* ss) {
+    TFillItemsFromSchemaMappingResult result;
+
+    TString dstRoot;
+    if (Settings.destination_path().empty()) {
+        dstRoot = CanonizePath(ss->RootPathElements);
+    } else {
+        dstRoot = CanonizePath(Settings.destination_path());
+    }
+
+    TString sourcePrefix = NBackup::NormalizeExportPrefix(Settings.source_prefix());
+    if (sourcePrefix) {
+        sourcePrefix.push_back('/');
+    }
+
+    auto combineDstPath = [&](const TString& path, const TString& rootPath) -> TString {
+        TStringBuilder result;
+        result << rootPath;
+        if (TString objectPath = CanonizePath(path)) {
+            result << objectPath;
+        }
+        return std::move(result);
+    };
+
+    auto init = [&](const NBackup::TSchemaMapping::TItem& schemaMappingItem, NSchemeShard::TImportInfo::TItem& item) {
+        item.SrcPrefix = TStringBuilder() << sourcePrefix << NBackup::NormalizeItemPrefix(schemaMappingItem.ExportPrefix);
+        item.SrcPath = schemaMappingItem.ObjectPath;
+        item.ExportItemIV = schemaMappingItem.IV;
+    };
+
+    TVector<TImportInfo::TItem> items;
+    if (Items.empty()) { // Fill the whole list from schema mapping
+        for (const auto& schemaMappingItem : SchemaMapping->Items) {
+            TString dstPath = combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
+            TString explain;
+            if (!ValidateImportDstPath(dstPath, ss, explain)) {
+                result.AddError(explain);
+                continue;
+            }
+
+            auto& item = items.emplace_back(dstPath);
+            init(schemaMappingItem, item);
+        }
+    } else { // Take existing items from items list
+        using TMapping = THashMap<TString, std::vector<std::pair<size_t /* index in schema mapping */, TString /* path suffix */>>>;
+        TMapping schemaMappingPrefixIndex;
+        TMapping schemaMappingObjectPathIndex;
+        for (size_t i = 0; i < SchemaMapping->Items.size(); ++i) {
+            const auto& schemaMappingItem = SchemaMapping->Items[i];
+            schemaMappingPrefixIndex[NBackup::NormalizeItemPrefix(schemaMappingItem.ExportPrefix)].emplace_back(i, TString());
+            // Add path and parent paths to index
+            // It allows to specify filters by directories
+            TVector<TString> pathComponents = SplitPath(schemaMappingItem.ObjectPath);
+            const TString fullObjectPath = JoinPath(pathComponents);
+            TString currentPath = fullObjectPath;
+            while (!pathComponents.empty()) {
+                schemaMappingObjectPathIndex[currentPath].emplace_back(i, fullObjectPath.size() > currentPath.size() ? fullObjectPath.substr(currentPath.size() + 1) : TString());
+                pathComponents.pop_back();
+                currentPath = JoinPath(pathComponents);
+            }
+        }
+
+        for (auto& item : Items) {
+            TMapping::iterator mappingIt;
+            if (item.SrcPrefix) {
+                mappingIt = schemaMappingPrefixIndex.find(NBackup::NormalizeItemPrefix(item.SrcPrefix));
+                if (mappingIt == schemaMappingPrefixIndex.end()) {
+                    result.AddError(TStringBuilder() << "cannot find prefix \"" << item.SrcPrefix << "\" in schema mapping");
+                }
+            } else if (item.SrcPath) {
+                mappingIt = schemaMappingObjectPathIndex.find(NBackup::NormalizeItemPath(item.SrcPath));
+                if (mappingIt == schemaMappingObjectPathIndex.end()) {
+                    result.AddError(TStringBuilder() << "cannot find source path \"" << item.SrcPath << "\" in schema mapping");
+                }
+            }
+
+            if (mappingIt) {
+                const bool isDstPathAbsolute = item.DstPathName && item.DstPathName.front() == '/';
+                for (const auto& [index, suffix] : mappingIt->second) {
+                    const auto& schemaMappingItem = SchemaMapping->Items[index];
+                    TStringBuilder dstPath;
+                    if (item.DstPathName) {
+                        if (isDstPathAbsolute) {
+                            dstPath << item.DstPathName;
+                        } else {
+                            dstPath << combineDstPath(item.DstPathName, dstRoot);
+                        }
+                        if (suffix) { // Exact filter matching
+                            if (dstPath.back() != '/') {
+                                dstPath << '/';
+                            }
+                            dstPath << suffix;
+                        }
+                    } else {
+                        dstPath << combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
+                    }
+
+                    TString explain;
+                    if (!ValidateImportDstPath(dstPath, ss, explain)) {
+                        result.AddError(explain);
+                        continue;
+                    }
+
+                    auto& item = items.emplace_back(dstPath);
+                    init(schemaMappingItem, item);
+                }
+            }
+        }
+    }
+
+    if (items.size() < Items.size()) {
+        // Just in case: we already validate it, but double check
+        result.AddError("error: not all import items were found in schema mapping");
+    }
+
+    if (items.empty()) {
+        // Schema mapping should not be empty
+        result.AddError("no items to import");
+    }
+
+    Items.swap(items);
+
+    return result;
+}
+
+void TImportInfo::TFillItemsFromSchemaMappingResult::AddError(const TString& err) {
+    Success = false;
+    if (++ErrorsCount > 30) {
+        return;
+    }
+    if (ErrorMessage) {
+        ErrorMessage += '\n';
+    }
+    ErrorMessage += err;
 }
 
 } // namespace NSchemeShard

@@ -1,7 +1,13 @@
 #include "arrow_batch_builder.h"
-#include "switch/switch_type.h"
+
+#include <ydb/core/formats/arrow/arrow_helpers_minikql.h>
+#include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_result_set_arrow.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
+
 namespace NKikimr::NArrow {
 
 namespace {
@@ -76,6 +82,15 @@ arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, 
         return arrow::Status::TypeError("Unsupported type");
     }
     return result;
+}
+
+arrow::Status AppendValue(arrow::RecordBatchBuilder& builder, const NUdf::TUnboxedValue& value, ui32 colNum, const NKikimr::NMiniKQL::TType* type) {
+    try {
+        NKqp::NFormats::AppendElement(value, builder.GetField(colNum), type);
+    } catch (const std::exception& e) {
+        return arrow::Status::FromArgs(arrow::StatusCode::Invalid, e.what());
+    }
+    return arrow::Status::OK();
 }
 
 }
@@ -225,11 +240,32 @@ arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NSc
     return arrow::Status::OK();
 }
 
+arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& yqlColumns) {
+    YqlSchema = yqlColumns;
+    auto schema = MakeArrowSchema(yqlColumns, NotNullColumns);
+    if (!schema.ok()) {
+        return arrow::Status::FromArgs(schema.status().code(), "Cannot make arrow schema: ", schema.status().ToString());
+    }
+    auto status = arrow::RecordBatchBuilder::Make(*schema, MemoryPool, RowsToReserve, &BatchBuilder);
+    NumRows = NumBytes = 0;
+    if (!status.ok()) {
+        return arrow::Status::FromArgs(schema.status().code(), "Cannot make arrow builder: ", status.ToString());
+    }
+    return arrow::Status::OK();
+}
+
 void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) {
     NumBytes += cell.Size();
     auto ydbType = YdbSchema[colNum].second;
     auto status = NKikimr::NArrow::AppendCell(*BatchBuilder, cell, colNum, ydbType);
     Y_ABORT_UNLESS(status.ok(), "Failed to append cell: %s", status.ToString().c_str());
+}
+
+void TArrowBatchBuilder::AppendValue(const NUdf::TUnboxedValue& value, ui32 colNum) {
+    NumBytes += sizeof(NUdf::TUnboxedValue); // TODO: strings or containers sizes?
+    auto yqlType = YqlSchema[colNum].second;
+    auto status = NKikimr::NArrow::AppendValue(*BatchBuilder, value, colNum, yqlType);
+    Y_ENSURE(status.ok(), "Failed to append value: " << status.ToString());
 }
 
 void TArrowBatchBuilder::AddRow(const TDbTupleRef& key, const TDbTupleRef& value) {
@@ -270,6 +306,17 @@ void TArrowBatchBuilder::AddRow(const TConstArrayRef<TCell>& row) {
     for (size_t i = 0; i < row.size(); ++i, ++offset) {
         auto& cell = row[i];
         AppendCell(cell, offset);
+    }
+}
+
+void TArrowBatchBuilder::AddRow(const NUdf::TUnboxedValue& row, size_t membersCount, const TVector<ui32>* columnOrder) {
+    Y_ABORT_UNLESS(!YqlSchema.empty());
+
+    ++NumRows;
+
+    for (size_t i = 0; i < membersCount; ++i) {
+        const auto& memberIndex = (!columnOrder || columnOrder->empty()) ? i : (*columnOrder)[i];
+        AppendValue(row.GetElement(memberIndex), i);
     }
 }
 

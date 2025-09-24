@@ -34,9 +34,9 @@ int main(int argc, char** argv) {
 
     opts.AddLongOption("microservice-id", "Microservice id")
         .RequiredArgument("ID")
-        .DefaultValue("control-plane")
+        .DefaultValue("data-plane")
         .StoreResult(&microserviceId);
-    
+
     opts.AddLongOption("resource-id", "Resource id")
         .Required()
         .RequiredArgument("ID")

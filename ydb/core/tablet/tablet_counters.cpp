@@ -1,5 +1,7 @@
 #include "tablet_counters.h"
 
+#include <google/protobuf/util/json_util.h>
+
 ////////////////////////////////////////////
 namespace NKikimr {
 
@@ -140,6 +142,16 @@ void TTabletCountersBase::OutputProto(NKikimrTabletBase::TTabletCountersBase& op
             }
         }
     }
+}
+
+TString TTabletCountersBase::OutputJson() const {
+    NKikimrTabletBase::TTabletCountersBase proto;
+    OutputProto(proto);
+
+    TString jsonString;
+    google::protobuf::util::MessageToJsonString(proto, &jsonString, {});
+
+    return jsonString;
 }
 
 ////////////////////////////////////////////

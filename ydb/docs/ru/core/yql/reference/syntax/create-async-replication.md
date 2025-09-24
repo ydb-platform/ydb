@@ -32,6 +32,11 @@ WITH (option = value [, ...])
     * `USER` — имя пользователя.
     * `PASSWORD_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего пароль.
 
+  * С помощью [делегированного сервисного аккаунта](https://yandex.cloud/ru/docs/iam/concepts/service-control):
+
+    * `SERVICE_ACCOUNT_ID` — идентификатор сервисного аккаунта.
+    * `INITIAL_TOKEN_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего токен от сервисного аккаунта. Используется для первоначальной инициализации.
+
 * `CONSISTENCY_LEVEL` — [уровень согласованности реплицируемых данных](../../../concepts/async-replication.md#consistency-levels):
   * `ROW` — [согласованность данных уровня строки](../../../concepts/async-replication.md#consistency-level-row). Режим по умолчанию.
   * `GLOBAL` — [глобальная согласованность данных](../../../concepts/async-replication.md#consistency-level-global). Дополнительно можно указать:
@@ -39,11 +44,7 @@ WITH (option = value [, ...])
 
 ## Примеры {#examples}
 
-{% note tip %}
-
-Перед созданием экземпляра асинхронной репликации [создайте](create-object-type-secret.md) секрет с аутентификационными данными для подключения или убедитесь в его существовании и наличии доступа к нему.
-
-{% endnote %}
+{% include [x](../_includes/secret_tip.md) %}
 
 Создание экземпляра асинхронной репликации для таблицы `original_table` из базы `/Root/another_database` в текущую базу в таблицу `replica_table`:
 

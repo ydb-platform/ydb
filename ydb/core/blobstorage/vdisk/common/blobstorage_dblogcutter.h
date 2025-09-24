@@ -22,6 +22,7 @@ namespace NKikimr {
             Syncer,
             HugeKeeper,
             Scrub,
+            Metadata,
             Max
         };
         const EComp Component;

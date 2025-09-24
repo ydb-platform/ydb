@@ -8,8 +8,8 @@
 
 namespace NYql::NFmr {
 
-TFmrUserJobLauncher::TFmrUserJobLauncher(bool runInSeparateProcess, const TString& fmrJobBinaryPath)
-    : RunInSeparateProcess_(runInSeparateProcess), FmrJobBinaryPath_(fmrJobBinaryPath)
+TFmrUserJobLauncher::TFmrUserJobLauncher(const TFmrUserJobLauncherOptions& options)
+    : RunInSeparateProcess_(options.RunInSeparateProcess), FmrJobBinaryPath_(options.FmrJobBinaryPath)
 {
 }
 

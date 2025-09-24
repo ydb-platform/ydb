@@ -1,9 +1,10 @@
 #include "yql_s3_mkql_compiler.h"
 
-#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/mkql/parser.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
 #include <library/cpp/json/json_writer.h>
+
 #include <util/stream/str.h>
 
 namespace NYql {
@@ -34,10 +35,7 @@ TRuntimeNode BuildSerializeCall(
             }
         );
     } else if (format == "json_list") {
-        ui64 jsonListSizeLimit = 10'000;
-        if (const auto userLimit = config->JsonListSizeLimit.Get()) {
-            jsonListSizeLimit = *userLimit;
-        }
+        const auto jsonListSizeLimit = config->JsonListSizeLimit.GetOrDefault();
         auto groupBySize = ctx.ProgramBuilder.Condense1(input,
                         [&](TRuntimeNode item) { return ctx.ProgramBuilder.AsList(item); },
                         [&](TRuntimeNode, TRuntimeNode state) { return ctx.ProgramBuilder.AggrGreaterOrEqual(ctx.ProgramBuilder.Length(state), ctx.ProgramBuilder.NewDataLiteral<ui64>(jsonListSizeLimit)); },
@@ -94,14 +92,11 @@ TRuntimeNode BuildSerializeCall(
             std::for_each(keys.cbegin(), keys.cend(), [&writer](const std::string_view& key){ writer.Write(key); });
         writer.CloseArray();
 
-        if (const auto keysCount = config->UniqueKeysCountLimit.Get())
-            writer.Write("keys_count_limit", *keysCount);
+        writer.Write("keys_count_limit", ToString(config->UniqueKeysCountLimit.GetOrDefault()));
     }
 
-    if (const auto totalSize = config->SerializeMemoryLimit.Get())
-        writer.Write("total_size_limit", *totalSize);
-    if (const auto blockSize = config->BlockSizeMemoryLimit.Get())
-        writer.Write("block_size_limit", *blockSize);
+    writer.Write("total_size_limit", ToString(config->SerializeMemoryLimit.GetOrDefault()));
+    writer.Write("block_size_limit", ToString(config->BlockSizeMemoryLimit.GetOrDefault()));
 
     for (const auto& v : settings) {
         writer.Write(v.first, v.second);
@@ -109,8 +104,9 @@ TRuntimeNode BuildSerializeCall(
 
     writer.CloseMap();
     writer.Flush();
-    if (settingsAsJson == "{}")
+    if (settingsAsJson == "{}") {
         settingsAsJson.clear();
+    }
 
     input = ctx.ProgramBuilder.FromFlow(input);
     const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({input.GetStaticType()})});
@@ -131,7 +127,7 @@ TRuntimeNode SerializeForS3(const TS3SinkOutput& wrapper, const TS3Configuration
     return BuildSerializeCall(input, keys, wrapper.Format().Value(), settings, inputItemType, config, ctx);
 }
 
-}
+} // anonymous namespace
 
 void RegisterDqS3MkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, const TS3State::TPtr& state) {
     compiler.ChainCallable(TDqSourceWideWrap::CallableName(),
@@ -158,11 +154,12 @@ void RegisterDqS3MkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
             return TRuntimeNode();
         });
 
-    if (!compiler.HasCallable(TS3SinkOutput::CallableName()))
+    if (!compiler.HasCallable(TS3SinkOutput::CallableName())) {
         compiler.AddCallable(TS3SinkOutput::CallableName(),
             [state](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
                 return SerializeForS3(TS3SinkOutput(&node), state->Configuration, ctx);
             });
+    }
 }
 
-}
+} // namespace NYql

@@ -14,9 +14,22 @@ namespace NYT {
 
 namespace NDetail {
 
-using TBacktrace = TRange<const void*>;
 using TBacktraceBuffer = std::array<const void*, 99>; // 99 is to keep formatting :)
-TBacktrace GetBacktrace(TBacktraceBuffer* buffer);
+TBacktraceView GetBacktrace(TBacktraceBuffer* buffer);
+
+template <class TCallback>
+void SymbolizeBacktrace(TBacktraceView backtrace, TCallback writeCallback, void* startPC = nullptr)
+{
+    if (backtrace.empty()) {
+        writeCallback(TStringBuf("<stack trace is not available>"));
+    } else {
+        NDetail::TBacktraceBuffer::const_iterator it;
+        if (startPC && (it = std::find(backtrace.Begin(), backtrace.End(), startPC)) != backtrace.End()) {
+            backtrace = backtrace.Slice(it - backtrace.Begin(), backtrace.Size());
+        }
+        NBacktrace::SymbolizeBacktrace(backtrace, writeCallback);
+    }
+}
 
 } // namespace NDetail
 
@@ -24,16 +37,8 @@ template <class TCallback>
 Y_NO_INLINE void DumpBacktrace(TCallback writeCallback, void* startPC)
 {
     NDetail::TBacktraceBuffer buffer;
-    auto frames = NDetail::GetBacktrace(&buffer);
-    if (frames.empty()) {
-        writeCallback(TStringBuf("<stack trace is not available>"));
-    } else {
-        NDetail::TBacktraceBuffer::const_iterator it;
-        if (startPC && (it = std::find(frames.Begin(), frames.End(), startPC)) != frames.End()) {
-            frames = frames.Slice(it - frames.Begin(), frames.Size());
-        }
-        NBacktrace::SymbolizeBacktrace(frames, writeCallback);
-    }
+    auto backtrace = NDetail::GetBacktrace(&buffer);
+    NDetail::SymbolizeBacktrace(backtrace, writeCallback, startPC);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

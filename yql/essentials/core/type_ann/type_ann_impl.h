@@ -24,6 +24,9 @@ namespace NTypeAnnImpl {
         void RegisterResolvedImport(const IUdfResolver::TImport& import);
     };
 
+    const TTypeAnnotationNode* ParseTypeCached(const TString& typeStr, TExprContext& ctx, TTypeAnnotationContext& typeCtx);
+    TExprNodeBuilder& AddChildren(TExprNodeBuilder& builder, ui32 index, const TExprNode::TPtr& input);
+
     // Implemented in type_ann_join.cpp
     IGraphTransformer::TStatus JoinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus JoinDictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

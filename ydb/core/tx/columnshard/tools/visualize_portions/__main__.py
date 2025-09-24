@@ -161,7 +161,7 @@ def GetIntersections(portions):
 
 
 def get_interactive_backends():
-    print(f"matplotlib version: {metadata.version("matplotlib")}")
+    print(f'matplotlib version: {metadata.version("matplotlib")}')
     if version.Version(metadata.version("matplotlib")) < version.Version("3.9"):
         from matplotlib import rcsetup
         return rcsetup.interactive_bk

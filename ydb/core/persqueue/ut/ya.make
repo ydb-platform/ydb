@@ -54,6 +54,13 @@ RESOURCE(
     ydb/core/persqueue/ut/resources/counters_topics.html counters_topics.html
     ydb/core/persqueue/ut/resources/counters_topics_extended.html counters_topics_extended.html
 
+    ydb/core/persqueue/ut/resources/partition_counters/federation/after_write.html federation_after_write.html
+    ydb/core/persqueue/ut/resources/partition_counters/federation/after_read.html federation_after_read.html
+    ydb/core/persqueue/ut/resources/partition_counters/federation/turned_off.html federation_turned_off.html
+    ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen/after_write.html first_class_citizen_after_write.html
+    ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen/after_read.html first_class_citizen_after_read.html
+    ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen/turned_off.html first_class_citizen_turned_off.html
+
     ydb/core/persqueue/ut/resources/counters_pqproxy.html counters_pqproxy.html
 
     ydb/core/persqueue/ut/resources/counters_labeled.json counters_labeled.json

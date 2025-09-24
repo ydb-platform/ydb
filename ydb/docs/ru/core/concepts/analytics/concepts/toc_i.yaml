@@ -1,0 +1,15 @@
+items:
+  - name: Ввод данных
+    href: ingest.md
+  - name: Хранение данных
+    href: store.md
+  - name: Выполнение запросов
+    href: execution.md
+  - name: Федеративные запросы
+    href: federated.md
+  - name: Трансформация и подготовка данных (ELT/ETL)
+    href: etl.md
+  - name: BI-аналитика и визуализация данных
+    href: bi.md
+  - name: Machine Learning
+    href: ml.md

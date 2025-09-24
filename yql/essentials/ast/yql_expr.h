@@ -85,6 +85,8 @@ class TEmptyListExprType;
 class TEmptyDictExprType;
 class TBlockExprType;
 class TScalarExprType;
+class TLinearExprType;
+class TDynamicLinearExprType;
 
 const size_t DefaultMistypeDistance = 3;
 const TString YqlVirtualPrefix = "_yql_virtual_";
@@ -120,6 +122,8 @@ struct TTypeAnnotationVisitor {
     virtual void Visit(const TEmptyDictExprType& type) = 0;
     virtual void Visit(const TBlockExprType& type) = 0;
     virtual void Visit(const TScalarExprType& type) = 0;
+    virtual void Visit(const TLinearExprType& type) = 0;
+    virtual void Visit(const TDynamicLinearExprType& type) = 0;
 };
 
 struct TDefaultTypeAnnotationVisitor : public TTypeAnnotationVisitor {
@@ -149,6 +153,8 @@ struct TDefaultTypeAnnotationVisitor : public TTypeAnnotationVisitor {
     void Visit(const TEmptyDictExprType& type) override;
     void Visit(const TBlockExprType& type) override;
     void Visit(const TScalarExprType& type) override;
+    void Visit(const TLinearExprType& type) override;
+    void Visit(const TDynamicLinearExprType& type) override;
 };
 
 class TErrorTypeVisitor : public TDefaultTypeAnnotationVisitor
@@ -180,9 +186,10 @@ enum ETypeAnnotationFlags : ui32 {
     TypeHasDynamicSize = 0x2000,
     TypeNonComparableInternal = 0x4000,
     TypeHasError = 0x8000,
+    TypeHasStaticLinear = 0x10000,
 };
 
-const ui64 TypeHashMagic = 0x10000;
+const ui64 TypeHashMagic = 0x1000000;
 
 inline ui64 StreamHash(const void* buffer, size_t size, ui64 seed) {
     return MurmurHash(buffer, size, seed);
@@ -814,6 +821,60 @@ public:
     }
 
     bool operator==(const TScalarExprType& other) const {
+        return GetItemType() == other.GetItemType();
+    }
+
+private:
+    const TTypeAnnotationNode* ItemType_;
+};
+
+class TLinearExprType : public TTypeAnnotationNode {
+public:
+    static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Linear;
+
+    TLinearExprType(ui64 hash, const TTypeAnnotationNode* itemType)
+        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeHasStaticLinear | TypeNonPersistable, hash, itemType->GetUsedPgExtensions())
+        , ItemType_(itemType)
+    {
+    }
+
+    static ui64 MakeHash(const TTypeAnnotationNode* itemType) {
+        ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Linear;
+        return StreamHash(itemType->GetHash(), hash);
+    }
+
+    const TTypeAnnotationNode* GetItemType() const {
+        return ItemType_;
+    }
+
+    bool operator==(const TLinearExprType& other) const {
+        return GetItemType() == other.GetItemType();
+    }
+
+private:
+    const TTypeAnnotationNode* ItemType_;
+};
+
+class TDynamicLinearExprType : public TTypeAnnotationNode {
+public:
+    static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::DynamicLinear;
+
+    TDynamicLinearExprType(ui64 hash, const TTypeAnnotationNode* itemType)
+        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash, itemType->GetUsedPgExtensions())
+        , ItemType_(itemType)
+    {
+    }
+
+    static ui64 MakeHash(const TTypeAnnotationNode* itemType) {
+        ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::DynamicLinear;
+        return StreamHash(itemType->GetHash(), hash);
+    }
+
+    const TTypeAnnotationNode* GetItemType() const {
+        return ItemType_;
+    }
+
+    bool operator==(const TDynamicLinearExprType& other) const {
         return GetItemType() == other.GetItemType();
     }
 
@@ -1525,6 +1586,12 @@ inline bool TTypeAnnotationNode::Equals(const TTypeAnnotationNode& node) const {
     case ETypeAnnotationKind::Scalar:
         return static_cast<const TScalarExprType&>(*this) == static_cast<const TScalarExprType&>(node);
 
+    case ETypeAnnotationKind::Linear:
+        return static_cast<const TLinearExprType&>(*this) == static_cast<const TLinearExprType&>(node);
+
+    case ETypeAnnotationKind::DynamicLinear:
+        return static_cast<const TDynamicLinearExprType&>(*this) == static_cast<const TDynamicLinearExprType&>(node);
+
     case ETypeAnnotationKind::LastType:
         YQL_ENSURE(false, "Incorrect type");
 
@@ -1586,6 +1653,10 @@ inline void TTypeAnnotationNode::Accept(TTypeAnnotationVisitor& visitor) const {
         return visitor.Visit(static_cast<const TBlockExprType&>(*this));
     case ETypeAnnotationKind::Scalar:
         return visitor.Visit(static_cast<const TScalarExprType&>(*this));
+    case ETypeAnnotationKind::Linear:
+        return visitor.Visit(static_cast<const TLinearExprType&>(*this));
+    case ETypeAnnotationKind::DynamicLinear:
+        return visitor.Visit(static_cast<const TDynamicLinearExprType&>(*this));
     case ETypeAnnotationKind::LastType:
         YQL_ENSURE(false, "Incorrect type");
     }
@@ -2428,6 +2499,7 @@ struct TExprStep {
     enum ELevel {
         Params,
         ExpandApplyForLambdas,
+        ExpandSeq,
         ValidateProviders,
         Configure,
         ExprEval,
@@ -2616,6 +2688,16 @@ struct TMakeTypeImpl<TScalarExprType> {
     static const TScalarExprType* Make(TExprContext& ctx, const TTypeAnnotationNode* itemType);
 };
 
+template <>
+struct TMakeTypeImpl<TLinearExprType> {
+    static const TLinearExprType* Make(TExprContext& ctx, const TTypeAnnotationNode* itemType);
+};
+
+template <>
+struct TMakeTypeImpl<TDynamicLinearExprType> {
+    static const TDynamicLinearExprType* Make(TExprContext& ctx, const TTypeAnnotationNode* itemType);
+};
+
 using TSingletonTypeCache = std::tuple<
     const TVoidExprType*,
     const TNullExprType*,
@@ -2665,6 +2747,7 @@ struct TExprContext : private TNonCopyable {
     std::unordered_set<const TConstraintNode*, TConstraintNode::THash, TConstraintNode::TEqual> ConstraintSet;
     std::unordered_map<const TTypeAnnotationNode*, TExprNode::TPtr> TypeAsNodeCache;
     std::unordered_set<TStringBuf, THash<TStringBuf>> DisabledConstraints;
+    std::unordered_map<TString, const TTypeAnnotationNode*> ParseTypeCache;
 
     ui64 NextUniqueId = 0;
     ui64 NodeAllocationCounter = 0;
@@ -2732,6 +2815,8 @@ struct TExprContext : private TNonCopyable {
     TExprNode::TPtr DeepCopyLambda(const TExprNode& node, TExprNode::TListType&& body);
     [[nodiscard]]
     TExprNode::TPtr DeepCopyLambda(const TExprNode& node, TExprNode::TPtr&& body = TExprNode::TPtr());
+    [[nodiscard]]
+    TExprNode::TPtr CopyLambdaWithTypes(const TExprNode& node);
     [[nodiscard]]
     TExprNode::TPtr FuseLambdas(const TExprNode& outer, const TExprNode& inner);
 

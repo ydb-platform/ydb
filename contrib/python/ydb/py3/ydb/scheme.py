@@ -124,7 +124,7 @@ class SchemeEntryType(enum.IntEnum):
         return entry == SchemeEntryType.EXTERNAL_DATA_SOURCE
 
     @staticmethod
-    def is_external_view(entry):
+    def is_view(entry):
         """
         :param entry: A scheme entry to check
         :return: True if scheme entry is a view and False otherwise
@@ -132,7 +132,7 @@ class SchemeEntryType(enum.IntEnum):
         return entry == SchemeEntryType.VIEW
 
     @staticmethod
-    def is_external_resource_pool(entry):
+    def is_resource_pool(entry):
         """
         :param entry: A scheme entry to check
         :return: True if scheme entry is a resource pool and False otherwise

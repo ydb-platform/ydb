@@ -42,7 +42,7 @@ TExprBase SelectFields(TExprBase node, Container fields, TExprContext& ctx, TPos
         .Done();
 }
 
-TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx) {
     auto maybeReturning = node.Maybe<TKqlReturningList>();
     if (!maybeReturning) {
         return node;
@@ -204,7 +204,7 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     }
 
     TExprNode::TPtr result = returning.Update().Ptr();
-    auto status = TryConvertTo(result, *result->GetTypeAnn(), *returning.Raw()->GetTypeAnn(), ctx);
+    auto status = TryConvertTo(result, *result->GetTypeAnn(), *returning.Raw()->GetTypeAnn(), ctx, typeCtx);
     YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error, "wrong returning expr type");
 
     if (status.Level == IGraphTransformer::TStatus::Repeat) {

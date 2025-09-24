@@ -30,7 +30,9 @@ namespace NYql {
     xx(Multi, 23) \
     xx(Pg, 24) \
     xx(Block, 25) \
-    xx(Scalar, 26)
+    xx(Scalar, 26) \
+    xx(Linear, 27) \
+    xx(DynamicLinear, 28)
 
 enum class ETypeAnnotationKind : ui64 {
     YQL_TYPE_ANN_KIND_MAP(ENUM_VALUE_GEN)

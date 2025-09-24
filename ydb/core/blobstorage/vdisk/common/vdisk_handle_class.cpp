@@ -9,9 +9,9 @@ namespace NKikimr {
     namespace NPriPut {
 
         EHandleType HandleType(const ui32 minHugeBlobInBytes, NKikimrBlobStorage::EPutHandleClass handleClass,
-                               ui32 originalBufSizeWithoutOverhead, bool addHeader) {
+                ui32 originalBufSizeWithoutOverhead) {
             // what size of huge blob it would be, if it huge
-            const ui64 hugeBlobSize = (addHeader ? TDiskBlob::HeaderSize : 0) + originalBufSizeWithoutOverhead;
+            const ui64 hugeBlobSize = TDiskBlob::MaxHeaderSize + originalBufSizeWithoutOverhead;
 
             switch (handleClass) {
                 case NKikimrBlobStorage::TabletLog:

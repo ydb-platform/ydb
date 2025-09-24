@@ -1596,7 +1596,7 @@ roaring_bitmap_t *roaring_bitmap_deserialize_safe(const void *buf,
         for (uint32_t i = 0; i < card; i++) {
             // elems may not be aligned, read with memcpy
             uint32_t elem;
-            memcpy((char*)&elem, (char*)(elems + i), sizeof(elem));
+            memcpy((char *)&elem, (char *)(elems + i), sizeof(elem));
             roaring_bitmap_add_bulk(bitmap, &context, elem);
         }
         return bitmap;
@@ -3016,7 +3016,7 @@ void roaring_bitmap_frozen_serialize(const roaring_bitmap_t *rb, char *buf) {
     uint16_t *key_zone = (uint16_t *)arena_alloc(&buf, 2 * ra->size);
     uint16_t *count_zone = (uint16_t *)arena_alloc(&buf, 2 * ra->size);
     uint8_t *typecode_zone = (uint8_t *)arena_alloc(&buf, ra->size);
-    char *header_zone = (char*)arena_alloc(&buf, 4);
+    char *header_zone = (char *)arena_alloc(&buf, 4);
 
     for (int32_t i = 0; i < ra->size; i++) {
         uint16_t count;

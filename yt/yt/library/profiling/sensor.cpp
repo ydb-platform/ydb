@@ -517,6 +517,18 @@ TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithHot(bool value) const
 }
 
 template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithMemOnly() const
+{
+    if (!Enabled_) {
+        return {};
+    }
+
+    auto opts = Options_;
+    opts.MemOnly = true;
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, Tags_, GetRegistry(), opts);
+}
+
+template <bool UseWeakPtr>
 TCounter TProfiler<UseWeakPtr>::Counter(const std::string& name) const
 {
     const auto& impl = GetRegistry();

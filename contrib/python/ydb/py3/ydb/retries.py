@@ -32,6 +32,7 @@ class RetrySettings(object):
         fast_backoff_settings=None,
         slow_backoff_settings=None,
         idempotent=False,
+        retry_cancelled=False,
     ):
         self.max_retries = max_retries
         self.max_session_acquire_timeout = max_session_acquire_timeout
@@ -45,6 +46,7 @@ class RetrySettings(object):
         self.retry_not_found = True
         self.idempotent = idempotent
         self.retry_internal_error = True
+        self.retry_cancelled = retry_cancelled
         self.unknown_error_handler = lambda e: None
         self.get_session_client_timeout = get_session_client_timeout
         if max_session_acquire_timeout is not None:

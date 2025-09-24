@@ -1,5 +1,5 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "3.22.5";
+  version = "22.5";
   passthru.version = version;
 
   src = fetchFromGitHub {
@@ -8,15 +8,28 @@ pkgs: attrs: with pkgs; with attrs; rec {
     rev = "v${version}";
     hash = "sha256-NMEij1eFg9bMVlNSOg1WJbXK0teeSVev9UUNxiC1AC0=";
 
+    # FIXME: import protobuf against abseil-cpp from buildInputs
     fetchSubmodules = true;
   };
 
   patches = [
     ./unversion-protoc.patch
   ];
+
+  buildInputs = [
+    # FIXME: import protobuf against abseil-cpp from buildInputs
+    # abseil-cpp
+    zlib
+  ];
+
   cmakeFlags = [
-    "-Dprotobuf_BUILD_SHARED_LIBS=OFF"
-    "-DBUILD_SHARED_LIBS=OFF"
+    # FIXME: import protobuf against abseil-cpp from buildInputs
+    # "-Dprotobuf_ABSL_PROVIDER=package
+
+    # Build shared libs for proper PEERDIR detection
+    "-Dprotobuf_BUILD_SHARED_LIBS=ON"
+    "-Dprotobuf_BUILD_STATIC_LIBS=OFF"
+    "-Dprotobuf_BUILD_TESTS=OFF"
   ];
 }
 

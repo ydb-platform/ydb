@@ -188,7 +188,10 @@ int TCommandSql::RunCommand(TConfig& config) {
                     settings
                 );
 
-            auto result = asyncResult.GetValueSync();
+            if (!WaitInterruptible(asyncResult)) {
+                return EXIT_FAILURE;
+            }
+            auto result = asyncResult.GetValue();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
             int printResult = PrintResponse(result);
             if (printResult != EXIT_SUCCESS) {
@@ -203,7 +206,10 @@ int TCommandSql::RunCommand(TConfig& config) {
             settings
         );
 
-        auto result = asyncResult.GetValueSync();
+        if (!WaitInterruptible(asyncResult)) {
+            return EXIT_FAILURE;
+        }
+        auto result = asyncResult.GetValue();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         return PrintResponse(result);
     }
@@ -222,7 +228,11 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
         TMaybe<NQuery::TExecStats> execStats;
 
         while (!IsInterrupted()) {
-            auto streamPart = result.ReadNext().ExtractValueSync();
+            auto asyncStreamPart = result.ReadNext();
+            if (!WaitInterruptible(asyncStreamPart)) {
+                return EXIT_FAILURE;
+            }
+            auto streamPart = asyncStreamPart.ExtractValue();
             if (ThrowOnErrorAndCheckEOS(streamPart)) {
                 break;
             }

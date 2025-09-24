@@ -137,10 +137,9 @@ namespace NKikimr {
         using TBase::AddBasic;
 
     public:
-        TCompactRecordMerger(TBlobStorageGroupType gtype, bool addHeader)
+        TCompactRecordMerger(TBlobStorageGroupType gtype, EBlobHeaderMode blobHeaderMode)
             : TBase(gtype, true)
-            , AddHeader(addHeader)
-            , DataMerger(gtype, addHeader)
+            , DataMerger(gtype, blobHeaderMode)
         {}
 
         void Clear() {
@@ -209,7 +208,6 @@ namespace NKikimr {
         }
 
     protected:
-        const bool AddHeader;
         TDataMerger DataMerger;
         TKey Key;
         bool ExternalDataStage = false;

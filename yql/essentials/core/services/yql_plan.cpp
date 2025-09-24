@@ -198,7 +198,8 @@ public:
         writer.OnBeginMap();
         writer.OnKeyedItem("Operations");
         writer.OnBeginList();
-        VisitNode(root, nodes, order);
+        TNodeOnNodeOwnedMap worldMap;
+        VisitNode(root, nodes, order, worldMap);
         ui32 lastId = 0;
         TVector<TBasicNode> basicNodes;
         TVector<TBasicLink> basicLinks;
@@ -320,7 +321,7 @@ public:
         writer.OnEndMap();
     }
 
-    void VisitCallable(const TExprNode::TPtr& node, TNodeMap<TNodeInfo>& nodes, TExprNode::TListType& order) {
+    void VisitCallable(const TExprNode::TPtr& node, TNodeMap<TNodeInfo>& nodes, TExprNode::TListType& order, TNodeOnNodeOwnedMap& worldMap) {
         if (nodes.cend() != nodes.find(node.Get())) {
             return;
         }
@@ -333,12 +334,23 @@ public:
         auto& info = nodes.emplace(node.Get(), TNodeInfo(translatedId, node.Get())).first->second;
         TExprNode::TListType& dependencies = info.Dependencies;
         if (node->Content() == CommitName) {
-            dependencies.push_back(node->Child(0));
+            dependencies.push_back(node->HeadPtr());
             auto dataSinkName = node->Child(1)->Child(0)->Content();
             auto datasink = Types_.DataSinkMap.FindPtr(dataSinkName);
             YQL_ENSURE(datasink);
             info.Provider = (*datasink).Get();
             info.IsVisible = dataSinkName != ResultProviderName;
+        }
+        else if (node->Content() == SeqName) {
+            auto world = node->HeadPtr();
+            dependencies.push_back(world);
+            for (size_t i = 1; i < node->ChildrenSize(); ++i) {
+                YQL_ENSURE(node->Child(i)->IsLambda());
+                worldMap[&node->Child(i)->Head().Head()] = world;
+                world = node->Child(i)->TailPtr();
+                dependencies.push_back(world);
+            }
+            info.IsVisible = false;
         }
         else if (node->ChildrenSize() >= 2 && node->Child(1)->IsCallable("DataSource")) {
             auto dataSourceName = node->Child(1)->Child(0)->Content();
@@ -389,15 +401,21 @@ public:
             }
         }
 
+        for (auto& child : dependencies) {
+            if (auto w = worldMap.find(child.Get()); w != worldMap.end()) {
+                child = w->second;
+            }
+        }
+
         for (const auto& child : dependencies) {
-            VisitNode(child, nodes, order);
+            VisitNode(child, nodes, order, worldMap);
         }
 
         order.push_back(node);
     }
 
     void VisitNode(const TExprNode::TPtr& node, TNodeMap<TNodeInfo>& nodes,
-        TExprNode::TListType& order) {
+        TExprNode::TListType& order, TNodeOnNodeOwnedMap& worldMap) {
         switch (node->Type()) {
         case TExprNode::Atom:
         case TExprNode::List:
@@ -407,7 +425,7 @@ public:
         case TExprNode::Arguments:
             return;
         case TExprNode::Callable:
-            VisitCallable(node, nodes, order);
+            VisitCallable(node, nodes, order, worldMap);
             break;
         }
     }

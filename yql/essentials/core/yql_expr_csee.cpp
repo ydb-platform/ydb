@@ -197,6 +197,9 @@ namespace {
                 case EDependencyScope::Mixed:
                     Y_ABORT("Strange argument.");
             }
+            if (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+                hash = CseeHash(node.UniqueId(), hash);
+            }
             break;
         case TExprNode::World:
             break;
@@ -356,6 +359,9 @@ namespace {
             return true;
         }
         case TExprNode::Argument: {
+            if (left.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World || right.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+                return false;
+            }
             if (currLeftFrame.Lambda && currRightFrame.Lambda && IsArgInScope(currLeftFrame, left) && IsArgInScope(currRightFrame, right)) {
                 const ui16 leftRelativeLevel = GetDependencyLevel(left);
                 const ui16 rightRelativeLevel = GetDependencyLevel(right);

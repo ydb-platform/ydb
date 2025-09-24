@@ -530,6 +530,7 @@ void TCms::AddPermissionExtensions(const TAction& action, TPermission& perm) con
         case TAction::RESTART_SERVICES:
         case TAction::SHUTDOWN_HOST:
         case TAction::REBOOT_HOST:
+        case TAction::DRAIN_NODE:
             AddHostExtensions(action.GetHost(), perm);
             break;
         default:
@@ -614,6 +615,10 @@ bool TCms::CheckAction(const TAction &action, const TActionOptions &opts, TError
             return CheckActionShutdownHost(action, opts, error, ctx);
         case TAction::REPLACE_DEVICES:
             return CheckActionReplaceDevices(action, opts.PermissionDuration, error);
+        case TAction::DRAIN_NODE:
+        case TAction::CORDON_NODE:
+            error.Deadline = TActivationContext::Now() + opts.PermissionDuration;
+            return true;
         case TAction::START_SERVICES:
         case TAction::STOP_SERVICES:
         case TAction::ADD_HOST:
@@ -1158,8 +1163,9 @@ void TCms::DoPermissionsCleanup(const TActorContext &ctx)
         const TDuration duration = TDuration::MicroSeconds(entry.second.Action.GetDuration());
         const TDuration doubleDuration = ((TDuration::Max() / 2) >= duration ? (2 * duration) : TDuration::Max());
         const TInstant deadline(entry.second.Deadline);
-        if ((deadline + doubleDuration) <= now)
+        if ((deadline + doubleDuration) <= now) {
             ids.push_back(entry.first);
+        }
     }
 
     Execute(CreateTxRemovePermissions(std::move(ids), nullptr, nullptr, true), ctx);
@@ -1554,6 +1560,10 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
         TInstant deadline = TActivationContext::Now() + TDuration::MicroSeconds(copy->Request.GetDuration());
         perm->SetDeadline(deadline.GetValue());
     }
+
+    copy->Request.ClearActions();
+
+    it->second = *copy;
 
     AcceptPermissions(resp->Record, rec.GetRequestId(), rec.GetUser(), ctx, true);
 

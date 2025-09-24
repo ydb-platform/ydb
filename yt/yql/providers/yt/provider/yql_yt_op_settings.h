@@ -22,6 +22,8 @@ enum class EYtWriteMode: ui32 {
     Append          /* "append" */,
     Drop            /* "drop" */,
     Flush           /* "flush" */,
+    Create          /* "create" */,
+    Alter           /* "alter" */,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -125,6 +127,10 @@ enum class EYtSettingType: ui64 {
     MutationId               /* "mutationid", "mutation_id" */,
     ColumnGroups             /* "column_groups", "columngroups" */,
     SecurityTags             /* "security_tags", "securitytags" */,
+    // Create, Alter
+    Columns                  /* "columns"*/,
+    Actions                  /* "actions"*/,
+    PrimaryKey               /* "primarykey"*/,
 
     LAST
 };

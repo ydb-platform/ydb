@@ -102,7 +102,7 @@ public:
         }
 
         KqpSessionId = record.GetResponse().GetSessionId();
-        Y_ABORT_UNLESS(!KqpSessionId.empty());
+        Y_ENSURE(!KqpSessionId.empty());
 
         return true;
     }
@@ -171,7 +171,7 @@ public:
 
         NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
         TxId = record.GetResponse().GetTxMeta().id();
-        Y_ABORT_UNLESS(!TxId.empty());
+        Y_ENSURE(!TxId.empty());
 
         while(parser.TryNextRow()) {
             auto tt = parser.ColumnParser(0).GetOptionalUint32();

@@ -195,6 +195,7 @@ std::vector<TString> TTableRecords::GetColumnIds() const {
 Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildUpsertQuery(const TString& tablePath) const {
     Ydb::Table::ExecuteDataQueryRequest result;
     TStringBuilder sb;
+    sb << "--!syntax_v1\n";
     sb << "DECLARE $objects AS List<" << BuildColumnsSchemaStruct() << ">;" << Endl;
     sb << "UPSERT INTO `" + tablePath + "`" << Endl;
     sb << "SELECT " << JoinSeq(",", GetColumnIds()) << " FROM AS_TABLE($objects)" << Endl;
@@ -207,6 +208,7 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildUpsertQuery(const TStrin
 Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildInsertQuery(const TString& tablePath) const {
     Ydb::Table::ExecuteDataQueryRequest result;
     TStringBuilder sb;
+    sb << "--!syntax_v1\n";
     sb << "DECLARE $objects AS List<" << BuildColumnsSchemaStruct() << ">;" << Endl;
     sb << "INSERT INTO `" + tablePath + "`" << Endl;
     sb << "SELECT " << JoinSeq(",", GetColumnIds()) << " FROM AS_TABLE($objects)" << Endl;
@@ -219,6 +221,7 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildInsertQuery(const TStrin
 Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildSelectQuery(const TString& tablePath) const {
     Ydb::Table::ExecuteDataQueryRequest result;
     TStringBuilder sb;
+    sb << "--!syntax_v1\n";
     sb << "DECLARE $ids AS List<" << BuildColumnsSchemaTuple() << ">;" << Endl;
     sb << "SELECT * FROM `" + tablePath + "`" << Endl;
     if (GetColumnIds().size() > 1) {
@@ -235,6 +238,7 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildSelectQuery(const TStrin
 Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildDeleteQuery(const TString& tablePath) const {
     Ydb::Table::ExecuteDataQueryRequest result;
     TStringBuilder sb;
+    sb << "--!syntax_v1\n";
     sb << "DECLARE $ids AS List<" << BuildColumnsSchemaTuple() << ">;" << Endl;
     sb << "DELETE FROM `" + tablePath + "`" << Endl;
     sb << "WHERE (" << JoinSeq(", ", GetColumnIds()) << ") IN $ids" << Endl;
@@ -247,6 +251,7 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildDeleteQuery(const TStrin
 Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildUpdateQuery(const TString& tablePath) const {
     Ydb::Table::ExecuteDataQueryRequest result;
     TStringBuilder sb;
+    sb << "--!syntax_v1\n";
     sb << "DECLARE $objects AS List<" << BuildColumnsSchemaStruct() << ">;" << Endl;
     sb << "UPDATE `" + tablePath + "` ON" << Endl;
     sb << "SELECT " << JoinSeq(",", GetColumnIds()) << " FROM AS_TABLE($objects)" << Endl;

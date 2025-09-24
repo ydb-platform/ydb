@@ -224,6 +224,12 @@ public:
             case ETypeAnnotationKind::Stream:
                 TBase::SaveStreamType(*type->Cast<TStreamExprType>());
                 break;
+            case ETypeAnnotationKind::Linear:
+                TBase::SaveLinearType(*type->Cast<TLinearExprType>());
+                break;
+            case ETypeAnnotationKind::DynamicLinear:
+                TBase::SaveDynamicLinearType(*type->Cast<TDynamicLinearExprType>());
+                break;
             default:
                 YQL_ENSURE(false, "Unsupported type annotation kind: " << type->GetKind());
         }
@@ -336,6 +342,12 @@ struct TExprTypeLoader {
     }
     TMaybe<TType> LoadOptionalType(TType itemType, ui32 /*level*/) {
         return Ctx.MakeType<TOptionalExprType>(itemType);
+    }
+    TMaybe<TType> LoadLinearType(TType itemType, ui32 /*level*/) {
+        return Ctx.MakeType<TLinearExprType>(itemType);
+    }
+    TMaybe<TType> LoadDynamicLinearType(TType itemType, ui32 /*level*/) {
+        return Ctx.MakeType<TDynamicLinearExprType>(itemType);
     }
     TMaybe<TType> LoadTupleType(const TVector<TType>& elements, ui32 /*level*/) {
         auto ret = Ctx.MakeType<TTupleExprType>(elements);

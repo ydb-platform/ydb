@@ -77,17 +77,16 @@ std::optional<TInotifyHandle::TPollResult> TInotifyHandle::Poll()
 TInotifyWatch::TInotifyWatch(
     TInotifyHandle* handle,
     std::string path,
-    EInotifyWatchEvents mask)
+    [[maybe_unused]] EInotifyWatchEvents mask)
     : FD_(handle->GetFD())
     , Path_(std::move(path))
-    , Mask_(mask)
 {
 #ifdef _linux_
     YT_VERIFY(FD_ >= 0);
     WD_ = inotify_add_watch(
         FD_,
         Path_.c_str(),
-        ToUnderlying(Mask_));
+        ToUnderlying(mask));
     if (WD_ < 0) {
         WD_ = -1;
         THROW_ERROR_EXCEPTION("Error registering watch for %v",

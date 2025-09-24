@@ -1461,6 +1461,47 @@ private:
     const NMiniKQL::TType* ItemType_ = nullptr;
 };
 
+//////////////////////////////////////////////////////////////////////////////
+// TLinearTypeBuilder
+//////////////////////////////////////////////////////////////////////////////
+class TLinearTypeBuilder: public NUdf::ILinearTypeBuilder
+{
+public:
+    TLinearTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent, bool isDynamic)
+        : NUdf::ILinearTypeBuilder(isDynamic)
+        , Parent_(parent)
+    {
+    }
+
+    NUdf::ILinearTypeBuilder& Item(NUdf::TDataTypeId typeId) override {
+        ItemType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
+        return *this;
+    }
+
+    NUdf::ILinearTypeBuilder& Item(const NUdf::TType* type) override {
+        ItemType_ = static_cast<const NMiniKQL::TType*>(type);
+        return *this;
+    }
+
+    NUdf::ILinearTypeBuilder& Item(
+            const NUdf::ITypeBuilder& typeBuilder) override
+    {
+        ItemType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
+        return *this;
+    }
+
+    NUdf::TType* Build() const override {
+        return NMiniKQL::TLinearType::Create(
+                    const_cast<NMiniKQL::TType*>(ItemType_),
+                    IsDynamic_,
+                    Parent_.Env());
+    }
+
+private:
+    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
+    const NMiniKQL::TType* ItemType_ = nullptr;
+};
+
 } // namespace
 
 namespace NMiniKQL {
@@ -1558,9 +1599,9 @@ bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>
 
 // TODO(YQL): This must be rewrited via traits dispatcher.
 bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail, bool output) {
+    itemType = SkipTaggedType(itemType);
     bool isOptional;
-    auto unpacked = UnpackOptional(itemType, isOptional);
-
+    auto unpacked = SkipTaggedType(UnpackOptional(itemType, isOptional));
     if (output && !unpacked->IsData()) {
         // output supports only data and optional data types
         if (onFail) {
@@ -1576,7 +1617,7 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         do {
             ++nestLevel;
             previousType = currentType;
-            currentType = AS_TYPE(TOptionalType, currentType)->GetItemType();
+            currentType = SkipTaggedType(AS_TYPE(TOptionalType, currentType)->GetItemType());
         } while (currentType->IsOptional());
 
         if (NeedWrapWithExternalOptional(previousType)) {
@@ -1606,7 +1647,7 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         for (ui32 i = 0; i < structType->GetMembersCount(); i++) {
             std::shared_ptr<arrow::DataType> childType;
             const TString memberName(structType->GetMemberName(i));
-            auto memberType = structType->GetMemberType(i);
+            auto memberType = SkipTaggedType(structType->GetMemberType(i));
             if (!ConvertArrowTypeImpl(memberType, childType, onFail, output)) {
                 return false;
             }
@@ -1622,7 +1663,7 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         std::vector<std::shared_ptr<arrow::Field>> fields;
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
             std::shared_ptr<arrow::DataType> childType;
-            auto elementType = tupleType->GetElementType(i);
+            auto elementType = SkipTaggedType(tupleType->GetElementType(i));
             if (!ConvertArrowTypeImpl(elementType, childType, onFail, output)) {
                 return false;
             }
@@ -1651,11 +1692,7 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         return true;
     }
 
-    if (itemType->IsTagged()) {
-        auto taggedType = AS_TYPE(TTaggedType, itemType);
-        auto baseType = taggedType->GetBaseType();
-        return ConvertArrowTypeImpl(baseType, type, onFail, output);
-    }
+    Y_ENSURE(!itemType->IsTagged(), "All tagged types must be handled above");
 
     if (IsSingularType(unpacked)) {
         type = arrow::null();
@@ -1839,6 +1876,10 @@ void TFunctionTypeInfoBuilder::SetMaxLangVer(ui32 langver) {
 
 ui32 TFunctionTypeInfoBuilder::GetCurrentLangVer() const {
     return LangVer_;
+}
+
+NUdf::ILinearTypeBuilder::TPtr TFunctionTypeInfoBuilder::Linear(bool isDynamic) const {
+    return new TLinearTypeBuilder(*this, isDynamic);
 }
 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl(
@@ -2101,6 +2142,7 @@ NUdf::ETypeKind TTypeInfoHelper::GetTypeKind(const NUdf::TType* type) const {
     case NMiniKQL::TType::EKind::Tagged: return NUdf::ETypeKind::Tagged;
     case NMiniKQL::TType::EKind::Pg: return NUdf::ETypeKind::Pg;
     case NMiniKQL::TType::EKind::Block: return NUdf::ETypeKind::Block;
+    case NMiniKQL::TType::EKind::Linear: return NUdf::ETypeKind::Linear;
     default:
         Y_DEBUG_ABORT_UNLESS(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
         return NUdf::ETypeKind::Unknown;
@@ -2137,6 +2179,7 @@ case NMiniKQL::TType::EKind::TypeKind: { \
         MKQL_HANDLE_UDF_TYPE(Tagged)
         MKQL_HANDLE_UDF_TYPE(Pg)
         MKQL_HANDLE_UDF_TYPE(Block)
+        MKQL_HANDLE_UDF_TYPE(Linear)
     default:
         Y_DEBUG_ABORT_UNLESS(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
     }
@@ -2287,6 +2330,12 @@ void TTypeInfoHelper::DoPg(const NMiniKQL::TPgType* tt, NUdf::ITypeVisitor* v) {
 void TTypeInfoHelper::DoBlock(const NMiniKQL::TBlockType* tt, NUdf::ITypeVisitor* v) {
     if (v->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(2, 26))) {
         v->OnBlock(tt->GetItemType(), tt->GetShape() == TBlockType::EShape::Scalar);
+    }
+}
+
+void TTypeInfoHelper::DoLinear(const NMiniKQL::TLinearType* tt, NUdf::ITypeVisitor* v) {
+    if (v->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(2, 44))) {
+        v->OnLinear(tt->GetItemType(), tt->IsDynamic());
     }
 }
 
@@ -2639,7 +2688,7 @@ struct TComparatorTraits {
     using TTzDateComparator = NUdf::TTzDateBlockItemComparator<T, Nullable>;
     using TSingularType = NUdf::TSingularTypeBlockItemComparator;
 
-    constexpr static bool PassType = false;
+     constexpr static bool PassType = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -2863,6 +2912,10 @@ TType* TTypeBuilder::BuildBlockStructType(const TStructType* structType) const {
         NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar)
     );
     return NewStructType(blockStructItems);
+}
+
+TType* TTypeBuilder::NewLinearType(TType* itemType, bool isDynamic) const {
+    return TLinearType::Create(itemType, isDynamic, Env);
 }
 
 void RebuildTypeIndex() {

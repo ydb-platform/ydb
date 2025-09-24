@@ -518,7 +518,7 @@ public:
     };
 
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
-        auto joinKey = inputRow.GetElement(0);
+        auto joinKey = inputRow.GetElement(1);
         std::vector<TCell> joinKeyCells(Settings.LookupKeyColumns.size());
         NMiniKQL::TStringProviderBackend backend;
 
@@ -546,7 +546,7 @@ public:
             }
         }
 
-        TSizedUnboxedValue row{.Data=std::move(std::move(inputRow.GetElement(1))), .StorageBytes=0};
+        TSizedUnboxedValue row{.Data=std::move(std::move(inputRow.GetElement(0))), .StorageBytes=0};
         row.ComputeSize = NYql::NDq::TDqDataSerializer::EstimateSize(row.Data, GetLeftRowType());
         ui64 joinKeyId = JoinKeySeqNo++;
         TOwnedCellVec cellVec(std::move(joinKeyCells));

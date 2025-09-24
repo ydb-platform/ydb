@@ -2707,6 +2707,8 @@ uint64_t roaring64_iterator_read(roaring64_iterator_t *it, uint64_t *buf,
         it->has_value = art_iterator_next(&it->art_it);
         if (it->has_value) {
             roaring64_iterator_init_at_leaf_first(it);
+        } else {
+            it->saturated_forward = true;
         }
     }
     return consumed;

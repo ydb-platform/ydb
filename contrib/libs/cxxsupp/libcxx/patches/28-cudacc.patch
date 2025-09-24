@@ -40,7 +40,7 @@ index f3cd1e5..c0a77ef 100644
  template <class _Iterator>
  using __is_segmented_iterator = __has_specialization<__segmented_iterator_traits<_Iterator> >;
 diff --git a/include/__math/traits.h b/include/__math/traits.h
-index 0c96f76..4ce554d 100644
+index 0c96f76..dcc54f2 100644
 --- a/include/__math/traits.h
 +++ b/include/__math/traits.h
 @@ -92,7 +92,7 @@ template <class _A1, __enable_if_t<is_integral<_A1>::value, int> = 0>
@@ -52,8 +52,15 @@ index 0c96f76..4ce554d 100644
  _LIBCPP_PREFERRED_OVERLOAD
  #endif
      bool
-@@ -116,7 +116,7 @@ template <class _A1, __enable_if_t<is_integral<_A1>::value, int> = 0>
+@@ -111,12 +111,14 @@ template <class _A1, __enable_if_t<is_integral<_A1>::value, int> = 0>
+   return false;
  }
+ 
++#if defined(_LIBCPP_PREFERRED_OVERLOAD) && !defined(__CUDACC__)
+ [[__nodiscard__]] inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isnan(float __x) _NOEXCEPT {
+   return __builtin_isnan(__x);
+ }
++#endif
  
  [[__nodiscard__]] inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI
 -#ifdef _LIBCPP_PREFERRED_OVERLOAD
@@ -61,6 +68,18 @@ index 0c96f76..4ce554d 100644
  _LIBCPP_PREFERRED_OVERLOAD
  #endif
      bool
+@@ -124,9 +126,11 @@ _LIBCPP_PREFERRED_OVERLOAD
+   return __builtin_isnan(__x);
+ }
+ 
++#if defined(_LIBCPP_PREFERRED_OVERLOAD) && !defined(__CUDACC__)
+ [[__nodiscard__]] inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isnan(long double __x) _NOEXCEPT {
+   return __builtin_isnan(__x);
+ }
++#endif
+ 
+ // isnormal
+ 
 diff --git a/include/complex b/include/complex
 index 4030d96..80471d9 100644
 --- a/include/complex

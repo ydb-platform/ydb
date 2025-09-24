@@ -73,6 +73,9 @@ struct TBlockType { using ItemType = T; };
 template <typename T>
 struct TScalarType { using ItemType = T; };
 
+template <typename T, bool IsDynamic = false>
+struct TLinear { using ItemType = T; };
+
 struct TVoid {};
 
 //////////////////////////////////////////////////////////////////////////////
@@ -430,7 +433,34 @@ protected:
     bool IsScalar_;
 };
 
-UDF_ASSERT_TYPE_SIZE(IListTypeBuilder, 8);
+UDF_ASSERT_TYPE_SIZE(IBlockTypeBuilder, 16);
+
+//////////////////////////////////////////////////////////////////////////////
+// ILinearTypeBuilder
+//////////////////////////////////////////////////////////////////////////////
+class ILinearTypeBuilder: public ITypeBuilder
+{
+public:
+    using TPtr = TUniquePtr<ILinearTypeBuilder>;
+
+    explicit ILinearTypeBuilder(bool isDynamic)
+        : IsDynamic_(isDynamic)
+    {}
+public:
+    template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
+    inline ILinearTypeBuilder& Item() {
+        return Item(TDataType<T>::Id);
+    }
+
+    virtual ILinearTypeBuilder& Item(TDataTypeId type) = 0;
+    virtual ILinearTypeBuilder& Item(const TType* type) = 0;
+    virtual ILinearTypeBuilder& Item(const ITypeBuilder& type) = 0;
+
+protected:
+    bool IsDynamic_;
+};
+
+UDF_ASSERT_TYPE_SIZE(ILinearTypeBuilder, 16);
 
 //////////////////////////////////////////////////////////////////////////////
 // IFunctionTypeInfoBuilder
@@ -658,7 +688,16 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 43)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+class IFunctionTypeInfoBuilder19: public IFunctionTypeInfoBuilder18 {
+public:
+    virtual ILinearTypeBuilder::TPtr Linear(bool isDynamic) const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder19;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 43)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder18;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 42)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder17;
@@ -951,6 +990,18 @@ struct TTypeBuilderHelper<TScalarType<T>> {
                 .Build();
     }
 };
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+template <typename T, bool IsDynamic>
+struct TTypeBuilderHelper<TLinear<T, IsDynamic>> {
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
+        return builder.Linear(IsDynamic)->
+                Item(TTypeBuilderHelper<T>::Build(builder))
+                .Build();
+    }
+};
+
 #endif
 
 template <>

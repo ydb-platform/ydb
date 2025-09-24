@@ -506,7 +506,7 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
         auto consumer = MakeConsumer(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "",
             [&](ui64 offset, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
@@ -548,7 +548,7 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
         auto consumer = MakeConsumer(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE pass > 0",
             [&](ui64 offset, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
@@ -593,7 +593,7 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
         auto consumer = MakeConsumer(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE FALSE",
             [&](ui64 offset, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
@@ -726,7 +726,7 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
         auto consumer = MakeConsumer(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "",
             [&](ui64 offset, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
@@ -768,7 +768,7 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
         auto consumer = MakeConsumer(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE pass > 0",
             [&](ui64 offset, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
@@ -813,7 +813,7 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
         auto consumer = MakeConsumer(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE FALSE",
             [&](ui64 offset, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);

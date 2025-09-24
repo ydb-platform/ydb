@@ -10,6 +10,8 @@
 
 namespace NMonitoring::NAudit {
 
+TString ExtractRemoteAddress(const NHttp::THttpIncomingRequest* request);
+
 using TAuditParts = TVector<std::pair<TString, TString>>;
 
 enum ERequestStatus {
@@ -26,10 +28,11 @@ public:
     void LogOnReceived();
     void LogOnCompleted(const NHttp::THttpOutgoingResponsePtr& response);
     void SetSubjectType(NACLibProto::ESubjectType subjectType);
+    static bool AuditEnabled(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase, NACLibProto::ESubjectType subjectType);
+    bool AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) const;
 
 private:
     void AddAuditLogPart(TStringBuf name, const TString& value);
-    bool AuditableRequest(const NHttp::THttpIncomingRequestPtr& request);
 
     TAuditParts Parts;
     bool Auditable = false;

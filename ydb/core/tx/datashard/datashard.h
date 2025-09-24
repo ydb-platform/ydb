@@ -135,8 +135,10 @@ namespace NDataShard {
             // Operation was blocked and is waiting for explicit unblock
             BlockFailPointWaiting = 1ULL << 48,
             BlockFailPointUnblocked = 1ULL << 49,
+            // Operation sent a TEvProposeTransactionRestart notification
+            RestartNotificationSent = 1ULL << 50,
 
-            LastFlag = BlockFailPointUnblocked,
+            LastFlag = RestartNotificationSent,
 
             PrivateFlagsMask = 0xFFFFFFFFFFFF0000ULL,
             PreservedPrivateFlagsMask = ReadOnly | ProposeBlocker | NeedDiagnostics | GlobalReader
@@ -364,6 +366,9 @@ namespace TEvDataShard {
         EvValidateUniqueIndexResponse,
 
         EvIncrementalRestoreResponse,
+
+        EvBuildFulltextIndexRequest,
+        EvBuildFulltextIndexResponse,
 
         EvEnd
     };
@@ -1556,6 +1561,18 @@ namespace TEvDataShard {
         : public TEventPB<TEvPrefixKMeansResponse,
                           NKikimrTxDataShard::TEvPrefixKMeansResponse,
                           TEvDataShard::EvPrefixKMeansResponse> {
+    };
+
+    struct TEvBuildFulltextIndexRequest
+        : public TEventPB<TEvBuildFulltextIndexRequest,
+                          NKikimrTxDataShard::TEvBuildFulltextIndexRequest,
+                          TEvDataShard::EvBuildFulltextIndexRequest> {
+    };
+
+    struct TEvBuildFulltextIndexResponse
+        : public TEventPB<TEvBuildFulltextIndexResponse,
+                          NKikimrTxDataShard::TEvBuildFulltextIndexResponse,
+                          TEvDataShard::EvBuildFulltextIndexResponse> {
     };
 
     struct TEvIncrementalRestoreResponse

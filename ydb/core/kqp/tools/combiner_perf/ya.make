@@ -46,8 +46,6 @@ CFLAGS(
 ENDIF()
 
 SRCS(
-    joins.cpp
-    construct_join_graph.cpp
     converters.cpp
     dq_combine_vs.cpp
     factories.cpp
@@ -59,6 +57,7 @@ SRCS(
     subprocess.cpp
     streams.cpp
     tpch_last.cpp
+    fs_utils.cpp
 )
 
 END()

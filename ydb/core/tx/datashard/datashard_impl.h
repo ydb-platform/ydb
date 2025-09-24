@@ -241,6 +241,7 @@ class TDataShard
     class TTxHandleSafeReshuffleKMeansScan;
     class TTxHandleSafeRecomputeKMeansScan;
     class TTxHandleSafeStatisticsScan;
+    class TTxHandleSafeBuildFulltextIndexScan;
 
     class TTxMediatorStateRestored;
 
@@ -1342,6 +1343,8 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
@@ -1437,7 +1440,7 @@ class TDataShard
     void OnStopGuardStarting(const TActorContext &ctx);
     void OnStopGuardComplete(const TActorContext &ctx);
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
-    void IcbRegister();
+    void InitControls();
     bool ReadOnlyLeaseEnabled() override;
     TDuration ReadOnlyLeaseDuration() override;
     void OnActivateExecutor(const TActorContext &ctx) override;
@@ -1479,7 +1482,7 @@ class TDataShard
     bool CheckMediatorAuthorisation(ui64 mediatorId);
 
     NTabletFlatExecutor::ITransaction* CreateTxInit();
-    NTabletFlatExecutor::ITransaction* CreateTxInitRestored();
+    NTabletFlatExecutor::ITransaction* CreateTxInitRestored(THashMap<ui64, TOperation::TPtr> migratedTxs);
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchemaDefaults();
     NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
@@ -1526,6 +1529,8 @@ public:
     void GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies);
     void SendConfirmedReplies(TMonotonic ts, std::vector<std::unique_ptr<IEventHandle>>&& replies);
     void SendCommittedReplies(std::vector<std::unique_ptr<IEventHandle>>&& replies);
+
+    void SendRestartNotification(TOperation* op);
 
     void WaitVolatileDependenciesThenSend(
             const absl::flat_hash_set<ui64>& dependencies,
@@ -2756,7 +2761,7 @@ private:
     ui64 InMemoryStatePrevGeneration = 0;
 
     void StartInMemoryRestoreActor();
-    void OnInMemoryStateRestored();
+    void OnInMemoryStateRestored(THashMap<ui64, TOperation::TPtr> migratedTxs);
     bool StartInMemoryStateActor();
 
     struct TPreservedInMemoryState {
@@ -3223,6 +3228,7 @@ protected:
             HFunc(TEvDataShard::TEvRecomputeKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvLocalKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvPrefixKMeansRequest, Handle);
+            HFunc(TEvDataShard::TEvBuildFulltextIndexRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);

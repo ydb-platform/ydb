@@ -49,6 +49,7 @@ typedef std::function<TExprNode::TPtr (const TExprNode::TPtr&, TExprContext&, IO
 IGraphTransformer::TStatus OptimizeExprEx(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizerEx optimizer,
     TExprContext& ctx, const TOptimizeExprSettings& settings);
 
+IGraphTransformer::TStatus ExpandSeq(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& types);
 IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 IGraphTransformer::TStatus ExpandApplyNoRepeat(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 TExprNode::TPtr ApplySyncListToWorld(const TExprNode::TPtr& main, const TSyncMap& syncList, TExprContext& ctx);
@@ -66,9 +67,12 @@ void VisitExprLambdasLast(const TExprNode::TPtr& root, const TExprVisitPtrFunc& 
 
 
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func);
+void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeOnNodeOwnedMap& worldMap);
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc);
+void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc, TNodeOnNodeOwnedMap& worldMap);
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes);
 void VisitExprByFirst(const TExprNode& root, const TExprVisitRefFunc& func);
+void VisitExprByFirst(const TExprNode& root, const TExprVisitRefFunc& func, TNodeOnNodeOwnedMap& worldMap);
 
 TExprNode::TPtr FindNode(const TExprNode::TPtr& root, const TExprVisitPtrFunc& predicate);
 TExprNode::TPtr FindNode(const TExprNode::TPtr& root, const TExprVisitPtrFunc& filter, const TExprVisitPtrFunc& predicate);

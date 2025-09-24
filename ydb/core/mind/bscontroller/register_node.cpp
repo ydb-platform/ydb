@@ -490,6 +490,9 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
         if (pdisk.InferPDiskSlotCountFromUnitSize) {
             pDisk->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
         }
+        if (pdisk.InferPDiskSlotCountMax) {
+            pDisk->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
+        }
     }
     pDisk->SetExpectedSerial(pdisk.ExpectedSerial);
     pDisk->SetManagementStage(SerialManagementStage);

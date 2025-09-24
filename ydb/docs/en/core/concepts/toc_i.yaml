@@ -1,11 +1,15 @@
 items:
 - name: Glossary
   href: glossary.md
+- name: Analytical Features
+  include:
+    path: analytics/toc_p.yaml
+    mode: link
 - name: Architecture
   href: architecture.md
 - name: Connecting to a database
   href: connect.md
-- name: Cluster structure
+- name: Schema objects
   href: datamodel/index.md
   include:
     path: datamodel/toc_p.yaml

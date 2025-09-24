@@ -58,3 +58,7 @@ message TClearSessionRequest {
 message TClearSessionResponse {
     EOperationStatus Status = 1;
 };
+
+message TErrorResponse {
+    string ErrorMessage = 1;
+}

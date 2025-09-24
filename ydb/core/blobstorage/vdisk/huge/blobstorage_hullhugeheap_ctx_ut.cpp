@@ -35,7 +35,7 @@ namespace NKikimr {
 
             return std::make_shared<THugeBlobCtx>("",
                     repairedHuge->Heap->BuildHugeSlotsMap(),
-                    true);
+                    EBlobHeaderMode::OLD_HEADER);
         }
 
 

@@ -81,21 +81,18 @@ void ProbeBaseStatsTest(bool isServerless) {
 
     // Create a database and a table
     if (isServerless) {
-        CreateDatabase(env, "Shared");
+        CreateDatabase(env, "Shared", 1, true);
         CreateServerlessDatabase(env, "Database", "/Root/Shared");
     } else {
         CreateDatabase(env, "Database");
     }
     CreateColumnStoreTable(env, "Database", "Table", 5);
     const TString path = "/Root/Database/Table";
+    const TPathId pathId = ResolvePathId(runtime, path);
     const ui32 nodeIdx = 1;
 
-    // Wait until the SchemeShard sends out the stats to the StatisticsAggregator.
-    bool statsToSA = false;
-    auto statsObserver = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& /* ev */) {
-        statsToSA = true;
-    });
-    runtime.WaitFor("TEvSchemeShardStats", [&]{ return statsToSA; });
+    // Wait until correct base statistics gets reported.
+    ValidateRowCount(runtime, nodeIdx, pathId, ColumnTableRowsNumber);
 
     // Issue the probe_base_stats request and verify that the result makes sense.
     const auto sender = runtime.AllocateEdgeActor(nodeIdx);
@@ -163,7 +160,7 @@ Y_UNIT_TEST_SUITE(HttpRequest) {
     }
 
     Y_UNIT_TEST(ProbeBaseStatsServerless) {
-        ProbeBaseStatsTest(false);
+        ProbeBaseStatsTest(true);
     }
 }
 

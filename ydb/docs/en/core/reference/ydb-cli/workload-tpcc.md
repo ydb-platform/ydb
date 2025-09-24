@@ -75,7 +75,7 @@ See the command description:
 | Name                         | Description                                                    | Default value |
 |------------------------------|----------------------------------------------------------------|---------------|
 | `--warehouses` or `-w`       | A number of TPC-C warehouses.                                  | 10            |
-| `--threads`                  | A number of threads loading the TPC-C data to the database.    | 10            |
+| `--threads`                  | A number of threads loading the TPC-C data to the database.    | auto          |
 | `--no-tui`                   | Disable TUI, which is enabled by default in interactive mode.  |               |
 
 The optimal number of loading threads depends on your YDB cluster’s size and configuration. As a rule of thumb, for clusters with several hundred CPU cores, starting with around 50 loading threads is reasonable. For larger clusters, you can scale this number further.
@@ -106,7 +106,7 @@ See the command description:
 | `--warehouses` or `-w`       | A number of TPC-C warehouses.                                  | 10            |
 | `--warmup`                   | Warmup time. Example: 10s, 5m, 1h.                             | auto          |
 | `--time` or `-t`             | Execution time. Example: 10s, 5m, 1h.                          | 2h            |
-| `--max-sessions` or `-m`     | A soft limit on the number of DB sessions.                     | 100           |
+| `--max-sessions` or `-m`     | A soft limit on the number of DB sessions.                     | auto          |
 | `--threads`                  | A number of threads executing queries                          | auto          |
 | `--format` or `-f`           | Output format: 'Pretty', 'Json'                                | Pretty        |
 | `--no-tui`                   | Disable TUI, which is enabled by default in interactive mode.  |               |

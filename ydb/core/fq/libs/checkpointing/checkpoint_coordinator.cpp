@@ -37,7 +37,7 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
     , StorageProxy(storageProxy)
     , RunActorId(runActorId)
     , Settings(settings)
-    , CheckpointingPeriod(TDuration::MilliSeconds(Settings.GetCheckpointingPeriodMillis()))
+    , CheckpointingPeriod(TDuration::MilliSeconds(Settings.GetCheckpointingPeriodMillis() ? Settings.GetCheckpointingPeriodMillis() : 30'000))
     , CheckpointingSnapshotRotationPeriod(Settings.GetCheckpointingSnapshotRotationPeriod())
     , CheckpointingSnapshotRotationIndex(CheckpointingSnapshotRotationPeriod)   // First - snapshot
     , GraphParams(graphParams)

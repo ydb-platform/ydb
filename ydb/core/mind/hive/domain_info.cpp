@@ -1,4 +1,5 @@
 #include "domain_info.h"
+#include "hive_impl.h"
 #include "hive_log.h"
 
 namespace NKikimr {
@@ -144,6 +145,19 @@ void TDomainInfo::SetScaleRecommenderPolicies(const NKikimrHive::TScaleRecommend
                 break;
         }
     }
+}
+
+TActorId TDomainInfo::GetPipeToHive(THive* self) {
+    if (!HivePipeClient) {
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 13};
+        HivePipeClient = self->Register(NTabletPipe::CreateClient(self->SelfId(), HiveId, pipeConfig));
+    }
+    return HivePipeClient;
+}
+
+void TDomainInfo::ClosePipeToHive(const TActorId& actorId) {
+    NTabletPipe::CloseAndForgetClient(TActorIdentity(actorId), HivePipeClient);
 }
 
 } // NHive

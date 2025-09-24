@@ -162,6 +162,7 @@ public:
     virtual TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
         IOptimizationContext& optCtx) = 0;
+    virtual void RegisterWorldArg(const TExprNode::TPtr& arg, const TExprNode::TPtr& world) = 0;
 
     //-- execution
     virtual bool CanExecute(const TExprNode& node) = 0;

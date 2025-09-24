@@ -49,18 +49,11 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
     Y_UNIT_TEST_TWIN(Sessions, EnableRealSystemViewPaths) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableRealSystemViewPaths(EnableRealSystemViewPaths);
-        TKikimrRunner kikimr(featureFlags, "root@builtin");
-
-        if (EnableRealSystemViewPaths) {
-            TPermissions permissions("root@builtin",
-                {"ydb.granular.describe_schema", "ydb.granular.select_row"}
-            );
-            auto schemeClient = kikimr.GetSchemeClient();
-            auto result = schemeClient.ModifyPermissions("/Root/.sys",
-                TModifyPermissionsSettings().AddGrantPermissions(permissions)
-            ).ExtractValueSync();
-            AssertSuccessResult(result);
-        }
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.SetFeatureFlags(featureFlags);
+        settings.SetAuthToken("root@builtin");  // root@builtin becomes cluster admin
+        TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
         auto tableClient = kikimr.GetTableClient();
@@ -314,7 +307,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                 [72057594046644480u];[%luu];["/Root/ReorderKey"];[%luu]
             ];)", i, startPathId + 10)  << Endl;
         }
-      
+
         for (size_t i = 0; i < 5; ++i) {
             expectedYson << Sprintf(R"([
                 [72057594046644480u];[%luu];["/Root/ReorderOptionalKey"];[%luu]
@@ -664,8 +657,8 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST(FailNavigate) {
-        TKikimrRunner kikimr("user0@builtin");
-        auto client = kikimr.GetTableClient();
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken("user0@builtin"));
 
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT PathId FROM `/Root/.sys/partition_stats`;

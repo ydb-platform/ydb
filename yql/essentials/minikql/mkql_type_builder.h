@@ -193,6 +193,7 @@ public:
     void SetMinLangVer(ui32 langver) override;
     void SetMaxLangVer(ui32 langver) override;
     ui32 GetCurrentLangVer() const override;
+    NUdf::ILinearTypeBuilder::TPtr Linear(bool isDynamic) const override;
 
 private:
     const NYql::TLangVersion LangVer_;
@@ -247,6 +248,7 @@ private:
     static void DoTagged(const NMiniKQL::TTaggedType* tt, NUdf::ITypeVisitor* v);
     static void DoPg(const NMiniKQL::TPgType* tt, NUdf::ITypeVisitor* v);
     static void DoBlock(const NMiniKQL::TBlockType* tt, NUdf::ITypeVisitor* v);
+    static void DoLinear(const NMiniKQL::TLinearType* tt, NUdf::ITypeVisitor* v);
 };
 
 bool CanHash(const NMiniKQL::TType* type);
@@ -317,6 +319,8 @@ public:
 
     TType* BuildBlockStructType(const TStructType* structType) const;
     TType* ValidateBlockStructType(const TStructType* structType) const;
+
+    TType* NewLinearType(TType* itemType, bool isDynamic) const;
 
 protected:
     const TTypeEnvironment& Env_;

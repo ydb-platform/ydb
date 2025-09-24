@@ -10,28 +10,30 @@ namespace NYdb::inline Dev {
 TBalancingPolicy::TBalancingPolicy(EBalancingPolicy policy, const std::string& params) {
     switch (policy) {
         case EBalancingPolicy::UsePreferableLocation:
-            Impl_ = TImpl::UsePreferableLocation(params);
+            Impl_ = std::make_unique<TImpl>(TImpl::UsePreferableLocation(params));
             break;
         case EBalancingPolicy::UseAllNodes:
-            Impl_ = TImpl::UseAllNodes();
+            Impl_ = std::make_unique<TImpl>(TImpl::UseAllNodes());
             break;
     }
 }
 
 TBalancingPolicy TBalancingPolicy::UsePreferableLocation(const std::string& location) {
-    return TBalancingPolicy(TImpl::UsePreferableLocation(location));
+    return TBalancingPolicy(std::make_unique<TImpl>(TImpl::UsePreferableLocation(location)));
 }
 
 TBalancingPolicy TBalancingPolicy::UseAllNodes() {
-    return TBalancingPolicy(TImpl::UseAllNodes());
+    return TBalancingPolicy(std::make_unique<TImpl>(TImpl::UseAllNodes()));
 }
 
 TBalancingPolicy TBalancingPolicy::UsePreferablePileState(EPileState pileState) {
-    return TBalancingPolicy(TImpl::UsePreferablePileState(pileState));
+    return TBalancingPolicy(std::make_unique<TImpl>(TImpl::UsePreferablePileState(pileState)));
 }
 
 TBalancingPolicy::TBalancingPolicy(std::unique_ptr<TImpl>&& impl)
     : Impl_(std::move(impl))
 {}
+
+TBalancingPolicy::~TBalancingPolicy() = default;
 
 }

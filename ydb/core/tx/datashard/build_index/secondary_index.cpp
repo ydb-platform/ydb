@@ -577,12 +577,13 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
         // 2. Validating request fields
         if (!request.HasSnapshotStep() || !request.HasSnapshotTxId()) {
-            badRequest(TStringBuilder() << "Empty snapshot");
-        }
-        const TSnapshotKey snapshotKey(tableId.PathId, rowVersion.Step, rowVersion.TxId);
-        if (!SnapshotManager.FindAvailable(snapshotKey)) {
-            badRequest(TStringBuilder() << "Unknown snapshot for path id " << tableId.PathId.OwnerId << ":" << tableId.PathId.LocalPathId
-                << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
+            badRequest(TStringBuilder() << "Missing snapshot");
+        } else {
+            const TSnapshotKey snapshotKey(tableId.PathId, rowVersion.Step, rowVersion.TxId);
+            if (!SnapshotManager.FindAvailable(snapshotKey)) {
+                badRequest(TStringBuilder() << "Unknown snapshot for path id " << tableId.PathId.OwnerId << ":" << tableId.PathId.LocalPathId
+                    << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
+            }
         }
 
         TSerializedTableRange requestedRange;

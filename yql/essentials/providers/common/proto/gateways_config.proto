@@ -918,6 +918,18 @@ message TYtflowGatewayConfig {
     repeated TAttr DefaultSettings = 102;
 }
 
+///////////////////////////// Fmr /////////////////////////////
+
+message TFmrConfig {
+    optional string Name = 1;
+    optional string CoordinatorUrl = 2;
+    repeated string AllowedGroups = 3;
+    optional bool EnableAuth = 4 [default = false];
+}
+
+message TFmrGatewayConfig {
+    repeated TFmrConfig FmrConfigurations = 1;
+}
 
 /////////////////////////////// Root ///////////////////////////////
 
@@ -946,4 +958,5 @@ message TGatewaysConfig {
     optional TRevisionFilterConfig RevisionFilter = 22;
     optional TDbResolverConfig DbResolver = 23;
     optional TYtflowGatewayConfig Ytflow = 24;
+    optional TFmrGatewayConfig Fmr = 25;
 }

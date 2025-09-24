@@ -208,8 +208,15 @@ jobs:
     - name: Prepare Visual Studio environment and build windows binary with ya make
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -o ./
-
+      run: >
+        ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }}
+        && echo VS environment prepared, getting toolchain...
+        && for /f "tokens=*" %%i in ('.\ya.bat tool c++ --print-toolchain-path') do set TOOLCHAIN_PATH=%%i\bin\clang-cl.exe
+        && call echo Using full compiler path: %%TOOLCHAIN_PATH%%
+        && call .\ya.bat make ydb/apps/ydb -r -DUSE_SSE4=no -o .\
+        --c-compiler %%TOOLCHAIN_PATH%%
+        --cxx-compiler %%TOOLCHAIN_PATH%%
+    
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}
       run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}

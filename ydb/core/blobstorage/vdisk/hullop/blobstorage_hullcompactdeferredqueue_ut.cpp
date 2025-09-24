@@ -42,7 +42,7 @@ public:
     TVector<size_t> Results;
 
     TTestDeferredQueue(TRopeArena& arena)
-        : TDeferredItemQueueBase<TTestDeferredQueue>("", arena, ::GType, true)
+        : TDeferredItemQueueBase<TTestDeferredQueue>("", arena, ::GType, EBlobHeaderMode::OLD_HEADER)
     {}
 };
 
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
             if (expm.Empty()) {
                 item.BlobId = -1;
             } else {
-                item.BlobId = GetResMapId(expm.CreateDiskBlob(arena, true));
+                item.BlobId = GetResMapId(expm.CreateDiskBlob(arena, EBlobHeaderMode::OLD_HEADER));
             }
             item.BlobParts = expm.GetDiskBlob().GetParts();
 
@@ -101,14 +101,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
                     }
                 }
 
-                TRope buf = m.CreateDiskBlob(arena, true);
+                TRope buf = m.CreateDiskBlob(arena, EBlobHeaderMode::OLD_HEADER);
                 Y_ABORT_UNLESS(buf);
                 item.DiskData.emplace_back(GetResMapId(buf), m.GetDiskBlob().GetParts());
             }
 
             // generate parts to store vector and store item
             if (!expm.Empty()) {
-                item.Expected = GetResMapId(expm.CreateDiskBlob(arena, true));
+                item.Expected = GetResMapId(expm.CreateDiskBlob(arena, EBlobHeaderMode::OLD_HEADER));
                 items.push_back(item);
             }
         };

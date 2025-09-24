@@ -78,6 +78,7 @@ public:
     TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) override;
     TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
         IOptimizationContext& optCtx) override;
+    void RegisterWorldArg(const TExprNode::TPtr& arg, const TExprNode::TPtr& world) override;
     bool CanExecute(const TExprNode& node) override;
     bool ValidateExecution(const TExprNode& node, TExprContext& ctx) override;
     void GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) override;

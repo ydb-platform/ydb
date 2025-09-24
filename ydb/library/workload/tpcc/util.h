@@ -89,4 +89,6 @@ inline void RequestStop() {
 
 size_t NumberOfMyCpus();
 
+size_t NumberOfComputeCpus(TDriver& driver);
+
 } // namespace NYdb::NTPCC

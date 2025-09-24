@@ -11,7 +11,7 @@
 
 #include <ydb/library/actors/interconnect/types.h>
 
-namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TBuildDuplicateFilters: public NConveyor::ITask {
 private:
@@ -70,8 +70,8 @@ private:
         return "BUILD_DUPLICATE_FILTERS";
     }
 
-    THashMap<ui64, NArrow::TColumnFilter> BuildFiltersOnInterval(const TColumnDataSplitter::TBorder& begin,
-        const TColumnDataSplitter::TBorder& end, const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData);
+    THashMap<ui64, NArrow::TColumnFilter> BuildFiltersOnInterval(const TIntervalInfo& interval, NArrow::NMerger::TMergePartialStream& merger,
+        const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData);
     std::vector<std::string> GetVersionColumnNames() const {
         return IIndexInfo::GetSnapshotColumnNames();
     }
@@ -103,4 +103,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

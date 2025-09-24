@@ -149,7 +149,7 @@ public:
 
 protected:
     TMaybeNode<TExprBase> BuildReturning(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpBuildReturning(node, ctx, KqpCtx);
+        TExprBase output = KqpBuildReturning(node, ctx, TypesCtx, KqpCtx);
         DumpAppliedRule("BuildReturning", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

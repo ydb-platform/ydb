@@ -18,9 +18,17 @@ namespace NYdb::inline Dev {
 
 class TResultSetParser;
 
+// Forward declarations for friend access
+namespace NTable {
+
+class TTableClient;
+
+} // namespace NTable
+
 //! Representation of YDB type.
 class TType {
     friend class TProtoAccessor;
+    friend class NTable::TTableClient;
 public:
     TType(const Ydb::Type& typeProto);
     TType(Ydb::Type&& typeProto);
@@ -263,12 +271,6 @@ struct TUuidValue {
         uint64_t Halfs[2];
     } Buf_;
 };
-
-namespace NTable {
-
-class TTableClient;
-
-} // namespace NTable
 
 //! Representation of YDB value.
 class TValue {

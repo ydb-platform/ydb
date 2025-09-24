@@ -38,11 +38,11 @@ inline bool HasReadIntents(TYtTableIntents intents) {
 }
 
 inline bool HasModifyIntents(TYtTableIntents intents) {
-    return intents & (TYtTableIntent::Override | TYtTableIntent::Append | TYtTableIntent::Drop | TYtTableIntent::Flush);
+    return intents & (TYtTableIntent::Override | TYtTableIntent::Append | TYtTableIntent::Drop | TYtTableIntent::Flush | TYtTableIntent::Create);
 }
 
 inline bool HasExclusiveModifyIntents(TYtTableIntents intents) {
-    return intents & (TYtTableIntent::Override | TYtTableIntent::Drop | TYtTableIntent::Flush);
+    return intents & (TYtTableIntent::Override | TYtTableIntent::Drop | TYtTableIntent::Flush | TYtTableIntent::Create);
 }
 
 struct TYtViewDescription {

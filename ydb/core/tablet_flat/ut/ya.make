@@ -59,6 +59,7 @@ SRCS(
     ut_slice_loader.cpp
     ut_vacuum.cpp
     ut_versions.cpp
+    ut_backup.cpp
 )
 
 RESOURCE(

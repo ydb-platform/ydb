@@ -1,5 +1,5 @@
 #include "fs_utils.h"
-#include "library/cpp/json/json_writer.h"
+#include <library/cpp/json/json_writer.h>
 
 int NKikimr::NMiniKQL::FilesIn(std::filesystem::path path) {
     using std::filesystem::directory_iterator;

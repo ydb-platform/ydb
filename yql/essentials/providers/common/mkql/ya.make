@@ -16,6 +16,7 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/core
     yql/essentials/core/expr_nodes
+    yql/essentials/core/type_ann
     yql/essentials/providers/common/schema/expr
     yql/essentials/parser/pg_catalog
 )

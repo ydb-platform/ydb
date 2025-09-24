@@ -222,6 +222,50 @@ class LoadSuiteBase:
         return core_hashes
 
     @classmethod
+    def __get_sanitizer_events(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, str]:
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).isoformat()
+        end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
+
+        sanitizer_regex_params = r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)'
+
+        core_processes = {
+            h: cls.execute_ssh(h, f"ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -P -A 150 '{sanitizer_regex_params}'")
+            for h in hosts
+        }
+
+        host_logs = {}
+        for h, exec in core_processes.items():
+            exec.wait(check_exit_code=False)
+            if exec.returncode != 0:
+                logging.error(f'Error while process sanitizers on host {h}: {exec.stderr}')
+            else:
+                host_logs[h] = exec.stdout
+        return host_logs
+
+    @classmethod
+    def __get_verify_fails(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, str]:
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).isoformat()
+        end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
+
+        verify_regex_params = r'(VERIFY failed.*\n)([^0-9]*.*\n){0,2}(\d+\..*\n)+'
+
+        core_processes = {
+            h: cls.execute_ssh(h, fr"ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -Pzo -i '{verify_regex_params}'")
+            for h in hosts
+        }
+
+        host_logs = {}
+        for h, exec in core_processes.items():
+            exec.wait(check_exit_code=False)
+            if exec.returncode != 0:
+                logging.error(f'Error while process VERIFY fails on host {h}: {exec.stderr}')
+            else:
+                host_logs[h] = exec.stdout
+        return host_logs
+
+    @classmethod
     def __get_hosts_with_omms(cls, hosts: set[str], start_time: float, end_time: float) -> set[str]:
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).strftime("%Y-%m-%d %H:%M:%S")
@@ -502,6 +546,8 @@ class LoadSuiteBase:
         # Собираем диагностическую информацию для всех хостов
         core_hashes = cls.__get_core_hashes_by_pod(all_hosts, start_time, end_time)
         ooms = cls.__get_hosts_with_omms(all_hosts, start_time, end_time)
+        sanitizer_messages = cls.__get_sanitizer_events(all_hosts, start_time, end_time)
+        verifies = cls.__get_verify_fails(all_hosts, start_time, end_time)
 
         # Создаем NodeErrors для каждой ноды с диагностической информацией
         node_errors = []
@@ -510,10 +556,14 @@ class LoadSuiteBase:
             has_cores = bool(core_hashes.get(node.slot, []))
             has_oom = node.host in ooms
 
-            if has_cores or has_oom:
+            if has_cores or has_oom or node.host in verifies or node.host in sanitizer_messages:
                 node_error = NodeErrors(node, 'diagnostic info collected')
                 node_error.core_hashes = core_hashes.get(node.slot, [])
                 node_error.was_oom = has_oom
+                if node.host in verifies:
+                    node_error.verifies = verifies[node.host]
+                if node.host in sanitizer_messages:
+                    node_error.sanitizer_errors = sanitizer_messages[node.host]
                 node_errors.append(node_error)
 
                 # Добавляем ошибки в результат (cores и OOM - это errors)
@@ -561,35 +611,6 @@ class LoadSuiteBase:
             result.add_warning(f"Error getting nodes state: {e}")
             node_errors = []
         return node_errors
-
-    def _update_summary_flags(self, result, workload_name):
-        """Обновляет summary-флаги для warning/error по всем итерациям"""
-        has_warning = False
-        has_error = False
-
-        # Проверяем ошибки и предупреждения в итерациях
-        for iteration in getattr(result, "iterations", {}).values():
-            if hasattr(iteration, "warning_message") and iteration.warning_message:
-                has_warning = True
-            if hasattr(iteration, "error_message") and iteration.error_message:
-                has_error = True
-
-        # Проверяем ошибки и предупреждения в основном результате
-        if result.warnings:
-            has_warning = True
-        if result.errors:
-            has_error = True
-
-        # Для обратной совместимости также проверяем старые поля
-        if hasattr(result, "warning_message") and result.warning_message:
-            has_warning = True
-        if hasattr(result, "error_message") and result.error_message:
-            has_error = True
-
-        stats = result.get_stats(workload_name)
-        if stats is not None:
-            stats["with_warnings"] = has_warning
-            stats["with_errors"] = has_error
 
     def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols):
         """Формирует allure-отчёт по результатам workload"""
@@ -651,7 +672,7 @@ class LoadSuiteBase:
 
         # --- FAIL TEST IF CORES OR OOM FOUND ---
         if node_issues > 0:
-            error_msg = f"Test failed: found {node_issues} node(s) with coredump(s) or OOM(s)"
+            error_msg = f"Test failed: found {node_issues} node(s) with coredump(s), OOM(s), VERIFY fail(s) or SAN errors"
             pytest.fail(error_msg)
         # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
         if workload_errors:
@@ -738,73 +759,6 @@ class LoadSuiteBase:
             is_successful=result.success,
             statistics=stats,
         )
-
-    def _upload_results_per_workload_run(self, result, workload_name):
-        suite = type(self).suite()
-        agg_stats = result.get_stats(workload_name)
-        nemesis_enabled = agg_stats.get("nemesis_enabled") if agg_stats else None
-        run_id = ResultsProcessor.get_run_id()
-        for iter_num, iteration in result.iterations.items():
-            runs = getattr(iteration, "runs", None) or [iteration]
-            for run_idx, run in enumerate(runs):
-                if getattr(run, "error_message", None):
-                    resolution = "error"
-                elif getattr(run, "warning_message", None):
-                    resolution = "warning"
-                elif hasattr(run, "timeout") and run.timeout:
-                    resolution = "timeout"
-                else:
-                    resolution = "ok"
-
-                stats = {
-                    "iteration": iter_num,
-                    "run_index": run_idx,
-                    "duration": getattr(run, "time", None),
-                    "resolution": resolution,
-                    "error_message": getattr(run, "error_message", None),
-                    "warning_message": getattr(run, "warning_message", None),
-                    "nemesis_enabled": nemesis_enabled,
-                    "aggregation_level": "per_run",
-                    "run_id": run_id,
-                }
-                ResultsProcessor.upload_results(
-                    kind='Stress',
-                    suite=suite,
-                    test=f"{workload_name}__iter_{iter_num}__run_{run_idx}",
-                    timestamp=time(),
-                    is_successful=(resolution == "ok"),
-                    duration=stats["duration"],
-                    statistics=stats,
-                )
-
-    def process_workload_result_with_diagnostics(self, result, workload_name, check_scheme=True, use_node_subcols=False):
-        """
-        Обрабатывает результат workload с добавлением диагностической информации
-        """
-        # 1. Сбор параметров workload
-        workload_params = self._collect_workload_params(result, workload_name)
-
-        # 2. Диагностика нод (cores/oom)
-        node_errors = self._diagnose_nodes(result, workload_name)
-
-        # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---
-        stats = result.get_stats(workload_name)
-        if stats is not None:
-            result.add_stat(workload_name, "nodes_with_issues", len(node_errors))
-
-        # 3. Формирование summary/статистики
-        self._update_summary_flags(result, workload_name)
-
-        # 4. Формирование allure-отчёта
-        self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols)
-
-        # 5. Обработка ошибок/статусов (fail, broken, etc)
-        self._handle_final_status(result, workload_name, node_errors)
-
-        # 6. Загрузка агрегированных результатов
-        self._upload_results(result, workload_name)
-        # 7. Загрузка результатов по каждому запуску workload
-        self._upload_results_per_workload_run(result, workload_name)
 
 
 class LoadSuiteParallel(LoadSuiteBase):

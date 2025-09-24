@@ -7,6 +7,8 @@ SRCS(
     type_ann_columnorder.h
     type_ann_core.cpp
     type_ann_core.h
+    type_ann_dict.cpp
+    type_ann_dict.h
     type_ann_expr.cpp
     type_ann_expr.h
     type_ann_impl.h

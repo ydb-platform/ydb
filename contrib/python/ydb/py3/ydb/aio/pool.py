@@ -270,7 +270,7 @@ class ConnectionPool(IConnectionPool):
                 self._discovery.notify_disconnected()
             raise
 
-        return await connection(
+        res = await connection(
             request,
             stub,
             rpc_name,
@@ -279,3 +279,5 @@ class ConnectionPool(IConnectionPool):
             wrap_args,
             self._on_disconnected(connection),
         )
+
+        return res

@@ -11,7 +11,6 @@ from ...query.transaction import (
     BaseQueryTxContext,
     QueryTxStateEnum,
 )
-from ..._errors import stream_error_converter
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +190,5 @@ class QueryTxContext(BaseQueryTxContext):
                 commit_tx=commit_tx,
                 settings=self.session._settings,
             ),
-            error_converter=stream_error_converter,
         )
         return self._prev_stream

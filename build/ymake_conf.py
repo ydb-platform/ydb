@@ -1458,7 +1458,7 @@ class GnuCompiler(Compiler):
                 '-fsigned-char',
             ]
 
-        if self.tc.is_clang:
+        if self.tc.is_clang and self.tc.version_at_least(14):
             self.c_foptions += [
                 # Explicitly enable sized deallocations though they were enabled in clang-19 / -std=c++14.
                 # See: https://releases.llvm.org/19.1.0/tools/clang/docs/ReleaseNotes.html
@@ -2458,7 +2458,7 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.8', '12.9'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.8', '12.9', '13.0'):
             return True
         elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
             return True
@@ -2590,7 +2590,7 @@ class CuDNN(object):
         self.cudnn_version = Setting('CUDNN_VERSION', auto=self.auto_cudnn_version)
 
     def have_cudnn(self):
-        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0')
+        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.12.0')
 
     def auto_cudnn_version(self):
         return '9.0.0'

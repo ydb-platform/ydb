@@ -1248,6 +1248,7 @@ std::unique_ptr<IInputStream> TRpcRawClient::ReadTable(
     req->set_enable_table_index(apiOptions.EnableTableIndex);
     req->set_enable_row_index(apiOptions.EnableRowIndex);
     req->set_enable_range_index(apiOptions.EnableRangeIndex);
+    req->set_enable_any_unpacking(apiOptions.EnableAnyUnpacking);
 
     if (apiOptions.Config) {
         req->set_config(NYson::ConvertToYsonString(*apiOptions.Config).ToString());

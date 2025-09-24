@@ -105,8 +105,8 @@ public:
         }
 
         bool IsMajorityReached() const {
-            for (const auto& [required, received] : DescriptionsByReplicaGroup) {
-                if (received < required) {
+            for (const auto& counts : DescriptionsByReplicaGroup) {
+                if (counts.Received < counts.Required) {
                     return false;
                 }
             }

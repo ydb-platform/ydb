@@ -2855,6 +2855,7 @@ message TReqReadTable
 
     optional bool unordered = 2 [default = false];
     optional bool omit_inaccessible_columns = 3 [default = false];
+    optional bool omit_inaccessible_rows = 12 [default = false];
     optional bool enable_table_index = 5 [default = false];
     optional bool enable_row_index = 6 [default = false];
     optional bool enable_range_index = 7 [default = false];

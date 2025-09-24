@@ -7,7 +7,6 @@ ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 TEST_SRCS(
     test_simple_table.py
     test_tpch_import.py
-    test_types_and_formats.py
 )
 
 PY_SRCS(

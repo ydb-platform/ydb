@@ -87,7 +87,7 @@ Doesn't support matching{% if feature_map_tables %}, can't be used in the primar
 Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key or in columns that form the key of a secondary index{% endif %}
     ||
 || `Yson` |
-[YSON](yson.md) in textual or binary representation |
+YSON in textual or binary representation |
 Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key or in columns that form the key of a secondary index{% endif %}
     ||
 || `Uuid` |

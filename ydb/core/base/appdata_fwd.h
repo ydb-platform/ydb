@@ -285,7 +285,7 @@ struct TAppData {
     TVector<TString> RegisterDynamicNodeAllowedSIDs;
     TVector<TString> BootstrapAllowedSIDs;
     TVector<TString> DefaultUserSIDs;
-    TString AllAuthenticatedUsers = "all-users@well-known";
+    TString AllAuthenticatedUsers = "all-users@well-known"; // it's only here to avoid many unit-tests problems
 
     TString TenantName;
     TString NodeName;

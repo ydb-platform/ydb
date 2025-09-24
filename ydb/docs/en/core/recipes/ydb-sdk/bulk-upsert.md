@@ -84,6 +84,56 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   }
   ```
 
+  {% cut "Bulk Upsert csv" %}
+
+  ```go
+  package main
+
+  import (
+  	"context"
+  	"fmt"
+  	"os"
+
+  	"github.com/ydb-platform/ydb-go-sdk/v3"
+  	"github.com/ydb-platform/ydb-go-sdk/v3/table"
+  )
+
+  func main() {
+  	ctx, cancel := context.WithCancel(context.Background())
+  	defer cancel()
+
+  	db, err := ydb.Open(ctx,
+  		os.Getenv("YDB_CONNECTION_STRING"),
+  		ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+  	)
+  	if err != nil {
+  		panic(err)
+  	}
+  	defer db.Close(ctx)
+
+  	csv := `skip row
+  	
+  id,val
+  42,"text42"
+  43,"text43"
+  44,hello
+  `
+
+  	// execute bulk upsert with native ydb data
+  	err = db.Table().BulkUpsert(ctx, "/local/bulk_upsert_example", table.BulkUpsertDataCsv(
+  		[]byte(csv),
+  		table.WithCsvHeader(),
+  		table.WithCsvSkipRows(2),
+  		table.WithCsvNullValue([]byte("hello")), // "hello" would be interpreted as NULL
+  	))
+  	if err != nil {
+  		fmt.Printf("unexpected error: %v", err)
+  	}
+  }
+  ```
+
+  {% endcut %}
+
 - Go (database/sql)
 
   The implementation of {{ ydb-short-name }} `database/sql` doesn't support bulk nontransactional upsert of data.

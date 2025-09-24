@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    blob_scanner.cpp
     bsc.cpp
     bsc.h
     bsc_audit.h

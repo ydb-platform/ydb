@@ -2067,6 +2067,12 @@ private:
 
     void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev);
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // BlobChecker
+
+    using TSerializedBlobCheckerGroupState = std::unordered_map<ui32, TString>;
+    TSerializedBlobCheckerGroupStates SerializedBlobCheckerGroupStates;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_CONTROLLER_ACTOR;

@@ -45,6 +45,7 @@ public:
             auto pdiskSerial = db.Table<Schema::DriveSerial>().Select();
             auto blobDepotDeleteQueue = db.Table<Schema::BlobDepotDeleteQueue>().Select();
             auto bridgeSyncState = db.Table<Schema::BridgeSyncState>().Select();
+            auto blobScannerState = db.Table<Schema::BlobCheckerState>().Select();
             if (!state.IsReady()
                     || !nodes.IsReady()
                     || !disk.IsReady()
@@ -65,7 +66,8 @@ public:
                     || !scrubState.IsReady()
                     || !pdiskSerial.IsReady()
                     || !blobDepotDeleteQueue.IsReady()
-                    || !bridgeSyncState.IsReady()) {
+                    || !bridgeSyncState.IsReady()
+                    || !blobScannerState.IsReady()) {
                 return false;
             }
         }
@@ -540,6 +542,22 @@ public:
                     .ErrorCount = bridgeSyncState.GetValue<Table::ErrorCount>(),
                 };
                 if (!bridgeSyncState.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // blob scanner state
+        Self->SerializedBlobCheckerGroupStates.clear();
+        {
+            using Table = Schema::BlobCheckerState;
+            auto blobScannerState = db.Table<Table>().Select();
+            if (!blobScannerState.IsReady()) {
+                return false;
+            }
+            while (blobScannerState.IsValid()) {
+                SerializedBlobCheckerGroupStates[blobScannerState.GetKey()] = blobScannerState.GetValue<Table::SerializedState>();
+                if (!blobScannerState.Next()) {
                     return false;
                 }
             }

@@ -472,6 +472,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TabletId, DirectBlockGroupId, NumVChunksClaimed, Allocation>;
     };
 
+    struct BlobCheckerState : Table<135> {
+        struct GroupId : Column<1, Group::ID::ColumnType> {};
+        struct SerializedState : Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<GroupId>;
+        using TColumns = TableColumns<GroupId, State>;
+
+    };
+
     using TTables = SchemaTables<
         Node,
         PDisk,
@@ -497,7 +506,8 @@ struct Schema : NIceDb::Schema {
         DriveSerial,
         BlobDepotDeleteQueue,
         BridgeSyncState,
-        DirectBlockGroupClaims
+        DirectBlockGroupClaims,
+        BlobCheckerState
     >;
 
     using TSettings = SchemaSettings<

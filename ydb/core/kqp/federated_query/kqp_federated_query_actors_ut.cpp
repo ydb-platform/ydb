@@ -110,6 +110,12 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
         promise = ResolveSecret("ownerId", "/Root/secret-name", kikimr);
         UNIT_ASSERT_VALUES_EQUAL(Ydb::StatusIds::BAD_REQUEST, promise.GetFuture().GetValueSync().Status);
+
+        secretValue += "-updated";
+        CreateSchemaSecret(secretName, secretValue, session);
+
+        promise = ResolveSecret("ownerId", "/Root/secret-name", kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
     }
 
     Y_UNIT_TEST(GetInParallel) {

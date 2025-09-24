@@ -790,6 +790,7 @@ public:
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
             QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
         {
+            /*
             // TODO: properly initialize transaction(s)
             TVector<IKqpGateway::TPhysicalTxData> txs;
             txs.emplace_back(QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx), QueryState->QueryData);
@@ -865,6 +866,7 @@ public:
             tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr, nullptr);
 
             Cerr << tasksGraph.DumpToString();
+            */
 
             co_return ReplyPrepareResult();
         }

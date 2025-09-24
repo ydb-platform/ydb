@@ -133,6 +133,8 @@ void TColumnShardStatisticsReporter::SendPeriodicStats() {
     auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletId, SSLocalId);
 
     FillWhateverCan(ev);
+
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HOORAU", ev->Record.GetTableStats().GetImmediateTxCompleted());
     NTabletPipe::SendData(ActorContext(), StatsReportPipe, ev.release());
 }
 

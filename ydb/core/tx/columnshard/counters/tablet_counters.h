@@ -125,6 +125,7 @@ public:
 
         output.SetImmediateTxCompleted(GetValue(COUNTER_IMMEDIATE_TX_COMPLETED));
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 15);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HELLO", GetValue(COUNTER_IMMEDIATE_TX_COMPLETED));
         output.SetTxRejectedByOverload(GetValue(COUNTER_WRITE_OVERLOAD));
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 16);
         output.SetTxRejectedBySpace(GetValue(COUNTER_OUT_OF_SPACE));

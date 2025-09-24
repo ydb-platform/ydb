@@ -38,6 +38,17 @@ namespace NYdb::NConsoleClient {
         NTopic::EMeteringMode MeteringMode_ = NTopic::EMeteringMode::Unspecified;
     };
 
+    class TCommandWithMetricsLevel {
+    protected:
+        void AddMetricsLevels(TClientCommand::TConfig& config);
+        void ParseMetricsLevel();
+        TMaybe<NTopic::EMetricsLevel> GetMetricsLevel() const;
+
+    private:
+        TString MetricsLevelStr_;
+        NTopic::EMetricsLevel MetricsLevel_;
+    };
+
     class TCommandWithAutoPartitioning {
     protected:
         void AddAutoPartitioning(TClientCommand::TConfig& config, bool withDefault);
@@ -61,7 +72,12 @@ namespace NYdb::NConsoleClient {
         TCommandTopic();
     };
 
-    class TCommandTopicCreate: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
+    class TCommandTopicCreate: public TYdbCommand,
+                               public TCommandWithTopicName,
+                               public TCommandWithSupportedCodecs,
+                               public TCommandWithMeteringMode,
+                               public TCommandWithAutoPartitioning,
+                               public TCommandWithMetricsLevel {
     public:
         TCommandTopicCreate();
         void Config(TConfig& config) override;
@@ -75,9 +91,15 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui32> MaxActivePartitions_;
         ui32 PartitionWriteSpeedKbps_;
         TMaybe<ui32> PartitionsPerTablet_;
+        TMaybe<NTopic::EMetricsLevel> MetricsLevel_;
     };
 
-    class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
+    class TCommandTopicAlter: public TYdbCommand,
+                              public TCommandWithTopicName,
+                              public TCommandWithSupportedCodecs,
+                              public TCommandWithMeteringMode,
+                              public TCommandWithAutoPartitioning,
+                              public TCommandWithMetricsLevel {
     public:
         TCommandTopicAlter();
         void Config(TConfig& config) override;
@@ -92,6 +114,7 @@ namespace NYdb::NConsoleClient {
 
 
         TMaybe<ui32> PartitionWriteSpeedKbps_;
+        TMaybe<NTopic::EMetricsLevel> MetricsLevel_;
 
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
     };

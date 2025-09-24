@@ -895,6 +895,8 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
     ToProto(req->mutable_tablet_read_options(), options);
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
 
+    YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspLookupRowsPtr& rsp) {
         auto rowset = DeserializeRowset<TUnversionedRow>(
             rsp->rowset_descriptor(),
@@ -941,6 +943,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
         THROW_ERROR_EXCEPTION("Versioned lookup does not support versioned read mode %Qlv",
             options.VersionedReadOptions.ReadMode);
     }
+    YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspVersionedLookupRowsPtr& rsp) {
         auto rowset = DeserializeRowset<TVersionedRow>(
@@ -978,6 +981,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
         protoSubrequest->set_keep_missing_rows(subrequestOptions.KeepMissingRows);
         protoSubrequest->set_enable_partial_result(subrequestOptions.EnablePartialResult);
         YT_OPTIONAL_SET_PROTO(protoSubrequest, use_lookup_cache, subrequestOptions.UseLookupCache);
+        YT_OPTIONAL_TO_PROTO(protoSubrequest, execution_pool, subrequestOptions.ExecutionPool);
 
         auto rowset = SerializeRowset(
             subrequest.NameTable,

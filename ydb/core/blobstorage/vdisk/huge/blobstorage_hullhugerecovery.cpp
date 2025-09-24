@@ -52,8 +52,6 @@ namespace NKikimr {
             logPos.SetChunkFreeingLsn(ChunkFreeingLsn);
             logPos.SetHugeBlobLoggedLsn(HugeBlobLoggedLsn);
             logPos.SetLogoBlobsDbSlotDelLsn(LogoBlobsDbSlotDelLsn);
-            logPos.SetBlocksDbSlotDelLsn(BlocksDbSlotDelLsn);
-            logPos.SetBarriersDbSlotDelLsn(BarriersDbSlotDelLsn);
             logPos.SetEntryPointLsn(EntryPointLsn);
         }
 
@@ -62,8 +60,6 @@ namespace NKikimr {
             ChunkFreeingLsn = logPos.GetChunkFreeingLsn();
             HugeBlobLoggedLsn = logPos.GetHugeBlobLoggedLsn();
             LogoBlobsDbSlotDelLsn = logPos.GetLogoBlobsDbSlotDelLsn();
-            BlocksDbSlotDelLsn = logPos.GetBlocksDbSlotDelLsn();
-            BarriersDbSlotDelLsn = logPos.GetBarriersDbSlotDelLsn();
             EntryPointLsn = logPos.GetEntryPointLsn();
         }
 

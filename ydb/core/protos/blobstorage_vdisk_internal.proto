@@ -247,9 +247,7 @@ message THullHugeRecoveryLogPos {
     optional uint64 ChunkFreeingLsn = 2;
     optional uint64 HugeBlobLoggedLsn = 3;
     optional uint64 LogoBlobsDbSlotDelLsn = 4;
-    optional uint64 BlocksDbSlotDelLsn = 5;
-    optional uint64 BarriersDbSlotDelLsn = 6;
-    optional uint64 EntryPointLsn = 7;
+    optional uint64 EntryPointLsn = 5;
 }
 
 message THugeKeeperHeap {
@@ -265,7 +263,7 @@ message THugeKeeperHeap {
 
         message TFreeSpaceItem {
             optional uint32 ChunkId = 1;
-            optional string Mask = 2;
+            optional bytes Mask = 2;
         }
         repeated TFreeSpaceItem FreeSpaceItems = 4;
     }

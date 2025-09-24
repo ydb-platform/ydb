@@ -524,6 +524,8 @@ message TReqLookupRows
 
     optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 12;
 
+    optional string execution_pool = 13;
+
     reserved 5;
     reserved 6;
 }
@@ -566,6 +568,8 @@ message TReqVersionedLookupRows
 
     required TRowsetDescriptor rowset_descriptor = 200;
 
+    optional string execution_pool = 11;
+
     reserved 5;
 }
 
@@ -594,6 +598,8 @@ message TReqMultiLookup
         required int32 attachment_count = 7;
 
         optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 8;
+
+        optional string execution_pool = 9;
     }
 
     repeated TSubrequest subrequests = 1;

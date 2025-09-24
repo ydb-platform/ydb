@@ -127,8 +127,10 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCa
 
     const auto secretIt = VersionedSecrets.find(secretName);
     if (secretIt != VersionedSecrets.end()) { // some secret version is in cache
-        const auto secretDescription = request->ResultSet.front().SecretInfo->Description;
-        if (secretDescription.GetVersion() <= secretIt->second.SecretVersion) { // cache contains the most recent version
+        if (
+            LocalCacheHasActualVersion(secretIt->second, secretDescription.GetVersion()) &&
+            LocalCacheHasActualObject(secretIt->second, request->ResultSet.front().Self->Info.GetPathId())
+        ) { // cache contains the most recent version
             LOG_D("TEvNavigateKeySetResult: request cookie=" << ev->Cookie << ", fill value from secret cache");
             FillResponse(ev->Cookie, TEvDescribeSecretsResponse::TDescription(std::vector<TString>{secretIt->second.Value}));
             return;
@@ -199,6 +201,17 @@ void TDescribeSchemaSecretsService::SendSchemeCacheRequest(const TString& secret
     // TODO(yurikiselev): Deal with UserToken [issue:25472]
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, LastCookie++);
+}
+
+bool TDescribeSchemaSecretsService::LocalCacheHasActualVersion(const TVersionedSecret& secret, const ui64& cacheSecretVersion) {
+    // altering secret value does not change secret path id, so have to check secret version
+    return secret.SecretVersion == cacheSecretVersion;
+}
+
+bool TDescribeSchemaSecretsService::LocalCacheHasActualObject(const TVersionedSecret& secret, const ui64& cacheSecretPathId) {
+    // This helps with the case when the secret was dropped and created again with the same name.
+    // Secret version will become zero again, which would not lead to a secret cache update.
+    return secret.PathId == cacheSecretPathId;
 }
 
 NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(const TString& secretName, const TString& ownerUserId, TActorSystem* actorSystem) {

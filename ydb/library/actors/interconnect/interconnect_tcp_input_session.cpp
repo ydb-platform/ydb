@@ -141,6 +141,7 @@ namespace NActors {
                 wr->Release();
                 reply(as,  NInterconnect::NRdma::TEvRdmaIoDone::WrError(err));
             }
+            return err;
         };
 
         auto allocResult = cq->AllocWrAsync(wrTask, cb);

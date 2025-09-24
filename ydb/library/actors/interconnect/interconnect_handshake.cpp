@@ -763,6 +763,7 @@ namespace NActors {
                     wr->Release();
                     cb(as,  TEvRdmaIoDone::WrError(err));
                 }
+                return err;
             };
 
             auto err = RdmaCq->AllocWrAsync(wrTask, cb);

@@ -1012,10 +1012,6 @@ class ToolchainOptions(object):
         # 'match_root' at this point contains real name for references via toolchain
         self.name_marker = '$(%s)' % self.params.get('match_root', self._name.upper())
 
-        self.arch_opt = self.params.get('arch_opt', [])
-        self.triplet_opt = self.params.get('triplet_opt', {})
-        self.target_opt = self.params.get('target_opt', [])
-
         # default C++ standard is set here, some older toolchains might need to redefine it in ya.conf.json
         self.cxx_std = self.params.get('cxx_std', 'c++20')
 
@@ -1163,7 +1159,7 @@ class GnuToolchain(Toolchain):
         host = build.host
         target = build.target
 
-        self.c_flags_platform = list(tc.target_opt)
+        self.c_flags_platform = []
 
         self.default_os_sdk_root = get_os_sdk(target)
 
@@ -1207,9 +1203,11 @@ class GnuToolchain(Toolchain):
             ])
 
         if self.tc.is_clang:
-            target_triple = self.tc.triplet_opt.get(target.arch, None)
-            if not target_triple:
-                target_triple = select(default=None, selectors=[
+            # gcc does not support multiple targets within the same compiler build,
+            # hence this logic is only relevant for clang
+            target_triple = select(
+                default=None,
+                selectors=[
                     (target.is_freebsd and target.is_x86_64, 'x86_64-freebsd-unknown'),
 
                     (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
@@ -1240,7 +1238,8 @@ class GnuToolchain(Toolchain):
 
                     (target.is_emscripten and target.is_wasm32, 'wasm32-unknown-emscripten'),
                     (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
-                ])
+                ],
+            )
 
             if target.is_android:
                 # Android NDK allows specification of API level in target triple, e.g.:
@@ -1542,7 +1541,7 @@ class GnuCompiler(Compiler):
             self.c_defines.append('-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE')
 
         self.c_flags = ['$CL_DEBUG_INFO', '$CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__']
-        self.c_flags += self.tc.arch_opt + ['-pipe']
+        self.c_flags += ['-pipe']
 
         self.sfdl_flags = ['-E', '-C', '-x', 'c++']
 
@@ -2053,7 +2052,6 @@ class MSVCCompiler(MSVC, Compiler):
             # enable standard conforming mode
             '/permissive-'
         ]
-        flags += self.tc.arch_opt
 
         c_warnings = [
             "/WX",

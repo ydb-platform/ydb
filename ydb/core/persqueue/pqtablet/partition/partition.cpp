@@ -2046,11 +2046,11 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_COUNT].Set(counters.CompactedCount);
             haveChanges = true;
         }
-        // if (counters.UncompactedRatio != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_RATIO].Get()) {
-        //     PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_RATIO].Set(counters.UncompactedRatio);
+        // if (counters.GetUncompactedRatio() != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_RATIO].Get()) {
+        //     PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_RATIO].Set(counters.GetUncompactedRatio());
         //     haveChanges = true;
         // }
-        if (counters.CurrReadCycleDuration.Seconds() != PartitionCompactionCounters->GetCounters()[METRIC_CURR_CYCLE_DURATION].Get()) {
+        if (counters.CurrReadCycleDuration.MilliSeconds() != PartitionCompactionCounters->GetCounters()[METRIC_CURR_CYCLE_DURATION].Get()) {
             PartitionCompactionCounters->GetCounters()[METRIC_CURR_CYCLE_DURATION].Set(counters.CurrReadCycleDuration.MilliSeconds());
             haveChanges = true;
         }
@@ -2058,7 +2058,6 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             PartitionCompactionCounters->GetCounters()[METRIC_CURR_READ_CYCLE_KEYS].Set(counters.CurrentReadCycleKeys);
             haveChanges = true;
         }
-        //ToDo: !! 2 more counters!
     }
     return haveChanges;
 }

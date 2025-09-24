@@ -142,11 +142,6 @@ void TPartitionCompaction::RecalcBodySize() {
             break;
         }
     }
-    if (Counters.UncompactedSize > 0) {
-        Counters.UncompactedRatio = 1.0 * Counters.CompactedSize / Counters.UncompactedSize;
-    } else {
-        Counters.UncompactedRatio = 0.0;
-    }
 
 }
 
@@ -751,11 +746,6 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody(TKeyCompactionCount
     UpdatedKeys.clear();
     DeletedKeys.clear();
 
-    if (counters.UncompactedSize != 0 || counters.CompactedSize != 0) {
-        counters.UncompactedRatio = 100 * counters.UncompactedSize / (counters.CompactedSize + counters.UncompactedSize);
-    } else {
-        counters.UncompactedRatio = 0;
-    }
     counters.CompactedCount = TotalMessagesWritten;
     counters.UncompactedCount = MaxOffset - LastProcessedOffset.GetOrElse(0);
 }

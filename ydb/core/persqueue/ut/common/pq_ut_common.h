@@ -280,7 +280,7 @@ struct TBalancerParams {
     TActorId Edge;
     const bool RequireAuth = false;
     bool Kill = true;
-    const THashSet<TString>& XtraConsumers = {};
+    THashSet<TString> XtraConsumers = {};
     bool EnableKeyCompaction = false;
 
     static TBalancerParams FromContext(const TString topic,

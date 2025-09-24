@@ -33,7 +33,13 @@ struct TKeyCompactionCounters {
     ui64 CompactedSize = 0;
     ui64 UncompactedCount = 0;
     ui64 CompactedCount = 0;
-    ui64 UncompactedRatio = 100;
+    ui64 GetUncompactedRatio() {
+        if (UncompactedSize > 0) {
+            return 100.0 * CompactedSize / UncompactedSize;
+        } else {
+            return 0;
+        }
+    }
     TDuration CurrReadCycleDuration = TDuration::Zero();
     ui64 CurrentReadCycleKeys = 0;
     ui64 ReadCyclesCount = 0;

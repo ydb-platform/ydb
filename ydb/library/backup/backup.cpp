@@ -827,7 +827,7 @@ TString ExtractTransformationLambdaName(const TString& lambdaCreateQuery) {
     
     size_t start_pos = lambdaCreateQuery.find(lambdaNameStartPattern);
     if (start_pos == TString::npos) {
-        // TODO Exception
+        LOG_E("Unexpected transfer lambda name: '$__ydb_transfer_lambda' was not found");
         return "";
     }
 
@@ -835,7 +835,7 @@ TString ExtractTransformationLambdaName(const TString& lambdaCreateQuery) {
 
     size_t end_pos = lambdaCreateQuery.find(lambdaNameEndPattern, start_pos);
     if (end_pos == TString::npos) {
-        // TODO Exception
+        LOG_E("Unexpected transfer lambda name: end semicolon was not found");
         return "";
     }
     

@@ -59,6 +59,8 @@ CLUSTER_CONFIG = dict(
     },
     enforce_user_token_requirement=True,
     default_clusteradmin=TOKEN,
+    monitoring_allowed_sids=[TOKEN],
+    viewer_allowed_sids=[TOKEN],
     auth_config_path=make_test_file_with_content('auth_config.yaml', AUTH_CONFIG),
     dynamic_pdisks=[{'user_kind': 0}],
 )

@@ -170,6 +170,8 @@ class KikimrConfigGenerator(object):
             domain_login_only=None,
             use_self_management=False,
             simple_config=False,
+            monitoring_allowed_sids=[],
+            viewer_allowed_sids=[],
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -507,6 +509,12 @@ class KikimrConfigGenerator(object):
             security_config = self.yaml_config["domains_config"]["security_config"]
             security_config.setdefault("administration_allowed_sids", []).append(self.__default_clusteradmin)
             security_config.setdefault("default_access", []).append('+F:{}'.format(self.__default_clusteradmin))
+
+        for sid in monitoring_allowed_sids:
+            security_config.setdefault("monitoring_allowed_sids", []).append(sid)
+
+        for sid in viewer_allowed_sids:
+            security_config.setdefault("viewer_allowed_sids", []).append(sid)
 
     @property
     def default_clusteradmin(self):

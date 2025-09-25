@@ -12,6 +12,7 @@
 #include <ydb/library/actors/core/executor_pool_io.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
+#include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
@@ -89,6 +90,9 @@ namespace NActors {
         SetRegistrationObserverFunc(&TTestActorRuntimeBase::DefaultRegistrationObserver);
 
         CleanupNodes();
+
+        App0 = nullptr;
+        NKikimr::NJaegerTracing::ClearTracingControl();
     }
 
     void TTestActorRuntime::AddAppDataInit(std::function<void(ui32, NKikimr::TAppData&)> callback) {

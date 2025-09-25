@@ -19,6 +19,9 @@ namespace NKikimr {
     namespace NGRpcService {
         class TInFlightLimiterRegistry;
     }
+    namespace NJaegerTracing {
+        class TSamplingThrottlingConfigurator;
+    }
 }
 
 namespace NKikimrCms {
@@ -269,6 +272,9 @@ struct TAppData {
     TString ClusterName;
 
     bool YamlConfigEnabled = false;
+
+    // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
+    TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
 
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,

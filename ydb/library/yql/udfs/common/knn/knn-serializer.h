@@ -61,8 +61,9 @@ public:
 class TKnnSerializerFacade {
 public:
     static TUnboxedValue Deserialize(const IValueBuilder* valueBuilder, const TStringRef& str) {
-        if (Y_UNLIKELY(str.Size() == 0))
+        if (Y_UNLIKELY(str.Size() == 0)) {
             return {};
+        }
 
         const ui8 format = str.Data()[str.Size() - HeaderLen];
         switch (format) {

@@ -16,7 +16,6 @@ PEERDIR(
     library/cpp/l2_distance
 )
 
-
 END()
 
 RECURSE_FOR_TESTS(

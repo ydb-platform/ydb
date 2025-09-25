@@ -14,31 +14,33 @@
 
 namespace {
 
-template <typename TTo>
-inline TArrayRef<const TTo> GetArray(const TStringBuf& str) {
-    const char* buf = str.Data();
-    const size_t len = str.Size() - HeaderLen;
+    template <typename TTo>
+    inline TArrayRef<const TTo> GetArray(const TStringBuf& str) {
+        const char* buf = str.Data();
+        const size_t len = str.Size() - HeaderLen;
 
-    if (Y_UNLIKELY(len % sizeof(TTo) != 0))
-        return {};
+        if (Y_UNLIKELY(len % sizeof(TTo) != 0)) {
+            return {};
+        }
 
-    const ui32 count = len / sizeof(TTo);
+        const ui32 count = len / sizeof(TTo);
 
-    return {reinterpret_cast<const TTo*>(buf), count};
-}
+        return {reinterpret_cast<const TTo*>(buf), count};
+    }
 
-struct TBitArray {
-    const ui64* data = nullptr;
-    ui64 bitLen = 0;
-};
+    struct TBitArray {
+        const ui64* data = nullptr;
+        ui64 bitLen = 0;
+    };
 
-inline TBitArray GetBitArray(const TStringBuf& str) {
-    if (Y_UNLIKELY(str.Size() < 2))
-        return {};
-    const char* buf = str.Data();
-    const ui64 len = 8 * (str.Size() - HeaderLen - 1) - static_cast<ui8>(buf[str.Size() - HeaderLen - 1]);
-    return {reinterpret_cast<const ui64*>(buf), len};
-}
+    inline TBitArray GetBitArray(const TStringBuf& str) {
+        if (Y_UNLIKELY(str.Size() < 2)) {
+            return {};
+        }
+        const char* buf = str.Data();
+        const ui64 len = 8 * (str.Size() - HeaderLen - 1) - static_cast<ui8>(buf[str.Size() - HeaderLen - 1]);
+        return {reinterpret_cast<const ui64*>(buf), len};
+    }
 
 } // namespace
 
@@ -60,8 +62,9 @@ private:
     }
 
     static void BitVectorHandleTail(ui64 byteLen, const ui64* v1, const ui64* v2, auto&& op) {
-        if (Y_LIKELY(byteLen == 0)) // fast-path for aligned case
+        if (Y_LIKELY(byteLen == 0)) { // fast-path for aligned case
             return;
+        }
         Y_ASSERT(byteLen < sizeof(ui64));
         const auto unneededBytes = sizeof(ui64) - byteLen;
         const auto* r1 = reinterpret_cast<const char*>(v1) - unneededBytes;
@@ -81,12 +84,14 @@ private:
     }
 
     static void BitVectorHandleOp(ui64 bitLen, const ui64* v1, const ui64* v2, auto&& op) {
-        if (Y_UNLIKELY(bitLen == 0))
+        if (Y_UNLIKELY(bitLen == 0)) {
             return;
+        }
         auto byteLen = (bitLen + 7) / 8;
         const auto wordLen = byteLen / sizeof(ui64);
-        if (Y_LIKELY(wordLen == 0)) // fast-path for short case
+        if (Y_LIKELY(wordLen == 0)) { // fast-path for short case
             return BitVectorHandleShort(byteLen, v1, v2, op);
+        }
         byteLen %= sizeof(ui64);
         for (const auto* end = v1 + wordLen; v1 != end; ++v1, ++v2) {
             op(*v1, *v2);
@@ -96,8 +101,9 @@ private:
 
     template <typename Func>
     static TDistanceResult VectorFuncImpl(const auto* v1, const auto* v2, auto len1, auto len2, Func&& func) {
-        if (Y_UNLIKELY(len1 != len2))
+        if (Y_UNLIKELY(len1 != len2)) {
             return {};
+        }
         return {func(v1, v2, len1)};
     }
 
@@ -119,8 +125,9 @@ public:
     static TDistanceResult ManhattanDistance(const TStringBuf& str1, const TStringBuf& str2) {
         const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
         const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
-        if (Y_UNLIKELY(format1 != format2))
+        if (Y_UNLIKELY(format1 != format2)) {
             return {};
+        }
 
         switch (format1) {
             case EFormat::FloatVector:
@@ -151,8 +158,9 @@ public:
     static TDistanceResult EuclideanDistance(const TStringBuf& str1, const TStringBuf& str2) {
         const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
         const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
-        if (Y_UNLIKELY(format1 != format2))
+        if (Y_UNLIKELY(format1 != format2)) {
             return {};
+        }
 
         switch (format1) {
             case EFormat::FloatVector:
@@ -183,8 +191,9 @@ public:
     static TDistanceResult DotProduct(const TStringBuf& str1, const TStringBuf& str2) {
         const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
         const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
-        if (Y_UNLIKELY(format1 != format2))
+        if (Y_UNLIKELY(format1 != format2)) {
             return {};
+        }
 
         switch (format1) {
             case EFormat::FloatVector:
@@ -215,8 +224,9 @@ public:
     static TDistanceResult CosineSimilarity(const TStringBuf& str1, const TStringBuf& str2) {
         const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
         const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
-        if (Y_UNLIKELY(format1 != format2))
+        if (Y_UNLIKELY(format1 != format2)) {
             return {};
+        }
 
         auto compute = [](auto ll, float lr, auto rr) {
             const float norm = std::sqrt(ll * rr);

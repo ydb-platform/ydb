@@ -480,7 +480,7 @@ void TGRpcRequestProxyImpl::HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TE
 
 void TGRpcRequestProxyImpl::PreHandleRuntimeEvent(TEvProxyRuntimeEvent::TPtr& event, const TActorContext& ctx) {
     switch (event->Get()->GetRuntimeEventType()) {
-    case NKikimr::NGRpcService::NRuntimeEvents::EType::COMMON: {
+    case NKikimr::NGRpcService::NRuntimeEvents::EType::UNKNOWN: {
         PreHandle(event, ctx);
         break;
     }

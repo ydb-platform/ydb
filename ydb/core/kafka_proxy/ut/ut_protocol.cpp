@@ -118,7 +118,6 @@ public:
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(settings.EnableQuoting);
         if (!settings.EnableQuoting)
             appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableReadQuoting(false);
-
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(settings.EnableQuoting);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);

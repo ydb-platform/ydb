@@ -135,7 +135,7 @@ public:
                 YQL_ENSURE(stageInfo.Meta.ShardOperations.empty());
                 YQL_ENSURE(stageInfo.InputsCount == 0);
 
-                TasksGraph.AddTask(stageInfo);
+                TasksGraph.AddTask(stageInfo, TKqpTasksGraph::TTaskType::LITERAL);
             }
 
             ResponseEv->InitTxResult(tx.Body);

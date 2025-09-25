@@ -207,7 +207,6 @@ class TestSimpleTable(S3ImportTestBase):
 
         assert query_failed
 
-        return
         logger.info("Exporting into s3...")
         self.ydb_client.query(f"INSERT INTO {s3_table} SELECT * FROM `{self.olap_table}`")
         logger.info(f"Exporting finished, bucket stats: {self.s3_client.get_bucket_stat(test_bucket)}")

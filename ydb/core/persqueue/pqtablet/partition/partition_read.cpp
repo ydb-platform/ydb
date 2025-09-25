@@ -45,15 +45,19 @@ ui64 TPartition::GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) cons
     if (!readTimestamp) {
         return offset;
     }
-    TMaybe<ui64> estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.DataKeysBody, *readTimestamp);
-    if (!AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
-        if (!estimatedOffset.Defined()) {
-            estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, *readTimestamp);
-        }
-        if (!estimatedOffset.Defined()) {
-            estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp);
-        }
+    if (AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+        // round timestamp down, because timestamps are stored with second precision in the kv-tablet
+        readTimestamp = TInstant::Seconds(readTimestamp->Seconds());
     }
+    TMaybe<ui64> estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.DataKeysBody, *readTimestamp);
+
+    if (!estimatedOffset.Defined()) {
+        estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, *readTimestamp);
+    }
+    if (!estimatedOffset.Defined()) {
+        estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp);
+    }
+
     if (!estimatedOffset.Defined()) {
         estimatedOffset = Min(BlobEncoder.Head.Offset, BlobEncoder.EndOffset - 1);
     }

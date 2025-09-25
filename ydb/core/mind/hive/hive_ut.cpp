@@ -658,13 +658,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             (ui32)stopTabletResult->Record.GetStatus() << " != " << (ui32)NKikimrProto::OK);
     }
 
+    template <typename... TReassignArgs>
     void SendReassignTablet(TTestActorRuntime &runtime,
                             ui64 hiveTablet,
-                            ui64 tabletId,
-                            const TVector<ui32>& channels,
-                            ui32 nodeIndex) {
-        TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
-        runtime.SendToPipe(hiveTablet, senderB, new TEvHive::TEvReassignTablet(tabletId, channels), 0, GetPipeConfigWithRetries());
+                            TReassignArgs&&... args) {
+        TActorId senderB = runtime.AllocateEdgeActor(0);
+        runtime.SendToPipe(hiveTablet, senderB, new TEvHive::TEvReassignTablet(args...), 0, GetPipeConfigWithRetries());
     }
 
     void SendReassignTabletSpace(TTestActorRuntime &runtime,
@@ -2211,7 +2210,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         MakeSureTabletIsUp(runtime, hiveTablet, 0);
         MakeSureTabletIsUp(runtime, tabletId, 0);
 
-        SendReassignTablet(runtime, hiveTablet, tabletId, {}, 0);
+        SendReassignTablet(runtime, hiveTablet, tabletId);
         {
             TDispatchOptions options;
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerSelectGroupsResult));
@@ -2250,7 +2249,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         MakeSureTabletIsUp(runtime, tabletId, 0);
 
-        SendReassignTablet(runtime, hiveTablet, tabletId, {}, 0);
+        SendReassignTablet(runtime, hiveTablet, tabletId);
 
         {
             TDispatchOptions options;
@@ -2869,7 +2868,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
             MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
         MakeSureTabletIsUp(runtime, tabletId, 0);
-        SendReassignTablet(runtime, hiveTablet, tabletId, {}, 0);
+        SendReassignTablet(runtime, hiveTablet, tabletId);
         MakeSureTabletIsUp(runtime, tabletId, 0);
     }
 
@@ -2888,7 +2887,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         MakeSureTabletIsDown(runtime, tabletId, 0);
 
-        SendReassignTablet(runtime, hiveTablet, tabletId, {}, 0);
+        SendReassignTablet(runtime, hiveTablet, tabletId);
 
         /*{
             TDispatchOptions options;
@@ -2914,9 +2913,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
             MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
         MakeSureTabletIsUp(runtime, tabletId, 0);
-        SendReassignTablet(runtime, hiveTablet, tabletId, {}, 0);
-        SendReassignTablet(runtime, hiveTablet, tabletId, {}, 0);
-        SendReassignTablet(runtime, hiveTablet, tabletId, {}, 0);
+        SendReassignTablet(runtime, hiveTablet, tabletId);
+        SendReassignTablet(runtime, hiveTablet, tabletId);
+        SendReassignTablet(runtime, hiveTablet, tabletId);
         MakeSureTabletIsUp(runtime, tabletId, 0);
         {
             TDispatchOptions options;
@@ -3015,7 +3014,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvInvalidateStoragePools(), 0, GetPipeConfigWithRetries());
 
-        SendReassignTablet(runtime, hiveTablet, tabletId, channels, 0);
+        SendReassignTablet(runtime, hiveTablet, tabletId, channels);
 
         {
             TDispatchOptions options;
@@ -3106,7 +3105,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
     }
 
-    // Incorrect test, muted
     Y_UNIT_TEST(TestReassignUseRelativeSpace) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true, 5);
@@ -3198,6 +3196,48 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
         MakeSureTabletIsUp(runtime, tabletId, 0);
         UNIT_ASSERT_VALUES_EQUAL(getGroup(tabletId), goodGroup);
+    }
+
+    Y_UNIT_TEST(TestAsyncReassign) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true, 5);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        const TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        const TActorId sender = runtime.AllocateEdgeActor();
+        auto getTabletInfo = [&runtime, sender, hiveTablet](ui64 tabletId) {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo({
+                .TabletId = tabletId,
+                .ReturnChannelHistory = true,
+            }));
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+
+            return response->Record.GetTablets().Get(0);
+        };
+
+        const TVector<ui32> channels = {0};
+        const TVector<ui32> forcedGroups;
+        SendReassignTablet(runtime, hiveTablet, tabletId, channels, forcedGroups, /*async*/ true);
+
+        const auto oldTabletInfo = getTabletInfo(tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(oldTabletInfo.GetTabletChannels(0).GetHistory().size(), 1);
+
+        runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvDrainNode(oldTabletInfo.GetNodeID()));
+
+        {
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEventRethrow<TEvHive::TEvDrainNodeResult>(handle);
+        }
+        const auto newTabletInfo = getTabletInfo(tabletId);
+        Cerr << newTabletInfo.ShortDebugString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(newTabletInfo.GetTabletChannels(0).GetHistory().size(), 2);
     }
 
     Y_UNIT_TEST(TestDeleteTabletError) {

@@ -51,7 +51,7 @@ public:
     std::string GetEndpoint() const override;
     std::string GetDatabase() const override;
 
-    std::string GetFullTopicPath() const;
+    std::string GetFullTopicPath(const std::string& name = TEST_TOPIC) const;
 
     std::vector<std::uint32_t> GetNodeIds() override;
     std::uint16_t GetPort() const override;

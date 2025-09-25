@@ -999,9 +999,16 @@ public:
             return TStatus::Error;
         }
 
-        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx, *State_->Types, 0, 1);
-        if (status != IGraphTransformer::TStatus::Ok) {
-            return status;
+        if (NNodes::TCoDependsOnBase::Match(&input->Head())) {
+            if (!State_->Types->DirectRowDependsOn) {
+                output = ctx.ChangeChild(*input, 0, input->Head().HeadPtr());
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx, *State_->Types, 0, 1);
+            if (status != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
         }
 
         input->SetTypeAnn(ctx.MakeType<TDataExprType>(Type));

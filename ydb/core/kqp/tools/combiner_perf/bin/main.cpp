@@ -1,6 +1,6 @@
 #include <filesystem>
 #include <ydb/core/kqp/tools/combiner_perf/dq_combine_vs.h>
-#include <ydb/core/kqp/tools/combiner_perf/joins.h>
+#include <ydb/core/kqp/tools/combiner_perf/fs_utils.h>
 #include <ydb/core/kqp/tools/combiner_perf/printout.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple_block.h>
@@ -114,26 +114,11 @@ NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult&
     return out;
 }
 
-int FilesIn(std::filesystem::path path)
-{
-    using std::filesystem::directory_iterator;
-    std::filesystem::create_directories(path);
-    return std::distance(directory_iterator(path), directory_iterator{});
-}
-
-void SaveJsonAt(NJson::TJsonValue value, TFixedBufferFileOutput* jsonlSaveFile) {
-
-    Cout << NJson::WriteJson(value, false, false, false) << Endl;
-    if (jsonlSaveFile != nullptr) {
-        *jsonlSaveFile << NJson::WriteJson(value, false, false, false) << Endl;
-    }
-}
-
 class TJsonResultCollector : public TTestResultCollector {
     static std::filesystem::path MakePath() {
         auto p = std::filesystem::path{std::getenv("HOME")} / ".combiner_perf" / "json";
         std::filesystem::create_directories(p);
-        p = p / Sprintf("%i.jsonl", FilesIn(p)).ConstRef();
+        p = p / Sprintf("%i.jsonl", NKikimr::NMiniKQL::FilesIn(p)).ConstRef();
         return p;
     }
 
@@ -145,7 +130,7 @@ class TJsonResultCollector : public TTestResultCollector {
     virtual void SubmitMetrics(const TRunParams& runParams, const TRunResult& result, const char* testName,
                                const std::optional<bool> llvm, const std::optional<bool> spilling) override {
         NJson::TJsonValue out = MakeJsonMetrics(runParams, result, testName, llvm, spilling);
-        SaveJsonAt(out, &OutFile);
+        NKikimr::NMiniKQL::SaveJsonAt(out, &OutFile);
     }
 
     ~TJsonResultCollector() {
@@ -203,16 +188,11 @@ void DoFullPass(TRunParams runParams, bool withSpilling)
         }
     };
 
-    auto doJoins = [&](const TRunParams& params) {
-        RunJoinsBench(params, printout);
-    };
-
     Y_UNUSED(doBlockHashed, doSimple, doSimpleLast);
 
     doSimple(runParams);
     doSimpleLast(runParams);
     doBlockHashed(runParams);
-    doJoins(runParams);
 }
 
 enum class ETestType {
@@ -222,7 +202,6 @@ enum class ETestType {
     BlockCombiner,
     DqHashCombinerVs,
     SimpleGraceJoin,
-    AllJoins
 };
 
 void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spilling)
@@ -256,18 +235,20 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
             }
         }
     } else if (testType == ETestType::DqHashCombinerVs) {
-        if (llvm || spilling) {
+        if (spilling) {
             ythrow yexception() << "LLVM/spilling are not supported for DqHashCombiner perf test";
         }
-        NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<false>(params, printout);
+        if (llvm) {
+            NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<true>(params, printout);
+        } else {
+            NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<false>(params, printout);
+        }
     } else if (testType == ETestType::SimpleGraceJoin) {
         if (params.NumRuns != 1) {
             Cerr << "Join tests only support run-count == 1. Force-setting run-count to 1" << Endl;
             params.NumRuns = 1;
         }
         NKikimr::NMiniKQL::RunTestGraceJoinSimple(params, printout);
-    } else if (testType == ETestType::AllJoins) {
-        NKikimr::NMiniKQL::RunJoinsBench(params, printout);
     }
 }
 
@@ -371,7 +352,7 @@ int main(int argc, const char* argv[])
         .Help("Hash map type (std::unordered_map or absl::dense_hash_map)");
 
     options.AddLongOption('t', "test")
-        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "grace-join", "all-join"})
+        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "grace-join"})
         .RequiredArgument("TEST_TYPE")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
@@ -385,8 +366,6 @@ int main(int argc, const char* argv[])
                 testType = ETestType::DqHashCombinerVs;
             } else if (val == "grace-join") {
                 testType = ETestType::SimpleGraceJoin;
-            } else if (val == "all-join") {
-                testType = ETestType::AllJoins;
             } else {
                 ythrow yexception() << "Unknown test type: " << val;
             }

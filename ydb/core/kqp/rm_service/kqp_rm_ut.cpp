@@ -150,10 +150,14 @@ public:
             const NKikimrConfig::TTableServiceConfig::TResourceManager& config, ui32 nodeInd = 0) {
         auto kqpCounters = MakeIntrusive<TKqpCounters>(Counters);
         auto resman = CreateKqpResourceManagerActor(config, kqpCounters, ResourceBrokers[nodeInd], nullptr, Runtime->GetNodeId(nodeInd));
+        // RM creates children during its registration, we need to enable schedule for them
+        auto prevObserver = Runtime->SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId& /*parentId*/, const TActorId& actorId) {
+            runtime.EnableScheduleForActor(actorId, true);
+        });
         ResourceManagers.push_back(Runtime->Register(resman, nodeInd));
         Runtime->RegisterService(MakeKqpResourceManagerServiceID(
             Runtime->GetNodeId(nodeInd)), ResourceManagers.back(), nodeInd);
-        Runtime->EnableScheduleForActor(ResourceManagers.back(), true);
+        Runtime->SetRegistrationObserverFunc(prevObserver);
     }
 
     void StartRms(const TVector<NKikimrConfig::TTableServiceConfig::TResourceManager>& configs = {}) {

@@ -1,0 +1,8 @@
+select Block(($parent)->{
+    $d, $v = MutDictPop(
+        ToMutDict({"a":1,"b":2},$parent),
+        "a");
+    return (
+        ListSort(DictItems(FromMutDict($d))),
+        $v)});
+    

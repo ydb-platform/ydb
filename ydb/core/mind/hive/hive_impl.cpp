@@ -286,10 +286,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
                     if (std::holds_alternative<TNotEnoughResources>(bestNodeResult)) {
                         NotEnoughResources = true;
                     }
-                    for (const TActorId actorToNotify : tablet->ActorsToNotifyOnRestart) {
-                        sideEffects.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
-                    }
-                    tablet->ActorsToNotifyOnRestart.clear();
+                    tablet->NotifyOnRestart("boot delay", sideEffects);
                     waitingTablets.push_back(record); // waiting for new node
                     tablet->InWaitQueue = true;
                     continue;
@@ -1037,7 +1034,7 @@ void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
             }
             Execute(CreateUpdateTabletGroups(tablet->Id, std::move(groups)));
         } else {
-            Execute(CreateReassignGroups(tablet->Id, ev.Get()->Sender, channelProfileNewGroup));
+            Execute(CreateReassignGroups(tablet->Id, ev.Get()->Sender, channelProfileNewGroup, ev->Get()->Record.GetAsync()));
         }
     }
 }

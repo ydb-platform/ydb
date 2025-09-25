@@ -5197,6 +5197,7 @@ void TPersQueue::BeginDeletePartitions(TTxWriteInfo& writeInfo)
         PQ_ENSURE(Partitions.contains(partitionId));
         const TPartitionInfo& partition = Partitions.at(partitionId);
         PQ_LOG_TX_D("send TEvPQ::TEvDeletePartition to partition " << partitionId);
+        // вот тут проверка
         Send(partition.Actor, new TEvPQ::TEvDeletePartition);
     }
     writeInfo.Deleting = true;

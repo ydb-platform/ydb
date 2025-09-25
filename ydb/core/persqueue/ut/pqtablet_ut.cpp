@@ -292,7 +292,7 @@ protected:
 
     template<class EventType>
     void AddOneTimeEventObserver(bool& seenEvent,
-                                 ui32 unseenEventCount,
+                                 ui32& unseenEventCount,
                                  std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback = [](){return TTestActorRuntimeBase::EEventAction::PROCESS;});
 
     void ExpectNoExclusiveLockAcquired();
@@ -1425,8 +1425,8 @@ void TPQTabletFixture::WaitForAppSendRsResponse(const TAppSendReadSetMatcher& ma
 }
 
 template<class EventType>
-void TPQTabletFixture::AddOneTimeEventObserver(bool& seenEvent, ui32 unseenEventCount, std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback) {
-    auto observer = [&seenEvent, unseenEventCount, callback](TAutoPtr<IEventHandle>& input) mutable {
+void TPQTabletFixture::AddOneTimeEventObserver(bool& seenEvent, ui32& unseenEventCount, std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback) {
+    auto observer = [&seenEvent, &unseenEventCount, callback](TAutoPtr<IEventHandle>& input) mutable {
         if (!seenEvent && input->CastAsLocal<EventType>()) {
             unseenEventCount--;
             if (unseenEventCount == 0) {
@@ -2508,14 +2508,6 @@ Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_With_Del
     // send data to create blobs for supportive partitions
     SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
 
-    TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent;
-    bool seenEvent = false;
-    // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
-    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, [&deleteDoneEvent](TAutoPtr<IEventHandle>& eventHandle) {
-        deleteDoneEvent = eventHandle->Release<TEvPQ::TEvDeletePartitionDone>();
-        return TTestActorRuntimeBase::EEventAction::DROP;
-    });
-
     // validate supportive partition was created
     WaitForExactSupportivePartitionsCount(1);
     auto txInfo = GetTxWritesFromKV();
@@ -2527,10 +2519,21 @@ Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_With_Del
         + KAFKA_TRANSACTION_DELETE_DELAY_MS;
     Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
     SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+    TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent;
+    bool seenEvent = false;
+    ui32 unseenEventCount = 2;
+    // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
+    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, unseenEventCount, [&deleteDoneEvent](TAutoPtr<IEventHandle>& eventHandle) {
+        deleteDoneEvent = eventHandle->Release<TEvPQ::TEvDeletePartitionDone>();
+        return TTestActorRuntimeBase::EEventAction::DROP;
+    });
     TDispatchOptions options;
-    options.CustomFinalCondition = [&seenEvent]() {return seenEvent;};
+    options.CustomFinalCondition = [&unseenEventCount]() {return unseenEventCount == 1;};
     UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
     PQTabletRestart(*Ctx);
+    TDispatchOptions options1;
+    options1.CustomFinalCondition = [&unseenEventCount]() {return unseenEventCount == 0;};
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
     // wait till supportive partition for this kafka transaction is deleted
     // WaitForExactSupportivePartitionsCount(0);
     WaitForExactTxWritesCount(0);
@@ -2674,8 +2677,9 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Deleting_State, TP
 
     std::vector<TAutoPtr<TEvPQ::TEvDeletePartitionDone>> deleteDoneEvents;
     bool seenEvent = false;
+    ui32 unseenEventsCount = 2;
     // add observer for TEvPQ::TEvDeletePartitionDone requests and skip it
-    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, 2, [&deleteDoneEvents](TAutoPtr<IEventHandle>& eventHandle) {
+    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, unseenEventsCount, [&deleteDoneEvents](TAutoPtr<IEventHandle>& eventHandle) {
         deleteDoneEvents.push_back(eventHandle->Release<TEvPQ::TEvDeletePartitionDone>());
         return TTestActorRuntimeBase::EEventAction::DROP;
     });

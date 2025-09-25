@@ -3,6 +3,7 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/core/testlib/actors/block_events.h>
 
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -231,25 +232,62 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         ValidateRowCount(runtime, 1, pathId2, 6);
     }
 
-    void TestNotFullStatistics(TTestEnv& env, size_t expectedRowCount) {
+    void TestNotFullStatistics(TTestEnv& env, size_t shardCount, size_t expectedRowCount) {
+        Y_ABORT_UNLESS(shardCount > 1, "Test expects more than 1 shard in the table");
+
         auto& runtime = *env.GetServer().GetRuntime();
 
         ui64 saTabletId = 0;
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
         ui64 ssTabletId = pathId.OwnerId;
 
-        ui32 nodeIdx = 1;
+        // Block stats updates from one of the shards and pass others through.
+        std::optional<ui64> blockedShardId;
+        THashSet<ui64> updatedShardIds;
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> blockShardStats(
+            runtime, [&](const TEvDataShard::TEvPeriodicTableStats::TPtr& ev) {
+                const auto& record = ev->Get()->Record;
+                if (record.GetTableLocalId() != pathId.LocalPathId) {
+                    return false;
+                }
+                if (!blockedShardId) {
+                    blockedShardId = record.GetDatashardId();
+                    return true;
+                } else if (blockedShardId == record.GetDatashardId()) {
+                    return true;
+                } else {
+                    updatedShardIds.insert(record.GetDatashardId());
+                    return false;
+                }
+            });
 
-        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> block(runtime);
-        runtime.WaitFor("TEvPeriodicTableStats", [&]{ return block.size() >= 3; });
-        block.Unblock(3);
+        runtime.WaitFor(
+            "TEvPeriodicTableStats",
+            [&]{ return updatedShardIds.size() >= shardCount - 1; });
+        // Give SchemeShard time to process shard stats updates
+        runtime.SimulateSleep(TDuration::Seconds(1));
 
+        {
+            // Check that the row count in SchemeShard got partially updated.
+            auto sender = runtime.AllocateEdgeActor();
+            auto describe = DescribeTable(runtime, sender, "/Root/Database/Table");
+            ui64 rowCount = describe.GetPathDescription().GetTableStats().GetRowCount();
+            UNIT_ASSERT_GT(rowCount, 0);
+        }
+
+        const ui32 nodeIdx = 1;
+
+        // Check that the statistics service still reports 0 row count.
         WaitForStatsUpdateFromSchemeShard(runtime, ssTabletId, saTabletId);
         UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId), 0);
 
-        block.Unblock();
-        block.Stop();
+        blockShardStats.Unblock();
+        blockShardStats.Stop();
+        // Give SchemeShard time to process shard stats updates
+        runtime.SimulateSleep(TDuration::Seconds(1));
 
+        // Check that after all shard updates reached SchemeShard,
+        // statistics service reports correct row count.
         WaitForStatsUpdateFromSchemeShard(runtime, ssTabletId, saTabletId);
         WaitForStatsPropagate(runtime, nodeIdx);
 
@@ -262,7 +300,7 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         CreateDatabase(env, "Database");
         CreateUniformTable(env, "Database", "Table");
 
-        TestNotFullStatistics(env, 4);
+        TestNotFullStatistics(env, /*shardCount=*/ 4, /*expectedRowCount=*/ 4);
     }
 
     Y_UNIT_TEST(NotFullStatisticsColumnshard) {
@@ -271,7 +309,7 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         CreateDatabase(env, "Database");
         CreateColumnStoreTable(env, "Database", "Table", 4);
 
-        TestNotFullStatistics(env, 1000);
+        TestNotFullStatistics(env, /*shardCount=*/ 4, /*expectedRowCount=*/ ColumnTableRowsNumber);
     }
 
     Y_UNIT_TEST(SimpleGlobalIndex) {

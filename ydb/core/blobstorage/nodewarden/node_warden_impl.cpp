@@ -115,6 +115,7 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(NPDisk::TEvSlayResult, Handle);
         hFunc(NPDisk::TEvShredPDiskResult, Handle);
         hFunc(NPDisk::TEvShredPDisk, Handle);
+        hFunc(NPDisk::TEvChangeExpectedSlotCountResult, Handle);
 
         hFunc(TEvRegisterPDiskLoadActor, Handle);
 
@@ -628,6 +629,16 @@ void TNodeWarden::Handle(NPDisk::TEvShredPDiskResult::TPtr ev) {
     ProcessShredStatus(ev->Cookie, ev->Get()->ShredGeneration, ev->Get()->Status == NKikimrProto::OK ? std::nullopt :
         std::make_optional(TStringBuilder() << "failed to shred PDisk Status# " << NKikimrProto::EReplyStatus_Name(
         ev->Get()->Status)));
+}
+
+void TNodeWarden::Handle(NPDisk::TEvChangeExpectedSlotCountResult::TPtr ev) {
+    const NPDisk::TEvChangeExpectedSlotCountResult &msg = *ev->Get();
+    STLOG(PRI_DEBUG, BS_NODE, NW108, "Handle(NPDisk::TEvChangeExpectedSlotCountResult)", (Msg, msg.ToString()));
+
+    // For now, just log the result. In the future, we might want to track this or take action based on the result.
+    if (msg.Status != NKikimrProto::OK) {
+        STLOG(PRI_ERROR, BS_NODE, NW109, "ChangeExpectedSlotCount failed", (Status, msg.Status), (ErrorReason, msg.ErrorReason));
+    }
 }
 
 void TNodeWarden::Handle(NPDisk::TEvShredPDisk::TPtr ev) {

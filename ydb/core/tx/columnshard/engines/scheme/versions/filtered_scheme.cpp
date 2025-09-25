@@ -14,8 +14,13 @@ TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& or
 {
     std::vector<std::shared_ptr<arrow::Field>> schemaFields;
     for (auto&& i : columnIds) {
+        auto f = originalSnapshot->GetFieldByColumnIdOptional(i);
+        if (!f) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "filtered_schema_missing_column")("column_id", i)("snapshot", originalSnapshot->DebugString());
+            continue;
+        }
         IdIntoIndex.emplace(i, schemaFields.size());
-        schemaFields.emplace_back(originalSnapshot->GetFieldByColumnIdVerified(i));
+        schemaFields.emplace_back(f);
     }
     Schema = std::make_shared<NArrow::TSchemaLite>(schemaFields);
 }

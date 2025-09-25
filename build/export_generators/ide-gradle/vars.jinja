@@ -22,6 +22,8 @@
 {#-     KAPT -#}
 {%-     set with_kapt = target.with_kapt and target.kapt.classpaths|length -%}
 {%-     set with_test_kapt = extra_targets|selectattr('with_kapt', 'eq', true)|map(attribute='with_kapt')|length and extra_targets|selectattr('with_kapt', 'eq', true)|selectattr('kapt')|map(attribute='kapt')|selectattr('classpaths')|map(attribute='classpaths')|sum|length -%}
+{#-     Options kapt.kotlin.generated autocreated by kapt plugin, skip it -#}
+{%-     set all_kapt_ap_opts = all_targets|selectattr('kapt')|map(attribute='kapt')|selectattr('ap_opts')|map(attribute='ap_opts')|sum|reject('startsWith', 'kapt.kotlin.generated=') -%}
 {%- endif -%}
 
 {#- ErrorProne -#}

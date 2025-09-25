@@ -85,6 +85,44 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TChain
         ////////////////////////////////////////////////////////////////////////////
+        TChain::TChain(TString vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap::TChain& chain)
+            : VDiskLogPrefix(std::move(vdiskLogPrefix))
+        {
+            LoadFromProto(chain);
+        }
+
+        void TChain::SaveToProto(NKikimrVDiskData::THugeKeeperHeap::TChain& chain) const {
+            chain.SetSlotsInChunk(SlotsInChunk);
+            chain.SetSlotSize(SlotSize);
+            chain.SetAllocatedSlots(AllocatedSlots);
+
+            ForEachFreeSpaceChunk([&chain](const auto& x) {
+                const auto& [chunkId, item] = x;
+                auto& freeSpaceItem = *chain.AddFreeSpaceItems();
+                freeSpaceItem.SetChunkId(chunkId);
+                TStringStream str;
+                ::Save(&str, item.FreeSlots);
+                freeSpaceItem.SetMask(str.Str());
+            });
+        }
+
+        void TChain::LoadFromProto(const NKikimrVDiskData::THugeKeeperHeap::TChain& chain) {
+            SlotsInChunk = chain.GetSlotsInChunk();
+            SlotSize = chain.GetSlotSize();
+            AllocatedSlots = chain.GetAllocatedSlots();
+
+            ConstMask = BuildConstMask(VDiskLogPrefix, SlotsInChunk);
+
+            for (const auto& freeSpaceItem : chain.GetFreeSpaceItems()) {
+                TFreeSpaceItem item;
+                TStringInput in(freeSpaceItem.GetMask());
+                ::Load(&in, item.FreeSlots);
+                item.NumFreeSlots = item.FreeSlots.Count();
+                FreeSlotsInFreeSpace += item.NumFreeSlots;
+                FreeSpace.emplace(freeSpaceItem.GetChunkId(), std::move(item));
+            }
+        }
+
         THugeSlot TChain::Convert(const NPrivate::TChunkSlot& id) const {
             return THugeSlot(id.GetChunkId(), id.GetSlotId() * SlotSize, SlotSize);
         }
@@ -407,26 +445,31 @@ namespace NKikimr {
                 ui32 appendBlockSize,
                 ui32 minHugeBlobInBytes,
                 ui32 milestoneBlobInBytes,
-                ui32 maxBlobInBytes,
+                ui32 maxHugeBlobInBytes,
                 ui32 overhead)
             : VDiskLogPrefix(vdiskLogPrefix)
             , ChunkSize(chunkSize)
             , AppendBlockSize(appendBlockSize)
             , MinHugeBlobInBytes(minHugeBlobInBytes)
-            , MilestoneBlobInBytes(milestoneBlobInBytes)
-            , Overhead(overhead)
+            , MaxHugeBlobInBytes(maxHugeBlobInBytes)
             , MinHugeBlobInBlocks(MinHugeBlobInBytes / AppendBlockSize)
-            , MaxHugeBlobInBlocks(SizeToBlocks(maxBlobInBytes))
+            , MaxHugeBlobInBlocks(SizeToBlocks(MaxHugeBlobInBytes))
         {
             Y_VERIFY_S(MinHugeBlobInBytes &&
-                    MinHugeBlobInBytes <= MilestoneBlobInBytes &&
-                    MilestoneBlobInBytes < maxBlobInBytes,
+                    MinHugeBlobInBytes <= milestoneBlobInBytes &&
+                    milestoneBlobInBytes < MaxHugeBlobInBytes,
                             VDiskLogPrefix << "INVALID CONFIGURATION! (SETTINGS ARE:"
-                            << " MaxBlobInBytes# " << maxBlobInBytes << " MinHugeBlobInBytes# " << MinHugeBlobInBytes
-                            << " MilestoneBlobInBytes# " << MilestoneBlobInBytes << " ChunkSize# " << ChunkSize
+                            << " MaxHugeBlobInBytes# " << MaxHugeBlobInBytes << " MinHugeBlobInBytes# " << MinHugeBlobInBytes
+                            << " MilestoneBlobInBytes# " << milestoneBlobInBytes << " ChunkSize# " << ChunkSize
                             << " AppendBlockSize# " << AppendBlockSize << ")");
 
-            BuildChains();
+            BuildChains(milestoneBlobInBytes, overhead);
+        }
+
+        TAllChains::TAllChains(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap)
+            : VDiskLogPrefix(vdiskLogPrefix)
+        {
+            LoadFromProto(heap);
         }
 
         TChain *TAllChains::GetChain(ui32 size) {
@@ -529,6 +572,33 @@ namespace NKikimr {
             Chains = std::move(newChains);
         }
 
+        void TAllChains::SaveToProto(NKikimrVDiskData::THugeKeeperHeap& heap) const {
+            heap.SetChunkSize(ChunkSize);
+            heap.SetAppendBlockSize(AppendBlockSize);
+            heap.SetMinHugeBlobInBytes(MinHugeBlobInBytes);
+            heap.SetMaxHugeBlobInBytes(MaxHugeBlobInBytes);
+
+            heap.MutableChains()->Reserve(Chains.size());
+            for (const auto& chain : Chains) {
+                chain.SaveToProto(*heap.AddChains());
+            }
+        }
+
+        void TAllChains::LoadFromProto(const NKikimrVDiskData::THugeKeeperHeap& heap) {
+            ChunkSize = heap.GetChunkSize();
+            AppendBlockSize = heap.GetAppendBlockSize();
+            MinHugeBlobInBytes = heap.GetMinHugeBlobInBytes();
+            MaxHugeBlobInBytes = heap.GetMaxHugeBlobInBytes();
+
+            MinHugeBlobInBlocks = MinHugeBlobInBytes / AppendBlockSize;
+            MaxHugeBlobInBlocks = SizeToBlocks(MaxHugeBlobInBytes);
+
+            Chains.reserve(heap.ChainsSize());
+            for (const auto& chain : heap.GetChains()) {
+                Chains.emplace_back(VDiskLogPrefix, chain);
+            }
+        }
+
         void TAllChains::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             for (const TChain& chain : Chains) {
                 chain.GetOwnedChunks(chunks);
@@ -540,6 +610,7 @@ namespace NKikimr {
             str << "{ChunkSize# " << ChunkSize
                 << " AppendBlockSize# " << AppendBlockSize
                 << " MinHugeBlobInBytes# " << MinHugeBlobInBytes
+                << " MaxHugeBlobInBytes# " << MaxHugeBlobInBytes
                 << " MinHugeBlobInBlocks# " << MinHugeBlobInBlocks
                 << " MaxHugeBlobInBlocks# " << MaxHugeBlobInBlocks;
             for (const auto& chain : Chains) {
@@ -613,12 +684,12 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TAllChains: Private
         ////////////////////////////////////////////////////////////////////////////
-        void TAllChains::BuildChains() {
+        void TAllChains::BuildChains(ui32 milestoneBlobInBytes, ui32 overhead) {
             const ui32 startBlocks = MinHugeBlobInBlocks;
-            const ui32 milestoneBlocks = MilestoneBlobInBytes / AppendBlockSize;
+            const ui32 milestoneBlocks = milestoneBlobInBytes / AppendBlockSize;
             const ui32 endBlocks = MaxHugeBlobInBlocks;
 
-            NPrivate::TChainLayoutBuilder builder(VDiskLogPrefix, startBlocks, milestoneBlocks, endBlocks, Overhead);
+            NPrivate::TChainLayoutBuilder builder(VDiskLogPrefix, startBlocks, milestoneBlocks, endBlocks, overhead);
             const ui32 blocksInChunk = ChunkSize / AppendBlockSize;
 
             for (auto x : builder.GetLayout()) {
@@ -689,15 +760,20 @@ namespace NKikimr {
                 ui32 appendBlockSize,
                 ui32 minHugeBlobInBytes,
                 ui32 mileStoneBlobInBytes,
-                ui32 maxBlobInBytes,
+                ui32 maxHugeBlobInBytes,
                 ui32 overhead,
                 ui32 freeChunksReservation)
             : VDiskLogPrefix(vdiskLogPrefix)
             , FreeChunksReservation(freeChunksReservation)
-            , FreeChunks()
             , Chains(vdiskLogPrefix, chunkSize, appendBlockSize, minHugeBlobInBytes, mileStoneBlobInBytes,
-                maxBlobInBytes, overhead)
+                maxHugeBlobInBytes, overhead)
         {}
+
+        THeap::THeap(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap)
+            : Chains(vdiskLogPrefix, heap)
+        {
+            LoadFromProto(heap);
+        }
 
         //////////////////////////////////////////////////////////////////////////////////////////
         // THeap: main functions
@@ -868,6 +944,23 @@ namespace NKikimr {
             ::Load(&str, signature);
             ::Load(&str, FreeChunks);
             ::Load(&str, Chains);
+        }
+
+        void THeap::SaveToProto(NKikimrVDiskData::THugeKeeperHeap& heap) const {
+            Chains.SaveToProto(heap);
+            heap.MutableFreeChunks()->Reserve(FreeChunks.size());
+            for (auto chunk : FreeChunks) {
+                heap.AddFreeChunks(chunk);
+            }
+            heap.SetFreeChunksReservation(FreeChunksReservation);
+        }
+
+        void THeap::LoadFromProto(const NKikimrVDiskData::THugeKeeperHeap& heap) {
+            FreeChunks.clear();
+            for (auto chunk : heap.GetFreeChunks()) {
+                FreeChunks.insert(chunk);
+            }
+            FreeChunksReservation = heap.GetFreeChunksReservation();
         }
 
         bool THeap::CheckEntryPoint(const TString &serialized) {

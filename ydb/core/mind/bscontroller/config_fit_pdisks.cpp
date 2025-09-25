@@ -191,6 +191,7 @@ namespace NKikimr {
                         disk.Serial = serial;
                         disk.SharedWithOs = driveInfo.SharedWithOs;
                         disk.InferPDiskSlotCountFromUnitSize = driveInfo.InferPDiskSlotCountFromUnitSize;
+                        disk.InferPDiskSlotCountMax = driveInfo.InferPDiskSlotCountMax;
 
                         auto diskId = disk.GetId();
                         auto [_, inserted] = disks.try_emplace(diskId, std::move(disk));

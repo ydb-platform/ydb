@@ -299,6 +299,8 @@ common:
     to: /concepts/topology.md
   - from: /concepts/clusters/common_scheme_ydb.md
     to: /contributor/general-schema.md
+  - from: /concepts/cluster/common_scheme_ydb.md
+    to: /contributor/general-schema.md
   - from: /concepts/clusters/distributed_storage.md
     to: /contributor/distributed-storage.md
   - from: /concepts/cluster/distributed_storage.md

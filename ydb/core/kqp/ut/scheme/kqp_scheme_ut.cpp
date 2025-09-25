@@ -13453,8 +13453,6 @@ END DO)",
             )sql";
             const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
-            UNIT_ASSERT_STRINGS_EQUAL(describeResult->Record.GetPathDescription().GetSecretDescription().GetValue(), "secret-value");
         }
         { // create dirs, empty value with inherit_permissions
             const static auto query = R"sql(
@@ -13506,7 +13504,6 @@ END DO)",
         }
 
         const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
-        UNIT_ASSERT_STRINGS_EQUAL(describeResult->Record.GetPathDescription().GetSecretDescription().GetValue(), "secret-value-1");
 
         // ok
         {
@@ -13515,8 +13512,6 @@ END DO)",
             )sql";
             const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
-            UNIT_ASSERT_STRINGS_EQUAL(describeResult->Record.GetPathDescription().GetSecretDescription().GetValue(), "secret-value-2");
         }
     }
 

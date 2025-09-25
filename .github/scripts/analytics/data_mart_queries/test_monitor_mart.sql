@@ -27,5 +27,5 @@ SELECT
     String::ReplaceAll(owner, 'TEAM:@ydb-platform/', '') as owner_team
 FROM `test_results/analytics/tests_monitor`
 WHERE date_window >= CurrentUtcDate() - 1 * Interval("P1D") -- for init table better take 30* Interval("P1D")
-and ( branch = 'main' or branch like 'stable-%')
+and ( branch = 'main' or branch like 'stable-%' or branch like 'stream-nb-2%')
 

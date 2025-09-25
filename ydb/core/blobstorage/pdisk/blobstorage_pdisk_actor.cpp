@@ -706,7 +706,9 @@ public:
 
     void InitHandle(NPDisk::TEvChangeExpectedSlotCount::TPtr &ev) {
         PDisk->Mon.ChangeExpectedSlotCount.CountRequest();
-        Send(ev->Sender, new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::CORRUPTED, StateErrorReason));
+        TStringStream str;
+        str << PCtx->PDiskLogPrefix << "is still initializing, please wait";
+        Send(ev->Sender, new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::NOTREADY, str.Str()));
         PDisk->Mon.ChangeExpectedSlotCount.CountResponse();
     }
 

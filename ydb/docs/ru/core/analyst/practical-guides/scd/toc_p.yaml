@@ -1,0 +1,7 @@
+items:
+  - name: Обзор
+    href: index.md
+  - name: SCD1 с использованием TRANSFER
+    href: scd1-transfer.md
+  - name: SCD2 с использованием TRANSFER
+    href: scd2-transfer.md

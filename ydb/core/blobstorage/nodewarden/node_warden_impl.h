@@ -592,6 +592,7 @@ namespace NKikimr::NStorage {
         void Handle(NPDisk::TEvSlayResult::TPtr ev);
         void Handle(NPDisk::TEvShredPDiskResult::TPtr ev);
         void Handle(NPDisk::TEvShredPDisk::TPtr ev);
+        void Handle(NPDisk::TEvChangeExpectedSlotCountResult::TPtr ev);
         void ProcessShredStatus(ui64 cookie, ui64 generation, std::optional<TString> error);
 
         void PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVersion, std::optional<TString> storageYaml,

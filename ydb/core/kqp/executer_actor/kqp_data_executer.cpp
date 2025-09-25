@@ -1967,7 +1967,7 @@ private:
         size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
         OnEmptyResult();
 
-        Cerr << TasksGraph.DumpToString();
+        // Cerr << TasksGraph.DumpToString();
 
         TIssue validateIssue;
         if (!ValidateTasks(TasksGraph, EExecType::Data, TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {

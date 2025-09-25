@@ -74,7 +74,7 @@ public:
     TKqpSchemeExecuter(
         TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target, const TMaybe<TString>& requestType,
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
-        bool temporary, bool isCreateTableAs, TString sessionId, TIntrusivePtr<TUserRequestContext> ctx,
+        bool temporary, bool createTmpDir, bool isCreateTableAs, TString sessionId, TIntrusivePtr<TUserRequestContext> ctx,
         const TActorId& kqpTempTablesAgentActor)
         : PhyTx(phyTx)
         , QueryType(queryType)
@@ -83,6 +83,7 @@ public:
         , UserToken(userToken)
         , ClientAddress(clientAddress)
         , Temporary(temporary)
+        , CreateTmpDir(createTmpDir)
         , IsCreateTableAs(isCreateTableAs)
         , SessionId(sessionId)
         , RequestContext(std::move(ctx))
@@ -151,6 +152,7 @@ public:
         modifyScheme->SetWorkingDir(GetSessionDirsBasePath(Database));
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
         modifyScheme->SetAllowCreateInTempDir(false);
+        modifyScheme->SetFailOnExist(true);
 
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(SessionId);
@@ -698,7 +700,8 @@ public:
         } else if (IsCreateTableAs && schemeOp.GetOperationCase() == NKqpProto::TKqpSchemeOperation::kAlterTable) {
             FindWorkingDirForCTAS();
         } else {
-            if (Temporary) {
+            if (CreateTmpDir) {
+                AFL_ENSURE(Temporary);
                 CreateTmpDirectory();
             } else {
                 MakeSchemeOperationRequest();
@@ -1036,6 +1039,7 @@ private:
     const TString ClientAddress;
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     bool Temporary;
+    bool CreateTmpDir;
     bool IsCreateTableAs;
     TString SessionId;
     ui64 TxId = 0;
@@ -1052,12 +1056,12 @@ IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
-    bool temporary, bool isCreateTableAs,
+    bool temporary, bool createTmpDir, bool isCreateTableAs,
     TString sessionId, TIntrusivePtr<TUserRequestContext> ctx, const TActorId& kqpTempTablesAgentActor)
 {
     return new TKqpSchemeExecuter(
         phyTx, queryType, target, requestType, database, userToken, clientAddress,
-        temporary, isCreateTableAs, sessionId, std::move(ctx), kqpTempTablesAgentActor);
+        temporary, createTmpDir, isCreateTableAs, sessionId, std::move(ctx), kqpTempTablesAgentActor);
 }
 
 } // namespace NKikimr::NKqp

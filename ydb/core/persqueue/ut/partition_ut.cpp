@@ -326,7 +326,7 @@ protected:
     NPersQueue::TTopicConverterPtr TopicConverter;
     NKikimrPQ::TPQTabletConfig Config;
 
-    TAutoPtr<TTabletCountersBase> TabletCounters;
+    std::shared_ptr<TTabletCountersBase> TabletCounters;
 
 };
 
@@ -368,7 +368,7 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
     >;
 
     TAutoPtr<TCounters> counters(new TCounters());
-    TabletCounters = counters->GetSecondTabletCounters().Release();
+    TabletCounters.reset(counters->GetSecondTabletCounters().Release());
 
     Config = MakeConfig(config.Version,
                         config.Consumers,
@@ -387,7 +387,7 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                 id,
                 Ctx->Edge,
                 Ctx->TabletId,
-                *TabletCounters
+                TabletCounters
         ));
     }
     auto samplingControl = Ctx->Runtime->GetAppData(0).TracingConfigurator->GetControl();
@@ -400,7 +400,7 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                                      "dcId",
                                      false,
                                      Config,
-                                     *TabletCounters,
+                                     TabletCounters,
                                      false,
                                      1,
                                      quoterId,

@@ -1272,7 +1272,7 @@ public:
 
 class TChangeExpectedSlotCount : public TRequestBase {
 public:
-    ui64 ExpectedSlotCount;
+    ui32 ExpectedSlotCount;
     ui32 SlotSizeInUnits;
 
     TChangeExpectedSlotCount(const NPDisk::TEvChangeExpectedSlotCount &ev, const TActorId &sender, TAtomicBase reqIdx)

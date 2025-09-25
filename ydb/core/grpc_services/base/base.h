@@ -262,7 +262,7 @@ struct TRpcServices {
 namespace NRuntimeEvents {
 
 enum class EType {
-    COMMON,
+    UNKNOWN,
     BOOTSTRAP_CLUSTER,
 };
 
@@ -1128,10 +1128,12 @@ public:
         return GetPeerMetaValues(NYdbGrpc::GRPC_USER_AGENT_HEADER);
     }
 
-    virtual NRuntimeEvents::EType GetRuntimeEventType() = 0;
+    virtual NRuntimeEvents::EType GetRuntimeEventType() {
+        return NRuntimeEvents::EType::UNKNOWN;
+    }
 };
 
-template <typename NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
+template <typename NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 class TEvProxyRuntimeEventWithType : public TEvProxyRuntimeEvent {
 public:
     NRuntimeEvents::EType GetRuntimeEventType() override {
@@ -1160,7 +1162,7 @@ template <ui32 TRpcId,
     bool IsOperation,
     typename TDerived,
     class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>,
-    typename NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
+    typename NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 class TGRpcRequestWrapperImpl
     : public std::conditional_t<IsOperation,
         TGrpcResponseSenderImpl<TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>,
@@ -1530,7 +1532,7 @@ template <ui32 TRpcId,
     bool IsOperation,
     typename TDerived,
     class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>,
-    typename NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
+    typename NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 class TGRpcRequestValidationWrapperImpl : public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived, TMethodAccessorTraits, RuntimeEventType> {
 public:
 
@@ -1564,7 +1566,7 @@ template <typename TReq,
     typename TResp,
     bool IsOperation,
     class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>,
-    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
+    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 class TGrpcRequestCall
     : public std::conditional_t<TProtoHasValidate<TReq>::Value,
         TGRpcRequestValidationWrapperImpl<
@@ -1644,13 +1646,13 @@ private:
 template <typename TReq,
     typename TResp,
     class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, true>,
-    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
+    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 using TGrpcRequestOperationCall = TGrpcRequestCall<TReq, TResp, true, TMethodAccessorTraits, RuntimeEventType>;
 
 template <typename TReq,
     typename TResp,
     class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, false>,
-    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
+    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 using TGrpcRequestNoOperationCall = TGrpcRequestCall<TReq, TResp, false, TMethodAccessorTraits, RuntimeEventType>;
 
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, TRateLimiterMode RlMode = TRateLimiterMode::Off>

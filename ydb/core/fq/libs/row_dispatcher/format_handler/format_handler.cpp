@@ -232,7 +232,7 @@ private:
             if (Watermark < watermark) {
                 Watermark = watermark;
             }
-            LOG_ROW_DISPATCHER_TRACE("OnData, row id: " << rowId << ", watermark: " << watermark);
+            LOG_ROW_DISPATCHER_TRACE("OnWatermark, row id: " << rowId << ", watermark: " << watermark);
         }
 
     public:

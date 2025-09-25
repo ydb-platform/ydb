@@ -10,7 +10,7 @@ TWriteQuoter::TWriteQuoter(
     const TPartitionId& partition,
     TActorId tabletActor,
     ui64 tabletId,
-    const TTabletCountersBase& counters
+    const std::shared_ptr<TTabletCountersBase>& counters
 )
     : TPartitionQuoterBase(
             topicConverter, config, partition, tabletActor, pqConfig.GetQuotingConfig().GetEnableQuoting(),
@@ -60,7 +60,7 @@ void TWriteQuoter::UpdateQuotaConfigImpl(bool, const TActorContext&) {
 THolder<TAccountQuoterHolder> TWriteQuoter::CreateAccountQuotaTracker() const {
     TActorId actorId;
     if (GetTabletActor() && GetAccountQuotingEnabled(AppData()->PQConfig)) {
-        actorId = TActivationContext::Register(
+        actorId = TActivationContext::RegisterWithSameMailbox(
             new TAccountWriteQuoter(
                 GetTabletActor(),
                 SelfId(),
@@ -69,7 +69,8 @@ THolder<TAccountQuoterHolder> TWriteQuoter::CreateAccountQuotaTracker() const {
                 GetPartition(),
                 Counters,
                 ActorContext()
-            )
+            ),
+            TabletActorId
         );
     }
     if (actorId) {

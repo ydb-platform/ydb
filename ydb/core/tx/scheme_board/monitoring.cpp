@@ -1778,7 +1778,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
         case ERequestType::Restore:
             if (params.Has("startRestore")) {
-                if (!ev->Get()->UserToken || !IsAdministrator(AppData(TlsActivationContext->AsActorContext()), ev->Get()->UserToken)) {
+                if (!ev->Get()->UserToken || !IsAdministrator(AppData(), ev->Get()->UserToken)) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderRestore(false, "Unauthorized")
                     ));

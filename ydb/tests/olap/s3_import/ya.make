@@ -13,7 +13,11 @@ PY_SRCS(
     base.py
 )
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+
+TAG(ya:fat)
+
+TIMEOUT(900)
 
 PEERDIR(
     ydb/tests/library

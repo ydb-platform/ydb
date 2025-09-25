@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/protos/actors.pb.h>
+#include <ydb/library/logger/actor.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
@@ -83,7 +84,11 @@ struct TLeaderElectionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChanged;
 };
 
-class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
+struct TActorSystemPtrMixin {
+    NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
+};
+
+class TLeaderElection: public TActorBootstrapped<TLeaderElection>, public TActorSystemPtrMixin {
 
     enum class EState {
         Init,
@@ -165,6 +170,7 @@ private:
     void ProcessState();
     void ResetState();
     void SetTimeout();
+    NYdb::TDriverConfig GetYdbDriverConfig() const;
 };
 
 TLeaderElection::TLeaderElection(
@@ -172,12 +178,12 @@ TLeaderElection::TLeaderElection(
     NActors::TActorId coordinatorId,
     const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYdb::TDriver driver,
+    NYdb::TDriver /*driver*/,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , Driver(driver)
+    , Driver(GetYdbDriverConfig())
     , YdbConnection(config.GetLocalMode() ? nullptr : NewYdbConnection(config.GetDatabase(), credentialsProviderFactory, Driver))
     , TablePathPrefix(JoinPath(config.GetDatabase().GetDatabase(), config.GetCoordinationNodePath()))
     , TenantId(JoinSeq(":", NKikimr::SplitPath(tenant)))
@@ -467,6 +473,13 @@ void TLeaderElection::HandleException(const std::exception& e) {
     LOG_ROW_DISPATCHER_ERROR("Internal error: exception:" << e.what());
     Metrics.Errors->Inc();
     ResetState();
+}
+
+NYdb::TDriverConfig TLeaderElection::GetYdbDriverConfig() const {
+    NYdb::TDriverConfig cfg;
+    cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+    cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
+    return cfg;
 }
 
 } // anonymous namespace

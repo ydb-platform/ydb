@@ -46,16 +46,16 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
                 case NOlap::NPortion::EProduced::UNSPECIFIED:
                     Y_ABORT_UNLESS(false);   // unexpected
                 case NOlap::NPortion::EProduced::INSERTED:
-                    self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_INDEXING_PORTIONS_WRITTEN);
+                    self->Counters->GetTabletCounters()->IncCounter(NColumnShard::COUNTER_INDEXING_PORTIONS_WRITTEN);
                     break;
                 case NOlap::NPortion::EProduced::COMPACTED:
-                    self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_COMPACTION_PORTIONS_WRITTEN);
+                    self->Counters->GetTabletCounters()->IncCounter(NColumnShard::COUNTER_COMPACTION_PORTIONS_WRITTEN);
                     break;
                 case NOlap::NPortion::EProduced::SPLIT_COMPACTED:
-                    self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
+                    self->Counters->GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
                     break;
                 case NOlap::NPortion::EProduced::EVICTED:
-                    self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_EVICTION_PORTIONS_WRITTEN);
+                    self->Counters->GetTabletCounters()->IncCounter(NColumnShard::COUNTER_EVICTION_PORTIONS_WRITTEN);
                     break;
                 case NOlap::NPortion::EProduced::INACTIVE:
                     Y_ABORT("Unexpected inactive case");

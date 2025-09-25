@@ -2,6 +2,7 @@
 #include "schemeshard_path_describer.h"
 
 #include <util/stream/format.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -55,6 +56,7 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
                         << ", result: " << Result->GetRecord().ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
 
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ZZZZZZ", Result->GetRecord().GetPathDescription().GetTableStats().GetImmediateTxCompleted());
         ctx.Send(Sender, std::move(Result), 0, Cookie);
     }
 

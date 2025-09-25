@@ -19,7 +19,7 @@ std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTx
         std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), txInfo.TxKind, txInfo.TxId,
             GetProposeStartInfoVerified().GetStatus(), GetProposeStartInfoVerified().GetStatusMessage());
     if (IsFail()) {
-        owner.Counters.GetTabletCounters()->IncCounter(COUNTER_PREPARE_ERROR);
+        owner.Counters->GetTabletCounters()->IncCounter(COUNTER_PREPARE_ERROR);
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("message", GetProposeStartInfoVerified().GetStatusMessage())("tablet_id", owner.TabletID())(
             "tx_id", txInfo.TxId);
     } else {
@@ -28,7 +28,7 @@ std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTx
         if (owner.ProcessingParams) {
             evResult->Record.MutableDomainCoordinators()->CopyFrom(owner.ProcessingParams->GetCoordinators());
         }
-        owner.Counters.GetTabletCounters()->IncCounter(COUNTER_PREPARE_SUCCESS);
+        owner.Counters->GetTabletCounters()->IncCounter(COUNTER_PREPARE_SUCCESS);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", GetProposeStartInfoVerified().GetStatusMessage())("tablet_id", owner.TabletID())(
             "tx_id", txInfo.TxId);
     }

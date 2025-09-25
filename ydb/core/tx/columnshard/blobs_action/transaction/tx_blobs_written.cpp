@@ -141,10 +141,10 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
             AFL_VERIFY(CommitSnapshot);
             Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
             Self->OperationsManager->CommitTransactionOnComplete(*Self, op->GetLockId(), *CommitSnapshot);
-            Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
+            Self->Counters->GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
         }
-        Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
-        Self->Counters.GetCSCounters().OnSuccessWriteResponse();
+        Self->Counters->GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
+        Self->Counters->GetCSCounters().OnSuccessWriteResponse();
         writeMeta.OnStage(NEvWrite::EWriteStage::Finished);
         LWPROBE(TxBlobsWritingFinished, Self->TabletID(), TransactionTime, TInstant::Now() - startCompleteTime, TInstant::Now() - StartTime, now - writeMeta.GetWriteStartInstant());
     }
@@ -183,7 +183,7 @@ bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorCont
 void TTxBlobsWritingFailed::DoComplete(const TActorContext& ctx) {
     for (auto&& i : Results) {
         i.DoSendReply(ctx);
-        Self->Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::PutBlob);
+        Self->Counters->GetCSCounters().OnFailedWriteResponse(EWriteFailReason::PutBlob);
     }
     for (auto&& wResult : Pack.GetWriteResults()) {
         const auto& writeMeta = wResult.GetWriteMeta();

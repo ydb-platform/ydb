@@ -1,5 +1,6 @@
 #include "helpers.h"
 
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -318,6 +319,7 @@ namespace NSchemeShardUT_Private {
         ForwardToTablet(runtime, schemeShard, sender, evLs);
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("Gotya", event->GetRecord().GetPathDescription().GetTableStats().GetImmediateTxCompleted());
         UNIT_ASSERT(event);
 
         return event->GetRecord();

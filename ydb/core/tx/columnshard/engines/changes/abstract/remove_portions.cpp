@@ -33,11 +33,11 @@ void TRemovePortionsChange::DoApplyOnExecute(
 void TRemovePortionsChange::DoApplyOnComplete(
     NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context, const TDataAccessorsResult& /*fetchedDataAccessors*/) {
     if (self) {
-        self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, Portions.size());
+        self->Counters->GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, Portions.size());
 
         for (auto& [_, portionInfo] : Portions) {
-            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, portionInfo->GetTotalBlobBytes());
-            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo->GetTotalRawBytes());
+            self->Counters->GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, portionInfo->GetTotalBlobBytes());
+            self->Counters->GetTabletCounters()->IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo->GetTotalRawBytes());
         }
     }
 

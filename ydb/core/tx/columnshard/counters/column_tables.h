@@ -27,8 +27,11 @@ public:
     }
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 7);
         output.SetLastAccessTime(LastAccessTime->MilliSeconds());
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 8);
         output.SetLastUpdateTime(LastUpdateTime->MilliSeconds());
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HIHI", 9);
     }
 
     std::shared_ptr<TSingleColumnTableCounters> GetPathIdCounter(const TInternalPathId pathId);

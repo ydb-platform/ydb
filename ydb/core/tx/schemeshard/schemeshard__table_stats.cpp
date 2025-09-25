@@ -80,7 +80,9 @@ auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TT
     sysStats.SetRowReads(stats.RowReads);
     sysStats.SetRangeReads(stats.RangeReads);
     sysStats.SetRangeReadRows(stats.RangeReadRows);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("YYYYY", stats.ImmediateTxCompleted);
     sysStats.SetImmediateTxCompleted(stats.ImmediateTxCompleted);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("YYYYY", sysStats.GetImmediateTxCompleted());
     sysStats.SetPlannedTxCompleted(stats.PlannedTxCompleted);
     sysStats.SetTxRejectedByOverload(stats.TxRejectedByOverload);
     sysStats.SetTxRejectedBySpace(stats.TxRejectedBySpace);
@@ -545,6 +547,8 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
     const auto& tabletMetrics = rec.GetTabletMetrics();
     ui64 dataSize = tableStats.GetDataSize();
     ui64 rowCount = tableStats.GetRowCount();
+
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("FOOOO", tableStats.GetImmediateTxCompleted());
 
     TPathId pathId = rec.HasTableOwnerId()
             ? TPathId(TOwnerId(rec.GetTableOwnerId()), TLocalPathId(rec.GetTableLocalId()))

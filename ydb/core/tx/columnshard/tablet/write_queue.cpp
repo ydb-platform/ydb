@@ -11,7 +11,7 @@ namespace NKikimr::NColumnShard {
 LWTRACE_USING(YDB_CS);
 
 bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) const {
-    owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
+    owner->Counters->GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
     auto writeOperation = owner->OperationsManager->CreateWriteOperation(PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, IsBulk);
 
@@ -23,7 +23,7 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) co
     writeOperation->SetBehaviour(Behaviour);
     const auto& applyToMvccSnapshot = MvccSnapshot.Valid() ? MvccSnapshot : NOlap::TSnapshot::Max();
     NOlap::TWritingContext wContext(owner->TabletID(), owner->SelfId(), Schema, owner->StoragesManager,
-        owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, applyToMvccSnapshot, LockId,
+        owner->Counters->GetIndexationCounters().SplitterCounters, owner->Counters->GetCSCounters().WritingCounters, applyToMvccSnapshot, LockId,
         writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationPortionsWriteActorId, IsBulk);
     // We don't need to split here portions by the last level
     // ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId.InternalPathId)->GetBucketPositions());
@@ -35,7 +35,7 @@ void TWriteTask::Abort(TColumnShard* owner, const TString& reason, const TActorC
     LWPROBE(EvWriteResult, owner->TabletID(), SourceId.ToString(), TxId, Cookie, "write_queue", false, reason);
     auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
         owner->TabletID(), TxId, status, reason);
-    owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
+    owner->Counters->GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
     if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED && OverloadSubscribeSeqNo) {
         result->Record.SetOverloadSubscribed(*OverloadSubscribeSeqNo);
         ctx.Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
@@ -56,13 +56,13 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
     for (auto it = WriteTasks.begin(); it != WriteTasks.end();) {
         if (it->IsDeprecated(now)) {
             it->Abort(Owner, "timeout", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
-            Owner->Counters.GetCSCounters().WritingCounters->TimeoutRate->Inc();
+            Owner->Counters->GetCSCounters().WritingCounters->TimeoutRate->Inc();
             it = WriteTasks.erase(it);
         } else if (!overloaded.contains(it->GetInternalPathId())) {
             auto overloadStatus = Owner->CheckOverloadedWait(it->GetInternalPathId());
             if (overloadStatus != TColumnShard::EOverloadStatus::None) {
                 overloaded.emplace(it->GetInternalPathId());
-                Owner->Counters.GetCSCounters().OnWaitingOverload(overloadStatus);
+                Owner->Counters->GetCSCounters().OnWaitingOverload(overloadStatus);
                 ++countTasks;
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "wait_overload")("status", overloadStatus)(
                     "path_id", it->GetInternalPathId());
@@ -81,7 +81,7 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
         WriteTasksOverloadCheckerScheduled = true;
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "queue_on_write")("size", countTasks);
     }
-    Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Set(WriteTasks.size());
+    Owner->Counters->GetCSCounters().WritingCounters->QueueWaitSize->Set(WriteTasks.size());
     return !countTasks;
 }
 
@@ -90,7 +90,7 @@ void TWriteTasksQueue::Enqueue(TWriteTask&& task) {
 }
 
 TWriteTasksQueue::~TWriteTasksQueue() {
-    Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Sub(WriteTasks.size());
+    Owner->Counters->GetCSCounters().WritingCounters->QueueWaitSize->Sub(WriteTasks.size());
 }
 
 }   // namespace NKikimr::NColumnShard

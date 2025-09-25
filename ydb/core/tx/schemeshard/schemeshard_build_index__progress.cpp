@@ -565,10 +565,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterPrefixSequencePropose(
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterSequencePropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
-    Y_ENSURE(buildInfo.IsBuildPrefixedVectorIndex(), "Unknown operation kind while building AlterPrefixSequencePropose");
+    Y_ENSURE(buildInfo.IsBuildPrefixedVectorIndex(), "Unknown operation kind while building AlterSequencePropose");
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
 
@@ -592,7 +592,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterPrefixSequencePropose(
     seq->SetRestart(true);
 
     LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "AlterPrefixSequencePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+        "AlterSequencePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -1119,7 +1119,7 @@ private:
             // Alter the sequence
             buildInfo.KMeans.AlterPrefixSequenceDone = true;
             NIceDb::TNiceDb db{txc.DB};
-            ChangeState(BuildId, TIndexBuildInfo::EState::AlterPrefixSequence);
+            ChangeState(BuildId, TIndexBuildInfo::EState::AlterSequence);
             Progress(BuildId);
             return false;
         }
@@ -1652,13 +1652,13 @@ public:
                 Progress(BuildId);
             }
             break;
-        case TIndexBuildInfo::EState::AlterPrefixSequence:
+        case TIndexBuildInfo::EState::AlterSequence:
             Y_ENSURE(buildInfo.IsBuildPrefixedVectorIndex());
             Y_ENSURE(buildInfo.KMeans.Level == 2);
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
-                Send(Self->SelfId(), AlterPrefixSequencePropose(Self, buildInfo), 0, ui64(BuildId));
+                Send(Self->SelfId(), AlterSequencePropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
@@ -2511,7 +2511,7 @@ public:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
-        case TIndexBuildInfo::EState::AlterPrefixSequence:
+        case TIndexBuildInfo::EState::AlterSequence:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
@@ -2674,7 +2674,7 @@ public:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
-        case TIndexBuildInfo::EState::AlterPrefixSequence:
+        case TIndexBuildInfo::EState::AlterSequence:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
         {
@@ -2805,7 +2805,7 @@ public:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
-        case TIndexBuildInfo::EState::AlterPrefixSequence:
+        case TIndexBuildInfo::EState::AlterSequence:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:

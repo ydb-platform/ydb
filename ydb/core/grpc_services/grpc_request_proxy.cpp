@@ -143,7 +143,8 @@ private:
     void HandleAuthStateUnavailable(IRequestProxyCtx* requestProxyCtx);
     template<typename TEvent>
     void HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TEvent>>& event);
-    void HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TEvProxyRuntimeEventWithType<NRuntimeEvents::EType::BOOTSTRAP_CLUSTER>>>& event);
+    template<typename TEvent>
+    void HandleAuthStateNotPerformedWithoutSchemeBoard(TAutoPtr<TEventHandle<TEvent>>& event);
 
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
@@ -183,13 +184,6 @@ private:
             HandleAuthStateNotPerformed(event);
             return;
         }
-
-        // in case we somehow skipped all auth checks
-        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "Can't authenticate request");
-        requestBaseCtx->RaiseIssue(issue);
-        requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-        requestBaseCtx->FinishSpan();
-        return;
     }
 
     void ForgetDatabase(const TString& database);
@@ -361,6 +355,12 @@ void TGRpcRequestProxyImpl::HandleAuthStateUnavailable(IRequestProxyCtx* request
 
 template<typename TEvent>
 void TGRpcRequestProxyImpl::HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TEvent>>& event) {
+    if constexpr (std::is_same_v<TEvent, TEvProxyRuntimeEvent>) {
+        if (event->Get()->GetRuntimeEventType() == NRuntimeEvents::EType::BOOTSTRAP_CLUSTER) {
+            HandleAuthStateNotPerformedWithoutSchemeBoard(event);
+            return;
+        }
+    }
     IRequestProxyCtx* requestProxyCtx = event->Get();
     TString databaseName;
     const TDatabaseInfo* database = nullptr;
@@ -475,9 +475,16 @@ void TGRpcRequestProxyImpl::HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TE
             this));
         return;
     }
+    // in case we somehow skipped all auth checks
+    const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "Can't authenticate request");
+    requestProxyCtx->RaiseIssue(issue);
+    requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+    requestProxyCtx->FinishSpan();
+    return;
 }
 
-void TGRpcRequestProxyImpl::HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TEvProxyRuntimeEventWithType<NRuntimeEvents::EType::BOOTSTRAP_CLUSTER>>>& event) {
+template<typename TEvent>
+void TGRpcRequestProxyImpl::HandleAuthStateNotPerformedWithoutSchemeBoard(TAutoPtr<TEventHandle<TEvent>>& event) {
     IRequestProxyCtx* requestProxyCtx = event->Get();
     TString databaseName;
     bool skipResourceCheck = false;
@@ -489,7 +496,7 @@ void TGRpcRequestProxyImpl::HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TE
     if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
         databaseName = CanonizePath(maybeDatabaseName.GetRef());
     } else {
-        if (!AllowYdbRequestsWithoutDatabase && DynamicNode) { // TEvRequestAuthAndCheck is allowed to be processed without database
+        if (!AllowYdbRequestsWithoutDatabase && DynamicNode && !std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
             requestProxyCtx->ReplyUnauthenticated("Requests without specified database are not allowed");
             requestProxyCtx->FinishSpan();
             return;
@@ -514,7 +521,7 @@ void TGRpcRequestProxyImpl::HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TE
     }
 
     TSchemeBoardEvents::TDescribeSchemeResult schemeData;
-    Register(CreateGrpcRequestCheckActor<TEvProxyRuntimeEventWithType<NRuntimeEvents::EType::BOOTSTRAP_CLUSTER>>(SelfId(),
+    Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
         schemeData,
         nullptr, // Do not have security object, cluster is not initialized. Check rights via list bootstrap_allowed_sids
         event.Release(),
@@ -700,7 +707,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvDiscoverPQClustersRequest, PreHandle);
         HFunc(TEvCoordinationSessionRequest, PreHandle);
         HFunc(TEvNodeCheckRequest, PreHandle);
-        HFunc(TEvProxyRuntimeEvent, PreHandleRuntimeEvent);
+        HFunc(TEvProxyRuntimeEvent, PreHandle);
         HFunc(TEvRequestAuthAndCheck, PreHandle);
 
         default:

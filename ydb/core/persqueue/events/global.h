@@ -55,6 +55,7 @@ namespace TEvPersQueue {
         EvReadingPartitionFinished,
         EvReadingPartitionStarted,
         EvOffloadStatus,
+        EvBalancingSubscribe,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -272,5 +273,6 @@ namespace TEvPersQueue {
 
     struct TEvOffloadStatus : TEventPB<TEvOffloadStatus, NKikimrPQ::TEvOffloadStatus, EvOffloadStatus> {};
 
+    struct TEvBalancingSubscribe : TEventPB<TEvBalancingSubscribe, NKikimrPQ::TEvBalancingSubscribe, EvBalancingSubscribe> {};
 };
 } //NKikimr

@@ -1214,3 +1214,9 @@ message TEvOffloadStatus {
     optional uint64 TabletId = 3;
     optional uint32 PartitionId = 4;
 }
+
+message TEvBalancingSubscribe {
+    optional NActorsProto.TActorId SourceActor = 2;
+    optional string Topic = 3;
+    optional string Consumer = 4;
+}

@@ -35,6 +35,7 @@ void KafkaReadSessionProxyActor::HandleOnWork(TRequest& ev) {
 template<>
 void KafkaReadSessionProxyActor::HandleOnWork<TEvKafka::TEvJoinGroupRequest::TPtr>(TEvKafka::TEvJoinGroupRequest::TPtr& ev) {
     Context->ReadSession.BalancingMode = Context->ReadSession.PendingBalancingMode.value_or(GetBalancingMode(*ev->Get()->Request));
+    Context->ReadSession.PendingBalancingMode.reset();
     HandleOnWork(ev);
 }
 

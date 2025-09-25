@@ -10,8 +10,7 @@ $verification_suites = SELECT
     RunId,
     Timestamp AS VerificationTimestamp,
     Success AS VerificationSuccess,
-    Info AS VerificationInfo,
-    ROW_NUMBER() OVER (PARTITION BY RunId ORDER BY Timestamp, Suite) AS OrderInRun
+    Info AS VerificationInfo
 FROM `nemesis/tests_results`
 WHERE 
     CAST(RunId AS Uint64) / 1000UL > $run_id_limit
@@ -47,40 +46,27 @@ WHERE
     AND Kind = 'Stability'
     AND JSON_VALUE(Stats, '$.aggregation_level') = 'aggregate';
 
--- Фильтруем тесты по CiNemesis статусу из verification
-$filtered_aggregate_tests = SELECT
+-- Находим ВСЕ тесты из aggregate, соответствующие Suite и nemesis статусу
+$filtered_aggregate_tests = SELECT DISTINCT
     uat.Db AS Db,
     uat.Suite AS Suite,
     uat.Test AS Test,
-    uat.RunId AS RunId,
-    v.VerificationInfo AS VerificationInfo
+    v.RunId AS RunId
 FROM $unique_aggregate_tests AS uat
-JOIN $verification_suites AS v
-    ON uat.Db = v.Db 
-    AND uat.Suite = v.Suite
-    AND uat.RunId = v.RunId
+CROSS JOIN $verification_suites AS v
 WHERE 
-    -- Если в CiJobTitle есть 'nemesis false', сопоставляем с _nemesis_False тестами
-    (JSON_VALUE(v.VerificationInfo, '$.ci_job_title') LIKE '%nemesis false%' AND uat.Test LIKE '%_nemesis_False')
-    -- Если в CiJobTitle есть 'nemesis' (но не 'nemesis false'), сопоставляем с _nemesis_True тестами
-    OR (JSON_VALUE(v.VerificationInfo, '$.ci_job_title') LIKE '%nemesis%' AND JSON_VALUE(v.VerificationInfo, '$.ci_job_title') NOT LIKE '%nemesis false%' AND uat.Test LIKE '%_nemesis_True')
-    -- Если нет nemesis в CiJobTitle, берем любой тест
-    OR JSON_VALUE(v.VerificationInfo, '$.ci_job_title') NOT LIKE '%nemesis%';
+    -- Фильтруем по nemesis статусу из verification
+    (
+        (JSON_VALUE(v.VerificationInfo, '$.ci_job_title') LIKE '%nemesis false%' AND uat.Test LIKE '%_nemesis_False')
+        OR (JSON_VALUE(v.VerificationInfo, '$.ci_job_title') LIKE '%nemesis%' AND JSON_VALUE(v.VerificationInfo, '$.ci_job_title') NOT LIKE '%nemesis false%' AND uat.Test LIKE '%_nemesis_True')
+        OR JSON_VALUE(v.VerificationInfo, '$.ci_job_title') NOT LIKE '%nemesis%'
+    );
 
 -- Создаем записи для всех уникальных тестов из aggregate
 $all_possible_tests = SELECT
     v.Db AS Db,
     v.Suite AS Suite,
-    COALESCE(
-        s.Test, 
-        uat.Test, 
-        String::ReplaceAll(v.Suite, 'Workload', '') || 'Workload' || 
-        CASE 
-            WHEN JSON_VALUE(v.VerificationInfo, '$.ci_job_title') LIKE '%nemesis false%' THEN '_nemesis_False'
-            WHEN JSON_VALUE(v.VerificationInfo, '$.ci_job_title') LIKE '%nemesis%' THEN '_nemesis_True'
-            ELSE ''
-        END
-    ) AS Test,
+    CAST(COALESCE(s.Test, uat.Test, String::ReplaceAll(v.Suite, 'Workload', '') || 'Workload') AS Utf8) AS Test,
     CASE WHEN s.Suite IS NULL THEN 1U ELSE 0U END AS IsCrashed,
     v.RunId AS RunId,
     COALESCE(s.Timestamp, v.VerificationTimestamp) AS Timestamp,
@@ -161,12 +147,8 @@ $all_possible_tests = SELECT
     -- Флаг того, что тест имел успешную верификацию 
     v.VerificationSuccess AS HadVerification,
     
-    -- Порядок выполнения: базовый OrderInRun из verification + смещение для разных тестов
-    CASE 
-        WHEN s.Test IS NOT NULL THEN v.OrderInRun  -- Если есть Stability запись, используем базовый OrderInRun
-        WHEN uat.Test IS NOT NULL THEN v.OrderInRun + 1000  -- Если есть только уникальный тест, добавляем смещение
-        ELSE v.OrderInRun  -- Fallback
-    END AS OrderInRun
+    -- Порядок выполнения: рассчитываем для каждого уникального Test
+    ROW_NUMBER() OVER (PARTITION BY v.RunId ORDER BY v.VerificationTimestamp, v.Suite, COALESCE(s.Test, uat.Test, String::ReplaceAll(v.Suite, 'Workload', '') || 'Workload')) AS OrderInRun
     
 FROM $verification_suites AS v
 LEFT JOIN $stability_suites AS s 
@@ -178,62 +160,6 @@ LEFT JOIN $filtered_aggregate_tests AS uat
     AND v.Suite = uat.Suite
     AND v.RunId = uat.RunId;
 
--- Добавляем OrderInRun в отдельном CTE
-$data_with_order = SELECT
-    Db,
-    Suite,
-    Test,
-    IsCrashed,
-    RunId,
-    Timestamp,
-    Success,
-    TotalRuns,
-    SuccessfulRuns,
-    FailedRuns,
-    TotalIterations,
-    SuccessfulIterations,
-    FailedIterations,
-    PlannedDuration,
-    ActualDuration,
-    TotalExecutionTime,
-    SuccessRate,
-    AvgThreadsPerIteration,
-    TotalThreads,
-    NodesPercentage,
-    NodesWithIssues,
-    NodeErrorMessages,
-    WorkloadErrorMessages,
-    WorkloadWarningMessages,
-    UseIterations,
-    Nemesis,
-    NemesisEnabled,
-    WorkloadType,
-    PathTemplate,
-    NodeErrors,
-    WorkloadErrors,
-    WorkloadWarnings,
-    TableType,
-    TestTimestamp,
-    StatsRunId,
-    ClusterVersion,
-    ClusterVersionLink,
-    ClusterEndpoint,
-    ClusterDatabase,
-    ClusterMonitoring,
-    NodesCount,
-    NodesInfo,
-    CiVersion,
-    TestToolsVersion,
-    ReportUrl,
-    CiLaunchId,
-    CiLaunchUrl,
-    CiLaunchStartTime,
-    CiJobTitle,
-    CiClusterName,
-    CiNemesis,
-    HadVerification,
-    OrderInRun
-FROM $all_possible_tests;
 
 SELECT
     agg.Db,
@@ -338,5 +264,5 @@ SELECT
         ELSE 'unknown'
     END AS OverallStatus
 
-FROM $data_with_order AS agg
+FROM $all_possible_tests AS agg
 ORDER BY RunTs DESC;

@@ -115,7 +115,7 @@ public:
         TActorId tabletActor,
         bool totalPartitionQuotaEnabled,
         ui64 tabletId,
-        const TTabletCountersBase& counters,
+        const std::shared_ptr<TTabletCountersBase>& counters,
         ui64 maxRequestsInflight
     )
         : InflightLimitSlidingWindow(1000, TDuration::Minutes(1))
@@ -128,7 +128,7 @@ public:
         , MaxInflightRequests(maxRequestsInflight)
         , TotalPartitionQuotaEnabled(totalPartitionQuotaEnabled)
     {
-        Counters.Populate(counters);
+        Counters.Populate(*counters);
     }
 
 public:
@@ -217,6 +217,7 @@ private:
         EAcquired,
     };
 
+protected:
     TActorId TabletActor;
     std::deque<TRequestContext> WaitingTotalPartitionQuotaRequests;
     THashMap<ui64, TRequestContext> PendingAccountQuotaRequests;
@@ -243,7 +244,7 @@ public:
         TActorId tabletActor,
         const TActorId& parent,
         ui64 tabletId,
-        const TTabletCountersBase& counters
+        const std::shared_ptr<TTabletCountersBase>& counters
     )
         : TPartitionQuoterBase(
                 topicConverter, config, partition, tabletActor, true, tabletId, counters,
@@ -311,7 +312,7 @@ public:
         const TPartitionId& partition,
         TActorId tabletActor,
         ui64 tabletId,
-        const TTabletCountersBase& counters
+        const std::shared_ptr<TTabletCountersBase>& counters
     );
 
 public:

@@ -3,6 +3,7 @@
 #include "monitoring.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tabletid.h>
@@ -1777,6 +1778,11 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
         case ERequestType::Restore:
             if (params.Has("startRestore")) {
+                if (!ev->Get()->UserToken || !IsAdministrator(AppData(), ev->Get()->UserToken)) {
+                    return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                        RenderRestore(false, "Unauthorized")
+                    ));
+                }
                 if (RestoreProgress.IsRunning()) {
                     return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(
                         RenderRestore(false, "Restore is already running")

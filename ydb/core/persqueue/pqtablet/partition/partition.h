@@ -512,7 +512,7 @@ public:
 
     TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
-               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
+               const NKikimrPQ::TPQTabletConfig& config, const std::shared_ptr<TTabletCountersBase>& counters, bool SubDomainOutOfSpace, ui32 numChannels,
                const TActorId& writeQuoterActorId,
                TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
                bool newPartition = false);
@@ -707,7 +707,7 @@ private:
     const NKikimrPQ::TPQTabletConfig::TPartition* PartitionConfig = nullptr;
     const NKikimrPQ::TPQTabletConfig::TPartition* PendingPartitionConfig = nullptr;
 
-    const TTabletCountersBase& Counters;
+    std::shared_ptr<TTabletCountersBase> Counters;
     NPersQueue::TTopicConverterPtr TopicConverter;
     bool IsLocalDC;
     TString DCId;

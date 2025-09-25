@@ -2871,7 +2871,6 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
     , OriginalPartitionsCount(0)
     , NewConfigShouldBeApplied(false)
     , TabletState(NKikimrPQ::ENormal)
-    , Counters(nullptr)
     , NextResponseCookie(0)
     , ResourceMetrics(nullptr)
 {
@@ -2890,8 +2889,9 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
         ECumulativeCounters_descriptor,
         EPercentileCounters_descriptor> TPersQueueCounters;
     typedef TProtobufTabletCountersPair<TKeyValueCounters, TPersQueueCounters> TCounters;
+
     TAutoPtr<TCounters> counters(new TCounters());
-    Counters = (counters->GetSecondTabletCounters()).Release();
+    Counters = std::make_shared<TTabletCountersBase>((counters->GetSecondTabletCounters()).Release());
 
     State.SetupTabletCounters(counters->GetFirstTabletCounters().Release()); //FirstTabletCounters is of good type and contains all counters
     State.Clear();

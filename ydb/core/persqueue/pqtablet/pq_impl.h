@@ -238,7 +238,7 @@ private:
     NKikimrPQ::ETabletState TabletState;
     TSet<TChangeNotification> TabletStateRequests;
 
-    TAutoPtr<TTabletCountersBase> Counters;
+    std::shared_ptr<TTabletCountersBase> Counters;
     TEvPQ::TEvTabletCacheCounters::TCacheCounters CacheCounters;
     TMap<TString, NKikimr::NPQ::TMultiCounter> BytesWrittenFromDC;
 

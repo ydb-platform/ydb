@@ -324,7 +324,7 @@ protected:
         NPersQueue::TTopicConverterPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig PQTabletConfig;
         TPartitionId PartitionId;
-        TTabletCountersBase Counters;
+        std::shared_ptr<TTabletCountersBase> Counters = std::make_shared<TTabletCountersBase>();
         TActorId Quoter;
     };
 

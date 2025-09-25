@@ -91,14 +91,6 @@ namespace NYdb::NConsoleClient {
             candidate.Content.resize(prefixLen);
 
             Y_ENSURE(!candidate.Content.empty());
-            const auto back = candidate.Content.back();
-            if (
-                !(candidate.Kind == NSQLComplete::ECandidateKind::FolderName ||
-                  (candidate.Kind == NSQLComplete::ECandidateKind::TableName) &&
-                      (!IsLeftPunct(back) && back != '<' || IsQuotation(back)))) {
-                candidate.Content += ' ';
-            }
-
             return {
                 std::move(candidate.Content),
                 ReplxxColorOf(candidate.Kind),

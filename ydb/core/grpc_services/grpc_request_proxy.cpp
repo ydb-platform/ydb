@@ -143,8 +143,7 @@ private:
     void HandleAuthStateUnavailable(IRequestProxyCtx* requestProxyCtx);
     template<typename TEvent>
     void HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TEvent>>& event);
-
-    void PreHandleRuntimeEvent(TEvProxyRuntimeEvent::TPtr& event, const TActorContext& ctx);
+    void HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TEvProxyRuntimeEventWithType<NRuntimeEvents::EType::BOOTSTRAP_CLUSTER>>>& event);
 
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
@@ -478,16 +477,52 @@ void TGRpcRequestProxyImpl::HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TE
     }
 }
 
-void TGRpcRequestProxyImpl::PreHandleRuntimeEvent(TEvProxyRuntimeEvent::TPtr& event, const TActorContext& ctx) {
-    switch (event->Get()->GetRuntimeEventType()) {
-    case NKikimr::NGRpcService::NRuntimeEvents::EType::UNKNOWN: {
-        PreHandle(event, ctx);
-        break;
+void TGRpcRequestProxyImpl::HandleAuthStateNotPerformed(TAutoPtr<TEventHandle<TEvProxyRuntimeEventWithType<NRuntimeEvents::EType::BOOTSTRAP_CLUSTER>>>& event) {
+    IRequestProxyCtx* requestProxyCtx = event->Get();
+    TString databaseName;
+    bool skipResourceCheck = false;
+    // do not check connect rights for the deprecated requests without database
+    // remove this along with AllowYdbRequestsWithoutDatabase flag
+    bool skipCheckConnectRights = false;
+
+    const auto& maybeDatabaseName = requestProxyCtx->GetDatabaseName();
+    if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
+        databaseName = CanonizePath(maybeDatabaseName.GetRef());
+    } else {
+        if (!AllowYdbRequestsWithoutDatabase && DynamicNode) { // TEvRequestAuthAndCheck is allowed to be processed without database
+            requestProxyCtx->ReplyUnauthenticated("Requests without specified database are not allowed");
+            requestProxyCtx->FinishSpan();
+            return;
+        }
+        databaseName = RootDatabase;
+        skipResourceCheck = true;
+        skipCheckConnectRights = true;
     }
-    case NKikimr::NGRpcService::NRuntimeEvents::EType::BOOTSTRAP_CLUSTER: {
-        break;
+    if (databaseName.empty()) {
+        Counters->IncDatabaseUnavailableCounter();
+        requestProxyCtx->ReplyUnauthenticated("Empty database name");
+        requestProxyCtx->FinishSpan();
+        return;
     }
+    if (requestProxyCtx->IsClientLost()) {
+        // Any status here
+        LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+            "Client was disconnected before processing request (grpc request proxy)");
+        requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+        requestProxyCtx->FinishSpan();
+        return;
     }
+
+    TSchemeBoardEvents::TDescribeSchemeResult schemeData;
+    Register(CreateGrpcRequestCheckActor<TEvProxyRuntimeEventWithType<NRuntimeEvents::EType::BOOTSTRAP_CLUSTER>>(SelfId(),
+        schemeData,
+        nullptr, // Do not have security object, cluster is not initialized. Check rights via list bootstrap_allowed_sids
+        event.Release(),
+        Counters,
+        skipCheckConnectRights,
+        {}, // Empty rootAttributes
+        this));
+    return;
 }
 
 template<class TEvent>

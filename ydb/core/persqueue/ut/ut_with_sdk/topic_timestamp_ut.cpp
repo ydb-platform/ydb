@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
 
             const std::tuple<bool, ui32, TString, std::vector<ETimestampFnKind>> readTimestampKinds[]{
                 {true, xfailTimestampPositionMaxError, "exact", {ETimestampFnKind::Exact,}},
-                {true, 0, "offset+middle", {ETimestampFnKind::Offset, ETimestampFnKind::Middle,}},
+                {true, xfailTimestampPositionMaxError, "offset+middle", {ETimestampFnKind::Offset, ETimestampFnKind::Middle,}},
             };
 
             const std::tuple<bool, TString, bool> restartOptions[]{

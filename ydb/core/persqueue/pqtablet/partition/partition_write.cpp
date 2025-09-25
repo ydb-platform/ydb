@@ -1082,6 +1082,9 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
             auto rename = request->Record.AddCmdRename();
             rename->SetOldKey(x.OldKey.ToString());
             rename->SetNewKey(x.NewKey.ToString());
+            if (x.CreationUnixTime != TInstant::Zero()) {
+                rename->SetCreationUnixTime(x.CreationUnixTime.Seconds());
+            }
         }
         if (!zone.DataKeysBody.empty() && zone.CompactedKeys.empty()) {
             PQ_ENSURE(zone.DataKeysBody.back().Key.GetOffset() + zone.DataKeysBody.back().Key.GetCount() <= x.NewKey.GetOffset())

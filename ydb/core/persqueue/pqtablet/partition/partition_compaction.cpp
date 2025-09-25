@@ -270,8 +270,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     for (const auto& requestedBlob : blobs) {
         TMaybe<ui64> firstBlobOffset = requestedBlob.Offset;
-
-        blobCreationUnixTime = requestedBlob.CreationUnixTime;
+        blobCreationUnixTime = std::max(blobCreationUnixTime, requestedBlob.CreationUnixTime);
 
         for (TBlobIterator it(requestedBlob.Key, requestedBlob.Value); it.IsValid(); it.Next()) {
             TBatch batch = it.GetBatch();
@@ -514,7 +513,7 @@ void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyVal
         CompactionBlobEncoder.NewHead.PartNo = 0;
     } else {
         AFL_ENSURE(CompactionBlobEncoder.NewHeadKey.Size == 0);
-        CompactionBlobEncoder.NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
+        CompactionBlobEncoder.NewHeadKey = {key, res.second, PendingWriteTimestamp, 0, MakeBlobKeyToken(key.ToString())};
     }
 }
 

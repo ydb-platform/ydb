@@ -377,7 +377,7 @@ public:
             if (TempTablesState) {
                 auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
                 if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-                    table = NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->SessionId, tempTableInfoIt->first);
+                    table = NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->TempDirName, tempTableInfoIt->first);
                 }
             }
 

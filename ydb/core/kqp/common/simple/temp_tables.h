@@ -19,6 +19,7 @@ struct TKqpTempTablesState {
     };
     TString SessionId;
     TString Database;
+    TString TempDirName;
     THashMap<TString, TTempTableInfo> TempTables;
     bool NeedCleaning = false;
 
@@ -31,9 +32,10 @@ struct TKqpTempTablesState {
 TString GetTmpDirPath(const TString& database);
 TString GetSessionDirName();
 TString GetSessionDirsBasePath(const TString& database);
-TString GetSessionDirPath(const TString& database, const TString& sessionId);
-TString GetTempTablePath(const TString& database, const TString& sessionId, const TString tablePath);
-TString GetCreateTempTablePath(const TString& database, const TString& sessionId, const TString tablePath);
+TString GetSessionDirPath(const TString& database, const TString& tmpDirName);
+TString GetTempTablePath(const TString& database, const TString& tmpDirName, const TString tablePath);
+TString GetCreateTempTablePath(const TString& database, const TString& tmpDirName
+, const TString tablePath);
 
 bool IsSessionsDirPath(const TStringBuf database, const TStringBuf path);
 bool IsSessionsDirPath(const TStringBuf database, const TString& workingDir, const TString& name);

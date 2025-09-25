@@ -170,6 +170,8 @@ const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TStrin
         }
     }
 
+    Cerr << "TEST :: " << tablePath << " :: " << table << Endl;
+
     auto desc = Tables.FindPtr(std::make_pair(cluster, tablePath));
     if (desc && (desc->GetTableType() != ETableType::Table || desc->DoesExist())) {
         return desc;
@@ -273,7 +275,7 @@ std::optional<TString> TKikimrTablesData::GetTempTablePath(const TStringBuf& tab
     auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
 
     if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-        return NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->SessionId, tempTableInfoIt->first);
+        return NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->TempDirName, tempTableInfoIt->first);
     }
     return std::nullopt;
 }

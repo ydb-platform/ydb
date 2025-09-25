@@ -66,7 +66,7 @@ public:
         }
 
         PathsToTraverse.push_back(
-            NKikimr::SplitPath(GetSessionDirPath(Database, TempTablesState.SessionId)));
+            NKikimr::SplitPath(GetSessionDirPath(Database, TempTablesState.TempDirName)));
         TraverseNext();
         Become(&TKqpTempTablesManager::PathSearchState);
     }

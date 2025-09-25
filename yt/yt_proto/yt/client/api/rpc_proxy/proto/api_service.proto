@@ -3642,6 +3642,21 @@ message TRspGetQueryTrackerInfo
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetDeclaredParametersInfo
+{
+    required string query_tracker_stage = 1;
+    required string query = 2;
+    required EQueryEngine engine = 3;
+    optional bytes settings = 4; // YSON
+}
+
+message TRspGetDeclaredParametersInfo
+{
+    required bytes declared_parameters_info = 1; // YSON
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Distributed table client
 ////////////////////////////////////////////////////////////////////////////////
 

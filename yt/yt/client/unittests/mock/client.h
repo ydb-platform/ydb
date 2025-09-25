@@ -813,6 +813,10 @@ public:
         const TGetQueryTrackerInfoOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TGetDeclaredParametersInfoResult>, GetDeclaredParametersInfo, (
+        const TGetDeclaredParametersInfoOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
         const std::string& bundleName,
         const NBundleControllerClient::TGetBundleConfigOptions& options), (override));

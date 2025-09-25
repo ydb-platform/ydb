@@ -183,6 +183,20 @@ struct TGetQueryTrackerInfoResult
     std::optional<int> ExpectedTablesVersion;
 };
 
+struct TGetDeclaredParametersInfoOptions
+    : public TTimeoutOptions
+    , public TQueryTrackerOptions
+{
+    std::string Query;
+    NYson::TYsonString Settings;
+    NQueryTrackerClient::EQueryEngine Engine;
+};
+
+struct TGetDeclaredParametersInfoResult
+{
+    NYson::TYsonString Parameters;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IQueryTrackerClient
@@ -219,6 +233,8 @@ struct IQueryTrackerClient
         const TAlterQueryOptions& options = {}) = 0;
 
     virtual TFuture<TGetQueryTrackerInfoResult> GetQueryTrackerInfo(const TGetQueryTrackerInfoOptions& options = {}) = 0;
+
+    virtual TFuture<TGetDeclaredParametersInfoResult> GetDeclaredParametersInfo(const TGetDeclaredParametersInfoOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

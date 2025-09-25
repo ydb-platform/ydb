@@ -10,9 +10,133 @@ import requests
 import argparse
 import re
 import json
-from datetime import datetime
+import configparser
+from datetime import datetime, timedelta
 from pathlib import Path
 from send_telegram_message import send_telegram_message
+
+try:
+    import ydb
+    YDB_AVAILABLE = True
+except ImportError:
+    YDB_AVAILABLE = False
+    print("⚠️ YDB client not available. Install with: pip install ydb")
+
+
+def get_muted_tests_stats(database_endpoint=None, database_path=None, credentials_path=None, use_yesterday=False):
+    """
+    Get statistics about muted tests from YDB by team.
+    
+    Args:
+        database_endpoint (str): YDB database endpoint
+        database_path (str): YDB database path
+        credentials_path (str): Path to service account credentials JSON file
+        use_yesterday (bool): If True, use yesterday's data for development convenience
+        
+    Returns:
+        dict: Dictionary with team names as keys and {'total': count, 'today': count} as values, or None if error
+    """
+    if not YDB_AVAILABLE:
+        print("❌ YDB client not available")
+        return None
+    
+    try:
+        # Set up credentials if provided
+        if credentials_path and os.path.exists(credentials_path):
+            os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = credentials_path
+        elif "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" in os.environ:
+            # Use CI credentials if available (like in create_new_muted_ya.py)
+            os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+        
+        # Try to load from config file if not provided
+        if not database_endpoint or not database_path:
+            try:
+                config = configparser.ConfigParser()
+                config_file_path = os.path.join(os.path.dirname(__file__), "../../config/ydb_qa_db.ini")
+                if os.path.exists(config_file_path):
+                    config.read(config_file_path)
+                    if not database_endpoint and "QA_DB" in config and "DATABASE_ENDPOINT" in config["QA_DB"]:
+                        database_endpoint = config["QA_DB"]["DATABASE_ENDPOINT"]
+                    if not database_path and "QA_DB" in config and "DATABASE_PATH" in config["QA_DB"]:
+                        database_path = config["QA_DB"]["DATABASE_PATH"]
+            except Exception as e:
+                print(f"⚠️ Could not load config file: {e}")
+        
+        # Use default values if still not provided
+        if not database_endpoint:
+            database_endpoint = os.getenv('YDB_ENDPOINT', 'grpcs://ydb.serverless.yandexcloud.net:2135')
+        if not database_path:
+            database_path = os.getenv('YDB_DATABASE', '/ru-central1/b1g8ejbrie0sfh5k0j2j/etn8l4e3hbti8k4n5g2e')
+        
+        print(f"🔍 Querying YDB for muted tests statistics...")
+        print(f"🔍 Endpoint: {database_endpoint}")
+        print(f"🔍 Database: {database_path}")
+        
+        with ydb.Driver(
+            endpoint=database_endpoint,
+            database=database_path,
+            credentials=ydb.credentials_from_env_variables(),
+        ) as driver:
+            driver.wait(timeout=10, fail_fast=True)
+            print("✅ Successfully connected to YDB")
+            
+            # Query for muted tests statistics by team
+            if use_yesterday:
+                target_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+                print(f"🔍 Using yesterday's data for development: {target_date}")
+            else:
+                target_date = datetime.now().strftime('%Y-%m-%d')
+                print(f"🔍 Using today's data: {target_date}")
+            
+            stats_query = f"""
+            SELECT 
+                owner,
+                COUNT(*) as total_count,
+                SUM(CASE WHEN mute_state_change_date = Date('{target_date}') THEN 1 ELSE 0 END) as today_count
+            FROM `test_results/analytics/test_muted_monitor_mart`
+            WHERE date_window = Date('{target_date}')
+            AND is_muted = 1
+            AND branch = 'main'
+            AND build_type = 'relwithdebinfo'
+            GROUP BY owner
+            """
+            
+            table_client = ydb.TableClient(driver, ydb.TableClientSettings())
+            
+            # Execute statistics query
+            stats_query_obj = ydb.ScanQuery(stats_query, {})
+            stats_it = table_client.scan_query(stats_query_obj)
+            stats_results = []
+            for result in stats_it:
+                stats_results.extend(result.result_set.rows)
+            
+            # Process results by team
+            team_stats = {}
+            for row in stats_results:
+                owner = row.owner
+                total_count = row.total_count
+                today_count = row.today_count
+                
+                # Extract team name from owner (e.g., "TEAM:@ydb-platform/appteam" -> "appteam")
+                if owner.startswith("TEAM:@ydb-platform/"):
+                    team_name = owner.replace("TEAM:@ydb-platform/", "")
+                else:
+                    team_name = owner
+                
+                team_stats[team_name] = {
+                    'total': total_count,
+                    'today': today_count
+                }
+            
+            print(f"📊 Found statistics for {len(team_stats)} teams:")
+            for team, stats in team_stats.items():
+                print(f"  - {team}: {stats['total']} total, {stats['today']} today")
+            
+            return team_stats
+        
+    except Exception as e:
+        print(f"❌ Error querying YDB: {e}")
+        return None
 
 
 def parse_team_issues(content):
@@ -80,7 +204,7 @@ def escape_markdown(text):
     return text
 
 
-def format_team_message(team_name, issues, team_responsible=None):
+def format_team_message(team_name, issues, team_responsible=None, muted_stats=None):
     """
     Format message for a specific team.
     
@@ -88,6 +212,7 @@ def format_team_message(team_name, issues, team_responsible=None):
         team_name (str): Team name
         issues (list): List of issues for the team
         team_responsible (dict): Dictionary mapping team names to responsible usernames
+        muted_stats (dict): Dictionary with team names as keys and {'total': count, 'today': count} as values
         
     Returns:
         str: Formatted message
@@ -101,6 +226,16 @@ def format_team_message(team_name, issues, team_responsible=None):
     # Start with title and team tag (replace - with _ in tag)
     team_tag = team_name.replace('-', '')
     message = f"🔇 **{current_date} new muted tests for [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** #{team_tag}\n\n"
+    
+    # Add muted tests statistics for this specific team if available
+    if muted_stats and team_name in muted_stats:
+        team_stats = muted_stats[team_name]
+        total = team_stats['total']
+        today = team_stats['today']
+        if today > 0:
+            message += f"📊 **Всего замьючено {total} (+ {today} сегодня)**\n\n"
+        else:
+            message += f"📊 **Всего замьючено {total}**\n\n"
     
     # Add responsible users on new line with "fyi:" prefix
     if team_responsible and team_name in team_responsible:
@@ -205,7 +340,7 @@ def get_team_config(team_name, team_channels):
         return None, None, None
 
 
-def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10, team_channels=None, dry_run=False):
+def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10, team_channels=None, dry_run=False, muted_stats=None):
     """
     Send separate messages for each team.
     
@@ -217,6 +352,7 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
         retry_delay (int): Delay between retry attempts in seconds
         team_channels (dict): Dictionary mapping team names to their specific channel configs
         dry_run (bool): If True, only print messages without sending to Telegram
+        muted_stats (dict): Dictionary with 'total' and 'today' counts for muted tests
     """
     
     total_teams = len(teams)
@@ -241,7 +377,7 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
             continue
         
         # Format message
-        message = format_team_message(team_name, issues, team_responsible)
+        message = format_team_message(team_name, issues, team_responsible, muted_stats)
         
         if not message.strip():
             continue
@@ -388,6 +524,13 @@ def main():
     parser.add_argument('--max-retries', type=int, default=5, help='Maximum number of retry attempts for failed messages (default: 5)')
     parser.add_argument('--retry-delay', type=int, default=10, help='Delay between retry attempts in seconds (default: 10)')
     
+    # YDB arguments for muted tests statistics
+    parser.add_argument('--ydb-endpoint', help='YDB database endpoint (or use YDB_ENDPOINT env var)')
+    parser.add_argument('--ydb-database', help='YDB database path (or use YDB_DATABASE env var)')
+    parser.add_argument('--ydb-credentials', help='Path to YDB service account credentials JSON file (or use YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS env var)')
+    parser.add_argument('--no-stats', action='store_true', help='Skip fetching muted tests statistics from YDB')
+    parser.add_argument('--use-yesterday', action='store_true', help='Use yesterday\'s data for development convenience')
+    
     args = parser.parse_args()
     
     # Get bot token
@@ -404,6 +547,23 @@ def main():
         sys.exit(1)
     
     print(f"📋 Loaded channel configurations for {len(team_channels.get('teams', {}))} teams")
+    
+    # Get muted tests statistics if not disabled
+    muted_stats = None
+    if not args.no_stats:
+        print("📊 Fetching muted tests statistics from YDB...")
+        muted_stats = get_muted_tests_stats(
+            database_endpoint=args.ydb_endpoint,
+            database_path=args.ydb_database,
+            credentials_path=args.ydb_credentials,
+            use_yesterday=args.use_yesterday
+        )
+        if muted_stats:
+            print(f"✅ Statistics loaded for {len(muted_stats)} teams")
+        else:
+            print("⚠️ Could not load statistics, continuing without stats")
+    else:
+        print("⏭️ Skipping statistics fetch (--no-stats flag)")
     
     # Check if we need Telegram connection (not for dry run)
     if not args.dry_run or args.test_connection:
@@ -480,7 +640,7 @@ def main():
         print(f"  - {team_name}: {len(issues)} issues{responsible_info}{channel_info}")
     
     # Send messages (or show in dry run)
-    send_team_messages(teams, bot_token, args.delay, args.max_retries, args.retry_delay, team_channels, args.dry_run)
+    send_team_messages(teams, bot_token, args.delay, args.max_retries, args.retry_delay, team_channels, args.dry_run, muted_stats)
 
 
 if __name__ == "__main__":

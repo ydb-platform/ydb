@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 
-def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="Markdown", message_thread_id=None, disable_web_page_preview=True, max_retries=5, retry_delay=10, delay=1):
+def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="Markdown", message_thread_id=None, disable_web_page_preview=True, max_retries=5, retry_delay=10, delay=1, photo_path=None):
     """
     Send a message to Telegram channel with retry mechanism.
     Can accept either text message or file path.
@@ -27,6 +27,7 @@ def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="Markd
         max_retries (int): Maximum number of retry attempts
         retry_delay (int): Delay between retry attempts in seconds
         delay (int): Delay between message chunks in seconds
+        photo_path (str, optional): Path to photo file to send
         
     Returns:
         bool: True if successful, False otherwise
@@ -50,6 +51,22 @@ def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="Markd
             # It's a text message
             content = message_or_file
     
+    # If photo is provided, send photo with caption
+    if photo_path:
+        photo_file = Path(photo_path)
+        if not photo_file.exists() or not photo_file.is_file():
+            print(f"❌ Photo file not found: {photo_path}")
+            return False
+        
+        print(f"📷 Sending photo: {photo_path}")
+        if _send_photo(bot_token, chat_id, photo_path, content, parse_mode, message_thread_id, max_retries, retry_delay):
+            print(f"✅ Photo sent successfully!")
+            return True
+        else:
+            print(f"❌ Failed to send photo")
+            return False
+    
+    # If no photo, send text message
     if not content.strip():
         print(f"⚠️ Content is empty")
         return True
@@ -163,6 +180,95 @@ def _send_single_message(bot_token, chat_id, message, parse_mode, message_thread
     return False
 
 
+def _send_photo(bot_token, chat_id, photo_path, caption, parse_mode, message_thread_id, max_retries, retry_delay):
+    """
+    Send a photo to Telegram channel with retry mechanism.
+    
+    Args:
+        bot_token (str): Telegram bot token
+        chat_id (str): Telegram chat ID
+        photo_path (str): Path to photo file
+        caption (str): Photo caption
+        parse_mode (str): Parse mode for caption formatting
+        message_thread_id (int, optional): Thread ID for group messages
+        max_retries (int): Maximum number of retry attempts
+        retry_delay (int): Delay between retry attempts in seconds
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    for attempt in range(max_retries + 1):
+        if attempt > 0:
+            print(f"🔄 Retry attempt {attempt}/{max_retries}...")
+            time.sleep(retry_delay)
+        
+        url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
+        
+        # Prepare files and data for multipart/form-data
+        with open(photo_path, 'rb') as photo_file:
+            files = {'photo': photo_file}
+            
+            data = {
+                'chat_id': chat_id,
+                'caption': caption,
+                'parse_mode': parse_mode
+            }
+            
+            # Add thread ID if provided
+            if message_thread_id is not None:
+                data['message_thread_id'] = message_thread_id
+            
+            try:
+                response = requests.post(url, files=files, data=data, timeout=60)
+                
+                # Always print response for debugging
+                print(f"🔍 Telegram API Response: {response.status_code}")
+                
+                if response.status_code != 200:
+                    print(f"❌ HTTP Error {response.status_code}: {response.text}")
+                    if attempt < max_retries:
+                        print(f"⏳ Waiting {retry_delay} seconds before retry...")
+                        continue
+                    else:
+                        return False
+                    
+                result = response.json()
+                if result.get('ok'):
+                    thread_info = f" (thread {message_thread_id})" if message_thread_id is not None else ""
+                    print(f"✅ Photo sent successfully to chat {chat_id}{thread_info}")
+                    return True
+                else:
+                    print(f"❌ Telegram API Error: {result.get('description', 'Unknown error')}")
+                    print(f"❌ Full response: {result}")
+                    if attempt < max_retries:
+                        print(f"⏳ Waiting {retry_delay} seconds before retry...")
+                        continue
+                    else:
+                        return False
+                    
+            except requests.exceptions.RequestException as e:
+                print(f"❌ Network error: {e}")
+                if attempt < max_retries:
+                    print(f"⏳ Waiting {retry_delay} seconds before retry...")
+                    continue
+                else:
+                    return False
+            except Exception as e:
+                print(f"❌ Unexpected error: {e}")
+                if attempt < max_retries:
+                    print(f"⏳ Waiting {retry_delay} seconds before retry...")
+                    continue
+                else:
+                    return False
+    
+    # If all retries failed, print the caption that couldn't be sent
+    print(f"❌ Failed to send photo after {max_retries} retries. Caption content:")
+    print("=" * 80)
+    print(caption)
+    print("=" * 80)
+    return False
+
+
 def split_message(message, max_length=4000):
     """
     Split long message into chunks.
@@ -225,6 +331,8 @@ def main():
                        help='Maximum number of retry attempts for failed messages (default: 5)')
     parser.add_argument('--retry-delay', type=int, default=10,
                        help='Delay between retry attempts in seconds (default: 10)')
+    parser.add_argument('--photo', 
+                       help='Path to photo file to send (optional)')
     
     args = parser.parse_args()
     
@@ -250,7 +358,8 @@ def main():
         disable_web_page_preview=args.disable_web_page_preview,
         max_retries=args.max_retries,
         retry_delay=args.retry_delay,
-        delay=args.delay
+        delay=args.delay,
+        photo_path=args.photo
     )
     
     sys.exit(0 if success else 1)

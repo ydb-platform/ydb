@@ -1025,7 +1025,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             auto& userInfo = userInfoPair.second;
             if (!userInfo.LabeledCounters)
                 continue;
-            if (userInfoPair.first != CLIENTID_WITHOUT_CONSUMER && !userInfo.HasReadRule && !userInfo.Important)
+            if (userInfoPair.first != CLIENTID_WITHOUT_CONSUMER && !userInfo.HasReadRule && !ImporantOrExtendedAvailabilityPeriod(userInfo))
                 continue;
             auto* cac = ac->AddConsumerAggregatedCounters();
             cac->SetConsumer(userInfo.User);
@@ -3084,6 +3084,7 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
         }
         userInfo.ReadFromTimestamp = ts;
         userInfo.Important = important.contains(consumer.GetName());
+        userInfo.AvailabilityPeriod = TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
 
         ui64 rrGen = consumer.GetGeneration();
         if (userInfo.ReadRuleGeneration != rrGen) {
@@ -3151,13 +3152,13 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             userInfo.ReadFromTimestamp = actual->ReadFromTimestamp;
             userInfo.HasReadRule = true;
 
-            if (userInfo.Important != actual->Important) {
+            if (userInfo.Important != actual->Important || userInfo.AvailabilityPeriod != actual->AvailabilityPeriod) {
                 if (userInfo.LabeledCounters) {
                     ScheduleDropPartitionLabeledCounters(userInfo.LabeledCounters->GetGroup());
                 }
-                userInfo.SetImportant(actual->Important);
+                userInfo.SetImportant(actual->Important, actual->AvailabilityPeriod);
             }
-            if (userInfo.Important && userInfo.Offset < (i64)GetStartOffset()) {
+            if (ImporantOrExtendedAvailabilityPeriod(userInfo) && userInfo.Offset < (i64)GetStartOffset()) {
                 userInfo.Offset = GetStartOffset();
             }
 
@@ -3672,7 +3673,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         userInfo.Offset = 0;
         userInfo.AnyCommits = false;
 
-        if (userInfo.Important) {
+        if (ImporantOrExtendedAvailabilityPeriod(userInfo)) {
             userInfo.Offset = GetStartOffset();
         }
     } else {
@@ -3944,6 +3945,7 @@ TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
             newPendingUserIt->second.CommittedMetadata = userIt->CommittedMetadata;
             newPendingUserIt->second.ReadRuleGeneration = userIt->ReadRuleGeneration;
             newPendingUserIt->second.Important = userIt->Important;
+            newPendingUserIt->second.AvailabilityPeriod = userIt->AvailabilityPeriod;
             newPendingUserIt->second.ReadFromTimestamp = userIt->ReadFromTimestamp;
         }
 

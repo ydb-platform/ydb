@@ -67,6 +67,7 @@ struct TUserInfoBase {
     bool AnyCommits = false;
 
     bool Important = false;
+    TDuration AvailabilityPeriod;
     TInstant ReadFromTimestamp;
 
     ui64 PartitionSessionId = 0;
@@ -81,13 +82,14 @@ struct TUserInfo: public TUserInfoBase {
         NMonitoring::TDynamicCounterPtr streamCountersSubgroup,
         NMonitoring::TDynamicCounterPtr partitionCountersSubgroup,
         const TString& user,
-        const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
+        const ui64 readRuleGeneration, const bool important, const TDuration availabilityPeriod,
+        const NPersQueue::TTopicConverterPtr& topicConverter,
         const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
         const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
         const TString& dbPath, bool meterRead, const TActorId& pipeClient, bool anyCommits,
         const std::optional<TString>& committedMetadata = std::nullopt
     )
-        : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important,
+        : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important, availabilityPeriod,
                         readFromTimestamp, partitionSession, pipeClient, committedMetadata}
         , ActualTimestamps(false)
         , WriteTimestamp(TInstant::Zero())
@@ -145,7 +147,7 @@ struct TUserInfo: public TUserInfoBase {
     void UpdateReadOffset(const i64 offset, TInstant writeTimestamp, TInstant createTimestamp, TInstant now, bool force = false);
     void AddTimestampToCache(const ui64 offset, TInstant writeTimestamp, TInstant createTimestamp, bool isUserRead, TInstant now);
     bool UpdateTimestampFromCache();
-    void SetImportant(bool important);
+    void SetImportant(bool important, TDuration availabilityPeriod);
 
     i64 GetReadOffset() const {
         return ReadOffset == -1 ? Offset : (ReadOffset + 1); //+1 because we want to track first not readed offset
@@ -250,7 +252,7 @@ public:
                              TMaybe<ui64> readRuleGeneration = {}) const;
     TUserInfo& Create(
         const TActorContext& ctx,
-        const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
+        const TString& user, const ui64 readRuleGeneration, bool important, TDuration availabilityPeriod, const TString& session,
         ui64 partitionSessionId, ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
         TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits,
         const std::optional<TString>& committedMetadata = std::nullopt
@@ -271,6 +273,7 @@ private:
                              const TString& user,
                              const ui64 readRuleGeneration,
                              bool important,
+                             const TDuration availabilityPeriod,
                              const TString& session,
                              ui64 partitionSessionId,
                              ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
@@ -299,6 +302,11 @@ private:
     TString MonitoringProjectId;
     mutable ui64 CurReadRuleGeneration;
 };
+
+
+inline bool ImporantOrExtendedAvailabilityPeriod(const TUserInfoBase& userInfo) {
+    return userInfo.Important || userInfo.AvailabilityPeriod > TDuration::Zero();
+}
 
 } //NPQ
 } //NKikimr

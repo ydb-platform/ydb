@@ -307,7 +307,6 @@ namespace NPQ {
                     TRequestedBlob reqBlob(key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount(), value.size(), value, key, cmd.GetCreationUnixTime());
                     kvReq.Partition = key.GetPartition();
                     kvReq.Blobs.push_back(std::move(reqBlob));
-                    Y_ASSERT(cmd.GetCreationUnixTime() != 0);
                     const TRequestedBlob& blob = kvReq.Blobs.back();
 
                     LOG_D("CacheProxy. Passthrough blob. Partition "

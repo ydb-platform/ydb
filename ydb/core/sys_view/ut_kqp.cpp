@@ -3857,7 +3857,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 33);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 34);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -3880,7 +3880,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 27);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 28);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -5625,6 +5625,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/.sys/auth_owners"];["metadata@system"]];
                     [["/Root/.sys/auth_permissions"];["metadata@system"]];
                     [["/Root/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/.sys/compile_cache_queries"];["metadata@system"]];
                     [["/Root/.sys/ds_groups"];["metadata@system"]];
                     [["/Root/.sys/ds_pdisks"];["metadata@system"]];
                     [["/Root/.sys/ds_storage_pools"];["metadata@system"]];
@@ -5688,6 +5689,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/Tenant1/.sys/auth_owners"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/auth_permissions"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/compile_cache_queries"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/nodes"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/partition_stats"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/pg_class"];["metadata@system"]];
@@ -5741,6 +5743,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/Tenant2/.sys/auth_owners"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/auth_permissions"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/compile_cache_queries"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/nodes"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/partition_stats"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/pg_class"];["metadata@system"]];
@@ -5989,6 +5992,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/.sys/auth_owners"];["metadata@system"]];
                     [["/Root/.sys/auth_permissions"];["metadata@system"]];
                     [["/Root/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/.sys/compile_cache_queries"];["metadata@system"]];
                     [["/Root/.sys/ds_groups"];["metadata@system"]];
                     [["/Root/.sys/ds_pdisks"];["metadata@system"]];
                     [["/Root/.sys/ds_storage_pools"];["metadata@system"]];
@@ -6660,6 +6664,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/.sys/auth_owners"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/auth_permissions"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/auth_users"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/compile_cache_queries"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/ds_groups"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/ds_pdisks"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/ds_storage_pools"];["ydb.generic.use"];["user1"]];
@@ -6726,6 +6731,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/Tenant1/.sys/auth_owners"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/auth_permissions"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/auth_users"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/compile_cache_queries"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/nodes"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/partition_stats"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/pg_class"];["ydb.generic.use"];["user1"]];

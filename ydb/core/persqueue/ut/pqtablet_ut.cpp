@@ -2494,8 +2494,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Ti
     SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
 
     // wait till supportive partition for this kafka transaction is deleted
-    // WaitForExactSupportivePartitionsCount(0);
-    WaitForExactTxWritesCount(0);
+    WaitForExactSupportivePartitionsCount(0);
 }
 
 Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_With_Delete_Partition_Done_Event_Drop, TPQTabletFixture)
@@ -2673,9 +2672,8 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Deleting_State, TP
 
     std::vector<TAutoPtr<TEvPQ::TEvDeletePartitionDone>> deleteDoneEvents;
     bool seenEvent = false;
-    ui32 unseenEventsCount = 2;
     // add observer for TEvPQ::TEvDeletePartitionDone requests and skip it
-    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, unseenEventsCount, [&deleteDoneEvents](TAutoPtr<IEventHandle>& eventHandle) {
+    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, 2, [&deleteDoneEvents](TAutoPtr<IEventHandle>& eventHandle) {
         deleteDoneEvents.push_back(eventHandle->Release<TEvPQ::TEvDeletePartitionDone>());
         return TTestActorRuntimeBase::EEventAction::DROP;
     });

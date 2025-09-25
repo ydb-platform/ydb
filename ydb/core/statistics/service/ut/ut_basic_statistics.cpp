@@ -414,6 +414,60 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         blockSSUpdates.Stop();
         WaitForRowCount(runtime, otherNodeIdx, pathId, rowCount2);
     }
+
+    Y_UNIT_TEST(IncompleteShardStats) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database", 1);
+        CreateColumnStoreTable(env, "Database", "Table", 4);
+
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
+        ui64 ssTabletId = pathId.OwnerId;
+
+        ui32 nodeIdx = 1;
+
+        // Wait until correct statistics gets reported
+        ValidateRowCount(runtime, nodeIdx, pathId, ColumnTableRowsNumber);
+
+        // Block stats updates from one of the shards and reboot SchemeShard
+        std::optional<ui64> blockedShardId;
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> blockShardStats(
+            runtime, [&](const TEvDataShard::TEvPeriodicTableStats::TPtr& ev) {
+                const auto& record = ev->Get()->Record;
+                if (record.GetTableLocalId() != pathId.LocalPathId) {
+                    return false;
+                }
+                if (!blockedShardId) {
+                    blockedShardId = record.GetDatashardId();
+                }
+                return blockedShardId == record.GetDatashardId();
+            });
+
+        RebootTablet(runtime, ssTabletId, runtime.AllocateEdgeActor());
+
+        // Wait for a statistics update to happen.
+        {
+            bool statsUpdateSent = false;
+            auto sendObserver = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev) {
+                if (ev->Get()->Record.GetSchemeShardId() == ssTabletId) {
+                    statsUpdateSent = true;
+                }
+            });
+            runtime.WaitFor("TEvSchemeShardStats", [&]{ return statsUpdateSent; });
+
+            bool propagateSent = false;
+            auto propagateObserver = runtime.AddObserver<TEvStatistics::TEvPropagateStatistics>([&](auto& ev){
+                if (ev->Recipient.NodeId() == runtime.GetNodeId(nodeIdx)) {
+                    propagateSent = true;
+                }
+            });
+            runtime.WaitFor("TEvPropagateStatistics", [&]{ return propagateSent; });
+            runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId), ColumnTableRowsNumber);
+    }
 }
 
 } // NSysView

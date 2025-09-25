@@ -50,7 +50,7 @@ public:
     virtual ui64 GetReserveMemorySize(
         const ui64 blobsSize, const ui64 rawSize, const std::optional<ui32> limit, const ui32 recordsCount) const override {
         if (limit) {
-            return std::max<ui64>(blobsSize, rawSize * (1.0 * *limit) / recordsCount);
+            return std::max<ui64>(blobsSize, rawSize * (1.0 * std::min<ui32>(*limit, recordsCount)) / recordsCount);
         } else {
             return std::max<ui64>(blobsSize, rawSize);
         }

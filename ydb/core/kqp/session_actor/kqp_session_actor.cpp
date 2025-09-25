@@ -868,11 +868,11 @@ public:
             Cerr << tasksGraph.DumpToString();
             */
 
-            co_return ReplyPrepareResult();
+            return ReplyPrepareResult();
         }
 
         if (!PrepareQueryContext()) {
-            co_return;
+            return;
         }
 
         Become(&TKqpSessionActor::ExecuteState);
@@ -881,10 +881,10 @@ public:
 
         if (QueryState->NeedPersistentSnapshot()) {
             AcquirePersistentSnapshot();
-            co_return;
+            return;
         } else if (QueryState->NeedSnapshot(*Config)) {
             AcquireMvccSnapshot();
-            co_return;
+            return;
         }
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState

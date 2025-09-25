@@ -14,6 +14,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
 
+#include <memory>
+
 namespace NFq {
 
 using namespace NActors;
@@ -99,7 +101,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection>, public TActor
     };
     NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig Config;
     const NKikimr::TYdbCredentialsProviderFactory& CredentialsProviderFactory;
-    NYdb::TDriver Driver;
+    std::unique_ptr<NYdb::TDriver> Driver;
     TYdbConnectionPtr YdbConnection;
     TString TablePathPrefix;
     const TString TenantId;
@@ -183,8 +185,6 @@ TLeaderElection::TLeaderElection(
     const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , Driver(GetYdbDriverConfig())
-    , YdbConnection(config.GetLocalMode() ? nullptr : NewYdbConnection(config.GetDatabase(), credentialsProviderFactory, Driver))
     , TablePathPrefix(JoinPath(config.GetDatabase().GetDatabase(), config.GetCoordinationNodePath()))
     , TenantId(JoinSeq(":", NKikimr::SplitPath(tenant)))
     , CoordinationNodePath(JoinPath(TablePathPrefix, TenantId))
@@ -224,6 +224,9 @@ TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
 
 void TLeaderElection::Bootstrap() {
     Become(&TLeaderElection::StateFunc);
+    Y_ABORT_UNLESS(!ActorSystemPtr->load(std::memory_order_relaxed), "Double ActorSystemPtr init");
+    ActorSystemPtr->store(TActivationContext::ActorSystem(), std::memory_order_relaxed);
+
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString()
          << ", tenant id " << TenantId << ", local mode " << Config.GetLocalMode() << ", coordination node path " << CoordinationNodePath);
@@ -231,6 +234,9 @@ void TLeaderElection::Bootstrap() {
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(CoordinatorId, 0));
         return;
     }
+
+    Driver = std::make_unique<NYdb::TDriver>(GetYdbDriverConfig());
+    YdbConnection = NewYdbConnection(Config.GetDatabase(), CredentialsProviderFactory, *Driver);
     ProcessState();
 }
 

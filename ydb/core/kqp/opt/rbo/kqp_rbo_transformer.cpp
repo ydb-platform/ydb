@@ -1,5 +1,7 @@
 #include "kqp_rbo_transformer.h"
 #include "kqp_operator.h"
+#include "kqp_plan_conversion_utils.h"
+
 #include <yql/essentials/utils/log/log.h>
 
 using namespace NYql;
@@ -482,7 +484,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
 
     auto status = OptimizeExpr(output, output, [this] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (TKqpOpRoot::Match(node.Get())) {
-            auto root = TOpRoot(node);
+            auto root = PlanConverter().ConvertRoot(node);
             root.ComputeParents();
             return RBO.Optimize(root, ctx);
         } else {

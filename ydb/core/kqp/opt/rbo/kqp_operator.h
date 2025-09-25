@@ -177,7 +177,7 @@ class IOperator {
         return OutputIUs;
     }
 
-    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) = 0;
+    virtual void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) {}
 
     virtual TString ToString() = 0;
 
@@ -229,11 +229,7 @@ class IBinaryOperator : public IOperator {
 
 class TOpEmptySource : public IOperator {
     public:
-    TOpEmptySource(TExprNode::TPtr node) : IOperator(EOperator::EmptySource, node) {}
-    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override {
-        Y_UNUSED(ctx);
-        return std::make_shared<TOpEmptySource>(Node); 
-    }
+    TOpEmptySource() : IOperator(EOperator::EmptySource, {}) {}
     virtual TString ToString() override { return "EmptySource"; }
 
 };
@@ -241,23 +237,21 @@ class TOpEmptySource : public IOperator {
 class TOpRead : public IOperator {
     public:
     TOpRead(TExprNode::TPtr node);
-    TOpRead(TString tableName, TString alias, TString columns);
-    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
     virtual TString ToString() override;
 
-    TString TableName;
     TString Alias;
     TVector<TString> Columns;
 };
 
 class TOpMap : public IUnaryOperator {
     public:
-    TOpMap(TExprNode::TPtr node);
-    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    TOpMap(std::shared_ptr<IOperator> input, TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements, bool project);
     bool HasRenames() const;
     bool HasLambdas() const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
     TVector<std::pair<TInfoUnit, TExprNode::TPtr>> GetLambdas() const;
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) override;
+
     virtual TString ToString() override;
 
     TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> MapElements;
@@ -266,41 +260,40 @@ class TOpMap : public IUnaryOperator {
 
 class TOpProject : public IUnaryOperator {
     public:
-    TOpProject(TExprNode::TPtr node);
-    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    TOpProject(std::shared_ptr<IOperator> input, TVector<TInfoUnit> projectList );
+
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) override;
     virtual TString ToString() override;
 
-    TVector<TInfoUnit> GetProjectList() const;
     TVector<TInfoUnit> ProjectList;
 };
 
 class TOpFilter : public IUnaryOperator {
     public:
-    TOpFilter(TExprNode::TPtr node);
-    TOpFilter(std::shared_ptr<IOperator> input, TExprNode::TPtr filterLambda, TExprContext& ctx, TPositionHandle pos);
-    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    TOpFilter(std::shared_ptr<IOperator> input, TExprNode::TPtr filterLambda);
     virtual TString ToString() override;
 
     TVector<TInfoUnit> GetFilterIUs() const;
     TConjunctInfo GetConjunctInfo() const;
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) override;
+
+    TExprNode::TPtr FilterLambda;
 };
 
 class TOpJoin : public IBinaryOperator {
     public:
-    TOpJoin(TExprNode::TPtr node);
     TOpJoin(std::shared_ptr<IOperator> leftArg, std::shared_ptr<IOperator> rightArg, TString joinKind, TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys);
-    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) override;
     virtual TString ToString() override;
 
-    TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
     TString JoinKind;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
 };
 
 class TOpLimit : public IUnaryOperator {
     public:
-    TOpLimit(TExprNode::TPtr node);
     TOpLimit(std::shared_ptr<IOperator> input, TExprNode::TPtr limitCond);
-    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) override;
     virtual TString ToString() override;
 
     TExprNode::TPtr LimitCond;
@@ -308,9 +301,7 @@ class TOpLimit : public IUnaryOperator {
 
 class TOpRoot : public IUnaryOperator {
     public:
-    TOpRoot(TExprNode::TPtr node);
     TOpRoot(std::shared_ptr<IOperator> input);
-    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
     virtual TString ToString() override;
     void ComputeParents();
 

@@ -1,4 +1,6 @@
 #include "kqp_rbo.h"
+#include "kqp_plan_conversion_utils.h"
+
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr {
@@ -51,10 +53,8 @@ void TRuleBasedStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, T
                     }
 
                     if (RequiresRebuild) {
-                        auto newRoot = std::static_pointer_cast<TOpRoot>(root.Rebuild(ctx));
-                        root.Node = newRoot->Node;
+                        ExprNodeRebuilder(ctx, root.Node->Pos()).RebuildExprNodes(root);
                         YQL_CLOG(TRACE, CoreDq) << "After rule " << rule->RuleName << ":\n" << KqpExprToPrettyString(NYql::NNodes::TExprBase(root.Node), ctx);
-                        root.Children[0] = newRoot->Children[0];
                     }
 
                     nMatches ++;
@@ -73,8 +73,8 @@ void TRuleBasedStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, T
 
 TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx) {
 
-    auto newRoot = std::static_pointer_cast<TOpRoot>(root.Rebuild(ctx));
-    YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << KqpExprToPrettyString(NYql::NNodes::TExprBase(newRoot->Node), ctx);
+    ExprNodeRebuilder(ctx, root.Node->Pos()).RebuildExprNodes(root);
+    YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << KqpExprToPrettyString(NYql::NNodes::TExprBase(root.Node), ctx);
 
     for (size_t idx=0; idx < Stages.size(); idx ++ ) {
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << idx;

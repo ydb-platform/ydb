@@ -994,6 +994,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT_VALUES_EQUAL(GetJoinOrder(plan).GetStringRobust(), R"(["T",["R","S"]])") ;
     }
 
+    Y_UNIT_TEST_TWIN(TestJoinOrderHintsYes, ColumnStore) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/yesdaulet.sql", "stats/basic.json", false, ColumnStore);
+        UNIT_ASSERT_VALUES_EQUAL(GetJoinOrder(plan).GetStringRobust(), R"(["L",["S",["N,"R"]]])") ;
+    }
+
     Y_UNIT_TEST_TWIN(TestJoinOrderHintsComplex, ColumnStore) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_complex.sql", "stats/basic.json", false, ColumnStore);
         auto joinOrder = GetJoinOrder(plan).GetStringRobust();

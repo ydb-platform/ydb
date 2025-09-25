@@ -7,46 +7,6 @@ namespace
     using namespace NYql;
     using namespace NNodes;
 
-    std::shared_ptr<IOperator> ExprNodeToOperator(TExprNode::TPtr node)
-    {
-        if (NYql::NNodes::TKqpOpEmptySource::Match(node.Get()))
-        {
-            return std::make_shared<TOpEmptySource>(node);
-        }
-        else if (NYql::NNodes::TKqpOpRead::Match(node.Get()))
-        {
-            return std::make_shared<TOpRead>(node);
-        }
-        else if (NYql::NNodes::TKqpOpMap::Match(node.Get()))
-        {
-            return std::make_shared<TOpMap>(node);
-        }
-        else if (NYql::NNodes::TKqpOpFilter::Match(node.Get()))
-        {
-            return std::make_shared<TOpFilter>(node);
-        }
-        else if (NYql::NNodes::TKqpOpJoin::Match(node.Get()))
-        {
-            return std::make_shared<TOpJoin>(node);
-        }
-        else if (NYql::NNodes::TKqpOpLimit::Match(node.Get()))
-        {
-            return std::make_shared<TOpLimit>(node);
-        }
-        else if (NYql::NNodes::TKqpOpProject::Match(node.Get()))
-        {
-            return std::make_shared<TOpProject>(node);
-        }
-        else if (NYql::NNodes::TKqpOpRoot::Match(node.Get()))
-        {
-            return std::make_shared<TOpRoot>(node);
-        }
-        else
-        {
-            YQL_ENSURE(false, "Unknown operator node");
-        }
-    }
-
     void DFS(int vertex, TVector<int> &sortedStages, THashSet<int> &visited, const THashMap<int, TVector<int>> &stageInputs)
     {
         visited.emplace(vertex);
@@ -303,113 +263,24 @@ namespace NKikimr
             for (auto c : opSource.Columns())
             {
                 OutputIUs.push_back(TInfoUnit(alias, c.StringValue()));
+                Columns.push_back(c.StringValue());
             }
 
-            TableName = alias;
-        }
-
-        std::shared_ptr<IOperator> TOpRead::Rebuild(TExprContext &ctx)
-        {
-            Y_UNUSED(ctx);
-            return std::make_shared<TOpRead>(Node);
+            Alias = alias;
         }
 
         TString TOpRead::ToString() {
-            return "Read (" + TableName + ")";
+            return "Read (" + Alias + ")";
         }
 
-        TOpMap::TOpMap(TExprNode::TPtr node) : IUnaryOperator(EOperator::Map, node)
-        {
-            auto opMap = TKqpOpMap(node);
-
-            Children.push_back(ExprNodeToOperator(opMap.Input().Ptr()));
-
-            auto project = opMap.Project().IsValid();
-
-            if (!project)
-            {
+        TOpMap::TOpMap(std::shared_ptr<IOperator> input, TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements, bool project) :
+            IUnaryOperator(EOperator::Map, input), MapElements(mapElements), Project(project) {
+            if (!Project) {
                 OutputIUs.insert(OutputIUs.begin(), GetInput()->GetOutputIUs().begin(), GetInput()->GetOutputIUs().end());
             }
-            for (auto mapElement : opMap.MapElements())
-            {
-                auto iu = TInfoUnit(mapElement.Variable().StringValue());
-                OutputIUs.push_back(iu);
-                if (mapElement.Maybe<TKqpOpMapElementRename>()) {
-                    auto element = mapElement.Cast<TKqpOpMapElementRename>();
-                    auto fromIU = TInfoUnit(element.From().StringValue());
-                    MapElements.push_back(std::make_pair(iu, fromIU));
-                }
-                else {
-                    auto element = mapElement.Cast<TKqpOpMapElementLambda>();
-                    if (element.Lambda().Body().Maybe<TCoMember>().Name().Maybe<TCoAtom>()) {
-                        auto member = element.Lambda().Body().Cast<TCoMember>();
-                        auto name = member.Name().Cast<TCoAtom>();
-                        auto fromIU = TInfoUnit(name.StringValue());
-                        MapElements.push_back(std::make_pair(iu, fromIU));
-                    }
-                    else {
-                        MapElements.push_back(std::make_pair(iu, element.Lambda().Ptr()));
-                    }
-                }
+            for (auto & [k, v] : MapElements) {
+                OutputIUs.push_back(k);
             }
-        }
-
-        std::shared_ptr<IOperator> TOpMap::Rebuild(TExprContext &ctx)
-        {
-            auto current = TKqpOpMap(Node);
-            auto newInput = Children[0]->Rebuild(ctx)->Node;
-
-            TVector<TExprNode::TPtr> newMapElements;
-
-            for (auto & [iu, body] : MapElements)
-            {
-                if (std::holds_alternative<TInfoUnit>(body))
-                {
-                    // clang-format off
-            newMapElements.push_back(Build<TKqpOpMapElementRename>(ctx, Node->Pos())
-                .Input(newInput)
-                .Variable().Build(iu.GetFullName())
-                .From().Build(std::get<TInfoUnit>(body).GetFullName())
-            .Done().Ptr());
-                    // clang-format on
-                }
-                else
-                {
-                    // clang-format off
-            newMapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, Node->Pos())
-                .Input(newInput)
-                .Variable().Build(iu.GetFullName())
-                .Lambda(std::get<TExprNode::TPtr>(body))
-            .Done().Ptr());
-                    // clang-format on
-                }
-            }
-
-            TExprNode::TPtr result;
-            if (!Project)
-            {
-                // clang-format off
-        result = Build<TKqpOpMap>(ctx, Node->Pos())
-            .Input(newInput)
-            .MapElements()
-                .Add(newMapElements)
-            .Build()
-        .Done().Ptr();
-                // clang-format on
-            }
-            else
-            {
-                // clang-format off
-        result = Build<TKqpOpMap>(ctx, Node->Pos())
-            .Input(newInput)
-            .MapElements()
-                .Add(newMapElements)
-            .Build()
-            .Project().Value("true").Build()
-        .Done().Ptr();
-                // clang-format on
-            }
-            return std::make_shared<TOpMap>(result);
         }
 
         bool TOpMap::HasRenames() const {
@@ -440,30 +311,12 @@ namespace NKikimr
             return res;
         }
 
-        TOpProject::TOpProject(TExprNode::TPtr node) : IUnaryOperator(EOperator::Project, node)
+        TOpProject::TOpProject(std::shared_ptr<IOperator> input, TVector<TInfoUnit> projectList) : IUnaryOperator(EOperator::Project, input),
+            ProjectList(projectList)
         {
-            auto opProject = TKqpOpProject(node);
-
-            Children.push_back(ExprNodeToOperator(opProject.Input().Ptr()));
-
-            for (auto p : opProject.ProjectList())
-            {
-                OutputIUs.push_back(TInfoUnit(p.StringValue()));
+            for (auto p : ProjectList ) {
+                OutputIUs.push_back(p);
             }
-        }
-
-        std::shared_ptr<IOperator> TOpProject::Rebuild(TExprContext &ctx)
-        {
-            auto current = TKqpOpProject(Node);
-            auto newInput = Children[0]->Rebuild(ctx)->Node;
-
-            // clang-format off
-            auto node = Build<TKqpOpProject>(ctx, Node->Pos())
-                .Input(newInput)
-                .ProjectList(current.ProjectList())
-            .Done().Ptr();
-            // clang-format on
-            return std::make_shared<TOpProject>(node);
         }
 
         TString TOpProject::ToString() {
@@ -475,45 +328,16 @@ namespace NKikimr
             return res;
         }
 
-        TOpFilter::TOpFilter(TExprNode::TPtr node) : IUnaryOperator(EOperator::Filter, node)
-        {
-            auto opFilter = TKqpOpFilter(node);
-
-            Children.push_back(ExprNodeToOperator(opFilter.Input().Ptr()));
-
-            OutputIUs = Children[0]->GetOutputIUs();
-        }
-
-        TOpFilter::TOpFilter(std::shared_ptr<IOperator> input, TExprNode::TPtr filterLambda, TExprContext &ctx, TPositionHandle pos) : IUnaryOperator(EOperator::Filter)
-        {
-            Children.push_back(input);
-            // clang-format off
-    Node = Build<TKqpOpFilter>(ctx, pos)
-        .Input(Children[0]->Node)
-        .Lambda(filterLambda)
-    .Done().Ptr();
-            // clang-format on
-        }
-
-        std::shared_ptr<IOperator> TOpFilter::Rebuild(TExprContext &ctx)
-        {
-            auto current = TKqpOpFilter(Node);
-            // clang-format off
-    auto node = Build<TKqpOpFilter>(ctx, Node->Pos())
-        .Input(Children[0]->Rebuild(ctx)->Node)
-        .Lambda(current.Lambda())
-    .Done().Ptr();
-            // clang-format on
-            return std::make_shared<TOpFilter>(node);
+        TOpFilter::TOpFilter(std::shared_ptr<IOperator> input, TExprNode::TPtr filterLambda) : IUnaryOperator(EOperator::Filter, input),
+            FilterLambda(filterLambda) {
+            OutputIUs = GetInput()->GetOutputIUs();
         }
 
         TVector<TInfoUnit> TOpFilter::GetFilterIUs() const
         {
             TVector<TInfoUnit> res;
 
-            auto opFilter = TKqpOpFilter(Node);
-            auto lambdaBody = opFilter.Lambda().Body();
-
+            auto lambdaBody = TCoLambda(FilterLambda).Body();
             GetAllMembers(lambdaBody.Ptr(), res);
             return res;
         }
@@ -522,8 +346,7 @@ namespace NKikimr
         {
             TConjunctInfo res;
 
-            auto opFilter = TKqpOpFilter(Node);
-            auto lambdaBody = opFilter.Lambda().Body().Ptr();
+            auto lambdaBody = TCoLambda(FilterLambda).Body().Ptr();
             if (lambdaBody->IsCallable("ToPg"))
             {
                 lambdaBody = lambdaBody->ChildPtr(0);
@@ -583,113 +406,33 @@ namespace NKikimr
             return "Filter";
         }
 
-        TOpJoin::TOpJoin(TExprNode::TPtr node) : IBinaryOperator(EOperator::Join, node)
-        {
-            auto opJoin = TKqpOpJoin(node);
+        TOpJoin::TOpJoin(std::shared_ptr<IOperator> leftInput, std::shared_ptr<IOperator> rightInput, TString joinKind, TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys) :
+            IBinaryOperator(EOperator::Join, leftInput, rightInput),
+            JoinKind(joinKind),
+            JoinKeys(joinKeys) {
 
-            Children.push_back(ExprNodeToOperator(opJoin.LeftInput().Ptr()));
-            Children.push_back(ExprNodeToOperator(opJoin.RightInput().Ptr()));
-
-            auto leftInputIUs = Children[0]->GetOutputIUs();
-            auto rightInputIUs = Children[1]->GetOutputIUs();
+            auto leftInputIUs = GetLeftInput()->GetOutputIUs();
+            auto rightInputIUs = GetRightInput()->GetOutputIUs();
 
             OutputIUs.insert(OutputIUs.end(), leftInputIUs.begin(), leftInputIUs.end());
             OutputIUs.insert(OutputIUs.end(), rightInputIUs.begin(), rightInputIUs.end());
-
-            JoinKind = opJoin.JoinKind().StringValue();
-            for (auto k : opJoin.JoinKeys())
-            {
-                TInfoUnit leftKey(k.LeftLabel().StringValue(), k.LeftColumn().StringValue());
-                TInfoUnit rightKey(k.RightLabel().StringValue(), k.RightColumn().StringValue());
-
-                JoinKeys.push_back(std::make_pair(leftKey, rightKey));
-            }
-        }
-
-        std::shared_ptr<IOperator> TOpJoin::Rebuild(TExprContext &ctx)
-        {
-            auto current = TKqpOpJoin(Node);
-
-            TVector<TDqJoinKeyTuple> keys;
-            for (auto k : JoinKeys)
-            {
-                // clang-format off
-        keys.push_back(Build<TDqJoinKeyTuple>(ctx, Node->Pos())
-                .LeftLabel()
-                    .Value(k.first.Alias)
-                .Build()
-                .LeftColumn()
-                    .Value(k.first.ColumnName)
-                .Build()
-                .RightLabel()
-                    .Value(k.second.Alias)
-                .Build()
-                .RightColumn()
-                    .Value(k.second.ColumnName)
-                .Build()
-            .Done());
-                // clang-format on
-            }
-
-            auto joinKeys = Build<TDqJoinKeyTupleList>(ctx, Node->Pos()).Add(keys).Done();
-
-            // clang-format off
-    auto node = Build<TKqpOpJoin>(ctx, Node->Pos())
-        .LeftInput(Children[0]->Rebuild(ctx)->Node)
-        .RightInput(Children[1]->Rebuild(ctx)->Node)
-        .JoinKind().Value(JoinKind).Build()
-        .JoinKeys(joinKeys)
-    .Done().Ptr();
-            // clang-format on
-            return std::make_shared<TOpJoin>(node);
         }
 
         TString TOpJoin::ToString() {
             return "Join";
         }
 
-        TOpLimit::TOpLimit(TExprNode::TPtr node) : IUnaryOperator(EOperator::Limit, node)
-        {
-            auto opLimit = TKqpOpLimit(node);
-
-            Children.push_back(ExprNodeToOperator(opLimit.Input().Ptr()));
-
-            OutputIUs = Children[0]->GetOutputIUs();
-        }
-
-        std::shared_ptr<IOperator> TOpLimit::Rebuild(TExprContext &ctx)
-        {
-            auto current = TKqpOpLimit(Node);
-            // clang-format off
-    auto node = Build<TKqpOpLimit>(ctx, Node->Pos())
-        .Input(Children[0]->Rebuild(ctx)->Node)
-        .Count(current.Count())
-    .Done().Ptr();
-            // clang-format on
-            return std::make_shared<TOpLimit>(node);
+        TOpLimit::TOpLimit(std::shared_ptr<IOperator> input, TExprNode::TPtr limitCond) : IUnaryOperator(EOperator::Limit, input),
+            LimitCond(limitCond) {
+            OutputIUs = GetInput()->GetOutputIUs();
         }
 
         TString TOpLimit::ToString() {
             return "Limit";
         }
 
-        TOpRoot::TOpRoot(TExprNode::TPtr node) : IUnaryOperator(EOperator::Root, node)
-        {
-            auto opRoot = TKqpOpRoot(node);
-
-            Children.push_back(ExprNodeToOperator(opRoot.Input().Ptr()));
-
-            OutputIUs = Children[0]->GetOutputIUs();
-        }
-
-        std::shared_ptr<IOperator> TOpRoot::Rebuild(TExprContext &ctx)
-        {
-            // clang-format off
-    auto node = Build<TKqpOpRoot>(ctx, Node->Pos())
-        .Input(Children[0]->Rebuild(ctx)->Node)
-    .Done().Ptr();
-            // clang-format on
-            return std::make_shared<TOpRoot>(node);
+        TOpRoot::TOpRoot(std::shared_ptr<IOperator> input) : IUnaryOperator(EOperator::Root, input) {
+            OutputIUs = GetInput()->GetOutputIUs();            
         }
 
         void ComputeParentsRec(std::shared_ptr<IOperator> op, std::shared_ptr<IOperator> parent) {

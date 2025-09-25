@@ -241,7 +241,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
 
     if (pushLeft.size()) {
         auto leftLambda = BuildFilterLambdaFromConjuncts(leftInput->Node->Pos(), pushLeft, ctx);
-        leftInput = std::make_shared<TOpFilter>(leftInput, leftLambda, ctx, leftInput->Node->Pos());
+        leftInput = std::make_shared<TOpFilter>(leftInput, leftLambda);
     }
 
     if (pushRight.size()) {
@@ -256,14 +256,14 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
             }
             if (predicatesForRightSide.size()) {
                 auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Node->Pos(), pushRight, ctx);
-                rightInput = std::make_shared<TOpFilter>(rightInput, rightLambda, ctx, rightInput->Node->Pos());
+                rightInput = std::make_shared<TOpFilter>(rightInput, rightLambda);
                 join->JoinKind = "Inner";
             } else {
                 return input;
             }
         } else {
             auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Node->Pos(), pushRight, ctx);
-            rightInput = std::make_shared<TOpFilter>(rightInput, rightLambda, ctx, rightInput->Node->Pos());
+            rightInput = std::make_shared<TOpFilter>(rightInput, rightLambda);
         }
     }
 
@@ -276,7 +276,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
 
     if (topLevelPreds.size()) {
         auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Node->Pos(), topLevelPreds, ctx);
-        return std::make_shared<TOpFilter>(join, topFilterLambda, ctx, join->Node->Pos());
+        return std::make_shared<TOpFilter>(join, topFilterLambda);
     } else {
         return join;
     }
@@ -317,7 +317,7 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
             auto opRead = CastOperator<TOpRead>(input);
             auto newStageId = props.StageGraph.AddSourceStage(opRead->GetOutputIUs());
             input->Props.StageId = newStageId;
-            readName = opRead->TableName;
+            readName = opRead->Alias;
         }
         else {
             auto newStageId = props.StageGraph.AddStage();
@@ -390,17 +390,14 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
 
 struct Scope {
     Scope(){}
-    Scope(int scopeId) : ScopeId(scopeId) {}
 
-    int ScopeId;
     TVector<int> ParentScopes;
     bool IdentityMap = true;
     THashMap<TInfoUnit, TVector<TInfoUnit>, TInfoUnit::THashFunction> RenameMap;
     TVector<std::shared_ptr<IOperator>> Operators;
-    std::shared_ptr<IOperator> TopOperator;
 
     TString ToString() {
-        auto res = TStringBuilder() <<  "{id: " << ScopeId << ", parents: [";
+        auto res = TStringBuilder() <<  "{parents: [";
         for (int p : ParentScopes) {
             res << p << ",";
         }
@@ -421,26 +418,34 @@ struct Scope {
     }
 };
 
-void ComputeScopesRec(std::shared_ptr<IOperator> & op, THashMap<int, Scope> & scopes, int & currScope, int parentScope) {
+struct TIOperatorSharedPtrHash
+{
+    size_t operator()(const std::shared_ptr<IOperator>& p) const
+    {
+        return p ? THash<int64_t>{}((int64_t)p.get()) : 0; 
+    }
+};
+
+class Scopes {
+    public:
+    void ComputeScopesRec(std::shared_ptr<IOperator> & op, int & currScope);
+    void ComputeScopes(std::shared_ptr<IOperator> & op);
+
+    THashMap<int, Scope> ScopeMap;
+    THashMap<std::shared_ptr<IOperator>, int, TIOperatorSharedPtrHash> RevScopeMap;
+};
+
+void Scopes::ComputeScopesRec(std::shared_ptr<IOperator> & op, int & currScope) {
+    if (RevScopeMap.contains(op)) {
+        return;
+    }
     bool makeNewScope = (op->Kind == EOperator::Map && CastOperator<TOpMap>(op)->Project) || (op->Kind == EOperator::Project) || (op->Parents.size() >= 2);
+    
     YQL_CLOG(TRACE, CoreDq) << "Op: " << op->ToString() << ", nparents = " << op->Parents.size();
 
-    if (op->Parents.size() >= 2) {
-        YQL_CLOG(TRACE, CoreDq) << "Op with 2 parents: " << op->ToString();
-
-        for (auto & [id, scope] : scopes ) {
-            if (scope.TopOperator == op) {
-                scope.ParentScopes.push_back(parentScope);
-                return;
-            }
-        }
-    }
     if (makeNewScope) {
-        auto newScope = Scope(currScope+1);
-        newScope.TopOperator = op;
-        newScope.ParentScopes.push_back(parentScope);
-        parentScope = currScope;
         currScope++;
+        auto newScope = Scope();
 
         if (op->Kind == EOperator::Map && CastOperator<TOpMap>(op)->Project) {
             auto map = CastOperator<TOpMap>(op);
@@ -459,30 +464,27 @@ void ComputeScopesRec(std::shared_ptr<IOperator> & op, THashMap<int, Scope> & sc
             }
             newScope.IdentityMap = false;
         }
-        scopes[currScope] = newScope;
+        ScopeMap[currScope] = newScope;
     }
-    scopes.at(currScope).Operators.push_back(op);
+
+    ScopeMap.at(currScope).Operators.push_back(op);
+    RevScopeMap[op] = currScope;
     for (auto c : op->Children) {
-        ComputeScopesRec(c, scopes, currScope, parentScope);
+        ComputeScopesRec(c, currScope);
     }
 }
 
-THashMap<int, Scope> ComputeScopes(std::shared_ptr<IOperator> & op) {
+void Scopes::ComputeScopes(std::shared_ptr<IOperator> & op) {
     int currScope = 0;
-    int parentScope = 0;
-    THashMap<int, Scope> result;
-    result[0] = Scope(0);
-    ComputeScopesRec(op, result, currScope, parentScope);
-    return result;
-}
-
-struct TIOperatorSharedPtrHash
-{
-    size_t operator()(const std::shared_ptr<IOperator>& p) const
-    {
-        return p ? THash<int64_t>{}((int64_t)p.get()) : 0; 
+    ScopeMap[0] = Scope();
+    ComputeScopesRec(op, currScope);
+    for (auto & [id, sc] : ScopeMap) {
+        auto topOp = sc.Operators[0];
+        for ( auto & p : topOp->Parents) {
+            sc.ParentScopes.push_back(RevScopeMap.at(p.lock()));
+        }
     }
-};
+}
 
 struct TIntTUnitPairHash
 {
@@ -492,39 +494,28 @@ struct TIntTUnitPairHash
     }
 };
 
-THashMap<std::shared_ptr<IOperator>, int, TIOperatorSharedPtrHash> ComputeScopeMap(const THashMap<int, Scope> & scopes) {
-    THashMap<std::shared_ptr<IOperator>, int, TIOperatorSharedPtrHash> scopeMap;
-
-    for (auto & [key, value] : scopes) {
-        for (auto op : value.Operators ) {
-            scopeMap[op] = key;
-        }
-    }
-    return scopeMap;
-}
-
 void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExprContext& ctx) {
     Y_UNUSED(optimizer);
     Y_UNUSED(ctx);
 
     YQL_CLOG(TRACE, CoreDq) << "Before compute parents";
 
+    for (auto it : root) {
+        YQL_CLOG(TRACE, CoreDq) << "Iterator: " << it.Current->ToString();
+        for (auto c : it.Current->Children) {
+            YQL_CLOG(TRACE, CoreDq) << "Child: " << c->ToString();
+        }
+    }
+
     root.ComputeParents();
 
     // We need to build scopes for the plan, because same aliases and variable names may be
     // used multiple times in different scopes
-    auto scopes = ComputeScopes(root.GetInput());
+    auto scopes = Scopes();
+    scopes.ComputeScopes(root.GetInput());
 
-    for (auto & [id, sc] : scopes) {
-        YQL_CLOG(TRACE, CoreDq) << "Scope: " << id << ": " << sc.ToString();
-    }
-
-    // Compute scope info for variables in the plan
-    // Scope info maps each <TInfoUnit, scopeNum> to a list of scopes where this variable is defined and alive
-    auto scopeMap = ComputeScopeMap(scopes);
-
-    for (auto & [key, value] : scopeMap) {
-        YQL_CLOG(TRACE, CoreDq) << "Scope map: " << (int64_t)key.get() << "(" << (int64_t)key->Kind << ")" << "," << value;
+    for (auto & [id, sc] : scopes.ScopeMap) {
+        YQL_CLOG(TRACE, CoreDq) << "Scope map: " << id << ": " << sc.ToString();
     }
 
     // Build a rename map by startingg at maps that rename variables and project
@@ -539,11 +530,11 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
 
             for (auto & [to, from] : map->GetRenames()) {
 
-                if (!scopeMap.contains(map)) {
+                if (!scopes.RevScopeMap.contains(map)) {
                     YQL_CLOG(TRACE, CoreDq) << "Map not found: " << (int64_t)map.get();
                 }
-                auto scopeId = scopeMap.at(map);
-                auto scope = scopes.at(scopeId);
+                auto scopeId = scopes.RevScopeMap.at(map);
+                auto scope = scopes.ScopeMap.at(scopeId);
 
                 auto source = std::make_pair(scopeId,from);
                 auto target = std::make_pair(scopeId,to);
@@ -551,7 +542,8 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
                 auto parentScopes = scope.ParentScopes;
 
                 while( parentScopes.size() == 1) {
-                    auto parentScope = scopes.at(parentScopes[0]);
+                    auto parentScopeId = parentScopes[0];
+                    auto parentScope = scopes.ScopeMap.at(parentScopeId);
                     if (!parentScope.RenameMap.contains(target.second)) {
                         break;
                     }
@@ -559,7 +551,7 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
                     if (renameTo.size()!=1){
                         break;
                     }
-                    target = std::make_pair(parentScope.ScopeId, renameTo[0]);
+                    target = std::make_pair(parentScopeId, renameTo[0]);
                     parentScopes = parentScope.ParentScopes;
                 }
 
@@ -576,6 +568,32 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
         if (value.size()==1) {
             YQL_CLOG(TRACE, CoreDq) << "Rename map: " << key.second.GetFullName() << "," << key.first << " -> " << value[0].second.GetFullName() << "," << value[0].first;
         }
+    }
+
+    // Iterate through the plan, applying renames to one operator at a time
+
+    for (auto it : root ) {
+        // Build a subset of the map for the current scope only
+        auto scopeId = scopes.RevScopeMap(it.Current);
+
+        // Exclude all IUs from OpReads in this scope
+        THashSet<TInfoUnit> exclude;
+        for (auto & op : scopes.ScopeMap.at(scopeId).Operators) {
+            if (op->Kind == EOperator::Source) {
+                for (auto iu : op->GetOutputIUs()) {
+                    exclude.insert(iu);
+                }
+            }
+        }
+
+        auto scopedRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>();
+        for (auto & [k,v] : renameMap) {
+            if (k.first == scopeId && !exclude.contains(k.second)) {
+                scopedRenameMap[k.second] = v.second;
+            }
+        }
+
+        it.Current->RenameIUs(scopedRenameMap);
     }
 
 }

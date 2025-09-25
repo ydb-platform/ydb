@@ -346,7 +346,7 @@ void TPartition::RenameCompactedBlob(TDataKey& k,
     auto write = CompactionBlobEncoder.PartitionedBlob.Add(k.Key, size, false);
     if (write && !write->Value.empty()) {
         // надо записать содержимое головы перед первым большим блобом
-        AddCmdWrite(write, compactionRequest, ctx);
+        AddCmdWrite(write, compactionRequest, k.Timestamp.Seconds(), ctx);
         CompactionBlobEncoder.CompactedKeys.emplace_back(write->Key, write->Value.size());
     }
 

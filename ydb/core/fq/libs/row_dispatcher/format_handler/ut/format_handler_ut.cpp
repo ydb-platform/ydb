@@ -596,6 +596,21 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                     .AddRow(TRow().AddString("1970-01-01T00:00:48Z"))
                     .AddRow(TRow().AddString("1970-01-01T00:00:49Z"))
             },
+            {
+                {firstOffset + 60, firstOffset + 70},
+                Nothing(),
+                TBatch()
+                    .AddRow(TRow().AddString("1970-01-01T00:00:01Z")) // watermark = NULL
+                    .AddRow(TRow().AddString("1970-01-01T00:00:02Z")) // watermark = NULL
+            },
+            {
+                {firstOffset + 600, firstOffset + 700, firstOffset + 800},
+                TInstant::Seconds(0),
+                TBatch()
+                    .AddRow(TRow().AddString("1970-01-01T00:00:03Z")) // watermark = NULL
+                    .AddRow(TRow().AddString("1970-01-01T00:00:05Z"))
+                    .AddRow(TRow().AddString("1970-01-01T00:00:04Z")) // watermark = NULL
+            },
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
@@ -615,6 +630,17 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         ParseMessages({
             GetMessage(firstOffset + 6, R"({"ts": "1970-01-01T00:00:48Z"})"),
             GetMessage(firstOffset + 7, R"({"ts": "1970-01-01T00:00:49Z"})"),
+        });
+
+        ParseMessages({
+            GetMessage(firstOffset + 60, R"({"ts": "1970-01-01T00:00:01Z"})"),
+            GetMessage(firstOffset + 70, R"({"ts": "1970-01-01T00:00:02Z"})"),
+        });
+
+        ParseMessages({
+            GetMessage(firstOffset + 600, R"({"ts": "1970-01-01T00:00:03Z"})"),
+            GetMessage(firstOffset + 700, R"({"ts": "1970-01-01T00:00:05Z"})"),
+            GetMessage(firstOffset + 800, R"({"ts": "1970-01-01T00:00:04Z"})"),
         });
 
         RemoveClient(ClientIds[1]);

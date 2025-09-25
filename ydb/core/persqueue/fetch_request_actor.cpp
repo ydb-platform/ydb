@@ -355,7 +355,13 @@ public:
 
     }
 
-    void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr&, const TActorContext& ctx) {
+    void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
+        NYdb::TStatus& result = ev->Get()->Result;
+        if (result.GetStatus() == NYdb::EStatus::SUCCESS) {
+            LOG_D("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+        } else {
+            LOG_I("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+        }
         PendingAlterTopicResponses--;
         if (PendingAlterTopicResponses == 0) {
             if (AnyCdcTopicInRequest) {

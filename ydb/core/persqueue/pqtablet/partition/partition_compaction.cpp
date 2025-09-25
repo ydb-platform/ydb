@@ -379,12 +379,11 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
         CompactionBlobEncoder.IsEmpty()) {
         // если это первое сообщение, то надо поправить StartOffset
         CompactionBlobEncoder.StartOffset = BlobEncoder.StartOffset;
-        CompactionBlobEncoder.EndOffset = CompactionBlobEncoder.StartOffset;
     }
 
     CompactionBlobEncoder.NewHead.Clear();
-    CompactionBlobEncoder.NewHead.Offset = BlobEncoder.StartOffset;
-    CompactionBlobEncoder.NewHead.PartNo = 0;
+    CompactionBlobEncoder.NewHead.Offset = KeysForCompaction.front().first.Key.GetOffset();
+    CompactionBlobEncoder.NewHead.PartNo = KeysForCompaction.front().first.Key.GetPartNo();
     CompactionBlobEncoder.NewHead.PackedSize = 0;
 
     TProcessParametersBase parameters;
@@ -409,6 +408,11 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
             // большой блоб надо переименовать
             LOG_D("Rename key " << k.Key.ToString());
 
+            CompactionBlobEncoder.NewHead.Clear();
+            CompactionBlobEncoder.NewHead.Offset = k.Key.GetOffset();
+            CompactionBlobEncoder.NewHead.PartNo = k.Key.GetPartNo();
+
+            parameters.CurOffset = CompactionBlobEncoder.NewHead.Offset;
 
             RenameCompactedBlob(k, k.Size,
                                 needToCompactHead,

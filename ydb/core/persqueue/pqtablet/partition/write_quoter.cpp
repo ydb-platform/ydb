@@ -10,7 +10,7 @@ TWriteQuoter::TWriteQuoter(
     const TPartitionId& partition,
     TActorId tabletActor,
     ui64 tabletId,
-    const TTabletCountersBase& counters
+    const std::shared_ptr<TTabletCountersBase>& counters
 )
     : TPartitionQuoterBase(
             topicConverter, config, partition, tabletActor, pqConfig.GetQuotingConfig().GetEnableQuoting(),

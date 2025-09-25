@@ -114,7 +114,7 @@ public:
         TActorId tabletActor,
         bool totalPartitionQuotaEnabled,
         ui64 tabletId,
-        const std::shared_ptr<TTabletCountersBase> counters,
+        const std::shared_ptr<TTabletCountersBase>& counters,
         ui64 maxRequestsInflight
     )
         : TBaseActor(tabletId, tabletActor, NKikimrServices::PERSQUEUE)
@@ -309,7 +309,7 @@ public:
         const TPartitionId& partition,
         TActorId tabletActor,
         ui64 tabletId,
-        const TTabletCountersBase& counters
+        const std::shared_ptr<TTabletCountersBase>& counters
     );
 
 public:

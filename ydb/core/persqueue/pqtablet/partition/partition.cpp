@@ -355,7 +355,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , LastEmittedHeartbeat(TRowVersion::Min())
     , SamplingControl(samplingControl)
 {
-    TabletCounters.Populate(Counters);
+    TabletCounters.Populate(*Counters);
 }
 
 void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {

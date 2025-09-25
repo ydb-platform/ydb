@@ -2891,7 +2891,7 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
     typedef TProtobufTabletCountersPair<TKeyValueCounters, TPersQueueCounters> TCounters;
 
     TAutoPtr<TCounters> counters(new TCounters());
-    Counters = std::make_shared<TTabletCountersBase>((counters->GetSecondTabletCounters()).Release());
+    Counters.reset(counters->GetSecondTabletCounters().Release());
 
     State.SetupTabletCounters(counters->GetFirstTabletCounters().Release()); //FirstTabletCounters is of good type and contains all counters
     State.Clear();
@@ -4758,7 +4758,7 @@ TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
             partition,
             SelfId(),
             TabletID(),
-            *Counters
+            Counters
         ));
     }
     return quoterId;
@@ -4782,7 +4782,7 @@ IActor* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                           DCId,
                           IsServerless,
                           config,
-                          *Counters,
+                          Counters,
                           SubDomainOutOfSpace,
                           (ui32)channels,
                           GetPartitionQuoter(partitionId),

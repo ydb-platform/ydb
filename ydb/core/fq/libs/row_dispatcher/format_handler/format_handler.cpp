@@ -320,7 +320,7 @@ private:
         }
 
         void FinishPacking() {
-            if (!DataPacker->IsEmpty() || Watermark) {
+            if (!DataPacker->IsEmpty() || !Watermark.Empty()) {
                 LOG_ROW_DISPATCHER_TRACE("FinishPacking, batch size: " << DataPackerSize << ", number rows: " << FilteredOffsets.size());
                 if (FilteredOffsets.empty()) {
                     FilteredOffsets.emplace(Offset);

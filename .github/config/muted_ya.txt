@@ -23,8 +23,32 @@ ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec+UseSink
 ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec-UseSink
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
+<<<<<<< HEAD
 ydb/core/persqueue/ut TPQTest.TestPartitionWriteQuota
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
+=======
+ydb/core/kqp/ut/close_with_load KqpQueryService.CloseSessionsWithLoad
+ydb/core/kqp/ut/service KqpQueryService.LargeUpsert-UseSink
+ydb/core/kqp/ut/service KqpQueryServiceScripts.ExecuteScriptWithCancelAfterAndTimeout
+ydb/core/kqp/ut/close_with_load KqpService.CloseSessionsWithLoad
+ydb/core/kqp/ut/service KqpService.TwoNodeOneShuttingDown
+ydb/core/kqp/ut/service unittest.[*/*] chunk
+ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
+ydb/core/kqp/workload_service/ut DefaultPoolSettings.TestResourcePoolsSysViewFilters
+ydb/core/mind/hive/ut THiveTest.TestCreateSubHiveCreateManyTablets
+ydb/core/mind/hive/ut unittest.[*/*] chunk
+ydb/core/persqueue/ut TPQTest.TestCompactifiedWithRetention
+ydb/core/persqueue/ut/slow SlowTopicAutopartitioning.CDC_Write
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.OrderOfChildrenPartitions_Topic
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_1MB_LB_offset+middle
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_1MB_LegacyTopic_offset+middle
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_1MB_Topic_offset+middle
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_LB_exact
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_LB_offset+middle
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_LegacyTopic_exact
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_LegacyTopic_offset+middle
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
+>>>>>>> baebf65595d (move out slow tests to separate file (#25824))
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard

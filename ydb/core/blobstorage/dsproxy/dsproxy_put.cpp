@@ -595,7 +595,7 @@ public:
         }
         ReportBytes(PutImpl.Blobs[0].Buffer.capacity() + sizeof(*this));
 
-        RequestBytes = params.Common.Event->Buffer.size();
+        RequestBytes = PutImpl.Blobs[0].Buffer.size();
         RequestHandleClass = HandleClassToHandleClass(HandleClass);
         MaxSaneRequests = Info->Type.TotalPartCount() * (1ull + Info->Type.Handoff()) * 2;
     }

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class YdbClient:
     def __init__(self, endpoint: str, database: str):
-        driver_config = ydb.DriverConfig(endpoint, database, auth_token='root@builtin')#credentials=ydb.AuthTokenCredentials("root@builtin"))#, )
+        driver_config = ydb.DriverConfig(endpoint, database, auth_token='root@builtin')
         self.driver = ydb.Driver(driver_config)
         self.session_pool = ydb.QuerySessionPool(self.driver)
 

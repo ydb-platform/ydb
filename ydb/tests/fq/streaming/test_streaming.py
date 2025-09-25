@@ -2,8 +2,6 @@ import logging
 import os
 import time
 
-import ydb
-
 from ydb.tests.fq.streaming.base import StreamingImportTestBase
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 

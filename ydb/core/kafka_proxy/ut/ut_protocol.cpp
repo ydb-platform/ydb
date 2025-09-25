@@ -70,8 +70,7 @@ class TTestServer {
 public:
     TIpPort Port;
 
-    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true,
-                bool enableAutoTopicCreation = false, bool enableAutoConsumerCreation = true, bool enableQuoting = true) {
+    TTestServer(const TTestServerSettings& settings) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -104,21 +103,23 @@ public:
         appConfig.MutableKafkaProxyConfig()->SetListeningPort(Port);
         appConfig.MutableKafkaProxyConfig()->SetMaxMessageSize(1024);
         appConfig.MutableKafkaProxyConfig()->SetMaxInflightSize(2048);
-        if (enableAutoTopicCreation) {
+        if (settings.EnableAutoTopicCreation) {
             appConfig.MutableKafkaProxyConfig()->SetAutoCreateTopicsEnable(true);
         }
         appConfig.MutableKafkaProxyConfig()->SetTopicCreationDefaultPartitions(2);
-        if (!enableAutoConsumerCreation) {
+        if (!settings.EnableAutoConsumerCreation) {
             appConfig.MutableKafkaProxyConfig()->SetAutoCreateConsumersEnable(false);
         }
-        if (serverless) {
+        if (settings.Serverless) {
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetHostname("localhost");
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetPort(FAKE_SERVERLESS_KAFKA_PROXY_PORT);
         }
 
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(enableQuoting);
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(settings.EnableQuoting);
+        if (!settings.EnableQuoting)
+            appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableReadQuoting(false);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(enableQuoting);
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(settings.EnableQuoting);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetFlushIntervalSec(1);
         appConfig.MutablePQConfig()->AddClientServiceType()->SetName("data-streams");
@@ -160,7 +161,7 @@ public:
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NLog::PRI_TRACE);
 
-        if (!enableNativeKafkaBalancing) {
+        if (!settings.EnableNativeKafkaBalancing) {
             KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaNativeBalancing(false);
         }
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaTransactions(true);
@@ -190,7 +191,7 @@ public:
             client.AlterUserAttributes("/", "Root",
                                        {{"folder_id", DEFAULT_FOLDER_ID},
                                         {"cloud_id", DEFAULT_CLOUD_ID},
-                                        {"kafka_api", kafkaApiMode},
+                                        {"kafka_api", settings.KafkaApiMode},
                                         {"database_id", "root"},
                                         {"serverless_rt_coordination_node_path", "/Coordinator/Root"},
                                         {"serverless_rt_base_resource_ru", "/ru_Root"}}));

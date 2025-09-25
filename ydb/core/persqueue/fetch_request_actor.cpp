@@ -1,9 +1,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
-
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
-
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/grpc_services/service_scheme.h>
@@ -358,9 +356,9 @@ public:
     void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
         NYdb::TStatus& result = ev->Get()->Result;
         if (result.GetStatus() == NYdb::EStatus::SUCCESS) {
-            LOG_D("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+            LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
         } else {
-            LOG_I("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+            LOG_INFO_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
         }
         PendingAlterTopicResponses--;
         if (PendingAlterTopicResponses == 0) {

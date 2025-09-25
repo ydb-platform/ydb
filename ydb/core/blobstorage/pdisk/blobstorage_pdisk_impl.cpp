@@ -2104,6 +2104,23 @@ void TPDisk::YardResize(TYardResize &ev) {
     }
 }
 
+void TPDisk::ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request) {
+    TGuard<TMutex> guard(StateMutex);
+    ExpectedSlotCount = request.ExpectedSlotCount;
+    Cfg->ExpectedSlotCount = request.ExpectedSlotCount;
+    Cfg->SlotSizeInUnits = request.SlotSizeInUnits;
+    Keeper.SetExpectedOwnerCount(ExpectedSlotCount);
+    for (TOwner owner = OwnerBeginUser; owner < OwnerEndUser; ++owner) {
+        if (OwnerData[owner].VDiskId != TVDiskID::InvalidId) {
+            Keeper.SetOwnerWeight(owner, Cfg->GetOwnerWeight(OwnerData[owner].GroupSizeInUnits));
+        }
+    }
+
+    auto result = std::make_unique<NPDisk::TEvChangeExpectedSlotCountResult>(NKikimrProto::OK, TString());
+    Mon.ChangeExpectedSlotCount.CountResponse();
+    PCtx->ActorSystem->Send(request.Sender, result.release());
+}
+
 // Scheduler weight configuration
 
 void TPDisk::ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight) {
@@ -2759,6 +2776,9 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestYardResize:
                 YardResize(static_cast<TYardResize&>(*req));
                 break;
+            case ERequestType::RequestChangeExpectedSlotCount:
+                ProcessChangeExpectedSlotCount(static_cast<TChangeExpectedSlotCount&>(*req));
+                break;
             default:
                 Y_FAIL_S(PCtx->PDiskLogPrefix << "Unexpected request type# " << TypeName(*req));
                 break;
@@ -3389,6 +3409,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestChunkShredResult:
         case ERequestType::RequestContinueShred:
         case ERequestType::RequestYardResize:
+        case ERequestType::RequestChangeExpectedSlotCount:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();
@@ -4019,6 +4040,7 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestPushUnformattedMetadataSector:
         case ERequestType::RequestContinueReadMetadata:
         case ERequestType::RequestYardResize:
+        case ERequestType::RequestChangeExpectedSlotCount:
             return false;
 
         // Can't be processed in read-only mode.

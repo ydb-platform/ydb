@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/control/lib/immediate_control_board_wrapper.h>

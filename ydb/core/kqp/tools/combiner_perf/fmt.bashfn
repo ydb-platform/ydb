@@ -1,4 +1,0 @@
-fmt () {
-        file=${1}
-        ya tool clang-format --style=file:./.clang-format -i $file
-}

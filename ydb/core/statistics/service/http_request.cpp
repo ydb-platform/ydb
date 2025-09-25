@@ -204,7 +204,7 @@ void THttpRequest::DoAnalyze(const TNavigate::TEntry& entry) {
     }
 
     const auto statisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
-    const auto operationId = TULIDGenerator().Next(TActivationContext::Now());
+    const auto operationId = UlidGen.Next(TActivationContext::Now());
 
     auto analyze = std::make_unique<TEvStatistics::TEvAnalyze>();
     auto& record = analyze->Record;

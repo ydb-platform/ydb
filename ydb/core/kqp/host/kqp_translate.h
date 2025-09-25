@@ -146,11 +146,6 @@ public:
         return *this;
     }
 
-    TKqpTranslationSettingsBuilder& SetIsEnableAntlr4Parser(bool value) {
-        IsEnableAntlr4Parser = value;
-        return *this;
-    }
-
     TKqpTranslationSettingsBuilder& SetLangVer(ui32 langVer) {
         LangVer = langVer;
         return *this;
@@ -168,7 +163,6 @@ private:
     bool IsEnableExternalDataSources = false;
     bool IsEnablePgConstsToParams = false;
     bool IsEnablePgSyntax = false;
-    bool IsEnableAntlr4Parser = false;
     TMaybe<bool> SqlAutoCommit = {};
     TGUCSettings::TPtr GUCSettings;
     TMaybe<TString> ApplicationName = {};

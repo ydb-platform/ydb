@@ -79,7 +79,7 @@ namespace NKikimr {
                         NKikimrProto::TKeyConfig();
         };
 
-        return { app, Mine.Release(), keyGenerator, std::move(Icb) };
+        return { app, Mine.Release(), keyGenerator, std::move(Icb), std::move(Dcb) };
     }
 
     void TAppPrepare::AddDomain(TDomainsInfo::TDomain* domain)
@@ -213,6 +213,13 @@ namespace NKikimr {
     {
         for (ui32 i = 0; i < numNodes; ++i) {
             Icb.emplace_back(new TControlBoard);
+        }
+    }
+
+    void TAppPrepare::InitDcb(ui32 numNodes)
+    {
+        for (ui32 i = 0; i < numNodes; ++i) {
+            Dcb.emplace_back(new TDynamicControlBoard);
         }
     }
 }

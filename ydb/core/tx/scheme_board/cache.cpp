@@ -898,7 +898,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillSystemViewInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
-            if (auto schema = Owner->SystemViewResolver->GetSystemViewSchema(pathDesc.GetSysViewDescription().GetType())) {
+            if (auto schema = NSysView::GetSystemViewResolver().GetSystemViewSchema(pathDesc.GetSysViewDescription().GetType())) {
                 Columns = std::move(schema->Columns);
                 KeyColumnTypes = std::move(schema->KeyColumnTypes);
                 for (const auto& [id, column] : Columns) {
@@ -917,6 +917,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return NSchemeCache::ETableKind::KindAsyncIndexTable;
             case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
                 return NSchemeCache::ETableKind::KindVectorIndexTable;
+            case NKikimrSchemeOp::EPathSubTypeFulltextIndexImplTable:
+                return NSchemeCache::ETableKind::KindFulltextIndexTable;
             default:
                 return NSchemeCache::ETableKind::KindRegularTable;
             }
@@ -1817,7 +1819,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillSystemViewEntry(TNavigateContext* context, TNavigate::TEntry& entry,
-            NSysView::ISystemViewResolver::ESource target) const
+            NSysView::ISystemViewResolver::ESource source) const
         {
             auto sysViewInfo = entry.TableId.SysViewInfo;
 
@@ -1828,13 +1830,14 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
                 auto listNodeEntry = MakeIntrusive<TNavigate::TListNodeEntry>();
 
-                auto names = Owner->SystemViewResolver->GetSystemViewNames(target);
-                std::sort(names.begin(), names.end());
+                const auto namesView = std::views::keys(NSysView::GetSystemViewResolver().GetSystemViewsTypes(source));
+                TVector<TStringBuf> names(namesView.begin(), namesView.end());
+                std::ranges::sort(names);
 
                 listNodeEntry->Kind = TNavigate::KindPath;
                 listNodeEntry->Children.reserve(names.size());
                 for (const auto& name : names) {
-                    listNodeEntry->Children.emplace_back(name, TPathId(), TNavigate::KindTable);
+                    listNodeEntry->Children.emplace_back(TString(name), TPathId(), TNavigate::KindTable);
                 }
 
                 entry.Kind = TNavigate::KindPath;
@@ -1842,14 +1845,19 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 entry.TableId = TTableId(PathId.OwnerId, InvalidLocalPathId, sysViewInfo);
 
             } else {
-                auto schema = Owner->SystemViewResolver->GetSystemViewSchema(sysViewInfo, target);
+                const auto sysViewType = NSysView::GetSystemViewResolver().GetSystemViewType(sysViewInfo, source);
+                if (!sysViewType) {
+                    return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+                }
+
+                auto schema = NSysView::GetSystemViewResolver().GetSystemViewSchema(*sysViewType);
                 if (!schema) {
                     return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
                 }
 
                 entry.Kind = TNavigate::KindTable;
-                if (target == NSysView::ISystemViewResolver::ESource::OlapStore ||
-                    target == NSysView::ISystemViewResolver::ESource::ColumnTable)
+                if (source == NSysView::ISystemViewResolver::ESource::OlapStore ||
+                    source == NSysView::ISystemViewResolver::ESource::ColumnTable)
                 {
                     // OLAP sys views are represented by OLAP tables
                     entry.Kind =TNavigate::KindColumnTable;
@@ -2068,12 +2076,17 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillSystemViewEntry(TResolveContext* context, TResolve::TEntry& entry,
-            NSysView::ISystemViewResolver::ESource target) const
+            NSysView::ISystemViewResolver::ESource source) const
         {
             TKeyDesc& keyDesc = *entry.KeyDescription;
             auto sysViewInfo = keyDesc.TableId.SysViewInfo;
 
-            auto schema = Owner->SystemViewResolver->GetSystemViewSchema(sysViewInfo, target);
+            const auto sysViewType = NSysView::GetSystemViewResolver().GetSystemViewType(sysViewInfo, source);
+            if (!sysViewType) {
+                return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
+            }
+
+            const auto schema = NSysView::GetSystemViewResolver().GetSystemViewSchema(*sysViewType);
             if (!schema) {
                 return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
             }
@@ -2816,7 +2829,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 };
 
                 NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
-                if (SystemViewResolver->IsSystemViewPath(entry.Path, sysViewPath)) {
+                if (NSysView::GetSystemViewResolver().IsSystemViewPath(entry.Path, sysViewPath)) {
                     auto& fallbackEntryInfo = context->EntriesFallbackInfo[i];
                     context->HasSysViewEntries = true;
                     if (fallbackEntryInfo.IsImplicit) {
@@ -2974,7 +2987,6 @@ public:
     TSchemeCache(NSchemeCache::TSchemeCacheConfig* config)
         : Counters(config->Counters)
         , Cache(TDuration::Minutes(2), TThis::Now)
-        , SystemViewResolver(NSysView::CreateSystemViewResolver())
     {
         for (const auto& root : config->Roots) {
             Roots.emplace(root.Name, root.RootSchemeShard);
@@ -3014,7 +3026,6 @@ private:
     TCounters Counters;
 
     TDoubleIndexedCache<TString, TPathId, TCacheItem, TMerger, TEvicter> Cache;
-    THolder<NSysView::ISystemViewResolver> SystemViewResolver;
 
     TActorId WatchCache;
 

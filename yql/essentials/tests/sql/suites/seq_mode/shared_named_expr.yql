@@ -1,4 +1,5 @@
 pragma SeqMode;
+pragma config.flags("DisableEarlyExpandSeq");
 pragma CompactNamedExprs;
 $a = 1;
 select $a;

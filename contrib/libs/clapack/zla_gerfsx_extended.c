@@ -77,7 +77,7 @@ static doublereal c_b31 = 1.;
     extern /* Subroutine */ int zgetrs_(char *, integer *, integer *, 
 	    doublecomplex *, integer *, integer *, doublecomplex *, integer *, 
 	     integer *);
-    extern /* Character */ VOID chla_transtype__(char *, ftnlen, integer *);
+    extern /* Character */ VOID chla_transtype_(char *, ftnlen, integer *);
     doublereal hugeval;
     integer x_state__, z_state__;
 
@@ -390,7 +390,7 @@ static doublereal c_b31 = 1.;
     if (*info != 0) {
 	return 0;
     }
-    chla_transtype__(ch__1, (ftnlen)1, trans_type__);
+    chla_transtype_(ch__1, (ftnlen)1, trans_type__);
     *(unsigned char *)trans = *(unsigned char *)&ch__1[0];
     eps = dlamch_("Epsilon");
     hugeval = dlamch_("Overflow");

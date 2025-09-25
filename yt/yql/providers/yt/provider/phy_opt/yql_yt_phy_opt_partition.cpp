@@ -593,13 +593,20 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
                     .Build()
                 .Build()
                 .Done().Ptr();
+        } else if (State_->Types->DirectRowDependsOn) {
+            groupSwitch = Build<TCoLambda>(ctx, handlerLambda.Pos())
+                .Args({"key", "item"})
+                .Body<TYtIsKeySwitch>()
+                    .Row<TCoDependsOn>()
+                        .Input("item")
+                    .Build()
+                .Build()
+                .Done().Ptr();
         } else {
             groupSwitch = Build<TCoLambda>(ctx, handlerLambda.Pos())
                 .Args({"key", "item"})
                 .Body<TYtIsKeySwitch>()
-                    .DependsOn<TCoDependsOn>()
-                        .Input("item")
-                    .Build()
+                    .Row("item")
                 .Build()
                 .Done().Ptr();
         }

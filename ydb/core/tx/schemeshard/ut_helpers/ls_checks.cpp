@@ -1,5 +1,6 @@
 #include "ls_checks.h"
 
+#include <google/protobuf/text_format.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
@@ -919,6 +920,41 @@ TCheckFunc KMeansTreeDescription(Ydb::Table::VectorIndexSettings_Metric metric,
     };
 }
 
+TCheckFunc SpecializedIndexDescription(const TString& proto) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        switch (record.GetPathDescription().GetTableIndex().GetSpecializedIndexDescriptionCase()) {
+            case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription: {
+                auto actual = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
+                Ydb::Table::KMeansTreeSettings expected;
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(proto, &expected));
+                UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
+                    TStringBuilder() << "Expected"
+                        << expected.ShortDebugString()
+                        << " but got "
+                        << actual.ShortDebugString());
+                break;
+            }
+            case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription: {
+                auto actual = record.GetPathDescription().GetTableIndex().GetFulltextIndexDescription().GetSettings();
+                Ydb::Table::FulltextIndexSettings expected;
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(proto, &expected));
+                UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
+                    TStringBuilder() << "Expected"
+                        << expected.ShortDebugString()
+                        << " but got "
+                        << actual.ShortDebugString());
+                break;
+            }
+            case NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET: {
+                UNIT_ASSERT_C(proto == "SPECIALIZEDINDEXDESCRIPTION_NOT_SET",
+                    TStringBuilder() << "Expected"
+                        << proto
+                        << " but got SPECIALIZEDINDEXDESCRIPTION_NOT_SET");
+                break;
+            }
+        }
+    };
+}
 
 TCheckFunc SequenceName(const TString& name) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -1145,6 +1181,18 @@ void NoMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) 
     UNIT_ASSERT(!record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().HasMaxPartitionsCount());
 }
 
+TCheckFunc MinTopicPartitionsCountEqual(ui32 count) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy().GetMinPartitionCount(), count);
+    };
+}
+
+TCheckFunc MaxTopicPartitionsCountEqual(ui32 count) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy().GetMaxPartitionCount(), count);
+    };
+}
+
 TCheckFunc PartitioningByLoadStatus(bool status) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().GetSplitByLoadSettings().GetEnabled(), status);
@@ -1360,7 +1408,7 @@ void CheckRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TStr
             }
         }
 
-        UNIT_ASSERT_C(!(has ^ mustHave), "" << record.GetPath() << "ace check fail"
+        UNIT_ASSERT_C(!(has ^ mustHave), "" << record.GetPath() << " ace check fail"
             << ", got " << src.ShortDebugString()
             << ", required " << (mustHave ? "" : "no ") << required.ShortDebugString());
     }

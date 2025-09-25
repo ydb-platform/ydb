@@ -339,6 +339,7 @@ void ParseRequest(
     const TReqPingDistributedWriteSession& req);
 
 ////////////////////////////////////////////////////////////////////////////////
+
 void FillRequest(
     TReqFinishDistributedWriteSession* req,
     const TDistributedWriteSessionWithResults& sessionWithResults,

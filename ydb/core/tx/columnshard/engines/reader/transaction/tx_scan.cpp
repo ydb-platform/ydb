@@ -45,9 +45,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
             return TReadMetadataBase::ESorting::NONE;
         }
     }();
-    /* FIXME: #22992 */
-    const auto useLimit = request.HasItemsLimit() && (sorting == ERequestSorting::NONE || !deduplicationEnabled);
-    TScannerConstructorContext context(snapshot, useLimit ? request.GetItemsLimit() : 0, sorting);
+    TScannerConstructorContext context(snapshot, request.HasItemsLimit() ? request.GetItemsLimit() : 0, sorting);
     const auto scanId = request.GetScanId();
     const ui64 txId = request.GetTxId();
     const ui32 scanGen = request.GetGeneration();

@@ -1119,6 +1119,13 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             size_t phase = stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
+
+            for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
+                for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
+                }
+            }
         }
 
         {
@@ -1137,6 +1144,13 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             size_t phase = stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
+
+            for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
+                for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
+                }
+            }
         }
 
         {
@@ -1157,7 +1171,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
                 size_t phase = stats.query_phases_size() - 1;
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access_size(), 0);
-                // TODO: reads???
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
@@ -1181,6 +1194,13 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             size_t phase = stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
+
+            for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
+                for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
+                }
+            }
         }
 
         {
@@ -1202,6 +1222,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 if (stats.query_phases(phase).table_access_size() > 0) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access_size(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 0);
                 }
             }
         }
@@ -1224,9 +1245,15 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
             if (!isSink) {
-                // TODO: reads???
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
+            } else {
+                for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
+                    for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
+                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
+                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
+                    }
+                }
             }
         }
 
@@ -1247,6 +1274,13 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             size_t phase = stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).deletes().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).deletes().bytes(), 0);
+
+            for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
+                for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
+                }
+            }
         }
 
         {
@@ -1266,6 +1300,13 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             size_t phase = stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).deletes().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).deletes().bytes(), 0);
+
+            for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
+                for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
+                }
+            }
         }
     }
 

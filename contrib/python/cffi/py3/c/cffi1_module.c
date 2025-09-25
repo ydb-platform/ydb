@@ -130,7 +130,13 @@ static PyObject *_my_Py_InitModule(char *module_name)
     if (module_def == NULL)
         return PyErr_NoMemory();
     *module_def = local_module_def;
-    return PyModule_Create(module_def);
+    PyObject *m = PyModule_Create(module_def);
+# ifdef Py_GIL_DISABLED
+    if (m != NULL) {
+        PyUnstable_Module_SetGIL(m, Py_MOD_GIL_NOT_USED);
+    }
+# endif
+    return m;
 #else
     return Py_InitModule(module_name, NULL);
 #endif

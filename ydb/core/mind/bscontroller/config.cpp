@@ -81,8 +81,11 @@ namespace NKikimr::NBsController {
             }
 
             void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
-                if (prev.Mood != cur.Mood) {
-                    // PDisk's mood has changed
+                if (prev.Mood != cur.Mood ||
+                        prev.ExpectedSlotCount != cur.ExpectedSlotCount ||
+                        prev.SlotSizeInUnits != cur.SlotSizeInUnits ||
+                        prev.InferPDiskSlotCountFromUnitSize != cur.InferPDiskSlotCountFromUnitSize ||
+                        prev.InferPDiskSlotCountMax != cur.InferPDiskSlotCountMax) {
                     CreatePDiskEntry(pdiskId, cur);
                 }
             }
@@ -116,6 +119,7 @@ namespace NKikimr::NBsController {
                 pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial);
                 pdisk->SetManagementStage(Self->SerialManagementStage);
                 pdisk->SetInferPDiskSlotCountFromUnitSize(pdiskInfo.InferPDiskSlotCountFromUnitSize);
+                pdisk->SetInferPDiskSlotCountMax(pdiskInfo.InferPDiskSlotCountMax);
                 if (pdiskInfo.PDiskConfig && !pdisk->MutablePDiskConfig()->ParseFromString(pdiskInfo.PDiskConfig)) {
                     // TODO(alexvru): report this somehow
                 }
@@ -614,6 +618,13 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            THashSet<TGroupId> groupIds;
+            for (auto&& [base, overlay] : state.Groups.Diff()) {
+                if (base) {
+                    groupIds.emplace(overlay->first);
+                }
+            }
+
             TNodeWardenUpdateNotifier(this, state).Execute();
 
             state.CheckConsistency();
@@ -621,6 +632,7 @@ namespace NKikimr::NBsController {
             ValidateInternalState();
 
             ScheduleVSlotReadyUpdate();
+            UpdateWaitingGroups(groupIds);
 
             return true;
         }
@@ -965,6 +977,7 @@ namespace NKikimr::NBsController {
                 drive.SetReadCentric(value.ReadCentric);
                 drive.SetKind(value.Kind);
                 drive.SetInferPDiskSlotCountFromUnitSize(value.InferPDiskSlotCountFromUnitSize);
+                drive.SetInferPDiskSlotCountMax(value.InferPDiskSlotCountMax);
 
                 if (const auto& config = value.PDiskConfig) {
                     NKikimrBlobStorage::TPDiskConfig& pb = *drive.MutablePDiskConfig();
@@ -1105,6 +1118,9 @@ namespace NKikimr::NBsController {
             pb->SetMaintenanceStatus(pdisk.MaintenanceStatus);
             if (pdisk.InferPDiskSlotCountFromUnitSize) {
                 pb->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
+            }
+            if (pdisk.InferPDiskSlotCountMax) {
+                pb->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
             }
         }
 

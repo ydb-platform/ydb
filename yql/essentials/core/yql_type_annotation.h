@@ -469,6 +469,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 PruneKeysMemLimit = 128 * 1024 * 1024;
     bool NormalizeDependsOn = false;
     ui32 AndOverOrExpansionLimit = 100;
+    bool EarlyExpandSeq = true;
+    bool DirectRowDependsOn = true;
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);

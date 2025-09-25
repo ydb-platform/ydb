@@ -71,6 +71,7 @@ private:
     TAppConfig GetAppConfig() const {
         TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetRequireDbPrefixInSecretName(true);
+        appConfig.MutableFeatureFlags()->SetEnableMetadataObjectsOnServerless(true);
         return appConfig;
     }
 

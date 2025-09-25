@@ -108,6 +108,7 @@ namespace NKikimr {
     struct TDomainsInfo;
     class TResourceProfiles;
     class TControlBoard;
+    class TDynamicControlBoard;
     class TFeatureFlags;
     class TMetricsConfig;
 }
@@ -224,6 +225,7 @@ struct TAppData {
     NActors::TMon* Mon;
     ::NMonitoring::TDynamicCounterPtr Counters;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
+    TIntrusivePtr<NKikimr::TDynamicControlBoard> Dcb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
     TIntrusivePtr<NSharedCache::TSharedCachePages> SharedCachePages;
 
@@ -283,7 +285,7 @@ struct TAppData {
     TVector<TString> RegisterDynamicNodeAllowedSIDs;
     TVector<TString> BootstrapAllowedSIDs;
     TVector<TString> DefaultUserSIDs;
-    TString AllAuthenticatedUsers = "all-users@well-known";
+    TString AllAuthenticatedUsers = "all-users@well-known"; // it's only here to avoid many unit-tests problems
 
     TString TenantName;
     TString NodeName;

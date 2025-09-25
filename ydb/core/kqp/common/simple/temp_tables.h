@@ -17,7 +17,6 @@ struct TKqpTempTablesState {
         TString WorkingDir;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     };
-    TString SessionId;
     TString Database;
     TString TempDirName;
     THashMap<TString, TTempTableInfo> TempTables;

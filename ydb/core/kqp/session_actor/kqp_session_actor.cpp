@@ -217,10 +217,9 @@ public:
         auto optSessionId = TryDecodeYdbSessionId(SessionId);
         YQL_ENSURE(optSessionId, "Can't decode ydb session Id");
 
-        TempTablesState.SessionId = *optSessionId;
         TempTablesState.Database = Settings.Database;
-        TempTablesState.TempDirName = TempTablesState.SessionId /*TAppData::RandomProvider->GenUuid4().AsUuidString()*/;
-        LOG_D("Create session actor with id " << TempTablesState.SessionId << " (tmp dir name: " << TempTablesState.TempDirName << ")");
+        TempTablesState.TempDirName = TAppData::RandomProvider->GenUuid4().AsUuidString();
+        LOG_D("Create session actor with id " <<  *optSessionId << " (tmp dir name: " << TempTablesState.TempDirName << ")");
     }
 
     void Bootstrap() {

@@ -10,7 +10,7 @@ TKqpTempTablesState::FindInfo(const std::string_view& path, bool withSessionId) 
         return TempTables.find(path);
     }
 
-    const auto temporaryStoragePrefix = CanonizePath(GetSessionDirPath(Database, SessionId)) + "/";
+    const auto temporaryStoragePrefix = CanonizePath(GetSessionDirPath(Database, TempDirName)) + "/";
 
     if (path.size() < temporaryStoragePrefix.size()) {
         return TempTables.end();

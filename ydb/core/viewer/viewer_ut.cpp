@@ -1,5 +1,5 @@
 #include "ut/ut_utils.h"
-#include <ydb/core/mon/ut/ut_utils/ut_utils.h>
+#include <ydb/core/mon/ut_utils/ut_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>

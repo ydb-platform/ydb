@@ -1,5 +1,5 @@
 #include <ydb/core/mon/mon.h>
-#include <ydb/core/mon/ut/ut_utils/ut_utils.h>
+#include <ydb/core/mon/ut_utils/ut_utils.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/testlib/test_client.h>
 

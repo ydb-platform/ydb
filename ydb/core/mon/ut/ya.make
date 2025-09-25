@@ -6,7 +6,7 @@ SIZE(MEDIUM)
 
 PEERDIR(
     ydb/core/mon
-    ydb/core/mon/ut/ut_utils
+    ydb/core/mon/ut_utils
     ydb/core/testlib/default
     ydb/library/aclib
     ydb/library/actors/core

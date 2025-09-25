@@ -4,8 +4,6 @@
 
 namespace NMonitoring::NPrivate {
 
-using namespace NActors;
-
 struct TEvMon {
     enum {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -21,27 +19,27 @@ struct TEvMon {
 
     static_assert(End < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect End < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-    struct TEvMonitoringRequest : TEventPB<TEvMonitoringRequest, NKikimrMonProto::TEvMonitoringRequest, EvMonitoringRequest> {
+    struct TEvMonitoringRequest : NActors::TEventPB<TEvMonitoringRequest, NKikimrMonProto::TEvMonitoringRequest, EvMonitoringRequest> {
         TEvMonitoringRequest() = default;
     };
 
-    struct TEvMonitoringResponse : TEventPB<TEvMonitoringResponse, NKikimrMonProto::TEvMonitoringResponse, EvMonitoringResponse> {
+    struct TEvMonitoringResponse : NActors::TEventPB<TEvMonitoringResponse, NKikimrMonProto::TEvMonitoringResponse, EvMonitoringResponse> {
         TEvMonitoringResponse() = default;
     };
 
-    struct TEvRegisterHandler : TEventLocal<TEvRegisterHandler, EvRegisterHandler> {
-        TMon::TRegisterHandlerFields Fields;
+    struct TEvRegisterHandler : NActors::TEventLocal<TEvRegisterHandler, EvRegisterHandler> {
+        NActors::TMon::TRegisterHandlerFields Fields;
 
-        TEvRegisterHandler(const TMon::TRegisterHandlerFields& fields)
+        TEvRegisterHandler(const NActors::TMon::TRegisterHandlerFields& fields)
             : Fields(fields)
         {}
     };
 
-    struct TEvMonitoringCancelRequest : TEventPB<TEvMonitoringCancelRequest, NKikimrMonProto::TEvMonitoringCancelRequest, EvMonitoringCancelRequest> {
+    struct TEvMonitoringCancelRequest : NActors::TEventPB<TEvMonitoringCancelRequest, NKikimrMonProto::TEvMonitoringCancelRequest, EvMonitoringCancelRequest> {
         TEvMonitoringCancelRequest() = default;
     };
 
-    struct TEvCleanupProxy : TEventLocal<TEvCleanupProxy, EvCleanupProxy> {
+    struct TEvCleanupProxy : NActors::TEventLocal<TEvCleanupProxy, EvCleanupProxy> {
         TString Address;
 
         TEvCleanupProxy(const TString& address)
@@ -50,4 +48,4 @@ struct TEvMon {
     };
 };
 
-} // namespace NMonImpl
+} // namespace NMonitoring::NPrivate

@@ -11,11 +11,11 @@ namespace NMonitoring::NTests {
 using namespace NActors;
 using namespace NKikimr;
 
-const TString TEST_MON_PATH = "test_mon";
-const TString TEST_RESPONSE = "Test actor";
-const TString AUTHORIZATION_HEADER = "Authorization";
-const TString VALID_TOKEN = "Bearer token";
-const TVector<TString> DEFAULT_TICKET_PARSER_GROUPS = {"group_name"};
+extern const TString TEST_MON_PATH;
+extern const TString TEST_RESPONSE;
+extern const TString AUTHORIZATION_HEADER;
+extern const TString VALID_TOKEN;
+extern const TVector<TString> DEFAULT_TICKET_PARSER_GROUPS;
 
 class TTestActorPage : public TActorBootstrapped<TTestActorPage> {
 public:

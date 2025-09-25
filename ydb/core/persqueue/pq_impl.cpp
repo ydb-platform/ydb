@@ -397,7 +397,7 @@ TActorId CreateReadProxy(const TActorId& sender, const TActorId& tablet, ui32 ta
                          const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request,
                          const TActorContext& ctx)
 {
-    return ctx.Register(new TReadProxy(sender, tablet, tabletGeneration, directReadKey, request));
+    return ctx.RegisterWithSameMailbox(new TReadProxy(sender, tablet, tabletGeneration, directReadKey, request));
 }
 
 /******************************************************* AnswerBuilderProxy *********************************************************/
@@ -903,7 +903,7 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
                                          bool newPartition,
                                          const TActorContext& ctx)
 {
-    TActorId actorId = ctx.Register(CreatePartitionActor(partitionId,
+    TActorId actorId = ctx.RegisterWithSameMailbox(CreatePartitionActor(partitionId,
                                                          topicConverter,
                                                          config,
                                                          newPartition,
@@ -976,7 +976,7 @@ void TPersQueue::CreateSupportivePartitionActor(const TPartitionId& partitionId,
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
 
     TPartitionInfo& partition = Partitions.at(partitionId);
-    partition.Actor = ctx.Register(CreatePartitionActor(partitionId,
+    partition.Actor = ctx.RegisterWithSameMailbox(CreatePartitionActor(partitionId,
                                                         TopicConverter,
                                                         MakeSupportivePartitionConfig(),
                                                         false,
@@ -3159,7 +3159,6 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
     , OriginalPartitionsCount(0)
     , NewConfigShouldBeApplied(false)
     , TabletState(NKikimrPQ::ENormal)
-    , Counters(nullptr)
     , NextResponseCookie(0)
     , ResourceMetrics(nullptr)
 {
@@ -3175,8 +3174,9 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
         ECumulativeCounters_descriptor,
         EPercentileCounters_descriptor> TPersQueueCounters;
     typedef TProtobufTabletCountersPair<TKeyValueCounters, TPersQueueCounters> TCounters;
+
     TAutoPtr<TCounters> counters(new TCounters());
-    Counters = (counters->GetSecondTabletCounters()).Release();
+    Counters.reset(counters->GetSecondTabletCounters().Release());
 
     State.SetupTabletCounters(counters->GetFirstTabletCounters().Release()); //FirstTabletCounters is of good type and contains all counters
     State.Clear();
@@ -3185,7 +3185,7 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
 void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
     IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
-    CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TabletID()));
+    CacheActor = ctx.RegisterWithSameMailbox(new TPQCacheProxy(ctx.SelfID, TabletID()));
 
     SamplingControl = AppData(ctx)->TracingConfigurator->GetControl();
 
@@ -5081,14 +5081,14 @@ TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
 
     auto& quoterId = PartitionWriteQuoters[partition.OriginalPartitionId];
     if (!quoterId) {
-        quoterId = Register(new TWriteQuoter(
+        quoterId = RegisterWithSameMailbox(new TWriteQuoter(
             TopicConverter,
             Config,
             AppData()->PQConfig,
             partition,
             SelfId(),
             TabletID(),
-            *Counters
+            Counters
         ));
     }
     return quoterId;
@@ -5112,7 +5112,7 @@ TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                           DCId,
                           IsServerless,
                           config,
-                          *Counters,
+                          Counters,
                           SubDomainOutOfSpace,
                           (ui32)channels,
                           GetPartitionQuoter(partitionId),

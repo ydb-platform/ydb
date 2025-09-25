@@ -502,6 +502,51 @@ def select_multiple(selectors):
             yield value
 
 
+def get_target_triple(target):
+    target_triple = select(
+        default=None,
+        selectors=[
+            (target.is_freebsd and target.is_x86_64, 'x86_64-freebsd-unknown'),
+
+            (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
+            (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
+            (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
+            (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'armv7-linux-gnueabihf'),
+            (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'armv7-linux-gnueabi'),
+            (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
+
+            (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios{}'.format(IOS_VERSION_MIN)),
+            (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios{}'.format(IOS_VERSION_MIN)),
+
+            (target.is_apple and target.is_x86, 'i386-apple-darwin14'),
+            (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'),
+            (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'),
+            (target.is_apple and target.is_armv7, 'armv7-apple-darwin14'),
+            (target.is_apple and target.is_armv8, 'arm64-apple-darwin14'),
+
+            (target.is_yocto and target.is_armv7, 'arm-poky-linux-gnueabi'),
+
+            (target.is_android and target.is_x86, 'i686-linux-android'),
+            (target.is_android and target.is_x86_64, 'x86_64-linux-android'),
+            (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
+            (target.is_android and target.is_armv8, 'aarch64-linux-android'),
+
+            (target.is_emscripten and target.is_wasm32, 'wasm32-unknown-emscripten'),
+            (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
+        ],
+    )
+
+    if target.is_android:
+        # Android NDK allows specification of API level in target triple, e.g.:
+        # armv7a-linux-androideabi16, aarch64-linux-android21
+        target_triple += str(target.android_api)
+
+    return target_triple
+
+
 def unique(it):
     known = set()
     for i in it:
@@ -1012,10 +1057,6 @@ class ToolchainOptions(object):
         # 'match_root' at this point contains real name for references via toolchain
         self.name_marker = '$(%s)' % self.params.get('match_root', self._name.upper())
 
-        self.arch_opt = self.params.get('arch_opt', [])
-        self.triplet_opt = self.params.get('triplet_opt', {})
-        self.target_opt = self.params.get('target_opt', [])
-
         # default C++ standard is set here, some older toolchains might need to redefine it in ya.conf.json
         self.cxx_std = self.params.get('cxx_std', 'c++20')
 
@@ -1163,7 +1204,7 @@ class GnuToolchain(Toolchain):
         host = build.host
         target = build.target
 
-        self.c_flags_platform = list(tc.target_opt)
+        self.c_flags_platform = []
 
         self.default_os_sdk_root = get_os_sdk(target)
 
@@ -1207,46 +1248,9 @@ class GnuToolchain(Toolchain):
             ])
 
         if self.tc.is_clang:
-            target_triple = self.tc.triplet_opt.get(target.arch, None)
-            if not target_triple:
-                target_triple = select(default=None, selectors=[
-                    (target.is_freebsd and target.is_x86_64, 'x86_64-freebsd-unknown'),
-
-                    (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
-                    (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
-                    (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
-                    (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'armv7-linux-gnueabihf'),
-                    (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'armv7-linux-gnueabi'),
-                    (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
-
-                    (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
-                    (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
-                    (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
-                    (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios{}'.format(IOS_VERSION_MIN)),
-                    (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios{}'.format(IOS_VERSION_MIN)),
-
-                    (target.is_apple and target.is_x86, 'i386-apple-darwin14'),
-                    (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'),
-                    (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'),
-                    (target.is_apple and target.is_armv7, 'armv7-apple-darwin14'),
-                    (target.is_apple and target.is_armv8, 'arm64-apple-darwin14'),
-
-                    (target.is_yocto and target.is_armv7, 'arm-poky-linux-gnueabi'),
-
-                    (target.is_android and target.is_x86, 'i686-linux-android'),
-                    (target.is_android and target.is_x86_64, 'x86_64-linux-android'),
-                    (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
-                    (target.is_android and target.is_armv8, 'aarch64-linux-android'),
-
-                    (target.is_emscripten and target.is_wasm32, 'wasm32-unknown-emscripten'),
-                    (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
-                ])
-
-            if target.is_android:
-                # Android NDK allows specification of API level in target triple, e.g.:
-                # armv7a-linux-androideabi16, aarch64-linux-android21
-                target_triple += str(target.android_api)
-
+            # gcc does not support multiple targets within the same compiler build,
+            # hence this logic is only relevant for clang
+            target_triple = get_target_triple(target)
             if target_triple:
                 self.c_flags_platform.append('--target={}'.format(target_triple))
 
@@ -1542,7 +1546,7 @@ class GnuCompiler(Compiler):
             self.c_defines.append('-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE')
 
         self.c_flags = ['$CL_DEBUG_INFO', '$CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__']
-        self.c_flags += self.tc.arch_opt + ['-pipe']
+        self.c_flags += ['-pipe']
 
         self.sfdl_flags = ['-E', '-C', '-x', 'c++']
 
@@ -2053,7 +2057,6 @@ class MSVCCompiler(MSVC, Compiler):
             # enable standard conforming mode
             '/permissive-'
         ]
-        flags += self.tc.arch_opt
 
         c_warnings = [
             "/WX",

@@ -524,6 +524,8 @@ message TReqLookupRows
 
     optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 12;
 
+    optional string execution_pool = 13;
+
     reserved 5;
     reserved 6;
 }
@@ -566,6 +568,8 @@ message TReqVersionedLookupRows
 
     required TRowsetDescriptor rowset_descriptor = 200;
 
+    optional string execution_pool = 11;
+
     reserved 5;
 }
 
@@ -594,6 +598,8 @@ message TReqMultiLookup
         required int32 attachment_count = 7;
 
         optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 8;
+
+        optional string execution_pool = 9;
     }
 
     repeated TSubrequest subrequests = 1;
@@ -2224,12 +2230,11 @@ message TReqPartitionTables
     optional bool enable_cookies = 10;
 
     // COMPAT(apollo1321): Remove in 25.2 release.
-    optional bool use_new_slicing_implementation_in_ordered_pool = 11 [default=true];
-
-    // COMPAT(apollo1321): Remove in 25.2 release.
     optional bool use_new_slicing_implementation_in_unordered_pool = 12 [default=true];
 
     optional TTransactionalOptions transactional_options = 100;
+
+    reserved 11;
 }
 
 message TMultiTablePartition
@@ -2850,6 +2855,7 @@ message TReqReadTable
 
     optional bool unordered = 2 [default = false];
     optional bool omit_inaccessible_columns = 3 [default = false];
+    optional bool omit_inaccessible_rows = 12 [default = false];
     optional bool enable_table_index = 5 [default = false];
     optional bool enable_row_index = 6 [default = false];
     optional bool enable_range_index = 7 [default = false];

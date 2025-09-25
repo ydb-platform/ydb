@@ -925,7 +925,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         ActorSystem,
         schemeCacheId,
         ev.Release(),
-        [userToken, database, cluster, mainCluster = Cluster, table, settings, expectedSchemaVersion, this, queryName, externalPath, ptr]
+        [userToken, database, cluster, mainCluster = Cluster, table, settings, expectedSchemaVersion, ptr, queryName, externalPath]
             (TPromise<TResult> promise, TResponse&& response) mutable
         {
             try {
@@ -935,7 +935,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 YQL_ENSURE(1 <= navigate.ResultSet.size() && navigate.ResultSet.size() <= 2);
                 auto& entry = InferEntry(navigate.ResultSet);
 
-                if (entry.Status != EStatus::Ok) {
+                if (entry.Status != EStatus::Ok ) {
                     promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, table));
                     return;
                 }
@@ -956,7 +956,12 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     }
                 }
 
-                const bool resolveEntityInsideDataSource = (cluster != Cluster);
+                auto thisPtr = ptr.lock();
+                if (!thisPtr) {
+                    promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, table));
+                    return;
+                }
+                const bool resolveEntityInsideDataSource = (cluster != thisPtr->Cluster);
                 // resolveEntityInsideDataSource => entry.Kind == EKind::KindExternalDataSource
                 if (resolveEntityInsideDataSource && entry.Kind != EKind::KindExternalDataSource) {
                     const auto message = TStringBuilder()
@@ -977,8 +982,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         if (externalPath) {
                             externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
                         }
-                        LoadExternalDataSourceSecretValues(entry, userToken, ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, this](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
+                        LoadExternalDataSourceSecretValues(entry, userToken, thisPtr->ActorSystem)
+                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, thisPtr](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
                             if (!externalDataSourceMetadata.Success()) {
@@ -1037,7 +1042,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 auto path = databaseName + "/" + *externalPath;
 
                                 GetSchemeEntryType(
-                                    FederatedQuerySetup,
+                                    thisPtr->FederatedQuerySetup,
                                     source.DataSourceLocation,
                                     databaseName,
                                     useTls,
@@ -1061,15 +1066,14 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     }
                     case EKind::KindExternalTable: {
                         YQL_ENSURE(entry.ExternalTableInfo, "expected external table info");
-                        auto locked = ptr.lock();
                         const auto& dataSourcePath = entry.ExternalTableInfo->Description.GetDataSourcePath();
                         auto externalTableMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, table);
-                        if (!externalTableMetadata.Success() || !locked) {
+                        if (!externalTableMetadata.Success()) {
                             promise.SetValue(externalTableMetadata);
                             return;
                         }
                         settings.WithExternalDatasources_ = true;
-                        LoadTableMetadataCache(cluster, dataSourcePath, settings, database, userToken)
+                        thisPtr->LoadTableMetadataCache(cluster, dataSourcePath, settings, database, userToken)
                             .Apply([promise, externalTableMetadata](const TFuture<TTableMetadataResult>& result) mutable
                         {
                             auto externalDataSourceMetadata = result.GetValue();
@@ -1080,18 +1084,13 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     }
                     case EKind::KindIndex: {
                         Y_ENSURE(entry.ListNodeEntry, "expected children list");
-                        auto locked = ptr.lock();
-                        if ( !locked) {
-                            promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, table));
-                            return;
-                        }
                         for (const auto& child : entry.ListNodeEntry->Children) {
                             if (!table.EndsWith(child.Name)) {
                                 continue;
                             }
                             TIndexId pathId = TIndexId(child.PathId, child.SchemaVersion);
 
-                            LoadTableMetadataCache(cluster, std::make_pair(pathId, table), settings, database, userToken)
+                            thisPtr->LoadTableMetadataCache(cluster, std::make_pair(pathId, table), settings, database, userToken)
                                 .Apply([promise](const TFuture<TTableMetadataResult>& result) mutable
                             {
                                 promise.SetValue(result.GetValue());

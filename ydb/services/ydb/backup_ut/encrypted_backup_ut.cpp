@@ -1118,7 +1118,7 @@ Y_UNIT_TEST_SUITE_F(ImportBigEncryptedFileTest, TS3BackupTestFixture) {
                 .SkipChecksumValidation(true);
 
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
-            WaitOpSuccess(res, TStringBuilder() << "Import from S3 " << destinationPath, TDuration::Minutes(3));
+            WaitOpSuccess(res, TStringBuilder() << "Import from S3 " << destinationPath, DEFAULT_OPERATION_WAIT_TIME * 5);
 
             TStringBuilder sql;
             sql << "SELECT MAX(Key), COUNT(*) FROM `" << destinationPath << "/TestTable`";

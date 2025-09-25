@@ -2521,7 +2521,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_With_Del
     TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent;
     bool seenEvent = false;
     // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
-    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, 1, [&deleteDoneEvent](TAutoPtr<IEventHandle>& eventHandle) {
+    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, 1, [](TAutoPtr<IEventHandle>& eventHandle) {
         deleteDoneEvent = eventHandle->Release<TEvPQ::TEvDeletePartitionDone>();
         return TTestActorRuntimeBase::EEventAction::DROP;
     });

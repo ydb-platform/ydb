@@ -587,8 +587,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterSequencePropose(
     auto seq = modifyScheme.MutableSequence();
     seq->SetName(NTableIndex::NKMeans::IdColumnSequence);
     seq->SetMinValue(-0x7FFFFFFFFFFFFFFF);
+    seq->SetMaxValue(-1);
     seq->SetStartValue(minValue);
-    seq->SetIncrement(-1); // PostingParentFlag is the top bit so it's like decrementing a negative number
     seq->SetRestart(true);
 
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,

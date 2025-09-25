@@ -340,6 +340,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                         indexDescription.GetName() + "/" + NTableIndex::NKMeans::PrefixTable,
                         NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
                     outTx.MutableSequence()->SetName(NTableIndex::NKMeans::IdColumnSequence);
+                    outTx.MutableSequence()->SetMinValue(-0x7FFFFFFFFFFFFFFF);
+                    outTx.MutableSequence()->SetMaxValue(-1);
+                    outTx.MutableSequence()->SetStartValue(NTableIndex::NKMeans::SetPostingParentFlag(1));
+                    outTx.MutableSequence()->SetRestart(true);
                     outTx.SetFailOnExist(tx.GetFailOnExist());
                     outTx.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
                     outTx.SetInternal(tx.GetInternal());

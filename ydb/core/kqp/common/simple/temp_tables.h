@@ -20,7 +20,7 @@ struct TKqpTempTablesState {
     TString SessionId;
     TString Database;
     THashMap<TString, TTempTableInfo> TempTables;
-    bool HasCreateTableAs = false;
+    bool NeedCleaning = false;
 
     using TConstPtr = std::shared_ptr<const TKqpTempTablesState>;
 

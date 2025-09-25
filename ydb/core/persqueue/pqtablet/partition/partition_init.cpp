@@ -978,7 +978,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     CreationTime = ctx.Now();
     WriteCycleStartTime = ctx.Now();
 
-    ReadQuotaTrackerActor = Register(new TReadQuoter(
+    ReadQuotaTrackerActor = RegisterWithSameMailbox(new TReadQuoter(
         AppData(ctx)->PQConfig,
         TopicConverter,
         Config,

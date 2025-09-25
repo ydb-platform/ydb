@@ -59,7 +59,8 @@ public:
     {}
 
     void Bootstrap() {
-        if (TempTablesState.TempTables.empty() && !TempTablesState.HasCreateTableAs) {
+        if (!TempTablesState.NeedCleaning) {
+            AFL_ENSURE(TempTablesState.TempTables.empty());
             Finish();
             return;
         }

@@ -120,22 +120,35 @@ void TColumnShardStatisticsReporter::SendPeriodicStats() {
         return;
     }
 
-    if (latestCSExecutorStats) {
-
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HOORAU", latestCSExecutorStats->ToString());
-        FillWhateverCan(latestCSExecutorStats);
-        NTabletPipe::SendData(ActorContext(), StatsReportPipe, latestCSExecutorStats.release());
+    if (!latestCSExecutorStats) {
         return;
+        // latestCSExecutorStats = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletId, SSLocalId);
     }
 
+    FillWhateverCan(latestCSExecutorStats);
+
+    auto toSend = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletId, SSLocalId);
+    toSend->Record.CopyFrom(latestCSExecutorStats->Record);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HOORAU", toSend->Record.GetTableStats().GetImmediateTxCompleted());
+    NTabletPipe::SendData(ActorContext(), StatsReportPipe, toSend.release());
+
+    // if (latestCSExecutorStats) {
+
+    //     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HOORAU", latestCSExecutorStats->ToString());
+    //     FillWhateverCan(latestCSExecutorStats);
+
+    //     NTabletPipe::SendData(ActorContext(), StatsReportPipe, latestCSExecutorStats.release());
+    //     return;
+    // }
 
 
-    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletId, SSLocalId);
 
-    FillWhateverCan(ev);
+    // auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletId, SSLocalId);
 
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HOORAU", ev->Record.GetTableStats().GetImmediateTxCompleted());
-    NTabletPipe::SendData(ActorContext(), StatsReportPipe, ev.release());
+    // FillWhateverCan(ev);
+
+    // AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("HOORAU", ev->Record.GetTableStats().GetImmediateTxCompleted());
+    // NTabletPipe::SendData(ActorContext(), StatsReportPipe, ev.release());
 }
 
 void TColumnShardStatisticsReporter::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {

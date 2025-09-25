@@ -1680,10 +1680,12 @@ Pear;15;33'''
             '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
-        issues = describe_result.query.issue
-        assert "millisecond accuracy does not fit into the datetime" in str(issues)
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple"
+        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
 
         # timestamp[us] -> Timestamp
 
@@ -1698,10 +1700,12 @@ Pear;15;33'''
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
-        issues = describe_result.query.issue
-        assert "microsecond accuracy does not fit into the datetime" in str(issues)
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple"
+        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
 
         # timestamp[s] -> Timestamp
 
@@ -1716,10 +1720,12 @@ Pear;15;33'''
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
-        issues = describe_result.query.issue
-        assert "millisecond accuracy does not fit into the datetime" in str(issues)
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple"
+        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
 
         # timestamp[ns] -> Timestamp
 
@@ -1734,10 +1740,12 @@ Pear;15;33'''
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
-        issues = describe_result.query.issue
-        assert "microsecond accuracy does not fit into the datetime" in str(issues)
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple"
+        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
 
         # date64 -> Timestamp
 
@@ -1774,13 +1782,14 @@ Pear;15;33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
         assert len(rows) == 1, "invalid count rows"
         assert rows[0].items[0].text_value == "apple"
         assert rows[0].items[1].bytes_value == b"2024-04-02T00:00:00Z"
 
         # int32 -> Timestamp
 
-        # 2024-04-02T00:00:00.000Z
+        # 2024-04-02T12:01:00.000Z
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
@@ -1793,9 +1802,10 @@ Pear;15;33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
         assert len(rows) == 1, "invalid count rows"
         assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T00:00:00Z"
+        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
 
         # int64 -> Timestamp
 
@@ -1816,7 +1826,7 @@ Pear;15;33'''
 
         # uint32 -> Timestamp
 
-        # 2024-04-02T00:00:00.000Z
+        # 2024-04-02T12:01:00.000Z
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
@@ -1829,13 +1839,14 @@ Pear;15;33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
         assert len(rows) == 1, "invalid count rows"
         assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T00:00:00Z"
+        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
 
         # uint64 -> Timestamp
 
-        # 2024-04-02T00:00:00.000Z
+        # 2024-04-02T12:01:00.000Z
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
@@ -1848,9 +1859,10 @@ Pear;15;33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
         assert len(rows) == 1, "invalid count rows"
         assert rows[0].items[0].text_value == "apple"
-        assert rows[0].items[1].bytes_value == b"2024-04-02T00:00:00Z"
+        assert rows[0].items[1].bytes_value == b"2024-04-02T12:01:00Z"
 
         # uint16 [default] -> Timestamp
 
@@ -1867,6 +1879,7 @@ Pear;15;33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
         rows = data.result.result_set.rows
         assert len(rows) == 1, "invalid count rows"
         assert rows[0].items[0].text_value == "apple"

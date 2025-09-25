@@ -114,7 +114,7 @@ public:
         TActorId tabletActor,
         bool totalPartitionQuotaEnabled,
         ui64 tabletId,
-        const TTabletCountersBase& counters,
+        const std::shared_ptr<TTabletCountersBase>& counters,
         ui64 maxRequestsInflight
     )
         : TBaseActor(tabletId, tabletActor, NKikimrServices::PERSQUEUE)
@@ -126,7 +126,7 @@ public:
         , MaxInflightRequests(maxRequestsInflight)
         , TotalPartitionQuotaEnabled(totalPartitionQuotaEnabled)
     {
-        Counters.Populate(counters);
+        Counters.Populate(*counters);
     }
 
 public:
@@ -239,7 +239,7 @@ public:
         TActorId tabletActor,
         const TActorId& parent,
         ui64 tabletId,
-        const TTabletCountersBase& counters
+        const std::shared_ptr<TTabletCountersBase>& counters
     )
         : TPartitionQuoterBase(
                 topicConverter, config, partition, tabletActor, true, tabletId, counters,
@@ -309,7 +309,7 @@ public:
         const TPartitionId& partition,
         TActorId tabletActor,
         ui64 tabletId,
-        const TTabletCountersBase& counters
+        const std::shared_ptr<TTabletCountersBase>& counters
     );
 
 public:

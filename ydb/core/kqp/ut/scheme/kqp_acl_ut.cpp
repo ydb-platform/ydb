@@ -1244,7 +1244,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto sessionRead = CreateSession(clientRead);
 
-        /*{
+        {
             const TString queryWrite = Sprintf(R"(
                 CREATE TABLE `/Root/TestSimple` (
                     id Uint64 NOT NULL,
@@ -1255,7 +1255,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
             auto result = sessionWrite.ExecuteQuery(queryWrite, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }*/
+        }
 
         {
             const TString queryWrite = Sprintf(R"(

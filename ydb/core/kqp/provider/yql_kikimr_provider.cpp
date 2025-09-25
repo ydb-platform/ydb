@@ -170,8 +170,6 @@ const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TStrin
         }
     }
 
-    Cerr << "TEST :: " << tablePath << " :: " << table << Endl;
-
     auto desc = Tables.FindPtr(std::make_pair(cluster, tablePath));
     if (desc && (desc->GetTableType() != ETableType::Table || desc->DoesExist())) {
         return desc;

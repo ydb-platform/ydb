@@ -329,7 +329,6 @@ public:
         switch (schemeOp.GetOperationCase()) {
             case NKqpProto::TKqpSchemeOperation::kCreateTable: {
                 auto modifyScheme = schemeOp.GetCreateTable();
-                Cerr << "HERE :: " << IsCreateTableAs << " " << Temporary << Endl;
                 AFL_ENSURE(!IsCreateTableAs || Temporary);
                 if (Temporary) {
                     auto changePath = [this](NKikimrSchemeOp::TTableDescription* tableDesc) {
@@ -337,7 +336,6 @@ public:
                         YQL_ENSURE(fullPath.size() > 1);
                         tableDesc->SetName(GetCreateTempTablePath(Database, TempDirName, fullPath));
                         tableDesc->SetPath(Database);
-                        Cerr << "TEST >> " << tableDesc->GetPath() << " " << tableDesc->GetName() << Endl;
                     };
 
                     switch (modifyScheme.GetOperationType()) {

@@ -42,6 +42,8 @@
 
 namespace NKikimr::NViewer {
 
+std::unique_ptr<NKikimrViewer::TTenantInfo> TJsonTenantInfo::TenantsCache;
+
 TBSGroupState GetBSGroupOverallStateWithoutLatency(
         const NKikimrWhiteboard::TBSGroupStateInfo& info,
         const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,

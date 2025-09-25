@@ -9,18 +9,18 @@ using TTuple = std::span<NYql::NUdf::TUnboxedValue>;
 }
 namespace std{
     template<>
-    class hash<std::vector<NKikimr::NMiniKQL::TTuple>>{
+    class hash<NKikimr::NMiniKQL::TTuple>{
         // hash(TKey)
-    size_t operator()(std::span<NKikimr::NMiniKQL::TTuple> vec){
-        return Hasher(vec[0].data());
+    size_t operator()(NKikimr::NMiniKQL::TTuple vec){
+        return Hasher(vec.data());
     }
     NKikimr::NMiniKQL::TWideUnboxedHasher Hasher;
     };
     template<>
-    class equal_to<std::vector<NKikimr::NMiniKQL::TTuple>>{
+    class equal_to<NKikimr::NMiniKQL::TTuple>{
         // hash(TKey)
-    bool operator()(std::span<NKikimr::NMiniKQL::TTuple> lhs, std::span<NKikimr::NMiniKQL::TTuple> rhs ){
-        return Equal(lhs[0].data(),rhs[0].data());
+    bool operator()(NKikimr::NMiniKQL::TTuple lhs, NKikimr::NMiniKQL::TTuple rhs ){
+        return Equal(lhs.data(),rhs.data());
     }
     NKikimr::NMiniKQL::TWideUnboxedEqual Equal;
     };
@@ -41,7 +41,7 @@ class TDumbJoinTable{
                 it->second.emplace_back(tuple);
             }
         });
-        Values = std::move(buildTable);
+        Tuples = std::move(buildTable);
     }
 void Lookup(std::span<NYql::NUdf::TUnboxedValue> key, std::function<void(const TTuple&)> produce) const {
     auto it = BuiltTable.find(key);
@@ -50,7 +50,7 @@ void Lookup(std::span<NYql::NUdf::TUnboxedValue> key, std::function<void(const T
     }
 }
 private:
-    std::vector<std::vector<NYql::NUdf::TUnboxedValue>> Values;
+    std::vector<std::vector<NYql::NUdf::TUnboxedValue>> Tuples;
     std::unordered_map<TTuple,std::vector<TTuple>> BuiltTable;
 }
 

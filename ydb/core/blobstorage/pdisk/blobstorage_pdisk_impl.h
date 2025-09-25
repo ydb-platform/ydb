@@ -213,7 +213,7 @@ public:
     ui32 LastInitialChunkIdx;
     ui64 LastInitialSectorIdx;
 
-    ui64 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
+    ui32 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
 
     TAtomic TotalOwners = 0; // number of registered owners
 

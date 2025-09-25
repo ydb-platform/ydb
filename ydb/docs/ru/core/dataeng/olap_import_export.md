@@ -17,6 +17,11 @@
 
 [Федеративные запросы](../concepts/federated_query/index.md) позволяют {{ ydb-short-name }} напрямую читать и записывать данные в файлах форматов Parquet или CSV. Этот метод удобен для выполнения операций экспорта и импорта непосредственно средствами SQL без использования внешних инструментов.
 
+### Предварительные требования
+
+- Реквизиты доступа {{ ydb-short-name }} с правами на чтение/запись.
+- {{ objstorage-name }} и статический ключ доступа к нему, например [Yandex Object Storage](https://yandex.cloud/ru/docs/storage/).
+
 ### Создайте секрет для доступа к {{ objstorage-name }}
 
 Для подключения к приватному бакету необходимо использовать аутентификацию по статическим ключам доступа. В {{ ydb-short-name }} эти ключи хранятся в виде [`SECRET`](../concepts/datamodel/secrets.md) объектов.
@@ -119,7 +124,7 @@ SELECT * FROM `external/backup/lineitem_sql`;
 - Установленный драйвер {{ ydb-short-name }} для Spark.
 - Наличие gRPC-эндпоинта для подключения к базе данных {{ ydb-short-name }}.
 - Реквизиты доступа {{ ydb-short-name }} с правами на чтение/запись.
-- Статический ключ доступа к {{ objstorage-name }}.
+- {{ objstorage-name }} и статический ключ доступа к нему, например [Yandex Object Storage](https://yandex.cloud/ru/docs/storage/).
 
 
 ### Подтоговка

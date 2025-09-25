@@ -175,7 +175,8 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoPositiveQueriesPrefixedVectorIndexOrderBy(session, "CosineSimilarity", "DESC", covered, init, count);
     }
 
-    TSession DoCreateTableForPrefixedVectorIndex(TTableClient& db, bool nullable, bool suffixPk = false) {
+    TSession DoOnlyCreateTableForPrefixedVectorIndex(TTableClient& db, bool nullable, bool suffixPk = false,
+        bool withIndex = false, bool covered = false) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
@@ -212,54 +213,74 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                     .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(60).EndTuple().Build());
                 tableBuilder.SetPartitionAtKeys(partitions);
             }
+            if (withIndex) {
+                TKMeansTreeSettings kmeans;
+                kmeans.Settings.Metric = TVectorIndexSettings::EMetric::CosineDistance;
+                kmeans.Settings.VectorType = TVectorIndexSettings::EVectorType::Uint8;
+                kmeans.Settings.VectorDimension = 2;
+                kmeans.Clusters = 2;
+                kmeans.Levels = 2;
+                std::vector<std::string> dataColumns;
+                if (covered) {
+                    dataColumns = {"user", "emb", "data"};
+                }
+                tableBuilder.AddVectorKMeansTreeIndex("index", {"user", "emb"}, dataColumns, kmeans);
+            }
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        {
-            const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (pk, user, emb, data) VALUES)"
-                "( 1, \"user_a\", \"\x03\x30\x03\", \"10\"),"
-                "(11, \"user_a\", \"\x13\x31\x03\", \"11\"),"
-                "(21, \"user_a\", \"\x23\x32\x03\", \"12\"),"
-                "(31, \"user_a\", \"\x53\x33\x03\", \"13\"),"
-                "(41, \"user_a\", \"\x43\x34\x03\", \"14\"),"
-                "(51, \"user_a\", \"\x50\x60\x03\", \"15\"),"
-                "(61, \"user_a\", \"\x61\x61\x03\", \"16\"),"
-                "(71, \"user_a\", \"\x12\x62\x03\", \"17\"),"
-                "(81, \"user_a\", \"\x75\x76\x03\", \"18\"),"
-                "(91, \"user_a\", \"\x76\x76\x03\", \"19\"),"
+        return session;
+    }
 
-                "( 2, \"user_b\", \"\x03\x30\x03\", \"20\"),"
-                "(12, \"user_b\", \"\x13\x31\x03\", \"21\"),"
-                "(22, \"user_b\", \"\x23\x32\x03\", \"22\"),"
-                "(32, \"user_b\", \"\x53\x33\x03\", \"23\"),"
-                "(42, \"user_b\", \"\x43\x34\x03\", \"24\"),"
-                "(52, \"user_b\", \"\x50\x60\x03\", \"25\"),"
-                "(62, \"user_b\", \"\x61\x61\x03\", \"26\"),"
-                "(72, \"user_b\", \"\x12\x62\x03\", \"27\"),"
-                "(82, \"user_b\", \"\x75\x76\x03\", \"28\"),"
-                "(92, \"user_b\", \"\x76\x76\x03\", \"29\"),"
+    void InsertDataForPrefixedVectorIndex(TSession& session) {
+        const TString query1(Q_(R"(
+            UPSERT INTO `/Root/TestTable` (pk, user, emb, data) VALUES)"
+            "( 1, \"user_a\", \"\x03\x30\x03\", \"10\"),"
+            "(11, \"user_a\", \"\x13\x31\x03\", \"11\"),"
+            "(21, \"user_a\", \"\x23\x32\x03\", \"12\"),"
+            "(31, \"user_a\", \"\x53\x33\x03\", \"13\"),"
+            "(41, \"user_a\", \"\x43\x34\x03\", \"14\"),"
+            "(51, \"user_a\", \"\x50\x60\x03\", \"15\"),"
+            "(61, \"user_a\", \"\x61\x61\x03\", \"16\"),"
+            "(71, \"user_a\", \"\x12\x62\x03\", \"17\"),"
+            "(81, \"user_a\", \"\x75\x76\x03\", \"18\"),"
+            "(91, \"user_a\", \"\x76\x76\x03\", \"19\"),"
 
-                "( 3, \"user_c\", \"\x03\x30\x03\", \"30\"),"
-                "(13, \"user_c\", \"\x13\x31\x03\", \"31\"),"
-                "(23, \"user_c\", \"\x23\x32\x03\", \"32\"),"
-                "(33, \"user_c\", \"\x53\x33\x03\", \"33\"),"
-                "(43, \"user_c\", \"\x43\x34\x03\", \"34\"),"
-                "(53, \"user_c\", \"\x50\x60\x03\", \"35\"),"
-                "(63, \"user_c\", \"\x61\x61\x03\", \"36\"),"
-                "(73, \"user_c\", \"\x12\x62\x03\", \"37\"),"
-                "(83, \"user_c\", \"\x75\x76\x03\", \"38\"),"
-                "(93, \"user_c\", \"\x76\x76\x03\", \"39\");"
-            ));
+            "( 2, \"user_b\", \"\x03\x30\x03\", \"20\"),"
+            "(12, \"user_b\", \"\x13\x31\x03\", \"21\"),"
+            "(22, \"user_b\", \"\x23\x32\x03\", \"22\"),"
+            "(32, \"user_b\", \"\x53\x33\x03\", \"23\"),"
+            "(42, \"user_b\", \"\x43\x34\x03\", \"24\"),"
+            "(52, \"user_b\", \"\x50\x60\x03\", \"25\"),"
+            "(62, \"user_b\", \"\x61\x61\x03\", \"26\"),"
+            "(72, \"user_b\", \"\x12\x62\x03\", \"27\"),"
+            "(82, \"user_b\", \"\x75\x76\x03\", \"28\"),"
+            "(92, \"user_b\", \"\x76\x76\x03\", \"29\"),"
 
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                          .ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+            "( 3, \"user_c\", \"\x03\x30\x03\", \"30\"),"
+            "(13, \"user_c\", \"\x13\x31\x03\", \"31\"),"
+            "(23, \"user_c\", \"\x23\x32\x03\", \"32\"),"
+            "(33, \"user_c\", \"\x53\x33\x03\", \"33\"),"
+            "(43, \"user_c\", \"\x43\x34\x03\", \"34\"),"
+            "(53, \"user_c\", \"\x50\x60\x03\", \"35\"),"
+            "(63, \"user_c\", \"\x61\x61\x03\", \"36\"),"
+            "(73, \"user_c\", \"\x12\x62\x03\", \"37\"),"
+            "(83, \"user_c\", \"\x75\x76\x03\", \"38\"),"
+            "(93, \"user_c\", \"\x76\x76\x03\", \"39\");"
+        ));
+
+        auto result = session.ExecuteDataQuery(
+                             query1,
+                             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                      .ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    TSession DoCreateTableForPrefixedVectorIndex(TTableClient& db, bool nullable, bool suffixPk = false) {
+        auto session = DoOnlyCreateTableForPrefixedVectorIndex(db, nullable, suffixPk);
+        InsertDataForPrefixedVectorIndex(session);
         return session;
     }
 
@@ -652,6 +673,76 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[0u]]");
         }
+    }
+
+    Y_UNIT_TEST_QUAD(PrefixedVectorEmptyIndexedTableInsert, Nullable, Covered) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+
+        auto session = DoOnlyCreateTableForPrefixedVectorIndex(db, Nullable, false, true, Covered);
+
+        const TString originalPostingTable = ReadTablePartToYson(session, "/Root/TestTable/index/indexImplPostingTable");
+        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, "[]");
+
+        // Insert to the table with index should succeed
+        InsertDataForPrefixedVectorIndex(session);
+
+        // Index is updated
+        const TString postingTable1_ins = ReadTablePartToYson(session, "/Root/TestTable/index/indexImplPostingTable");
+        UNIT_ASSERT_STRINGS_UNEQUAL(originalPostingTable, postingTable1_ins);
+
+        // Check that we can now actually find new rows
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, Covered,
+            "$target = \"\x67\x68\x03\";\n$user = \"user_a\";");
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, Covered,
+            "$target = \"\x67\x68\x03\";\n$user = \"user_b\";");
+    }
+
+    // Same as PrefixedVectorEmptyIndexedTableInsert, but the index is created separately after creating the table
+    Y_UNIT_TEST_QUAD(EmptyPrefixedVectorIndexInsert, Nullable, Covered) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+
+        auto session = DoOnlyCreateTableForPrefixedVectorIndex(db, Nullable, false);
+        DoCreatePrefixedVectorIndex(session, false, Covered ? "COVER (user, emb, data)" : "", 2);
+
+        const TString originalPostingTable = ReadTablePartToYson(session, "/Root/TestTable/index/indexImplPostingTable");
+        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, "[]");
+
+        // Insert to the table with index should succeed
+        InsertDataForPrefixedVectorIndex(session);
+
+        // Index is updated
+        const TString postingTable1_ins = ReadTablePartToYson(session, "/Root/TestTable/index/indexImplPostingTable");
+        UNIT_ASSERT_STRINGS_UNEQUAL(originalPostingTable, postingTable1_ins);
+
+        // Check that we can now actually find new rows
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, Covered,
+            "$target = \"\x67\x68\x03\";\n$user = \"user_a\";");
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, Covered,
+            "$target = \"\x67\x68\x03\";\n$user = \"user_b\";");
     }
 
     void DoTestPrefixedVectorIndexDelete(const TString& deleteQuery, bool returning, bool covered) {

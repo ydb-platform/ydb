@@ -274,7 +274,7 @@ private:
 
             ++NewNumberRows;
             NewDataPackerSize = DataPacker->PackedSizeEstimate();
-            LOG_ROW_DISPATCHER_TRACE("OnData, row id: " << rowId << ", offset: " << Offset << ", new packer size: " << NewDataPackerSize);
+            LOG_ROW_DISPATCHER_TRACE("OnData, row id: " << rowId << ", offset: " << Offset << ", new number rows: " << NewNumberRows << ", new row size: " << NewDataPackerSize);
         }
 
         void OnBatchFinish() override {

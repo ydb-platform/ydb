@@ -241,6 +241,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
         return entry.Name.starts_with("~")
             || entry.Name.starts_with(".sys")
+            || entry.Name.starts_with(".tmp")
             || entry.Name.starts_with(".metadata")
             || entry.Name.starts_with("export-");
     }

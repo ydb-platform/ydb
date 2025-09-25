@@ -221,6 +221,21 @@ private:
             Client->StartClientSession();
         }
 
+    private:
+        void OnWatermark(const NYql::NUdf::TUnboxedValue& rowIdValue, const NYql::NUdf::TUnboxedValue& maybeWatermark) {
+            if (!maybeWatermark) {
+                return;
+            }
+            auto rowId = rowIdValue.Get<ui64>();
+            Offset = Self.Offsets->at(rowId);
+            auto watermark = TInstant::MicroSeconds(maybeWatermark.Get<ui64>());
+            if (Watermark < watermark) {
+                Watermark = watermark;
+            }
+            LOG_ROW_DISPATCHER_TRACE("OnData, row id: " << rowId << ", watermark: " << watermark);
+        }
+
+    public:
         void OnData(const NYql::NUdf::TUnboxedValue* value) override {
             ui64 rowId;
             if (value->IsEmbedded()) {
@@ -229,15 +244,7 @@ private:
                 if (value->GetListLength() == 1) {
                     rowId = value->GetElement(0).Get<ui64>();
                 } else if (value->GetListLength() == 2) {
-                    rowId = value->GetElement(0).Get<ui64>();
-                    Offset = Self.Offsets->at(rowId);
-                    if (const auto maybeWatermark = value->GetElement(1)) {
-                        auto watermark = TInstant::MicroSeconds(maybeWatermark.Get<ui64>());
-                        if (Watermark < watermark) {
-                            Watermark = watermark;
-                        }
-                        LOG_ROW_DISPATCHER_TRACE("OnData, row id: " << rowId << ", watermark: " << watermark);
-                    }
+                    OnWatermark(value->GetElement(0), value->GetElement(1));
                     return;
                 } else {
                     Y_ENSURE(false, "Unexpected output schema size");

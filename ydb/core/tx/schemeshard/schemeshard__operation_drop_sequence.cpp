@@ -295,13 +295,14 @@ public:
 
             if (checks) {
                 if (parent.Parent()->IsTableIndex()) {
-                    checks.IsUnderDeleting()
-                        .IsInsideTableIndexPath()
-                        .IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
                     // Only __ydb_id sequence can be present in the prefixed index
                     if (name != NTableIndex::NKMeans::IdColumnSequence) {
-                        checks.IsCommonSensePath();
+                        result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
+                        return result;
                     }
+                    checks.IsInsideTableIndexPath()
+                        .IsUnderDeleting()
+                        .IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
                 } else if (parent->IsTable()) {
                     // allow immediately inside a normal table
                     if (parent.IsUnderOperation()) {

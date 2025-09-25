@@ -434,10 +434,10 @@ public:
             if (checks) {
                 if (parentPath.Parent()->IsTableIndex()) {
                     checks.IsInsideTableIndexPath();
-                    // Only __ydb_id sequence can be created in the prefixed index
-                    if (name != NTableIndex::NKMeans::IdColumnSequence ||
-                        !Transaction.GetInternal()) {
-                        checks.IsCommonSensePath();
+                    // Only __ydb_id sequence can be altered and only by internal transactions (build_index__progress)
+                    if (name != NTableIndex::NKMeans::IdColumnSequence || !Transaction.GetInternal()) {
+                        result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
+                        return result;
                     }
                 } else if (parentPath->IsTable()) {
                     // allow immediately inside a normal table

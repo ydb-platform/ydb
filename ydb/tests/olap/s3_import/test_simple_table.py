@@ -515,7 +515,7 @@ class TestSimpleTable(S3ImportTestBase):
         except ydb.issues.SchemeError as schema_error:
             assert f"Cannot find table \'db.[{self.olap_table}]\' because it does not exist or you do not have access permissions." in schema_error.message
 
-            self._drop_olap_table()
+            self.ydb_client.query(f"DROP TABLE `{self.olap_table}_2`")
             return
 
         assert "query should have failed"

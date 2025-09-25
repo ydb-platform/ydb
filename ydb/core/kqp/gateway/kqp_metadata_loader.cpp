@@ -935,7 +935,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 YQL_ENSURE(1 <= navigate.ResultSet.size() && navigate.ResultSet.size() <= 2);
                 auto& entry = InferEntry(navigate.ResultSet);
 
-                if (entry.Status != EStatus::Ok ) {
+                if (entry.Status != EStatus::Ok) {
                     promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, table));
                     return;
                 }

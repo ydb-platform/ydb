@@ -31,8 +31,8 @@ template <> class equal_to<NKikimr::NMiniKQL::TTuple> {
 
 namespace NKikimr::NMiniKQL {
 
-class TDumbJoinTable {
-    TDumbJoinTable(int tupleSize, NKikimr::NMiniKQL::TWideUnboxedEqual eq, NKikimr::NMiniKQL::TWideUnboxedHasher hash)
+class TStdJoinTable {
+    TStdJoinTable(int tupleSize, NKikimr::NMiniKQL::TWideUnboxedEqual eq, NKikimr::NMiniKQL::TWideUnboxedHasher hash)
         : TupleSize(tupleSize), BuiltTable(1, std::hash<TTuple>{hash}, std::equal_to<TTuple>{eq})
     {}
 
@@ -67,6 +67,6 @@ class TDumbJoinTable {
     const int TupleSize;
     std::vector<NYql::NUdf::TUnboxedValue> Tuples;
     std::unordered_map<TTuple, std::vector<TTuple>> BuiltTable;
-}
+};
 
 } // namespace NKikimr::NMiniKQL

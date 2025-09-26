@@ -10,6 +10,7 @@ SRCS(
     drop.cpp
     generate.cpp
     main.cpp
+    run.cpp
     key_value.h
     key_value.cpp
 )

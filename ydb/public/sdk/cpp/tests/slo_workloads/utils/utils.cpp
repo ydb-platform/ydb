@@ -120,19 +120,22 @@ int DoMain(int argc, char** argv, TCreateCommand create, TRunCommand run, TClean
     std::string tokenFile;
     std::string iamSaKeyFile;
     std::string statConfigFile;
+    std::string balancingPolicy;
 
-    opts.AddLongOption('c', "connection_string", "YDB connection string").Required().RequiredArgument("SCHEMA://HOST:PORT/?DATABASE=DATABASE")
+    opts.AddLongOption('c', "connection-string", "YDB connection string").Required().RequiredArgument("SCHEMA://HOST:PORT/?DATABASE=DATABASE")
         .StoreResult(&connectionString);
     opts.AddLongOption('p', "prefix", "Base prefix for tables").RequiredArgument("PATH")
         .StoreResult(&prefix);
     opts.AddLongOption('k', "token", "security token").RequiredArgument("TOKEN")
         .StoreResult(&token);
-    opts.AddLongOption('f', "token_file", "security token file").RequiredArgument("PATH")
+    opts.AddLongOption('f', "token-file", "security token file").RequiredArgument("PATH")
         .StoreResult(&tokenFile);
-    opts.AddLongOption("iam_sa_key_file", "IAM service account key file").RequiredArgument("SECRET")
+    opts.AddLongOption("iam-sa-key-file", "IAM service account key file").RequiredArgument("SECRET")
         .StoreResult(&iamSaKeyFile);
-    opts.AddLongOption('s', "stat_config", "statistics config file").Optional().RequiredArgument("PATH")
+    opts.AddLongOption('s', "stat-config", "statistics config file").Optional().RequiredArgument("PATH")
         .StoreResult(&statConfigFile);
+    opts.AddLongOption('b', "balancing-policy", "Balancing policy").Optional().DefaultValue("use-all-nodes").RequiredArgument("(use-all-nodes|prefer-local-dc|prefer-primary-pile)")
+        .StoreResult(&balancingPolicy);
     opts.AddHelpOption('h');
     opts.SetFreeArgsMin(1);
     opts.SetFreeArgTitle(0, "<COMMAND>", GetCmdList());
@@ -169,6 +172,17 @@ int DoMain(int argc, char** argv, TCreateCommand create, TRunCommand run, TClean
         Cerr << "Warning: No authentication methods provided." << Endl;
     }
 
+    if (balancingPolicy == "use-all-nodes") {
+        config.SetBalancingPolicy(TBalancingPolicy::UseAllNodes());
+    } else if (balancingPolicy == "prefer-local-dc") {
+        config.SetBalancingPolicy(TBalancingPolicy::UsePreferableLocation());
+    } else if (balancingPolicy == "prefer-primary-pile") {
+        config.SetBalancingPolicy(TBalancingPolicy::UsePreferablePileState());
+    } else {
+        Cerr << "Unknown balancing policy: " << balancingPolicy << Endl;
+        return EXIT_FAILURE;
+    }
+
     TDriver driver(config);
 
     StartStatCollecting(driver, statConfigFile);
@@ -194,7 +208,7 @@ int DoMain(int argc, char** argv, TCreateCommand create, TRunCommand run, TClean
             return EXIT_FAILURE;
         }
     }
-    catch (const TYdbErrorException& e) {
+    catch (const NYdb::NStatusHelpers::TYdbErrorException& e) {
         Cerr << "Exception caught: " << e << Endl;
         return EXIT_FAILURE;
     }
@@ -287,7 +301,7 @@ TTableStats GetTableStats(TDatabaseOptions& dbOptions, const std::string& tableN
     );
 
     std::optional<TTablePartIterator> tableIterator;
-    ThrowOnError(client.RetryOperationSync([&tableIterator, &dbOptions, &tableName](TSession session) {
+    NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync([&tableIterator, &dbOptions, &tableName](TSession session) {
         auto result = session.ReadTable(
             JoinPath(dbOptions.Prefix, tableName),
             TReadTableSettings().AppendColumns("object_id")
@@ -310,7 +324,7 @@ TTableStats GetTableStats(TDatabaseOptions& dbOptions, const std::string& tableN
                 break;
             }
 
-            ThrowOnError(tablePart);
+            NYdb::NStatusHelpers::ThrowOnError(tablePart);
         }
         futures.push_back(
             NThreading::Async(
@@ -349,26 +363,24 @@ void ParseOptionsCommon(TOpts& opts, TCommonOptions& options, bool followers) {
         .DefaultValue(options.MaxInputThreads).StoreResult(&options.MaxInputThreads);
     opts.AddLongOption("stop_on_error", "Stop thread if an error occured").NoArgument()
         .SetFlag(&options.StopOnError).DefaultValue(options.StopOnError);
-    opts.AddLongOption("payload_min", "Minimum length of payload string").RequiredArgument("NUM")
+    opts.AddLongOption("payload-min", "Minimum length of payload string").RequiredArgument("NUM")
         .DefaultValue(options.MinLength).StoreResult(&options.MinLength);
-    opts.AddLongOption("payload_max", "Maximum length of payload string").RequiredArgument("NUM")
+    opts.AddLongOption("payload-max", "Maximum length of payload string").RequiredArgument("NUM")
         .DefaultValue(options.MaxLength).StoreResult(&options.MaxLength);
     opts.AddLongOption("timeout", "Read requests execution timeout [ms]").RequiredArgument("NUM")
         .DefaultValue(options.A_ReactionTime).StoreResult(&options.A_ReactionTime);
-    opts.AddLongOption("dont_push", "Do not push metrics").NoArgument()
+    opts.AddLongOption("dont-push", "Do not push metrics").NoArgument()
         .SetFlag(&options.DontPushMetrics).DefaultValue(options.DontPushMetrics);
     opts.AddLongOption("retry", "Retry each request until Ok reply or global timeout").NoArgument()
         .SetFlag(&options.RetryMode).DefaultValue(options.RetryMode);
-    opts.AddLongOption("save_result", "Save result to file").NoArgument()
+    opts.AddLongOption("save-result", "Save result to file").NoArgument()
         .SetFlag(&options.SaveResult).DefaultValue(options.SaveResult);
-    opts.AddLongOption("result_file_name", "Set result json file name").RequiredArgument("String")
+    opts.AddLongOption("result-file-name", "Set result json file name").RequiredArgument("String")
         .DefaultValue(options.ResultFileName).StoreResult(&options.ResultFileName);
-    opts.AddLongOption("app_timeout", "Use application timeout (over SDK)").NoArgument()
+    opts.AddLongOption("app-timeout", "Use application timeout (over SDK)").NoArgument()
         .SetFlag(&options.UseApplicationTimeout).DefaultValue(options.UseApplicationTimeout);
-    opts.AddLongOption("prevention_request", "Send prevention request at 1/2 of timeout").NoArgument()
+    opts.AddLongOption("prevention-request", "Send prevention request at 1/2 of timeout").NoArgument()
         .SetFlag(&options.SendPreventiveRequest).DefaultValue(options.SendPreventiveRequest);
-    opts.AddLongOption("no_prepare", "Do not prepare requests").NoArgument()
-        .SetFlag(&options.DoNotPrepare).DefaultValue(options.DoNotPrepare);
     if (followers) {
         opts.AddLongOption("followers", "Use followers").NoArgument()
             .SetFlag(&options.UseFollowers).DefaultValue(options.UseFollowers);
@@ -377,7 +389,7 @@ void ParseOptionsCommon(TOpts& opts, TCommonOptions& options, bool followers) {
 
 bool CheckOptionsCommon(TCommonOptions& options) {
     if (options.MinLength > options.MaxLength) {
-        Cerr << "--payload_min should be less than --payload_max" << Endl;
+        Cerr << "--payload-min should be less than --payload-max" << Endl;
         return false;
     }
     if (!options.MaxInputThreads) {
@@ -396,7 +408,7 @@ bool ParseOptionsCreate(int argc, char** argv, TCreateOptions& createOptions, bo
     ParseOptionsCommon(opts, createOptions.CommonOptions, followers);
     opts.AddLongOption("count", "Total number of records to generate").RequiredArgument("NUM")
         .DefaultValue(createOptions.Count).StoreResult(&createOptions.Count);
-    opts.AddLongOption("pack_size", "Number of new records in each create request").RequiredArgument("NUM")
+    opts.AddLongOption("pack-size", "Number of new records in each create request").RequiredArgument("NUM")
         .DefaultValue(createOptions.PackSize).StoreResult(&createOptions.PackSize);
 
     TOptsParseResult res(&opts, argc, argv);
@@ -409,7 +421,7 @@ bool ParseOptionsCreate(int argc, char** argv, TCreateOptions& createOptions, bo
         return false;
     }
     if (!createOptions.PackSize) {
-        Cerr << "--pack_size should be more than 0" << Endl;
+        Cerr << "--pack-size should be more than 0" << Endl;
         return false;
     }
     return true;
@@ -420,15 +432,15 @@ bool ParseOptionsRun(int argc, char** argv, TRunOptions& runOptions, bool follow
     ParseOptionsCommon(opts, runOptions.CommonOptions, followers);
     opts.AddLongOption("time", "Time to run (Seconds)").RequiredArgument("Seconds")
         .DefaultValue(runOptions.CommonOptions.SecondsToRun).StoreResult(&runOptions.CommonOptions.SecondsToRun);
-    opts.AddLongOption("read_rps", "Request generation rate for read requests (Thread A)").RequiredArgument("NUM")
+    opts.AddLongOption("read-rps", "Request generation rate for read requests (Thread A)").RequiredArgument("NUM")
         .DefaultValue(runOptions.Read_rps).StoreResult(&runOptions.Read_rps);
-    opts.AddLongOption("write_rps", "Request generation rate for write requests (Thread B)").RequiredArgument("NUM")
+    opts.AddLongOption("write-rps", "Request generation rate for write requests (Thread B)").RequiredArgument("NUM")
         .DefaultValue(runOptions.Write_rps).StoreResult(&runOptions.Write_rps);
-    opts.AddLongOption("no_read", "Do not run reading requests (thread A)").NoArgument()
+    opts.AddLongOption("no-read", "Do not run reading requests (thread A)").NoArgument()
         .SetFlag(&runOptions.DontRunA).DefaultValue(runOptions.DontRunA);
-    opts.AddLongOption("no_write", "Do not run writing requests (thread B)").NoArgument()
+    opts.AddLongOption("no-write", "Do not run writing requests (thread B)").NoArgument()
         .SetFlag(&runOptions.DontRunB).DefaultValue(runOptions.DontRunB);
-    opts.AddLongOption("no_c", "Do not run thread C").NoArgument()
+    opts.AddLongOption("no-c", "Do not run thread C").NoArgument()
         .SetFlag(&runOptions.DontRunC).DefaultValue(runOptions.DontRunC);
     opts.AddLongOption("infly", "Maximum number of running jobs").RequiredArgument("NUM")
         .DefaultValue(runOptions.CommonOptions.MaxInfly).StoreResult(&runOptions.CommonOptions.MaxInfly);

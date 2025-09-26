@@ -133,7 +133,7 @@ class CGenerator(object):
     def _visit_expr(self, n):
         if isinstance(n, c_ast.InitList):
             return '{' + self.visit(n) + '}'
-        elif isinstance(n, c_ast.ExprList):
+        elif isinstance(n, (c_ast.ExprList, c_ast.Compound)):
             return '(' + self.visit(n) + ')'
         else:
             return self.visit(n)

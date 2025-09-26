@@ -3495,6 +3495,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetBlockChannelsMode(blockChannelsMode);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");
+        settings.AppConfig.MutableTableServiceConfig()->SetDefaultHashShuffleFuncType(NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
 
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -4674,6 +4675,32 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 result.GetIssues().ToString(),
                 "Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes.",
                 result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(SysViewScanAfterDropTable) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 100);
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery("DROP TABLE `olapStore/olapTable`", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result =
+                client.ExecuteQuery("SELECT * FROM `/Root/olapStore/.sys/store_primary_index_optimizer_stats`", NQuery::TTxControl::NoTx())
+                    .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 }

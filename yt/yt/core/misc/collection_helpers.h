@@ -172,6 +172,9 @@ const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaul
 template <class T>
 i64 GetVectorMemoryUsage(const std::vector<T>& vector);
 
+template <class TRange, class T>
+bool Contains(TRange&& range, const T& value);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

@@ -22,6 +22,8 @@ items:
   href: vector-indexes.md
 - name: Query plans optimization
   href: query-plans-optimization.md
+- name: Query hints
+  href: query-hints.md
 - name: Batch upload
   href: batch-upload.md
 - name: Paging

@@ -2,6 +2,10 @@
 
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/services/lib/sharding/sharding.h>
+
+#include <library/cpp/digest/md5/md5.h>
+
 
 namespace NKikimr {
 namespace NPQ {
@@ -110,6 +114,10 @@ TString MiddleOf(const TString& from, const TString& to) {
     }
 
     return result;
+}
+
+NYql::NDecimal::TUint128 Hash(const TString& sourceId) {
+    return NKikimr::NDataStreams::V1::HexBytesToDecimal(MD5::Calc(sourceId));
 }
 
 TPartitionKeyRange TPartitionKeyRange::Parse(const NKikimrPQ::TPartitionKeyRange& proto) {

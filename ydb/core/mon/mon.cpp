@@ -1,5 +1,6 @@
 #include "mon.h"
 #include "mon_impl.h"
+#include "events_internal.h"
 #include "counters_adapter_impl.h"
 
 #include <ydb/core/base/appdata.h>
@@ -32,51 +33,10 @@
 
 namespace NActors {
 
-struct TEvMon {
-    enum {
-        EvMonitoringRequest = NActors::NMon::HttpInfo + 10,
-        EvMonitoringResponse,
-        EvRegisterHandler,
-        EvMonitoringCancelRequest,
-        EvCleanupProxy,
-        End
-    };
-
-    static_assert(EvMonitoringRequest > NMon::End, "expect EvMonitoringRequest > NMon::End");
-    static_assert(End < EventSpaceEnd(NActors::TEvents::ES_MON), "expect End < EventSpaceEnd(NActors::TEvents::ES_MON)");
-
-    struct TEvMonitoringRequest : TEventPB<TEvMonitoringRequest, NKikimrMonProto::TEvMonitoringRequest, EvMonitoringRequest> {
-        TEvMonitoringRequest() = default;
-    };
-
-    struct TEvMonitoringResponse : TEventPB<TEvMonitoringResponse, NKikimrMonProto::TEvMonitoringResponse, EvMonitoringResponse> {
-        TEvMonitoringResponse() = default;
-    };
-
-    struct TEvRegisterHandler : TEventLocal<TEvRegisterHandler, EvRegisterHandler> {
-        TMon::TRegisterHandlerFields Fields;
-
-        TEvRegisterHandler(const TMon::TRegisterHandlerFields& fields)
-            : Fields(fields)
-        {}
-    };
-
-    struct TEvMonitoringCancelRequest : TEventPB<TEvMonitoringCancelRequest, NKikimrMonProto::TEvMonitoringCancelRequest, EvMonitoringCancelRequest> {
-        TEvMonitoringCancelRequest() = default;
-    };
-
-    struct TEvCleanupProxy : TEventLocal<TEvCleanupProxy, EvCleanupProxy> {
-        TString Address;
-
-        TEvCleanupProxy(const TString& address)
-            : Address(address)
-        {}
-    };
-};
-
 namespace {
 
 using namespace NKikimr;
+using namespace NMonitoring::NPrivate;
 
 bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
     if (request->Method == "POST") {
@@ -101,7 +61,7 @@ TString GetDatabase(NHttp::THttpIncomingRequest* request) {
     return {};
 }
 
-IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket) {
+IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket, TString peerName) {
     return new NActors::IEventHandle(
         NGRpcService::CreateGRpcRequestProxyId(),
         owner,
@@ -109,7 +69,8 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
             database,
             ticket ? TMaybe<TString>(ticket) : Nothing(),
             owner,
-            NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin)),
+            NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
+            std::move(peerName)),
         IEventHandle::FlagTrackDelivery
     );
 }
@@ -122,9 +83,9 @@ NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner,
     TStringBuf ydbSessionId = cookies["ydb_session_id"];
     TStringBuf authorization = headers["Authorization"];
     if (!authorization.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString(authorization));
+        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString(authorization), NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else if (!ydbSessionId.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString("Login ") + TString(ydbSessionId));
+        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else {
         return nullptr;
     }
@@ -525,14 +486,7 @@ public:
                 << " " << request->Method
                 << " " << request->URL);
         }
-        TString serializedToken;
-        if (result) {
-            AuditCtx.AddAuditLogParts(result->AuditLogParts);
-            if (result->UserToken) {
-                AuditCtx.SetSubjectType(result->UserToken->GetSubjectType());
-                serializedToken = result->UserToken->GetSerializedToken();
-            }
-        }
+        TString serializedToken = result && result->UserToken ? result->UserToken->GetSerializedToken() : TString();
         AuditCtx.LogOnReceived();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
             Container, serializedToken), IEventHandle::FlagTrackDelivery);
@@ -559,6 +513,11 @@ public:
 
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        AuditCtx.AddAuditLogParts(result.AuditLogParts);
+        if (result.UserToken) {
+            AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
+            Event->Get()->UserToken = result.UserToken->GetSerializedToken();
+        }
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
@@ -1176,13 +1135,6 @@ public:
                 << " " << request->Method
                 << " " << request->URL);
         }
-        if (result) {
-            AuditCtx.AddAuditLogParts(result->AuditLogParts);
-            if (result->UserToken) {
-                AuditCtx.SetSubjectType(result->UserToken->GetSubjectType());
-                Event->Get()->UserToken = result->UserToken->GetSerializedToken();
-            }
-        }
         AuditCtx.LogOnReceived();
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }
@@ -1206,6 +1158,11 @@ public:
 
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        AuditCtx.AddAuditLogParts(result.AuditLogParts);
+        if (result.UserToken) {
+            AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
+            Event->Get()->UserToken = result.UserToken->GetSerializedToken();
+        }
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
@@ -1540,10 +1497,10 @@ NMonitoring::IMonPage* TMon::RegisterCountersPage(const TString& path, const TSt
 }
 
 void TMon::RegisterActorHandler(const TRegisterHandlerFields& fields) {
+    TGuard<TMutex> g(Mutex);
     if (ActorSystem) {
         ActorSystem->Send(HttpMonServiceActorId, new TEvMon::TEvRegisterHandler(fields));
     } else {
-        TGuard<TMutex> g(Mutex);
         ActorMonPages.emplace_back(TActorMonPageInfo{
             .Handler = fields,
         });

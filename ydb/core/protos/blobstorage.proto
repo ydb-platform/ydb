@@ -8,6 +8,7 @@ import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/node_whiteboard.proto";
+import "google/protobuf/any.proto";
 
 package NKikimrBlobStorage;
 option java_package = "ru.yandex.kikimr.proto";
@@ -665,6 +666,7 @@ message TEvVCheckReadinessResult {
     optional TMessageId ExpectedMsgId = 3;
     optional TVDiskCostSettings CostSettings = 4;
     optional bool ExtraBlockChecksSupport = 5;
+    optional bool Checksumming = 6;
     optional NKikimrBlobStorage.TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
 }
 
@@ -1002,9 +1004,11 @@ message TNodeWardenServiceSet {
         optional bool ReadOnly = 14;
         optional bool Stop = 15;
 
-        // If not zero, NodeWarded infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits (if unset)
-        // from drive size and this value
+        // If not zero, NodeWarded infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits (if unset) by the formula
+        // ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize
+        // where SlotSizeInUnits = 2^N is chosen to meet ExpectedSlotCount <= InferPDiskSlotCountMax
         optional uint64 InferPDiskSlotCountFromUnitSize = 16;
+        optional uint32 InferPDiskSlotCountMax = 17;
     }
 
     message TVDisk {
@@ -1560,6 +1564,7 @@ message TEvControllerDistconfRequest {
     optional uint64 ExpectedStorageConfigVersion = 5;
     optional string PeerName = 6;
     optional bytes UserToken = 7;
+    optional google.protobuf.Any StorageConfig = 8; // TStorageConfig with this request that is going to be applied after operation
 }
 
 message TEvControllerDistconfResponse {

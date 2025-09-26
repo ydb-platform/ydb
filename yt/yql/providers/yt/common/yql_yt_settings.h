@@ -403,6 +403,7 @@ public:
     ~TYtVersionedConfiguration() = default;
 
     size_t FindNodeVer(const TExprNode& node);
+    void CopyNodeVer(const TExprNode& from, const TExprNode& to);
     void FreezeZeroVersion();
     void PromoteVersion(const TExprNode& node);
     size_t GetLastVersion() const {

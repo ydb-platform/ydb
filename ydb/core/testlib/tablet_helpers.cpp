@@ -668,16 +668,12 @@ namespace NKikimr {
         return storagePoolKinds;
     }
 
-    i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val) {
-        TAtomic prev;
-        runtime->GetAppData().Icb->SetValue("SchemeShard_SplitMergePartCountLimit", val, prev);
-        return prev;
+    void SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val) {
+        TControlBoard::SetValue(val, runtime->GetAppData().Icb->SchemeShardControls.SplitMergePartCountLimit);
     }
 
-    bool SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow) {
-        TAtomic prev;
-        runtime->GetAppData().Icb->SetValue("SchemeShard_AllowServerlessStorageBilling", isAllow, prev);
-        return prev;
+    void SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow) {
+        TControlBoard::SetValue(isAllow, runtime->GetAppData().Icb->SchemeShardControls.AllowServerlessStorageBilling);
     }
 
     void SetupChannelProfiles(TAppPrepare &app, ui32 nchannels) {

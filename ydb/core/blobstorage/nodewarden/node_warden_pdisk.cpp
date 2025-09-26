@@ -16,15 +16,15 @@ namespace NKikimr::NStorage {
         {NPDisk::DEVICE_TYPE_NVME, 300000000},
     };
 
-    void TNodeWarden::InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize, ui64 unitSizeInBytes) {
+    void TNodeWarden::InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize, ui64 unitSizeInBytes, ui32 maxSlots) {
         Y_ABORT_UNLESS(driveSize);
         Y_ABORT_UNLESS(unitSizeInBytes);
 
         const double slotCount = lround(double(driveSize) / unitSizeInBytes);
         ui32 slotSizeInUnits = 1u;
 
-        constexpr long MaxSlots = 16;
-        while (lround(slotCount/slotSizeInUnits) > MaxSlots) {
+        maxSlots = maxSlots ? maxSlots : 16;
+        while (lround(slotCount/slotSizeInUnits) > maxSlots) {
             slotSizeInUnits *= 2;
         }
 
@@ -153,7 +153,8 @@ namespace NKikimr::NStorage {
                 STLOG(PRI_ERROR, BS_NODE, NW96, "Unable to determine drive size for inferring PDisk slot count",
                     (Path, path), (Details, outDetails.Str()));
             } else {
-                InferPDiskSlotCount(pdiskConfig, driveSize, unitSizeInBytes);
+                ui32 maxSlots = pdisk.GetInferPDiskSlotCountMax();
+                InferPDiskSlotCount(pdiskConfig, driveSize, unitSizeInBytes, maxSlots);
             }
         }
 
@@ -521,7 +522,35 @@ namespace NKikimr::NStorage {
 
         auto processDisk = [&](const TServiceSetPDisk& pdisk) {
             const TPDiskKey key(pdisk);
-            if (!LocalPDisks.contains(key)) {
+            if (auto it = LocalPDisks.find(key); it != LocalPDisks.end()) {
+                TPDiskRecord& localPDisk = it->second;
+                TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(pdisk);
+                const NKikimrBlobStorage::TPDiskConfig& oldPDiskConfig = localPDisk.Record.GetPDiskConfig();
+                ui64 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
+                ui64 oldExpectedSlotCount = oldPDiskConfig.GetExpectedSlotCount();
+                ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
+                ui32 oldSlotSizeInUnits = oldPDiskConfig.GetSlotSizeInUnits();
+                STLOG(PRI_DEBUG, BS_NODE, NW110, "ApplyServiceSetPDisks",
+                    (PDiskId, key.PDiskId),
+                    (NewExpectedSlotCount, newExpectedSlotCount),
+                    (OldExpectedSlotCount, oldExpectedSlotCount),
+                    (NewSlotSizeInUnits, newSlotSizeInUnits),
+                    (OldSlotSizeInUnits, oldSlotSizeInUnits));
+                if (newExpectedSlotCount != oldExpectedSlotCount ||
+                        newSlotSizeInUnits != oldSlotSizeInUnits) {
+                    STLOG(PRI_DEBUG, BS_NODE, NW107, "SendChangeExpectedSlotCount",
+                        (PDiskId, key.PDiskId),
+                        (ExpectedSlotCount, newExpectedSlotCount),
+                        (SlotSizeInUnits, newSlotSizeInUnits));
+
+                    const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
+                    Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(newExpectedSlotCount, newSlotSizeInUnits));
+
+                    NKikimrBlobStorage::TPDiskConfig* pdiskConfig = localPDisk.Record.MutablePDiskConfig();
+                    pdiskConfig->SetExpectedSlotCount(newExpectedSlotCount);
+                    pdiskConfig->SetSlotSizeInUnits(newSlotSizeInUnits);
+                }
+            } else {
                 StartLocalPDisk(pdisk, false);
             }
             pdiskToDelete.erase(key);

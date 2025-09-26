@@ -5,7 +5,7 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 static void DropTable(TTableClient& client, const std::string& path) {
-    ThrowOnError(client.RetryOperationSync([path](TSession session) {
+    NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync([path](TSession session) {
         return session.DropTable(path).ExtractValueSync();
     }));
 }

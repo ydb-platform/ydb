@@ -166,7 +166,7 @@ void TStat::Finish() {
 }
 
 TStatUnit TStat::CreateStatUnit() {
-    std::lock_guard<std::mutex> lock(Mutex);
+    std::lock_guard lock(Mutex);
 
     TInstant Now = TInstant::Now();
     CheckCurrentSecond(Now);
@@ -196,7 +196,7 @@ void TStat::Report(TStatUnit& unit, NYdb::EStatus status) {
 }
 
 void TStat::ReportMaxInfly() {
-    std::lock_guard<std::mutex> lock(Mutex);
+    std::lock_guard lock(Mutex);
 
     ++Replies.CountMaxInfly;
     TInstant Now = TInstant::Now();
@@ -205,7 +205,7 @@ void TStat::ReportMaxInfly() {
 }
 
 void TStat::ReportStats(std::uint64_t infly, std::uint64_t sessions, std::uint64_t readPromises, std::uint64_t executorPromises) {
-    std::lock_guard<std::mutex> lock(Mutex);
+    std::lock_guard lock(Mutex);
 
     Counters.Infly = infly;
     Counters.ActiveSessions = sessions;
@@ -220,7 +220,7 @@ void TStat::ReportStats(std::uint64_t infly, std::uint64_t sessions, std::uint64
 }
 
 void TStat::Reserve(size_t size) {
-    std::lock_guard<std::mutex> lock(Mutex);
+    std::lock_guard lock(Mutex);
 
     LatencyStats.reserve(size);
     LatencyData.reserve(size);
@@ -233,7 +233,7 @@ void TStat::ReportLatencyData(
     std::vector<TDuration>&& oks,
     std::vector<TDuration>& notOks
 ) {
-    std::lock_guard<std::mutex> lock(Mutex);
+    std::lock_guard lock(Mutex);
 
     LatencyStats.emplace_back();
     TPeriodStat& p = LatencyStats.back();
@@ -249,13 +249,13 @@ void TStat::ReportLatencyData(
 void TStat::UpdateSessionStats(
     const std::unordered_map<std::string, size_t>& sessionStats
 ) {
-    std::lock_guard<std::mutex> lock(Mutex);
+    std::lock_guard lock(Mutex);
 
     SessionStats = sessionStats;
 }
 
 void TStat::PrintStatistics(TStringBuilder& out) {
-    std::lock_guard<std::mutex> lock(Mutex);
+    std::lock_guard lock(Mutex);
 
     TInstant now = TInstant::Now();
     CheckCurrentSecond(now);
@@ -299,7 +299,7 @@ void TStat::PrintStatistics(TStringBuilder& out) {
 }
 
 void TStat::SaveResult() {
-    std::lock_guard<std::mutex> lock(Mutex);
+    std::lock_guard lock(Mutex);
 
     if (LatencyData.size()) {
         CalculateGlobalPercentile();
@@ -389,7 +389,7 @@ TInstant TStat::GetStartTime() const {
 }
 
 void TStat::OnReport(TStatUnit& unit, const TInnerStatus& status) {
-    std::lock_guard<std::mutex> lock(Mutex);
+    std::lock_guard lock(Mutex);
 
     TDuration delay = unit.Delay();
     switch (status.InnerStatus) {

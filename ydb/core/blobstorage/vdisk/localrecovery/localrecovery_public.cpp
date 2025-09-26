@@ -490,12 +490,6 @@ namespace NKikimr {
                 LocRecCtx->VCtx->VDiskLogPrefix);
 
             ui32 hugeBlobOverhead = Config->HugeBlobOverhead;
-
-            if (MetadataEntryPoint.HasHugeBlobOverhead()) {
-                hugeBlobOverhead = MetadataEntryPoint.GetHugeBlobOverhead();
-            } else if (IsTinyDisk) {
-                hugeBlobOverhead = TVDiskConfig::TinyDiskHugeBlobOverhead;
-            }
             MetadataEntryPoint.SetHugeBlobOverhead(hugeBlobOverhead);
 
             auto logFunc = [&] (const TString &msg) {
@@ -567,10 +561,9 @@ namespace NKikimr {
                 VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::LoadDb;
                 const auto &m = ev->Get();
 
-                IsTinyDisk = m->PDiskParams->IsTinyDisk;
-
-                // remove in next version
-                IsTinyDisk = false;
+                if (AppData(ctx)->FeatureFlags.GetEnableTinyDisks()) {
+                    IsTinyDisk = m->PDiskParams->IsTinyDisk;
+                }
 
                 LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config);
 

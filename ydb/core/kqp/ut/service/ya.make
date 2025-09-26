@@ -15,6 +15,7 @@ SRCS(
     kqp_qs_queries_ut.cpp
     kqp_qs_scripts_ut.cpp
     kqp_service_ut.cpp
+    kqp_snapshot_readonly.cpp
 )
 
 PEERDIR(

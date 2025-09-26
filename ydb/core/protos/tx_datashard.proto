@@ -273,6 +273,7 @@ message TKqpReadRangesSourceSettings {
     optional bool IsBatch = 22 [default = false];
 
     optional bool IsTableImmutable = 23 [default = false];
+    optional NKikimrKqp.EIsolationLevel IsolationLevel = 24 [default = ISOLATION_LEVEL_UNDEFINED];
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given

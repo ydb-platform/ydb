@@ -5123,6 +5123,34 @@
             "uri": "https://{canondata_backend}/1597364/0dfdd9be36ea9ae7f51895a91916fc4ec61ed0d8/resource.tar.gz#test_sql2yql.test_linear-mutdict_upsert_/sql.yql"
         }
     ],
+    "test_sql2yql.test[linear-opt_block1]": [
+        {
+            "checksum": "295de2b8e5b7ab78ae0c27ab40c3e8e6",
+            "size": 1218,
+            "uri": "https://{canondata_backend}/1600758/347bcbaaa0880e8fce734e45f36d8bcfa59ac5d5/resource.tar.gz#test_sql2yql.test_linear-opt_block1_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-opt_block1_diff_lambda]": [
+        {
+            "checksum": "9e035a30eeeb6508997c433e568d005d",
+            "size": 1255,
+            "uri": "https://{canondata_backend}/1784826/0ef7974e374145886c095b465087fd7e6961c7bb/resource.tar.gz#test_sql2yql.test_linear-opt_block1_diff_lambda_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-opt_block2]": [
+        {
+            "checksum": "7568b521d86809804ad567f194f08ef6",
+            "size": 1258,
+            "uri": "https://{canondata_backend}/1937429/af85a2a3ced2244b377c50a373a56945f25a377c/resource.tar.gz#test_sql2yql.test_linear-opt_block2_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-opt_block_multi]": [
+        {
+            "checksum": "9eb82256a4af3df5fe811fc856bf4021",
+            "size": 1551,
+            "uri": "https://{canondata_backend}/1600758/347bcbaaa0880e8fce734e45f36d8bcfa59ac5d5/resource.tar.gz#test_sql2yql.test_linear-opt_block_multi_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[linear-types]": [
         {
             "checksum": "f756d489eb05467c7a6414636f47f37e",
@@ -12253,6 +12281,26 @@
     "test_sql_format.test[linear-mutdict_upsert]": [
         {
             "uri": "file://test_sql_format.test_linear-mutdict_upsert_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-opt_block1]": [
+        {
+            "uri": "file://test_sql_format.test_linear-opt_block1_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-opt_block1_diff_lambda]": [
+        {
+            "uri": "file://test_sql_format.test_linear-opt_block1_diff_lambda_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-opt_block2]": [
+        {
+            "uri": "file://test_sql_format.test_linear-opt_block2_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-opt_block_multi]": [
+        {
+            "uri": "file://test_sql_format.test_linear-opt_block_multi_/formatted.sql"
         }
     ],
     "test_sql_format.test[linear-types]": [

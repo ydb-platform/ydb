@@ -606,7 +606,7 @@ public:
         } else if (!Snapshot.IsValid() && !Settings->HasLockTxId() && !Settings->GetAllowInconsistentReads()) {
             return RuntimeError("Inconsistent reads without locks", NDqProto::StatusIds::UNAVAILABLE);
         }
-        Y_VERIFY(Settings->GetIsolationLevel() == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO && Settings->HasLockTxId(), "SnapshotReadOnly should not take locks");
+        Y_VERIFY(Settings->GetIsolationLevel() == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO && !Settings->HasLockTxId(), "SnapshotReadOnly should not take locks");
 
         const auto& tr = *AppData()->TypeRegistry;
 

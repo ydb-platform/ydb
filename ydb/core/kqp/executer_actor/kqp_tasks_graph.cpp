@@ -1304,7 +1304,6 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                 if (isTableImmutable) {
                     input.Meta.SourceSettings->SetAllowInconsistentReads(true);
                 }
-                // input.Meta.SourceSettings->SetTransactionMode(GetMeta().RequestIsolationLevel);
             } else {
                 YQL_ENSURE(input.SourceSettings);
                 inputDesc.MutableSource()->MutableSettings()->CopyFrom(*input.SourceSettings);
@@ -2474,6 +2473,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         FillTableMeta(stageInfo, settings->MutableTable());
 
         settings->SetIsTableImmutable(source.GetIsTableImmutable());
+        settings->SetIsolationLevel(GetMeta().RequestIsolationLevel);
 
         for (auto& keyColumn : keyTypes) {
             auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn, "");

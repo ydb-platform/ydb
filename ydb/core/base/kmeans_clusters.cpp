@@ -3,6 +3,8 @@
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
+#include <ydb/library/yql/udfs/common/knn/knn-defines.h>
+#include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
 #include <span>
 
@@ -262,7 +264,7 @@ public:
             return false;
         }
         for (const auto& cluster: newClusters) {
-            if (!IsExpectedSize(cluster)) {
+            if (!IsExpectedFormat(cluster)) {
                 return false;
             }
         }
@@ -344,7 +346,7 @@ public:
     }
 
     std::optional<ui32> FindCluster(TArrayRef<const char> embedding) override {
-        if (!IsExpectedSize(embedding)) {
+        if (!IsExpectedFormat(embedding)) {
             return {};
         }
         auto min = TMetric::Init();
@@ -368,25 +370,50 @@ public:
     void AggregateToCluster(ui32 pos, const TArrayRef<const char>& embedding, ui64 weight) override {
         auto& aggregate = NextClusters.at(pos);
         auto* coords = aggregate.data();
-        Y_ENSURE(IsExpectedSize(embedding));
-        for (auto coord : this->GetCoords(embedding.data())) {
-            *coords++ += (TSum)coord * weight;
+        Y_ENSURE(IsExpectedFormat(embedding));
+
+        if (IsBitQuantized()) {
+            const ui8* data = reinterpret_cast<const ui8*>(embedding.data());
+            for (size_t i = 0; i < Dimensions; ++i) {
+                const bool coord = data[i / 8] & (1 << (i % 8));
+                *coords++ += (TSum)coord * weight;
+            }
+        } else {
+            for (const auto coord : this->GetCoords(embedding.data())) {
+                *coords++ += (TSum)coord * weight;
+            }
         }
         NextClusterSizes.at(pos) += weight;
     }
 
-    bool IsExpectedSize(const TArrayRef<const char>& data) override {
+    bool IsExpectedFormat(const TArrayRef<const char>& data) override {
+        if (TypeByte != data.back()) {
+            return false;
+        }
+
+        if (IsBitQuantized()) {
+            return data.size() >= 2 && Dimensions == (data.size() - 2) * 8 - data[data.size() - 2];
+        }
+
         return data.size() == 1 + sizeof(TCoord) * Dimensions;
     }
 
     TString GetEmptyRow() const override {
         TString str;
-        str.resize(1 + sizeof(TCoord) * Dimensions);
-        str[sizeof(TCoord) * Dimensions] = TypeByte;
+        const size_t bufferSize = NKnnVectorSerialization::GetBufferSize<TCoord>(Dimensions);
+        str.resize(bufferSize);
+        str[bufferSize - HeaderLen] = TypeByte;
+        if (IsBitQuantized()) {
+            str[bufferSize - HeaderLen - 1] = 8 - Dimensions % 8;
+        }
         return str;
     }
 
 private:
+    static constexpr bool IsBitQuantized() {
+        return std::is_same_v<TCoord, bool>;
+    }
+
     auto GetCoords(const char* coords) {
         return std::span{reinterpret_cast<const TCoord*>(coords), Dimensions};
     }
@@ -398,10 +425,21 @@ private:
     void Fill(TString& d, TSum* embedding, ui64& c) {
         Y_ENSURE(c > 0);
         const auto count = static_cast<TSum>(c);
-        auto data = GetData(d.MutRef().data());
-        for (auto& coord : data) {
-            coord = *embedding / count;
-            embedding++;
+
+        if (IsBitQuantized()) {
+            ui8* const data = reinterpret_cast<ui8*>(d.MutRef().data());
+            for (size_t i = 0; i < Dimensions; ++i) {
+                if (i % 8 == 0) {
+                    data[i / 8] = 0;
+                }
+                data[i / 8] |= (1 << (i % 8)) & (bool)(embedding[i] / count);
+            }
+        } else {
+            auto data = GetData(d.MutRef().data());
+            for (auto& coord : data) {
+                coord = *embedding / count;
+                embedding++;
+            }
         }
     }
 };

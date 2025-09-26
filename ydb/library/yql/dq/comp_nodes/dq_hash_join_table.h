@@ -2,25 +2,25 @@
 #include "type_utils.h"
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 
-namespace NKikimr::NMiniKQL {
+namespace NKikimr::NMiniKQL::NJoinTable {
 
 using TTuple = NYql::NUdf::TUnboxedValue*;
 
 }
 
 namespace std {
-template <> class hash<NKikimr::NMiniKQL::TTuple> {
+template <> class hash<NKikimr::NMiniKQL::NJoinTable::TTuple> {
   public:
-    size_t operator()(NKikimr::NMiniKQL::TTuple vec) {
+    size_t operator()(NKikimr::NMiniKQL::NJoinTable::TTuple vec) {
         return Hasher(vec);
     }
 
     NKikimr::NMiniKQL::TWideUnboxedHasher Hasher;
 };
 
-template <> class equal_to<NKikimr::NMiniKQL::TTuple> {
+template <> class equal_to<NKikimr::NMiniKQL::NJoinTable::TTuple> {
   public:
-    bool operator()(NKikimr::NMiniKQL::TTuple lhs, NKikimr::NMiniKQL::TTuple rhs) {
+    bool operator()(NKikimr::NMiniKQL::NJoinTable::TTuple lhs, NKikimr::NMiniKQL::NJoinTable::TTuple rhs) {
         return Equal(lhs, rhs);
     }
 
@@ -33,7 +33,7 @@ namespace NKikimr::NMiniKQL {
 
 class TStdJoinTable {
     TStdJoinTable(int tupleSize, NKikimr::NMiniKQL::TWideUnboxedEqual eq, NKikimr::NMiniKQL::TWideUnboxedHasher hash)
-        : TupleSize(tupleSize), BuiltTable(1, std::hash<TTuple>{hash}, std::equal_to<TTuple>{eq})
+        : TupleSize(tupleSize), BuiltTable(1, std::hash<NJoinTable::TTuple>{hash}, std::equal_to<NJoinTable::TTuple>{eq})
     {}
 
     void Add(std::span<NYql::NUdf::TUnboxedValue> tuple) {
@@ -47,7 +47,7 @@ class TStdJoinTable {
     void Build() {
         Y_ABORT_UNLESS(BuiltTable.empty(), "JoinTable is built already");
         for (int index = 0; index < std::ssize(Tuples); index += TupleSize) {
-            TTuple thisTuple = &Tuples[index];
+            NJoinTable::TTuple thisTuple = &Tuples[index];
             auto [it, ok] = BuiltTable.emplace(thisTuple, std::vector{thisTuple});
             if (!ok) {
                 it->second.emplace_back(thisTuple);
@@ -55,7 +55,7 @@ class TStdJoinTable {
         }
     }
 
-    void Lookup(TTuple key, std::function<void(TTuple)> produce) const {
+    void Lookup(NJoinTable::TTuple key, std::function<void(NJoinTable::TTuple)> produce) const {
         Y_ABORT_IF(BuiltTable.empty(), "call Build first");
         auto it = BuiltTable.find(key);
         if (it != BuiltTable.end()) {
@@ -66,7 +66,7 @@ class TStdJoinTable {
   private:
     const int TupleSize;
     std::vector<NYql::NUdf::TUnboxedValue> Tuples;
-    std::unordered_map<TTuple, std::vector<TTuple>> BuiltTable;
+    std::unordered_map<NJoinTable::TTuple, std::vector<NJoinTable::TTuple>> BuiltTable;
 };
 
 } // namespace NKikimr::NMiniKQL

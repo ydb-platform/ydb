@@ -84,6 +84,54 @@ namespace
     .Done().Ptr();
         // clang-format on
     }
+
+    TExprNode::TPtr RenameMembers(TExprNode::TPtr input, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext& ctx) {
+        if (input->IsCallable("Member")) {
+            auto member = TCoMember(input);
+            auto memberName = member.Name();
+            if (renameMap.contains(TInfoUnit(memberName.StringValue()))) {
+                auto renamed = renameMap.at(TInfoUnit(memberName.StringValue()));
+                // clang-format off
+                memberName = Build<TCoAtom>(ctx, input->Pos()).Value(renamed.GetFullName()).Done();
+                // clang-format on
+            }
+            // clang-format off
+            return Build<TCoMember>(ctx, input->Pos())
+                .Struct(member.Struct())
+                .Name(memberName)
+            .Done().Ptr();
+            // clang-format on
+        }
+        else if (input->IsCallable()){
+            TVector<TExprNode::TPtr> newChildren;
+            for (auto c : input->Children()) {
+                newChildren.push_back(RenameMembers(c, renameMap, ctx));
+            }
+            // clang-format off
+            return ctx.Builder(input->Pos())
+                .Callable(input->Content())
+                    .Add(std::move(newChildren))
+                    .Seal()
+                .Build();
+            // clang-format on
+        }
+        else if(input->IsList()){
+            TVector<TExprNode::TPtr> newChildren;
+            for (auto c : input->Children()) {
+                newChildren.push_back(RenameMembers(c, renameMap, ctx));
+            }
+            // clang-format off
+            return ctx.Builder(input->Pos())
+                .List()
+                    .Add(std::move(newChildren))
+                    .Seal()
+                .Build();
+            // clang-format on
+        }
+        else {
+            return input;
+        }
+    }
 }
 
 namespace NKikimr
@@ -255,6 +303,11 @@ namespace NKikimr
             StageIds = sortedStages;
         }
 
+        void IOperator::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) {
+            Y_UNUSED(renameMap);
+            Y_UNUSED(ctx);
+        }
+
         TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node)
         {
             auto opSource = TKqpOpRead(node);
@@ -302,6 +355,36 @@ namespace NKikimr
             return result;
         }
 
+        void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) {
+            TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> newMapElements;
+
+            for (auto & el : MapElements) {
+
+                TInfoUnit newIU = el.first;
+                if (renameMap.contains(el.first)) {
+                    newIU = renameMap.at(el.first);
+                }
+
+                std::variant<TInfoUnit, TExprNode::TPtr> newBody = el.second;
+
+                if (std::holds_alternative<TInfoUnit>(el.second)) {
+                    auto from = std::get<TInfoUnit>(el.second);
+                    if (renameMap.contains(from)) {
+                        newBody = renameMap.at(from);
+                    }
+                }
+                else {
+                    auto lambda = std::get<TExprNode::TPtr>(el.second);
+                    newBody = RenameMembers(lambda, renameMap, ctx);
+                }
+
+                //el.first = newIU;
+                //el.second = newBody;
+                newMapElements.push_back(std::make_pair(newIU, newBody));
+            }
+            MapElements = newMapElements;
+        }
+
         TString TOpMap::ToString() {
             auto res = TStringBuilder() << "Map [";
             for (auto & [k,v] : MapElements) {
@@ -319,6 +402,16 @@ namespace NKikimr
             }
         }
 
+        void TOpProject::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) {
+            Y_UNUSED(ctx);
+
+            for (auto & p : ProjectList) {
+                if (renameMap.contains(p)) {
+                    p = renameMap.at(p);
+                }
+            }
+        }
+
         TString TOpProject::ToString() {
             auto res = TStringBuilder() << "Project [";
             for (auto iu : ProjectList) {
@@ -331,6 +424,10 @@ namespace NKikimr
         TOpFilter::TOpFilter(std::shared_ptr<IOperator> input, TExprNode::TPtr filterLambda) : IUnaryOperator(EOperator::Filter, input),
             FilterLambda(filterLambda) {
             OutputIUs = GetInput()->GetOutputIUs();
+        }
+
+        void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) {
+            FilterLambda = RenameMembers(FilterLambda, renameMap, ctx);
         }
 
         TVector<TInfoUnit> TOpFilter::GetFilterIUs() const
@@ -418,6 +515,19 @@ namespace NKikimr
             OutputIUs.insert(OutputIUs.end(), rightInputIUs.begin(), rightInputIUs.end());
         }
 
+        void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) {
+            Y_UNUSED(ctx);
+
+            for (auto & k : JoinKeys ) {
+                if (renameMap.contains(k.first)) {
+                    k.first = renameMap.at(k.first);
+                }
+                if (renameMap.contains(k.second)) {
+                    k.second = renameMap.at(k.second);
+                }
+            }
+        }
+
         TString TOpJoin::ToString() {
             return "Join";
         }
@@ -425,6 +535,10 @@ namespace NKikimr
         TOpLimit::TOpLimit(std::shared_ptr<IOperator> input, TExprNode::TPtr limitCond) : IUnaryOperator(EOperator::Limit, input),
             LimitCond(limitCond) {
             OutputIUs = GetInput()->GetOutputIUs();
+        }
+
+        void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) {
+            LimitCond = RenameMembers(LimitCond, renameMap, ctx);
         }
 
         TString TOpLimit::ToString() {
@@ -460,6 +574,22 @@ namespace NKikimr
 
         TString TOpRoot::ToString() {
             return "Root";
+        }
+
+        TString TOpRoot::PlanToString() {
+            auto builder = TStringBuilder();
+            PlanToStringRec(GetInput(), builder, 0);
+            return builder;
+        }
+
+        void TOpRoot::PlanToStringRec(std::shared_ptr<IOperator> op, TStringBuilder & builder, int tabs) {
+            for (int i=0; i<tabs; i++) {
+                builder << "  ";
+            }
+            builder << op->ToString() << "\n";
+            for ( auto c : op->Children) {
+                PlanToStringRec(c, builder, tabs+1);
+            }
         }
 
         TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right)

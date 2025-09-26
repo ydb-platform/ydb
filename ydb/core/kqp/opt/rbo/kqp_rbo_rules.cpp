@@ -179,6 +179,12 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
 
     // Only handle Inner and Cross join at this time
     auto join = CastOperator<TOpJoin>(filter->GetInput());
+
+    // Make sure the join and its inputs are single consumer
+    if (!join->IsSingleConsumer() || !join->GetLeftInput()->IsSingleConsumer() || !join->GetRightInput()->IsSingleConsumer()) {
+        return input;
+    }
+
     if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && to_lower(join->JoinKind) != "left") {
         YQL_CLOG(TRACE, CoreDq) << "Wrong join type " << join->JoinKind << Endl;
         return input;
@@ -392,8 +398,10 @@ struct Scope {
     Scope(){}
 
     TVector<int> ParentScopes;
+    bool TopScope = false;
     bool IdentityMap = true;
-    THashMap<TInfoUnit, TVector<TInfoUnit>, TInfoUnit::THashFunction> RenameMap;
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> Unrenameable;
+    TVector<TInfoUnit> OutputIUs;
     TVector<std::shared_ptr<IOperator>> Operators;
 
     TString ToString() {
@@ -401,13 +409,13 @@ struct Scope {
         for (int p : ParentScopes) {
             res << p << ",";
         }
-        res << "], Identity: " << IdentityMap << ", Rename Map: {";
-        for (auto & [k,vs] : RenameMap) {
-            res << k.GetFullName() << "-> [";
-            for (auto & v : vs) {
-                res << v.GetFullName() << ",";
-            }
-            res << "], ";
+        res << "], Identity: " << IdentityMap << ", TopScope: " << TopScope << ", Unrenameable: {";
+        for (auto & iu : Unrenameable) {
+            res << iu.GetFullName() << ",";
+        }
+        res << "}, Output: {";
+        for (auto & iu : OutputIUs) {
+            res << iu.GetFullName() << ",";
         }
         res << "}, Operators: [";
         for (auto & op : Operators) {
@@ -446,25 +454,28 @@ void Scopes::ComputeScopesRec(std::shared_ptr<IOperator> & op, int & currScope) 
     if (makeNewScope) {
         currScope++;
         auto newScope = Scope();
+        //FIXME: The top scope is a scope with id=1
+        if (currScope==1) {
+            newScope.TopScope=true;
+        }
 
         if (op->Kind == EOperator::Map && CastOperator<TOpMap>(op)->Project) {
             auto map = CastOperator<TOpMap>(op);
-            for (auto r : map->GetRenames()) {
-                if (!newScope.RenameMap.contains(r.second)) {
-                    newScope.RenameMap[r.second] = TVector<TInfoUnit>();
-                }
-                newScope.RenameMap.at(r.second).push_back(r.first);
-            }
+            newScope.OutputIUs = map->GetOutputIUs();
             newScope.IdentityMap = false;
         } 
         else if (op->Kind == EOperator::Project) {
             auto project = CastOperator<TOpProject>(op);
-            for (auto p : project->ProjectList) {
-                newScope.RenameMap[p] = {p};
-            }
+            newScope.OutputIUs = project->GetOutputIUs();
             newScope.IdentityMap = false;
         }
         ScopeMap[currScope] = newScope;
+    }
+
+    if (op->Kind == EOperator::Source) {
+        for (auto iu : op->GetOutputIUs()) {
+            ScopeMap.at(currScope).Unrenameable.insert(iu);
+        }
     }
 
     ScopeMap.at(currScope).Operators.push_back(op);
@@ -481,7 +492,14 @@ void Scopes::ComputeScopes(std::shared_ptr<IOperator> & op) {
     for (auto & [id, sc] : ScopeMap) {
         auto topOp = sc.Operators[0];
         for ( auto & p : topOp->Parents) {
-            sc.ParentScopes.push_back(RevScopeMap.at(p.lock()));
+            auto parentScopeId = RevScopeMap.at(p.lock());
+            sc.ParentScopes.push_back(parentScopeId);
+            if (topOp->Parents.size()>=2) {
+                auto & parentScope = ScopeMap.at(parentScopeId);
+                for ( auto iu : sc.OutputIUs) {
+                    parentScope.Unrenameable.insert(iu);
+                }
+            }
         }
     }
 }
@@ -524,42 +542,46 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
 
     THashMap<std::pair<int, TInfoUnit>, TVector<std::pair<int, TInfoUnit>>, TIntTUnitPairHash> renameMap;
 
+    int newAliasId = 1;
+
     for (auto iter : root ) {
         if (iter.Current->Kind == EOperator::Map && CastOperator<TOpMap>(iter.Current)->Project) {
             auto map = CastOperator<TOpMap>(iter.Current);
 
-            for (auto & [to, from] : map->GetRenames()) {
+            for (auto [to, body] : map->MapElements) {
 
-                if (!scopes.RevScopeMap.contains(map)) {
-                    YQL_CLOG(TRACE, CoreDq) << "Map not found: " << (int64_t)map.get();
-                }
                 auto scopeId = scopes.RevScopeMap.at(map);
                 auto scope = scopes.ScopeMap.at(scopeId);
-
-                auto source = std::make_pair(scopeId,from);
-                auto target = std::make_pair(scopeId,to);
-
                 auto parentScopes = scope.ParentScopes;
 
-                while( parentScopes.size() == 1) {
-                    auto parentScopeId = parentScopes[0];
-                    auto parentScope = scopes.ScopeMap.at(parentScopeId);
-                    if (!parentScope.RenameMap.contains(target.second)) {
-                        break;
-                    }
-                    auto renameTo = parentScope.RenameMap.at(target.second);
-                    if (renameTo.size()!=1){
-                        break;
-                    }
-                    target = std::make_pair(parentScopeId, renameTo[0]);
-                    parentScopes = parentScope.ParentScopes;
+                // If we're not in the final scope that exports variables to the user,
+                // generate a unique new alias for the variable to avoid collisions
+                auto exportTo = to;
+                if (!scope.TopScope) {
+                    TString newAlias = "#" + std::to_string(newAliasId++);
+                    exportTo = TInfoUnit(newAlias, to.ColumnName);
                 }
 
-                if (renameMap.find(source) == renameMap.end()) {
-                    renameMap[source] = TVector<std::pair<int, TInfoUnit>>();
-                }
+                // "Export" the result of map output to the upper scope, but only if there is one
+                // parent scope only
+                auto source = std::make_pair(scopeId, to);
+                auto target = std::make_pair(parentScopes[0], exportTo);
+                renameMap[source].push_back(target);
 
-                renameMap.at(source).push_back(target);
+                //if (parentScopes.size()==1) {
+                //    renameMap[source].push_back(target);
+                //}
+
+                // If the map element is a rename, record the rename in the map within the same scope
+                // However skip all unrenamable uis
+                if (std::holds_alternative<TInfoUnit>(body)) {
+                    auto sourceIU = std::get<TInfoUnit>(body);
+                    if (!scope.Unrenameable.contains(sourceIU)) {
+                        source = std::make_pair(scopeId, sourceIU);
+                        target = std::make_pair(scopeId, to);
+                        renameMap[source].push_back(target);
+                    }
+                }
             }
         }
     }
@@ -567,33 +589,70 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
     for (auto & [key, value] : renameMap) {
         if (value.size()==1) {
             YQL_CLOG(TRACE, CoreDq) << "Rename map: " << key.second.GetFullName() << "," << key.first << " -> " << value[0].second.GetFullName() << "," << value[0].first;
+        } else {
+            YQL_CLOG(TRACE, CoreDq) << "Rename map: " << key.second.GetFullName() << "," << key.first << " -> ";
+            for (auto v : value ) {
+                YQL_CLOG(TRACE, CoreDq) << v.second.GetFullName() << "," << v.first;
+            }
         }
     }
+
+    // Make a transitive closure of rename map
+    THashMap<std::pair<int, TInfoUnit>, std::pair<int, TInfoUnit>, TIntTUnitPairHash> closedMap;
+    for (auto & [k, v] : renameMap) {
+        if (v.size()==1) {
+            closedMap[k] = v[0];
+        }
+    }
+
+    bool fixpointReached = false;
+    while(! fixpointReached) {
+
+        fixpointReached = true;
+        for (auto & [k,v] : closedMap) {
+            if (closedMap.contains(v)) {
+                fixpointReached = false;
+            }
+
+            while (closedMap.contains(v)) {
+                v = closedMap.at(v);
+            }
+            closedMap[k] = v;
+        }
+    }
+
+    // Add unique aliases 
 
     // Iterate through the plan, applying renames to one operator at a time
 
     for (auto it : root ) {
         // Build a subset of the map for the current scope only
-        auto scopeId = scopes.RevScopeMap(it.Current);
+        auto scopeId = scopes.RevScopeMap.at(it.Current);
 
         // Exclude all IUs from OpReads in this scope
-        THashSet<TInfoUnit> exclude;
-        for (auto & op : scopes.ScopeMap.at(scopeId).Operators) {
-            if (op->Kind == EOperator::Source) {
-                for (auto iu : op->GetOutputIUs()) {
-                    exclude.insert(iu);
-                }
-            }
-        }
+        //THashSet<TInfoUnit, TInfoUnit::THashFunction> exclude;
+        //for (auto & op : scopes.ScopeMap.at(scopeId).Operators) {
+        //    if (op->Kind == EOperator::Source) {
+        //        for (auto iu : op->GetOutputIUs()) {
+        //            exclude.insert(iu);
+        //        }
+        //    }
+        //}
 
         auto scopedRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>();
-        for (auto & [k,v] : renameMap) {
-            if (k.first == scopeId && !exclude.contains(k.second)) {
-                scopedRenameMap[k.second] = v.second;
+        for (auto & [k,v] : closedMap) {
+            //if (k.first == scopeId && !exclude.contains(k.second)) {
+            if (k.first == scopeId) {
+                scopedRenameMap.emplace(k.second, v.second);
             }
         }
 
-        it.Current->RenameIUs(scopedRenameMap);
+        YQL_CLOG(TRACE, CoreDq) << "Applying renames to operator: " << scopeId << ":" << it.Current->ToString();
+        for (auto & [k,v] : scopedRenameMap ) {
+            YQL_CLOG(TRACE, CoreDq) << "From " << k.GetFullName() << ", To " << v.GetFullName();
+        }
+
+        it.Current->RenameIUs(scopedRenameMap, ctx);
     }
 
 }

@@ -75,11 +75,14 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx
 
     ExprNodeRebuilder(ctx, root.Node->Pos()).RebuildExprNodes(root);
     YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << KqpExprToPrettyString(NYql::NNodes::TExprBase(root.Node), ctx);
+    YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString();
 
     for (size_t idx=0; idx < Stages.size(); idx ++ ) {
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << idx;
         auto stage = Stages[idx];
         stage->RunStage(this, root, ctx);
+        ExprNodeRebuilder(ctx, root.Node->Pos()).RebuildExprNodes(root);
+        YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << KqpExprToPrettyString(NYql::NNodes::TExprBase(root.Node), ctx);
     }
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";

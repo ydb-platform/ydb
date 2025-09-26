@@ -507,35 +507,6 @@ IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPt
 
     Y_UNUSED(ctx);
 
-    /*
-    auto status = OptimizeExpr(output, output, [] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        Y_UNUSED(ctx);
-        YQL_CLOG(TRACE, CoreDq) << "Checking if node " << node->UniqueId() << " is list: " << node->IsList();
-
-        if (node.Get()->IsList() && node.Get()->ChildrenSize()>=1) {
-            auto child_level_1 = node.Get()->Child(0);
-            YQL_CLOG(TRACE, CoreDq) << "Matched level 0";
-
-            if (child_level_1->IsList() && child_level_1->ChildrenSize()>=1) {
-                auto child_level_2 = child_level_1->Child(0);
-                YQL_CLOG(TRACE, CoreDq) << "Matched level 1";
-
-                if (child_level_2->IsList() && child_level_2->ChildrenSize()>=1) {
-                    auto maybeQuery = child_level_2->Child(0);
-                    YQL_CLOG(TRACE, CoreDq) << "Matched level 2";
-
-                    if (TKqpPhysicalQuery::Match(maybeQuery)) {
-                        YQL_CLOG(TRACE, CoreDq) << "Found query node";
-                        return maybeQuery;
-                    }
-                }
-            }
-        }
-        return node;
-    }, ctx, settings);
-
-    */
-
     YQL_CLOG(TRACE, CoreDq) << "Cleanup input plan: " << output->Dump();
 
     if (output->IsList() && output->ChildrenSize()>=1) {

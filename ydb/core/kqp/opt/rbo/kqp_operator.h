@@ -25,6 +25,7 @@ enum EOperator : ui32 {
 struct TInfoUnit {
     TInfoUnit(TString alias, TString column): Alias(alias), ColumnName(column) {}
     TInfoUnit(TString name);
+    TInfoUnit() {}
 
     TString GetFullName() const {
        return ((Alias!="") ? ("_alias_" + Alias + ".") : "" ) + ColumnName;
@@ -177,7 +178,7 @@ class IOperator {
         return OutputIUs;
     }
 
-    virtual void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) {}
+    virtual void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx);
 
     virtual TString ToString() = 0;
 
@@ -304,6 +305,9 @@ class TOpRoot : public IUnaryOperator {
     TOpRoot(std::shared_ptr<IOperator> input);
     virtual TString ToString() override;
     void ComputeParents();
+
+    TString PlanToString();
+    void PlanToStringRec(std::shared_ptr<IOperator> op, TStringBuilder & builder, int ntabs);
 
     TPlanProps PlanProps;
 

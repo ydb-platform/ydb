@@ -134,6 +134,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr n
 
 void ExprNodeRebuilder::RebuildExprNodes(TOpRoot & root) {
     for (auto it : root) {
+        YQL_CLOG(TRACE, CoreDq) << "Rebuilding: " << it.Current->ToString();
         RebuildExprNode(it.Current);
     }
 
@@ -155,10 +156,11 @@ void ExprNodeRebuilder::RebuildExprNode(std::shared_ptr<IOperator> op) {
 
     switch(op->Kind) {
         case EOperator::EmptySource:
+            newNode = RebuildEmptySource();
+            break;
         case EOperator::Source:
             newNode = op->Node;
             break;
-
         case EOperator::Map:
             newNode = RebuildMap(op);
             break;
@@ -179,6 +181,13 @@ void ExprNodeRebuilder::RebuildExprNode(std::shared_ptr<IOperator> op) {
     }
 
     op->Node = newNode;
+}
+
+TExprNode::TPtr ExprNodeRebuilder::RebuildEmptySource() {
+    // clang-format off
+    return Build<TKqpOpEmptySource>(Ctx, Pos)
+            .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ExprNodeRebuilder::RebuildMap(std::shared_ptr<IOperator> op) {

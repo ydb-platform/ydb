@@ -40,7 +40,7 @@ class TKqpNewRBOTransformer : public TSyncTransformerBase {
             TypeCtx(typeCtx),
             KqpCtx(*kqpCtx),
             RBO({
-                std::make_shared<TRenameStage>(),
+                //std::make_shared<TRenameStage>(),
                 std::make_shared<TRuleBasedStage>(RuleStage1), 
                 std::make_shared<TRuleBasedStage>(RuleStage2)}, kqpCtx, typeCtx, config, typeAnnTransformer, peephole) {}
 

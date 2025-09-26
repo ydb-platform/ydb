@@ -36,6 +36,7 @@ class ExprNodeRebuilder {
     void RebuildExprNodes(TOpRoot & root);
     void RebuildExprNode(std::shared_ptr<IOperator> op);
 
+    TExprNode::TPtr RebuildEmptySource();
     TExprNode::TPtr RebuildMap(std::shared_ptr<IOperator> op);
     TExprNode::TPtr RebuildProject(std::shared_ptr<IOperator> op);
     TExprNode::TPtr RebuildFilter(std::shared_ptr<IOperator> op);

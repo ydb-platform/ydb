@@ -29,7 +29,7 @@ items:
     href: balancing-prefer-local.md
   - name: Предпочитать конкретную зону доступности
     href: balancing-prefer-location.md
-  - name: Предпочитать pile c конкретным состоянием
+  - name: Предпочитать пайл c конкретным состоянием
     href: balancing-prefer-pile.md
 - name: Выполнение повторных запросов
   href: retry.md

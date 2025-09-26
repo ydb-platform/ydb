@@ -104,6 +104,13 @@ public:
     TAsyncClusterStateResult ClusterState(const TClusterStateSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Monitoring::ClusterStateRequest>(settings);
 
+        if (settings.Duration_) {
+            request.set_duration(settings.Duration_.value());
+        }
+
+        if (settings.Period_) {
+            request.set_period(settings.Period_.value());
+        }
         auto promise = NThreading::NewPromise<TClusterStateResult>();
 
         auto extractor = [promise]

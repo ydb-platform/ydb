@@ -6,8 +6,8 @@
 
 namespace NYql::NDq {
 
-#define SRC_WM_LOG_T(X) /* TODO */
-#define SRC_WM_LOG_D(X) /* TODO */
+#define SRC_WM_LOG_T(X) do { if constexpr (false) TStringBuilder() << X; } while(false)
+#define SRC_WM_LOG_D(X) do { if constexpr (false) TStringBuilder() << X; } while(false)
 template <typename TPartitionKey>
 struct TDqSourceWatermarkTracker {
 public:

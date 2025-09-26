@@ -37,6 +37,11 @@ except ImportError:
 # Configuration constants
 MUTE_UPDATE_SHOW_DIFF = False  # Set to True to show +/- statistics in mute update messages
 
+# Teams blacklisted from weekly/monthly updates
+PERIOD_UPDATE_BLACKLIST = {
+    'storage'  # Add team names that should not receive periodic updates
+}
+
 
 def _setup_ydb_connection(database_endpoint=None, database_path=None, credentials_path=None):
     """
@@ -453,7 +458,7 @@ def escape_markdown(text):
     
     def replace_code(match):
         code_blocks.append(match.group(1))
-        return f"CODEPLACEHOLDER{len(code_blocks)-1}"
+        return f"CODEPLACEHOLDER{len(code_blocks)-1}N"
     
     # Replace all inline code with placeholders
     text = re.sub(code_pattern, replace_code, text)
@@ -464,7 +469,7 @@ def escape_markdown(text):
     
     def replace_link(match):
         links.append((match.group(1), match.group(2)))
-        return f"LINKPLACEHOLDER{len(links)-1}"
+        return f"LINKPLACEHOLDER{len(links)-1}N"
     
     # Replace all links with placeholders
     text = re.sub(link_pattern, replace_link, text)
@@ -475,7 +480,7 @@ def escape_markdown(text):
     
     def replace_url(match):
         urls.append(match.group(0))
-        return f"URLPLACEHOLDER{len(urls)-1}"
+        return f"URLPLACEHOLDER{len(urls)-1}N"
     
     # Replace all standalone URLs with placeholders
     text = re.sub(url_pattern, replace_url, text)
@@ -489,7 +494,7 @@ def escape_markdown(text):
     
     # Restore standalone URLs (they should NOT be escaped)
     for i, url in enumerate(urls):
-        text = text.replace(f"URLPLACEHOLDER{i}", url)
+        text = text.replace(f"URLPLACEHOLDER{i}N", url)
     
     # Restore links, escaping special characters in link text but NOT in URLs
     for i, (link_text, link_url) in enumerate(links):
@@ -499,11 +504,11 @@ def escape_markdown(text):
             escaped_text = escaped_text.replace(char, f'\\{char}')
         
         # URLs should NOT be escaped (Telegram handles them correctly)
-        text = text.replace(f"LINKPLACEHOLDER{i}", f"[{escaped_text}]({link_url})")
+        text = text.replace(f"LINKPLACEHOLDER{i}N", f"[{escaped_text}]({link_url})")
     
     # Restore inline code (content should NOT be escaped)
     for i, code_content in enumerate(code_blocks):
-        text = text.replace(f"CODEPLACEHOLDER{i}", f"`{code_content}`")
+        text = text.replace(f"CODEPLACEHOLDER{i}N", f"`{code_content}`")
     
     return text
 
@@ -964,12 +969,20 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
         print("❌ No teams found in data")
         return False
     
-    print(f"📤 Sending {period}ly updates for {len(teams_from_data)} teams from data...")
+    # Filter out blacklisted teams
+    teams_to_process = [team for team in teams_from_data if team not in PERIOD_UPDATE_BLACKLIST]
+    blacklisted_count = len(teams_from_data) - len(teams_to_process)
+    
+    if blacklisted_count > 0:
+        print(f"⏭️ Skipping {blacklisted_count} blacklisted teams: {', '.join(team for team in teams_from_data if team in PERIOD_UPDATE_BLACKLIST)}")
+    
+    print(f"📤 Sending {period}ly updates for {len(teams_to_process)} teams from data...")
     
     success_count = 0
-    total_teams = len(teams_from_data)
+    total_teams = len(teams_to_process)
     
-    for team_name in teams_from_data:
+    for team_name in teams_to_process:
+        
         # Get team channel configuration
         team_responsible, team_chat_id, team_thread_id = get_team_config(team_name, team_channels)
         
@@ -1105,8 +1118,12 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
     
     if dry_run:
         print(f"🎉 Dry run completed: {success_count}/{total_teams} {period}ly updates formatted!")
+        if blacklisted_count > 0:
+            print(f"📊 Summary: {len(teams_from_data)} total teams, {blacklisted_count} blacklisted, {total_teams} processed")
     else:
         print(f"🎉 Sent {success_count}/{total_teams} {period}ly updates successfully!")
+        if blacklisted_count > 0:
+            print(f"📊 Summary: {len(teams_from_data)} total teams, {blacklisted_count} blacklisted, {total_teams} processed, {success_count} sent")
     
     return success_count == total_teams
 

@@ -42,6 +42,7 @@
 
 | [См. список](../changelog-enterprise.md#24-4-4-15) ||
 || v.24.4.4.13 | 29.07.2025 |
+
 - [Дистрибутив](https://binaries.ясубд.рф/release/24.4.4.13/yasubd-24.4.4.13-linux-amd64.tar.xz)
 - [Отладочные символы](https://binaries.ясубд.рф/release/24.4.4.13/yasubd-24.4.4.13-linux-amd64-debug.tar.xz)
 

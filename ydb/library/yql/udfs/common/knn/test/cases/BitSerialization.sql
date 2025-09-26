@@ -81,3 +81,39 @@ select Len(Untag($bitvector_neg_40, "BitVector")) == 5 + 2, $bitvector_neg_40;
 select Len(Untag($bitvector_neg_48, "BitVector")) == 6 + 2, $bitvector_neg_48;
 select Len(Untag($bitvector_neg_56, "BitVector")) == 7 + 2, $bitvector_neg_56;
 select Len(Untag($bitvector_neg_60, "BitVector")) == 8 + 2, $bitvector_neg_60;
+
+-- serialization format
+$flip_list_item = ($list, $idx) -> {
+    $before = ListTake($list, $idx);
+    $after = ListSkip($list, $idx + 1);
+    RETURN ListExtend($before, [-Unwrap($list[$idx])], $after);
+};
+
+select
+    Knn::ToBinaryStringBit(
+        $flip_list_item(
+            ListReplicate(`base_value`, `element_count`),
+            `element_idx`
+        )
+    )
+from (
+    select
+        ListFromRange(0, 130, 7) as `element_count`,  -- size of vector
+        ListFromRange(0, 130, 3) as `element_idx`,    -- bit idx that differs
+        [1.0f, -1.0f]            as `base_value`,     -- default bit value
+)
+flatten list by (`element_count`, `element_idx`, `base_value`)  -- cartesian product to cover all combinations
+where `element_idx` < `element_count`;
+
+select Knn::ToBinaryStringBit([-1.0]);  -- expected \0\7\10
+select Knn::ToBinaryStringBit([1.0, 1.0]);  -- expected \3\6\10
+select Knn::ToBinaryStringBit([1.0, 2.0, 3.0, 0.0, -1.0, -3.0, 0.0, 15.0]);  -- expected \225\0\10
+select Knn::ToBinaryStringBit([1.0, 2.0, 3.0, 0.0, -1.0, -3.0, 0.0, 15.0, 6.0, -1.0, -1.0, 33.34]);  -- expected \0b00011001\0b1110\4\10
+
+select Knn::ToBinaryStringBit(
+    [
+        1.0, 1.0, -1.0,  -- last byte in serialized data
+        -1.0, -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, -1.0,
+        1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0
+    ]
+);  -- expected \0b11001101\0b00001100\0b00000110\5\10

@@ -1147,8 +1147,10 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
             newWatermark = *maybeNewWatermark;
         }
 
-        SRC_LOG_D("SessionId: " << GetSessionId() << " New watermark " << newWatermark << " was generated");
-        activeBatch.Watermark = newWatermark;
+        if (newWatermark) {
+            SRC_LOG_D("SessionId: " << GetSessionId() << " New watermark " << newWatermark << " was generated");
+            activeBatch.Watermark = newWatermark;
+        }
     }
 
     Parent->NotifyCA();

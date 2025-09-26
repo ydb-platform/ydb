@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         Ydb::Table::TableIndex index;
         index.set_name("fulltext_idx");
         index.add_index_columns("text");
-        index.add_data_columns("text");
+        index.add_data_columns("data");
         auto& fulltext = *index.mutable_global_fulltext_index()->mutable_fulltext_settings();
         fulltext.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
         auto& analyzers = *fulltext.add_columns()->mutable_analyzers();
@@ -80,17 +80,16 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         Cout << rows1 << Endl;
 
         auto rows = ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/texts/fulltext_idx/indexImplTable");
-        UNIT_ASSERT_VALUES_EQUAL(TVector<TString>{
-            "[[[["
-            R"(["apple";["1"];["green apple"]];)"
-            R"(["apple";["2"];["red apple"]];)"
-            R"(["apple";["3"];["yellow apple"]];)"
-            R"(["car";["4"];["red car"]];)"
-            R"(["green";["1"];["green apple"]];)"
-            R"(["red";["2"];["red apple"]];)"
-            R"(["red";["4"];["red car"]];)"
-            R"(["yellow";["3"];["yellow apple"]]];)"
-            "%false]]]"}, rows);
+        UNIT_ASSERT_VALUES_EQUAL(TVector<TString>{"[[[["
+            R"(["apple";["one"];["1"]];)"
+            R"(["apple";["two"];["2"]];)"
+            R"(["apple";["three"];["3"]];)"
+            R"(["car";["four"];["4"]];)"
+            R"(["green";["one"];["1"]];)"
+            R"(["red";["two"];["2"]];)"
+            R"(["red";["four"];["4"]];)"
+            R"(["yellow";["three"];["3"]]];)"
+        "%false]]]"}, rows);
     }
 
 }

@@ -1,5 +1,6 @@
 #include "kqp_query_compiler.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
@@ -8,24 +9,23 @@
 #include <ydb/core/kqp/query_compiler/kqp_olap_compiler.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/kqp/query_data/kqp_request_predictor.h>
-#include <ydb/core/ydb_convert/ydb_convert.h>
-
-#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
-
-#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
+
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
-#include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/core/yql_type_helpers.h>
 
 
 namespace NKikimr {
@@ -589,6 +589,14 @@ TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpPro
     return issues;
 }
 
+TStringBuf RemoveJoinAliases(TStringBuf keyName) {
+    if (const auto idx = keyName.find_last_of('.'); idx != TString::npos) {
+        return keyName.substr(idx + 1);
+    }
+
+    return keyName;
+}
+
 class TKqpQueryCompiler : public IKqpQueryCompiler {
 public:
     TKqpQueryCompiler(const TString& cluster, const TIntrusivePtr<TKikimrTablesData> tablesData,
@@ -795,7 +803,7 @@ private:
                 auto connection = input.Cast<TDqConnection>();
 
                 auto& protoInput = *stageProto.AddInputs();
-                FillConnection(connection, stagesMap, protoInput, ctx, tablesMap, physicalStageByID);
+                FillConnection(connection, stagesMap, protoInput, ctx, tablesMap, physicalStageByID, &stage, inputIndex);
                 protoInput.SetInputIndex(inputIndex);
             }
         }
@@ -1017,7 +1025,7 @@ private:
 
             auto& resultProto = *txProto.AddResults();
             auto& connectionProto = *resultProto.MutableConnection();
-            FillConnection(connection, stagesMap, connectionProto, ctx, tablesMap, physicalStageByID);
+            FillConnection(connection, stagesMap, connectionProto, ctx, tablesMap, physicalStageByID, nullptr, 0);
 
             const TTypeAnnotationNode* itemType = nullptr;
             switch (connectionProto.GetTypeCase()) {
@@ -1452,7 +1460,9 @@ private:
         NKqpProto::TKqpPhyConnection& connectionProto,
         TExprContext& ctx,
         THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
-        THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
+        THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID,
+        const TDqPhyStage* stage,
+        ui32 inputIndex
     ) {
         auto inputStageIndex = stagesMap.FindPtr(connection.Output().Stage().Ref().UniqueId());
         YQL_ENSURE(inputStageIndex, "stage #" << connection.Output().Stage().Ref().UniqueId() << " not found in stages map: "
@@ -1814,6 +1824,59 @@ private:
                     vectorResolveProto.AddCopyColumnIndexes(columnIndexes.at(copyCol));
                     pos++;
                 }
+            }
+
+            return;
+        }
+
+        if (auto maybeDqSourceStreamLookup = connection.Maybe<TDqCnStreamLookup>()) {
+            const auto streamLookup = maybeDqSourceStreamLookup.Cast();
+            const auto lookupSourceWrap = streamLookup.RightInput().Cast<TDqLookupSourceWrap>();
+
+            const TStringBuf dataSourceCategory = lookupSourceWrap.DataSource().Category();
+            const auto provider = TypesCtx.DataSourceMap.find(dataSourceCategory);
+            YQL_ENSURE(provider != TypesCtx.DataSourceMap.end(), "Unsupported data source category: \"" << dataSourceCategory << "\"");
+            NYql::IDqIntegration* dqIntegration = provider->second->GetDqIntegration();
+            YQL_ENSURE(dqIntegration, "Unsupported dq source for provider: \"" << dataSourceCategory << "\"");
+
+            auto& dqSourceLookupCn = *connectionProto.MutableDqSourceStreamLookup();
+            auto& lookupSource = *dqSourceLookupCn.MutableLookupSource();
+            auto& lookupSourceSettings = *lookupSource.MutableSettings();
+            auto& lookupSourceType = *lookupSource.MutableType();
+            dqIntegration->FillLookupSourceSettings(lookupSourceWrap.Ref(), lookupSourceSettings, lookupSourceType);
+            YQL_ENSURE(!lookupSourceSettings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" did't fill dq source settings for its dq source node");
+            YQL_ENSURE(lookupSourceType, "Data source provider \"" << dataSourceCategory << "\" did't fill dq source settings type for its dq source node");
+
+            const auto& streamLookupOutput = streamLookup.Output();
+            const auto connectionInputRowType = GetSeqItemType(streamLookupOutput.Ref().GetTypeAnn());
+            YQL_ENSURE(connectionInputRowType->GetKind() == ETypeAnnotationKind::Struct);
+            const auto connectionOutputRowType = GetSeqItemType(streamLookup.Ref().GetTypeAnn());
+            YQL_ENSURE(connectionOutputRowType->GetKind() == ETypeAnnotationKind::Struct);
+            YQL_ENSURE(stage);
+            dqSourceLookupCn.SetConnectionInputRowType(NYql::NCommon::GetSerializedTypeAnnotation(connectionInputRowType));
+            dqSourceLookupCn.SetConnectionOutputRowType(NYql::NCommon::GetSerializedTypeAnnotation(connectionOutputRowType));
+            dqSourceLookupCn.SetLookupRowType(NYql::NCommon::GetSerializedTypeAnnotation(lookupSourceWrap.RowType().Ref().GetTypeAnn()));
+            dqSourceLookupCn.SetInputStageRowType(NYql::NCommon::GetSerializedTypeAnnotation(GetSeqItemType(streamLookupOutput.Stage().Program().Ref().GetTypeAnn())));
+            dqSourceLookupCn.SetOutputStageRowType(NYql::NCommon::GetSerializedTypeAnnotation(GetSeqItemType(stage->Program().Args().Arg(inputIndex).Ref().GetTypeAnn())));
+
+            const TString leftLabel(streamLookup.LeftLabel());
+            dqSourceLookupCn.SetLeftLabel(leftLabel);
+            dqSourceLookupCn.SetRightLabel(streamLookup.RightLabel().StringValue());
+            dqSourceLookupCn.SetJoinType(streamLookup.JoinType().StringValue());
+            dqSourceLookupCn.SetCacheLimit(FromString<ui64>(streamLookup.MaxCachedRows()));
+            dqSourceLookupCn.SetCacheTtlSeconds(FromString<ui64>(streamLookup.TTL()));
+            dqSourceLookupCn.SetMaxDelayedRows(FromString<ui64>(streamLookup.MaxDelayedRows()));
+
+            if (const auto maybeMultiget = streamLookup.IsMultiget()) {
+                dqSourceLookupCn.SetIsMultiGet(FromString<bool>(maybeMultiget.Cast()));
+            }
+
+            for (const auto& key : streamLookup.LeftJoinKeyNames()) {
+                *dqSourceLookupCn.AddLeftJoinKeyNames() = leftLabel ? RemoveJoinAliases(key) : key;
+            }
+
+            for (const auto& key : streamLookup.RightJoinKeyNames()) {
+                *dqSourceLookupCn.AddRightJoinKeyNames() = RemoveJoinAliases(key);
             }
 
             return;

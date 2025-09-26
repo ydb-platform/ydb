@@ -1079,6 +1079,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         WaitCheckpointUpdate(executionId);
 
         auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
         readSession->AddDataReceivedEvent(1, R"({"key": "key1", "value": "value1"})");
         readSession->AddDataReceivedEvent(2, R"({"key": "key2", "value": "value2"})");
         readSession->AddDataReceivedEvent(3, R"({"key": "key3", "value": "value3"})");
@@ -1089,7 +1090,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         WaitCheckpointUpdate(executionId);
 
         WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(4, R"({"key": "key4", "value": "value4"})");
-        ReadMockPqMessage(WaitMockPqWriteSession(pqGateway, outputTopicName), "key4value4");
+        writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
+        ReadMockPqMessage(writeSession, "key4value4");
 
         CancelScriptExecution(operationId);
     }

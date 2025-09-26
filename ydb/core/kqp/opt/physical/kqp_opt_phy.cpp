@@ -71,6 +71,7 @@ public:
         AddHandler(0, &TCoExtendBase::Match, HNDL(BuildExtendStage));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteRightJoinToLeft));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<false>));
+        AddHandler(0, &TDqJoin::Match, HNDL(RewriteStreamLookupJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(BuildJoin<false>));
         AddHandler(0, &TDqPrecompute::Match, HNDL(BuildPrecompute));
         AddHandler(0, &TCoLMap::Match, HNDL(PushLMapToStage<false>));
@@ -504,6 +505,14 @@ protected:
     {
         TExprBase output = DqRewriteLeftPureJoin(node, ctx, *getParents(), IsGlobal);
         DumpAppliedRule("RewriteLeftPureJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteStreamLookupJoin(TExprBase node, TExprContext& ctx) {
+        TMaybeNode<TExprBase> output = DqRewriteStreamLookupJoin(node, ctx);
+        if (output) {
+            DumpAppliedRule("RewriteStreamLookupJoin", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
         return output;
     }
 

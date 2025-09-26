@@ -36,8 +36,7 @@ summary: YDB Health Issue in /Root (Status: RED)
   expr: ydb_healthcheck{STATUS!="GOOD"}
   for: 1m
   labels:
-    severity: >-
-      {{ if or (eq $labels.STATUS "RED") (eq $labels.STATUS "DEGRADED") }} critical {{ else }} warning {{ end }}
+    severity: '{{ if or (eq $labels.STATUS "RED") (eq $labels.STATUS "DEGRADED") }} critical {{ else }} warning {{ end }}'
     component: ydb
     database: "{{ $labels.DATABASE }}"
     type: "{{ $labels.TYPE }}"

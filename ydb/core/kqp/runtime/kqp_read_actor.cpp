@@ -606,12 +606,12 @@ public:
         } else if (!Snapshot.IsValid() && !Settings->HasLockTxId() && !Settings->GetAllowInconsistentReads()) {
             return RuntimeError("Inconsistent reads without locks", NDqProto::StatusIds::UNAVAILABLE);
         }
+        Y_VERIFY(Settings->GetIsolationLevel() == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO && Settings->HasLockTxId(), "SnapshotReadOnly should not take locks");
 
         const auto& tr = *AppData()->TypeRegistry;
 
         TVector<THolder<TShardState>> newShards;
-        newShards.reserve(keyDesc->GetPartitions().size());
-
+        newShards.reserve(keyDesc->GetPartitions().size()); 
         auto bounds = state->GetBounds(Settings->GetReverse());
         size_t pointIndex = 0;
         size_t rangeIndex = 0;

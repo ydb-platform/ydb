@@ -1304,7 +1304,7 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                 if (isTableImmutable) {
                     input.Meta.SourceSettings->SetAllowInconsistentReads(true);
                 }
-
+                // input.Meta.SourceSettings->SetTransactionMode(GetMeta().RequestIsolationLevel);
             } else {
                 YQL_ENSURE(input.SourceSettings);
                 inputDesc.MutableSource()->MutableSettings()->CopyFrom(*input.SourceSettings);
@@ -2553,7 +2553,6 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         if (GetMeta().LockMode) {
             settings->SetLockMode(*GetMeta().LockMode);
         }
-
         createdTasksIds.push_back(task.Id);
         return task;
     };

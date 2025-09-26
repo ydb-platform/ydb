@@ -173,15 +173,10 @@ Y_UNIT_TEST_SUITE(KqpSnapshotReadOnly) {
         };
         
         auto txSettings = NYdb::NQuery::TTxSettings::SnapshotRO();
-        ui32 c = 0;
         for (auto& query : queries) {
             auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(txSettings).CommitTx()).ExtractValueSync();
-            // auto parser = result.GetResultSetParser(0);
-            // UNIT_ASSERT_C(parser.RowsCount() > 0, query);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString() << " counter" << c);
-            c++;
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, "query: " + query + ", result: " + result.GetIssues().ToString());
         }
-        UNIT_ASSERT(false);
     }
 }
 

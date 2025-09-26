@@ -96,7 +96,7 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
           - "localhost:8765"
         ```
 
-    1. If necessary, in the `tls_config` section, specify the [Certificate Authority (CA) certificate](../deployment-options/manual/initial-deployment.md#tls-certificates) that signed the other TLS certificates of the {{ ydb-short-name }} cluster:
+    1. If necessary, in the `tls_config` section of [`prometheus_ydb.yml`](../../../../../deploy/prometheus/prometheus_ydb.yml), specify the [Certificate Authority (CA) certificate](../deployment-options/manual/initial-deployment.md#tls-certificates) that signed the other TLS certificates of the {{ ydb-short-name }} cluster:
 
        ```json
        scheme: https

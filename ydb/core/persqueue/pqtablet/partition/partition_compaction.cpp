@@ -5,7 +5,7 @@
 
 namespace NKikimr::NPQ {
 
-bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime)
+bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, const TInstant blobCreationUnixTime)
 {
     const auto& ctx = ActorContext();
 
@@ -305,7 +305,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
                 Y_DEBUG_ABORT_UNLESS(blobCreationUnixTime <= blob.WriteTimestamp);
                 blobCreationUnixTime = std::max(blobCreationUnixTime, blob.WriteTimestamp);
-                ExecRequestForCompaction(msg, parameters, compactionRequest.Get(), blob.WriteTimestamp.Seconds());
+                ExecRequestForCompaction(msg, parameters, compactionRequest.Get(), blob.WriteTimestamp);
 
                 firstBlobOffset = Nothing();
             }
@@ -319,7 +319,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     CompactionBlobEncoder.HeadCleared = parameters.HeadCleared;
 
-    EndProcessWritesForCompaction(compactionRequest.Get(), blobCreationUnixTime.Seconds(), ctx);
+    EndProcessWritesForCompaction(compactionRequest.Get(), blobCreationUnixTime, ctx);
 
     // for debugging purposes
     //DumpKeyValueRequest(compactionRequest->Record);
@@ -378,7 +378,7 @@ void TPartition::BlobsForCompactionWereWrite()
     TryRunCompaction();
 }
 
-void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime, const TActorContext& ctx)
+void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, const TInstant blobCreationUnixTime, const TActorContext& ctx)
 {
     if (CompactionBlobEncoder.HeadCleared) {
         AFL_ENSURE(!CompactionBlobEncoder.CompactedKeys.empty() || CompactionBlobEncoder.Head.PackedSize == 0)
@@ -478,7 +478,7 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKey(const bool headCleare
     return GetNewCompactionWriteKeyImpl(headCleared, needCompaction, headSize);
 }
 
-void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime, const TActorContext& ctx)
+void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TInstant blobCreationUnixTime, const TActorContext& ctx)
 {
     const auto& key = res.first;
 
@@ -487,7 +487,8 @@ void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyVal
     auto write = request->Record.AddCmdWrite();
     write->SetKey(key.Data(), key.Size());
     write->SetValue(valueD);
-    write->SetCreationUnixTime(blobCreationUnixTime);
+    write->SetCreationUnixTime(blobCreationUnixTime.Seconds());  // note: The time is rounded to second precision.
+    Y_ASSERT(blobCreationUnixTime.Seconds() > 0);
 
     bool isInline = key.IsHead() && valueD.size() < MAX_INLINE_SIZE;
 

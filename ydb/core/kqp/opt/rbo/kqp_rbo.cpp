@@ -1,4 +1,6 @@
 #include "kqp_rbo.h"
+#include "kqp_plan_conversion_utils.h"
+
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr {
@@ -21,55 +23,68 @@ bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator>& input,
     }
 }
 
-TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx) {
-    for (size_t idx=0; idx < Stages.size(); idx ++ ) {
-        YQL_CLOG(TRACE, CoreDq) << "Running ruleset: " << idx;
-        auto & stage = Stages[idx];
+void TRuleBasedStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExprContext& ctx) {
 
-        bool fired = true;
+    bool fired = true;
 
-        int nMatches = 0;
+    int nMatches = 0;
 
-        while (fired && nMatches < 1000) {
-            fired = false;
+    while (fired && nMatches < 1000) {
+        fired = false;
 
-            for (auto iter : root ) {
-                for (auto rule : stage.Rules) {
-                    auto op = iter.Current;
+        for (auto iter : root ) {
+            for (auto rule : Rules) {
+                auto op = iter.Current;
 
-                    if (rule->TestAndApply(op, ctx, KqpCtx, TypeCtx, Config, root.PlanProps)) {
-                        YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
+                if (rule->TestAndApply(op, ctx, optimizer->KqpCtx, optimizer->TypeCtx, optimizer->Config, root.PlanProps)) {
+                    YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
 
-                        if (iter.Parent) {
-                            iter.Parent->Children[iter.ChildIndex] = op;
-                        }
-                        else {
-                            root.Children[0] = op;
-                        }
-
-                        fired = true;
-
-                        if (stage.RequiresRebuild) {
-                            auto newRoot = std::static_pointer_cast<TOpRoot>(root.Rebuild(ctx));
-                            YQL_CLOG(TRACE, CoreDq) << "Rebuilt tree";
-                            root.Node = newRoot->Node;
-                            root.Children[0] = newRoot->Children[0];
-                        }
-
-
-                        nMatches ++;
-                        break;
+                    if (iter.Parent) {
+                        iter.Parent->Children[iter.ChildIndex] = op;
                     }
-                }
+                    else {
+                        root.Children[0] = op;
+                    }
 
-                if (fired) {
+                    fired = true;
+
+                    if (rule->RequiresParentRecompute) {
+                        root.ComputeParents();
+                    }
+
+                    if (RequiresRebuild) {
+                        ExprNodeRebuilder(ctx, root.Node->Pos()).RebuildExprNodes(root);
+                        YQL_CLOG(TRACE, CoreDq) << "After rule " << rule->RuleName << ":\n" << KqpExprToPrettyString(NYql::NNodes::TExprBase(root.Node), ctx);
+                    }
+
+                    nMatches ++;
                     break;
                 }
             }
-        }
 
-        Y_ENSURE(nMatches < 100);
+            if (fired) {
+                break;
+            }
+        }
     }
+
+    Y_ENSURE(nMatches < 100);
+}
+
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx) {
+
+    ExprNodeRebuilder(ctx, root.Node->Pos()).RebuildExprNodes(root);
+    YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << KqpExprToPrettyString(NYql::NNodes::TExprBase(root.Node), ctx);
+    YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString();
+
+    for (size_t idx=0; idx < Stages.size(); idx ++ ) {
+        YQL_CLOG(TRACE, CoreDq) << "Running stage: " << idx;
+        auto stage = Stages[idx];
+        stage->RunStage(this, root, ctx);
+        ExprNodeRebuilder(ctx, root.Node->Pos()).RebuildExprNodes(root);
+        YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << KqpExprToPrettyString(NYql::NNodes::TExprBase(root.Node), ctx);
+    }
+
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
     return ConvertToPhysical(root, ctx, TypeCtx, TypeAnnTransformer, PeepholeTransformer, Config);

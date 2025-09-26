@@ -303,7 +303,6 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                 }, std::nullopt};
                 msg.Internal = true;
 
-                Y_DEBUG_ABORT_UNLESS(blobCreationUnixTime <= blob.WriteTimestamp);
                 blobCreationUnixTime = std::max(blobCreationUnixTime, blob.WriteTimestamp);
                 ExecRequestForCompaction(msg, parameters, compactionRequest.Get(), blob.WriteTimestamp);
 

@@ -76,7 +76,6 @@ http://localhost:31002/counters/counters=<servicename>/prometheus
 
 1. [Запустите](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus, используя отредактированный файл конфигурации.
 
-1. [Установите и запустите](https://prometheus.io/docs/prometheus/latest/getting_started/#downloading-and-running-prometheus) Prometheus, используя [файл конфигурации](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_ydb_prometheus.yml).
 1. [Установите и запустите](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.
 1. [Создайте](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) источник данных с типом `prometheus` в Grafana и подсоедините его к запущенному экземпляру Prometheus.
 1. Загрузите [дашборды {{ ydb-short-name }}](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/) в Grafana.

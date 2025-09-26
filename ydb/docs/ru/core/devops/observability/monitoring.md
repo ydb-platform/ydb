@@ -98,7 +98,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
            ca_file: '<ydb-ca-file>'
        ```
 
-1. Разместите отредактированные файлы в одной директории и [запустите](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus, используя файл конфигурации `prometheus_ydb.yml`.
+1. Разместите отредактированные файлы в одной директории и [запустите](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus, указав в опциях запуска файл конфигурации `prometheus_ydb.yml`.
 
 1. [Установите и запустите](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.
 

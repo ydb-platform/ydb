@@ -536,6 +536,8 @@ def get_target_triple(target):
 
             (target.is_emscripten and target.is_wasm32, 'wasm32-unknown-emscripten'),
             (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
+
+            (target.is_windows and target.is_x86_64, 'x86_64-pc-win32'),
         ],
     )
 
@@ -2066,7 +2068,15 @@ class MSVCCompiler(MSVC, Compiler):
         c_warnings += ['/wd{}'.format(code) for code in warns_disabled]
         cxx_warnings = []
 
+        c_flags_platform = []
+
         if self.tc.use_clang:
+            # gcc does not support multiple targets within the same compiler build,
+            # hence this logic is only relevant for clang
+            target_triple = get_target_triple(target)
+            if target_triple:
+                c_flags_platform.append('--target={}'.format(target_triple))
+
             if not self.tc.is_system_cxx:
                 flags += [
                     # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
@@ -2145,6 +2155,7 @@ class MSVCCompiler(MSVC, Compiler):
         emit('C_COMPILER_UNQUOTED', '"{}"'.format(self.tc.c_compiler))
         emit('MASM_COMPILER_UNQUOTED', '"{}"'.format(self.tc.masm_compiler))
         emit('MASM_COMPILER_OLD_UNQUOTED', self.tc.masm_compiler)
+        emit('C_FLAGS_PLATFORM', c_flags_platform)
         append('C_DEFINES', defines)
         append('C_WARNING_OPTS', c_warnings)
         emit('_CXX_DEFINES', cxx_defines)

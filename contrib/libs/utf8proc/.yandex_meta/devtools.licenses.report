@@ -84,7 +84,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        NEWS.md [319:319]
+        NEWS.md [329:329]
 
 KEEP     MIT                  b9f647ef7e29973cc8b999af88006590
 BELONGS ya.make
@@ -113,7 +113,7 @@ BELONGS ya.make
 
 KEEP     MIT AND Unicode      e494dba55af130e3b0d56ff7a74377e3
 BELONGS ya.make
-FILE_INCLUDE LICENSE.md found in files: README.md at line 30
+FILE_INCLUDE LICENSE.md found in files: README.md at line 28
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: MIT
@@ -121,11 +121,11 @@ FILE_INCLUDE LICENSE.md found in files: README.md at line 30
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [25:30]
+        README.md [23:28]
     Scancode info:
         Original SPDX id: LicenseRef-scancode-unicode
         Score           : 100.00
         Match type      : NOTICE
         Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
     Files with this license:
-        README.md [25:30]
+        README.md [23:28]

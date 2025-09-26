@@ -430,4 +430,48 @@ void TGetQueryTrackerInfoCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TGetDeclaredParametersInfoCommand::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<std::string>(
+        "stage",
+        [] (TThis* command) -> auto& {
+            return command->Options.QueryTrackerStage;
+        })
+        .Default("production");
+
+    registrar.ParameterWithUniversalAccessor<std::string>(
+        "query",
+        [] (TThis* command) -> auto& {
+            return command->Options.Query;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<EQueryEngine>(
+        "engine",
+        [] (TThis* command) -> auto& {
+            return command->Options.Engine;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TYsonString>(
+        "settings",
+        [] (TThis* command) -> auto& {
+            return command->Options.Settings;
+        })
+        .Optional(/*init*/ false);
+}
+
+void TGetDeclaredParametersInfoCommand::DoExecute(ICommandContextPtr context)
+{
+    auto result = WaitFor(context->GetClient()->GetDeclaredParametersInfo(Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .BeginMap()
+            .Item("parameters").Value(result.Parameters)
+        .EndMap());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

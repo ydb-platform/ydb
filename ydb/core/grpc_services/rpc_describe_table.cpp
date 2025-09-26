@@ -300,5 +300,10 @@ void DoDescribeTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityPro
     f.RegisterActor(new TDescribeTableRPC(p.release()));
 }
 
+template<>
+IActor* TEvDescribeTableRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TDescribeTableRPC(msg);
+}
+
 } // namespace NKikimr
 } // namespace NGRpcService

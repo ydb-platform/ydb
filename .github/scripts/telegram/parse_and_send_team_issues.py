@@ -316,6 +316,7 @@ def create_trend_plot(team_name, trend_data, debug_dir=None):
         plt.xlabel('Date', fontsize=12)
         plt.ylabel('Number of Muted Tests', fontsize=12)
         plt.grid(True, alpha=0.3)
+        plt.ylim(bottom=0)  # Start y-axis from 0
         
         # Format x-axis
         plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
@@ -456,9 +457,24 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
     
     # Start with title and team tag (replace - with _ in tag)
     team_tag = team_name.replace('-', '')
-    message = f"🔇 **{current_date} new muted tests for [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** #{team_tag}\n\n"
+    message = f"🔇 **{current_date} new muted tests in `main` for [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** #{team_tag}\n\n"
     
-    # Add muted tests statistics for this specific team if available
+    for issue in issues:
+        # Extract issue number from URL for compact display
+        issue_number = issue['url'].split('/')[-1] if '/' in issue['url'] else issue['url']
+        
+        # Remove "in main" from title if present and "Mute " prefix
+        title = issue['title']
+        if title.endswith(' in main'):
+            title = title[:-8]  # Remove " in main"
+        if title.startswith('Mute '):
+            title = title[5:]  # Remove "Mute " prefix
+        
+        # Escape the title for Markdown and wrap in backticks
+        escaped_title = escape_markdown(title)
+        message += f" - 🎯 `{escaped_title}` [#{issue_number}]({issue['url']})\n"
+    
+    # Add muted tests statistics for this specific team if available (moved to end)
     if muted_stats and team_name in muted_stats:
         team_stats = muted_stats[team_name]
         total = team_stats['total']
@@ -470,15 +486,15 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
         
         # Format statistics with color coding and emojis
         if today > 0 and minus_today > 0:
-            message += f"📊 **[Total muted tests: {total}]({dashboard_url}) (today 🔴+{today}/🟢-{minus_today})**\n\n"
+            message += f"\n📊 **[Total muted tests today: {total}]({dashboard_url}) (🔴+{today} muted /🟢-{minus_today} unmuted)**"
         elif today > 0:
-            message += f"📊 **[Total muted tests: {total}]({dashboard_url}) (today 🔴+{today})**\n\n"
+            message += f"\n📊 **[Total muted tests today: {total}]({dashboard_url}) (🔴+{today} muted)**"
         elif minus_today > 0:
-            message += f"📊 **[Total muted tests: {total}]({dashboard_url}) (today 🟢-{minus_today})**\n\n"
+            message += f"\n📊 **[Total muted tests today: {total}]({dashboard_url}) (🟢-{minus_today} unmuted)**"
         else:
-            message += f"📊 **[Total muted tests: {total}]({dashboard_url})**\n\n"
+            message += f"\n📊 **[Total muted tests today: {total}]({dashboard_url})**"
     
-    # Add responsible users on new line with "fyi:" prefix
+    # Add responsible users on new line with "fyi:" prefix (moved after statistics)
     if team_responsible and team_name in team_responsible:
         responsible = team_responsible[team_name]
         # Handle both single responsible and list of responsibles
@@ -486,12 +502,7 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
             responsible_str = " ".join(f"@{r.replace('_', '\\_')}" if not r.startswith('@') else r.replace('_', '\\_') for r in responsible)
         else:
             responsible_str = f"@{responsible.replace('_', '\\_')}" if not responsible.startswith('@') else responsible.replace('_', '\\_')
-        message += f"fyi: {responsible_str}\n\n"
-    
-    for issue in issues:
-        # Escape the title for Markdown and wrap in backticks
-        escaped_title = escape_markdown(issue['title'])
-        message += f" - 🎯 [{issue['url']}]({issue['url']}) - `{escaped_title}`\n"
+        message += f"\n\nfyi: {responsible_str}"
     
     # Add empty line at the end for better readability
     message += "\n"
@@ -829,11 +840,189 @@ def load_team_channels(team_channels_json):
         return None
 
 
+def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, max_retries=5, retry_delay=10, dry_run=False, debug_plots_dir=None):
+    """
+    Send periodic trend updates for all teams.
+    
+    Args:
+        period (str): Period type ('week' or 'month')
+        bot_token (str): Telegram bot token
+        team_channels (dict): Dictionary mapping team names to their channel configurations
+        ydb_config (dict): YDB configuration
+        delay (int): Delay between messages in seconds
+        max_retries (int): Maximum number of retry attempts
+        retry_delay (int): Delay between retry attempts in seconds
+        dry_run (bool): If True, only print messages without sending to Telegram
+        debug_plots_dir (str): Directory to save debug plot files
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print(f"📊 Starting {period}ly trend updates...")
+    
+    # Get all team data for trends
+    all_team_data = get_all_team_data(
+        database_endpoint=ydb_config.get('endpoint'),
+        database_path=ydb_config.get('path'),
+        credentials_path=ydb_config.get('credentials'),
+        use_yesterday=ydb_config.get('use_yesterday', False)
+    )
+    
+    if not all_team_data:
+        print("❌ Could not fetch team data for trend updates")
+        return False
+    
+    # Get teams from data (all teams that have data)
+    teams_from_data = list(all_team_data.keys())
+    if not teams_from_data:
+        print("❌ No teams found in data")
+        return False
+    
+    print(f"📤 Sending {period}ly updates for {len(teams_from_data)} teams from data...")
+    
+    success_count = 0
+    total_teams = len(teams_from_data)
+    
+    for team_name in teams_from_data:
+        # Get team channel configuration
+        team_responsible, team_chat_id, team_thread_id = get_team_config(team_name, team_channels)
+        
+        # If team not found in config, use default channel
+        if not team_chat_id and team_channels:
+            default_channel_name = team_channels.get('default_channel')
+            if default_channel_name and 'channels' in team_channels:
+                if default_channel_name in team_channels['channels']:
+                    team_chat_id, team_thread_id = parse_chat_and_thread_id(team_channels['channels'][default_channel_name])
+                    print(f"📨 Using default channel '{default_channel_name}' for team {team_name}: {team_chat_id}")
+        
+        # Determine channel name for logging
+        if team_channels and 'teams' in team_channels and team_name in team_channels['teams']:
+            team_config = team_channels['teams'][team_name]
+            team_channel_name = team_config.get('channel', team_channels.get('default_channel', 'default'))
+        else:
+            team_channel_name = team_channels.get('default_channel', 'default') if team_channels else 'default'
+        
+        if not team_chat_id:
+            print(f"⚠️ No channel configuration for team: {team_name} (skipping)")
+            continue
+        
+        # Create trend message
+        period_ru = "неделя к неделе" if period == "week" else "месяц к месяцу"
+        team_tag = team_name.replace('-', '')
+        message = f"📈 **Изменения {period_ru} для команды [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** #{team_tag}\n\n"
+        
+        # Add trend statistics if available
+        if team_name in all_team_data:
+            team_stats = all_team_data[team_name]['stats']
+            trend_data = all_team_data[team_name]['trend']
+            total = team_stats['total']
+            dashboard_url = f"https://datalens.yandex/4un3zdm0zcnyr?owner_team={team_name}"
+            
+            # Calculate period change
+            period_days = 7 if period == "week" else 30
+            current_date = datetime.now() - timedelta(days=1) if ydb_config.get('use_yesterday', False) else datetime.now()
+            previous_date = current_date - timedelta(days=period_days)
+            
+            current_date_str = current_date.strftime('%Y-%m-%d')
+            previous_date_str = previous_date.strftime('%Y-%m-%d')
+            
+            current_count = trend_data.get(current_date_str, 0)
+            previous_count = trend_data.get(previous_date_str, 0)
+            change = current_count - previous_count
+            
+            # Format change with color coding
+            if change > 0:
+                change_str = f"🔴+{change}"
+            elif change < 0:
+                change_str = f"🟢{change}"  # change is already negative
+            else:
+                change_str = "0"
+            
+            message += f"📊 **[Total muted tests: {total}]({dashboard_url}) ({change_str} vs {period_days} days ago)**\n\n"
+        
+        # Add responsible users if available
+        if team_responsible and team_name in team_responsible:
+            responsible = team_responsible[team_name]
+            # Handle both single responsible and list of responsibles
+            if isinstance(responsible, list):
+                responsible_str = " ".join(f"@{r.replace('_', '\\_')}" if not r.startswith('@') else r.replace('_', '\\_') for r in responsible)
+            else:
+                responsible_str = f"@{responsible.replace('_', '\\_')}" if not responsible.startswith('@') else responsible.replace('_', '\\_')
+            message += f"fyi: {responsible_str}\n\n"
+        
+        message += f"График показывает динамику замьюченных тестов за последние 30 дней."
+        
+        if dry_run:
+            print(f"📋 [DRY RUN] Team: {team_name}")
+            print(f"📋 Channel: {team_channel_name} ({team_chat_id})")
+            print(f"📋 Thread: {team_thread_id}")
+            print("📋 Message:")
+            print("-" * 80)
+            print(message)
+            print("-" * 80)
+            print()
+            success_count += 1
+        else:
+            print(f"📨 Sending {period}ly update for team: {team_name}")
+            
+            # Get trend data for this team
+            trend_data = all_team_data.get(team_name, {}).get('trend', {})
+            
+            if trend_data and MATPLOTLIB_AVAILABLE:
+                # Create trend plot
+                plot_data = create_trend_plot(team_name, trend_data, debug_plots_dir)
+                
+                if plot_data:
+                    # Send message with plot
+                    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+                        tmp_file.write(base64.b64decode(plot_data))
+                        tmp_path = tmp_file.name
+                    
+                    try:
+                        print(f"📤 Sending trend plot for team: {team_name}")
+                        if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay, photo_path=tmp_path):
+                            success_count += 1
+                            print(f"✅ Trend update sent for team: {team_name}")
+                        else:
+                            print(f"❌ Failed to send trend update for team: {team_name}")
+                    finally:
+                        # Clean up temporary file
+                        if os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
+                else:
+                    # Fallback to text message
+                    print(f"⚠️ Could not create plot, sending text message for team: {team_name}")
+                    if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay):
+                        success_count += 1
+                        print(f"✅ Text update sent for team: {team_name}")
+                    else:
+                        print(f"❌ Failed to send text update for team: {team_name}")
+            else:
+                # Send text message only
+                print(f"📤 Sending text update for team: {team_name}")
+                if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay):
+                    success_count += 1
+                    print(f"✅ Text update sent for team: {team_name}")
+                else:
+                    print(f"❌ Failed to send text update for team: {team_name}")
+        
+        # Add delay between messages
+        if success_count < total_teams:
+            time.sleep(delay)
+    
+    if dry_run:
+        print(f"🎉 Dry run completed: {success_count}/{total_teams} {period}ly updates formatted!")
+    else:
+        print(f"🎉 Sent {success_count}/{total_teams} {period}ly updates successfully!")
+    
+    return success_count == total_teams
+
+
 def main():
     parser = argparse.ArgumentParser(description="Parse team issues and send separate messages for each team")
     
     # Required arguments
-    parser.add_argument('--file', required=True, help='Path to file with formatted results')
+    parser.add_argument('--file', help='Path to file with formatted results (required for --on-mute-change-update mode)')
     parser.add_argument('--bot-token', help='Telegram bot token (or use TELEGRAM_BOT_TOKEN env var)')
     parser.add_argument('--team-channels', required=True, help='JSON string mapping teams to their channel configurations (or use TEAM_CHANNELS env var)')
     
@@ -845,6 +1034,11 @@ def main():
     parser.add_argument('--max-retries', type=int, default=5, help='Maximum number of retry attempts for failed messages (default: 5)')
     parser.add_argument('--retry-delay', type=int, default=10, help='Delay between retry attempts in seconds (default: 10)')
     
+    # Mode selection (mutually exclusive)
+    mode_group = parser.add_mutually_exclusive_group(required=True)
+    mode_group.add_argument('--on-mute-change-update', action='store_true', help='Default mode: send updates about new muted tests')
+    mode_group.add_argument('--period-update', choices=['week', 'month'], help='Send periodic trend updates (week or month)')
+    
     # YDB arguments for muted tests statistics
     parser.add_argument('--ydb-endpoint', help='YDB database endpoint (or use YDB_ENDPOINT env var)')
     parser.add_argument('--ydb-database', help='YDB database path (or use YDB_DATABASE env var)')
@@ -855,6 +1049,11 @@ def main():
     parser.add_argument('--debug-plots-dir', help='Directory to save debug plot files (enables debug mode)')
     
     args = parser.parse_args()
+    
+    # Validate mode-specific requirements
+    if args.on_mute_change_update and not args.file:
+        print("❌ --file is required for --on-mute-change-update mode")
+        sys.exit(1)
     
     # Get bot token
     bot_token = args.bot_token or os.getenv('TELEGRAM_BOT_TOKEN')
@@ -871,6 +1070,43 @@ def main():
     
     print(f"📋 Loaded channel configurations for {len(team_channels.get('teams', {}))} teams")
     
+    # Handle period update mode
+    if args.period_update:
+        # Prepare YDB config for period updates
+        ydb_config = {
+            'endpoint': args.ydb_endpoint,
+            'path': args.ydb_database,
+            'credentials': args.ydb_credentials,
+            'use_yesterday': args.use_yesterday
+        }
+        
+        # Check if we need Telegram connection (not for dry run)
+        if not args.dry_run:
+            if not bot_token:
+                print("❌ Bot token not provided. Use --bot-token or set TELEGRAM_BOT_TOKEN environment variable")
+                sys.exit(1)
+        
+        # Send period updates
+        success = send_period_updates(
+            period=args.period_update,
+            bot_token=bot_token,
+            team_channels=team_channels,
+            ydb_config=ydb_config,
+            delay=args.delay,
+            max_retries=args.max_retries,
+            retry_delay=args.retry_delay,
+            dry_run=args.dry_run,
+            debug_plots_dir=args.debug_plots_dir
+        )
+        
+        if success:
+            print("✅ Period updates completed successfully")
+            sys.exit(0)
+        else:
+            print("❌ Period updates failed")
+            sys.exit(1)
+    
+    # Handle on-mute-change-update mode (default mode)
     # Get muted tests statistics if not disabled
     muted_stats = None
     if not args.no_stats:
@@ -989,7 +1225,20 @@ def main():
             print("⚠️ Could not fetch team data, will use individual queries if needed")
     
     # Send messages (or show in dry run)
-    send_team_messages(teams, bot_token, args.delay, args.max_retries, args.retry_delay, team_channels, args.dry_run, muted_stats, args.include_plots, ydb_config, args.debug_plots_dir, all_team_data)
+    send_team_messages(
+        teams, 
+        bot_token, 
+        args.delay, 
+        args.max_retries, 
+        args.retry_delay, 
+        team_channels, 
+        args.dry_run,
+        muted_stats,
+        args.include_plots,
+        ydb_config,
+        args.debug_plots_dir,
+        all_team_data
+    )
 
 
 if __name__ == "__main__":

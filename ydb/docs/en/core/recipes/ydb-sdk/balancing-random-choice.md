@@ -1,6 +1,6 @@
 # Random choice
 
-The {{ ydb-short-name }} SDK uses the `random_choice` algorithm by default, except for the C++ SDK.
+The {{ ydb-short-name }} SDK uses the `random_choice` algorithm by default, except for the C++ SDK, which uses the ["prefer the nearest data center"](./balancing-prefer-local.md) algorithm by default.
 
 Below are examples of the code for forced setting of the "random choice" balancing algorithm in different {{ ydb-short-name }} SDKs.
 

@@ -104,7 +104,7 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
            ca_file: '<ydb-ca-file>'
        ```
 
-1. [Start](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus using the edited configuration file.
+1. [Start](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus using `prometheus_ydb.yml` as a configuration file.
 
 1. [Install and start](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.
 

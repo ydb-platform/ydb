@@ -2026,7 +2026,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_C(response.StartsWith("Conversion error"), response);
     }
 
-    void CheckRequest(TTestActorRuntime& runtime, const TActorId& sender, TAutoPtr<IEventHandle>& handle) {
+    void CheckRequest(TTestActorRuntime& runtime, const TActorId& sender, TAutoPtr<IEventHandle>& handle, bool isNewDb = false) {
         THttpRequest httpReq(HTTP_METHOD_GET);
         httpReq.CgiParameters.emplace("timeout", "2000");
         auto page = MakeHolder<TMonPage>("viewer", "title");
@@ -2053,6 +2053,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT(std::find(names.begin(), names.end(), "/Root") != names.end());
         UNIT_ASSERT(std::find(names.begin(), names.end(), "/Root/db1") != names.end());
         UNIT_ASSERT(std::find(names.begin(), names.end(), "/Root/db2") != names.end());
+        if (isNewDb) {
+            UNIT_ASSERT(std::find(names.begin(), names.end(), "/Root/db3") != names.end());
+        }
     }
 
     Y_UNIT_TEST(TenantsCacheForNoConsoleMode) {
@@ -2075,33 +2078,55 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TAutoPtr<IEventHandle> handle;
 
         // Phase control
-        bool dropConsole = false;
+        enum class EPhase { UpInitial, DownFallback, UpWithNewDb };
+        EPhase phase = EPhase::UpInitial;
+        TVector<TString> phasePaths;
+        ui32 statusIdx = 0;
+        auto setPhase = [&](EPhase p) {
+            phase = p;
+            phasePaths.clear();
+            statusIdx = 0;
+            switch (phase) {
+                case EPhase::UpInitial:
+                    phasePaths = {"/Root", "/Root/db1", "/Root/db2"};
+                    break;
+                case EPhase::DownFallback:
+                    break;
+                case EPhase::UpWithNewDb:
+                    phasePaths = {"/Root", "/Root/db1", "/Root/db2", "/Root/db3"};
+                    break;
+            }
+        };
+        setPhase(EPhase::UpInitial);
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case NConsole::TEvConsole::EvListTenantsResponse: {
-                    if (dropConsole) {
+                    if (phase == EPhase::DownFallback) {
                         return TTestActorRuntime::EEventAction::DROP; // simulate Console unavailability
                     }
                     auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
                     Ydb::Cms::ListDatabasesResult listTenantsResult;
                     (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
-                    listTenantsResult.Addpaths("/Root");
-                    listTenantsResult.Addpaths("/Root/db2");
-                    listTenantsResult.Addpaths("/Root/db1");
+                    for (const auto& p : phasePaths) {
+                        listTenantsResult.Addpaths(p);
+                    }
                     (*x)->Get()->Record.MutableResponse()->mutable_operation()->mutable_result()->PackFrom(listTenantsResult);
                     break;
                 }
                 case NConsole::TEvConsole::EvGetTenantStatusResponse: {
-                    static int num = 0;
-                    if (dropConsole) {
+                    if (phase == EPhase::DownFallback) {
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                     auto* x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
                     Ydb::Cms::GetDatabaseStatusResult status;
                     (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&status);
                     if (!status.path()) {
-                        status.set_path("/Root" + (num++ == 0 ? "" : ("/db" + ToString(num))));
+                        if (statusIdx < phasePaths.size()) {
+                            status.set_path(phasePaths[statusIdx++]);
+                        } else {
+                            status.set_path("/Root");
+                        }
                     }
                     status.set_state(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
                     (*x)->Get()->Record.MutableResponse()->mutable_operation()->mutable_result()->PackFrom(status);
@@ -2126,10 +2151,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
         runtime.SetObserverFunc(observerFunc);
 
         // First request: Console available, cache is populated
+        setPhase(EPhase::UpInitial);
         CheckRequest(runtime, sender, handle);
 
         // Second request: Console unavailable, expect last-good cached response
-        dropConsole = true;
+        setPhase(EPhase::DownFallback);
         CheckRequest(runtime, sender, handle);
+
+        // Third request: Console restored with new DB /Root/db3 present
+        setPhase(EPhase::UpWithNewDb);
+        CheckRequest(runtime, sender, handle, true);
     }
 }

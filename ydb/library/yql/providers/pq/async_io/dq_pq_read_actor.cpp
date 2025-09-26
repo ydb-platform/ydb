@@ -294,9 +294,10 @@ public:
             SRC_LOG_I("SessionId: " << GetSessionId(clusterState.Index) << " CreateReadSession");
             if (WatermarkTracker) {
                 TPartitionKey partitionKey { .Cluster = TString(clusterState.Info.Name) };
+                auto now = TInstant::Now();
                 for (const auto partitionId : GetPartitionsToRead(clusterState)) { // XXX duplicated, but rare
                     partitionKey.PartitionId = partitionId;
-                    WatermarkTracker->RegisterPartition(partitionKey);
+                    WatermarkTracker->RegisterPartition(partitionKey, now);
                 }
             }
         }
@@ -610,8 +611,16 @@ private:
     }
 
     void InitWatermarkTracker() {
+        auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
+        auto idleDelayUs = // TODO remove fallback
+            SourceParams.GetWatermarks().HasIdleDelayUs() ?
+            SourceParams.GetWatermarks().GetIdleDelayUs() :
+            lateArrivalDelayUs;
         SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
-            << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds");
+            << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds"
+            << " idle delay: " << idleDelayUs << " microseconds "
+            << " late arrival delay: " << lateArrivalDelayUs << " microseconds"
+            );
 
         if (!SourceParams.GetWatermarks().GetEnabled()) {
             return;
@@ -620,7 +629,8 @@ private:
         WatermarkTracker.ConstructInPlace(
             TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
             SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
-            TDuration::MicroSeconds(SourceParams.GetWatermarks().GetLateArrivalDelayUs()),
+            TDuration::MicroSeconds(lateArrivalDelayUs),
+            TDuration::MicroSeconds(idleDelayUs),
             TInstant::Now()
         );
     }

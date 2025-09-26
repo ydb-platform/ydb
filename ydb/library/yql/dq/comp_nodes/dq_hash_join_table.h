@@ -6,34 +6,10 @@ namespace NKikimr::NMiniKQL::NJoinTable {
 
 using TTuple = NYql::NUdf::TUnboxedValue*;
 
-}
-
-namespace std {
-template <> class hash<NKikimr::NMiniKQL::NJoinTable::TTuple> {
-  public:
-    size_t operator()(NKikimr::NMiniKQL::NJoinTable::TTuple vec) {
-        return Hasher(vec);
-    }
-
-    NKikimr::NMiniKQL::TWideUnboxedHasher Hasher;
-};
-
-template <> class equal_to<NKikimr::NMiniKQL::NJoinTable::TTuple> {
-  public:
-    bool operator()(NKikimr::NMiniKQL::NJoinTable::TTuple lhs, NKikimr::NMiniKQL::NJoinTable::TTuple rhs) {
-        return Equal(lhs, rhs);
-    }
-
-    NKikimr::NMiniKQL::TWideUnboxedEqual Equal;
-};
-
-} // namespace std
-
-namespace NKikimr::NMiniKQL {
-
 class TStdJoinTable {
+public:
     TStdJoinTable(int tupleSize, NKikimr::NMiniKQL::TWideUnboxedEqual eq, NKikimr::NMiniKQL::TWideUnboxedHasher hash)
-        : TupleSize(tupleSize), BuiltTable(1, std::hash<NJoinTable::TTuple>{hash}, std::equal_to<NJoinTable::TTuple>{eq})
+        : TupleSize(tupleSize), BuiltTable(1, hash,eq)
     {}
 
     void Add(std::span<NYql::NUdf::TUnboxedValue> tuple) {
@@ -47,7 +23,7 @@ class TStdJoinTable {
     void Build() {
         Y_ABORT_UNLESS(BuiltTable.empty(), "JoinTable is built already");
         for (int index = 0; index < std::ssize(Tuples); index += TupleSize) {
-            NJoinTable::TTuple thisTuple = &Tuples[index];
+            TTuple thisTuple = &Tuples[index];
             auto [it, ok] = BuiltTable.emplace(thisTuple, std::vector{thisTuple});
             if (!ok) {
                 it->second.emplace_back(thisTuple);
@@ -55,7 +31,7 @@ class TStdJoinTable {
         }
     }
 
-    void Lookup(NJoinTable::TTuple key, std::function<void(NJoinTable::TTuple)> produce) const {
+    void Lookup(TTuple key, std::function<void(TTuple)> produce) const {
         Y_ABORT_IF(BuiltTable.empty(), "call Build first");
         auto it = BuiltTable.find(key);
         if (it != BuiltTable.end()) {
@@ -66,7 +42,7 @@ class TStdJoinTable {
   private:
     const int TupleSize;
     std::vector<NYql::NUdf::TUnboxedValue> Tuples;
-    std::unordered_map<NJoinTable::TTuple, std::vector<NJoinTable::TTuple>> BuiltTable;
+    std::unordered_map<TTuple, std::vector<TTuple>, NKikimr::NMiniKQL::TWideUnboxedHasher, NKikimr::NMiniKQL::TWideUnboxedEqual> BuiltTable;
 };
 
 } // namespace NKikimr::NMiniKQL

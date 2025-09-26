@@ -156,7 +156,7 @@ runs:
           fi
 
           git checkout $ORIGINAL_HEAD
-          YA_MAKE_TARGET=.
+          YA_MAKE_TARGET="--build-custom-json=$GRAPH_COMPARE_OUTPUT"
         else
           YA_MAKE_TARGET=""
           for TARGET in ${{ inputs.build_target }}; do

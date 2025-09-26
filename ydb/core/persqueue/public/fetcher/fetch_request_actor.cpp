@@ -6,6 +6,7 @@
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
 
+#include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/persqueue/events/global.h>
@@ -27,7 +28,7 @@ using namespace NSchemeCache;
 
 
 namespace {
-    static constexpr TDuration DefaultTimeout = TDuration::MilliSeconds(30000);
+    static constexpr TDuration MaxTimeout = TDuration::MilliSeconds(30000);
 }
 
 struct TTabletInfo { // ToDo !! remove
@@ -97,6 +98,8 @@ private:
     TActorId RequesterId;
     ui64 PendingQuotaAmount;
 
+    TActorId LongTimer;
+
     std::unordered_map<TString, TString> PrivateTopicPathToCdcPath;
     std::unordered_map<TString, TString> CdcPathToPrivateTopicPath;
 
@@ -118,7 +121,7 @@ public:
         , PartTabletsRequested(0)
         , RequesterId(requesterId)
     {
-        ui64 deadline = TAppData::TimeProvider->Now().MilliSeconds() + Min<ui32>(Settings.MaxWaitTimeMs, 30000);
+        ui64 deadline = TAppData::TimeProvider->Now().MilliSeconds() + Min<ui64>(Settings.MaxWaitTimeMs, MaxTimeout.MilliSeconds());
         FetchRequestBytesLeft = Settings.TotalMaxBytes;
         for (const auto& p : Settings.Partitions) {
             if (p.Topic.empty()) {
@@ -169,10 +172,12 @@ public:
             return SendReplyAndDie(std::move(Response), ctx);
         }
         LOG_D("scheduling HasDataInfoResponse in " << Settings.MaxWaitTimeMs);
-        ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(Settings.MaxWaitTimeMs, 30000)), new TEvPersQueue::TEvHasDataInfoResponse);
+
+        // We add 1 second because message from partition can be in flight
+        LongTimer = CreateLongTimer(Min<TDuration>(MaxTimeout, TDuration::MilliSeconds(Settings.MaxWaitTimeMs)) + TDuration::Seconds(1),
+            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvTimeout()));
 
         SendSchemeCacheRequest(ctx);
-        Schedule(DefaultTimeout, new TEvPrivate::TEvTimeout());
         Become(&TPQFetchRequestActor::StateFunc);
     }
 
@@ -395,12 +400,15 @@ public:
 
     void HandleTimeout(const TActorContext& ctx) {
         TString reason = "Timeout while waiting for response, may be just slow, Marker# PQ11";
-        return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::GENERIC_ERROR, reason), ctx);
+        return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::TIMEOUT, reason), ctx);
     }
 
     void Die(const TActorContext& ctx) override {
         for (auto& actor: PQClient) {
             NTabletPipe::CloseClient(ctx, actor);
+        }
+        if (LongTimer) {
+            Send(LongTimer, new TEvents::TEvPoison());
         }
         TRlHelpers::PassAway(SelfId());
         TActorBootstrapped<TPQFetchRequestActor>::Die(ctx);

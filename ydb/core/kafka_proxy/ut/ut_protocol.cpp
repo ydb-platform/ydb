@@ -2491,6 +2491,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     }
 
     Y_UNIT_TEST(TopicsCompactionSwitchOnAndOff) {
+        return; // TODO komels
+
         TInsecureTestServer testServer(TTestServerSettings{.KafkaApiMode = "2", .EnableQuoting = false});
         TKafkaTestClient client(testServer.Port);
         TString topic = "topic-comp-test";

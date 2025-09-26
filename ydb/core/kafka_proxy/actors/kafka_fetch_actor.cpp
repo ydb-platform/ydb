@@ -96,8 +96,32 @@ size_t TKafkaFetchActor::CheckTopicIndex(const NKikimr::TEvPQ::TEvFetchResponse:
     return topicIt->second;
 }
 
+namespace {
+
+EKafkaErrors ConvertFetchErrorCode(Ydb::StatusIds::StatusCode status) {
+    switch (status) {
+        case Ydb::StatusIds::SUCCESS:
+            return EKafkaErrors::NONE_ERROR;
+        case Ydb::StatusIds::BAD_REQUEST:
+            return EKafkaErrors::INVALID_REQUEST;
+        case Ydb::StatusIds::SCHEME_ERROR:
+            return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
+        case Ydb::StatusIds::UNAUTHORIZED:
+            return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+        case Ydb::StatusIds::INTERNAL_ERROR: // pipe error
+            return EKafkaErrors::NOT_LEADER_OR_FOLLOWER;
+        case Ydb::StatusIds::TIMEOUT: // partition didn`t answer
+            return EKafkaErrors::REQUEST_TIMED_OUT;
+        default:
+            return EKafkaErrors::UNKNOWN_SERVER_ERROR;
+    }
+}
+
+}
+
+
 void TKafkaFetchActor::HandleErrorResponse(const NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, TFetchResponseData::TFetchableTopicResponse& topicResponse) {
-    const auto code = ConvertErrorCode(ev->Get()->Status);
+    const auto code = ConvertFetchErrorCode(ev->Get()->Status);
 
     for (auto& partitionResponse : topicResponse.Partitions) {
         partitionResponse.ErrorCode = code;

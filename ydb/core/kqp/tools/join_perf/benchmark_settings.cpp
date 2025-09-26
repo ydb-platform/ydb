@@ -2,7 +2,7 @@
 
 namespace NKikimr::NMiniKQL {
 
-TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, const TBenchmarkSettings::TPreset& preset,
+TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, const TPreset& preset,
                  TTableSizes size) {
     TString algoName = [&] {
         switch (algo) {
@@ -37,28 +37,40 @@ TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, const TBenchm
 }
 
 namespace NBenchmarkSizes {
-TVector<TTableSizes> ExponentialSizeIncrease() {
-    TVector<TTableSizes> ret;
+TPreset ExponentialSizeIncrease(int samples, int scale) {
+    TPreset ret;
+    ret.PresetName = "ExpGrowth";
     int init = 1 << 18;
+    init *= scale;
     for (int index = 0; index < 8; index++) {
         int thisNum = init * (1 << index);
-        ret.emplace_back(thisNum, thisNum);
+        for (int _ = 0; _ < samples; ++_){
+            ret.Cases.emplace_back(thisNum, thisNum);
+        }
     }
     return ret;
 }
 
-TVector<TTableSizes> LinearSizeIncrease() {
-    TVector<TTableSizes> ret;
-    int init = 1 << 22;
+TPreset LinearSizeIncrease(int samples, int scale) {
+    TPreset ret;
+    ret.PresetName = "LinearGrowth";
+    int init = 1 << 18;
+    init *= scale; 
     for (int index = 1; index < 9; index++) {
         int thisNum = init * index;
-        ret.emplace_back(thisNum, thisNum);
+        for (int _ = 0; _ < samples; ++_){
+            ret.Cases.emplace_back(thisNum, thisNum);
+        }
     }
     return ret;
 }
 
-TVector<TTableSizes> VerySmallSizes() {
-    return {{512, 512}, {1024, 1024}};
+TPreset VerySmallSizes(int, int) {
+    TPreset ret;
+    ret.PresetName = "VerySmall";
+    ret.Cases.emplace_back(512, 512);
+    ret.Cases.emplace_back(1024, 1024);
+    return ret;
 }
 } // namespace NBenchmarkSizes
 

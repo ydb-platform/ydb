@@ -18,6 +18,4 @@ echo Build graph for head commit...
 ./ya make -Gj0 -ttt ydb --build release -k --cache-tests --build-all > $workdir/graph_head
 
 echo Build graph for changed nodes...
-./ya tool ygdiff --old $workdir/graph_base --new $workdir/graph_head --cut $workdir/graph_diff
-
-echo $workdir/graph_diff
+./ya tool ygdiff --old $workdir/graph_base --new $workdir/graph_head --cut $3

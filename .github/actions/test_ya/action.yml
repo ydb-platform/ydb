@@ -143,7 +143,8 @@ runs:
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           set +e
-          ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          GRAPH_DIFF_PATH=$(realpath ./graph_diff.json)
+          ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD $GRAPH_DIFF_PATH |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
 
@@ -156,7 +157,7 @@ runs:
           fi
 
           git checkout $ORIGINAL_HEAD
-          YA_MAKE_TARGET="--build-custom-json=$GRAPH_COMPARE_OUTPUT"
+          YA_MAKE_TARGET="--build-custom-json=$GRAPH_DIFF_PATH"
         else
           YA_MAKE_TARGET=""
           for TARGET in ${{ inputs.build_target }}; do

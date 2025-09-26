@@ -385,6 +385,13 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         ctx.Send(source, result.release(), 0, cookie);
     };
 
+    if (behaviour == EOperationBehaviour::WriteWithLock) {
+        if (auto lock = OperationsManager->GetLockOptional(record.GetLockTxId()); lock && lock->IsDeleted()) {
+            sendError("lock is already deleted", NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+            return;
+        }
+    }
+
     const auto inFlightLocksRangesBytes = NOlap::TPKRangeFilter::GetFiltersTotalMemorySize();
     const ui64 inFlightLocksRangesBytesLimit = AppDataVerified().ColumnShardConfig.GetInFlightLocksRangesBytesLimit();
     if (behaviour == EOperationBehaviour::WriteWithLock && inFlightLocksRangesBytes > inFlightLocksRangesBytesLimit) {

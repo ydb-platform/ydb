@@ -305,6 +305,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
     void SubscribeLock(const ui64 lockId, const ui32 lockNodeId);
+    void MaybeCleanupLock(const ui64 lockId);
 
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
 

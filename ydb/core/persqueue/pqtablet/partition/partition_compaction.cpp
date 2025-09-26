@@ -481,8 +481,8 @@ void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyVal
 {
     const auto& key = res.first;
 
-    TString valueD = CompactionBlobEncoder.SerializeForKey(key, res.second, CompactionBlobEncoder.EndOffset, PendingWriteTimestamp);
-
+    TInstant compactionWriteTimestamp;
+    TString valueD = CompactionBlobEncoder.SerializeForKey(key, res.second, CompactionBlobEncoder.EndOffset, compactionWriteTimestamp);
     auto write = request->Record.AddCmdWrite();
     write->SetKey(key.Data(), key.Size());
     write->SetValue(valueD);
@@ -515,7 +515,7 @@ void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyVal
         CompactionBlobEncoder.NewHead.PartNo = 0;
     } else {
         AFL_ENSURE(CompactionBlobEncoder.NewHeadKey.Size == 0);
-        CompactionBlobEncoder.NewHeadKey = {key, res.second, PendingWriteTimestamp, 0, MakeBlobKeyToken(key.ToString())};
+        CompactionBlobEncoder.NewHeadKey = {key, res.second, compactionWriteTimestamp, 0, MakeBlobKeyToken(key.ToString())};
     }
 }
 

@@ -255,7 +255,6 @@ public:
                 OnBscError(error);
             }
             if (ev->Get()->TabletId == GetConsoleId()) {
-
                 if (TenantsCache) {
                     return ReplyAndPassAway(GetHTTPOKJSON(*TenantsCache));
                 }

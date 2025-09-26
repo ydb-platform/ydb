@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_result_set_format_settings.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_result_set_format_settings.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -16,8 +16,6 @@
 #include <util/generic/ptr.h>
 #include <util/generic/guid.h>
 #include <google/protobuf/arena.h>
-
-#include <vector>
 
 namespace NKqpProto {
 class TKqpPhyParamBinding;
@@ -102,11 +100,11 @@ struct TKqpExecuterTxResult {
         const NKikimr::NMiniKQL::THolderFactory& factory);
     NKikimrMiniKQL::TResult* GetMkql(google::protobuf::Arena* arena);
     NKikimrMiniKQL::TResult GetMkql();
-    Ydb::ResultSet* GetYdb(google::protobuf::Arena* arena, const TResultSetFormatSettings& resultSetFormatSettings, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite);
+    Ydb::ResultSet* GetYdb(google::protobuf::Arena* arena, const NFormats::TFormatsSettings& settings, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite);
     bool HasTrailingResults();
 
     void FillMkql(NKikimrMiniKQL::TResult* mkqlResult);
-    void FillYdb(Ydb::ResultSet* ydbResult, const TResultSetFormatSettings& resultSetFormatSettings, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite);
+    void FillYdb(Ydb::ResultSet* ydbResult, const NFormats::TFormatsSettings& settings, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite);
 };
 
 struct TTimeAndRandomProvider {
@@ -258,7 +256,8 @@ public:
 
     TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);
     NKikimrMiniKQL::TResult* GetMkqlTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
-    Ydb::ResultSet* GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, const TResultSetFormatSettings& resultSetFormatSettings, TMaybe<ui64> rowsLimitPerWrite);
+    Ydb::ResultSet* GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena,
+        const NFormats::TFormatsSettings& formatsSettings, TMaybe<ui64> rowsLimitPerWrite);
     bool HasTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb);
 
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);

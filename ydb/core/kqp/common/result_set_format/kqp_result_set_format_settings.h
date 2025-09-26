@@ -10,7 +10,7 @@
 
 #include <optional>
 
-namespace NKikimr::NKqp {
+namespace NKikimr::NKqp::NFormats {
 
 struct TArrowFormatSettings {
     struct TCompressionCodec {
@@ -76,15 +76,15 @@ struct TArrowFormatSettings {
     std::optional<TCompressionCodec> CompressionCodec;
 };
 
-class TResultSetFormatSettings {
+class TFormatsSettings {
 public:
-    TResultSetFormatSettings(
+    TFormatsSettings(
         ::Ydb::ResultSet::Format format = ::Ydb::ResultSet::FORMAT_UNSPECIFIED,
         ::Ydb::Query::SchemaInclusionMode schemaInclusionMode = ::Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED,
-        std::optional<TArrowFormatSettings> arrowFormatSettings = std::nullopt)
+        std::optional<TArrowFormatSettings> arrowSettings = std::nullopt)
         : Format(format)
         , SchemaInclusionMode(schemaInclusionMode)
-        , ArrowFormatSettings(std::move(arrowFormatSettings))
+        , ArrowSettings(std::move(arrowSettings))
     {
         if (Format == ::Ydb::ResultSet::FORMAT_UNSPECIFIED) {
             Format = ::Ydb::ResultSet::FORMAT_VALUE;
@@ -114,14 +114,14 @@ public:
         return SchemaInclusionMode == ::Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_FIRST_ONLY;
     }
 
-    const std::optional<TArrowFormatSettings>& GetArrowFormatSettings() const {
-        return ArrowFormatSettings;
+    const std::optional<TArrowFormatSettings>& GetArrowSettings() const {
+        return ArrowSettings;
     }
 
 private:
     ::Ydb::ResultSet::Format Format;
     ::Ydb::Query::SchemaInclusionMode SchemaInclusionMode;
-    std::optional<TArrowFormatSettings> ArrowFormatSettings;
+    std::optional<TArrowFormatSettings> ArrowSettings;
 };
 
-} // namespace NKikimr::NKqp
+} // namespace NKikimr::NKqp::NFormats

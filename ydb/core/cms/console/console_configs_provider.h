@@ -196,6 +196,7 @@ private:
                       const TActorContext &ctx);
 
     void ProcessScheduledUpdates(const TActorContext &ctx);
+    void RemoveSubscription(const TActorId& subscriber);
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx);

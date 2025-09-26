@@ -8,6 +8,7 @@ on:
       - 'stream-nb-*'
       - 'dev-*'
       - 'rc-*'
+      - 'q-stable-*'
     types:
       - 'opened'
       - 'synchronize'

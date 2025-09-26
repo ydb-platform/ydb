@@ -1,0 +1,12 @@
+- labels:
+    container: ydb-dynamic
+  targets:
+  - "ydb-s1.example.com:31002"
+  - "ydb-s1.example.com:31012"
+  - "ydb-s1.example.com:31022"
+  - "ydb-s2.example.com:31002"
+  - "ydb-s2.example.com:31012"
+  - "ydb-s2.example.com:31022"
+  - "ydb-s3.example.com:31002"
+  - "ydb-s3.example.com:31012"
+  - "ydb-s3.example.com:31022"

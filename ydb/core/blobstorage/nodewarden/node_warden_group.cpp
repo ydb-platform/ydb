@@ -363,8 +363,16 @@ namespace NKikimr::NStorage {
         if (!syncer.ActorId && group.Info && group.Info->GroupGeneration == syncer.PendingBridgeProxyGroupGeneration) {
             syncer.BridgeProxyGroupGeneration = syncer.PendingBridgeProxyGroupGeneration;
             syncer.SyncerDataStats = std::make_unique<NBridge::TSyncerDataStats>();
+
+            TBlobStorageGroupType sourceGroupType(TBlobStorageGroupType::ErasureNone);
+            if (const auto it = Groups.find(syncer.SourceGroupId.GetRawId()); it != Groups.end() && it->second.Info) {
+                sourceGroupType = it->second.Info->Type;
+            } else {
+                Y_DEBUG_ABORT("can't obtain source group type");
+            }
+
             syncer.ActorId = Register(NBridge::CreateSyncerActor(group.Info, syncer.SourceGroupId, syncer.TargetGroupId,
-                syncer.SyncerDataStats));
+                syncer.SyncerDataStats, SyncRateQuoter, sourceGroupType));
             syncer.Finished = false;
             syncer.ErrorReason.reset();
             ++syncer.NumStart;

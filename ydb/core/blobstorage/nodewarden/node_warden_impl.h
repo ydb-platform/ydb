@@ -680,6 +680,8 @@ namespace NKikimr::NStorage {
 
         std::set<TWorkingSyncer> WorkingSyncers;
 
+        TReplQuoter::TPtr SyncRateQuoter;
+
         void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
         void StartSyncerIfNeeded(TWorkingSyncer& syncer);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenNotifySyncerFinished>> ev);

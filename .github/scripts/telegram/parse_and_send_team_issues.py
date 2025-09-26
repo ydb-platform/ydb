@@ -436,7 +436,7 @@ def parse_team_issues(content):
 
 def escape_markdown(text):
     """
-    Escape special Markdown characters for Telegram, but preserve link structure.
+    Escape special MarkdownV2 characters for Telegram, but preserve bold formatting and link structure.
     
     Args:
         text (str): Text to escape
@@ -444,10 +444,66 @@ def escape_markdown(text):
     Returns:
         str: Escaped text
     """
-    special_chars = ['*', '~', '>', '#', '=', '|', '{', '}', '!']
+    # For MarkdownV2, we need to escape these characters: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    # But we want to preserve * for bold formatting and [ ] ( ) for links, so we'll handle them specially
+    
+    # First, protect links by temporarily replacing them
+    import re
+    link_pattern = r'\[([^\]]+)\]\(([^)]+)\)'
+    links = []
+    
+    def replace_link(match):
+        links.append((match.group(1), match.group(2)))
+        return f"LINKPLACEHOLDER{len(links)-1}"
+    
+    # Replace all links with placeholders
+    text = re.sub(link_pattern, replace_link, text)
+    
+    # Escape special characters, but not * for bold formatting
+    # Don't escape . inside backticks as it breaks code formatting
+    special_chars = ['~', '`', '>', '+', '-', '=', '|', '{', '}', '!']
     
     for char in special_chars:
         text = text.replace(char, f'\\{char}')
+    
+    # Handle dots separately - only escape when not inside backticks
+    # This is a simplified approach - escape all dots for now
+    text = text.replace('.', '\\.')
+    
+    # Handle # separately - only escape when not at end of line or in specific contexts
+    # For now, let's escape all # to be safe
+    text = text.replace('#', '\\#')
+    
+    # Escape underscores, but protect placeholders first
+    # Replace placeholders with temporary markers that don't contain underscores
+    temp_placeholders = {}
+    for i in range(len(links)):
+        placeholder = f"LINKPLACEHOLDER{i}"
+        temp_marker = f"LINKPLACEHOLDER{i}LINK"
+        temp_placeholders[temp_marker] = placeholder
+        text = text.replace(placeholder, temp_marker)
+    
+    # Now escape underscores
+    text = text.replace('_', '\\_')
+    
+    # Restore placeholders
+    for temp_marker, placeholder in temp_placeholders.items():
+        text = text.replace(temp_marker, placeholder)
+    
+    # Restore links, escaping special characters in both link text and URLs for MarkdownV2
+    for i, (link_text, link_url) in enumerate(links):
+        # Escape special characters in link text for MarkdownV2
+        escaped_text = link_text
+        for char in ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']:
+            escaped_text = escaped_text.replace(char, f'\\{char}')
+        
+        # Escape special characters in URL for MarkdownV2
+        escaped_url = link_url
+        for char in ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']:
+            escaped_url = escaped_url.replace(char, f'\\{char}')
+        
+        text = text.replace(f"LINKPLACEHOLDER{i}", f"[{escaped_text}]({escaped_url})")
+    
     return text
 
 
@@ -473,7 +529,7 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
     
     # Start with title and team tag (replace - with _ in tag)
     team_tag = team_name.replace('-', '')
-    message = f"🔇 **{current_date} new muted tests in `main` for [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** #{team_tag}\n\n"
+    message = f"🔇 *{current_date} new muted tests in `main` for [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})* #{team_tag}\n\n"
     
     for issue in issues:
         # Extract issue number from URL for compact display
@@ -503,15 +559,15 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
         # Format statistics with color coding and emojis
         if show_diff:
             if today > 0 and minus_today > 0:
-                message += f"\n📊 **[Total muted tests: {total}]({dashboard_url}) 🔴+{today} muted /🟢-{minus_today} unmuted**"
+                message += f"\n📊 *[Total muted tests: {total}]({dashboard_url}) 🔴+{today} muted /🟢-{minus_today} unmuted*"
             elif today > 0:
-                message += f"\n📊 **[Total muted tests: {total}]({dashboard_url}) 🔴+{today} muted**"
+                message += f"\n📊 *[Total muted tests: {total}]({dashboard_url}) 🔴+{today} muted*"
             elif minus_today > 0:
-                message += f"\n📊 **[Total muted tests: {total}]({dashboard_url}) 🟢-{minus_today} unmuted**"
+                message += f"\n📊 *[Total muted tests: {total}]({dashboard_url}) 🟢-{minus_today} unmuted*"
             else:
-                message += f"\n📊 **[Total muted tests: {total}]({dashboard_url})**"
+                message += f"\n📊 *[Total muted tests: {total}]({dashboard_url})*"
         else:
-            message += f"\n📊 **[Total muted tests: {total}]({dashboard_url})**"
+            message += f"\n📊 *[Total muted tests: {total}]({dashboard_url})*"
     
     # Add responsible users on new line with "fyi:" prefix (moved after statistics)
     if team_responsible and team_name in team_responsible:
@@ -658,6 +714,15 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
         if not message.strip():
             continue
         
+        # Escape the entire message for MarkdownV2
+        message = escape_markdown(message)
+        
+        # Print final message before sending
+        print(f"🔍 Final message for {team_name}:")
+        print("-" * 80)
+        print(message)
+        print("-" * 80)
+        
         if dry_run:
             print(f"\n--- Team: {team_name} ---")
             print(f"📨 Channel: {team_chat_id}" + (f" (thread {team_thread_id})" if team_thread_id else ""))
@@ -725,7 +790,7 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                     print(f"📤 Photo path: {tmp_path}")
                     print(f"📤 Message length: {len(message)} characters")
                     
-                    if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay, photo_path=tmp_path):
+                    if send_telegram_message(bot_token, team_chat_id, message, "MarkdownV2", team_thread_id, True, max_retries, retry_delay, photo_path=tmp_path):
                         sent_count += 1
                         print(f"✅ Message with plot sent for team: {team_name}")
                     else:
@@ -741,7 +806,7 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                 print(f"📤 Chat ID: {team_chat_id}, Thread ID: {team_thread_id}")
                 print(f"📤 Message length: {len(message)} characters")
                 
-                if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay):
+                if send_telegram_message(bot_token, team_chat_id, message, "MarkdownV2", team_thread_id, True, max_retries, retry_delay):
                     sent_count += 1
                     print(f"✅ Message sent for team: {team_name}")
                 else:
@@ -926,9 +991,9 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
             continue
         
         # Create trend message
-        period_en = "week over week" if period == "week" else "month over month"
+        period_title = "Weekly Muted Tests Report" if period == "week" else "Monthly Muted Tests Report"
         team_tag = team_name.replace('-', '')
-        message = f"📈 **{period_en.title()} changes for team [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** #{team_tag}\n\n"
+        message = f"📈 *{period_title}* for team [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name}) #{team_tag}\n\n"
         
         # Add trend statistics if available
         if team_name in all_team_data:
@@ -949,15 +1014,15 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
             previous_count = trend_data.get(previous_date_str, 0)
             change = current_count - previous_count
             
-            # Format change with color coding
-            if change > 0:
-                change_str = f"🔴+{change}"
-            elif change < 0:
-                change_str = f"🟢{change}"  # change is already negative
-            else:
-                change_str = "0"
+            message += f"📊 *[Total muted tests: {total}]({dashboard_url})*\n\n"
             
-            message += f"📊 **[Total muted tests: {total}]({dashboard_url}) ({change_str} vs {period_days} days ago)**\n\n"
+            # Add change information
+            if change > 0:
+                message += f"🔴 +{change} muted tests in last {period_days} days\n\n"
+            elif change < 0:
+                message += f"🟢 {change} muted tests in last {period_days} days\n\n"
+            else:
+                message += f"⚪ No change in last {period_days} days\n\n"
         
         # Add responsible users if available
         if team_responsible and team_name in team_responsible:
@@ -969,7 +1034,14 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
                 responsible_str = f"@{responsible.replace('_', '\\_')}" if not responsible.startswith('@') else responsible.replace('_', '\\_')
             message += f"fyi: {responsible_str}\n\n"
         
-        message += f"Chart shows muted tests trend over the last 30 days."
+        # Escape the entire message for MarkdownV2
+        message = escape_markdown(message)
+        
+        # Print final message before sending
+        print(f"🔍 Final {period}ly message for {team_name}:")
+        print("-" * 80)
+        print(message)
+        print("-" * 80)
         
         if dry_run:
             print(f"📋 [DRY RUN] Team: {team_name}")
@@ -999,7 +1071,7 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
                     
                     try:
                         print(f"📤 Sending trend plot for team: {team_name}")
-                        if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay, photo_path=tmp_path):
+                        if send_telegram_message(bot_token, team_chat_id, message, "MarkdownV2", team_thread_id, True, max_retries, retry_delay, photo_path=tmp_path):
                             success_count += 1
                             print(f"✅ Trend update sent for team: {team_name}")
                         else:
@@ -1011,7 +1083,7 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
                 else:
                     # Fallback to text message
                     print(f"⚠️ Could not create plot, sending text message for team: {team_name}")
-                    if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay):
+                    if send_telegram_message(bot_token, team_chat_id, message, "MarkdownV2", team_thread_id, True, max_retries, retry_delay):
                         success_count += 1
                         print(f"✅ Text update sent for team: {team_name}")
                     else:
@@ -1019,7 +1091,7 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
             else:
                 # Send text message only
                 print(f"📤 Sending text update for team: {team_name}")
-                if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay):
+                if send_telegram_message(bot_token, team_chat_id, message, "MarkdownV2", team_thread_id, True, max_retries, retry_delay):
                     success_count += 1
                     print(f"✅ Text update sent for team: {team_name}")
                 else:

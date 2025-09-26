@@ -138,7 +138,7 @@ def _send_photo_with_chunked_caption(bot_token, chat_id, photo_path, content, pa
         return False
 
 
-def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="Markdown", message_thread_id=None, disable_web_page_preview=True, max_retries=5, retry_delay=10, delay=1, photo_path=None):
+def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="MarkdownV2", message_thread_id=None, disable_web_page_preview=True, max_retries=5, retry_delay=10, delay=1, photo_path=None):
     """
     Send a message to Telegram channel with retry mechanism.
     Can accept either text message or file path.
@@ -400,8 +400,8 @@ def main():
     parser.add_argument('--message', required=True, help='Message text or path to file to send')
     
     # Optional arguments
-    parser.add_argument('--parse-mode', default='Markdown', choices=['Markdown', 'HTML', 'None'], 
-                       help='Parse mode for message formatting (default: Markdown)')
+    parser.add_argument('--parse-mode', default='MarkdownV2', choices=['Markdown', 'MarkdownV2', 'HTML', 'None'], 
+                       help='Parse mode for message formatting (default: MarkdownV2)')
     parser.add_argument('--delay', type=int, default=1, 
                        help='Delay between message chunks in seconds (default: 1)')
     parser.add_argument('--max-length', type=int, default=4000, 

@@ -4,54 +4,69 @@
 
 namespace NKikimr::NMiniKQL {
 
-using TTuple = std::span<NYql::NUdf::TUnboxedValue>;
+using TTuple = NYql::NUdf::TUnboxedValue*;
 
 }
-namespace std{
-    template<>
-    class hash<NKikimr::NMiniKQL::TTuple>{
-        // hash(TKey)
-    size_t operator()(NKikimr::NMiniKQL::TTuple vec){
-        return Hasher(vec.data());
+
+namespace std {
+template <> class hash<NKikimr::NMiniKQL::TTuple> {
+  public:
+    size_t operator()(NKikimr::NMiniKQL::TTuple vec) {
+        return Hasher(vec);
     }
+
     NKikimr::NMiniKQL::TWideUnboxedHasher Hasher;
-    };
-    template<>
-    class equal_to<NKikimr::NMiniKQL::TTuple>{
-        // hash(TKey)
-    bool operator()(NKikimr::NMiniKQL::TTuple lhs, NKikimr::NMiniKQL::TTuple rhs ){
-        return Equal(lhs.data(),rhs.data());
+};
+
+template <> class equal_to<NKikimr::NMiniKQL::TTuple> {
+  public:
+    // hash(TKey)
+    bool operator()(NKikimr::NMiniKQL::TTuple lhs, NKikimr::NMiniKQL::TTuple rhs) {
+        return Equal(lhs, rhs);
     }
+
     NKikimr::NMiniKQL::TWideUnboxedEqual Equal;
-    };
-    
-}
+};
+
+} // namespace std
 
 namespace NKikimr::NMiniKQL {
 
-class TDumbJoinTable{
-    void BuildWith(std::vector<std::vector<NYql::NUdf::TUnboxedValue>> buildTable){
-        assert(BuiltTable.empty());
-        int size = std::ssize(buildTable[0]);
+class TDumbJoinTable {
+    TDumbJoinTable(int tupleSize, NKikimr::NMiniKQL::TWideUnboxedEqual eq, NKikimr::NMiniKQL::TWideUnboxedHasher hash)
+        : TupleSize(tupleSize), BuiltTable(1, std::hash<TTuple>{hash}, std::equal_to<TTuple>{eq})
+    {}
 
-        std::ranges::for_each(buildTable, [&](std::span<NYql::NUdf::TUnboxedValue> tuple) mutable{
-            assert(std::ssize(tuple) == size);
-            auto [it, ok] = BuiltTable.emplace(tuple, std::vector{tuple});
-            if (!ok){
-                it->second.emplace_back(tuple);
+    void Add(std::span<NYql::NUdf::TUnboxedValue> tuple) {
+        Y_ABORT_UNLESS(BuiltTable.empty(), "JoinTable is built already");
+        Y_ABORT_UNLESS(std::ssize(tuple) == TupleSize, "tuple size promise vs actual mismatch");
+        for (int idx = 0; idx < TupleSize; ++idx) {
+            Tuples.push_back(tuple[idx]);
+        }
+    }
+
+    void Build() {
+        for (int index = 0; index < std::ssize(Tuples); index += TupleSize) {
+            TTuple thisTuple = &Tuples[index];
+            auto [it, ok] = BuiltTable.emplace(thisTuple, std::vector{thisTuple});
+            if (!ok) {
+                it->second.emplace_back(thisTuple);
             }
-        });
-        Tuples = std::move(buildTable);
+        }
     }
-void Lookup(std::span<NYql::NUdf::TUnboxedValue> key, std::function<void(const TTuple&)> produce) const {
-    auto it = BuiltTable.find(key);
-    if (it != BuiltTable.end()){
-        std::ranges::for_each(it->second, produce);
+
+    void Lookup(TTuple key, std::function<void(const TTuple&)> produce) const {
+        Y_ABORT_IF(BuiltTable.empty(), "call Build first");
+        auto it = BuiltTable.find(key);
+        if (it != BuiltTable.end()) {
+            std::ranges::for_each(it->second, produce);
+        }
     }
-}
-private:
-    std::vector<std::vector<NYql::NUdf::TUnboxedValue>> Tuples;
-    std::unordered_map<TTuple,std::vector<TTuple>> BuiltTable;
+
+  private:
+    const int TupleSize;
+    std::vector<NYql::NUdf::TUnboxedValue> Tuples;
+    std::unordered_map<TTuple, std::vector<TTuple>> BuiltTable;
 }
 
-}
+} // namespace NKikimr::NMiniKQL

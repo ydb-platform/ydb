@@ -1,15 +1,19 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
-
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
-
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/grpc_services/service_scheme.h>
+#include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/persqueue/write_meta.h>
-
+#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
+#include <ydb/core/kafka_proxy/actors/actors.h>
+#include <ydb/core/kafka_proxy/actors/kafka_topic_group_path_struct.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
 #include "events/global.h"
@@ -77,6 +81,8 @@ private:
     ui32 FetchRequestReadsDone;
     ui64 FetchRequestCurrentReadTablet;
     ui64 CurrentCookie;
+    ui32 AlterTopicCookie = 0;
+    ui32 PendingAlterTopicResponses = 0;
     ui32 FetchRequestBytesLeft;
     THolder<TEvPQ::TEvFetchResponse> Response;
     TVector<TActorId> PQClient;
@@ -85,6 +91,9 @@ private:
     THashMap<TString, TTopicInfo> TopicInfo;
     THashMap<ui64, TTabletInfo> TabletInfo;
 
+    std::unordered_map<ui32, TString> AlterTopicCookieToName;
+    std::unordered_set<NKafka::TTopicGroupIdAndPath, NKafka::TTopicGroupIdAndPathHash> ConsumerTopicAlterRequestAttempts;
+
     ui32 TopicsAnswered;
     THashSet<ui64> TabletsDiscovered;
     THashSet<ui64> TabletsAnswered;
@@ -92,6 +101,7 @@ private:
     TString ErrorReason;
     TActorId RequesterId;
     ui64 PendingQuotaAmount;
+    bool AnyCdcTopicInRequest = false;
 
     std::unordered_map<TString, TString> PrivateTopicPathToCdcPath;
     std::unordered_map<TString, TString> CdcPathToPrivateTopicPath;
@@ -208,7 +218,7 @@ public:
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Handle SchemeCache response");
         auto& result = ev->Get()->Request;
-        bool anyCdcTopicInRequest = false;
+        AnyCdcTopicInRequest = false;
         for (const auto& entry : result->ResultSet) {
             auto path = CanonizePath(NKikimr::JoinPath(entry.Path));
             switch (entry.Status) {
@@ -232,8 +242,8 @@ public:
                     );
             }
             if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                anyCdcTopicInRequest = true;
-                Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
+                AnyCdcTopicInRequest = true;
+                AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1);
                 auto privateTopicPath = CanonizePath(JoinPath(ChildPath(NKikimr::SplitPath(path), entry.ListNodeEntry->Children.at(0).Name)));
                 PrivateTopicPathToCdcPath[privateTopicPath] = path;
                 CdcPathToPrivateTopicPath[path] = privateTopicPath;
@@ -277,17 +287,90 @@ public:
             auto& topicInfo = TopicInfo[path];
             topicInfo.BalancerTabletId = description.GetBalancerTabletID();
             topicInfo.PQInfo = entry.PQGroupInfo;
+
+            const auto &config = description.GetPQTabletConfig();
+            const auto &consumers = config.GetConsumers();
+            TString groupId = Settings.Partitions[0].ClientId;
+            if (groupId != NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER) {
+                bool consumerIsAdded = false;
+                for (const auto& consumer : consumers) {
+                    TString consumerName = consumer.GetName();
+                    if (consumerName == groupId) {
+                        consumerIsAdded = true;
+                    }
+                }
+                TAppData* appData = AppData(ctx);
+                if (!consumerIsAdded && appData->KafkaProxyConfig.GetAutoCreateConsumersEnable()) {
+                    CreateConsumerGroupIfNecessary(entry.Path.back(), path, groupId);
+                }
+            }
         }
 
-        if (anyCdcTopicInRequest) {
-            SendSchemeCacheRequest(ctx);
+        if (PendingAlterTopicResponses == 0) {
+            if (AnyCdcTopicInRequest) {
+                SendSchemeCacheRequest(ctx);
+                return;
+            }
+
+            for (auto& p: TopicInfo) {
+                ProcessMetadata(p.first, p.second, ctx);
+            }
+        }
+
+    }
+
+    void CreateConsumerGroupIfNecessary(const TString& topicName,
+                                    const TString& topicPath,
+                                    const TString& groupId) {
+        NKafka::TTopicGroupIdAndPath consumerTopicRequest = NKafka::TTopicGroupIdAndPath{groupId, topicPath};
+        if (ConsumerTopicAlterRequestAttempts.find(consumerTopicRequest) == ConsumerTopicAlterRequestAttempts.end()) {
+            ConsumerTopicAlterRequestAttempts.insert(consumerTopicRequest);
+        } else {
+            // it is enough to send a consumer addition request only once for a particular topic
             return;
         }
+        PendingAlterTopicResponses++;
 
-        for (auto& p: TopicInfo) {
-            ProcessMetadata(p.first, p.second, ctx);
+        auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
+        request.get()->set_path(topicPath);
+        auto* consumer = request->add_add_consumers();
+        consumer->set_name(groupId);
+        AlterTopicCookie++;
+        AlterTopicCookieToName[AlterTopicCookie] = topicName;
+        auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = topicName, this]
+            (Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
+            NYdb::NIssue::TIssues issues;
+            NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
+            Send(replyTo,
+                new NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse(std::move(status)),
+                0,
+                cookie);
+        };
+        NKikimr::NGRpcService::DoAlterTopicRequest(
+            std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(
+            topicName, Settings.Database, std::move(request), callback),
+            NKikimr::NReplication::TLocalProxyActor(Settings.Database));
+
+    }
+
+    void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
+        NYdb::TStatus& result = ev->Get()->Result;
+        if (result.GetStatus() == NYdb::EStatus::SUCCESS) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+        } else {
+            LOG_INFO_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
         }
+        PendingAlterTopicResponses--;
+        if (PendingAlterTopicResponses == 0) {
+            if (AnyCdcTopicInRequest) {
+                SendSchemeCacheRequest(ctx);
+                return;
+            }
 
+            for (auto& p: TopicInfo) {
+                ProcessMetadata(p.first, p.second, ctx);
+            }
+        }
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -575,6 +658,7 @@ public:
             HFunc(TEvPersQueue::TEvResponse, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
+            HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
             HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
             CFunc(TEvPrivate::EvTimeout, HandleTimeout);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);

@@ -1,5 +1,16 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.26.0 {#2-26-0}
+
+Дата выхода 25 сентября 2025. Для обновления до версии **2.26.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлены опции `--no-merge` и `--no-cache` в [команду](./reference/ydb-cli/commands/monitoring-healthcheck.md) `{{ ydb-cli }} monitoring healthcheck`.
+* Добавлена статистика времени компиляции запроса в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`.
+* Добавлена опция `--retries` в [команду](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`, позваляющая задать количество повторных попыток для каждого запроса загрузки данных.
+* **_(Требуется сервер v25.4+)_** Добавлена опция `--replace-sys-acl` в [команду](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`, которая задаёт, нужно ли заменять ACL для системных объектов.
+
 ## Версия 2.25.0 {#2-25-0}
 
 Дата выхода 1 сентября 2025. Для обновления до версии **2.25.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).

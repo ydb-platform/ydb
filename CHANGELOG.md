@@ -171,6 +171,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
-* 22620:![profdata](https://github.com/user-attachments/assets/81a7f464-2890-4c8f-81f4-01cebe274b49) [#22620](https://github.com/ydb-platform/ydb/pull/22620) ([Oleg Doronin](https://github.com/dorooleg))
+* 22620:Accelerated validation of schema change verification in SS in case of enabled thering for CS. [#22620](https://github.com/ydb-platform/ydb/pull/22620) ([Oleg Doronin](https://github.com/dorooleg))
 * 22473:The compute scheduler tries to utilize all pools fair-share by resuming throttled tasks [#22473](https://github.com/ydb-platform/ydb/pull/22473) ([Ivan](https://github.com/abyss7))
 * 22311:Invoke TRope::Compact in OnVGetResult only when occupied memory exceeds threshold [#22311](https://github.com/ydb-platform/ydb/pull/22311) ([Anton Myagkov](https://github.com/antonmyagkov))

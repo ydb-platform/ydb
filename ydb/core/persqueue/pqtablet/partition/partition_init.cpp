@@ -612,14 +612,12 @@ static void CheckKeysTimestampOrder(const std::deque<TDataKey>& keys) {
     auto curr = std::next(prev);
     while (curr != keys.end()) {
         if (curr->Timestamp < prev->Timestamp) {
-            Y_DEBUG_ABORT("Data keys have misarranged timestamps:%s", (
-                TStringBuilder()
+            PQ_LOG_ERROR("Data keys have misarranged timestamps:"
                     << " prev_timestamp=" << prev->Timestamp
                     << " curr_timestamp=" << curr->Timestamp
                     << " prev_key=" << prev->Key.ToString()
                     << " curr_key=" << curr->Key.ToString()
                     << " index=" << std::distance(keys.begin(), curr)
-                ).c_str()
             );
         }
         prev = curr++;

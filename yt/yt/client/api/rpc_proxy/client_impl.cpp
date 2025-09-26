@@ -199,6 +199,7 @@ ITransactionPtr TClient::AttachTransaction(
     YT_OPTIONAL_SET_PROTO(req, ping_period, options.PingPeriod);
     req->set_ping(options.Ping);
     req->set_ping_ancestors(options.PingAncestors);
+    YT_OPTIONAL_SET_PROTO(req, pinger_address, options.PingerAddress);
 
     auto rsp = NConcurrency::WaitFor(req->Invoke())
         .ValueOrThrow();
@@ -234,6 +235,7 @@ ITransactionPtr TClient::AttachTransaction(
         durability,
         timeout,
         options.PingAncestors,
+        options.PingerAddress,
         options.PingPeriod,
         std::move(stickyParameters),
         rsp->sequence_number_source_id(),
@@ -1130,6 +1132,7 @@ TFuture<TCheckPermissionByAclResult> TClient::CheckPermissionByAcl(
     req->set_permission(ToProto(permission));
     req->set_acl(ToProto(ConvertToYsonString(acl)));
     req->set_ignore_missing_subjects(options.IgnoreMissingSubjects);
+    req->set_ignore_pending_removal_subjects(options.IgnorePendingRemovalSubjects);
 
     ToProto(req->mutable_master_read_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
@@ -1869,7 +1872,6 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
     req->set_enable_key_guarantee(options.EnableKeyGuarantee);
     req->set_enable_cookies(options.EnableCookies);
 
-    req->set_use_new_slicing_implementation_in_ordered_pool(options.UseNewSlicingImplementationInOrderedPool);
     req->set_use_new_slicing_implementation_in_unordered_pool(options.UseNewSlicingImplementationInUnorderedPool);
 
     ToProto(req->mutable_transactional_options(), options);
@@ -2547,6 +2549,7 @@ TFuture<TListQueriesResult> TClient::ListQueries(
     if (options.CursorTime) {
         req->set_cursor_time(NYT::ToProto(*options.CursorTime));
     }
+
     req->set_cursor_direction(static_cast<NProto::EOperationSortDirection>(options.CursorDirection));
 
     if (options.UserFilter) {
@@ -2567,6 +2570,9 @@ TFuture<TListQueriesResult> TClient::ListQueries(
     if (options.Attributes) {
         ToProto(req->mutable_attributes(), options.Attributes);
     }
+
+    req->set_search_by_token_prefix(options.SearchByTokenPrefix);
+    req->set_use_full_text_search(options.UseFullTextSearch);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListQueriesPtr& rsp) {
         return TListQueriesResult{
@@ -2630,6 +2636,7 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
             .AccessControlObjects = FromProto<std::vector<std::string>>(rsp->access_control_objects()),
             .Clusters = FromProto<std::vector<std::string>>(rsp->clusters()),
             .EnginesInfo = rsp->has_engines_info() ? std::optional(TYsonString(rsp->engines_info())) : std::nullopt,
+            .ExpectedTablesVersion = rsp->has_expected_tables_version() ? std::optional(rsp->expected_tables_version()) : std::nullopt,
         };
     }));
 }

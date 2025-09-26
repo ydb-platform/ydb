@@ -24,6 +24,7 @@ public:
     virtual void Visit(TStructType& node) = 0;
     virtual void Visit(TListType& node) = 0;
     virtual void Visit(TOptionalType& node) = 0;
+    virtual void Visit(TLinearType& node) = 0;
     virtual void Visit(TDictType& node) = 0;
     virtual void Visit(TCallableType& node) = 0;
     virtual void Visit(TAnyType& node) = 0;
@@ -62,6 +63,7 @@ public:
     void Visit(TStructType& node) override;
     void Visit(TListType& node) override;
     void Visit(TOptionalType& node) override;
+    void Visit(TLinearType& node) override;
     void Visit(TDictType& node) override;
     void Visit(TCallableType& node) override;
     void Visit(TAnyType& node) override;
@@ -103,6 +105,7 @@ public:
     void Visit(TStructType& node) override;
     void Visit(TListType& node) override;
     void Visit(TOptionalType& node) override;
+    void Visit(TLinearType& node) override;
     void Visit(TDictType& node) override;
     void Visit(TCallableType& node) override;
     void Visit(TAnyType& node) override;
@@ -143,6 +146,7 @@ public:
     void Visit(TStructType& node) override;
     void Visit(TListType& node) override;
     void Visit(TOptionalType& node) override;
+    void Visit(TLinearType& node) override;
     void Visit(TDictType& node) override;
     void Visit(TCallableType& node) override;
     void Visit(TAnyType& node) override;

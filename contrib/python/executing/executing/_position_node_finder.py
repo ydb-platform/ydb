@@ -5,8 +5,10 @@ from types import CodeType, FrameType
 from typing import Any, Callable, Iterator, Optional, Sequence, Set, Tuple, Type, Union, cast
 from .executing import EnhancedAST, NotOneValueFound, Source, only, function_node_types, assert_
 from ._exceptions import KnownIssue, VerifierFailure
+from ._utils import mangled_name
 
 from functools import lru_cache
+import itertools
 
 # the code in this module can use all python>=3.11 features
 
@@ -23,51 +25,6 @@ def parents(node: EnhancedAST) -> Iterator[EnhancedAST]:
 def node_and_parents(node: EnhancedAST) -> Iterator[EnhancedAST]:
     yield node
     yield from parents(node)
-
-
-def mangled_name(node: EnhancedAST) -> str:
-    """
-
-    Parameters:
-        node: the node which should be mangled
-        name: the name of the node
-
-    Returns:
-        The mangled name of `node`
-    """
-    if isinstance(node, ast.Attribute):
-        name = node.attr
-    elif isinstance(node, ast.Name):
-        name = node.id
-    elif isinstance(node, (ast.alias)):
-        name = node.asname or node.name.split(".")[0]
-    elif isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
-        name = node.name
-    elif isinstance(node, ast.ExceptHandler):
-        assert node.name
-        name = node.name
-    elif sys.version_info >= (3,12) and isinstance(node,ast.TypeVar):
-        name=node.name
-    else:
-        raise TypeError("no node to mangle for type "+repr(type(node)))
-
-    if name.startswith("__") and not name.endswith("__"):
-
-        parent,child=node.parent,node
-
-        while not (isinstance(parent,ast.ClassDef) and child not in parent.bases):
-            if not hasattr(parent,"parent"):
-                break # pragma: no mutate
-
-            parent,child=parent.parent,parent
-        else:
-            class_name=parent.name.lstrip("_")
-            if class_name!="":
-                return "_" + class_name + name
-
-            
-
-    return name
 
 
 @lru_cache(128) # pragma: no mutate
@@ -115,6 +72,7 @@ class PositionNodeFinder(object):
 
     def __init__(self, frame: FrameType, stmts: Set[EnhancedAST], tree: ast.Module, lasti: int, source: Source):
         self.bc_dict={bc.offset:bc for bc in get_instructions(frame.f_code) }
+        self.frame=frame
 
         self.source = source
         self.decorator: Optional[EnhancedAST] = None
@@ -302,6 +260,23 @@ class PositionNodeFinder(object):
             # handle positions changes for __enter__
             return node.parent.parent
 
+        if sys.version_info >= (3, 14) and instruction.opname == "CALL":
+            before = self.instruction_before(instruction)
+            if (
+                before is not None
+                and before.opname == "LOAD_SPECIAL"
+                and before.argrepr in ("__enter__","__aenter__")
+                and before.positions == instruction.positions
+                and isinstance(node.parent, ast.withitem)
+                and node is node.parent.context_expr
+            ):
+                return node.parent.parent
+
+        if sys.version_info >= (3, 14) and isinstance(node, ast.UnaryOp) and isinstance(node.op,ast.Not) and instruction.opname !="UNARY_NOT":
+            # fix for https://github.com/python/cpython/issues/137843
+            return node.operand
+
+
         return node
 
     def known_issues(self, node: EnhancedAST, instruction: dis.Instruction) -> None:
@@ -383,6 +358,7 @@ class PositionNodeFinder(object):
             if (instruction.opname, instruction.argval) in [
                 ("LOAD_DEREF", "__class__"),
                 ("LOAD_FAST", first_arg),
+                ("LOAD_FAST_BORROW", first_arg),
                 ("LOAD_DEREF", first_arg),
             ]:
                 raise KnownIssue("super optimization")
@@ -423,7 +399,7 @@ class PositionNodeFinder(object):
             ):
                 raise KnownIssue(f"can not map {instruction.opname} to two ast nodes")
 
-            if instruction.opname == "LOAD_FAST" and instruction.argval == "__class__":
+            if instruction.opname in ("LOAD_FAST","LOAD_FAST_BORROW") and instruction.argval == "__class__":
                 # example:
                 #   class T:
                 #       def a():
@@ -443,6 +419,60 @@ class PositionNodeFinder(object):
                 # work around for 
                 # https://github.com/python/cpython/issues/114671
                 self.result = node.operand
+
+        if sys.version_info >= (3,14):
+
+
+            if header_length := self.annotation_header_size():
+
+                last_offset=list(self.bc_dict.keys())[-1]
+                if (
+                    not (header_length*2 < instruction.offset <last_offset-4)
+                ):
+                    # https://github.com/python/cpython/issues/135700
+                    raise KnownIssue("synthetic opcodes in annotations are just bound to the first node")
+
+                if self.frame.f_code.co_name=="__annotate__" and instruction.opname=="STORE_SUBSCR":
+                    raise KnownIssue("synthetic code to store annotation")
+
+                if self.frame.f_code.co_name=="__annotate__" and isinstance(node,ast.AnnAssign):
+                    raise KnownIssue("some opcodes in the annotation are just bound specific nodes")
+
+            if isinstance(node,(ast.TypeAlias)) and  self.frame.f_code.co_name==node.name.id :
+                raise KnownIssue("some opcodes in the annotation are just bound TypeAlias")
+
+            if instruction.opname == "STORE_NAME" and instruction.argrepr == "__annotate__":
+                raise KnownIssue("just a store of the annotation")
+
+            if instruction.opname == "IS_OP" and isinstance(node,ast.Name):
+                raise KnownIssue("part of a check that a name like `all` is a builtin")
+
+
+
+    def annotation_header_size(self)->int:
+        if sys.version_info >=(3,14):
+            header=[inst.opname for inst in itertools.islice(self.bc_dict.values(),8)]
+
+            if len(header)==8:
+                if header[0] in ("COPY_FREE_VARS","MAKE_CELL"):
+                    del header[0]
+                    header_size=8
+                else:
+                    del header[7]
+                    header_size=7
+
+                if header==[
+                    "RESUME",
+                    "LOAD_FAST_BORROW",
+                    "LOAD_SMALL_INT",
+                    "COMPARE_OP",
+                    "POP_JUMP_IF_FALSE",
+                    "NOT_TAKEN",
+                    "LOAD_COMMON_CONSTANT",
+                ]:
+                    return header_size
+
+        return 0
 
     @staticmethod
     def is_except_cleanup(inst: dis.Instruction, node: EnhancedAST) -> bool:
@@ -551,7 +581,7 @@ class PositionNodeFinder(object):
             # call to context.__exit__
             return
 
-        if inst_match(("CALL", "LOAD_FAST")) and node_match(
+        if inst_match(("CALL", "LOAD_FAST","LOAD_FAST_BORROW")) and node_match(
             (ast.ListComp, ast.GeneratorExp, ast.SetComp, ast.DictComp)
         ):
             # call to the generator function
@@ -657,11 +687,12 @@ class PositionNodeFinder(object):
             if inst_match("COMPARE_OP", argval="==") and node_match(ast.MatchValue):
                 return
 
-        if inst_match("BINARY_OP") and node_match(
-            ast.AugAssign, op=op_type_map[instruction.argrepr.removesuffix("=")]
-        ):
-            # a+=5
-            return
+        if inst_match("BINARY_OP"):
+            arg=instruction.argrepr.removesuffix("=")
+
+            if arg!="[]" and node_match( ast.AugAssign, op=op_type_map[arg]):
+                # a+=5
+                return
 
         if node_match(ast.Attribute, ctx=ast.Del) and inst_match(
             "DELETE_ATTR", argval=mangled_name(node)
@@ -693,11 +724,15 @@ class PositionNodeFinder(object):
                 "LOAD_NAME",
                 "LOAD_FAST",
                 "LOAD_FAST_CHECK",
+                "LOAD_FAST_BORROW",
                 "LOAD_GLOBAL",
                 "LOAD_DEREF",
                 "LOAD_FROM_DICT_OR_DEREF",
+                "LOAD_FAST_BORROW_LOAD_FAST_BORROW",
             ),
-            argval=mangled_name(node),
+        ) and (
+            mangled_name(node) in instruction.argval if isinstance(instruction.argval,tuple)
+            else instruction.argval == mangled_name(node)
         ):
             return
 
@@ -707,7 +742,7 @@ class PositionNodeFinder(object):
             return
 
         if node_match(ast.Constant) and inst_match(
-            "LOAD_CONST", argval=cast(ast.Constant, node).value
+            ("LOAD_CONST","LOAD_SMALL_INT"), argval=cast(ast.Constant, node).value
         ):
             return
 
@@ -767,7 +802,7 @@ class PositionNodeFinder(object):
                 if(
                     inst_match("CALL_INTRINSIC_1", argrepr="INTRINSIC_TYPEALIAS")
                     or inst_match(
-                        ("STORE_NAME", "STORE_FAST", "STORE_DEREF"), argrepr=node.name.id
+                        ("STORE_NAME", "STORE_FAST", "STORE_DEREF","STORE_GLOBAL"), argrepr=node.name.id
                     )
                     or inst_match("CALL")
                 ):
@@ -807,6 +842,10 @@ class PositionNodeFinder(object):
                 if inst_match("LOAD_FAST",argval=".kwdefaults"):
                     return
 
+                if sys.version_info >= (3, 14):
+                    if inst_match("LOAD_FAST_BORROW_LOAD_FAST_BORROW",argval=(".defaults",".kwdefaults")):
+                        return
+
             if inst_match("STORE_NAME", argval="__classdictcell__"):
                 # this is a general thing
                 return
@@ -840,7 +879,7 @@ class PositionNodeFinder(object):
             if inst_match("LOAD_FAST", argval="__classdict__"):
                 return
 
-            if inst_match("LOAD_FAST") and node_match(
+            if inst_match(("LOAD_FAST","LOAD_FAST_BORROW")) and node_match(
                 (
                     ast.FunctionDef,
                     ast.ClassDef,
@@ -866,7 +905,21 @@ class PositionNodeFinder(object):
                 # the node is the first node in the body
                 return
 
-            if inst_match("LOAD_FAST") and isinstance(node.parent,ast.TypeVar):
+            if inst_match(("LOAD_FAST","LOAD_FAST_BORROW")) and isinstance(node.parent,ast.TypeVar):
+                return
+
+            if inst_match("CALL_INTRINSIC_2",argrepr="INTRINSIC_SET_TYPEPARAM_DEFAULT") and node_match((ast.TypeVar,ast.ParamSpec,ast.TypeVarTuple)):
+                return
+
+        if sys.version_info >= (3, 14):
+            if inst_match("BINARY_OP",argrepr="[]") and node_match(ast.Subscript):
+                return
+            if inst_match("LOAD_FAST_BORROW", argval="__classdict__"):
+                return
+            if inst_match(("STORE_NAME","LOAD_NAME"), argval="__conditional_annotations__"):
+                return
+
+            if inst_match("LOAD_FAST_BORROW_LOAD_FAST_BORROW") and node_match(ast.Name) and node.id in instruction.argval:
                 return
 
 

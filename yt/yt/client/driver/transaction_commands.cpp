@@ -71,6 +71,13 @@ void TStartTransactionCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "pinger_address",
+        [] (TThis* command) -> auto& {
+            return command->Options.PingerAddress;
+        })
+        .Optional(/*init*/ true);
+
     registrar.ParameterWithUniversalAccessor<std::vector<TTransactionId>>(
         "prerequisite_transaction_ids",
         [] (TThis* command) -> auto& {
@@ -132,6 +139,7 @@ void TStartTransactionCommand::DoExecute(ICommandContextPtr context)
 {
     Options.Ping = true;
     Options.AutoAbort = false;
+    Options.PingerAddress = context->Request().UserRemoteAddress;
 
     if (Attributes) {
         Options.Attributes = ConvertToAttributes(Attributes);

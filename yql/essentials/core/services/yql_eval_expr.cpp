@@ -6,6 +6,7 @@
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
@@ -91,7 +92,7 @@ public:
     TNodeSet Reachable;
     TNodeMap<ui32> ExternalWorlds;
     TDeque<TExprNode::TPtr> ExternalWorldsList;
-    bool HasConfigPending = false;
+    TNodeMap<bool> Visited;
 
 public:
     void Scan(const TExprNode& node) {
@@ -117,15 +118,20 @@ public:
             }
             return true;
         });
-        ScanImpl(node);
+
+        bool hasConfigPending = false;
+        ScanImpl(node, hasConfigPending);
     }
 
 private:
-    void ScanImpl(const TExprNode& node) {
-        if (!Visited_.emplace(&node).second) {
+    void ScanImpl(const TExprNode& node, bool& hasConfigPending) {
+        auto [it, inserted] = Visited.emplace(&node, false);
+        if (!inserted) {
+            hasConfigPending = it->second;
             return;
         }
 
+        bool localConfigPending = false;
         if (node.IsCallable("Seq!")) {
             for (ui32 i = 1; i < node.ChildrenSize(); ++i) {
                 auto lambda = node.Child(i);
@@ -143,10 +149,7 @@ private:
                 auto withSlash = TString(prefix) + "/";
                 return alias.StartsWith(withSlash);
                 })) {
-                for (auto& curr: CurrentEvalNodes_) {
-                    Reachable.erase(curr);
-                }
-                HasConfigPending = true;
+                localConfigPending = true;
             }
         }
 
@@ -158,16 +161,14 @@ private:
         bool pop = false;
         if (node.IsCallable(EvaluationFuncs) || node.IsCallable(SubqueryExpandFuncs)) {
             Reachable.insert(&node);
-            CurrentEvalNodes_.insert(&node);
             pop = true;
         }
 
         if (node.IsCallable({ "EvaluateIf!", "EvaluateFor!", "EvaluateParallelFor!" })) {
             // scan predicate/list only
             if (node.ChildrenSize() > 1) {
-                CurrentEvalNodes_.insert(&node);
                 pop = true;
-                ScanImpl(*node.Child(1));
+                ScanImpl(*node.Child(1), localConfigPending);
             }
         } else if (node.IsCallable(SubqueryExpandFuncs)) {
             // scan list only if it's wrapped by evaluation func
@@ -177,30 +178,32 @@ private:
             }
             if (node.ChildrenSize() > index) {
                 if (node.Child(index)->IsCallable(EvaluationFuncs)) {
-                    CurrentEvalNodes_.insert(&node);
                     pop = true;
-                    ScanImpl(*node.Child(index));
+                    ScanImpl(*node.Child(index), localConfigPending);
                 } else {
                     for (const auto& child : node.Children()) {
-                        ScanImpl(*child);
+                        ScanImpl(*child, localConfigPending);
                     }
                 }
             }
         } else {
             for (const auto& child : node.Children()) {
-                ScanImpl(*child);
+                ScanImpl(*child, localConfigPending);
             }
         }
         if (pop) {
-            CurrentEvalNodes_.erase(&node);
+            if (localConfigPending) {
+                Reachable.erase(&node);
+            }
         }
+
+        hasConfigPending = hasConfigPending || localConfigPending;
+        it->second = hasConfigPending;
     }
 
 private:
-    TNodeSet Visited_;
     THashSet<TStringBuf> PendingFileAliases_;
     THashSet<TStringBuf> PendingFolderPrefixes_;
-    TNodeSet CurrentEvalNodes_;
 };
 
 struct TEvalScope {
@@ -235,7 +238,7 @@ bool ValidateCalcWorlds(const TExprNode& node, const TTypeAnnotationContext& typ
         return ValidateCalcWorlds(*node.Child(0), types, visited);
     }
 
-    if (node.IsCallable("Sync!")) {
+    if (node.IsCallable(SyncName)) {
         for (const auto& child : node.Children()) {
             if (!ValidateCalcWorlds(*child, types, visited)) {
                 return false;
@@ -243,6 +246,28 @@ bool ValidateCalcWorlds(const TExprNode& node, const TTypeAnnotationContext& typ
         }
 
         return true;
+    }
+
+    if (node.IsCallable(SeqName)) {
+        if (!node.ChildrenSize()) {
+            return false;
+        }
+        if (!ValidateCalcWorlds(node.Head(), types, visited)) {
+            return false;
+        }
+        for (size_t i = 1; i < node.ChildrenSize(); ++i) {
+            if (!node.Child(i)->IsLambda()) {
+                return false;
+            }
+            if (!ValidateCalcWorlds(node.Child(i)->Tail(), types, visited)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    if (node.IsArgument()) {
+        return node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World;
     }
 
     for (auto& dataProvider : types.DataSources) {
@@ -654,7 +679,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
             auto world = node->ChildPtr(0);
             auto ret = ctx.Builder(node->Pos())
-                .Callable(seq ? "Seq!" : "Sync!")
+                .Callable(seq ? SeqName : SyncName)
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         ui32 pos = 0;
                         if (seq) {
@@ -683,7 +708,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 .Seal()
                 .Build();
 
-            ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+            ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas).Repeat(TExprStep::ExpandSeq);
             hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
             return ret;
         }
@@ -770,7 +795,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                     .Seal()
                     .Build();
 
-                ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+                ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas).Repeat(TExprStep::ExpandSeq);
                 hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
                 return sorted;
             } else {
@@ -821,7 +846,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 auto args = ctx.NewArguments(node->Pos(), std::move(argItems));
                 auto merged = ctx.NewLambda(node->Pos(), std::move(args), std::move(body));
 
-                ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+                ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas).Repeat(TExprStep::ExpandSeq);
                 hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
                 return merged;
             }
@@ -910,10 +935,12 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         }
 
         if (marked.Reachable.find(node.Get()) == marked.Reachable.cend()) {
-            if (marked.HasConfigPending) {
+            bool withRestart = false;
+            if (auto it = marked.Visited.find(node.Get()); it != marked.Visited.end() && it->second) {
                 ctx.Step.Repeat(TExprStep::Configure);
+                withRestart = true;
             }
-            hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, marked.HasConfigPending));
+            hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, withRestart));
             return node;
         }
 
@@ -1134,7 +1161,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             });
 
             result = ctx.ReplaceNodes(std::move(result), replaces);
-            ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+            ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas).Repeat(TExprStep::ExpandSeq);
             hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
             return result;
         }

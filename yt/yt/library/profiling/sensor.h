@@ -229,6 +229,7 @@ struct TSensorOptions
     bool DisableDefault = false;
     bool DisableProjections = false;
     bool ProducerRemoveSupport = false;
+    bool MemOnly = false;
 
     TDuration HistogramMin;
     TDuration HistogramMax;
@@ -383,6 +384,13 @@ public:
      *    4160 bytes - Counter, TimeCounter, Gauge, Timer, Summary
      */
     TProfiler WithHot(bool value = true) const;
+
+    //! WithMemOnly sets MemOnly flag to true.
+    /*!
+     *  MemOnly metrics are used for computing aggregates and don't consume
+     *  write and store quotas.
+     */
+    TProfiler WithMemOnly() const;
 
     //! Counter is used to measure rate of events.
     TCounter Counter(const std::string& name) const;

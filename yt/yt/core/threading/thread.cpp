@@ -289,7 +289,7 @@ void TThread::SetThreadPriority()
 
 #if defined(_unix_)
 TThread::TSignalHandlerStack::TSignalHandlerStack(size_t size)
-    : Size_(size)
+    : Size_(RoundUpToPage(size))
 {
     const size_t guardSize = GuardPageCount * GetPageSize();
 

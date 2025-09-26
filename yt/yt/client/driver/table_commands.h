@@ -160,9 +160,6 @@ private:
     bool EnableCookies;
 
     //! COMPAT(apollo1321): remove in 25.2 release.
-    bool UseNewSlicingImplementationInOrderedPool;
-
-    //! COMPAT(apollo1321): remove in 25.2 release.
     bool UseNewSlicingImplementationInUnorderedPool;
 
     void DoExecute(ICommandContextPtr context) override;

@@ -91,7 +91,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
         ```json
         - labels:
-            container: ydb-static
+            container: ydb-dynamic
           targets:
           - "localhost:8765"
         ```

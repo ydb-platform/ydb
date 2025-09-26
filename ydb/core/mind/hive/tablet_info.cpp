@@ -545,5 +545,12 @@ bool TTabletInfo::RestartsOften() const {
     return Statistics.RestartTimestampSize() >= Hive.GetTabletRestartsMaxCount();
 }
 
+void TTabletInfo::NotifyOnRestart(const TString& status, TSideEffects& sideEffects) {
+    for (auto actorId : ActorsToNotifyOnRestart) {
+        sideEffects.Send(actorId, new TEvPrivate::TEvRestartComplete(GetFullTabletId(), status));
+    }
+    ActorsToNotifyOnRestart.clear();
+}
+
 } // NHive
 } // NKikimr

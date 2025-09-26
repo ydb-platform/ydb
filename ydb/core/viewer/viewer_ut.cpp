@@ -1,4 +1,6 @@
 #include "ut/ut_utils.h"
+#include <ydb/core/mon/ut_utils/ut_utils.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
@@ -35,6 +37,7 @@ using namespace NKikimrWhiteboard;
 using namespace NSchemeShard;
 using namespace Tests;
 using namespace NMonitoring;
+using namespace NMonitoring::NTests;
 using namespace NKikimr::NViewerTests;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
@@ -420,90 +423,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
 #endif
     }
 
-    struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
-        TFakeTicketParserActor()
-            : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StFunc)
-        {}
-
-        STFUNC(StFunc) {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
-                default:
-                    break;
-            }
-        }
-
-        void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Ticket parser: got TEvAuthorizeTicket event: " << ev->Get()->Ticket << " " << ev->Get()->Database << " " << ev->Get()->Entries.size());
-            ++AuthorizeTicketRequests;
-
-            if (ev->Get()->Database != "/Root") {
-                Fail(ev, TStringBuilder() << "Incorrect database " << ev->Get()->Database);
-                return;
-            }
-
-            if (ev->Get()->Ticket != "test_ydb_token") {
-                Fail(ev, TStringBuilder() << "Incorrect token " << ev->Get()->Ticket);
-                return;
-            }
-
-            bool databaseIdFound = false;
-            bool folderIdFound = false;
-            for (const TEvTicketParser::TEvAuthorizeTicket::TEntry& entry : ev->Get()->Entries) {
-                for (const std::pair<TString, TString>& attr : entry.Attributes) {
-                    if (attr.first == "database_id") {
-                        databaseIdFound = true;
-                        if (attr.second != "test_database_id") {
-                            Fail(ev, TStringBuilder() << "Incorrect database_id " << attr.second);
-                            return;
-                        }
-                    } else if (attr.first == "folder_id") {
-                        folderIdFound = true;
-                        if (attr.second != "test_folder_id") {
-                            Fail(ev, TStringBuilder() << "Incorrect folder_id " << attr.second);
-                            return;
-                        }
-                    }
-                }
-            }
-            if (!databaseIdFound) {
-                Fail(ev, "database_id not found");
-                return;
-            }
-            if (!folderIdFound) {
-                Fail(ev, "folder_id not found");
-                return;
-            }
-
-            Success(ev);
-        }
-
-        void Fail(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev, const TString& message) {
-            ++AuthorizeTicketFails;
-            TEvTicketParser::TError err;
-            err.Retryable = false;
-            err.Message = message ? message : "Test error";
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult: " << err.Message);
-            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, err));
-        }
-
-        void Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-            ++AuthorizeTicketSuccesses;
-            NACLib::TUserToken::TUserTokenInitFields args;
-            args.UserSID = "username";
-            args.GroupSIDs.push_back("group_name");
-            TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult success");
-            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
-        }
-
-        size_t AuthorizeTicketRequests = 0;
-        size_t AuthorizeTicketSuccesses = 0;
-        size_t AuthorizeTicketFails = 0;
-    };
 
     IActor* CreateFakeTicketParser(const TTicketParserSettings&) {
-        return new TFakeTicketParserActor();
+        return new TFakeTicketParserActor({"group_name"});
     }
 
     struct TPostQueryArguments {
@@ -537,7 +459,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
         UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
         return NJson::ReadJsonTree(&responseStream, /* throwOnError = */ true);
@@ -1676,7 +1598,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         TString requestBody = R"json({
             "query": "SELECT cast('311111111113.222222223' as Double);",
             "database": "/Root",
@@ -1720,8 +1642,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         TFakeTicketParserActor* ticketParser = nullptr;
         settings.CreateTicketParser = [&](const TTicketParserSettings&) -> IActor* {
-            ticketParser = new TFakeTicketParserActor();
-            return ticketParser;
+            return ticketParser = new TFakeTicketParserActor({"group_name"});
         };
 
         TServer server(settings);
@@ -1739,7 +1660,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         TString requestBody = R"json({
             "query": "SELECT 42;",
             "database": "/Root",
@@ -1802,7 +1723,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost(TStringBuilder()
                                                             << "/query/script/execute?timeout=600000"
                                                             << "&database=%2FRoot", requestBody.Str(), &responseStream, headers);
@@ -1816,7 +1737,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         id = std::regex_replace(id.c_str(), std::regex("/"), "%2F");
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
                                                             << "/operation/get?timeout=600000&id=" << id
@@ -1832,7 +1753,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
                                                             << "/operation/list?timeout=600000&kind=scriptexec"
                                                             << "&database=%2FRoot", &responseStream, headers);
@@ -1847,7 +1768,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         id = std::regex_replace(id.c_str(), std::regex("/"), "%2F");
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
                                                             << "/query/script/fetch?timeout=600000&operation_id=" << id
@@ -1965,7 +1886,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/plan2svg", tinyPlan, &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
@@ -2019,7 +1940,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/plan2svg", brokenPlan, &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_BAD_REQUEST, statusCode << ": " << response);

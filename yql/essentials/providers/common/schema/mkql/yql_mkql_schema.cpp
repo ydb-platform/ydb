@@ -143,6 +143,9 @@ public:
             case TType::EKind::Tagged:
                 TBase::SaveTaggedType(*static_cast<const TTaggedType*>(type));
                 break;
+            case TType::EKind::Linear:
+                TBase::SaveLinearType(*static_cast<const TLinearType*>(type));
+                break;
             default:
                 YQL_ENSURE(false, "Unsupported type kind:" << (ui32)type->GetKind());
         }

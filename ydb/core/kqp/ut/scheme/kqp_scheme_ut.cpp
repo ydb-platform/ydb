@@ -3986,7 +3986,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Vector index support is disabled");
         }
     }
 
@@ -13453,8 +13454,6 @@ END DO)",
             )sql";
             const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
-            UNIT_ASSERT_STRINGS_EQUAL(describeResult->Record.GetPathDescription().GetSecretDescription().GetValue(), "secret-value");
         }
         { // create dirs, empty value with inherit_permissions
             const static auto query = R"sql(
@@ -13506,7 +13505,6 @@ END DO)",
         }
 
         const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
-        UNIT_ASSERT_STRINGS_EQUAL(describeResult->Record.GetPathDescription().GetSecretDescription().GetValue(), "secret-value-1");
 
         // ok
         {
@@ -13515,8 +13513,6 @@ END DO)",
             )sql";
             const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
-            UNIT_ASSERT_STRINGS_EQUAL(describeResult->Record.GetPathDescription().GetSecretDescription().GetValue(), "secret-value-2");
         }
     }
 

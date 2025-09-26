@@ -470,7 +470,9 @@ class ConnectionPool(IConnectionPool):
             wrap_args,
             lambda: self._on_disconnected(connection),
         )
+
         tracing.trace(self.tracer, {"response": res}, trace_level=tracing.TraceLevel.DEBUG)
+
         return res
 
     @_utilities.wrap_async_call_exceptions

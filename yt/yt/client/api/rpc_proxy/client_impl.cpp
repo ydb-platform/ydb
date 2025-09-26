@@ -1872,7 +1872,6 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
     req->set_enable_key_guarantee(options.EnableKeyGuarantee);
     req->set_enable_cookies(options.EnableCookies);
 
-    req->set_use_new_slicing_implementation_in_ordered_pool(options.UseNewSlicingImplementationInOrderedPool);
     req->set_use_new_slicing_implementation_in_unordered_pool(options.UseNewSlicingImplementationInUnorderedPool);
 
     ToProto(req->mutable_transactional_options(), options);
@@ -2638,6 +2637,30 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
             .Clusters = FromProto<std::vector<std::string>>(rsp->clusters()),
             .EnginesInfo = rsp->has_engines_info() ? std::optional(TYsonString(rsp->engines_info())) : std::nullopt,
             .ExpectedTablesVersion = rsp->has_expected_tables_version() ? std::optional(rsp->expected_tables_version()) : std::nullopt,
+        };
+    }));
+}
+
+TFuture<TGetDeclaredParametersInfoResult> TClient::GetDeclaredParametersInfo(
+    const TGetDeclaredParametersInfoOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetDeclaredParametersInfo();
+    SetTimeoutOptions(*req, options);
+
+    req->set_query_tracker_stage(options.QueryTrackerStage);
+
+    if (options.Settings) {
+        ToProto(req->mutable_settings(), ConvertToYsonString(options.Settings));
+    }
+
+    req->set_query(options.Query);
+    req->set_engine(NProto::ConvertQueryEngineToProto(options.Engine));
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetDeclaredParametersInfoPtr& rsp) {
+        return TGetDeclaredParametersInfoResult{
+            .Parameters = TYsonString(rsp->declared_parameters_info()),
         };
     }));
 }

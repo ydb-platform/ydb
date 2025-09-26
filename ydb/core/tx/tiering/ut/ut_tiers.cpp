@@ -462,8 +462,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         UNIT_ASSERT(batchSize < 8 * 1024 * 1024);
 
         {
-            TAtomic unusedPrev;
-            runtime.GetAppData().Icb->SetValue("ColumnShardControls.GranuleIndexedPortionsCountLimit", 1, unusedPrev);
+            TControlBoard::SetValue(1, runtime.GetAppData().Icb->ColumnShardControls.GranuleIndexedPortionsCountLimit);
         }
         lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch1);
         lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch2);

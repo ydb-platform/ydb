@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20250814.0)
+VERSION(20250814.1)
 
-ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20250814.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20250814.1.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include

@@ -49,6 +49,7 @@ enum class ECommitState {
 };
 
 
+class IAutopartitioningManager;
 class TPartitionCompaction;
 
 struct TTransaction {
@@ -134,6 +135,7 @@ class TPartition : public TBaseActor<TPartition> {
     friend TInitDataRangeStep;
     friend TInitDataStep;
     friend TInitEndWriteTimestampStep;
+    friend TInitFieldsStep;
 
     friend TPartitionSourceManager;
 
@@ -293,6 +295,7 @@ private:
 
     void AddMetaKey(TEvKeyValue::TEvRequest* request);
     void CheckHeadConsistency() const;
+    void CheckTimestampsOrderInZones(TStringBuf validateReason = {}) const;
     void HandlePendingRequests(const TActorContext& ctx);
     void HandleQuotaWaitingRequests(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
@@ -449,8 +452,6 @@ private:
                                                 const TActorContext& ctx);
 
     void Initialize(const TActorContext& ctx);
-    void InitSplitMergeSlidingWindow();
-
     template <typename T>
     void EmplacePendingRequest(T&& body, NWilson::TSpan&& span, const TActorContext& ctx) {
         const auto now = ctx.Now();
@@ -479,7 +480,6 @@ private:
 
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
-    NKikimrPQ::EScaleStatus CheckScaleStatus(const TActorContext& ctx);
     void ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus);
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
 
@@ -512,7 +512,7 @@ public:
 
     TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
-               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
+               const NKikimrPQ::TPQTabletConfig& config, const std::shared_ptr<TTabletCountersBase>& counters, bool SubDomainOutOfSpace, ui32 numChannels,
                const TActorId& writeQuoterActorId,
                TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
                bool newPartition = false);
@@ -707,7 +707,7 @@ private:
     const NKikimrPQ::TPQTabletConfig::TPartition* PartitionConfig = nullptr;
     const NKikimrPQ::TPQTabletConfig::TPartition* PendingPartitionConfig = nullptr;
 
-    const TTabletCountersBase& Counters;
+    std::shared_ptr<TTabletCountersBase> Counters;
     NPersQueue::TTopicConverterPtr TopicConverter;
     bool IsLocalDC;
     TString DCId;
@@ -959,9 +959,10 @@ private:
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgReadBytes;
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgQuotaBytes;
 
-    std::unique_ptr<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> SplitMergeAvgWriteBytes;
+    std::unique_ptr<IAutopartitioningManager> AutopartitioningManager;
     TInstant LastScaleRequestTime = TInstant::Zero();
     TMaybe<NKikimrPQ::TPartitionScaleParticipants> PartitionScaleParticipants;
+    TMaybe<TString> SplitBoundary;
     NKikimrPQ::EScaleStatus ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
 
     ui64 ReservedSize;
@@ -1047,8 +1048,6 @@ private:
 
     TRowVersion LastEmittedHeartbeat;
 
-    TLastCounter SourceIdCounter;
-
     const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
 
     bool ClosedInternalPartition = false;
@@ -1079,10 +1078,16 @@ private:
                      ui64 creationUnixTime,
                      const TActorContext& ctx,
                      bool includeToWriteCycle = true);
-    void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+    void AddCmdWriteWithDeferredTimestamp(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                      TEvKeyValue::TEvRequest* request,
                      const TActorContext& ctx,
                      bool includeToWriteCycle = true);
+    void AddCmdWriteImpl(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                     TEvKeyValue::TEvRequest* request,
+                     ui64 creationUnixTime,
+                     const TActorContext& ctx,
+                     bool includeToWriteCycle,
+                     struct TPartitionsPrivateAddCmdWriteTag);
     void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
                            TProcessParametersBase& parameters,
                            ui32 curWrites,
@@ -1127,11 +1132,25 @@ private:
 
     void TryCorrectStartOffset(TMaybe<ui64> offset);
 
+    ui64 GetStartOffset() const;
+    ui64 GetEndOffset() const;
+
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
     TDeque<NWilson::TTraceId> TxForPersistTraceIds;
     TDeque<NWilson::TSpan> TxForPersistSpans;
 
     bool CanProcessUserActionAndTransactionEvents() const;
 };
+
+inline ui64 TPartition::GetStartOffset() const {
+    if (CompactionBlobEncoder.IsEmpty()) {
+        return BlobEncoder.StartOffset;
+    }
+    return CompactionBlobEncoder.StartOffset;
+}
+
+inline ui64 TPartition::GetEndOffset() const {
+    return BlobEncoder.EndOffset;
+}
 
 } // namespace NKikimr::NPQ

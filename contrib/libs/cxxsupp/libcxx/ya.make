@@ -2,6 +2,9 @@
 
 LIBRARY()
 
+# Ensure this library is mutually exclusive with "system stl" mode
+NO_BUILD_IF(USE_STL_SYSTEM)
+
 LICENSE(
     Apache-2.0 AND
     Apache-2.0 WITH LLVM-exception AND

@@ -88,6 +88,7 @@ TMetarequestTestParams SetupServer(const TString shortTopicName, bool serverless
             serverSettings.AppConfig->MutableKafkaProxyConfig()->MutableProxy()->SetPort(FAKE_SERVERLESS_KAFKA_PROXY_PORT);
     }
     NPersQueue::TTestServer server(serverSettings, true, {}, NActors::NLog::PRI_INFO, pm);
+    server.EnableLogs({NKikimrServices::PERSQUEUE, NKikimrServices::PQ_FETCH_REQUEST});
 
     server.AnnoyingClient->CreateTopic(fullTopicName, 1);
     server.WaitInit(shortTopicName);
@@ -502,13 +503,39 @@ namespace NKafka::NTests {
             return {actorId, actor};
         }
 
-        Y_UNIT_TEST(FetchWithTimeout) {
+        Y_UNIT_TEST(FetchWithNoneData) {
             auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
 
             auto* runtime = server.GetRuntime();
             auto edge = runtime->AllocateEdgeActor();
 
             CreateFetchActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime, config);
+
+            TAutoPtr<IEventHandle> handle;
+            auto* ev = runtime->GrabEdgeEvent<TEvKafka::TEvResponse>(handle);
+            UNIT_ASSERT(ev);
+            auto response = dynamic_cast<TFetchResponseData*>(ev->Response.get());
+
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(response->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Responses[0].Partitions.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        Y_UNIT_TEST(FetchWithTimeout) {
+            auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
+
+            auto* runtime = server.GetRuntime();
+            auto edge = runtime->AllocateEdgeActor();
+
+            auto [actorId, actor] = CreateFetchActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime, config);
+            Sleep(TDuration::MilliSeconds(100)); // wait actor willbe created
+
+            // emulate pipe error
+            auto topicIndexes = TestAccessor::GetTopicIndexes(actor);
+            UNIT_ASSERT(topicIndexes.size() == 1);
+            auto fetchActorId = topicIndexes.begin()->first;
+            runtime->Send(fetchActorId, fetchActorId, new TEvents::TEvWakeup(1000));
 
             TAutoPtr<IEventHandle> handle;
             auto* ev = runtime->GrabEdgeEvent<TEvKafka::TEvResponse>(handle);
@@ -528,10 +555,12 @@ namespace NKafka::NTests {
             auto edge = runtime->AllocateEdgeActor();
 
             auto [actorId, actor] = CreateFetchActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime, config);
-            Sleep(TDuration::MilliSeconds(100)); // wait acttor willbe created
+            Sleep(TDuration::MilliSeconds(100)); // wait actor willbe created
 
             // emulate pipe error
-            auto fetchActorId = TestAccessor::GetTopicIndexes(actor).begin()->first;
+            auto topicIndexes = TestAccessor::GetTopicIndexes(actor);
+            UNIT_ASSERT(topicIndexes.size() == 1);
+            auto fetchActorId = topicIndexes.begin()->first;
             runtime->Send(fetchActorId, {}, new TEvTabletPipe::TEvClientDestroyed(0, {}, {}));
 
             TAutoPtr<IEventHandle> handle;

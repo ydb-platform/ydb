@@ -17,9 +17,9 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
-#define LOG_E(stream) LOG_ERROR_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, stream)
-#define LOG_I(stream) LOG_INFO_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, stream)
-#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, stream)
+#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, stream)
+#define LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, stream)
+#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, stream)
 
 namespace NKikimr::NPQ {
 
@@ -29,6 +29,7 @@ using namespace NSchemeCache;
 
 namespace {
     static constexpr TDuration MaxTimeout = TDuration::MilliSeconds(30000);
+    static constexpr ui64 TimeoutWakeupTag = 1000;
 }
 
 struct TTabletInfo { // ToDo !! remove
@@ -61,20 +62,6 @@ using namespace NActors;
 
 class TPQFetchRequestActor : public TActorBootstrapped<TPQFetchRequestActor>
                            , private TRlHelpers {
-
-struct TEvPrivate {
-    enum EEv {
-        EvTimeout = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
-
-    struct TEvTimeout : NActors::TEventLocal<TEvTimeout, EvTimeout> {
-    };
-
-};
-
 private:
     TFetchRequestSettings Settings;
 
@@ -146,6 +133,10 @@ public:
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Tag == TimeoutWakeupTag) {
+            HandleTimeout(ctx);
+            return;
+        }
         const auto tag = static_cast<EWakeupTag>(ev->Get()->Tag);
         OnWakeup(tag);
         switch (tag) {
@@ -171,11 +162,11 @@ public:
         if (Response) {
             return SendReplyAndDie(std::move(Response), ctx);
         }
-        LOG_D("scheduling HasDataInfoResponse in " << Settings.MaxWaitTimeMs);
 
-        // We add 1 second because message from partition can be in flight
-        LongTimer = CreateLongTimer(Min<TDuration>(MaxTimeout, TDuration::MilliSeconds(Settings.MaxWaitTimeMs)) + TDuration::Seconds(1),
-            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvPrivate::TEvTimeout()));
+        // We add 6 second because message from partition can be in flight and
+        // wakeup period in the partition is 5 seconds. timeout must be more
+        LongTimer = CreateLongTimer(Min<TDuration>(MaxTimeout, TDuration::MilliSeconds(Settings.MaxWaitTimeMs)) + TDuration::Seconds(6),
+            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(TimeoutWakeupTag)));
 
         SendSchemeCacheRequest(ctx);
         Become(&TPQFetchRequestActor::StateFunc);
@@ -347,9 +338,9 @@ public:
             } else {
                 const auto& tabletInfo = TabletInfo[tabletId];
                 auto& fetchInfo = it->second.FetchInfo[part];
-                LOG_D("sending HasDataInfoResponse " << fetchInfo->Record.DebugString());
+                LOG_D("Sending TEvPersQueue::TEvHasDataInfo " << fetchInfo->Record.DebugString());
 
-                NTabletPipe::SendData(ctx, tabletInfo.PipeClient, it->second.FetchInfo[part].Release());
+                NTabletPipe::SendData(ctx, tabletInfo.PipeClient, fetchInfo.Release());
                 ++PartTabletsRequested;
             }
         }
@@ -400,6 +391,7 @@ public:
 
     void HandleTimeout(const TActorContext& ctx) {
         TString reason = "Timeout while waiting for response, may be just slow, Marker# PQ11";
+        LOG_D(reason);
         return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::TIMEOUT, reason), ctx);
     }
 
@@ -590,7 +582,6 @@ public:
             HFunc(TEvents::TEvWakeup, Handle);
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
             HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
-            CFunc(TEvPrivate::EvTimeout, HandleTimeout);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
     )
 };

@@ -47,7 +47,6 @@ struct TTopicInfo {
     TVector<ui64> Tablets;
     THashMap<ui32, ui64> PartitionToTablet;
 
-    NKikimrPQ::TPQTabletConfig Config;
     TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> PQInfo;
     NPersQueue::TDiscoveryConverterPtr Converter;
     ui32 NumParts = 0;
@@ -320,8 +319,6 @@ public:
         const auto& pqDescr = topicInfo.PQInfo->Description;
 
         ++TopicsAnswered;
-        topicInfo.Config = pqDescr.GetPQTabletConfig();
-        topicInfo.Config.SetVersion(pqDescr.GetAlterVersion());
         topicInfo.NumParts = pqDescr.PartitionsSize();
 
         for (const auto& partition : pqDescr.GetPartitions()) {

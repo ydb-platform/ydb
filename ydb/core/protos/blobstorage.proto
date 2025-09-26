@@ -8,6 +8,7 @@ import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/node_whiteboard.proto";
+import "google/protobuf/any.proto";
 
 package NKikimrBlobStorage;
 option java_package = "ru.yandex.kikimr.proto";
@@ -1563,6 +1564,7 @@ message TEvControllerDistconfRequest {
     optional uint64 ExpectedStorageConfigVersion = 5;
     optional string PeerName = 6;
     optional bytes UserToken = 7;
+    optional google.protobuf.Any StorageConfig = 8; // TStorageConfig with this request that is going to be applied after operation
 }
 
 message TEvControllerDistconfResponse {

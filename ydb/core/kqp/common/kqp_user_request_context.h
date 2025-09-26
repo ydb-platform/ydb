@@ -19,6 +19,7 @@ namespace NKikimr::NKqp {
         NActors::TActorId RunScriptActorId;
         TString PoolId;
         std::optional<NResourcePool::TPoolSettings> PoolConfig;
+        bool IsStreamingQuery = false;
 
         TUserRequestContext() = default;
 

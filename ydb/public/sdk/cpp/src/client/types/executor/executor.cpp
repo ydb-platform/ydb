@@ -60,6 +60,7 @@ std::shared_ptr<IExecutor> CreateThreadPoolExecutor(std::size_t threadCount, std
     return std::make_shared<TThreadPoolExecutor>(CreateThreadPool(threadCount), threadCount, maxQueueSize);
 }
 
+#ifndef YDB_SDK_OSS
 std::shared_ptr<IExecutor> CreateThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> threadPool, std::size_t threadCount, std::size_t maxQueueSize) {
     return std::make_shared<TThreadPoolExecutor>(threadPool, threadCount, maxQueueSize);
 }
@@ -67,5 +68,6 @@ std::shared_ptr<IExecutor> CreateThreadPoolExecutorAdapter(std::shared_ptr<IThre
 std::shared_ptr<IExecutor> CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> threadPool) {
     return std::make_shared<TThreadPoolExecutor>(threadPool);
 }
+#endif
 
 } // namespace NYdb::inline Dev

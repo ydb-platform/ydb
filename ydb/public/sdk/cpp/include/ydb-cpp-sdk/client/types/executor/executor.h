@@ -1,6 +1,8 @@
 #pragma once
 
+#ifndef YDB_SDK_OSS
 #include <util/thread/pool.h>
+#endif
 
 #include <functional>
 #include <mutex>
@@ -42,6 +44,7 @@ protected:
 // Create default executor for thread pool.
 IExecutor::TPtr CreateThreadPoolExecutor(std::size_t threadCount, std::size_t maxQueueSize = 0);
 
+#ifndef YDB_SDK_OSS
 // Create executor adapter for util thread pool.
 // Thread pool is started and stopped by SDK.
 IExecutor::TPtr CreateThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> threadPool, std::size_t threadCount, std::size_t maxQueueSize = 0);
@@ -49,5 +52,6 @@ IExecutor::TPtr CreateThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> thr
 // Create executor adapter for util thread pool.
 // Thread pool is expected to have been started and stopped by user.
 IExecutor::TPtr CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> threadPool);
+#endif
 
 } // namespace NYdb

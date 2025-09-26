@@ -445,10 +445,20 @@ def escape_markdown(text):
         str: Escaped text
     """
     # For MarkdownV2, we need to escape these characters: _ * [ ] ( ) ~ ` > # + - = | { } . !
-    # But we want to preserve * for bold formatting and [ ] ( ) for links, so we'll handle them specially
+    # But we want to preserve * for bold formatting, [ ] ( ) for links, and content inside backticks
     
-    # First, protect links by temporarily replacing them
-    import re
+    # First, protect inline code by temporarily replacing them
+    code_pattern = r'`([^`]+)`'
+    code_blocks = []
+    
+    def replace_code(match):
+        code_blocks.append(match.group(1))
+        return f"CODEPLACEHOLDER{len(code_blocks)-1}"
+    
+    # Replace all inline code with placeholders
+    text = re.sub(code_pattern, replace_code, text)
+    
+    # Then protect links by temporarily replacing them
     link_pattern = r'\[([^\]]+)\]\(([^)]+)\)'
     links = []
     
@@ -459,50 +469,41 @@ def escape_markdown(text):
     # Replace all links with placeholders
     text = re.sub(link_pattern, replace_link, text)
     
-    # Escape special characters, but not * for bold formatting
-    # Don't escape . inside backticks as it breaks code formatting
-    special_chars = ['~', '`', '>', '+', '-', '=', '|', '{', '}', '!']
+    # Also protect standalone URLs (http/https) by temporarily replacing them
+    url_pattern = r'https?://[^\s\)]+'
+    urls = []
+    
+    def replace_url(match):
+        urls.append(match.group(0))
+        return f"URLPLACEHOLDER{len(urls)-1}"
+    
+    # Replace all standalone URLs with placeholders
+    text = re.sub(url_pattern, replace_url, text)
+    
+    # Escape special characters for MarkdownV2 (single backslash)
+    # Characters that need escaping: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    special_chars = ['_', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
     
     for char in special_chars:
         text = text.replace(char, f'\\{char}')
     
-    # Handle dots separately - only escape when not inside backticks
-    # This is a simplified approach - escape all dots for now
-    text = text.replace('.', '\\.')
+    # Restore standalone URLs (they should NOT be escaped)
+    for i, url in enumerate(urls):
+        text = text.replace(f"URLPLACEHOLDER{i}", url)
     
-    # Handle # separately - only escape when not at end of line or in specific contexts
-    # For now, let's escape all # to be safe
-    text = text.replace('#', '\\#')
-    
-    # Escape underscores, but protect placeholders first
-    # Replace placeholders with temporary markers that don't contain underscores
-    temp_placeholders = {}
-    for i in range(len(links)):
-        placeholder = f"LINKPLACEHOLDER{i}"
-        temp_marker = f"LINKPLACEHOLDER{i}LINK"
-        temp_placeholders[temp_marker] = placeholder
-        text = text.replace(placeholder, temp_marker)
-    
-    # Now escape underscores
-    text = text.replace('_', '\\_')
-    
-    # Restore placeholders
-    for temp_marker, placeholder in temp_placeholders.items():
-        text = text.replace(temp_marker, placeholder)
-    
-    # Restore links, escaping special characters in both link text and URLs for MarkdownV2
+    # Restore links, escaping special characters in link text but NOT in URLs
     for i, (link_text, link_url) in enumerate(links):
-        # Escape special characters in link text for MarkdownV2
+        # Escape special characters in link text only
         escaped_text = link_text
-        for char in ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']:
+        for char in special_chars:
             escaped_text = escaped_text.replace(char, f'\\{char}')
         
-        # Escape special characters in URL for MarkdownV2
-        escaped_url = link_url
-        for char in ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']:
-            escaped_url = escaped_url.replace(char, f'\\{char}')
-        
-        text = text.replace(f"LINKPLACEHOLDER{i}", f"[{escaped_text}]({escaped_url})")
+        # URLs should NOT be escaped (Telegram handles them correctly)
+        text = text.replace(f"LINKPLACEHOLDER{i}", f"[{escaped_text}]({link_url})")
+    
+    # Restore inline code (content should NOT be escaped)
+    for i, code_content in enumerate(code_blocks):
+        text = text.replace(f"CODEPLACEHOLDER{i}", f"`{code_content}`")
     
     return text
 
@@ -529,7 +530,9 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
     
     # Start with title and team tag (replace - with _ in tag)
     team_tag = team_name.replace('-', '')
-    message = f"🔇 *{current_date} new muted tests in `main` for [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})* #{team_tag}\n\n"
+    # Create team URL and escape it
+    team_url = f"https://github.com/orgs/ydb-platform/teams/{team_name}"
+    message = f"🔇 *{current_date} new muted tests in `main` for [{team_name}]({team_url})* #{team_tag}\n\n"
     
     for issue in issues:
         # Extract issue number from URL for compact display
@@ -542,9 +545,8 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
         if title.startswith('Mute '):
             title = title[5:]  # Remove "Mute " prefix
         
-        # Escape the title for Markdown and wrap in backticks
-        escaped_title = escape_markdown(title)
-        message += f" 🎯 `{escaped_title}` [#{issue_number}]({issue['url']})\n"
+        # Wrap title in backticks (will be escaped later with the whole message)
+        message += f" 🎯 `{title}` [#{issue_number}]({issue['url']})\n"
     
     # Add muted tests statistics for this specific team if available (moved to end)
     if muted_stats and team_name in muted_stats:

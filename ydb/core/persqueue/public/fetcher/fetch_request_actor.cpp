@@ -39,7 +39,6 @@ struct TTabletInfo {
 };
 
 struct TTopicInfo {
-    TVector<ui64> Tablets;
     THashMap<ui32, ui64> PartitionToTablet;
 
     TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> PQInfo;
@@ -328,7 +327,6 @@ public:
 
             if (TabletInfo.find(tabletId) == TabletInfo.end()) {
                 auto& tabletInfo = TabletInfo[tabletId];
-                topicInfo.Tablets.push_back(tabletId);
 
                 // Tablet node resolution relies on opening a pipe
                 tabletInfo.PipeClient = CreatePipe(tabletId, ctx);

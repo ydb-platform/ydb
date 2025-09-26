@@ -10,7 +10,7 @@ namespace NYql {
 template <typename TEv, ui32 TEventType>
 class TTopicEventBase : public NActors::TEventLocal<TEv, TEventType> {
 public:
-    explicit TTopicEventBase(NYdb::NTopic::IExecutor::TFunction&& f)
+    explicit TTopicEventBase(NYdb::IExecutor::TFunction&& f)
         : Function(std::move(f))
     {}
 
@@ -19,12 +19,12 @@ public:
     }
 
 private:
-    NYdb::NTopic::IExecutor::TFunction Function;
+    NYdb::IExecutor::TFunction Function;
 };
 
 template <typename TTopicEvent>
 class TTopicEventProcessor {
-    class TEventProxy final : public NYdb::NTopic::IExecutor {
+    class TEventProxy final : public NYdb::IExecutor {
     public:
         TEventProxy(NActors::TActorSystem* actorSystem, const NActors::TActorId& executerId)
             : ActorSystem(actorSystem)
@@ -45,6 +45,9 @@ class TTopicEventProcessor {
         void DoStart() final {
         }
 
+        void Stop() final {
+        }
+
     private:
         NActors::TActorSystem* ActorSystem = nullptr;
         const NActors::TActorId ExecuterId;
@@ -54,7 +57,7 @@ public:
     template <typename TSettings>
     void SetupTopicClientSettings(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, TSettings& settings) {
         if (!ExecuterProxy) {
-            ExecuterProxy = MakeIntrusive<TEventProxy>(actorSystem, selfId);
+            ExecuterProxy = std::make_shared<TEventProxy>(actorSystem, selfId);
         }
 
         settings.DefaultHandlersExecutor(ExecuterProxy);
@@ -67,7 +70,7 @@ protected:
     }
 
 private:
-    NYdb::NTopic::IExecutor::TPtr ExecuterProxy;
+    NYdb::IExecutor::TPtr ExecuterProxy;
 };
 
 } // namespace NYql

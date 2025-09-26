@@ -34,7 +34,6 @@ namespace {
 }
 
 struct TTabletInfo {
-    TString Topic;
     TActorId PipeClient;
     bool BrokenPipe = false;
 };
@@ -329,7 +328,6 @@ public:
 
             if (TabletInfo.find(tabletId) == TabletInfo.end()) {
                 auto& tabletInfo = TabletInfo[tabletId];
-                tabletInfo.Topic = name;
                 topicInfo.Tablets.push_back(tabletId);
 
                 // Tablet node resolution relies on opening a pipe

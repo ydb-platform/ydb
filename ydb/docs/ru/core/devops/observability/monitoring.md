@@ -50,7 +50,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 1. Отредактируйте [файлы конфигурации]() Prometheus:
 
-    1. В файле [`ydbd-storage.yaml`]() в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов хранения, работающих на сервере.
+    1. В файле [`ydbd-storage.yaml`]() в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов хранения, работающих на серверах.
 
         ```json
         - labels:

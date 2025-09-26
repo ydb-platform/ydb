@@ -25,8 +25,6 @@ using namespace NActors;
 using namespace Ydb;
 
 using TEvSelfCheckRequest = TGrpcRequestOperationCall<Ydb::Monitoring::SelfCheckRequest, Ydb::Monitoring::SelfCheckResponse>;
-using TEvClusterStateRequest = TGrpcRequestOperationCall<Ydb::Monitoring::ClusterStateRequest, Ydb::Monitoring::ClusterStateResponse>;
-
 class TSelfCheckRPC : public TRpcRequestActor<TSelfCheckRPC, TEvSelfCheckRequest, true> {
 public:
     using TRpcRequestActor::TRpcRequestActor;
@@ -121,59 +119,6 @@ public:
 void DoSelfCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TSelfCheckRPC(p.release()));
 }
-
-class TClusterStateRPC : public TRpcRequestActor<TClusterStateRPC, TEvClusterStateRequest, true> {
-public:
-    using TRpcRequestActor::TRpcRequestActor;
-
-    std::optional<Ydb::Monitoring::ClusterStateResult> Result;
-    Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
-
-    void SendClusterStateRequest() {
-        THolder<NHealthCheck::TEvClusterStateRequest> request = MakeHolder<NHealthCheck::TEvClusterStateRequest>();
-        request->Request = *GetProtoRequest();
-        Send(NHealthCheck::MakeHealthCheckID(), request.Release());
-        Become(&TThis::StateWaitHealthCheck);
-    }
-
-    void Bootstrap() {
-        SendClusterStateRequest();
-    }
-
-    STATEFN(StateWaitHealthCheck) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvUndelivered, Handle);
-            hFunc(NHealthCheck::TEvClusterStateResult, Handle);
-        }
-    }
-
-    void Handle(NHealthCheck::TEvClusterStateResult::TPtr& ev) {
-        Status = Ydb::StatusIds::SUCCESS;
-        Result = std::move(ev->Get()->Result);
-        ReplyAndPassAway();
-    }
-
-    void Handle(TEvents::TEvUndelivered::TPtr&) {
-        Status = Ydb::StatusIds::UNAVAILABLE;
-        ReplyAndPassAway();
-    }
-    
-    void ReplyAndPassAway() {
-        TResponse response;
-        Ydb::Operations::Operation& operation = *response.mutable_operation();
-        operation.set_ready(true);
-        operation.set_status(Status);
-        if (Result) {
-            operation.mutable_result()->PackFrom(*Result);
-        }
-        return Reply(response);
-    }
-};
-
-void DoClusterStateRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TClusterStateRPC(p.release()));
-}
-
 class TNodeCheckRPC : public TRpcRequestActor<TNodeCheckRPC, TEvNodeCheckRequest, true> {
 public:
     using TRpcRequestActor::TRpcRequestActor;

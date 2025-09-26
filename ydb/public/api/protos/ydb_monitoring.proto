@@ -230,6 +230,8 @@ message SelfCheckResult {
 
 message ClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1; // basic operation params, including timeout
+    uint32 duration = 2;
+    uint32 period = 3;
 }
 
 message ClusterStateResponse {

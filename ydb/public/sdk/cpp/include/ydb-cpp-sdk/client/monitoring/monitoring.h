@@ -35,7 +35,10 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
     FLUENT_SETTING_OPTIONAL(uint32_t, MaximumLevel);
 };
 
-struct TClusterStateSettings : public TOperationRequestSettings<TClusterStateSettings> {};
+struct TClusterStateSettings : public TOperationRequestSettings<TClusterStateSettings> {
+    FLUENT_SETTING_OPTIONAL(uint32_t, Duration);
+    FLUENT_SETTING_OPTIONAL(uint32_t, Period);
+};
 
 
 class TSelfCheckResult : public TStatus {

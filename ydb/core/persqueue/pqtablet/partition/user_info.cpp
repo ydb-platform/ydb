@@ -254,10 +254,11 @@ bool TUserInfo::UpdateTimestampFromCache() {
     return false;
 }
 
-void TUserInfo::SetImportant(bool important) {
+void TUserInfo::SetImportant(bool important, TDuration availabilityPeriod) {
     Important = important;
+    AvailabilityPeriod = availabilityPeriod;
     if (LabeledCounters && !AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        LabeledCounters->SetGroup(User + "/" + (important ? "1" : "0") + "/" + TopicConverter->GetClientsideName());
+        LabeledCounters->SetGroup(User + "/" + (ImporantOrExtendedAvailabilityPeriod(*this) ? "1" : "0") + "/" + TopicConverter->GetClientsideName());
     }
 }
 
@@ -321,7 +322,7 @@ void TUsersInfoStorage::ParseDeprecated(const TString& key, const TString& data,
     AFL_ENSURE(offset <= (ui64)Max<i64>())("description", "Offset is too big")("offset", offset);
 
     if (!userInfo) {
-        Create(ctx, user, 0, false, session, 0, gen, step, static_cast<i64>(offset), 0, TInstant::Zero(), {}, false);
+        Create(ctx, user, 0, false, TDuration::Zero(), session, 0, gen, step, static_cast<i64>(offset), 0, TInstant::Zero(), {}, false);
     } else {
         userInfo->Session = session;
         userInfo->Generation = gen;
@@ -347,7 +348,7 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
     TUserInfo* userInfo = GetIfExists(user);
     if (!userInfo) {
         Create(
-            ctx, user, userData.GetReadRuleGeneration(), false, userData.GetSession(), userData.GetPartitionSessionId(),
+            ctx, user, userData.GetReadRuleGeneration(), false, TDuration::Zero(), userData.GetSession(), userData.GetPartitionSessionId(),
             userData.GetGeneration(), userData.GetStep(), offset,
             userData.GetOffsetRewindSum(), TInstant::Zero(),  {}, userData.GetAnyCommits(),
             userData.HasCommittedMetadata() ? static_cast<std::optional<TString>>(userData.GetCommittedMetadata()) : std::nullopt
@@ -376,7 +377,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
     auto it = UsersInfo.find(user);
     if (it == UsersInfo.end()) {
         return Create(
-                ctx, user, readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration, false, "", 0,
+                ctx, user, readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration, false, TDuration::Zero(), "", 0,
                 0, 0, 0, 0, TInstant::Zero(), {}, false
         );
     }
@@ -459,6 +460,7 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
                                             const TString& user,
                                             const ui64 readRuleGeneration,
                                             bool important,
+                                            const TDuration availabilityPeriod,
                                             const TString& session,
                                             ui64 partitionSessionId,
                                             ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
@@ -478,7 +480,7 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
 
     return {
         ctx, StreamCountersSubgroup, GetPartitionCounterSubgroup(ctx),
-        user, readRuleGeneration, important, TopicConverter, Partition,
+        user, readRuleGeneration, important, availabilityPeriod, TopicConverter, Partition,
         session, partitionSessionId, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, DbPath,
         meterRead, pipeClient, anyCommits, committedMetadata
     };
@@ -488,16 +490,17 @@ TUserInfoBase TUsersInfoStorage::CreateUserInfo(const TString& user,
                                             TMaybe<ui64> readRuleGeneration) const
 {
     return TUserInfoBase{user, readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration,
-                          "", 0, 0, 0, false, false, {}, 0, {}};
+                          "", 0, 0, 0, false, false, TDuration::Zero(), {}, 0, {}};
 }
 
 TUserInfo& TUsersInfoStorage::Create(
-        const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
+        const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration,
+        bool important, const TDuration availabilityPeriod, const TString& session,
         ui64 partitionSessionId, ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
         TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits,
         const std::optional<TString>& committedMetadata
 ) {
-    auto userInfo = CreateUserInfo(ctx, user, readRuleGeneration, important, session, partitionSessionId,
+    auto userInfo = CreateUserInfo(ctx, user, readRuleGeneration, important, availabilityPeriod, session, partitionSessionId,
                                               gen, step, offset, readOffsetRewindSum, readFromTimestamp, pipeClient,
                                               anyCommits, committedMetadata);
     auto result = UsersInfo.emplace(user, std::move(userInfo));

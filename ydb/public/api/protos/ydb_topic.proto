@@ -6,6 +6,7 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
+import "google/protobuf/empty.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -822,6 +823,9 @@ message Consumer {
         // Bytes read statistics.
         MultipleWindowsStat bytes_read = 4;
     }
+
+    // Message for this consumer will not expire due to retention for at least `availability_period` if they aren't commited.
+    optional google.protobuf.Duration availability_period = 8;
 }
 
 // Consumer alter description.
@@ -844,6 +848,12 @@ message AlterConsumer {
     // User and server attributes of consumer. Server attributes starts from "_" and will be validated by server.
     // Leave the value blank to drop an attribute.
     map<string, string> alter_attributes = 6;
+
+    // Change message lifetime if consumer is important.
+    oneof availability_period_action {
+        google.protobuf.Duration set_availability_period = 7;
+        google.protobuf.Empty reset_availability_period = 8;
+    }
 }
 
 enum AutoPartitioningStrategy {

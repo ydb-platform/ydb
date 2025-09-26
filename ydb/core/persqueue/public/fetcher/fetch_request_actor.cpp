@@ -42,8 +42,6 @@ struct TTopicInfo {
     THashMap<ui32, ui64> PartitionToTablet;
 
     TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> PQInfo;
-    NPersQueue::TDiscoveryConverterPtr Converter;
-    ui32 NumParts = 0;
     THashSet<ui32> PartitionsToRequest;
 
     //fetchRequest part
@@ -313,7 +311,6 @@ public:
         const auto& pqDescr = topicInfo.PQInfo->Description;
 
         ++TopicsAnswered;
-        topicInfo.NumParts = pqDescr.PartitionsSize();
 
         for (const auto& partition : pqDescr.GetPartitions()) {
             ui32 partitionId = partition.GetPartitionId();

@@ -332,6 +332,18 @@ def create_trend_plot(team_name, trend_data, debug_dir=None):
             plt.plot(dates, p(x_numeric), "r--", alpha=0.8, label='Trend')
             plt.legend()
         
+        # Add annotation for the last point
+        if dates and counts:
+            last_date = dates[-1]
+            last_count = counts[-1]
+            plt.annotate(f'{last_count}', 
+                        xy=(last_date, last_count), 
+                        xytext=(10, 10), 
+                        textcoords='offset points',
+                        bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7),
+                        arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'),
+                        fontsize=10, fontweight='bold')
+        
         plt.tight_layout()
         
         # Save to temporary file

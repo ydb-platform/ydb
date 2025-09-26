@@ -18,7 +18,7 @@ struct TJsonParserConfig {
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     ui64 BatchSize = 1_MB;
     TDuration LatencyLimit;
-    ui64 BufferCellCount = 1000000;  // (number rows) * (number columns) limit, amount memory size is O(BufferCellCount * log(BufferCellCount))
+    ui64 BufferCellCount = 1000000;  // (number rows) * (number columns) limit
 };
 
 TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters);

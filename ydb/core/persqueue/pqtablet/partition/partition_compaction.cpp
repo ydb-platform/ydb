@@ -304,7 +304,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                 }, std::nullopt};
                 msg.Internal = true;
 
-                ExecRequestForCompaction(msg, parameters, compactionRequest.Get(), blobCreationUnixTime);
+                ExecRequestForCompaction(msg, parameters, compactionRequest.Get(), blob.WriteTimestamp.Seconds());
 
                 firstBlobOffset = Nothing();
             }

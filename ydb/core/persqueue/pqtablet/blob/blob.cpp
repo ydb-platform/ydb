@@ -300,7 +300,9 @@ ui32 THead::GetCount() const
         return 0;
 
     //how much offsets before last batch and how much offsets in last batch
-    AFL_ENSURE(Batches.front().GetOffset() == Offset)("front.Offset", Batches.front().GetOffset())("offset", Offset);
+    AFL_ENSURE(Batches.front().GetOffset() == Offset)
+        ("front.Offset", Batches.front().GetOffset())
+        ("offset", Offset);
 
     return Batches.back().GetOffset() - Offset + Batches.back().GetCount();
 }
@@ -436,7 +438,13 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
     , MaxBlobSize(maxBlobSize)
     , FastWrite(fastWrite)
 {
-    AFL_ENSURE(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0); // if head not cleared, then NewHead is going after Head
+    AFL_ENSURE(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0) // if head not cleared, then NewHead is going after Head
+        ("Head.NextOffset", Head.GetNextOffset())
+        ("Head.PackedSize", Head.PackedSize)
+        ("NewHead.Offset", NewHead.Offset)
+        ("NewHead.PartNo", NewHead.PartNo)
+        ("headCleared", headCleared)
+        ("needCompactHead", needCompactHead);
     if (!headCleared) {
         HeadSize = Head.PackedSize + NewHead.PackedSize;
         InternalPartsCount = Head.GetInternalPartsCount() + NewHead.GetInternalPartsCount();
@@ -531,7 +539,7 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
 auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
 {
     AFL_ENSURE(NewHead.Offset >= Head.Offset)("Head.Offset", Head.Offset)("NewHead.Offset", NewHead.Offset);
-    ui32 size = blob.GetSerializedSize();
+    const ui32 size = blob.GetSerializedSize();
     AFL_ENSURE(InternalPartsCount < 1000); //just check for future packing
     if (HeadSize + BlobsSize + size + GetMaxHeaderSize() > MaxBlobSize) {
         NeedCompactHead = true;
@@ -554,7 +562,7 @@ auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
     return res;
 }
 
-auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size) -> std::optional<TFormedBlobInfo>
+auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size, bool isFastWrite) -> std::optional<TFormedBlobInfo>
 {
     if (HeadSize + BlobsSize == 0) { //if nothing to compact at all
         NeedCompactHead = false;
@@ -571,7 +579,11 @@ auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size) -> std::optional<TForm
     }
 
     auto newKey = TKey::FromKey(oldKey, TKeyPrefix::TypeData, Partition, StartOffset);
-    newKey.SetFastWrite();
+    if (isFastWrite) {
+        newKey.SetFastWrite();
+    } else {
+        newKey.SetBody();
+    }
 
     FormedBlobs.emplace_back(oldKey, newKey, size);
 

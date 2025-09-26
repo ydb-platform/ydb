@@ -62,6 +62,11 @@ void TKey::SetFastWrite()
     SetSuffix(ESuffix::FastWrite);
 }
 
+void TKey::SetBody()
+{
+    SetSuffix(Nothing());
+}
+
 TKey TKey::FromKey(const TKey& k,
                    EType type,
                    const TPartitionId& partition,

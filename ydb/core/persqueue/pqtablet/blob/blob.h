@@ -212,7 +212,7 @@ public:
     };
 
     std::optional<TFormedBlobInfo> Add(TClientBlob&& blob);
-    std::optional<TFormedBlobInfo> Add(const TKey& key, ui32 size);
+    std::optional<TFormedBlobInfo> Add(const TKey& key, ui32 size, bool isFastWrite);
 
     bool IsInited() const;
     bool IsComplete() const;

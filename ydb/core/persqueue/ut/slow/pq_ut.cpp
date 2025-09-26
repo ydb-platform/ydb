@@ -31,6 +31,7 @@ Y_UNIT_TEST(TestWriteVeryBigMessage) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(1);
         activeZone = false;
 
         PQTabletPrepare({}, {}, tc); //always delete
@@ -147,7 +148,7 @@ Y_UNIT_TEST(TestOnDiskStoredSourceIds) {
     });
 }
 
-Y_UNIT_TEST(MediumMsgComactificationWithRebootsTest) {
+Y_UNIT_TEST(MediumMsgCompactificationWithRebootsTest) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() { return tc.InitialEventsFilter.Prepare(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
@@ -189,7 +190,7 @@ Y_UNIT_TEST(MediumMsgComactificationWithRebootsTest) {
         PQGetPartInfo([](ui64 offset) { return offset >= 1; }, currentOffset, tc); });
 }
 
-Y_UNIT_TEST(LargeMsgComactificationWithRebootsTest) {
+Y_UNIT_TEST(LargeMsgCompactificationWithRebootsTest) {
     return; // ToDo: enable after fixing LOGBROKER-9700
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() { return tc.InitialEventsFilter.Prepare(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {

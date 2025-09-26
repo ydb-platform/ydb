@@ -307,6 +307,11 @@ Y_UNIT_TEST_SUITE(ActorHandler) {
         TStringStream responseStream;
         const auto status = env.GetHttpClient().DoRequest("OPTIONS", env.MakeDefaultUrl(), "", &responseStream);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_NO_CONTENT);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketFails, 0);
     }
 }
 
@@ -337,6 +342,11 @@ Y_UNIT_TEST_SUITE(MonPage) {
         TStringStream responseStream;
         const auto status = env.GetHttpClient().DoRequest("OPTIONS", env.MakeDefaultUrl(), "", &responseStream);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_NO_CONTENT);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketFails, 0);
     }
 }
 
@@ -347,6 +357,48 @@ Y_UNIT_TEST_SUITE(Other) {
         TStringStream responseStream;
         const auto status = env.GetHttpClient().DoGet("/wrong_path", &responseStream, env.MakeAuthHeaders());
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(TraceHttpOk) {
+        THttpMonTestEnv env({
+            .TicketParserGroupSIDs = {"ydb.clusters.monitor@as"},
+        });
+
+        TStringStream responseStream;
+        const auto status = env.GetHttpClient().DoGet("/trace", &responseStream, env.MakeAuthHeaders());
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketFails, 0);
+    }
+
+    Y_UNIT_TEST(TraceNoValidGroupForbidden) {
+        THttpMonTestEnv env;
+
+        TStringStream responseStream;
+        const auto status = env.GetHttpClient().DoGet("/trace", &responseStream, env.MakeAuthHeaders());
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_FORBIDDEN);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketFails, 0);
+    }
+
+    Y_UNIT_TEST(TraceInvalidTokenForbidden) {
+        THttpMonTestEnv env;
+
+        TStringStream responseStream;
+        const TString invalidToken = TString("Bearer invalid");
+        const auto status = env.GetHttpClient().DoGet("/trace", &responseStream, env.MakeAuthHeaders(invalidToken));
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_FORBIDDEN);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketFails, 1);
     }
 }
 

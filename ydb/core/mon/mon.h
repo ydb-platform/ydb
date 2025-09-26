@@ -94,6 +94,7 @@ protected:
     TIntrusivePtr<NMonitoring::TIndexMonPage> IndexMonPage;
     TActorSystem* ActorSystem = {};
     TActorId HttpProxyActorId;
+    TActorId HttpAuthActorId;
     TActorId HttpMonServiceActorId;
     TActorId NodeProxyServiceActorId;
 
@@ -108,6 +109,7 @@ protected:
     THashMap<TString, TActorId> ActorServices;
     std::shared_ptr<NMonitoring::IMetricFactory> Metrics;
 
+    void RegisterLwTracePages();
     void RegisterActorMonPage(const TActorMonPageInfo& pageInfo);
 };
 

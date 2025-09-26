@@ -13,6 +13,7 @@ import json
 import configparser
 import tempfile
 import base64
+import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 from send_telegram_message import send_telegram_message
@@ -27,6 +28,7 @@ except ImportError:
 try:
     import matplotlib.pyplot as plt
     import matplotlib.dates as mdates
+    import numpy as np
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
@@ -325,7 +327,6 @@ def create_trend_plot(team_name, trend_data, debug_dir=None):
         
         # Add trend line
         if len(dates) > 1:
-            import numpy as np
             x_numeric = np.arange(len(dates))
             z = np.polyfit(x_numeric, counts, 1)
             p = np.poly1d(z)
@@ -360,7 +361,6 @@ def create_trend_plot(team_name, trend_data, debug_dir=None):
             debug_path = os.path.join(debug_dir, f"trend_{team_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
             
             # Copy to debug directory
-            import shutil
             shutil.copy2(tmp_path, debug_path)
             print(f"🔍 Debug plot saved to: {debug_path}")
         
@@ -708,7 +708,6 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                 if debug_plots_dir:
                     os.makedirs(debug_plots_dir, exist_ok=True)
                     final_debug_path = os.path.join(debug_plots_dir, f"final_{team_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-                    import shutil
                     shutil.copy2(tmp_path, final_debug_path)
                     print(f"🔍 Final debug plot saved to: {final_debug_path}")
                 

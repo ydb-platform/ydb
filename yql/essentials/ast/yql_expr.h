@@ -1880,11 +1880,6 @@ public:
 
     TPtr ChildPtr(ui32 index) const {
         ENSURE_NOT_DELETED
-        if (index >= Children_.size()) {
-            int64_t z = 0;
-            auto x = *(int*)z;
-            Y_UNUSED(x);
-        }
         Y_ENSURE(index < Children_.size(), "index out of range");
         return Children_[index];
     }

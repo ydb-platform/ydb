@@ -760,14 +760,10 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     buffer.clear();
     watermark = Nothing();
 
-    const auto now = TInstant::Now();
-    MaybeScheduleNextIdleCheck(now);
-
-    if (freeSpace == 0) {
-        return 0;
-    }
-
     if (WatermarkTracker) {
+        const auto now = TInstant::Now();
+        MaybeScheduleNextIdleCheck(now);
+
         const auto idleWatermark = WatermarkTracker->HandleIdleness(now);
 
         if (idleWatermark) {
@@ -781,8 +777,12 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         }
     }
 
+    if (freeSpace == 0 || ReadyBuffer.empty()) {
+        return 0;
+    }
+
     i64 usedSpace = 0;
-    while (freeSpace > 0 && !ReadyBuffer.empty() && watermark.Empty()) {
+    do {
         auto readyBatch = std::move(ReadyBuffer.front());
         ReadyBuffer.pop();
 
@@ -795,7 +795,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         freeSpace -= readyBatch.UsedSpace;
         PartitionToOffset[readyBatch.PartitionKey] = readyBatch.NextOffset;
         SRC_LOG_T("NextOffset " << readyBatch.NextOffset);
-    }
+    } while (freeSpace > 0 && !ReadyBuffer.empty() && watermark.Empty());
 
     ReadyBufferSizeBytes -= usedSpace;
     SRC_LOG_T("Return " << buffer.RowCount() << " rows, watermark " << watermark << ", buffer size " << ReadyBufferSizeBytes << ", free space " << freeSpace << ", result size " << usedSpace);

@@ -266,11 +266,10 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     AFL_ENSURE(CompactionBlobEncoder.NewHead.GetBatches().empty());
 
-    ui64 blobCreationUnixTime = 0;
+    TInstant blobCreationUnixTime = TInstant::Zero();
 
     for (const auto& requestedBlob : blobs) {
         TMaybe<ui64> firstBlobOffset = requestedBlob.Offset;
-        blobCreationUnixTime = std::max(blobCreationUnixTime, requestedBlob.CreationUnixTime);
 
         for (TBlobIterator it(requestedBlob.Key, requestedBlob.Value); it.IsValid(); it.Next()) {
             TBatch batch = it.GetBatch();
@@ -304,12 +303,15 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                 }, std::nullopt};
                 msg.Internal = true;
 
+                Y_DEBUG_ABORT_UNLESS(blobCreationUnixTime <= blob.WriteTimestamp);
+                blobCreationUnixTime = std::max(blobCreationUnixTime, blob.WriteTimestamp);
                 ExecRequestForCompaction(msg, parameters, compactionRequest.Get(), blob.WriteTimestamp.Seconds());
 
                 firstBlobOffset = Nothing();
             }
         }
     }
+    Y_VERIFY(blobCreationUnixTime > TInstant::Zero());
 
     if (!CompactionBlobEncoder.IsLastBatchPacked()) {
         CompactionBlobEncoder.PackLastBatch();
@@ -317,7 +319,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     CompactionBlobEncoder.HeadCleared = parameters.HeadCleared;
 
-    EndProcessWritesForCompaction(compactionRequest.Get(), blobCreationUnixTime, ctx);
+    EndProcessWritesForCompaction(compactionRequest.Get(), blobCreationUnixTime.Seconds(), ctx);
 
     // for debugging purposes
     //DumpKeyValueRequest(compactionRequest->Record);

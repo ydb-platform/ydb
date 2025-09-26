@@ -125,33 +125,33 @@ python .github/scripts/telegram/parse_and_send_team_issues.py \
 The script sends messages in the following format:
 
 ```
-🔇 **13-01-25 new muted tests for [team-name](https://github.com/orgs/ydb-platform/teams/team-name)** #teamname
+🔇 **13-01-25 new muted tests in `main` for [team-name](https://github.com/orgs/ydb-platform/teams/team-name)** #teamname
 
-📊 **[Total muted tests: 150](https://datalens.yandex/4un3zdm0zcnyr?owner_team=team-name) (🔴+5/🟢-2)**
+ 🎯 `Issue Title` [#12345](https://github.com/...)
+ 🎯 `Another Issue Title` [#12346](https://github.com/...)
+
+📊 **[Total muted tests: 150](https://datalens.yandex/4un3zdm0zcnyr?owner_team=team-name) 🔴+5 muted /🟢-2 unmuted**
 
 fyi: @user1 @user2
-
- - 🎯 [https://github.com/...](https://github.com/...) - `Issue Title`
- - 🎯 [https://github.com/...](https://github.com/...) - `Another Issue Title`
 ```
 
 **Statistics explanation:**
-- `📊 **[Total muted tests: N](dashboard_url) (🔴+M/🟢-K)**` - Total muted tests with today's changes
-- `📊 **[Total muted tests: N](dashboard_url) (🔴+M)**` - Total muted tests with today's additions only
-- `📊 **[Total muted tests: N](dashboard_url) (🟢-K)**` - Total muted tests with today's unmutes only
+- `📊 **[Total muted tests: N](dashboard_url) 🔴+M muted /🟢-K unmuted**` - Total muted tests with today's changes
+- `📊 **[Total muted tests: N](dashboard_url) 🔴+M muted**` - Total muted tests with today's additions only
+- `📊 **[Total muted tests: N](dashboard_url) 🟢-K unmuted**` - Total muted tests with today's unmutes only
 - `📊 **[Total muted tests: N](dashboard_url)**` - Total muted tests (no changes today)
 
 ### Periodic Trend Updates Mode
 The script sends trend reports in the following format:
 
 ```
-📈 **Изменения неделя к неделе для команды [team-name](https://github.com/orgs/ydb-platform/teams/team-name)** #teamname
+📈 **Week Over Week changes for team [team-name](https://github.com/orgs/ydb-platform/teams/team-name)** #teamname
 
 📊 **[Total muted tests: 150](https://datalens.yandex/4un3zdm0zcnyr?owner_team=team-name) (🔴+10 vs 7 days ago)**
 
 fyi: @user1 @user2
 
-График показывает динамику замьюченных тестов за последние 30 дней.
+Chart shows muted tests trend over the last 30 days.
 ```
 
 **Period statistics explanation:**

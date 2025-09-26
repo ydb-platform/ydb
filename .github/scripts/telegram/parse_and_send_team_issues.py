@@ -34,6 +34,9 @@ except ImportError:
     MATPLOTLIB_AVAILABLE = False
     print("⚠️ Matplotlib not available. Install with: pip install matplotlib")
 
+# Configuration constants
+MUTE_UPDATE_SHOW_DIFF = False  # Set to True to show +/- statistics in mute update messages
+
 
 def _setup_ydb_connection(database_endpoint=None, database_path=None, credentials_path=None):
     """
@@ -330,7 +333,7 @@ def create_trend_plot(team_name, trend_data, debug_dir=None):
             x_numeric = np.arange(len(dates))
             z = np.polyfit(x_numeric, counts, 1)
             p = np.poly1d(z)
-            plt.plot(dates, p(x_numeric), "r--", alpha=0.8, label='Trend')
+            plt.plot(dates, p(x_numeric), "r--", alpha=0.8, linewidth=2, label='Trend')
             plt.legend()
         
         # Add annotation for the last point
@@ -448,7 +451,7 @@ def escape_markdown(text):
     return text
 
 
-def format_team_message(team_name, issues, team_responsible=None, muted_stats=None):
+def format_team_message(team_name, issues, team_responsible=None, muted_stats=None, show_diff=False):
     """
     Format message for a specific team.
     
@@ -457,6 +460,7 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
         issues (list): List of issues for the team
         team_responsible (dict): Dictionary mapping team names to responsible usernames
         muted_stats (dict): Dictionary with team names as keys and {'total': count, 'today': count} as values
+        show_diff (bool): Whether to show +/- statistics
         
     Returns:
         str: Formatted message
@@ -484,7 +488,7 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
         
         # Escape the title for Markdown and wrap in backticks
         escaped_title = escape_markdown(title)
-        message += f" - 🎯 `{escaped_title}` [#{issue_number}]({issue['url']})\n"
+        message += f" 🎯 `{escaped_title}` [#{issue_number}]({issue['url']})\n"
     
     # Add muted tests statistics for this specific team if available (moved to end)
     if muted_stats and team_name in muted_stats:
@@ -497,14 +501,17 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
         dashboard_url = f"https://datalens.yandex/4un3zdm0zcnyr?owner_team={team_name}"
         
         # Format statistics with color coding and emojis
-        if today > 0 and minus_today > 0:
-            message += f"\n📊 **[Total muted tests today: {total}]({dashboard_url}) (🔴+{today} muted /🟢-{minus_today} unmuted)**"
-        elif today > 0:
-            message += f"\n📊 **[Total muted tests today: {total}]({dashboard_url}) (🔴+{today} muted)**"
-        elif minus_today > 0:
-            message += f"\n📊 **[Total muted tests today: {total}]({dashboard_url}) (🟢-{minus_today} unmuted)**"
+        if show_diff:
+            if today > 0 and minus_today > 0:
+                message += f"\n📊 **[Total muted tests: {total}]({dashboard_url}) 🔴+{today} muted /🟢-{minus_today} unmuted**"
+            elif today > 0:
+                message += f"\n📊 **[Total muted tests: {total}]({dashboard_url}) 🔴+{today} muted**"
+            elif minus_today > 0:
+                message += f"\n📊 **[Total muted tests: {total}]({dashboard_url}) 🟢-{minus_today} unmuted**"
+            else:
+                message += f"\n📊 **[Total muted tests: {total}]({dashboard_url})**"
         else:
-            message += f"\n📊 **[Total muted tests today: {total}]({dashboard_url})**"
+            message += f"\n📊 **[Total muted tests: {total}]({dashboard_url})**"
     
     # Add responsible users on new line with "fyi:" prefix (moved after statistics)
     if team_responsible and team_name in team_responsible:
@@ -604,7 +611,7 @@ def get_team_config(team_name, team_channels):
         return None, None, None
 
 
-def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10, team_channels=None, dry_run=False, muted_stats=None, include_plots=False, ydb_config=None, debug_plots_dir=None, all_team_data=None):
+def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10, team_channels=None, dry_run=False, muted_stats=None, include_plots=False, ydb_config=None, debug_plots_dir=None, all_team_data=None, show_diff=False):
     """
     Send separate messages for each team.
     
@@ -621,6 +628,7 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
         ydb_config (dict): YDB configuration for trend data
         debug_plots_dir (str): Directory to save debug plot files (if None, debug mode is disabled)
         all_team_data (dict): Pre-fetched team data to avoid repeated queries
+        show_diff (bool): Whether to show +/- statistics in messages
     """
     
     total_teams = len(teams)
@@ -645,7 +653,7 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
             continue
         
         # Format message
-        message = format_team_message(team_name, issues, team_responsible, muted_stats)
+        message = format_team_message(team_name, issues, team_responsible, muted_stats, show_diff)
         
         if not message.strip():
             continue
@@ -918,9 +926,9 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
             continue
         
         # Create trend message
-        period_ru = "неделя к неделе" if period == "week" else "месяц к месяцу"
+        period_en = "week over week" if period == "week" else "month over month"
         team_tag = team_name.replace('-', '')
-        message = f"📈 **Изменения {period_ru} для команды [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** #{team_tag}\n\n"
+        message = f"📈 **{period_en.title()} changes for team [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name})** #{team_tag}\n\n"
         
         # Add trend statistics if available
         if team_name in all_team_data:
@@ -961,7 +969,7 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
                 responsible_str = f"@{responsible.replace('_', '\\_')}" if not responsible.startswith('@') else responsible.replace('_', '\\_')
             message += f"fyi: {responsible_str}\n\n"
         
-        message += f"График показывает динамику замьюченных тестов за последние 30 дней."
+        message += f"Chart shows muted tests trend over the last 30 days."
         
         if dry_run:
             print(f"📋 [DRY RUN] Team: {team_name}")
@@ -1248,7 +1256,8 @@ def main():
         args.include_plots,
         ydb_config,
         args.debug_plots_dir,
-        all_team_data
+        all_team_data,
+        MUTE_UPDATE_SHOW_DIFF
     )
 
 

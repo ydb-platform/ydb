@@ -2025,4 +2025,111 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_BAD_REQUEST, statusCode << ": " << response);
         UNIT_ASSERT_C(response.StartsWith("Conversion error"), response);
     }
+
+    void CheckRequest(TTestActorRuntime& runtime, const TActorId& sender, TAutoPtr<IEventHandle>& handle) {
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("timeout", "2000");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/tenantinfo", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(jsonResult, &json, true);
+
+        auto& tenants = json.GetMap().at("TenantInfo").GetArray();
+        TVector<TString> names;
+        names.reserve(tenants.size());
+        for (const auto& v : tenants) {
+            const auto& m = v.GetMap();
+            if (m.contains("Name")) {
+                names.push_back(m.at("Name").GetString());
+            }
+        }
+
+        UNIT_ASSERT(std::find(names.begin(), names.end(), "/Root") != names.end());
+        UNIT_ASSERT(std::find(names.begin(), names.end(), "/Root/db1") != names.end());
+        UNIT_ASSERT(std::find(names.begin(), names.end(), "/Root/db2") != names.end());
+    }
+
+    Y_UNIT_TEST(TenantsCacheForNoConsoleMode) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        // Phase control
+        bool dropConsole = false;
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NConsole::TEvConsole::EvListTenantsResponse: {
+                    if (dropConsole) {
+                        return TTestActorRuntime::EEventAction::DROP; // simulate Console unavailability
+                    }
+                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                    Ydb::Cms::ListDatabasesResult listTenantsResult;
+                    (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
+                    listTenantsResult.Addpaths("/Root");
+                    listTenantsResult.Addpaths("/Root/db2");
+                    listTenantsResult.Addpaths("/Root/db1");
+                    (*x)->Get()->Record.MutableResponse()->mutable_operation()->mutable_result()->PackFrom(listTenantsResult);
+                    break;
+                }
+                case NConsole::TEvConsole::EvGetTenantStatusResponse: {
+                    static int num = 0;
+                    if (dropConsole) {
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    auto* x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
+                    Ydb::Cms::GetDatabaseStatusResult status;
+                    (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&status);
+                    if (!status.path()) {
+                        status.set_path("/Root" + (num++ == 0 ? "" : ("/db" + ToString(num))));
+                    }
+                    status.set_state(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
+                    (*x)->Get()->Record.MutableResponse()->mutable_operation()->mutable_result()->PackFrom(status);
+                    break;
+                }
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                    auto &entry = (*x)->Get()->Request->ResultSet.front();
+                    if (!entry.DomainInfo) {
+                        auto domains = runtime.GetAppData().DomainsInfo;
+                        entry.DomainInfo = MakeIntrusive<TDomainInfo>(TPathId(domains->GetDomain()->SchemeRoot, 1),
+                                              TPathId(domains->GetDomain()->SchemeRoot, 1));
+                        entry.DomainInfo->Params.SetHive(domains->GetHive());
+                        entry.Status = TNavigate::EStatus::Ok;
+                        entry.Kind = TNavigate::EKind::KindExtSubdomain;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        // First request: Console available, cache is populated
+        CheckRequest(runtime, sender, handle);
+
+        // Second request: Console unavailable, expect last-good cached response
+        dropConsole = true;
+        CheckRequest(runtime, sender, handle);
+    }
 }

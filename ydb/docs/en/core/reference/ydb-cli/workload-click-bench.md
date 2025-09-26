@@ -38,7 +38,7 @@ See the description of the command to init the data load:
 
 | Name          | Description                                                       | Default value             |
 |--------------------------------------------------|---------------------------------------------------------------------------|----------------------------|
-| `--store <value>`                                | Table storage type. Possible values: `row`, `column`, `external-s3`.      | `row`.                     |
+| `--store <value>`                                | Table storage type. Possible values: `row`, `column`, `external-s3`.      | `column`.                     |
 | `--external-s3-prefix <value>`                   | Only relevant for external tables. Root path to the dataset in S3 storage.|                            |
 | `--external-s3-endpoint <value>` or `-e <value>` | Only relevant for external tables. Link to S3 Bucket with data.           |                            |
 | `--string`                                       | Use `String` type for text fields. `Utf8` is used by default.             |                            |

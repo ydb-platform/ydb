@@ -207,7 +207,7 @@ In most cases, working with {{ ydb-short-name }} column-oriented tables is simil
 * Column-oriented tables support a limited set of data types:
 
   + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
-  + Available only in columns not included in the primary key: `Bool`, `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `Interval`, `JsonDocument`, `Json`, `Uuid`, `Yson`.
+  + Available only in columns not included in the primary key: `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `JsonDocument`, `Json`, `Yson`.
 
 * Column-oriented tables support column groups, but only for compression settings.
 
@@ -231,11 +231,7 @@ At the moment, not all functionality of column-oriented tables is implemented. T
 * Vector indexes.
 * Bloom filters.
 * Change Data Capture.
-* Table renaming.
 * Custom table attributes.
-* Modifying the list of columns.
-* Adding data to column-oriented tables using the SQL INSERT statement.
-* Deleting data from column-oriented tables using the SQL DELETE statement. In fact, deletion is only possible after the TTL data retention time has expired.
 
 ### Partitioning Column-Oriented Tables {#olap-tables-partitioning}
 

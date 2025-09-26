@@ -16,6 +16,8 @@
 #include <library/cpp/yt/memory/ref_tracked.h>
 #include <library/cpp/yt/memory/ref_counted.h>
 
+#include <util/thread/pool.h>
+
 namespace NYT {
 namespace {
 
@@ -293,6 +295,52 @@ TEST(TRefCountedTrackerTest, RefTracked)
     EXPECT_EQ(0u, GetAliveCount<TSimpleRefTrackedObject>());
     EXPECT_EQ(0u, GetAliveBytes<TSimpleRefTrackedObject>());
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+#ifndef _win_
+
+TEST(TForkAwareSpinLockTest, ForkSafetyWithAllocations)
+{
+    std::atomic<bool> stopped = {false};
+    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, lock);
+
+    auto acquireTask = [&lock, &stopped] {
+        while (!stopped.load()) {
+            Sleep(TDuration::MicroSeconds(2));
+            auto g = Guard(lock);
+            auto someAllocation = New<TRefCounted>();
+        }
+    };
+
+    // NB(pavook): thread pool with one thread works weirdly for some reason.
+    auto worker = ::CreateThreadPool(2);
+
+    worker->SafeAddFunc(acquireTask);
+
+    // And let the chaos begin!
+    int forkCount = 2000;
+    for (int iter = 1; iter <= forkCount; ++iter) {
+        pid_t pid = fork();
+
+        YT_VERIFY(pid >= 0);
+
+        if (pid == 0) {
+            // NB(pavook): thread pools are no longer with us.
+            _exit(0);
+        }
+    }
+
+    for (int i = 1; i <= forkCount; ++i) {
+        int status;
+        YT_VERIFY(waitpid(0, &status, 0) > 0);
+        YT_VERIFY(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    }
+
+    stopped.store(true);
+}
+
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 

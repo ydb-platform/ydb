@@ -48,7 +48,7 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
 
 1. [Install](https://prometheus.io/docs/prometheus/latest/getting_started) Prometheus.
 
-1. Edit the Prometheus [configuration files](https://github.com/s-sabitova/ydb/tree/new-prometheus-config/ydb/deploy/prometheus):
+1. Edit the Prometheus [configuration files](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus):
 
     1. In the `targets` section of [`ydbd-storage.yml`](../../../../../deploy/prometheus/ydbd-storage.yml), specify the addresses of all {{ ydb-short-name }} cluster servers and the ports of storage nodes running on the servers.
        

@@ -311,7 +311,6 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
             }
         }
     }
-    Y_VERIFY(blobCreationUnixTime > TInstant::Zero());
 
     if (!CompactionBlobEncoder.IsLastBatchPacked()) {
         CompactionBlobEncoder.PackLastBatch();

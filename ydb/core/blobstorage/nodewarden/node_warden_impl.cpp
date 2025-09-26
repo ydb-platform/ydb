@@ -456,6 +456,9 @@ void TNodeWarden::Bootstrap() {
     actorSystem->RegisterLocalService(MakeBlobStorageSyncBrokerID(), Register(
         CreateSyncBrokerActor(MaxInProgressSyncCount)));
 
+    // create bridge syncer rate quoter
+    SyncRateQuoter = std::make_shared<TReplQuoter>(Cfg->BlobStorageConfig.GetBridgeSyncRateBytesPerSecond());
+
     // determine if we are running in 'mock' mode
     EnableProxyMock = Cfg->BlobStorageConfig.GetServiceSet().GetEnableProxyMock();
 

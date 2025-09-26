@@ -2,7 +2,7 @@
 
 ## Описание проблемы (без использования оптимизации)
 
-Клиент может запускать одновременно несколько [стриминговых запросов](../), которые читают и обрабатывают данные из одного и того же  [топика](../topic). При этом запросы могут использовать разные схемы данных (разный набор колонок) и различные предикаты.
+Клиент может запускать одновременно несколько [стриминговых запросов](./), которые читают и обрабатывают данные из одного и того же  [топика](../topic). При этом запросы могут использовать разные схемы данных (разный набор колонок) и различные предикаты.
 
 При этом часть обработки дублируется в процессе выполнения в каждом запросе:
 
@@ -19,18 +19,15 @@
 
 ```sql
 
-CREATE EXTERNAL DATA SOURCE my_source WITH (
+CREATE EXTERNAL DATA SOURCE source_name WITH (
     SOURCE_TYPE = "YDB",
     ...
     SHARED_READING = TRUE
 );
 
-CREATE OR REPLACE STREAMING QUERY `my_queries/shared_reading` 
-    WITH (
-        STREAMING_DISPOSITION = FRESH
-    ) AS
+CREATE OR REPLACE STREAMING QUERY `my_queries/query1`
 BEGIN
-    INSERT INTO `my_source`.`output_topic_name` SELECT * FROM `my_source`.`input_topic_name`;
+    INSERT INTO `source_name`.`output_topic_name` SELECT * FROM `source_name`.`input_topic_name`;
 END;
 ```
 

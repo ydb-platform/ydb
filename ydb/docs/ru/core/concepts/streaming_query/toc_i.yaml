@@ -1,3 +1,4 @@
 items:
 - { name: Обзор,                                                  href: index.md }
-- { name: Shared reading,                                         href: shared_reading.md }
+- { name: Чекпойнты,                                              href: checkpoints.md }
+- { name: Оптимизация чтения (Shared reading),                    href: shared_reading.md }

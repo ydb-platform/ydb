@@ -3,4 +3,5 @@
 ...
 
 Подробная информация про работу в соответствующих разделах:
-- [Shared reading](shared_reading.md)
+- [Чекпойнты](checkpoints.md)
+- [Оптимизация чтение Shared reading](shared_reading.md)

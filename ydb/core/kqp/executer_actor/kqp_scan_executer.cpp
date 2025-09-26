@@ -167,8 +167,6 @@ private:
         TasksGraph.BuildAllTasks(LlvmSettings, ResourcesSnapshot, Stats.get(), nullptr);
         OnEmptyResult();
 
-        // Cerr << TasksGraph.DumpToString();
-
         TIssue validateIssue;
         if (!ValidateTasks(TasksGraph, EExecType::Scan, TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
             TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, validateIssue);

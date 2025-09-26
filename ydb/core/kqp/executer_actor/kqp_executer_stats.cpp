@@ -806,7 +806,11 @@ NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDq::TStageId& stageI
     newStage->SetStageId(stageId.StageId);
     newStage->SetStageGuid(stageProto.GetStageGuid());
     newStage->SetProgram(stageProto.GetProgramAst());
-    // TODO: fill newStage with introspections from tasks
+
+    // TODO: respect stats level: full, profile
+    auto intros = tasksGraph.GetStageIntrospection(stageId);
+    newStage->MutableIntrospections()->Add(intros.begin(), intros.end());
+
     return newStage;
 }
 

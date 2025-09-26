@@ -1820,7 +1820,6 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
             default:
                 break;
         }
-
     }
 
     Y_ENSURE(mapConnectionCount <= 1, "Only a single map connection is allowed");
@@ -3028,6 +3027,92 @@ TKqpTasksGraph::TKqpTasksGraph(
     FillKqpTasksGraphStages();
 }
 
+TVector<TString> TKqpTasksGraph::GetStageIntrospection(const TStageId& stageId) const {
+    TVector<TString> introspections;
+    THashMap<TTaskType::EReason, ui64> tasksPerReason;
+
+    for (const auto& taskId : GetStageInfo(stageId).Tasks) {
+        const auto& task = GetTask(taskId);
+        ++tasksPerReason[task.Reason];
+    }
+
+    for (const auto [reason, count] : tasksPerReason) {
+        switch(reason) {
+            case TTaskType::EReason::UNKNOWN:
+                introspections.push_back(ToString(count) + " tasks created for unknown reason");
+                break;
+            case TTaskType::EReason::LITERAL:
+                introspections.push_back(ToString(count) + " tasks for literal executer");
+                break;
+            case TTaskType::EReason::RESTORED:
+                introspections.push_back(ToString(count) + " tasks restored");
+                break;
+            case TTaskType::EReason::FORCED:
+                introspections.push_back(ToString(count) + " tasks forced by user override");
+                break;
+            case TTaskType::EReason::LEVEL_PREDICTED:
+                introspections.push_back(ToString(count) + " tasks by level prediction");
+                break;
+            case TTaskType::EReason::MINIMUM_COMPUTE:
+                introspections.push_back(ToString(count) + " minimum tasks for compute");
+                break;
+            case TTaskType::EReason::SYSVIEW_COMPUTE:
+                introspections.push_back(ToString(count) + " tasks for sysview");
+                break;
+            case TTaskType::EReason::PREV_STAGE_COMPUTE:
+                introspections.push_back(ToString(count) + " tasks same as previous stage");
+                break;
+            case TTaskType::EReason::AGGREGATION_COMPUTE:
+                introspections.push_back(ToString(count) + " tasks from AggregationComputeThreads setting");
+                break;
+            case TTaskType::EReason::UPSERT_DELETE_DATASHARD:
+                introspections.push_back(ToString(count) + " tasks for upsert/delete in datashard");
+                break;
+            case TTaskType::EReason::DEFAULT_SOURCE_SCAN:
+                introspections.push_back(ToString(count) + " tasks default for source scan");
+                break;
+            case TTaskType::EReason::DEFAULT_SHARD_SCAN:
+                introspections.push_back(ToString(count) + " tasks default for shard scan");
+                break;
+            case TTaskType::EReason::SHUFFLE_ELIMINATE_SCAN:
+                introspections.push_back(ToString(count) + " tasks for scan with shuffle elimination");
+                break;
+            case TTaskType::EReason::SINGLE_SOURCE_SCAN:
+                introspections.push_back(ToString(count) + " tasks for a single/sequential source scan");
+                break;
+            case TTaskType::EReason::DEFAULT_SOURCE_READ:
+                introspections.push_back(ToString(count) + " tasks default for source read");
+                break;
+            case TTaskType::EReason::SCHEDULED_SOURCE_READ:
+                introspections.push_back(ToString(count) + " tasks scheduled for source read");
+                break;
+            case TTaskType::EReason::SNAPSHOT_SOURCE_READ:
+                introspections.push_back(ToString(count) + " tasks by resource snapshot for source read");
+                break;
+            case TTaskType::EReason::OLAP_AGGREGATION_SCAN:
+                introspections.push_back(ToString(count) + " tasks from CSScanThreadsPerNode setting");
+                break;
+            case TTaskType::EReason::OLTP_AGGREGATION_SCAN:
+                introspections.push_back(ToString(count) + " tasks from DSScanMinimalThreads setting");
+                break;
+            case TTaskType::EReason::OLAP_SORT_SCAN:
+                introspections.push_back(ToString(count) + " tasks for OLAP and sort scan");
+                break;
+            case TTaskType::EReason::OLTP_SORT_SCAN:
+                introspections.push_back(ToString(count) + " tasks from DSBaseSortScanThreads setting");
+                break;
+            case TTaskType::EReason::OLTP_MAP_JOIN_SCAN:
+                introspections.push_back(ToString(count) + " tasks from DSBaseJoinScanThreads setting");
+                break;
+            case TTaskType::EReason::MINIMUM_SCAN:
+                introspections.push_back(ToString(count) + " tasks default for scan");
+                break;
+        }
+    }
+
+    return introspections;
+}
+
 TString TKqpTasksGraph::DumpToString() const {
     THashMap<TStageId, ui64> stageTasks;
     for (const auto& task : GetTasks()) {
@@ -3036,8 +3121,13 @@ TString TKqpTasksGraph::DumpToString() const {
 
     TStringStream dump;
     for (const auto& [stageId, tasks] : stageTasks) {
-        dump << "Stage " << stageId << " has " << tasks << " tasks" << Endl;
+        dump << "Stage " << stageId << " has " << tasks << " tasks: ";
+        for (const auto& intro : GetStageIntrospection(stageId)) {
+            dump << intro << ";";
+        }
+        dump << Endl;
     }
+
     return dump.Str();
 }
 

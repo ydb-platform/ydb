@@ -790,7 +790,6 @@ public:
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
             QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
         {
-            /*
             // TODO: properly initialize transaction(s)
             TVector<IKqpGateway::TPhysicalTxData> txs;
             txs.emplace_back(QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx), QueryState->QueryData);
@@ -829,6 +828,9 @@ public:
                     co_return;
                 }
                 tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
+                for (const auto& [shardId, nodeId] : tasksGraph.GetMeta().ShardIdToNodeId) {
+                    tasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
+                }
             }
 
             bool needResourcesSnapshot = tasksGraph.GetMeta().IsScan;
@@ -865,14 +867,14 @@ public:
 
             tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr, nullptr);
 
-            Cerr << tasksGraph.DumpToString();
-            */
+            // TODO: fill tasks count into result
+            // Cerr << tasksGraph.DumpToString();
 
-            return ReplyPrepareResult();
+            co_return ReplyPrepareResult();
         }
 
         if (!PrepareQueryContext()) {
-            return;
+            co_return;
         }
 
         Become(&TKqpSessionActor::ExecuteState);
@@ -881,10 +883,10 @@ public:
 
         if (QueryState->NeedPersistentSnapshot()) {
             AcquirePersistentSnapshot();
-            return;
+            co_return;
         } else if (QueryState->NeedSnapshot(*Config)) {
             AcquireMvccSnapshot();
-            return;
+            co_return;
         }
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState

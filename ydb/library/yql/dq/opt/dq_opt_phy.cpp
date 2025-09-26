@@ -3486,12 +3486,8 @@ bool ValidateStreamLookupJoinFlags(const TDqJoin& join, TExprContext& ctx) {
     }
 
     if (!rightAny) {
-        if (false) { // Temporarily change to warning to allow for smooth transition
-            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
-            return false;
-        } else {
-            ctx.AddWarning(TIssue(ctx.GetPosition(join.Pos()), "(Deprecation) Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
-        }
+        ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
+        return false;
     }
 
     return true;
@@ -3505,7 +3501,6 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
         return node;
     }
 
-    const auto pos = node.Pos();
     const auto left = join.LeftInput().Maybe<TDqConnection>();
     if (!left) {
         return node;
@@ -3534,19 +3529,25 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
         }
     }
 
+    const auto pos = node.Pos();
+
     if (!ttl) {
         ttl = ctx.NewAtom(pos, 300);
     }
+
     if (!maxCachedRows) {
         maxCachedRows = ctx.NewAtom(pos, 1'000'000);
     }
+
     if (!maxDelayedRows) {
         maxDelayedRows = ctx.NewAtom(pos, 1'000'000);
     }
+
     auto rightInput = join.RightInput().Ptr();
     if (auto maybe = TExprBase(rightInput).Maybe<TCoExtractMembers>()) {
         rightInput = maybe.Cast().Input().Ptr();
     }
+
     auto leftLabel = join.LeftLabel().Maybe<NNodes::TCoAtom>() ? join.LeftLabel().Cast<NNodes::TCoAtom>().Ptr() : ctx.NewAtom(pos, "");
     Y_ENSURE(join.RightLabel().Maybe<NNodes::TCoAtom>());
     auto cn = Build<TDqCnStreamLookup>(ctx, pos)

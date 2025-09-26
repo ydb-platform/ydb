@@ -1860,8 +1860,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .ResultFactory = [&]() {
                     readSplitsCount += 1;
                     const auto payloadColumn = readSplitsCount < 3
-                        ?  std::vector<std::string>{"P1", "P2", "P3"}
-                        :  std::vector<std::string>{"P4", "P5", "P6"};
+                        ? std::vector<std::string>{"P1", "P2", "P3"}
+                        : std::vector<std::string>{"P4", "P5", "P6"};
 
                     return MakeRecordBatch(
                         MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),

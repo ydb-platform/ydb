@@ -27,6 +27,7 @@ SRCS(
     actors/kafka_transaction_actor_sql.cpp
     actors/kafka_transaction_actor.cpp
     actors/kafka_state_name_to_int.cpp
+    actors/kafka_topic_group_path_struct.cpp
     kafka_connection.cpp
     kafka_connection.h
     kafka_constants.h

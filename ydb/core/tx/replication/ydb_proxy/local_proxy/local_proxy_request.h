@@ -13,11 +13,13 @@ public:
             TString path,
             TString databaseName,
             std::unique_ptr<google::protobuf::Message>&& request,
-            const std::function<void(Ydb::StatusIds::StatusCode, const google::protobuf::Message*)> sendResultCallback)
+            const std::function<void(Ydb::StatusIds::StatusCode, const google::protobuf::Message*)> sendResultCallback,
+            TIntrusiveConstPtr<NACLib::TUserToken> userToken = {})
         : Path(path)
         , DatabaseName(databaseName)
         , Request(std::move(request))
         , SendResultCallback(sendResultCallback)
+        , UserToken(userToken)
     {
     }
 
@@ -46,6 +48,9 @@ public:
     }
 
     const TString& GetSerializedToken() const override {
+        if (UserToken) {
+            return UserToken->GetSerializedToken();
+        }
         return DummyString;
     }
 
@@ -196,13 +201,13 @@ protected:
 
 private:
     const Ydb::Operations::OperationParams DummyParams;
-    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TString DummyString;
     const NKikimr::NGRpcService::TAuditLogParts DummyAuditLogParts;
     const TString Path;
     const TString DatabaseName;
     std::unique_ptr<google::protobuf::Message> Request;
     const std::function<void(Ydb::StatusIds::StatusCode, const google::protobuf::Message*)> SendResultCallback;
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     NYql::TIssue Issue;
 
     void ProcessYdbStatusCode(Ydb::StatusIds::StatusCode& status, const google::protobuf::Message* result) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
@@ -21,6 +22,8 @@ public:
     TVector<NPq::NProto::TDqReadTaskParams> ReadParams;
     const NActors::TActorId ComputeActorId;
     ui64 TaskId;
+    TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
+    TMaybe<TInstant> NextIdlenessCheckAt;
 
     TDqPqReadActorBase(
         ui64 inputIndex,
@@ -37,6 +40,12 @@ public:
 
     ui64 GetInputIndex() const override;
     const TDqAsyncStats& GetIngressStats() const override;
+
+    virtual void ScheduleSourcesCheck(TInstant) = 0;
+
+    virtual void InitWatermarkTracker() = 0;
+    void InitWatermarkTracker(ui64, ui64);
+    void MaybeScheduleNextIdleCheck(TInstant systemTime);
 
     virtual TString GetSessionId() const {
         return TString{"empty"};

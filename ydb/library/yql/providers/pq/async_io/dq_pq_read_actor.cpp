@@ -4,6 +4,7 @@
 #include "dq_pq_read_actor_base.h"
 #include "probes.h"
 
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>

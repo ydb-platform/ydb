@@ -696,14 +696,6 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyTableOperatio
     }
 }
 
-
-namespace {
-
-using namespace NMiniKQL;
-
-} // namespace
-
-
 template <typename TEffect>
 THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TEffect& effect,
     const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,

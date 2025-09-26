@@ -3108,6 +3108,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         LockBuild = 47,
         Applying = 50,
         Unlocking = 60,
+        AlterSequence = 61,
         Done = 200,
 
         Cancellation_Applying = 350,
@@ -3217,6 +3218,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         bool IsEmpty = false;
 
         EState State = Sample;
+
+        bool AlterPrefixSequenceDone = false;
 
         NTableIndex::NKMeans::TClusterId ParentBegin = 0;  // included
         NTableIndex::NKMeans::TClusterId Parent = ParentBegin;

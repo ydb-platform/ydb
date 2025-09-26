@@ -307,7 +307,7 @@ ui32 THead::GetCount() const
 
 
 //
-// THead::TBatchAccessor 
+// THead::TBatchAccessor
 //
 
 THead::TBatchAccessor THead::MutableBatch(ui32 idx) {
@@ -353,10 +353,11 @@ ui16 TPartitionedBlob::GetHeadPartNo() const {
     return HeadPartNo;
 }
 
-TPartitionedBlob::TRenameFormedBlobInfo::TRenameFormedBlobInfo(const TKey& oldKey, const TKey& newKey, ui32 size) :
-    OldKey(oldKey),
-    NewKey(newKey),
-    Size(size)
+TPartitionedBlob::TRenameFormedBlobInfo::TRenameFormedBlobInfo(const TKey& oldKey, const TKey& newKey, ui32 size, TInstant creationUnixTime)
+    : OldKey(oldKey)
+    , NewKey(newKey)
+    , Size(size)
+    , CreationUnixTime(creationUnixTime)
 {
 }
 
@@ -455,12 +456,14 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
     }
 }
 
-TString TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHead, THead& newHead, ui32 estimatedSize)
+TPartitionedBlob::TCompactHeadResult TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHead, THead& newHead, ui32 estimatedSize)
 {
+    TInstant endWriteTimestamp = TInstant::Zero();
     TString valueD;
     valueD.reserve(estimatedSize);
     if (glueHead) {
         for (ui32 pp = 0; pp < head.Batches.size(); ++pp) {
+            endWriteTimestamp = std::max(endWriteTimestamp, head.Batches[pp].GetEndWriteTimestamp());
             AFL_ENSURE(head.Batches[pp].Packed);
             head.Batches[pp].SerializeTo(valueD);
         }
@@ -475,11 +478,12 @@ TString TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHe
                 batch.Pack();
                 b = &batch;
             }
+            endWriteTimestamp = std::max(endWriteTimestamp,b->GetEndWriteTimestamp());
             AFL_ENSURE(b->Packed);
             b->SerializeTo(valueD);
         }
     }
-    return valueD;
+    return {std::move(valueD), endWriteTimestamp};
 }
 
 auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optional<TFormedBlobInfo>
@@ -505,13 +509,14 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
     StartPartNo = NextPartNo;
     InternalPartsCount = 0;
 
-    TString valueD = CompactHead(GlueHead, Head, GlueNewHead, NewHead, HeadSize + BlobsSize + (BlobsSize > 0 ? GetMaxHeaderSize() : 0));
+    auto [valueD, endWriteTimestamp] = CompactHead(GlueHead, Head, GlueNewHead, NewHead, HeadSize + BlobsSize + (BlobsSize > 0 ? GetMaxHeaderSize() : 0));
 
     GlueHead = GlueNewHead = false;
     if (!Blobs.empty()) {
         auto batch = TBatch::FromBlobs(Offset, std::move(Blobs));
         Blobs.clear();
         batch.Pack();
+        endWriteTimestamp = std::max(endWriteTimestamp, batch.GetEndWriteTimestamp());
         AFL_ENSURE(batch.Packed);
         batch.SerializeTo(valueD);
     }
@@ -521,7 +526,7 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
     BlobsSize = 0;
     TClientBlob::CheckBlob(tmpKey, valueD);
     if (useRename) {
-        FormedBlobs.emplace_back(tmpKey, dataKey, valueD.size());
+        FormedBlobs.emplace_back(tmpKey, dataKey, valueD.size(), endWriteTimestamp);
     }
     Blobs.clear();
 
@@ -554,7 +559,7 @@ auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
     return res;
 }
 
-auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size) -> std::optional<TFormedBlobInfo>
+auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size, TInstant timestamp) -> std::optional<TFormedBlobInfo>
 {
     if (HeadSize + BlobsSize == 0) { //if nothing to compact at all
         NeedCompactHead = false;
@@ -573,7 +578,7 @@ auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size) -> std::optional<TForm
     auto newKey = TKey::FromKey(oldKey, TKeyPrefix::TypeData, Partition, StartOffset);
     newKey.SetFastWrite();
 
-    FormedBlobs.emplace_back(oldKey, newKey, size);
+    FormedBlobs.emplace_back(oldKey, newKey, size, timestamp);
 
     StartOffset += oldKey.GetCount();
     //NewHead.Offset += oldKey.GetOffset() + oldKey.GetCount();

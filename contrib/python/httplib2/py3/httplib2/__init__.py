@@ -16,7 +16,7 @@ __contributors__ = [
     "Lai Han",
 ]
 __license__ = "MIT"
-__version__ = "0.30.0"
+__version__ = "0.30.2"
 
 import base64
 import calendar
@@ -953,6 +953,10 @@ def proxy_info_from_url(url, method="http", noproxy=None):
     url = urllib.parse.urlparse(url)
 
     proxy_type = 3  # socks.PROXY_TYPE_HTTP
+    if url.scheme == "socks4":
+        proxy_type = 1  # socks.PROXY_TYPE_SOCKS4
+    elif url.scheme == "socks5" or url.scheme == "socks":
+        proxy_type = 2  # socks.PROXY_TYPE_SOCKS5
     pi = ProxyInfo(
         proxy_type=proxy_type,
         proxy_host=url.hostname,

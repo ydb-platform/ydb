@@ -3558,6 +3558,7 @@ message TQuery
     optional NYT.NYTree.NProto.TAttributeDictionary other_attributes = 15;
     optional bytes access_control_objects = 16; // YSON
     optional bytes secrets = 17; // YSON
+    optional bool is_indexed = 18;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

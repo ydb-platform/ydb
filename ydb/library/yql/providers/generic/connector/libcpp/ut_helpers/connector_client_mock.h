@@ -68,6 +68,11 @@ namespace NYql::NConnector::NTest {
         return google::protobuf::util::MessageDifferencer::Equals(arg, expected);
     }
 
+    MATCHER_P(RequestRelaxedMatcher, expected, "") {
+        Y_UNUSED(arg);
+        return true;
+    }
+
 #define MATCH_RESULT_WITH_INPUT(INPUT, RESULT_SET, GETTER)                      \
     {                                                                           \
         for (const auto& val : INPUT) {                                         \
@@ -373,12 +378,11 @@ namespace NYql::NConnector::NTest {
             DATA_SOURCE_INSTANCE_SUBBUILDER();
 
             TDescribeTableResultBuilder<TBuilder> Response() {
-                return TDescribeTableResultBuilder<TBuilder>(ResponseResult_, this);
+                return TDescribeTableResultBuilder<TBuilder>(ResponseResults_.emplace_back(std::make_shared<NApi::TDescribeTableResponse>()), this);
             }
 
             void FillWithDefaults() {
                 Table(DEFAULT_TABLE);
-                Response();
             }
 
             TBuilder& TypeMappingSettings(const NApi::TTypeMappingSettings& proto) {
@@ -388,16 +392,19 @@ namespace NYql::NConnector::NTest {
 
         private:
             void SetExpectation() {
-                EXPECT_CALL(*Mock_, DescribeTableImpl(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(
-                        TResult<NApi::TDescribeTableResponse>(
-                            {NYdbGrpc::TGrpcStatus(),
-                             *ResponseResult_})));
+                if (ResponseResults_.empty()) {
+                    Response();
+                }
+
+                auto& expectBuilder = EXPECT_CALL(*Mock_, DescribeTableImpl(ProtobufRequestMatcher(*Result_)));
+                for (auto result : ResponseResults_) {
+                    expectBuilder.WillOnce(Return(TResult<NApi::TDescribeTableResponse>({NYdbGrpc::TGrpcStatus(), *result})));
+                }
             }
 
         private:
             TConnectorClientMock* Mock_ = nullptr;
-            std::shared_ptr<NApi::TDescribeTableResponse> ResponseResult_ = std::make_shared<NApi::TDescribeTableResponse>();
+            std::vector<std::shared_ptr<NApi::TDescribeTableResponse>> ResponseResults_;
         };
 
         template <class TParent = void /* no parent by default */>
@@ -663,9 +670,7 @@ namespace NYql::NConnector::NTest {
             explicit TListSplitsExpectationBuilder(NApi::TListSplitsRequest* result = nullptr, TConnectorClientMock* mock = nullptr)
                 : TProtoBuilder<int, NApi::TListSplitsRequest>(result)
                 , Mock_(mock)
-
             {
-                FillWithDefaults();
             }
 
             explicit TListSplitsExpectationBuilder(TConnectorClientMock* mock)
@@ -681,7 +686,7 @@ namespace NYql::NConnector::NTest {
             SETTER(MaxSplitCount, max_split_count);
 
             TListSplitsResultBuilder<TBuilder> Result() {
-                return TListSplitsResultBuilder<TBuilder>(ResponseResult_, this);
+                return TListSplitsResultBuilder<TBuilder>(ResponseResults_.emplace_back(std::make_shared<TListSplitsStreamIteratorMock>()), this);
             }
 
             auto& Status(const NYdbGrpc::TGrpcStatus& status) {
@@ -689,20 +694,31 @@ namespace NYql::NConnector::NTest {
                 return *this;
             }
 
-            void FillWithDefaults() {
-                Result();
+            auto& ValidateArgs(bool validate) {
+                ValidateArgs_ = validate;
+                return *this;
             }
 
         private:
             void SetExpectation() {
-                EXPECT_CALL(*Mock_, ListSplitsImpl(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(TIteratorResult<IListSplitsStreamIterator>{ResponseStatus_, ResponseResult_}));
+                if (ResponseResults_.empty()) {
+                    Result();
+                }
+
+                auto& expectBuilder = ValidateArgs_
+                    ? EXPECT_CALL(*Mock_, ListSplitsImpl(ProtobufRequestMatcher(*Result_)))
+                    : EXPECT_CALL(*Mock_, ListSplitsImpl(RequestRelaxedMatcher(*Result_)));
+
+                for (auto response : ResponseResults_) {
+                    expectBuilder.WillOnce(Return(TIteratorResult<IListSplitsStreamIterator>{ResponseStatus_, response}));
+                }
             }
 
         private:
             TConnectorClientMock* Mock_ = nullptr;
-            TListSplitsStreamIteratorMock::TPtr ResponseResult_ = std::make_shared<TListSplitsStreamIteratorMock>();
+            std::vector<TListSplitsStreamIteratorMock::TPtr> ResponseResults_;
             NYdbGrpc::TGrpcStatus ResponseStatus_ {};
+            bool ValidateArgs_ = true;
         };
 
         template <class TParent = void /* no parent by default */>
@@ -757,11 +773,16 @@ namespace NYql::NConnector::NTest {
             SETTER(Filtering, filtering);
 
             TReadSplitsResultBuilder<TBuilder> Result() {
-                return TReadSplitsResultBuilder<TBuilder>(ResponseResult_, this);
+                return TReadSplitsResultBuilder<TBuilder>(ResponseResults_.emplace_back(std::make_shared<TReadSplitsStreamIteratorMock>()), this);
             }
 
             auto& Status(const NYdbGrpc::TGrpcStatus& status) {
                 ResponseStatus_ = status;
+                return *this;
+            }
+
+            auto& ValidateArgs(bool validate) {
+                ValidateArgs_ = validate;
                 return *this;
             }
 
@@ -771,14 +792,23 @@ namespace NYql::NConnector::NTest {
 
         private:
             void SetExpectation() {
-                EXPECT_CALL(*Mock_, ReadSplitsImpl(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(TIteratorResult<IReadSplitsStreamIterator>{ResponseStatus_, ResponseResult_}));
+                if (ResponseResults_.empty()) {
+                    Result();
+                }
+
+                auto& expectBuilder = ValidateArgs_
+                    ? EXPECT_CALL(*Mock_, ReadSplitsImpl(ProtobufRequestMatcher(*Result_)))
+                    : EXPECT_CALL(*Mock_, ReadSplitsImpl(RequestRelaxedMatcher(*Result_)));
+                for (auto response : ResponseResults_) {
+                    expectBuilder.WillOnce(Return(TIteratorResult<IReadSplitsStreamIterator>{ResponseStatus_, response}));
+                }
             }
 
         private:
             TConnectorClientMock* Mock_ = nullptr;
-            TReadSplitsStreamIteratorMock::TPtr ResponseResult_ = std::make_shared<TReadSplitsStreamIteratorMock>();
+            std::vector<TReadSplitsStreamIteratorMock::TPtr> ResponseResults_;
             NYdbGrpc::TGrpcStatus ResponseStatus_ {};
+            bool ValidateArgs_ = true;
         };
 
         TDescribeTableExpectationBuilder ExpectDescribeTable() {

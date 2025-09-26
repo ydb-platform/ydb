@@ -422,6 +422,8 @@ private:
     void BuildVectorResolveChannels(const TStageInfo& stageInfo, ui32 inputIndex,
         const TStageInfo& inputStageInfo, ui32 outputIndex,
         const NKqpProto::TKqpPhyCnVectorResolve& vectorResolve, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
+    void BuildDqSourceStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
+        ui32 outputIndex, const NKqpProto::TKqpPhyCnDqSourceStreamLookup& dqSourceStreamLookup, const NYql::NDq::TChannelLogFunc& logFunc);
 
     void FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output, ui32 outputIdx,
         bool enableSpilling, const TStageInfo& stageInfo) const;

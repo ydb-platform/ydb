@@ -110,10 +110,11 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             nullptr,
             driver);
 
+        const auto& kqpSettings = appConfig->GetKQPConfig().GetSettings();
         settings
             .SetFeatureFlags(featureFlags)
             .SetFederatedQuerySetupFactory(federatedQuerySetupFactory)
-            .SetKqpSettings({})
+            .SetKqpSettings({kqpSettings.begin(), kqpSettings.end()})
             .SetS3ActorsFactory(std::move(s3ActorsFactory))
             .SetWithSampleTables(false)
             .SetDomainRoot(options.DomainRoot)

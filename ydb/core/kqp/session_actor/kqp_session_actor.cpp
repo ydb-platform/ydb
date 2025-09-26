@@ -17,6 +17,8 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/executer_actor/kqp_locks_helper.h>
 #include <ydb/core/kqp/executer_actor/kqp_partitioned_executer.h>
+#include <ydb/core/kqp/executer_actor/kqp_table_resolver.h>
+#include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -40,6 +42,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
+#include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -787,6 +790,84 @@ public:
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
             QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
         {
+            /*
+            // TODO: properly initialize transaction(s)
+            TVector<IKqpGateway::TPhysicalTxData> txs;
+            txs.emplace_back(QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx), QueryState->QueryData);
+
+            auto txAlloc = std::make_shared<TTxAllocatorState>(AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
+            auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {});
+            tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
+
+            // Resolve tables
+            {
+                auto kqpTableResolver = CreateKqpTableResolver(SelfId(), 0, QueryState->UserToken, tasksGraph);
+                RegisterWithSameMailbox(kqpTableResolver);
+                auto resolveEv = co_await ActorWaitForEvent<TEvKqpExecuter::TEvTableResolveStatus>(0);
+                if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                    ReplyResolveError(*resolveEv->Get());
+                    co_return;
+                }
+            }
+
+            // Resolve shards
+            {
+                TSet<ui64> shardIds;
+                for (const auto& [stageId, stageInfo] : tasksGraph.GetStagesInfo()) {
+                    if (stageInfo.Meta.ShardKey) {
+                        for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                            shardIds.insert(partition.ShardId);
+                        }
+                    }
+                }
+                // TODO: initialize tasksGraph.GetMeta().UseFollowers ?
+                auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), 0, false, std::move(shardIds));
+                RegisterWithSameMailbox(kqpShardsResolver);
+                auto resolveEv = co_await ActorWaitForEvent<NShardResolver::TEvShardsResolveStatus>(0);
+                if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                    ReplyResolveError(*resolveEv->Get());
+                    co_return;
+                }
+                tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
+            }
+
+            bool needResourcesSnapshot = tasksGraph.GetMeta().IsScan;
+            if (!tasksGraph.GetMeta().IsScan) {
+                for (const auto& transaction : txs) {
+                    for (const auto& stage : transaction.Body->GetStages()) {
+                        if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
+                            needResourcesSnapshot = true;
+                        }
+                    }
+                }
+                // TODO: better set `needResourcesSnapshot`
+            }
+
+            // Get resources snapshot
+            TVector<NKikimrKqp::TKqpNodeResources> resourcesSnapshot;
+            if (needResourcesSnapshot) {
+                struct TEvResourcesSnapshot : public TEventLocal<TEvResourcesSnapshot, EventSpaceBegin(TEvents::ES_PRIVATE)> {
+                    TVector<NKikimrKqp::TKqpNodeResources> Snapshot;
+
+                    TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
+                        : Snapshot(std::move(snapshot)) {}
+                };
+
+                GetKqpResourceManager()->RequestClusterResourcesInfo(
+                    [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+                        TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvResourcesSnapshot(std::move(resources)));
+                        as->Send(eh);
+                    }
+                );
+
+                resourcesSnapshot = std::move((co_await ActorWaitForEvent<TEvResourcesSnapshot>(0))->Get()->Snapshot);
+            }
+
+            tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr, nullptr);
+
+            Cerr << tasksGraph.DumpToString();
+            */
+
             return ReplyPrepareResult();
         }
 
@@ -1246,7 +1327,7 @@ public:
     }
 
     bool CheckTransactionLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
-        auto& txCtx = *QueryState->TxCtx;
+        const auto& txCtx = *QueryState->TxCtx;
         const bool broken = txCtx.TxManager
             ? !!txCtx.TxManager->GetLockIssue()
             : txCtx.Locks.Broken();
@@ -1267,7 +1348,7 @@ public:
     }
 
     bool CheckTopicOperations() {
-        auto& txCtx = *QueryState->TxCtx;
+        const auto& txCtx = *QueryState->TxCtx;
 
         if (txCtx.TopicOperations.IsValid()) {
             return true;
@@ -1400,7 +1481,7 @@ public:
                 "BATCH operation can be executed only in the implicit transaction mode.");
         }
 
-        auto& txCtx = *QueryState->TxCtx;
+        const auto& txCtx = *QueryState->TxCtx;
         auto request = PrepareRequest(tx, false, QueryState.get());
 
         try {
@@ -2454,6 +2535,52 @@ public:
         );
 
         Send(request->Sender, response.release(), 0, proxyRequestId);
+    }
+
+    void ReplyResolveError(const TEvKqpExecuter::TEvTableResolveStatus& ev) {
+        QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
+        auto& record = QueryResponse->Record;
+
+        record.SetYdbStatus(ev.Status);
+        auto& response = *record.MutableResponse();
+        AddQueryIssues(response, ev.Issues);
+
+        auto txId = TTxId();
+        if (auto ctx = Transactions.ReleaseTransaction(txId)) {
+            ctx->Invalidate();
+            if (!ctx->BufferActorId) {
+                Transactions.AddToBeAborted(std::move(ctx));
+            } else {
+                TerminateBufferActor(ctx);
+            }
+        }
+
+        FillTxInfo(record.MutableResponse());
+
+        Cleanup(false);
+    }
+
+    void ReplyResolveError(const NShardResolver::TEvShardsResolveStatus& ev) {
+        QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
+        auto& record = QueryResponse->Record;
+
+        record.SetYdbStatus(ev.Status);
+        auto& response = *record.MutableResponse();
+        AddQueryIssues(response, ev.Issues);
+
+        auto txId = TTxId();
+        if (auto ctx = Transactions.ReleaseTransaction(txId)) {
+            ctx->Invalidate();
+            if (!ctx->BufferActorId) {
+                Transactions.AddToBeAborted(std::move(ctx));
+            } else {
+                TerminateBufferActor(ctx);
+            }
+        }
+
+        FillTxInfo(record.MutableResponse());
+
+        Cleanup(false);
     }
 
     void ReplyBusy(TEvKqp::TEvQueryRequest::TPtr& ev) {

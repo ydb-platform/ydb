@@ -307,7 +307,7 @@ namespace Tests {
         TVector<TActorId> grpcRequestProxies;
         grpcRequestProxies.reserve(proxyCount);
 
-        auto& appData = Runtime->GetAppData(grpcServiceNodeId);
+        auto& appData = Runtime->GetAppData();
         for (size_t i = 0; i < proxyCount; ++i) {
             auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig);
             auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled, appData.UserPoolId);

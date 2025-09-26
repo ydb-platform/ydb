@@ -76,11 +76,8 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             );
         }
 
-        auto rows1 = ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/texts");
-        Cout << rows1 << Endl;
-
-        auto rows = ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/texts/fulltext_idx/indexImplTable");
-        UNIT_ASSERT_VALUES_EQUAL(TVector<TString>{"[[[["
+        auto rows = ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/texts/fulltext_idx/indexImplTable").at(0);
+        UNIT_ASSERT_VALUES_EQUAL("[[[["
             R"(["apple";["one"];["1"]];)"
             R"(["apple";["two"];["2"]];)"
             R"(["apple";["three"];["3"]];)"
@@ -89,7 +86,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             R"(["red";["two"];["2"]];)"
             R"(["red";["four"];["4"]];)"
             R"(["yellow";["three"];["3"]]];)"
-        "%false]]]"}, rows);
+        "%false]]]", rows);
     }
 
 }

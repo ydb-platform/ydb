@@ -88,7 +88,7 @@
 
   {% endcut %}
 
-  {% cut "Пакетная вставка csv" %}
+  {% cut "Пакетная вставка `CSV`" %}
 
   ```go
   package main

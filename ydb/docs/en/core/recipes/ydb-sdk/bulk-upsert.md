@@ -88,7 +88,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
   {% endcut %}
 
-  {% cut "Bulk upsert CSV data" %}
+  {% cut "Bulk upsert `CSV` data" %}
 
   ```go
   package main
@@ -123,7 +123,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   44,hello
   `
 
-    // execute bulk upsert from csv data
+    // execute bulk upsert from CSV data
     err = db.Table().BulkUpsert(ctx, "/local/bulk_upsert_example", table.BulkUpsertDataCsv(
       []byte(csv),
       table.WithCsvHeader(),

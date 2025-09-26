@@ -275,7 +275,7 @@ namespace NKikimr {
                 // limit bandwidth
                 const auto& quoter = ReplCtx->VCtx->ReplNodeRequestQuoter;
                 const TDuration duration = quoter
-                    ? quoter->Take(TActivationContext::Now(), actualBytes)
+                    ? quoter->Take(TActivationContext::Monotonic(), actualBytes)
                     : TDuration::Zero();
                 std::unique_ptr<TEvBlobStorage::TEvVGetResult> event(ev->Release().Release());
                 if (duration != TDuration::Zero()) {

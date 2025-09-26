@@ -3753,7 +3753,7 @@ bool IsInstantEqual(const TTypeAnnotationNode& type) {
     case ETypeAnnotationKind::Void: return true;
     case ETypeAnnotationKind::Tuple: {
         const auto tupleType = type.Cast<TTupleExprType>();
-        if (const auto size = tupleType->GetSize()) {
+        if (/* const auto size = */ tupleType->GetSize()) {
             for (const auto& item : tupleType->GetItems()) {
                 if (!IsInstantEqual(*item)) {
                     return false;
@@ -3764,7 +3764,7 @@ bool IsInstantEqual(const TTypeAnnotationNode& type) {
     }
     case ETypeAnnotationKind::Struct: {
         const auto structType = type.Cast<TStructExprType>();
-        if (const auto size = structType->GetSize()) {
+        if (/* const auto size = */ structType->GetSize()) {
             for (const auto& item : structType->GetItems()) {
                 if (!IsInstantEqual(*item)) {
                     return false;

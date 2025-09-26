@@ -11,6 +11,8 @@ import argparse
 import re
 import json
 import configparser
+import tempfile
+import base64
 from datetime import datetime, timedelta
 from pathlib import Path
 from send_telegram_message import send_telegram_message
@@ -22,30 +24,36 @@ except ImportError:
     YDB_AVAILABLE = False
     print("⚠️ YDB client not available. Install with: pip install ydb")
 
+try:
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+    print("⚠️ Matplotlib not available. Install with: pip install matplotlib")
 
-def get_muted_tests_stats(database_endpoint=None, database_path=None, credentials_path=None, use_yesterday=False):
+
+def _setup_ydb_connection(database_endpoint=None, database_path=None, credentials_path=None):
     """
-    Get statistics about muted tests from YDB by team.
+    Set up YDB connection parameters and credentials.
     
     Args:
         database_endpoint (str): YDB database endpoint
         database_path (str): YDB database path
         credentials_path (str): Path to service account credentials JSON file
-        use_yesterday (bool): If True, use yesterday's data for development convenience
         
     Returns:
-        dict: Dictionary with team names as keys and {'total': count, 'today': count} as values, or None if error
+        tuple: (database_endpoint, database_path) or (None, None) if error
     """
     if not YDB_AVAILABLE:
         print("❌ YDB client not available")
-        return None
+        return None, None
     
     try:
         # Set up credentials if provided
         if credentials_path and os.path.exists(credentials_path):
             os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = credentials_path
         elif "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" in os.environ:
-            # Use CI credentials if available (like in create_new_muted_ya.py)
             os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
         
         # Try to load from config file if not provided
@@ -68,9 +76,28 @@ def get_muted_tests_stats(database_endpoint=None, database_path=None, credential
         if not database_path:
             database_path = os.getenv('YDB_DATABASE', '/ru-central1/b1g8ejbrie0sfh5k0j2j/etn8l4e3hbti8k4n5g2e')
         
-        print(f"🔍 Querying YDB for muted tests statistics...")
-        print(f"🔍 Endpoint: {database_endpoint}")
-        print(f"🔍 Database: {database_path}")
+        return database_endpoint, database_path
+        
+    except Exception as e:
+        print(f"❌ Error setting up YDB connection: {e}")
+        return None, None
+
+
+def _execute_ydb_query(database_endpoint, database_path, query, description):
+    """
+    Execute a YDB query and return results.
+    
+    Args:
+        database_endpoint (str): YDB database endpoint
+        database_path (str): YDB database path
+        query (str): SQL query to execute
+        description (str): Description for logging
+        
+    Returns:
+        list: Query results or None if error
+    """
+    try:
+        print(f"🔍 {description}")
         
         with ydb.Driver(
             endpoint=database_endpoint,
@@ -80,62 +107,249 @@ def get_muted_tests_stats(database_endpoint=None, database_path=None, credential
             driver.wait(timeout=10, fail_fast=True)
             print("✅ Successfully connected to YDB")
             
-            # Query for muted tests statistics by team
-            if use_yesterday:
-                target_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-                print(f"🔍 Using yesterday's data for development: {target_date}")
-            else:
-                target_date = datetime.now().strftime('%Y-%m-%d')
-                print(f"🔍 Using today's data: {target_date}")
-            
-            stats_query = f"""
-            SELECT 
-                owner,
-                COUNT(*) as total_count,
-                SUM(CASE WHEN mute_state_change_date = Date('{target_date}') THEN 1 ELSE 0 END) as today_count
-            FROM `test_results/analytics/test_muted_monitor_mart`
-            WHERE date_window = Date('{target_date}')
-            AND is_muted = 1
-            AND branch = 'main'
-            AND build_type = 'relwithdebinfo'
-            GROUP BY owner
-            """
-            
             table_client = ydb.TableClient(driver, ydb.TableClientSettings())
+            query_obj = ydb.ScanQuery(query, {})
+            it = table_client.scan_query(query_obj)
+            results = []
+            for result in it:
+                results.extend(result.result_set.rows)
             
-            # Execute statistics query
-            stats_query_obj = ydb.ScanQuery(stats_query, {})
-            stats_it = table_client.scan_query(stats_query_obj)
-            stats_results = []
-            for result in stats_it:
-                stats_results.extend(result.result_set.rows)
-            
-            # Process results by team
-            team_stats = {}
-            for row in stats_results:
-                owner = row.owner
-                total_count = row.total_count
-                today_count = row.today_count
-                
-                # Extract team name from owner (e.g., "TEAM:@ydb-platform/appteam" -> "appteam")
-                if owner.startswith("TEAM:@ydb-platform/"):
-                    team_name = owner.replace("TEAM:@ydb-platform/", "")
-                else:
-                    team_name = owner
-                
-                team_stats[team_name] = {
-                    'total': total_count,
-                    'today': today_count
-                }
-            
-            print(f"📊 Found statistics for {len(team_stats)} teams:")
-            for team, stats in team_stats.items():
-                print(f"  - {team}: {stats['total']} total, {stats['today']} today")
-            
-            return team_stats
+            print(f"📊 Query returned {len(results)} rows")
+            return results
         
     except Exception as e:
-        print(f"❌ Error querying YDB: {e}")
+        print(f"❌ Error executing YDB query: {e}")
+        return None
+
+
+def get_muted_tests_stats(database_endpoint=None, database_path=None, credentials_path=None, use_yesterday=False):
+    """
+    Get statistics about muted tests from YDB by team.
+    
+    Args:
+        database_endpoint (str): YDB database endpoint
+        database_path (str): YDB database path
+        credentials_path (str): Path to service account credentials JSON file
+        use_yesterday (bool): If True, use yesterday's data for development convenience
+        
+    Returns:
+        dict: Dictionary with team names as keys and {'total': count, 'today': count} as values, or None if error
+    """
+    # Set up connection
+    endpoint, path = _setup_ydb_connection(database_endpoint, database_path, credentials_path)
+    if not endpoint or not path:
+        return None
+    
+    # Calculate target date
+    if use_yesterday:
+        target_date = datetime.now() - timedelta(days=1)
+    else:
+        target_date = datetime.now()
+    
+    # Query for team statistics
+    stats_query = f"""
+    SELECT
+        owner,
+        COUNT(*) as total_count,
+        SUM(CASE WHEN mute_state_change_date = Date('{target_date.strftime('%Y-%m-%d')}') THEN 1 ELSE 0 END) as today_count
+    FROM `test_results/analytics/test_muted_monitor_mart`
+    WHERE date_window = Date('{target_date.strftime('%Y-%m-%d')}')
+    AND is_muted = 1
+    AND branch = 'main'
+    AND build_type = 'relwithdebinfo'
+    GROUP BY owner
+    """
+    
+    # Query for yesterday's count (for calculating "minus today")
+    yesterday_date = target_date - timedelta(days=1)
+    yesterday_query = f"""
+    SELECT
+        owner,
+        COUNT(*) as yesterday_count
+    FROM `test_results/analytics/test_muted_monitor_mart`
+    WHERE date_window = Date('{yesterday_date.strftime('%Y-%m-%d')}')
+    AND is_muted = 1
+    AND branch = 'main'
+    AND build_type = 'relwithdebinfo'
+    GROUP BY owner
+    """
+    
+    # Execute both queries
+    results = _execute_ydb_query(endpoint, path, stats_query, f"Getting muted tests statistics for {target_date.strftime('%Y-%m-%d')}")
+    if results is None:
+        return None
+    
+    yesterday_results = _execute_ydb_query(endpoint, path, yesterday_query, f"Getting yesterday's muted tests count for {yesterday_date.strftime('%Y-%m-%d')}")
+    if yesterday_results is None:
+        print("⚠️ Could not get yesterday's data, skipping 'minus today' calculation")
+        yesterday_results = []
+    
+    # Process today's results
+    team_stats = {}
+    for row in results:
+        owner = row.owner
+        if owner and owner.startswith('TEAM:@ydb-platform/'):
+            team_name = owner.split('/')[-1]
+            team_stats[team_name] = {
+                'total': row.total_count,
+                'today': row.today_count,
+                'minus_today': 0  # Will be calculated below
+            }
+    
+    # Process yesterday's results and calculate "minus today"
+    yesterday_counts = {}
+    for row in yesterday_results:
+        owner = row.owner
+        if owner and owner.startswith('TEAM:@ydb-platform/'):
+            team_name = owner.split('/')[-1]
+            yesterday_counts[team_name] = row.yesterday_count
+    
+    # Calculate "minus today" for each team
+    for team_name, stats in team_stats.items():
+        yesterday_count = yesterday_counts.get(team_name, 0)
+        # minus_today = yesterday_count - (today_total - today_newly_muted)
+        # This gives us how many were unmuted today
+        stats['minus_today'] = max(0, yesterday_count - (stats['total'] - stats['today']))
+    
+    print(f"📊 Found statistics for {len(team_stats)} teams")
+    return team_stats
+
+
+def get_monthly_trend_data(database_endpoint=None, database_path=None, credentials_path=None, team_name=None, use_yesterday=False):
+    """
+    Get monthly trend data for a specific team.
+    
+    Args:
+        database_endpoint (str): YDB database endpoint
+        database_path (str): YDB database path
+        credentials_path (str): Path to service account credentials JSON file
+        team_name (str): Team name to get data for
+        use_yesterday (bool): If True, use yesterday as end date for development convenience
+        
+    Returns:
+        dict: Dictionary with dates as keys and counts as values, or None if error
+    """
+    # Set up connection
+    endpoint, path = _setup_ydb_connection(database_endpoint, database_path, credentials_path)
+    if not endpoint or not path:
+        return None
+    
+    # Calculate date range (last 30 days)
+    if use_yesterday:
+        end_date = datetime.now() - timedelta(days=1)
+    else:
+        end_date = datetime.now()
+    start_date = end_date - timedelta(days=30)
+    
+    # Query for monthly trend data
+    trend_query = f"""
+    SELECT 
+        date_window,
+        COUNT(*) as daily_count
+    FROM `test_results/analytics/test_muted_monitor_mart`
+    WHERE date_window >= Date('{start_date.strftime('%Y-%m-%d')}')
+    AND date_window <= Date('{end_date.strftime('%Y-%m-%d')}')
+    AND is_muted = 1
+    AND branch = 'main'
+    AND build_type = 'relwithdebinfo'
+    AND owner = 'TEAM:@ydb-platform/{team_name}'
+    GROUP BY date_window
+    ORDER BY date_window
+    """
+    
+    # Execute query
+    results = _execute_ydb_query(endpoint, path, trend_query, f"Getting monthly trend data for team '{team_name}' from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+    if results is None:
+        return None
+    
+    # Process results
+    trend_data = {}
+    base_date = datetime(1970, 1, 1)
+    for row in results:
+        # Convert days since epoch to date
+        date_obj = base_date + timedelta(days=row.date_window)
+        date_str = date_obj.strftime('%Y-%m-%d')
+        trend_data[date_str] = row.daily_count
+    
+    print(f"📊 Found trend data for {len(trend_data)} days")
+    return trend_data
+
+
+def create_trend_plot(team_name, trend_data):
+    """
+    Create a trend plot for muted tests.
+    
+    Args:
+        team_name (str): Team name
+        trend_data (dict): Dictionary with dates as keys and counts as values
+        
+    Returns:
+        str: Base64 encoded image data, or None if error
+    """
+    if not MATPLOTLIB_AVAILABLE:
+        print("❌ Matplotlib not available for plotting")
+        return None
+    
+    if not trend_data:
+        print("⚠️ No trend data available for plotting")
+        return None
+    
+    try:
+        # Prepare data
+        dates = []
+        counts = []
+        for date_str in sorted(trend_data.keys()):
+            dates.append(datetime.strptime(date_str, '%Y-%m-%d'))
+            counts.append(trend_data[date_str])
+        
+        # Create plot
+        plt.figure(figsize=(10, 6))
+        plt.plot(dates, counts, marker='o', linewidth=2, markersize=4)
+        plt.title(f'Muted Tests Trend - {team_name}', fontsize=14, fontweight='bold')
+        plt.xlabel('Date', fontsize=12)
+        plt.ylabel('Number of Muted Tests', fontsize=12)
+        plt.grid(True, alpha=0.3)
+        
+        # Format x-axis
+        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
+        plt.gca().xaxis.set_major_locator(mdates.DayLocator(interval=3))
+        plt.xticks(rotation=45)
+        
+        # Add trend line
+        if len(dates) > 1:
+            import numpy as np
+            x_numeric = np.arange(len(dates))
+            z = np.polyfit(x_numeric, counts, 1)
+            p = np.poly1d(z)
+            plt.plot(dates, p(x_numeric), "r--", alpha=0.8, label='Trend')
+            plt.legend()
+        
+        plt.tight_layout()
+        
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+            plt.savefig(tmp_file.name, dpi=150, bbox_inches='tight')
+            tmp_path = tmp_file.name
+        
+        print(f"📈 Created trend plot for {team_name}: {tmp_path}")
+        print(f"📁 File size: {os.path.getsize(tmp_path)} bytes")
+        
+        # Read and encode as base64
+        with open(tmp_path, 'rb') as f:
+            image_data = f.read()
+        
+        print(f"📊 Base64 data length: {len(base64.b64encode(image_data).decode('utf-8'))} characters")
+        
+        # Clean up
+        os.unlink(tmp_path)
+        plt.close()
+        
+        # Encode as base64
+        base64_data = base64.b64encode(image_data).decode('utf-8')
+        return base64_data
+        
+    except Exception as e:
+        print(f"❌ Error creating trend plot: {e}")
         return None
 
 
@@ -232,8 +446,14 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
         team_stats = muted_stats[team_name]
         total = team_stats['total']
         today = team_stats['today']
-        if today > 0:
-            message += f"📊 **Всего замьючено {total} (+ {today} сегодня)**\n\n"
+        minus_today = team_stats.get('minus_today', 0)
+        
+        if today > 0 and minus_today > 0:
+            message += f"📊 **Всего замьючено {total} (сегодня +{today}/-{minus_today})**\n\n"
+        elif today > 0:
+            message += f"📊 **Всего замьючено {total} (сегодня +{today})**\n\n"
+        elif minus_today > 0:
+            message += f"📊 **Всего замьючено {total} (сегодня -{minus_today})**\n\n"
         else:
             message += f"📊 **Всего замьючено {total}**\n\n"
     
@@ -340,7 +560,7 @@ def get_team_config(team_name, team_channels):
         return None, None, None
 
 
-def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10, team_channels=None, dry_run=False, muted_stats=None):
+def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10, team_channels=None, dry_run=False, muted_stats=None, include_plots=False, ydb_config=None):
     """
     Send separate messages for each team.
     
@@ -352,7 +572,9 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
         retry_delay (int): Delay between retry attempts in seconds
         team_channels (dict): Dictionary mapping team names to their specific channel configs
         dry_run (bool): If True, only print messages without sending to Telegram
-        muted_stats (dict): Dictionary with 'total' and 'today' counts for muted tests
+        muted_stats (dict): Dictionary with team names as keys and {'total': count, 'today': count} as values
+        include_plots (bool): If True, include trend plots in messages
+        ydb_config (dict): YDB configuration for trend data
     """
     
     total_teams = len(teams)
@@ -390,11 +612,59 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
         else:
             print(f"📨 Sending message for team: {team_name} ({len(issues)} issues)")
             
-            if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay):
-                sent_count += 1
-                print(f"✅ Message sent for team: {team_name}")
+            # Get trend plot if requested
+            plot_data = None
+            if include_plots and ydb_config and MATPLOTLIB_AVAILABLE:
+                print(f"📊 Getting trend data for team: {team_name}")
+                trend_data = get_monthly_trend_data(
+                    database_endpoint=ydb_config.get('endpoint'),
+                    database_path=ydb_config.get('path'),
+                    credentials_path=ydb_config.get('credentials'),
+                    team_name=team_name,
+                    use_yesterday=ydb_config.get('use_yesterday', False)
+                )
+                if trend_data:
+                    print(f"📊 Trend data for {team_name}: {len(trend_data)} days")
+                    plot_data = create_trend_plot(team_name, trend_data)
+                    if plot_data:
+                        print(f"📈 Created trend plot for team: {team_name}")
+                    else:
+                        print(f"⚠️ Could not create trend plot for team: {team_name}")
+                else:
+                    print(f"⚠️ No trend data available for team: {team_name}")
+            elif include_plots and not MATPLOTLIB_AVAILABLE:
+                print(f"⚠️ Matplotlib not available, skipping plot for team: {team_name}")
+            elif include_plots and not ydb_config:
+                print(f"⚠️ YDB config not available, skipping plot for team: {team_name}")
+            
+            # Send message with or without plot
+            if plot_data:
+                # Save plot to temporary file and send as photo
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+                    tmp_file.write(base64.b64decode(plot_data))
+                    tmp_path = tmp_file.name
+                
+                print(f"📁 Saved plot to temporary file: {tmp_path}")
+                print(f"📁 File size: {os.path.getsize(tmp_path)} bytes")
+                
+                try:
+                    if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay, tmp_path):
+                        sent_count += 1
+                        print(f"✅ Message with plot sent for team: {team_name}")
+                    else:
+                        print(f"❌ Failed to send message with plot for team: {team_name} after {max_retries} retries")
+                finally:
+                    # Clean up temporary file
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                        print(f"🗑️ Cleaned up temporary file: {tmp_path}")
             else:
-                print(f"❌ Failed to send message for team: {team_name} after {max_retries} retries")
+                # Send regular message
+                if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay):
+                    sent_count += 1
+                    print(f"✅ Message sent for team: {team_name}")
+                else:
+                    print(f"❌ Failed to send message for team: {team_name} after {max_retries} retries")
             
             # Add delay between messages
             if sent_count < total_teams:
@@ -530,6 +800,7 @@ def main():
     parser.add_argument('--ydb-credentials', help='Path to YDB service account credentials JSON file (or use YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS env var)')
     parser.add_argument('--no-stats', action='store_true', help='Skip fetching muted tests statistics from YDB')
     parser.add_argument('--use-yesterday', action='store_true', help='Use yesterday\'s data for development convenience')
+    parser.add_argument('--include-plots', action='store_true', help='Include trend plots in messages (requires matplotlib)')
     
     args = parser.parse_args()
     
@@ -639,8 +910,18 @@ def main():
         
         print(f"  - {team_name}: {len(issues)} issues{responsible_info}{channel_info}")
     
+    # Prepare YDB config for plots if needed
+    ydb_config = None
+    if args.include_plots and not args.no_stats:
+        ydb_config = {
+            'endpoint': args.ydb_endpoint,
+            'path': args.ydb_database,
+            'credentials': args.ydb_credentials,
+            'use_yesterday': args.use_yesterday
+        }
+    
     # Send messages (or show in dry run)
-    send_team_messages(teams, bot_token, args.delay, args.max_retries, args.retry_delay, team_channels, args.dry_run, muted_stats)
+    send_team_messages(teams, bot_token, args.delay, args.max_retries, args.retry_delay, team_channels, args.dry_run, muted_stats, args.include_plots, ydb_config)
 
 
 if __name__ == "__main__":

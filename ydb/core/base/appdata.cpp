@@ -14,6 +14,7 @@
 #include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
@@ -124,6 +125,7 @@ TAppData::TAppData(
     , DataIntegrityTrailsConfig(Impl->DataIntegrityTrailsConfig)
     , MetricsConfig(Impl->MetricsConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
+    , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}
 
 TAppData::~TAppData()

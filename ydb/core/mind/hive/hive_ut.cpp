@@ -2921,6 +2921,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestReassignUseRelativeSpace) {
+        // TODO: Remove this code after issue https://github.com/ydb-platform/ydb/issues/12255 will be resolved
+        ui64 prevSeed = NActors::DefaultRandomSeed;
+        NActors::DefaultRandomSeed = 42;
+        Y_SCOPE_EXIT(prevSeed) {
+            NActors::DefaultRandomSeed = prevSeed;
+        };
+        // TODO: Remove this code after issue https://github.com/ydb-platform/ydb/issues/12255 will be resolved
+
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true, 5);
         const ui64 hiveTablet = MakeDefaultHiveID();
@@ -7146,6 +7154,9 @@ Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
         NKikimrProto::EReplyStatus expectedStatus, ui32 expectedNodes = 0)
     {
         const auto sender = runtime.AllocateEdgeActor();
+
+        const auto hiveId = MakeDefaultHiveID();
+        const TSubDomainKey subdomainKey(TTestTxConfig::SchemeShard, 1);
         runtime.SendToPipe(hiveId, sender, new TEvHive::TEvRequestScaleRecommendation(subdomainKey));
 
         TAutoPtr<IEventHandle> handle;

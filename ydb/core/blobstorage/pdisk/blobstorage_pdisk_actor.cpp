@@ -704,6 +704,12 @@ public:
         PDisk->Mon.YardResize.CountResponse();
     }
 
+    void InitHandle(NPDisk::TEvChangeExpectedSlotCount::TPtr &ev) {
+        PDisk->Mon.ChangeExpectedSlotCount.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::CORRUPTED, StateErrorReason));
+        PDisk->Mon.ChangeExpectedSlotCount.CountResponse();
+    }
+
     void InitHandle(NPDisk::TEvShredPDisk::TPtr &ev) {
         const NPDisk::TEvShredPDisk &evShredPDisk = *ev->Get();
         InitQueue.emplace_back(ev->Sender, evShredPDisk.ShredGeneration, ev->Cookie);
@@ -846,6 +852,12 @@ public:
         PDisk->Mon.YardResize.CountRequest();
         Send(ev->Sender, new NPDisk::TEvYardResizeResult(NKikimrProto::CORRUPTED, {}, StateErrorReason));
         PDisk->Mon.YardResize.CountResponse();
+    }
+
+    void ErrorHandle(NPDisk::TEvChangeExpectedSlotCount::TPtr &ev) {
+        PDisk->Mon.ChangeExpectedSlotCount.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::CORRUPTED, StateErrorReason));
+        PDisk->Mon.ChangeExpectedSlotCount.CountResponse();
     }
 
     void ErrorHandle(NPDisk::TEvChunkReserve::TPtr &ev) {
@@ -991,6 +1003,12 @@ public:
     void Handle(NPDisk::TEvYardResize::TPtr &ev) {
         PDisk->Mon.YardResize.CountRequest();
         TYardResize* request = PDisk->ReqCreator.CreateFromEv<TYardResize>(*ev->Get(), ev->Sender);
+        PDisk->InputRequest(request);
+    }
+
+    void Handle(NPDisk::TEvChangeExpectedSlotCount::TPtr &ev) {
+        PDisk->Mon.YardResize.CountRequest();
+        TChangeExpectedSlotCount* request = PDisk->ReqCreator.CreateFromEv<TChangeExpectedSlotCount>(*ev->Get(), ev->Sender);
         PDisk->InputRequest(request);
     }
 
@@ -1499,6 +1517,7 @@ public:
             hFunc(NPDisk::TEvShredVDiskResult, InitHandle);
             hFunc(NPDisk::TEvContinueShred, InitHandle);
             hFunc(NPDisk::TEvYardResize, InitHandle);
+            hFunc(NPDisk::TEvChangeExpectedSlotCount, InitHandle);
 
             hFunc(TEvReadMetadata, Handle);
             hFunc(TEvWriteMetadata, Handle);
@@ -1532,6 +1551,7 @@ public:
             hFunc(NPDisk::TEvShredVDiskResult, Handle);
             hFunc(NPDisk::TEvContinueShred, Handle);
             hFunc(NPDisk::TEvYardResize, Handle);
+            hFunc(NPDisk::TEvChangeExpectedSlotCount, Handle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);
@@ -1569,6 +1589,7 @@ public:
             hFunc(NPDisk::TEvShredVDiskResult, ErrorHandle);
             hFunc(NPDisk::TEvContinueShred, ErrorHandle);
             hFunc(NPDisk::TEvYardResize, ErrorHandle);
+            hFunc(NPDisk::TEvChangeExpectedSlotCount, ErrorHandle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);

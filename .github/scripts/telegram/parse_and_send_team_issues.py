@@ -465,14 +465,18 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
         today = team_stats['today']
         minus_today = team_stats.get('minus_today', 0)
         
+        # Create dashboard URL for the team
+        dashboard_url = f"https://datalens.yandex/4un3zdm0zcnyr?owner_team={team_name}"
+        
+        # Format statistics with color coding and emojis
         if today > 0 and minus_today > 0:
-            message += f"📊 **Всего замьючено {total} (сегодня +{today}/-{minus_today})**\n\n"
+            message += f"📊 **[Total muted tests: {total}]({dashboard_url}) (today 🔴+{today}/🟢-{minus_today})**\n\n"
         elif today > 0:
-            message += f"📊 **Всего замьючено {total} (сегодня +{today})**\n\n"
+            message += f"📊 **[Total muted tests: {total}]({dashboard_url}) (today 🔴+{today})**\n\n"
         elif minus_today > 0:
-            message += f"📊 **Всего замьючено {total} (сегодня -{minus_today})**\n\n"
+            message += f"📊 **[Total muted tests: {total}]({dashboard_url}) (today 🟢-{minus_today})**\n\n"
         else:
-            message += f"📊 **Всего замьючено {total}**\n\n"
+            message += f"📊 **[Total muted tests: {total}]({dashboard_url})**\n\n"
     
     # Add responsible users on new line with "fyi:" prefix
     if team_responsible and team_name in team_responsible:

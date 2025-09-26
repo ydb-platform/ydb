@@ -12,6 +12,141 @@ import time
 from pathlib import Path
 
 
+def _read_content(message_or_file):
+    """
+    Read content from message string or file.
+    
+    Args:
+        message_or_file (str): Message text or path to file to send
+        
+    Returns:
+        str: Content to send, or None if error
+    """
+    # If the string is too long, it's definitely not a file path
+    if len(message_or_file) > 255:
+        return message_or_file
+    
+    file_path = Path(message_or_file)
+    if file_path.exists() and file_path.is_file():
+        # It's a file, read its content
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            print(f"❌ Error reading file {file_path}: {e}")
+            return None
+    else:
+        # It's a text message
+        return message_or_file
+
+
+def _send_chunked_messages(bot_token, chat_id, content, parse_mode, message_thread_id, disable_web_page_preview, max_retries, retry_delay, delay, max_length=4000):
+    """
+    Send chunked text messages.
+    
+    Args:
+        bot_token (str): Telegram bot token
+        chat_id (str): Telegram chat ID
+        content (str): Content to send
+        parse_mode (str): Parse mode for message formatting
+        message_thread_id (int, optional): Thread ID for group messages
+        disable_web_page_preview (bool): Disable web page preview for links
+        max_retries (int): Maximum number of retry attempts
+        retry_delay (int): Delay between retry attempts in seconds
+        delay (int): Delay between message chunks in seconds
+        max_length (int): Maximum length per chunk
+        
+    Returns:
+        bool: True if all chunks sent successfully, False otherwise
+    """
+    if not content.strip():
+        print(f"⚠️ Content is empty")
+        return True
+    
+    # Split message into chunks if needed
+    chunks = split_message(content, max_length)
+    print(f"📤 Sending {len(chunks)} message(s)...")
+    
+    success_count = 0
+    for i, chunk in enumerate(chunks, 1):
+        print(f"📨 Sending chunk {i}/{len(chunks)}...")
+        
+        if _send_single_message(bot_token, chat_id, chunk, parse_mode, message_thread_id, disable_web_page_preview, max_retries, retry_delay):
+            success_count += 1
+        
+        # Add delay between messages (except for the last one)
+        if i < len(chunks):
+            time.sleep(delay)
+    
+    if success_count == len(chunks):
+        print(f"✅ All {success_count} message(s) sent successfully!")
+        return True
+    else:
+        print(f"⚠️ Only {success_count}/{len(chunks)} message(s) sent successfully")
+        return False
+
+
+def _send_photo_with_chunked_caption(bot_token, chat_id, photo_path, content, parse_mode, message_thread_id, disable_web_page_preview, max_retries, retry_delay, delay):
+    """
+    Send photo with chunked caption.
+    
+    Args:
+        bot_token (str): Telegram bot token
+        chat_id (str): Telegram chat ID
+        photo_path (str): Path to photo file
+        content (str): Caption content
+        parse_mode (str): Parse mode for message formatting
+        message_thread_id (int, optional): Thread ID for group messages
+        disable_web_page_preview (bool): Disable web page preview for links
+        max_retries (int): Maximum number of retry attempts
+        retry_delay (int): Delay between retry attempts in seconds
+        delay (int): Delay between message chunks in seconds
+        
+    Returns:
+        bool: True if all chunks sent successfully, False otherwise
+    """
+    photo_file = Path(photo_path)
+    if not photo_file.exists() or not photo_file.is_file():
+        print(f"❌ Photo file not found: {photo_path}")
+        return False
+    
+    print(f"📷 Sending photo: {photo_path}")
+    
+    # Split message into chunks for photo caption
+    chunks = split_message(content, max_length=1024)  # Telegram caption limit is 1024 characters
+    print(f"📤 Sending photo with {len(chunks)} message chunk(s)...")
+    
+    success_count = 0
+    for i, chunk in enumerate(chunks, 1):
+        print(f"📨 Sending photo chunk {i}/{len(chunks)}...")
+        
+        if i == 1:
+            # First chunk goes with photo
+            if _send_photo(bot_token, chat_id, photo_path, chunk, parse_mode, message_thread_id, max_retries, retry_delay):
+                success_count += 1
+                print(f"✅ Photo with caption sent successfully!")
+            else:
+                print(f"❌ Failed to send photo with caption")
+        else:
+            # Subsequent chunks as regular messages
+            if _send_single_message(bot_token, chat_id, chunk, parse_mode, message_thread_id, disable_web_page_preview, max_retries, retry_delay):
+                success_count += 1
+                print(f"✅ Text chunk {i} sent successfully!")
+            else:
+                print(f"❌ Failed to send text chunk {i}")
+        
+        # Add delay between messages (except for the last one)
+        if i < len(chunks):
+            time.sleep(delay)
+    
+    if success_count == len(chunks):
+        print(f"✅ All {success_count} message(s) sent successfully!")
+        return True
+    else:
+        print(f"⚠️ Only {success_count}/{len(chunks)} message(s) sent successfully")
+        return False
+
+
 def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="Markdown", message_thread_id=None, disable_web_page_preview=True, max_retries=5, retry_delay=10, delay=1, photo_path=None):
     """
     Send a message to Telegram channel with retry mechanism.
@@ -35,66 +170,18 @@ def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="Markd
     print(f"🔍 send_telegram_message called with photo_path: {photo_path}")
     print(f"🔍 message_or_file length: {len(message_or_file) if message_or_file else 'None'}")
     print(f"🔍 chat_id: {chat_id}, message_thread_id: {message_thread_id}")
-    # Check if message_or_file is a file path
-    # If the string is too long, it's definitely not a file path
-    if len(message_or_file) > 255:
-        # It's definitely a text message, not a file path
-        content = message_or_file
-    else:
-        file_path = Path(message_or_file)
-        if file_path.exists() and file_path.is_file():
-            # It's a file, read its content
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-            except Exception as e:
-                print(f"❌ Error reading file {file_path}: {e}")
-                return False
-        else:
-            # It's a text message
-            content = message_or_file
     
-    # If photo is provided, send photo with caption
+    # Read content from message string or file
+    content = _read_content(message_or_file)
+    if content is None:
+        return False
+    
+    # If photo is provided, send photo with chunked caption
     if photo_path:
-        photo_file = Path(photo_path)
-        if not photo_file.exists() or not photo_file.is_file():
-            print(f"❌ Photo file not found: {photo_path}")
-            return False
-        
-        print(f"📷 Sending photo: {photo_path}")
-        if _send_photo(bot_token, chat_id, photo_path, content, parse_mode, message_thread_id, max_retries, retry_delay):
-            print(f"✅ Photo sent successfully!")
-            return True
-        else:
-            print(f"❌ Failed to send photo")
-            return False
+        return _send_photo_with_chunked_caption(bot_token, chat_id, photo_path, content, parse_mode, message_thread_id, disable_web_page_preview, max_retries, retry_delay, delay)
     
     # If no photo, send text message
-    if not content.strip():
-        print(f"⚠️ Content is empty")
-        return True
-    
-    # Split message into chunks if needed
-    chunks = split_message(content)
-    print(f"📤 Sending {len(chunks)} message(s)...")
-    
-    success_count = 0
-    for i, chunk in enumerate(chunks, 1):
-        print(f"📨 Sending chunk {i}/{len(chunks)}...")
-        
-        if _send_single_message(bot_token, chat_id, chunk, parse_mode, message_thread_id, disable_web_page_preview, max_retries, retry_delay):
-            success_count += 1
-        
-        # Add delay between messages (except for the last one)
-        if i < len(chunks):
-            time.sleep(delay)
-    
-    if success_count == len(chunks):
-        print(f"✅ All {success_count} message(s) sent successfully!")
-        return True
-    else:
-        print(f"⚠️ Only {success_count}/{len(chunks)} message(s) sent successfully")
-        return False
+    return _send_chunked_messages(bot_token, chat_id, content, parse_mode, message_thread_id, disable_web_page_preview, max_retries, retry_delay, delay)
 
 
 def _send_single_message(bot_token, chat_id, message, parse_mode, message_thread_id, disable_web_page_preview, max_retries, retry_delay):

@@ -50,47 +50,53 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 1. Отредактируйте [файлы конфигурации]() Prometheus:
 
-    1. В файле [`ydbd-storage.yaml`]() в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов хранения, работающих на серверах.
+    1. В файле [`ydbd-storage.yml`](../../../../../deploy/prometheus/ydbd-storage.yml) в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов хранения, работающих на серверах.
 
         ```json
         - labels:
             container: ydb-static
-        - targets:
-          - ydb-s1.example.com:8765
-          - ydb-s2.example.com:8765
-          - ydb-s3.example.com:8765
+          targets:
+          - "ydb-s1.example.com:8765"
+          - "ydb-s2.example.com:8765"
+          - "ydb-s3.example.com:8765"
         ```
 
         Для локального однонодового кластера YDB в секции `targets` укажите один адрес:
 
         ```json
-        - targets: ["localhost:8765"]
+        - labels:
+            container: ydb-static
+          targets:
+          - "localhost:8765"
         ```
         
-    1. В файле [`ydbd-database.yaml`]() в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов баз данных, работающих на серверах.
+    1. В файле [`ydbd-database.yml`](../../../../../deploy/prometheus/ydbd-database.yml) в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов баз данных, работающих на серверах.
 
         ```json
         - labels:
             container: ydb-dynamic
-        - targets:
-          - ydb-s1.example.com:31002
-          - ydb-s1.example.com:31012
-          - ydb-s1.example.com:31022
-          - ydb-s2.example.com:31002
-          - ydb-s2.example.com:31012
-          - ydb-s2.example.com:31022
-          - ydb-s3.example.com:31002
-          - ydb-s3.example.com:31012
-          - ydb-s3.example.com:31022
+          targets:
+          - "ydb-s1.example.com:31002"
+          - "ydb-s1.example.com:31012"
+          - "ydb-s1.example.com:31022"
+          - "ydb-s2.example.com:31002"
+          - "ydb-s2.example.com:31012"
+          - "ydb-s2.example.com:31022"
+          - "ydb-s3.example.com:31002"
+          - "ydb-s3.example.com:31012"
+          - "ydb-s3.example.com:31022"
         ```
   
         Для локального однонодового кластера YDB, в секции `targets` укажите один адрес:
 
         ```json
-        - targets: ["localhost:8765"]
+        - labels:
+            container: ydb-static
+          targets:
+          - "localhost:8765"
         ```
 
-    1. В файле [`prometheus_ydb.yml`]() при необходимости в секции `tls_config` укажите [сертификат центра регистрации](../deployment-options/manual/initial-deployment.md#tls-certificates) (Certification Authority, CA), которым подписаны остальные сертификаты TLS кластера {{ ydb-short-name }}:
+    1. В файле [`prometheus_ydb.yml`](../../../../../deploy/prometheus/prometheus_ydb.yml) при необходимости в секции `tls_config` укажите [сертификат центра регистрации](../deployment-options/manual/initial-deployment.md#tls-certificates) (Certification Authority, CA), которым подписаны остальные сертификаты TLS кластера {{ ydb-short-name }}:
 
        ```json
        scheme: https

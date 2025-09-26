@@ -84,7 +84,16 @@ bool TOlapColumnsDescription::ApplyUpdate(
         auto it = orderedKeyColumnIds.begin();
         for (ui32 i = 0; i < orderedKeyColumnIds.size(); ++i, ++it) {
             KeyColumnIds.emplace_back(it->second);
-            Y_ABORT_UNLESS(i == it->first);
+            if (i != it->first) {
+                const TString missedColumnName = i < schemaUpdate.GetPrimaryKeyColumnNames().size() ? schemaUpdate.GetPrimaryKeyColumnNames()[i] : "@unknown";
+                errors.AddError(NKikimrScheme::StatusSchemeError, Sprintf("Unknown column '%s' specified in key column list", missedColumnName.data()));
+                return false;
+            }
+        }
+        if (orderedKeyColumnIds.size() < schemaUpdate.GetPrimaryKeyColumnNames().size()) {
+            const TString missedColumnName = schemaUpdate.GetPrimaryKeyColumnNames()[orderedKeyColumnIds.size()];
+            errors.AddError(NKikimrScheme::StatusSchemeError, Sprintf("Unknown column '%s' specified in key column list", missedColumnName.data()));
+            return false;
         }
         if (KeyColumnIds.empty()) {
             errors.AddError(NKikimrScheme::StatusSchemeError, "No primary key specified");
